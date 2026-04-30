@@ -1,0 +1,75 @@
+export const SERVER_URL = 'http://192.168.68.56:3001';
+
+const get = (url) => fetch(SERVER_URL + url).then(r => r.json());
+const post = (url, data) => fetch(SERVER_URL + url, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(data)
+}).then(r => r.json());
+const put = (url, data) => fetch(SERVER_URL + url, {
+  method: 'PUT', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(data)
+}).then(r => r.json());
+const del = (url) => fetch(SERVER_URL + url, { method: 'DELETE' }).then(r => r.json());
+
+export const getTables = () => get('/api/tables');
+export const updateTableStatus = (id, status) => put(`/api/tables/${id}`, { status });
+export const getMenu = () => get('/api/menu');
+export const getAllMenu = () => get('/api/menu/all');
+export const addMenuItem = (item) => post('/api/menu/items', item);
+export const updateMenuItem = (id, item) => put(`/api/menu/items/${id}`, item);
+export const getOrders = () => get('/api/orders');
+export const getOrder = (id) => get(`/api/orders/${id}`);
+export const createOrder = (table_id, covers) => post('/api/orders', { table_id, covers });
+export const addOrderItems = (orderId, items) => post(`/api/orders/${orderId}/items`, { items });
+export const payOrder = (orderId, amount, method) => post(`/api/orders/${orderId}/pay`, { amount, method });
+export const updateItemStatus = (itemId, status) => put(`/api/order-items/${itemId}/status`, { status });
+export const loginStaff = (pin) => post('/api/staff/login', { pin });
+export const getDailyReport = (date) => get(`/api/reports/daily${date ? `?date=${date}` : ''}`);
+export const getItemModifiers = (itemId) => get(`/api/menu/items/${itemId}/modifiers`);
+export const addModifierGroup = (itemId, group) => post(`/api/menu/items/${itemId}/modifiers`, group);
+export const addModifierOption = (groupId, option) => post(`/api/modifier-groups/${groupId}/options`, option);
+export const deleteModifierGroup = (groupId) => del(`/api/modifier-groups/${groupId}`);
+export const deleteModifier = (modifierId) => del(`/api/modifiers/${modifierId}`);
+export const voidItem = (itemId, reason) => put(`/api/order-items/${itemId}/void`, { reason });
+export const applyDiscount = (orderId, discount_type, discount_value, discount_reason) => put(`/api/orders/${orderId}/discount`, { discount_type, discount_value, discount_reason });
+// ── Settings ─────────────────────────────────
+export const getSettings = () => get('/api/settings');
+export const updateSettings = (settings) => put('/api/settings', settings);
+
+// ── Discount reasons ─────────────────────────
+export const getDiscountReasons = () => get('/api/discount-reasons');
+export const addDiscountReason = (reason) => post('/api/discount-reasons', { reason });
+export const deleteDiscountReason = (id) => del(`/api/discount-reasons/${id}`);
+
+// ── Staff ────────────────────────────────────
+export const getStaff = () => get('/api/staff');
+export const addStaff = (staff) => post('/api/staff', staff);
+export const updateStaff = (id, staff) => put(`/api/staff/${id}`, staff);
+
+// ── Reports ──────────────────────────────────
+export const getSummaryReport = (from, to) => get(`/api/reports/summary?from=${from}&to=${to}`);
+export const getItemSalesReport = (from, to) => get(`/api/reports/items?from=${from}&to=${to}`);
+// ── Table plan ───────────────────────────────
+export const updateTablePlan = (id, data) => put(`/api/tables/${id}/plan`, data);
+export const addTable = (table) => post('/api/tables', table);
+export const deleteTable = (id) => del(`/api/tables/${id}`);
+
+// ── Bill ─────────────────────────────────────
+export const getBill = (orderId) => get(`/api/orders/${orderId}/bill`);
+export const getBarOrders = () => get('/api/orders/bar');
+export const getCategories = () => get('/api/categories');
+export const updateCategoryBar = (id, is_bar) => put(`/api/categories/${id}/bar`, { is_bar });
+export const getSubcategories = () => get('/api/subcategories');
+export const addSubcategory = (category_id, name) => post('/api/subcategories', { category_id, name });
+export const deleteSubcategory = (id) => del(`/api/subcategories/${id}`);
+export const fireCourse = (orderId, course) => put(`/api/orders/${orderId}/fire-course/${course}`, {});
+export const getTableStatus = () => get('/api/tables/status');
+export const markBillPrinted = (orderId) => put(`/api/orders/${orderId}/bill-printed`, {});
+export const moveTable = (orderId, newTableId) => put(`/api/orders/${orderId}/move`, { new_table_id: newTableId });
+export const mergeTables = (targetOrderId, mergeOrderId) => put(`/api/orders/${targetOrderId}/merge`, { merge_order_id: mergeOrderId });
+export const getZReportPreview = (from, to) => get(`/api/z-report/preview?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+export const saveZReport = (type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference) => 
+  post('/api/z-report/save', { type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference });
+export const getZReportHistory = () => get('/api/z-report/history');
+export const getBills = (from, to, method) => get(`/api/bills?from=${from}&to=${to}&method=${method}`);
+export const getBillItems = (orderId) => get(`/api/bills/${orderId}/items`);

@@ -20,7 +20,7 @@ export default function App() {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f5f5f5' }}>
         <nav className="navbar">
-          <span className="navbar-brand">RestoPOS</span>
+          <span className="navbar-brand">SiamEPOS</span>
           <div className="navbar-user">
             <span>{staff.name}</span>
             <button className="logout-btn" onClick={() => setStaff(null)}>Log out</button>
@@ -44,7 +44,7 @@ export default function App() {
   return (
     <div className="app">
       <nav className="navbar">
-        <span className="navbar-brand">RestoPOS</span>
+        <span className="navbar-brand">SiamEPOS</span>
         <div className="navbar-links">
           <button className={screen === 'tables' ? 'active' : ''} onClick={() => setScreen('tables')}>Tables</button>
           {staff.role === 'admin' && (

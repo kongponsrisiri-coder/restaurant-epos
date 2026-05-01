@@ -30,7 +30,7 @@ export default function LoginScreen({ onLogin }) {
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#1a1a2e' }}>
       <div style={{ background:'white', borderRadius:20, padding:'40px 36px', width:300, display:'flex', flexDirection:'column', alignItems:'center', gap:24 }}>
         <div style={{ textAlign:'center' }}>
-          <div style={{ fontSize:28, fontWeight:700, color:'#1a1a2e' }}>RestoPOS</div>
+          <div style={{ fontSize:28, fontWeight:700, color:'#1a1a2e' }}>SiamEPOS</div>
           <div style={{ color:'#888', fontSize:14 }}>Enter your PIN</div>
         </div>
 

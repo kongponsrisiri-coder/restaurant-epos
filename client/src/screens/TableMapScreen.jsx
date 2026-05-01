@@ -61,7 +61,9 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
   const getTableTime = (tableId) => {
     const order = openOrders.find(o => o.table_id === tableId);
     if (!order) return null;
-    const opened = new Date((order.opened_at || order.created_at) + ' UTC');
+    const rawDate = order.opened_at || order.created_at;
+    const opened = new Date(rawDate);
+    if (isNaN(opened.getTime())) return null;
     const diff = Math.floor((Date.now() - opened.getTime()) / 60000);
     if (diff < 1) return '0m';
     if (diff < 60) return `${diff}m`;
@@ -73,13 +75,15 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
   const getTimeColor = (tableId) => {
     const order = openOrders.find(o => o.table_id === tableId);
     if (!order) return 'white';
-    const opened = new Date((order.opened_at || order.created_at) + ' UTC');
+    const rawDate = order.opened_at || order.created_at;
+    const opened = new Date(rawDate);
+    if (isNaN(opened.getTime())) return 'white';
     const diff = Math.floor((Date.now() - opened.getTime()) / 60000);
     if (diff > 90) return '#fca5a5';
     if (diff > 60) return '#fde68a';
     return 'rgba(255,255,255,0.9)';
   };
-
+  
   const handleTableClick = async (table) => {
     const existingOrder = openOrders.find(o => o.table_id === table.id);
 

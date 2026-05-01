@@ -43,7 +43,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
 
   const getItemIsBar = (item) => {
     const cat = menu.find(c => c.id === item.category_id);
-    return cat?.is_bar === 1;
+    return !!cat?.is_bar;
   };
 
   const handleItemClick = async (item) => {
@@ -159,7 +159,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
 
   const activeItems = menu.find(c => c.id === activeCategory)?.items || [];
   const activeSubs = menu.find(c => c.id === activeCategory)?.subcategories || [];
-  const activeCatIsBar = menu.find(c => c.id === activeCategory)?.is_bar === 1;
+  const activeCatIsBar = !!menu.find(c => c.id === activeCategory)?.is_bar;
   const existingItems = order?.items || [];
 
   const existingByCourse = {};

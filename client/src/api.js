@@ -1,4 +1,4 @@
-export const SERVER_URL = 'http://localhost:3001';
+export const SERVER_URL = 'https://restaurant-epos-production.up.railway.app';
 
 const get = (url) => fetch(SERVER_URL + url).then(r => r.json());
 const post = (url, data) => fetch(SERVER_URL + url, {
@@ -32,29 +32,19 @@ export const deleteModifierGroup = (groupId) => del(`/api/modifier-groups/${grou
 export const deleteModifier = (modifierId) => del(`/api/modifiers/${modifierId}`);
 export const voidItem = (itemId, reason) => put(`/api/order-items/${itemId}/void`, { reason });
 export const applyDiscount = (orderId, discount_type, discount_value, discount_reason) => put(`/api/orders/${orderId}/discount`, { discount_type, discount_value, discount_reason });
-// ── Settings ─────────────────────────────────
 export const getSettings = () => get('/api/settings');
 export const updateSettings = (settings) => put('/api/settings', settings);
-
-// ── Discount reasons ─────────────────────────
 export const getDiscountReasons = () => get('/api/discount-reasons');
 export const addDiscountReason = (reason) => post('/api/discount-reasons', { reason });
 export const deleteDiscountReason = (id) => del(`/api/discount-reasons/${id}`);
-
-// ── Staff ────────────────────────────────────
 export const getStaff = () => get('/api/staff');
 export const addStaff = (staff) => post('/api/staff', staff);
 export const updateStaff = (id, staff) => put(`/api/staff/${id}`, staff);
-
-// ── Reports ──────────────────────────────────
 export const getSummaryReport = (from, to) => get(`/api/reports/summary?from=${from}&to=${to}`);
 export const getItemSalesReport = (from, to) => get(`/api/reports/items?from=${from}&to=${to}`);
-// ── Table plan ───────────────────────────────
 export const updateTablePlan = (id, data) => put(`/api/tables/${id}/plan`, data);
 export const addTable = (table) => post('/api/tables', table);
 export const deleteTable = (id) => del(`/api/tables/${id}`);
-
-// ── Bill ─────────────────────────────────────
 export const getBill = (orderId) => get(`/api/orders/${orderId}/bill`);
 export const getBarOrders = () => get('/api/orders/bar');
 export const getCategories = () => get('/api/categories');
@@ -73,3 +63,5 @@ export const saveZReport = (type, from, to, data, float_amount, petty_cash, pett
 export const getZReportHistory = () => get('/api/z-report/history');
 export const getBills = (from, to, method) => get(`/api/bills?from=${from}&to=${to}&method=${method}`);
 export const getBillItems = (orderId) => get(`/api/bills/${orderId}/items`);
+export const getKitchenCompleted = () => get('/api/kitchen/completed');
+export const getBarCompleted = () => get('/api/bar/completed');

@@ -1,171 +1,222 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { Pool } = require('pg');
 
-// This creates the database file in your project folder
-// If it already exists, it just opens it
-const DB_PATH = path.join(__dirname, '../../restaurant.db');
-
-const db = new sqlite3.Database(DB_PATH, (err) => {
-  if (err) {
-    console.error('Could not connect to database', err);
-  } else {
-    console.log('Connected to SQLite database');
-  }
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: false
 });
 
-// Create all tables if they don't exist yet
-db.serialize(() => {
+async function initDB() {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tables (
+        id SERIAL PRIMARY KEY,
+        table_number INTEGER NOT NULL UNIQUE,
+        name TEXT,
+        capacity INTEGER DEFAULT 4,
+        status TEXT DEFAULT 'available',
+        pos_x REAL DEFAULT 0,
+        pos_y REAL DEFAULT 0,
+        shape TEXT DEFAULT 'square',
+        width REAL DEFAULT 100,
+        height REAL DEFAULT 100
+      )
+    `);
 
-  // TABLES — the physical tables in your restaurant
-  db.run(`
-    CREATE TABLE IF NOT EXISTS tables (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      table_number INTEGER NOT NULL UNIQUE,
-      name TEXT,
-      capacity INTEGER DEFAULT 4,
-      status TEXT DEFAULT 'available'
-    )
-  `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        is_bar INTEGER DEFAULT 0
+      )
+    `);
 
-  // CATEGORIES — e.g. Starters, Mains, Drinks, Desserts
-  db.run(`
-    CREATE TABLE IF NOT EXISTS categories (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      sort_order INTEGER DEFAULT 0
-    )
-  `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS subcategories (
+        id SERIAL PRIMARY KEY,
+        category_id INTEGER REFERENCES categories(id),
+        name TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0
+      )
+    `);
 
-  // MENU ITEMS — every dish or drink you sell
-  db.run(`
-    CREATE TABLE IF NOT EXISTS menu_items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      category_id INTEGER,
-      name TEXT NOT NULL,
-      description TEXT,
-      price REAL NOT NULL,
-      is_available INTEGER DEFAULT 1,
-      FOREIGN KEY (category_id) REFERENCES categories(id)
-    )
-  `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS menu_items (
+        id SERIAL PRIMARY KEY,
+        category_id INTEGER REFERENCES categories(id),
+        subcategory_id INTEGER REFERENCES subcategories(id),
+        name TEXT NOT NULL,
+        description TEXT,
+        price REAL NOT NULL,
+        is_available INTEGER DEFAULT 1
+      )
+    `);
 
-  // ORDERS — one order per table visit
-  db.run(`
-    CREATE TABLE IF NOT EXISTS orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      table_id INTEGER,
-      status TEXT DEFAULT 'open',
-      created_at TEXT DEFAULT (datetime('now')),
-      closed_at TEXT,
-      total REAL DEFAULT 0,
-      notes TEXT,
-      FOREIGN KEY (table_id) REFERENCES tables(id)
-    )
-  `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS modifier_groups (
+        id SERIAL PRIMARY KEY,
+        menu_item_id INTEGER NOT NULL REFERENCES menu_items(id),
+        name TEXT NOT NULL,
+        required INTEGER DEFAULT 1,
+        multi_select INTEGER DEFAULT 0
+      )
+    `);
 
-  // ORDER ITEMS — each dish inside an order
-  db.run(`
-    CREATE TABLE IF NOT EXISTS order_items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      order_id INTEGER NOT NULL,
-      menu_item_id INTEGER NOT NULL,
-      quantity INTEGER DEFAULT 1,
-      unit_price REAL NOT NULL,
-      notes TEXT,
-      status TEXT DEFAULT 'pending',
-      created_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (order_id) REFERENCES orders(id),
-      FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)
-    )
-  `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS modifiers (
+        id SERIAL PRIMARY KEY,
+        group_id INTEGER NOT NULL REFERENCES modifier_groups(id),
+        name TEXT NOT NULL,
+        extra_price REAL DEFAULT 0,
+        is_available INTEGER DEFAULT 1
+      )
+    `);
 
-  // STAFF — waiters and admins
-  db.run(`
-    CREATE TABLE IF NOT EXISTS staff (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      pin TEXT NOT NULL,
-      role TEXT DEFAULT 'waiter',
-      is_active INTEGER DEFAULT 1,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS orders (
+        id SERIAL PRIMARY KEY,
+        table_id INTEGER REFERENCES tables(id),
+        status TEXT DEFAULT 'open',
+        created_at TIMESTAMP DEFAULT NOW(),
+        closed_at TIMESTAMP,
+        opened_at TIMESTAMP DEFAULT NOW(),
+        total REAL DEFAULT 0,
+        notes TEXT,
+        covers INTEGER DEFAULT 1,
+        discount_type TEXT,
+        discount_value REAL,
+        discount_reason TEXT,
+        bill_printed INTEGER DEFAULT 0
+      )
+    `);
 
-  // PAYMENTS — how each order was paid
-  db.run(`
-    CREATE TABLE IF NOT EXISTS payments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      order_id INTEGER NOT NULL,
-      amount REAL NOT NULL,
-      method TEXT DEFAULT 'cash',
-      paid_at TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (order_id) REFERENCES orders(id)
-    )
-  `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS order_items (
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER NOT NULL REFERENCES orders(id),
+        menu_item_id INTEGER NOT NULL REFERENCES menu_items(id),
+        quantity INTEGER DEFAULT 1,
+        unit_price REAL NOT NULL,
+        notes TEXT,
+        status TEXT DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT NOW(),
+        course INTEGER DEFAULT 1,
+        item_note TEXT,
+        is_fired INTEGER DEFAULT 0,
+        fired_at TIMESTAMP,
+        cooking_started_at TIMESTAMP,
+        served_at TIMESTAMP,
+        voided INTEGER DEFAULT 0,
+        void_reason TEXT
+      )
+    `);
 
-  // Seed some starter data so the app works straight away
-  db.get("SELECT COUNT(*) as count FROM tables", (err, row) => {
-    if (row && row.count === 0) {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS order_item_modifiers (
+        id SERIAL PRIMARY KEY,
+        order_item_id INTEGER NOT NULL REFERENCES order_items(id),
+        modifier_id INTEGER NOT NULL REFERENCES modifiers(id),
+        name TEXT NOT NULL,
+        extra_price REAL DEFAULT 0
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS staff (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        pin TEXT NOT NULL,
+        role TEXT DEFAULT 'waiter',
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS payments (
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER NOT NULL REFERENCES orders(id),
+        amount REAL NOT NULL,
+        method TEXT DEFAULT 'cash',
+        paid_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS settings (
+        id SERIAL PRIMARY KEY,
+        key TEXT NOT NULL UNIQUE,
+        value TEXT
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS discount_reasons (
+        id SERIAL PRIMARY KEY,
+        reason TEXT NOT NULL,
+        is_active INTEGER DEFAULT 1
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS z_reports (
+        id SERIAL PRIMARY KEY,
+        type TEXT,
+        opened_at TIMESTAMP,
+        closed_at TIMESTAMP,
+        total_sales REAL,
+        total_cash REAL,
+        total_card REAL,
+        total_other REAL,
+        total_covers INTEGER,
+        total_orders INTEGER,
+        discounts REAL,
+        voids INTEGER,
+        float_amount REAL,
+        petty_cash REAL,
+        petty_cash_reason TEXT,
+        actual_cash REAL,
+        cash_difference REAL,
+        report_data TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // Seed starter data
+    const tablesCount = await client.query('SELECT COUNT(*) as count FROM tables');
+    if (parseInt(tablesCount.rows[0].count) === 0) {
       for (let i = 1; i <= 10; i++) {
-        db.run(`INSERT INTO tables (table_number, capacity) VALUES (?, ?)`, [i, 4]);
+        await client.query('INSERT INTO tables (table_number, capacity) VALUES ($1, $2)', [i, 4]);
       }
       console.log('Created 10 tables');
     }
-  });
 
-  db.get("SELECT COUNT(*) as count FROM categories", (err, row) => {
-    if (row && row.count === 0) {
-      db.run(`INSERT INTO categories (name, sort_order) VALUES ('Starters', 1)`);
-      db.run(`INSERT INTO categories (name, sort_order) VALUES ('Mains', 2)`);
-      db.run(`INSERT INTO categories (name, sort_order) VALUES ('Desserts', 3)`);
-      db.run(`INSERT INTO categories (name, sort_order) VALUES ('Drinks', 4)`);
+    const categoriesCount = await client.query('SELECT COUNT(*) as count FROM categories');
+    if (parseInt(categoriesCount.rows[0].count) === 0) {
+      await client.query("INSERT INTO categories (name, sort_order) VALUES ('Starters', 1)");
+      await client.query("INSERT INTO categories (name, sort_order) VALUES ('Mains', 2)");
+      await client.query("INSERT INTO categories (name, sort_order) VALUES ('Desserts', 3)");
+      await client.query("INSERT INTO categories (name, sort_order) VALUES ('Drinks', 4)");
       console.log('Created starter categories');
     }
-  });
 
-  db.get("SELECT COUNT(*) as count FROM staff", (err, row) => {
-    if (row && row.count === 0) {
-      db.run(`INSERT INTO staff (name, pin, role) VALUES ('Admin', '0000', 'admin')`);
-      db.run(`INSERT INTO staff (name, pin, role) VALUES ('Waiter 1', '1111', 'waiter')`);
-      console.log('Created default staff — remember to change the PINs!');
+    const staffCount = await client.query('SELECT COUNT(*) as count FROM staff');
+    if (parseInt(staffCount.rows[0].count) === 0) {
+      await client.query("INSERT INTO staff (name, pin, role) VALUES ('Admin', '0000', 'admin')");
+      await client.query("INSERT INTO staff (name, pin, role) VALUES ('Waiter 1', '1111', 'waiter')");
+      console.log('Created default staff');
     }
-  });
 
-});
-// MODIFIER GROUPS — e.g. "Choose Meat", "Choose Size"
-  db.run(`
-    CREATE TABLE IF NOT EXISTS modifier_groups (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      menu_item_id INTEGER NOT NULL,
-      name TEXT NOT NULL,
-      required INTEGER DEFAULT 1,
-      multi_select INTEGER DEFAULT 0,
-      FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)
-    )
-  `);
+    console.log('✅ Database ready');
+  } catch (err) {
+    console.error('Database init error:', err);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
 
-  // MODIFIERS — e.g. Chicken, Beef, Prawn
-  db.run(`
-    CREATE TABLE IF NOT EXISTS modifiers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      group_id INTEGER NOT NULL,
-      name TEXT NOT NULL,
-      extra_price REAL DEFAULT 0,
-      is_available INTEGER DEFAULT 1,
-      FOREIGN KEY (group_id) REFERENCES modifier_groups(id)
-    )
-  `);
+initDB().catch(console.error);
 
-  // ORDER ITEM MODIFIERS — records which options were chosen
-  db.run(`
-    CREATE TABLE IF NOT EXISTS order_item_modifiers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      order_item_id INTEGER NOT NULL,
-      modifier_id INTEGER NOT NULL,
-      name TEXT NOT NULL,
-      extra_price REAL DEFAULT 0,
-      FOREIGN KEY (order_item_id) REFERENCES order_items(id),
-      FOREIGN KEY (modifier_id) REFERENCES modifiers(id)
-    )
-  `);
-module.exports = db;
+module.exports = pool;

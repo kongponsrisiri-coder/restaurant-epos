@@ -41,7 +41,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     fetchData();
   }, [orderId]);
 
-  const getItemIsBar = (item) => {
+const getItemIsBar = (item) => {
     const cat = menu.find(c => c.id === item.category_id);
     return !!cat?.is_bar;
   };

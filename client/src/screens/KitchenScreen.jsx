@@ -112,7 +112,7 @@ export default function KitchenScreen() {
   useEffect(() => {
     fetchOrders();
     fetchCompleted();
-    const socket = io(SERVER_URL);
+    const socket = io(SERVER_URL, { transports: ['websocket', 'polling'] });
     socket.on('new_order_items', () => fetchOrders());
     socket.on('item_status_changed', () => { fetchOrders(); fetchCompleted(); });
     socket.on('order_closed', () => { fetchOrders(); fetchCompleted(); });

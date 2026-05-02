@@ -148,12 +148,25 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     }
   };
 
+  // ── Item discount — apply or remove ──
   const handleItemDiscount = async (item) => {
     const allowedRoles = ['admin', 'manager', 'supervisor'];
     if (!allowedRoles.includes(staff?.role)) {
       alert('⛔ Only Admin, Manager or Supervisor can apply discounts!');
       return;
     }
+    // If item already has discount — offer to remove
+    if (item.discount_value > 0) {
+      const remove = window.confirm(
+        `This item has a discount:\n${item.discount_type === 'percent' ? item.discount_value + '%' : '£' + item.discount_value} off\n\nOK = Remove discount\nCancel = Change discount`
+      );
+      if (remove) {
+        await applyItemDiscount(item.id, null, 0);
+        await fetchOrder();
+        return;
+      }
+    }
+    // Apply new discount
     const type = window.confirm('OK = percentage %\nCancel = fixed £ amount') ? 'percent' : 'fixed';
     const value = prompt(type === 'percent' ? 'Discount %:' : 'Discount £:', '10');
     if (!value) return;
@@ -192,6 +205,19 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     if (!cartByCourse[c]) cartByCourse[c] = [];
     cartByCourse[c].push(item);
   });
+
+  // Reusable DISC button
+  const DiscButton = ({ item }) => (
+    <button onClick={() => handleItemDiscount(item)} style={{
+      background: item.discount_value > 0 ? '#fef9c3' : '#dcfce7',
+      border: 'none', borderRadius: 4,
+      padding: '2px 6px', cursor: 'pointer',
+      color: item.discount_value > 0 ? '#92400e' : '#16a34a',
+      fontSize: 10, fontWeight: 700
+    }}>
+      {item.discount_value > 0 ? '🏷️ DISC' : 'DISC'}
+    </button>
+  );
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
@@ -352,22 +378,32 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               </div>
             )}
 
-            {/* Existing bar items */}
+            {/* Existing bar items — WITH DISC button */}
             {existingBarItems.filter(i => !i.voided).length > 0 && (
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#1e40af', marginBottom: 6, textTransform: 'uppercase' }}>🍹 Bar — Sent</div>
                 {existingBarItems.filter(i => !i.voided).map(item => (
-                  <div key={item.id} style={{ marginBottom: 5, fontSize: 13, color: '#555', display: 'flex', justifyContent: 'space-between' }}>
-                    <span>{item.status === 'served' ? '✅' : '🍹'} {item.quantity}× {item.name}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
-                      <button onClick={async () => {
-                        const reason = prompt('Void reason:', 'Customer changed mind');
-                        if (!reason) return;
-                        await voidItem(item.id, reason);
-                        await fetchOrder();
-                      }} style={{ background: '#fee2e2', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', color: '#ef4444', fontSize: 10, fontWeight: 700 }}>VOID</button>
+                  <div key={item.id} style={{ marginBottom: 6 }}>
+                    <div style={{ fontSize: 13, color: '#555', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ flex: 1 }}>{item.status === 'served' ? '✅' : '🍹'} {item.quantity}× {item.name}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
+                        <DiscButton item={item} />
+                        <button onClick={async () => {
+                          const reason = prompt('Void reason:', 'Customer changed mind');
+                          if (!reason) return;
+                          await voidItem(item.id, reason);
+                          await fetchOrder();
+                        }} style={{ background: '#fee2e2', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', color: '#ef4444', fontSize: 10, fontWeight: 700 }}>VOID</button>
+                      </div>
                     </div>
+                    {item.notes && <div style={{ fontSize: 11, color: '#aaa', marginLeft: 16 }}>— {item.notes}</div>}
+                    {item.item_note && <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16 }}>📝 {item.item_note}</div>}
+                    {item.discount_value > 0 && (
+                      <div style={{ fontSize: 10, color: '#92400e', marginLeft: 16, fontWeight: 700 }}>
+                        🏷️ {item.discount_type === 'percent' ? `${item.discount_value}% off` : `£${item.discount_value} off`}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -420,7 +456,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                     )}
                   </div>
 
-                  {/* PENDING / UNFIRED items — pulsing orange */}
+                  {/* PENDING / UNFIRED items */}
                   {unfired.map(item => (
                     <div key={item.id} style={{
                       marginBottom: 8, padding: '10px 12px',
@@ -442,11 +478,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                         </span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           <span style={{ color: '#92400e', fontWeight: 600 }}>£{(item.unit_price * item.quantity).toFixed(2)}</span>
-                          <button onClick={() => handleItemDiscount(item)} style={{
-                            background: '#dcfce7', border: 'none', borderRadius: 4,
-                            padding: '2px 6px', cursor: 'pointer',
-                            color: '#16a34a', fontSize: 10, fontWeight: 700
-                          }}>DISC</button>
+                          <DiscButton item={item} />
                           <button onClick={async () => {
                             const reason = prompt('Void reason:', 'Customer changed mind');
                             if (!reason) return;
@@ -458,7 +490,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       {item.notes && <div style={{ fontSize: 11, color: '#92400e', marginLeft: 8, marginTop: 3 }}>— {item.notes}</div>}
                       {item.item_note && <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 8, marginTop: 2 }}>📝 {item.item_note}</div>}
                       {item.discount_value > 0 && (
-                        <div style={{ fontSize: 10, color: '#16a34a', marginLeft: 8, marginTop: 2, fontWeight: 700 }}>
+                        <div style={{ fontSize: 10, color: '#92400e', marginLeft: 8, marginTop: 2, fontWeight: 700 }}>
                           🏷️ {item.discount_type === 'percent' ? `${item.discount_value}% off` : `£${item.discount_value} off`}
                         </div>
                       )}
@@ -474,11 +506,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                         </span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
-                          <button onClick={() => handleItemDiscount(item)} style={{
-                            background: '#dcfce7', border: 'none', borderRadius: 4,
-                            padding: '2px 6px', cursor: 'pointer',
-                            color: '#16a34a', fontSize: 10, fontWeight: 700
-                          }}>DISC</button>
+                          <DiscButton item={item} />
                           <button onClick={async () => {
                             const reason = prompt('Void reason:', 'Customer changed mind');
                             if (!reason) return;
@@ -496,7 +524,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       {item.notes && <div style={{ fontSize: 11, color: '#aaa', marginLeft: 16 }}>— {item.notes}</div>}
                       {item.item_note && <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16 }}>📝 {item.item_note}</div>}
                       {item.discount_value > 0 && (
-                        <div style={{ fontSize: 10, color: '#16a34a', marginLeft: 16, fontWeight: 700 }}>
+                        <div style={{ fontSize: 10, color: '#92400e', marginLeft: 16, fontWeight: 700 }}>
                           🏷️ {item.discount_type === 'percent' ? `${item.discount_value}% off` : `£${item.discount_value} off`}
                         </div>
                       )}
@@ -525,8 +553,6 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
 
           {/* Bottom totals */}
           <div style={{ padding: '14px 16px', borderTop: '1px solid #eee', flexShrink: 0 }}>
-
-            {/* Discount */}
             <div style={{ marginBottom: 10 }}>
               {order?.discount_value > 0 ? (
                 <div style={{ display: 'flex', gap: 8 }}>

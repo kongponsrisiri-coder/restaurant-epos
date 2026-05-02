@@ -65,3 +65,5 @@ export const getBills = (from, to, method) => get(`/api/bills?from=${from}&to=${
 export const getBillItems = (orderId) => get(`/api/bills/${orderId}/items`);
 export const getKitchenCompleted = () => get('/api/kitchen/completed');
 export const getBarCompleted = () => get('/api/bar/completed');
+export const resendToKitchen = (orderId, itemIds) => post(`/api/orders/${orderId}/resend`, { item_ids: itemIds });
+

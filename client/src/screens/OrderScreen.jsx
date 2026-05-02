@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse } from '../api';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen } from '../api';
 import BillScreen from './BillScreen';
 
 const COURSE_LABELS = { 1: 'Starters', 2: 'Mains', 3: 'Desserts', 4: 'Extra' };
@@ -431,6 +431,16 @@ const getItemIsBar = (item) => {
                             await voidItem(item.id, reason);
                             await fetchOrder();
                           }} style={{ background: '#fee2e2', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', color: '#ef4444', fontSize: 10, fontWeight: 700 }}>VOID</button>
+                          <button onClick={async () => {
+  if (!window.confirm('Resend this item to kitchen?')) return;
+  await resendToKitchen(orderId, [item.id]);
+  await fetchOrder();
+  alert('🔄 Resent to kitchen!');
+}} style={{
+  background: '#dbeafe', border: 'none', borderRadius: 4,
+  padding: '2px 6px', cursor: 'pointer',
+  color: '#1e40af', fontSize: 10, fontWeight: 700, marginLeft: 4
+}}>RESEND</button>
                         </div>
                       </div>
                       {item.notes && <div style={{ fontSize: 11, color: '#aaa', marginLeft: 16 }}>— {item.notes}</div>}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import LoginScreen from './screens/LoginScreen';
 import TableMapScreen from './screens/TableMapScreen';
 import OrderScreen from './screens/OrderScreen';
@@ -11,6 +11,8 @@ export default function App() {
   const [staff, setStaff] = useState(null);
   const [screen, setScreen] = useState('tables');
   const [activeOrder, setActiveOrder] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const isMobile = window.innerWidth < 768;
 
   if (!staff) return <LoginScreen onLogin={setStaff} />;
   if (staff.role === 'kitchen') return <KitchenScreen />;
@@ -20,9 +22,9 @@ export default function App() {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f5f5f5' }}>
         <nav className="navbar">
-          <span className="navbar-brand">SiamEPOS</span>
+          <span className="navbar-brand">Siam<span style={{ color: '#C9A84C' }}>EPOS</span></span>
           <div className="navbar-user">
-            <span>{staff.name}</span>
+            <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
             <button className="logout-btn" onClick={() => setStaff(null)}>Log out</button>
           </div>
         </nav>
@@ -44,20 +46,57 @@ export default function App() {
   return (
     <div className="app">
       <nav className="navbar">
-        <span className="navbar-brand">SiamEPOS</span>
-        <div className="navbar-links">
+        <span className="navbar-brand">Siam<span style={{ color: '#C9A84C' }}>EPOS</span></span>
+
+        {/* Desktop nav */}
+        <div className="navbar-links" style={{ display: isMobile ? 'none' : 'flex' }}>
           <button className={screen === 'tables' ? 'active' : ''} onClick={() => setScreen('tables')}>Tables</button>
-          {staff.role === 'admin' && (
+          {(staff.role === 'admin' || staff.role === 'manager' || staff.role === 'supervisor') && (
             <button className={screen === 'admin' ? 'active' : ''} onClick={() => setScreen('admin')}>Admin</button>
           )}
           <button className={screen === 'kitchen' ? 'active' : ''} onClick={() => setScreen('kitchen')}>Kitchen view</button>
           <button className={screen === 'bar' ? 'active' : ''} onClick={() => setScreen('bar')}>Bar</button>
         </div>
+
+        {/* Mobile hamburger */}
+        {isMobile && (
+          <button onClick={() => setMenuOpen(!menuOpen)} style={{
+            background: 'none', border: 'none', color: 'white',
+            fontSize: 24, cursor: 'pointer', padding: '0 8px'
+          }}>☰</button>
+        )}
+
         <div className="navbar-user">
-          <span>{staff.name}</span>
+          <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
           <button className="logout-btn" onClick={() => setStaff(null)}>Log out</button>
         </div>
       </nav>
+
+      {/* Mobile dropdown menu */}
+      {isMobile && menuOpen && (
+        <div style={{
+          background: '#1a1a2e', padding: '8px 16px',
+          display: 'flex', flexDirection: 'column', gap: 4,
+          borderBottom: '2px solid rgba(201,168,76,0.3)'
+        }}>
+          {[
+            { key: 'tables', label: '🗺️ Tables' },
+            ...(staff.role === 'admin' || staff.role === 'manager' || staff.role === 'supervisor' ? [{ key: 'admin', label: '⚙️ Admin' }] : []),
+            { key: 'kitchen', label: '🍳 Kitchen' },
+            { key: 'bar', label: '🍹 Bar' },
+          ].map(item => (
+            <button key={item.key} onClick={() => { setScreen(item.key); setMenuOpen(false); }} style={{
+              background: screen === item.key ? 'rgba(201,168,76,0.2)' : 'transparent',
+              border: 'none', color: screen === item.key ? '#C9A84C' : 'rgba(255,255,255,0.8)',
+              padding: '12px 16px', borderRadius: 8,
+              textAlign: 'left', fontSize: 15, fontWeight: 600, cursor: 'pointer'
+            }}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <main className="main-content">
         {screen === 'tables' && (
           <TableMapScreen

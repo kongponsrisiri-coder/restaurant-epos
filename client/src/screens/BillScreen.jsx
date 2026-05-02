@@ -8,16 +8,21 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const [selectedMethod, setSelectedMethod] = useState(null);
   const [stage, setStage] = useState('bill');
 
+  // Split bill state
+  const [splitCount, setSplitCount] = useState(2);
+  const [splitMode, setSplitMode] = useState('equal'); // 'equal' or 'items'
+  const [splitPaid, setSplitPaid] = useState([]); // which splits are paid
+
   useEffect(() => {
-  getBill(orderId).then(data => {
-    setBill(data);
-    setLoading(false);
-    markBillPrinted(orderId);
-  });
-}, [orderId]);
+    getBill(orderId).then(data => {
+      setBill(data);
+      setLoading(false);
+      markBillPrinted(orderId);
+    });
+  }, [orderId]);
 
   if (loading) return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
       <div style={{ color: 'white', fontSize: 18 }}>Loading bill...</div>
     </div>
   );
@@ -25,7 +30,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   if (!bill || !bill.order) return null;
 
   const { order, settings } = bill;
-  const subtotal = order.items?.reduce((sum, i) => sum + i.unit_price * i.quantity, 0) || 0;
+  const subtotal = order.items?.filter(i => !i.voided).reduce((sum, i) => sum + i.unit_price * i.quantity, 0) || 0;
   const discountAmount = order.discount_value > 0
     ? order.discount_type === 'percent' ? subtotal * (order.discount_value / 100) : order.discount_value
     : 0;
@@ -41,6 +46,11 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+  // Split calculations
+  const splitAmount = billTotal / splitCount;
+  const paidCount = splitPaid.length;
+  const remainingAmount = billTotal - (paidCount * splitAmount);
 
   const handleNumpad = (btn) => {
     if (btn === 'C') { setPaymentInput(''); return; }
@@ -62,8 +72,16 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     onPay(billTotal, selectedMethod, amountPaid, actualTip);
   };
 
+  const handleSplitPayment = (index) => {
+    setSplitPaid(prev => [...prev, index]);
+    if (splitPaid.length + 1 >= splitCount) {
+      // All splits paid
+      onPay(billTotal, 'Split', billTotal, 0);
+    }
+  };
+
   const overlay = {
-    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+    position: 'fixed', inset: 0,
     background: 'rgba(0,0,0,0.75)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     zIndex: 9999, padding: 16
@@ -72,7 +90,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const card = {
     background: 'white', borderRadius: 20,
     width: '100%',
-    maxWidth: stage === 'amount' ? 820 : 420,
+    maxWidth: stage === 'amount' ? 820 : stage === 'split' ? 500 : 420,
     maxHeight: '95vh', overflowY: 'auto',
     boxShadow: '0 20px 60px rgba(0,0,0,0.5)'
   };
@@ -100,7 +118,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
               </div>
 
               <div style={{ marginBottom: 16, fontFamily: 'monospace' }}>
-                {order.items?.map(item => (
+                {order.items?.filter(i => !i.voided).map(item => (
                   <div key={item.id} style={{ marginBottom: 6 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
                       <span>{item.quantity}× {item.name}</span>
@@ -124,7 +142,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 )}
                 {serviceCharge > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 6, color: '#555' }}>
-                    <span>Service charge ({settings.service_charge_percent}%)</span>
+                    <span>Service charge ({settings.service_charge_percent || 12.5}%)</span>
                     <span>£{serviceCharge.toFixed(2)}</span>
                   </div>
                 )}
@@ -141,10 +159,19 @@ export default function BillScreen({ orderId, onClose, onPay }) {
             <div style={{ padding: '0 24px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button onClick={() => setStage('method')} style={{
                 padding: '18px', borderRadius: 12, border: 'none',
-                background: '#e94560', color: 'white', fontSize: 20, fontWeight: 800, cursor: 'pointer'
+                background: '#1a1a2e', color: 'white', fontSize: 18, fontWeight: 800, cursor: 'pointer'
               }}>
                 💳 Take Payment — £{billTotal.toFixed(2)}
               </button>
+
+              {/* SPLIT BILL BUTTON */}
+              <button onClick={() => { setSplitPaid([]); setStage('split'); }} style={{
+                padding: '14px', borderRadius: 12, border: '2px solid #C9A84C',
+                background: 'white', color: '#C9A84C', fontSize: 16, fontWeight: 700, cursor: 'pointer'
+              }}>
+                ✂️ Split Bill
+              </button>
+
               <button onClick={() => window.print()} style={{
                 padding: '12px', borderRadius: 10, border: '2px solid #1a1a2e',
                 background: 'white', color: '#1a1a2e', fontSize: 14, fontWeight: 600, cursor: 'pointer'
@@ -158,6 +185,100 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 Close
               </button>
             </div>
+          </div>
+        )}
+
+        {/* ─── SPLIT BILL ─── */}
+        {stage === 'split' && (
+          <div style={{ padding: 32 }}>
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: '#1a1a2e' }}>✂️ Split Bill</div>
+              <div style={{ fontSize: 14, color: '#888', marginTop: 4 }}>
+                Total: £{billTotal.toFixed(2)}
+              </div>
+            </div>
+
+            {/* Number of ways to split */}
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#555', marginBottom: 12, textAlign: 'center' }}>
+                Split between how many people?
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+                {[2,3,4,5,6,7,8,9,10].map(n => (
+                  <button key={n} onClick={() => { setSplitCount(n); setSplitPaid([]); }} style={{
+                    padding: '14px 8px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                    fontWeight: 700, fontSize: 16,
+                    background: splitCount === n ? '#1a1a2e' : '#f0f0f0',
+                    color: splitCount === n ? 'white' : '#1a1a2e',
+                  }}>{n}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Split summary */}
+            <div style={{ background: '#f8f8f8', borderRadius: 14, padding: 20, marginBottom: 24 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, color: '#555', marginBottom: 8 }}>
+                <span>Each person pays</span>
+                <span style={{ fontWeight: 800, fontSize: 24, color: '#1a1a2e' }}>
+                  £{splitAmount.toFixed(2)}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#888' }}>
+                <span>Paid so far</span>
+                <span>{paidCount} of {splitCount} people</span>
+              </div>
+              {paidCount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#22c55e', marginTop: 8, fontWeight: 700 }}>
+                  <span>Remaining</span>
+                  <span>£{remainingAmount.toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Individual split payments */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+              {Array.from({ length: splitCount }, (_, i) => {
+                const isPaid = splitPaid.includes(i);
+                return (
+                  <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '14px 18px', borderRadius: 12,
+                    background: isPaid ? '#f0fdf4' : 'white',
+                    border: `2px solid ${isPaid ? '#22c55e' : '#e0e0e0'}`
+                  }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: isPaid ? '#22c55e' : '#1a1a2e' }}>
+                        {isPaid ? '✅' : '👤'} Person {i + 1}
+                      </div>
+                      <div style={{ fontSize: 13, color: '#888' }}>£{splitAmount.toFixed(2)}</div>
+                    </div>
+                    {!isPaid ? (
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={() => handleSplitPayment(i)} style={{
+                          padding: '10px 16px', borderRadius: 8, border: 'none',
+                          background: '#1a1a2e', color: 'white',
+                          fontWeight: 700, fontSize: 13, cursor: 'pointer'
+                        }}>💵 Cash</button>
+                        <button onClick={() => handleSplitPayment(i)} style={{
+                          padding: '10px 16px', borderRadius: 8, border: 'none',
+                          background: '#C9A84C', color: 'white',
+                          fontWeight: 700, fontSize: 13, cursor: 'pointer'
+                        }}>💳 Card</button>
+                      </div>
+                    ) : (
+                      <div style={{ color: '#22c55e', fontWeight: 700 }}>Paid ✓</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <button onClick={() => setStage('bill')} style={{
+              width: '100%', padding: '14px', borderRadius: 10, border: 'none',
+              background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15
+            }}>
+              ← Back to Bill
+            </button>
           </div>
         )}
 
@@ -200,10 +321,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
 
         {/* ─── AMOUNT + NUMPAD ─── */}
         {stage === 'amount' && (
-          <div style={{ display: 'flex' }}>
-
+          <div style={{ display: 'flex', flexWrap: 'wrap' }}>
             {/* Left */}
-            <div style={{ flex: 1, padding: 28, borderRight: '1px solid #eee' }}>
+            <div style={{ flex: 1, minWidth: 280, padding: 28, borderRight: '1px solid #eee' }}>
               <div style={{ marginBottom: 20 }}>
                 <div style={{ fontSize: 13, color: '#888', marginBottom: 4 }}>Payment method</div>
                 <div style={{ fontSize: 22, fontWeight: 700 }}>
@@ -248,8 +368,8 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   ].filter((v, i, arr) => arr.indexOf(v) === i).map(amount => (
                     <button key={amount} onClick={() => setPaymentInput(amount.toFixed(2))} style={{
                       padding: '12px', borderRadius: 10,
-                      border: `2px solid ${paymentInput === amount.toFixed(2) ? '#e94560' : '#1a1a2e'}`,
-                      background: paymentInput === amount.toFixed(2) ? '#e94560' : 'white',
+                      border: `2px solid ${paymentInput === amount.toFixed(2) ? '#C9A84C' : '#1a1a2e'}`,
+                      background: paymentInput === amount.toFixed(2) ? '#C9A84C' : 'white',
                       color: paymentInput === amount.toFixed(2) ? 'white' : '#1a1a2e',
                       fontWeight: 700, cursor: 'pointer', fontSize: 15
                     }}>

@@ -702,25 +702,25 @@ app.get('/api/tables/status', async (req, res) => {
       const dessertsFired = desserts.some(i => i.is_fired);
       const dessertsDone = desserts.length > 0 && desserts.every(i => i.status === 'served');
 
-      const hasPending = kitchenItems.some(i => i.status !== 'served');
+      // Pending = fired but not yet served
+      const hasPending = kitchenItems.some(i => i.is_fired && i.status !== 'served');
+      // Unfired = items saved but not sent to kitchen yet
+      const hasUnfired = kitchenItems.some(i => !i.is_fired);
 
       let colourStatus = 'occupied';
-      if (order.bill_printed && !hasPending) {
+
+      // Course colour always takes priority
+      if (dessertsDone) colourStatus = 'desserts_done';
+      else if (dessertsFired) colourStatus = 'desserts_fired';
+      else if (mainsDone) colourStatus = 'mains_done';
+      else if (mainsFired) colourStatus = 'mains_fired';
+      else if (startersDone) colourStatus = 'starters_done';
+      else if (startersFired) colourStatus = 'starters_fired';
+
+      // Only override with white if bill printed AND nothing pending AND nothing unfired
+      if (order.bill_printed && !hasPending && !hasUnfired) {
         colourStatus = 'bill_printed';
-      } else {
-        if (dessertsDone) colourStatus = 'desserts_done';
-        else if (dessertsFired) colourStatus = 'desserts_fired';
-        else if (mainsDone) colourStatus = 'mains_done';
-        else if (mainsFired) colourStatus = 'mains_fired';
-        else if (startersDone) colourStatus = 'starters_done';
-        else if (startersFired) colourStatus = 'starters_fired';
       }
-
-      return { ...order, colour_status: colourStatus };
-    });
-
-    res.json(result);
-  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/bar/completed', async (req, res) => {

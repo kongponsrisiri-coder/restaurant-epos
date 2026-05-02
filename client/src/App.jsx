@@ -22,7 +22,21 @@ export default function App() {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f5f5f5' }}>
         <nav className="navbar">
-          <span className="navbar-brand">Siam<span style={{ color: '#C9A84C' }}>EPOS</span></span>
+          <span className="navbar-brand">
+  <svg width="20" height="14" viewBox="0 0 32 22" style={{marginRight:3, verticalAlign:'middle'}}>
+    <rect width="32" height="22" fill="#A51931" rx="2"/>
+    <rect y="3.5" width="32" height="15" fill="white"/>
+    <rect y="7" width="32" height="8" fill="#2D2A4A"/>
+  </svg>
+  <svg width="20" height="14" viewBox="0 0 60 40" style={{marginRight:6, verticalAlign:'middle'}}>
+    <rect width="60" height="40" fill="#012169" rx="2"/>
+    <path d="M0,0 L60,40 M60,0 L0,40" stroke="white" strokeWidth="8"/>
+    <path d="M0,0 L60,40 M60,0 L0,40" stroke="#C8102E" strokeWidth="5"/>
+    <path d="M30,0 L30,40 M0,20 L60,20" stroke="white" strokeWidth="13"/>
+    <path d="M30,0 L30,40 M0,20 L60,20" stroke="#C8102E" strokeWidth="8"/>
+  </svg>
+  Siam<span style={{ color: '#C9A84C' }}>EPOS</span>
+</span>
           <div className="navbar-user">
             <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
             <button className="logout-btn" onClick={() => setStaff(null)}>Log out</button>

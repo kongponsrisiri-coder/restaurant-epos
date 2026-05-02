@@ -68,17 +68,26 @@ export default function LoginScreen({ onLogin }) {
 
         {/* Logo */}
         <div style={{ textAlign: 'center' }}>
-         <div style={{
-  width: 64, height: 64,
-  background: 'linear-gradient(135deg, #0D1B3E, #1A2F6B)',
-  borderRadius: 18,
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
+        <div style={{
+  width: 72, height: 44,
   margin: '0 auto 14px',
-  boxShadow: '0 8px 24px rgba(13,27,62,0.3)',
-  fontSize: 26,
-  gap: 2
+  display: 'flex', gap: 6,
+  alignItems: 'center', justifyContent: 'center',
 }}>
-  🇹🇭🇬🇧
+  {/* Thailand flag */}
+  <svg width="32" height="22" viewBox="0 0 32 22" rx="3">
+    <rect width="32" height="22" fill="#A51931" rx="3"/>
+    <rect y="3.5" width="32" height="15" fill="white"/>
+    <rect y="7" width="32" height="8" fill="#2D2A4A"/>
+  </svg>
+  {/* UK flag */}
+  <svg width="32" height="22" viewBox="0 0 60 40" rx="3">
+    <rect width="60" height="40" fill="#012169" rx="3"/>
+    <path d="M0,0 L60,40 M60,0 L0,40" stroke="white" strokeWidth="8"/>
+    <path d="M0,0 L60,40 M60,0 L0,40" stroke="#C8102E" strokeWidth="5"/>
+    <path d="M30,0 L30,40 M0,20 L60,20" stroke="white" strokeWidth="13"/>
+    <path d="M30,0 L30,40 M0,20 L60,20" stroke="#C8102E" strokeWidth="8"/>
+  </svg>
 </div>
           <div style={{
             fontSize: 30, fontWeight: 800,

@@ -222,10 +222,17 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                   {table.table_number}
                 </div>
                 {time && (
-                  <div style={{ fontSize: 10, fontWeight: 700, color: colours.bg === '#f8fafc' ? '#555' : timeColor, marginTop: 2 }}>
-                    ⏱ {time}
-                  </div>
-                )}
+  <div style={{
+    fontSize: 13, fontWeight: 800,
+    color: '#000000',
+    marginTop: 3,
+    background: 'rgba(255,255,255,0.85)',
+    padding: '2px 6px',
+    borderRadius: 6
+  }}>
+    ⏱ {time}
+  </div>
+)}
               </div>
             );
           })}

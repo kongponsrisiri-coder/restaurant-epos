@@ -702,16 +702,42 @@ app.get('/api/tables/status', async (req, res) => {
       const dessertsFired = desserts.some(i => i.is_fired);
       const dessertsDone = desserts.length > 0 && desserts.every(i => i.status === 'served');
 
- if (dessertsDone) colourStatus = 'desserts_done';       // ⚫ Grey
-else if (dessertsFired) colourStatus = 'desserts_fired'; // 🩷 Pink
-else if (mainsDone) colourStatus = 'mains_done';         // 🌑 Navy ✅
-else if (mainsFired) colourStatus = 'mains_fired';       // 🔵 Light Blue
-else if (startersDone) colourStatus = 'starters_done';   // 🟠 Orange
-else if (startersFired) colourStatus = 'starters_fired'; // 🟡 Yellow
+ // Filter non-bar items only
+const kitchenItems = Array.isArray(items) ? items.filter(i => !i.is_bar) : [];
 
-// White ONLY if bill printed AND nothing cooking
+// Course 1 — Starters
+const starters = kitchenItems.filter(i => Number(i.course) === 1);
+const startersFired = starters.some(i => i.is_fired);
+const startersDone = starters.length > 0 && starters.every(i => i.status === 'served');
+
+// Course 2 — Mains
+const mains = kitchenItems.filter(i => Number(i.course) === 2);
+const mainsFired = mains.some(i => i.is_fired);
+const mainsDone = mains.length > 0 && mains.every(i => i.status === 'served');
+
+// Course 3 — Desserts
+const desserts = kitchenItems.filter(i => Number(i.course) === 3);
+const dessertsFired = desserts.some(i => i.is_fired);
+const dessertsDone = desserts.length > 0 && desserts.every(i => i.status === 'served');
+
+// Active cooking check
+const hasActiveCooking = kitchenItems.some(i =>
+  i.status !== 'served' && i.is_fired
+);
+const hasUnfired = kitchenItems.some(i => !i.is_fired);
+
+// Determine colour — most advanced wins
+let colourStatus = 'occupied';
+if (dessertsDone) colourStatus = 'desserts_done';
+else if (dessertsFired) colourStatus = 'desserts_fired';
+else if (mainsDone) colourStatus = 'mains_done';
+else if (mainsFired) colourStatus = 'mains_fired';
+else if (startersDone) colourStatus = 'starters_done';
+else if (startersFired) colourStatus = 'starters_fired';
+
+// Only show bill_printed if nothing active
 if (order.bill_printed && !hasActiveCooking && !hasUnfired) {
-  colourStatus = 'bill_printed'; // ⬜ White
+  colourStatus = 'bill_printed';
 }
 
       return { ...order, colour_status: colourStatus };

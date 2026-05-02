@@ -16,7 +16,7 @@ const playSound = (type) => {
       // Single high beep — Starters
       oscillator.frequency.setValueAtTime(880, ctx.currentTime);
       oscillator.frequency.setValueAtTime(1100, ctx.currentTime + 0.1);
-      gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+      gainNode.gain.setValueAtTime(1.0, ctx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
       oscillator.start(ctx.currentTime);
       oscillator.stop(ctx.currentTime + 0.4);
@@ -25,7 +25,7 @@ const playSound = (type) => {
       oscillator.frequency.setValueAtTime(660, ctx.currentTime);
       oscillator.frequency.setValueAtTime(880, ctx.currentTime + 0.15);
       oscillator.frequency.setValueAtTime(660, ctx.currentTime + 0.3);
-      gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+      gainNode.gain.setValueAtTime(1.0, ctx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
       oscillator.start(ctx.currentTime);
       oscillator.stop(ctx.currentTime + 0.5);
@@ -34,14 +34,14 @@ const playSound = (type) => {
       oscillator.frequency.setValueAtTime(550, ctx.currentTime);
       oscillator.frequency.setValueAtTime(770, ctx.currentTime + 0.15);
       oscillator.frequency.setValueAtTime(990, ctx.currentTime + 0.3);
-      gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+      gainNode.gain.setValueAtTime(1.0, ctx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
       oscillator.start(ctx.currentTime);
       oscillator.stop(ctx.currentTime + 0.6);
     } else {
       // Default beep
       oscillator.frequency.setValueAtTime(750, ctx.currentTime);
-      gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+      gainNode.gain.setValueAtTime(1.0, ctx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
       oscillator.start(ctx.currentTime);
       oscillator.stop(ctx.currentTime + 0.3);

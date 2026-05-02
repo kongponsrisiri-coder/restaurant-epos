@@ -690,55 +690,32 @@ app.get('/api/tables/status', async (req, res) => {
       const items = itemsByOrder[order.id] || [];
       const kitchenItems = items.filter(i => !i.is_bar);
 
-      const starters = kitchenItems.filter(i => i.course === 1);
+      const starters = kitchenItems.filter(i => Number(i.course) === 1);
       const startersFired = starters.some(i => i.is_fired);
       const startersDone = starters.length > 0 && starters.every(i => i.status === 'served');
 
-      const mains = kitchenItems.filter(i => i.course === 2);
+      const mains = kitchenItems.filter(i => Number(i.course) === 2);
       const mainsFired = mains.some(i => i.is_fired);
       const mainsDone = mains.length > 0 && mains.every(i => i.status === 'served');
 
-      const desserts = kitchenItems.filter(i => i.course === 3);
+      const desserts = kitchenItems.filter(i => Number(i.course) === 3);
       const dessertsFired = desserts.some(i => i.is_fired);
       const dessertsDone = desserts.length > 0 && desserts.every(i => i.status === 'served');
 
- // Filter non-bar items only
-const kitchenItems = Array.isArray(items) ? items.filter(i => !i.is_bar) : [];
+      const hasActiveCooking = kitchenItems.some(i => i.status !== 'served' && i.is_fired);
+      const hasUnfired = kitchenItems.some(i => !i.is_fired);
 
-// Course 1 — Starters
-const starters = kitchenItems.filter(i => Number(i.course) === 1);
-const startersFired = starters.some(i => i.is_fired);
-const startersDone = starters.length > 0 && starters.every(i => i.status === 'served');
+      let colourStatus = 'occupied';
+      if (dessertsDone) colourStatus = 'desserts_done';
+      else if (dessertsFired) colourStatus = 'desserts_fired';
+      else if (mainsDone) colourStatus = 'mains_done';
+      else if (mainsFired) colourStatus = 'mains_fired';
+      else if (startersDone) colourStatus = 'starters_done';
+      else if (startersFired) colourStatus = 'starters_fired';
 
-// Course 2 — Mains
-const mains = kitchenItems.filter(i => Number(i.course) === 2);
-const mainsFired = mains.some(i => i.is_fired);
-const mainsDone = mains.length > 0 && mains.every(i => i.status === 'served');
-
-// Course 3 — Desserts
-const desserts = kitchenItems.filter(i => Number(i.course) === 3);
-const dessertsFired = desserts.some(i => i.is_fired);
-const dessertsDone = desserts.length > 0 && desserts.every(i => i.status === 'served');
-
-// Active cooking check
-const hasActiveCooking = kitchenItems.some(i =>
-  i.status !== 'served' && i.is_fired
-);
-const hasUnfired = kitchenItems.some(i => !i.is_fired);
-
-// Determine colour — most advanced wins
-let colourStatus = 'occupied';
-if (dessertsDone) colourStatus = 'desserts_done';
-else if (dessertsFired) colourStatus = 'desserts_fired';
-else if (mainsDone) colourStatus = 'mains_done';
-else if (mainsFired) colourStatus = 'mains_fired';
-else if (startersDone) colourStatus = 'starters_done';
-else if (startersFired) colourStatus = 'starters_fired';
-
-// Only show bill_printed if nothing active
-if (order.bill_printed && !hasActiveCooking && !hasUnfired) {
-  colourStatus = 'bill_printed';
-}
+      if (order.bill_printed && !hasActiveCooking && !hasUnfired) {
+        colourStatus = 'bill_printed';
+      }
 
       return { ...order, colour_status: colourStatus };
     });

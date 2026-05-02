@@ -690,32 +690,37 @@ app.get('/api/tables/status', async (req, res) => {
       const items = itemsByOrder[order.id] || [];
       const kitchenItems = items.filter(i => !i.is_bar);
 
-      const starters = kitchenItems.filter(i => Number(i.course) === 1);
-      const startersFired = starters.some(i => i.is_fired);
-      const startersDone = starters.length > 0 && starters.every(i => i.status === 'served');
+     const starters = kitchenItems.filter(i => Number(i.course) === 1);
+const startersFired = starters.some(i => i.is_fired);
+const startersDone = starters.length > 0 && starters.every(i => i.status === 'served');
 
-      const mains = kitchenItems.filter(i => Number(i.course) === 2);
-      const mainsFired = mains.some(i => i.is_fired);
-      const mainsDone = mains.length > 0 && mains.every(i => i.status === 'served');
+const mains = kitchenItems.filter(i => Number(i.course) === 2);
+const mainsFired = mains.some(i => i.is_fired);
+const mainsDone = mains.length > 0 && mains.every(i => i.status === 'served');
 
-      const desserts = kitchenItems.filter(i => Number(i.course) === 3);
-      const dessertsFired = desserts.some(i => i.is_fired);
-      const dessertsDone = desserts.length > 0 && desserts.every(i => i.status === 'served');
+const desserts = kitchenItems.filter(i => Number(i.course) === 3);
+const dessertsFired = desserts.some(i => i.is_fired);
+const dessertsDone = desserts.length > 0 && desserts.every(i => i.status === 'served');
 
-      const hasActiveCooking = kitchenItems.some(i => i.status !== 'served' && i.is_fired);
-      const hasUnfired = kitchenItems.some(i => !i.is_fired);
+// Find the MOST RECENT course state
+let colourStatus = 'occupied';
+if (dessertsDone) colourStatus = 'desserts_done';
+else if (dessertsFired) colourStatus = 'desserts_fired';
+else if (mainsDone) colourStatus = 'mains_done';
+else if (mainsFired) colourStatus = 'mains_fired';
+else if (startersDone) colourStatus = 'starters_done';
+else if (startersFired) colourStatus = 'starters_fired';
 
-      let colourStatus = 'occupied';
-      if (dessertsDone) colourStatus = 'desserts_done';
-      else if (dessertsFired) colourStatus = 'desserts_fired';
-      else if (mainsDone) colourStatus = 'mains_done';
-      else if (mainsFired) colourStatus = 'mains_fired';
-      else if (startersDone) colourStatus = 'starters_done';
-      else if (startersFired) colourStatus = 'starters_fired';
+// Show White ONLY when bill printed AND every single kitchen item is served
+const allKitchenServed = kitchenItems.length > 0 && 
+  kitchenItems.every(i => i.status === 'served');
+const noUnfiredItems = kitchenItems.every(i => i.is_fired);
 
-      if (order.bill_printed && !hasActiveCooking && !hasUnfired) {
-        colourStatus = 'bill_printed';
-      }
+if (order.bill_printed && allKitchenServed && noUnfiredItems) {
+  colourStatus = 'bill_printed';
+}
+// If bill printed but food still not all served — keep course colour
+// This means: Orange/Navy/Grey stays until ALL food is served
 
       return { ...order, colour_status: colourStatus };
     });

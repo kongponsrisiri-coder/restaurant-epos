@@ -47,6 +47,7 @@ async function initDB() {
         category_id INTEGER REFERENCES categories(id),
         subcategory_id INTEGER REFERENCES subcategories(id),
         name TEXT NOT NULL,
+        name_alt TEXT,
         description TEXT,
         price REAL NOT NULL,
         is_available INTEGER DEFAULT 1
@@ -194,6 +195,7 @@ async function initDB() {
     await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS start_date TEXT`);
     await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS notes TEXT`);
     await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS employment_status TEXT DEFAULT 'active'`);
+    await client.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS name_alt TEXT`);
 
     // ── Seed starter data ──
     const tablesCount = await client.query('SELECT COUNT(*) as count FROM tables');

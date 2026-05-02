@@ -114,7 +114,7 @@ app.delete('/api/subcategories/:id', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// MENU ROUTES
+// MENU ROUTES — includes name_alt
 // ─────────────────────────────────────────────
 
 app.get('/api/menu', async (req, res) => {
@@ -151,10 +151,10 @@ app.get('/api/menu/all', async (req, res) => {
 
 app.post('/api/menu/items', async (req, res) => {
   try {
-    const { category_id, subcategory_id, name, description, price } = req.body;
+    const { category_id, subcategory_id, name, name_alt, description, price } = req.body;
     const result = await pool.query(
-      'INSERT INTO menu_items (category_id, subcategory_id, name, description, price) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-      [category_id, subcategory_id || null, name, description, price]
+      'INSERT INTO menu_items (category_id, subcategory_id, name, name_alt, description, price) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+      [category_id, subcategory_id || null, name, name_alt || null, description, price]
     );
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -162,10 +162,10 @@ app.post('/api/menu/items', async (req, res) => {
 
 app.put('/api/menu/items/:id', async (req, res) => {
   try {
-    const { name, description, price, is_available, subcategory_id, category_id } = req.body;
+    const { name, name_alt, description, price, is_available, subcategory_id, category_id } = req.body;
     await pool.query(
-      'UPDATE menu_items SET name=$1, description=$2, price=$3, is_available=$4, subcategory_id=$5, category_id=$6 WHERE id=$7',
-      [name, description, price, is_available, subcategory_id || null, category_id, req.params.id]
+      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, subcategory_id=$6, category_id=$7 WHERE id=$8',
+      [name, name_alt || null, description, price, is_available, subcategory_id || null, category_id, req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -246,7 +246,7 @@ app.get('/api/orders/bar', async (req, res) => {
     if (!orders.length) return res.json([]);
     const orderIds = orders.map(o => o.id);
     const itemsRes = await pool.query(
-      `SELECT order_items.*, menu_items.name, categories.is_bar
+      `SELECT order_items.*, menu_items.name, menu_items.name_alt, categories.is_bar
        FROM order_items
        LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
        LEFT JOIN categories ON menu_items.category_id = categories.id
@@ -273,7 +273,7 @@ app.get('/api/orders/:id', async (req, res) => {
     const order = orderRes.rows[0];
     if (!order) return res.status(404).json({ error: 'Order not found' });
     const itemsRes = await pool.query(
-      `SELECT order_items.*, menu_items.name, menu_items.category_id, categories.is_bar
+      `SELECT order_items.*, menu_items.name, menu_items.name_alt, menu_items.category_id, categories.is_bar
        FROM order_items 
        LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
        LEFT JOIN categories ON menu_items.category_id = categories.id
@@ -323,7 +323,7 @@ app.post('/api/orders/:id/items', async (req, res) => {
     await client.query('COMMIT');
     const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
     const newItemsRes = await pool.query(
-      `SELECT order_items.*, menu_items.name FROM order_items 
+      `SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items 
        LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
        WHERE order_items.order_id = $1 AND order_items.is_fired = 1 AND order_items.status = 'cooking'`,
       [orderId]
@@ -357,7 +357,7 @@ app.put('/api/orders/:id/fire-course/:course', async (req, res) => {
        LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [id]
     );
     const itemsRes = await pool.query(
-      `SELECT order_items.*, menu_items.name FROM order_items
+      `SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items
        LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
        WHERE order_items.order_id = $1 AND order_items.course = $2 AND order_items.is_fired = 1`,
       [id, course]
@@ -448,7 +448,7 @@ app.get('/api/orders/:id/bill', async (req, res) => {
          LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id=$1`, [req.params.id]
       ),
       pool.query(
-        `SELECT order_items.*, menu_items.name FROM order_items
+        `SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items
          LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
          WHERE order_items.order_id=$1 AND order_items.voided=0`, [req.params.id]
       ),
@@ -476,16 +476,17 @@ app.post('/api/staff/login', async (req, res) => {
 
 app.get('/api/staff', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, role, is_active, created_at FROM staff ORDER BY name');
+    const result = await pool.query('SELECT id, name, role, is_active, created_at, start_date, notes, employment_status FROM staff ORDER BY name');
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/staff', async (req, res) => {
   try {
-    const { name, pin, role } = req.body;
+    const { name, pin, role, start_date, notes, employment_status } = req.body;
     const result = await pool.query(
-      'INSERT INTO staff (name, pin, role) VALUES ($1,$2,$3) RETURNING id', [name, pin, role]
+      'INSERT INTO staff (name, pin, role, start_date, notes, employment_status) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+      [name, pin, role, start_date || null, notes || null, employment_status || 'active']
     );
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -493,14 +494,25 @@ app.post('/api/staff', async (req, res) => {
 
 app.put('/api/staff/:id', async (req, res) => {
   try {
-    const { name, pin, role, is_active } = req.body;
+    const { name, pin, role, is_active, start_date, notes, employment_status } = req.body;
     if (pin) {
-      await pool.query('UPDATE staff SET name=$1, pin=$2, role=$3, is_active=$4 WHERE id=$5',
-        [name, pin, role, is_active, req.params.id]);
+      await pool.query(
+        'UPDATE staff SET name=$1, pin=$2, role=$3, is_active=$4, start_date=$5, notes=$6, employment_status=$7 WHERE id=$8',
+        [name, pin, role, is_active, start_date || null, notes || null, employment_status || 'active', req.params.id]
+      );
     } else {
-      await pool.query('UPDATE staff SET name=$1, role=$2, is_active=$3 WHERE id=$4',
-        [name, role, is_active, req.params.id]);
+      await pool.query(
+        'UPDATE staff SET name=$1, role=$2, is_active=$3, start_date=$4, notes=$5, employment_status=$6 WHERE id=$7',
+        [name, role, is_active, start_date || null, notes || null, employment_status || 'active', req.params.id]
+      );
     }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/staff/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM staff WHERE id=$1', [req.params.id]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -629,7 +641,7 @@ app.get('/api/reports/items', async (req, res) => {
 app.get('/api/kitchen/completed', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT order_items.*, menu_items.name, orders.covers, orders.id as order_id,
+      `SELECT order_items.*, menu_items.name, menu_items.name_alt, orders.covers, orders.id as order_id,
               tables.table_number, order_items.fired_at, order_items.served_at
        FROM order_items
        LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
@@ -694,14 +706,9 @@ app.get('/api/tables/status', async (req, res) => {
       const dessertsFired = desserts.some(i => i.is_fired);
       const dessertsDone = desserts.length > 0 && desserts.every(i => i.status === 'served');
 
-      // hasPending = any kitchen item fired but not yet served
-      const hasPending = kitchenItems.some(i => i.is_fired && i.status !== 'served');
-      // hasUnfired = any kitchen item saved but not sent to kitchen
-      const hasUnfired = kitchenItems.some(i => !i.is_fired);
+      const hasFiredItems = kitchenItems.some(i => i.is_fired);
 
       let colourStatus = 'occupied';
-
-      // Course colour always takes priority
       if (dessertsDone) colourStatus = 'desserts_done';
       else if (dessertsFired) colourStatus = 'desserts_fired';
       else if (mainsDone) colourStatus = 'mains_done';
@@ -709,8 +716,7 @@ app.get('/api/tables/status', async (req, res) => {
       else if (startersDone) colourStatus = 'starters_done';
       else if (startersFired) colourStatus = 'starters_fired';
 
-      // Only show white if bill printed AND nothing pending AND nothing unfired
-      if (order.bill_printed && !hasPending && !hasUnfired) {
+      if (order.bill_printed && !hasFiredItems) {
         colourStatus = 'bill_printed';
       }
 
@@ -724,7 +730,7 @@ app.get('/api/tables/status', async (req, res) => {
 app.get('/api/bar/completed', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT order_items.*, menu_items.name, orders.covers, orders.id as order_id,
+      `SELECT order_items.*, menu_items.name, menu_items.name_alt, orders.covers, orders.id as order_id,
               tables.table_number, order_items.fired_at, order_items.served_at
        FROM order_items
        LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
@@ -909,7 +915,7 @@ app.post('/api/orders/:id/resend', async (req, res) => {
       [req.params.id]
     );
     const itemsRes = await pool.query(
-      `SELECT order_items.*, menu_items.name FROM order_items
+      `SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items
        LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
        WHERE order_items.id = ANY($1::int[])`,
       [item_ids]
@@ -918,39 +924,7 @@ app.post('/api/orders/:id/resend', async (req, res) => {
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-// Apply discount to individual item
-app.put('/api/order-items/:id/discount', async (req, res) => {
-  try {
-    const { discount_type, discount_value } = req.body;
-    await pool.query(
-      'UPDATE order_items SET discount_type=$1, discount_value=$2 WHERE id=$3',
-      [discount_type, discount_value, req.params.id]
-    );
-    const itemRes = await pool.query('SELECT order_id FROM order_items WHERE id=$1', [req.params.id]);
-    if (itemRes.rows[0]) {
-      const totalRes = await pool.query(
-        `SELECT SUM(
-          CASE 
-            WHEN discount_type = 'percent' THEN quantity * unit_price * (1 - discount_value/100)
-            WHEN discount_type = 'fixed' THEN quantity * unit_price - discount_value
-            ELSE quantity * unit_price
-          END
-        ) as total FROM order_items WHERE order_id=$1 AND voided=0`,
-        [itemRes.rows[0].order_id]
-      );
-      await pool.query('UPDATE orders SET total=$1 WHERE id=$2', [totalRes.rows[0].total || 0, itemRes.rows[0].order_id]);
-    }
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
 
-// Delete staff
-app.delete('/api/staff/:id', async (req, res) => {
-  try {
-    await pool.query('DELETE FROM staff WHERE id=$1', [req.params.id]);
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
 // Item discount
 app.put('/api/order-items/:id/discount', async (req, res) => {
   try {
@@ -974,14 +948,6 @@ app.put('/api/order-items/:id/discount', async (req, res) => {
       await pool.query('UPDATE orders SET total=$1 WHERE id=$2',
         [totalRes.rows[0].total || 0, itemRes.rows[0].order_id]);
     }
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// Delete staff permanently
-app.delete('/api/staff/:id', async (req, res) => {
-  try {
-    await pool.query('DELETE FROM staff WHERE id=$1', [req.params.id]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

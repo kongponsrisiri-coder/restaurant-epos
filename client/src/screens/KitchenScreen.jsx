@@ -67,6 +67,22 @@ function Timer({ startedAt }) {
   );
 }
 
+// Item name display — shows English + alt language if enabled
+function ItemName({ item, showAlt, altLang }) {
+  return (
+    <div>
+      <div style={{ color: 'white', fontWeight: 800, fontSize: 20 }}>
+        {item.quantity}× {item.name}
+      </div>
+      {showAlt && item.name_alt && (
+        <div style={{ color: '#fbbf24', fontWeight: 700, fontSize: 16, marginTop: 2 }}>
+          {item.quantity}× {item.name_alt}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function KitchenScreen() {
   const [orders, setOrders] = useState([]);
   const [completedItems, setCompletedItems] = useState([]);
@@ -74,6 +90,22 @@ export default function KitchenScreen() {
   const [tab, setTab] = useState('kitchen');
   const [filter, setFilter] = useState('all');
   const [notification, setNotification] = useState(null);
+  const [showAlt, setShowAlt] = useState(false);
+  const [altLang, setAltLang] = useState('ภาษาไทย');
+
+  // Load language preference from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('kitchen_show_alt');
+    const savedLang = localStorage.getItem('kitchen_alt_lang');
+    if (saved === 'true') setShowAlt(true);
+    if (savedLang) setAltLang(savedLang);
+  }, []);
+
+  const toggleAlt = () => {
+    const next = !showAlt;
+    setShowAlt(next);
+    localStorage.setItem('kitchen_show_alt', String(next));
+  };
 
   const fetchOrders = async () => {
     try {
@@ -152,10 +184,6 @@ export default function KitchenScreen() {
   const cookingCount = orders.reduce((s, o) =>
     s + o.items.filter(i => !i.voided && i.is_fired && i.status === 'cooking' && !i.is_bar).length, 0);
 
-  const passCount = orders.filter(o =>
-    o.items.some(i => !i.voided && i.status !== 'served' && !i.is_bar)
-  ).length;
-
   const passOrders = orders
     .map(o => ({ ...o, items: o.items.filter(i => !i.voided && i.status !== 'served' && !i.is_bar) }))
     .filter(o => o.items.length > 0);
@@ -223,27 +251,28 @@ export default function KitchenScreen() {
             background: tab === 'pass' ? '#8b5cf6' : '#333', color: 'white'
           }}>
             🍽️ Pass
-            {passCount > 0 && (
-              <span style={{ background: 'white', color: '#8b5cf6', borderRadius: 20, padding: '2px 8px', marginLeft: 8, fontSize: 13 }}>
-                {passCount}
-              </span>
-            )}
           </button>
           <button onClick={() => { setTab('completed'); fetchCompleted(); }} style={{
             padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer',
             fontWeight: 700, fontSize: 15,
             background: tab === 'completed' ? '#22c55e' : '#333', color: 'white'
           }}>
-            ✅ Completed
-            {completedItems.length > 0 && (
-              <span style={{ background: 'white', color: '#22c55e', borderRadius: 20, padding: '2px 8px', marginLeft: 8, fontSize: 13 }}>
-                {completedItems.length}
-              </span>
-            )}
+            ✅ Done
           </button>
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* Language toggle */}
+          <button onClick={toggleAlt} style={{
+            padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
+            fontWeight: 800, fontSize: 14,
+            background: showAlt ? '#C9A84C' : '#333',
+            color: showAlt ? '#0D1B3E' : '#aaa',
+            transition: 'all 0.2s'
+          }}>
+            {showAlt ? `🌐 EN + ภาษา` : `🌐 EN only`}
+          </button>
+
           {tab === 'kitchen' && (
             <div style={{ display: 'flex', gap: 6 }}>
               {['all', '1', '2', '3', '4'].map(f => (
@@ -258,16 +287,16 @@ export default function KitchenScreen() {
             </div>
           )}
           <button onClick={() => { fetchOrders(); fetchCompleted(); }} style={{ background: '#333', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer' }}>
-            Refresh
+            ↻
           </button>
         </div>
       </div>
 
       {/* Legend */}
-      <div style={{ padding: '8px 20px', display: 'flex', gap: 24, borderBottom: '1px solid #222', flexWrap: 'wrap', flexShrink: 0 }}>
+      <div style={{ padding: '6px 20px', display: 'flex', gap: 20, borderBottom: '1px solid #222', flexWrap: 'wrap', flexShrink: 0, alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div style={{ width: 10, height: 10, borderRadius: 2, background: '#f59e0b' }} />
-          <span style={{ color: '#aaa', fontSize: 12 }}>⏳ Pending — not fired yet</span>
+          <span style={{ color: '#aaa', fontSize: 12 }}>⏳ Pending</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div style={{ width: 10, height: 10, borderRadius: 2, background: '#1e3a5f' }} />
@@ -283,7 +312,11 @@ export default function KitchenScreen() {
             <span style={{ color: '#aaa', fontSize: 12 }}>{s.label}</span>
           </div>
         ))}
-        <div style={{ marginLeft: 'auto', color: '#555', fontSize: 12 }}>← Oldest order always on left</div>
+        {showAlt && (
+          <div style={{ marginLeft: 'auto', background: '#C9A84C', color: '#0D1B3E', padding: '3px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800 }}>
+            🌐 Bilingual Mode ON
+          </div>
+        )}
       </div>
 
       {/* ─── KITCHEN TAB ─── */}
@@ -304,7 +337,7 @@ export default function KitchenScreen() {
                     <div style={{ background: '#e94560', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ color: 'white', fontWeight: 800, fontSize: 24 }}>
                         Table {order.table_number}
-                        {order.covers && <span style={{ fontSize: 14, fontWeight: 400, marginLeft: 8, opacity: 0.8 }}>{order.covers} covers</span>}
+                        {order.covers && <span style={{ fontSize: 14, fontWeight: 400, marginLeft: 8, opacity: 0.8 }}>{order.covers} cvr</span>}
                       </div>
                       <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>
                         #{order.id} · {getTimeAgo(order.created_at)}
@@ -313,26 +346,22 @@ export default function KitchenScreen() {
 
                     <div style={{ padding: 12 }}>
 
-                      {/* ── UPCOMING / PENDING — more visible ── */}
+                      {/* PENDING */}
                       {upcoming.length > 0 && (
                         <div style={{
-                          marginBottom: 12,
-                          background: '#2d1f00',
-                          borderRadius: 10,
-                          padding: '10px 12px',
+                          marginBottom: 12, background: '#2d1f00',
+                          borderRadius: 10, padding: '10px 12px',
                           border: '2px solid #f59e0b',
                           animation: 'pendingGlow 2s infinite'
                         }}>
                           <div style={{
-                            color: '#fbbf24', fontSize: 12, fontWeight: 800,
+                            color: '#fbbf24', fontSize: 11, fontWeight: 800,
                             textTransform: 'uppercase', marginBottom: 10,
                             letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 8
                           }}>
-                            <span style={{
-                              background: '#f59e0b', color: '#111',
-                              padding: '3px 10px', borderRadius: 20, fontSize: 11
-                            }}>⏳ PENDING — WAITING TO FIRE</span>
-                            <span style={{ color: '#6b7280', fontSize: 11 }}>{upcoming.length} item{upcoming.length > 1 ? 's' : ''}</span>
+                            <span style={{ background: '#f59e0b', color: '#111', padding: '3px 10px', borderRadius: 20, fontSize: 11 }}>
+                              ⏳ PENDING
+                            </span>
                           </div>
                           {(() => {
                             const byCourse = {};
@@ -350,14 +379,8 @@ export default function KitchenScreen() {
                                   </span>
                                 </div>
                                 {byCourse[course].map(item => (
-                                  <div key={item.id} style={{
-                                    background: '#3d2800', borderRadius: 8,
-                                    padding: '10px 12px', marginBottom: 6,
-                                    border: '1px solid #78350f'
-                                  }}>
-                                    <div style={{ color: '#fde68a', fontWeight: 800, fontSize: 18 }}>
-                                      {item.quantity}× {item.name}
-                                    </div>
+                                  <div key={item.id} style={{ background: '#3d2800', borderRadius: 8, padding: '10px 12px', marginBottom: 6, border: '1px solid #78350f' }}>
+                                    <ItemName item={item} showAlt={showAlt} altLang={altLang} />
                                     {item.notes && <div style={{ color: '#d97706', fontSize: 13, marginTop: 4, fontWeight: 600 }}>— {item.notes}</div>}
                                     {item.item_note && <div style={{ color: '#f87171', fontSize: 13, fontWeight: 700, marginTop: 4 }}>📝 {item.item_note}</div>}
                                   </div>
@@ -372,7 +395,7 @@ export default function KitchenScreen() {
                         <div style={{ borderTop: '1px solid #333', marginBottom: 12 }} />
                       )}
 
-                      {/* ── COOKING ── */}
+                      {/* COOKING */}
                       {cooking.length > 0 && (
                         <div>
                           <div style={{ color: '#e94560', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 8, letterSpacing: 1 }}>
@@ -397,9 +420,7 @@ export default function KitchenScreen() {
                                   <div key={item.id} style={{ background: '#1e3a5f', borderRadius: 10, padding: '12px', marginBottom: 8, border: '2px solid #3b82f6' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                       <div style={{ flex: 1 }}>
-                                        <div style={{ color: 'white', fontWeight: 800, fontSize: 20 }}>
-                                          {item.quantity}× {item.name}
-                                        </div>
+                                        <ItemName item={item} showAlt={showAlt} altLang={altLang} />
                                         {item.notes && <div style={{ color: '#93c5fd', fontSize: 13, marginTop: 3 }}>{item.notes}</div>}
                                         {item.item_note && <div style={{ color: '#e94560', fontSize: 13, fontWeight: 700, marginTop: 3 }}>📝 {item.item_note}</div>}
                                       </div>
@@ -434,7 +455,7 @@ export default function KitchenScreen() {
       {tab === 'pass' && (
         <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: 16 }}>
           {passOrders.length === 0 ? (
-            <div style={{ textAlign: 'center', color: '#555', marginTop: 100, fontSize: 20 }}>✅ Pass is clear — nothing to plate up!</div>
+            <div style={{ textAlign: 'center', color: '#555', marginTop: 100, fontSize: 20 }}>✅ Pass is clear!</div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
               {passOrders.map(order => (
@@ -464,38 +485,37 @@ export default function KitchenScreen() {
                           </div>
                           {byCourse[course].map(item => {
                             const isCooked = item.status === 'cooked';
-                            const isCooking = item.is_fired && (item.status === 'cooking' || item.status === 'pending');
+                            const isCooking = item.is_fired && item.status === 'cooking';
                             const isUpcoming = !item.is_fired;
                             return (
                               <div key={item.id} style={{
                                 background: isCooked ? '#2d1f4e' : isUpcoming ? '#2d1f00' : '#2a2a2a',
                                 borderRadius: 10, padding: '12px', marginBottom: 8,
                                 border: `2px solid ${isCooked ? '#8b5cf6' : isUpcoming ? '#f59e0b' : '#1e3a5f'}`,
-                                opacity: isUpcoming ? 0.8 : 1,
                               }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <div style={{ flex: 1 }}>
                                     <div style={{ color: isCooked ? 'white' : isUpcoming ? '#fde68a' : '#9ca3af', fontWeight: 700, fontSize: 16 }}>
                                       {item.quantity}× {item.name}
                                     </div>
+                                    {showAlt && item.name_alt && (
+                                      <div style={{ color: '#C9A84C', fontWeight: 600, fontSize: 14, marginTop: 2 }}>
+                                        {item.quantity}× {item.name_alt}
+                                      </div>
+                                    )}
                                     {item.notes && <div style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>{item.notes}</div>}
                                     {item.item_note && <div style={{ color: '#e94560', fontSize: 12, fontWeight: 600, marginTop: 2 }}>📝 {item.item_note}</div>}
                                   </div>
-                                  <div style={{ marginLeft: 12, flexShrink: 0, textAlign: 'center' }}>
+                                  <div style={{ marginLeft: 12, flexShrink: 0 }}>
                                     {isCooked && (
                                       <button onClick={() => markServed(item.id)} style={{
                                         background: '#8b5cf6', color: 'white', border: 'none',
                                         borderRadius: 10, padding: '10px 18px',
-                                        fontWeight: 800, fontSize: 15, cursor: 'pointer',
-                                        boxShadow: '0 4px 12px rgba(139,92,246,0.4)'
+                                        fontWeight: 800, fontSize: 15, cursor: 'pointer'
                                       }}>✓ Done</button>
                                     )}
-                                    {isCooking && (
-                                      <div style={{ color: '#3b82f6', fontSize: 12, fontWeight: 700, textAlign: 'center' }}>🔥<br />Cooking</div>
-                                    )}
-                                    {isUpcoming && (
-                                      <div style={{ color: '#f59e0b', fontSize: 12, fontWeight: 700, textAlign: 'center' }}>⏳<br />Pending</div>
-                                    )}
+                                    {isCooking && <div style={{ color: '#3b82f6', fontSize: 12, fontWeight: 700, textAlign: 'center' }}>🔥<br />Cooking</div>}
+                                    {isUpcoming && <div style={{ color: '#f59e0b', fontSize: 12, fontWeight: 700, textAlign: 'center' }}>⏳<br />Pending</div>}
                                   </div>
                                 </div>
                               </div>
@@ -517,9 +537,9 @@ export default function KitchenScreen() {
         <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div style={{ color: 'white', fontSize: 16, fontWeight: 700 }}>
-              Today's completed dishes — {completedItems.length} items served
+              Today's completed — {completedItems.length} items
             </div>
-            <button onClick={fetchCompleted} style={{ background: '#333', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>Refresh</button>
+            <button onClick={fetchCompleted} style={{ background: '#333', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>↻</button>
           </div>
           {Object.keys(completedByOrder).length === 0 ? (
             <div style={{ textAlign: 'center', color: '#555', marginTop: 100, fontSize: 20 }}>No completed orders yet today</div>
@@ -532,22 +552,21 @@ export default function KitchenScreen() {
                       Table {group.table_number}
                       {group.covers && <span style={{ fontSize: 13, fontWeight: 400, marginLeft: 8, opacity: 0.7 }}>{group.covers} cvr</span>}
                     </div>
-                    <div style={{ color: '#aaa', fontSize: 13 }}>Order #{group.order_id}</div>
+                    <div style={{ color: '#aaa', fontSize: 13 }}>#{group.order_id}</div>
                   </div>
                   <div style={{ padding: 12 }}>
                     {group.items.map(item => (
                       <div key={item.id} style={{ background: '#111827', borderRadius: 10, padding: '10px 12px', marginBottom: 8, border: '1px solid #374151' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ color: '#22c55e', fontWeight: 700, fontSize: 14 }}>✅ {item.quantity}× {item.name}</div>
-                            {item.notes && <div style={{ color: '#6b7280', fontSize: 11, marginTop: 2 }}>{item.notes}</div>}
-                            {item.item_note && <div style={{ color: '#60a5fa', fontSize: 11, marginTop: 2 }}>📝 {item.item_note}</div>}
-                          </div>
-                          <div style={{ textAlign: 'right', marginLeft: 12, flexShrink: 0 }}>
-                            <div style={{ color: '#6b7280', fontSize: 11 }}>{COURSE_LABELS[item.course] || 'Course ' + item.course}</div>
-                            {item.fired_at && <div style={{ color: '#eab308', fontSize: 11, marginTop: 2 }}>⏱ {getCookTime(item.fired_at, item.served_at)}</div>}
-                          </div>
+                        <div style={{ color: '#22c55e', fontWeight: 700, fontSize: 14 }}>
+                          ✅ {item.quantity}× {item.name}
                         </div>
+                        {showAlt && item.name_alt && (
+                          <div style={{ color: '#C9A84C', fontSize: 13, marginTop: 2 }}>
+                            {item.quantity}× {item.name_alt}
+                          </div>
+                        )}
+                        {item.notes && <div style={{ color: '#6b7280', fontSize: 11, marginTop: 2 }}>{item.notes}</div>}
+                        {item.fired_at && <div style={{ color: '#eab308', fontSize: 11, marginTop: 2 }}>⏱ {getCookTime(item.fired_at, item.served_at)}</div>}
                       </div>
                     ))}
                   </div>

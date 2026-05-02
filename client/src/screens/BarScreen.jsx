@@ -27,8 +27,19 @@ export default function BarScreen() {
   const [completedItems, setCompletedItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('bar');
-  // Track which items are marked ready (cooked) per order
   const [readyItems, setReadyItems] = useState({});
+  const [showAlt, setShowAlt] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('bar_show_alt');
+    if (saved === 'true') setShowAlt(true);
+  }, []);
+
+  const toggleAlt = () => {
+    const next = !showAlt;
+    setShowAlt(next);
+    localStorage.setItem('bar_show_alt', String(next));
+  };
 
   const fetchOrders = async () => {
     try {
@@ -137,22 +148,30 @@ export default function BarScreen() {
             fontWeight: 700, fontSize: 15,
             background: tab === 'completed' ? '#22c55e' : '#1e293b', color: 'white'
           }}>
-            ✅ Completed
-            {completedItems.length > 0 && (
-              <span style={{ background: 'white', color: '#22c55e', borderRadius: 20, padding: '2px 8px', marginLeft: 8, fontSize: 13 }}>
-                {completedItems.length}
-              </span>
-            )}
+            ✅ Done
           </button>
         </div>
-        <button onClick={() => { fetchOrders(); fetchCompleted(); }} style={{ background: '#1e293b', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer' }}>
-          Refresh
-        </button>
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* Language toggle */}
+          <button onClick={toggleAlt} style={{
+            padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
+            fontWeight: 800, fontSize: 14,
+            background: showAlt ? '#C9A84C' : '#1e293b',
+            color: showAlt ? '#0D1B3E' : '#aaa',
+            transition: 'all 0.2s'
+          }}>
+            {showAlt ? `🌐 EN + ภาษา` : `🌐 EN only`}
+          </button>
+          <button onClick={() => { fetchOrders(); fetchCompleted(); }} style={{ background: '#1e293b', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer' }}>
+            ↻
+          </button>
+        </div>
       </div>
 
       {/* Timer legend */}
       {tab === 'bar' && (
-        <div style={{ padding: '8px 20px', display: 'flex', gap: 20, borderBottom: '1px solid #1e293b', flexShrink: 0 }}>
+        <div style={{ padding: '8px 20px', display: 'flex', gap: 20, borderBottom: '1px solid #1e293b', flexShrink: 0, alignItems: 'center' }}>
           {[
             { color: '#22c55e', label: '< 5 mins' },
             { color: '#eab308', label: '5-10 mins' },
@@ -163,9 +182,11 @@ export default function BarScreen() {
               <span style={{ color: '#aaa', fontSize: 12 }}>{s.label}</span>
             </div>
           ))}
-          <div style={{ marginLeft: 'auto', color: '#555', fontSize: 12 }}>
-            Tap ✓ Ready when drink is made · Tap 🍹 Serve Table to deliver all
-          </div>
+          {showAlt && (
+            <div style={{ marginLeft: 'auto', background: '#C9A84C', color: '#0D1B3E', padding: '3px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800 }}>
+              🌐 Bilingual ON
+            </div>
+          )}
         </div>
       )}
 
@@ -174,7 +195,7 @@ export default function BarScreen() {
         <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: 16 }}>
           {orders.length === 0 ? (
             <div style={{ textAlign: 'center', color: '#555', marginTop: 100, fontSize: 20 }}>
-              🍹 Bar is clear — no drinks to prepare!
+              🍹 Bar is clear!
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
@@ -190,7 +211,6 @@ export default function BarScreen() {
                     boxShadow: allReady ? '0 0 20px rgba(34,197,94,0.3)' : 'none',
                     transition: 'all 0.3s'
                   }}>
-                    {/* Table header */}
                     <div style={{
                       background: allReady ? '#166534' : '#1e40af',
                       padding: '12px 16px',
@@ -200,14 +220,11 @@ export default function BarScreen() {
                         Table {order.table_number}
                         {order.covers && <span style={{ fontSize: 13, fontWeight: 400, marginLeft: 8, opacity: 0.8 }}>{order.covers} cvr</span>}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>
-                          {orderReadyIds.length}/{order.items.length} ready
-                        </span>
-                      </div>
+                      <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>
+                        {orderReadyIds.length}/{order.items.length} ready
+                      </span>
                     </div>
 
-                    {/* Items */}
                     <div style={{ padding: 12 }}>
                       {order.items.map(item => {
                         const isReady = orderReadyIds.includes(item.id);
@@ -223,6 +240,11 @@ export default function BarScreen() {
                                 <div style={{ color: isReady ? '#4ade80' : 'white', fontWeight: 700, fontSize: 16 }}>
                                   {isReady ? '✅' : '🍹'} {item.quantity}× {item.name}
                                 </div>
+                                {showAlt && item.name_alt && (
+                                  <div style={{ color: '#C9A84C', fontWeight: 600, fontSize: 14, marginTop: 2, marginLeft: 22 }}>
+                                    {item.quantity}× {item.name_alt}
+                                  </div>
+                                )}
                                 {item.notes && <div style={{ color: '#94a3b8', fontSize: 12, marginTop: 2 }}>{item.notes}</div>}
                                 {item.item_note && <div style={{ color: '#60a5fa', fontSize: 12, fontWeight: 600, marginTop: 2 }}>📝 {item.item_note}</div>}
                                 {!isReady && (
@@ -254,23 +276,19 @@ export default function BarScreen() {
                       })}
                     </div>
 
-                    {/* Serve Table button — shows when ALL items ready */}
                     {allReady && (
                       <div style={{ padding: '0 12px 12px' }}>
                         <button onClick={() => serveTable(order)} style={{
                           width: '100%', padding: '16px', borderRadius: 12, border: 'none',
                           background: 'linear-gradient(135deg, #22c55e, #16a34a)',
-                          color: 'white', fontSize: 18, fontWeight: 800,
-                          cursor: 'pointer',
-                          boxShadow: '0 4px 16px rgba(34,197,94,0.4)',
-                          animation: 'pulse 1.5s infinite'
+                          color: 'white', fontSize: 18, fontWeight: 800, cursor: 'pointer',
+                          boxShadow: '0 4px 16px rgba(34,197,94,0.4)'
                         }}>
                           🍹 Serve Table {order.table_number}!
                         </button>
                       </div>
                     )}
 
-                    {/* Partial ready indicator */}
                     {someReady && !allReady && (
                       <div style={{ padding: '0 12px 12px' }}>
                         <div style={{ background: '#1e293b', borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -278,7 +296,7 @@ export default function BarScreen() {
                             <div style={{ width: `${(orderReadyIds.length / order.items.length) * 100}%`, height: '100%', background: '#eab308', borderRadius: 3, transition: 'width 0.3s' }} />
                           </div>
                           <span style={{ color: '#eab308', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                            {orderReadyIds.length}/{order.items.length} ready
+                            {orderReadyIds.length}/{order.items.length}
                           </span>
                         </div>
                       </div>
@@ -296,37 +314,39 @@ export default function BarScreen() {
         <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div style={{ color: 'white', fontSize: 16, fontWeight: 700 }}>
-              Today's drinks served — {completedItems.length} items
+              Today's drinks — {completedItems.length} served
             </div>
-            <button onClick={fetchCompleted} style={{ background: '#1e293b', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
-              Refresh
-            </button>
+            <button onClick={fetchCompleted} style={{ background: '#1e293b', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>↻</button>
           </div>
           {Object.keys(completedByOrder).length === 0 ? (
-            <div style={{ textAlign: 'center', color: '#555', marginTop: 100, fontSize: 20 }}>No completed drinks yet today</div>
+            <div style={{ textAlign: 'center', color: '#555', marginTop: 100, fontSize: 20 }}>No completed drinks yet</div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
               {Object.values(completedByOrder).map(group => (
                 <div key={group.order_id} style={{ background: '#1a1a2e', borderRadius: 16, overflow: 'hidden' }}>
-                  <div style={{ background: '#1e293b', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ background: '#1e293b', padding: '12px 16px', display: 'flex', justifyContent: 'space-between' }}>
                     <div style={{ color: 'white', fontWeight: 800, fontSize: 18 }}>
                       Table {group.table_number}
                       {group.covers && <span style={{ fontSize: 13, fontWeight: 400, marginLeft: 8, opacity: 0.7 }}>{group.covers} cvr</span>}
                     </div>
-                    <div style={{ color: '#aaa', fontSize: 13 }}>Order #{group.order_id}</div>
+                    <div style={{ color: '#aaa', fontSize: 13 }}>#{group.order_id}</div>
                   </div>
                   <div style={{ padding: 12 }}>
                     {group.items.map(item => (
                       <div key={item.id} style={{ background: '#0f172a', borderRadius: 10, padding: '10px 12px', marginBottom: 8, border: '1px solid #1e293b' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ color: '#22c55e', fontWeight: 700, fontSize: 14 }}>✅ {item.quantity}× {item.name}</div>
-                            {item.notes && <div style={{ color: '#475569', fontSize: 11, marginTop: 2 }}>{item.notes}</div>}
-                          </div>
-                          <div style={{ textAlign: 'right', marginLeft: 12, flexShrink: 0 }}>
-                            {item.fired_at && <div style={{ color: '#eab308', fontSize: 11 }}>⏱ {getCookTime(item.fired_at, item.served_at)}</div>}
-                          </div>
+                        <div style={{ color: '#22c55e', fontWeight: 700, fontSize: 14 }}>
+                          ✅ {item.quantity}× {item.name}
                         </div>
+                        {showAlt && item.name_alt && (
+                          <div style={{ color: '#C9A84C', fontSize: 13, marginTop: 2 }}>
+                            {item.quantity}× {item.name_alt}
+                          </div>
+                        )}
+                        {item.fired_at && (
+                          <div style={{ color: '#eab308', fontSize: 11, marginTop: 4 }}>
+                            ⏱ {getCookTime(item.fired_at, item.served_at)}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -336,13 +356,6 @@ export default function BarScreen() {
           )}
         </div>
       )}
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.02); }
-        }
-      `}</style>
     </div>
   );
 }

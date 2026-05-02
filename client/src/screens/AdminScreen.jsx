@@ -363,7 +363,7 @@ function MenuSection() {
   const [activeCategory, setActiveCategory] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
-  const [form, setForm] = useState({ name: '', description: '', price: '', category_id: '', subcategory_id: null });
+  const [form, setForm] = useState({ name: '', name_alt: '', description: '', price: '', category_id: '', subcategory_id: null });
   const [modifierItem, setModifierItem] = useState(null);
   const [modifiers, setModifiers] = useState([]);
   const [newGroup, setNewGroup] = useState({ name: '', required: true, multi_select: false });
@@ -389,10 +389,10 @@ function MenuSection() {
   };
 
   const openEditForm = (item) => {
-    setForm({ name: item.name, description: item.description || '', price: item.price, category_id: item.category_id, subcategory_id: item.subcategory_id || null });
-    setEditItem(item);
-    setShowForm(true);
-  };
+  setForm({ name: item.name, name_alt: item.name_alt || '', description: item.description || '', price: item.price, category_id: item.category_id, subcategory_id: item.subcategory_id || null });
+  setEditItem(item);
+  setShowForm(true);
+};
 
   const handleSave = async () => {
     if (!form.name || !form.price) return alert('Name and price are required!');
@@ -546,10 +546,17 @@ function MenuSection() {
                 </div>
               )}
               <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Item name *</label>
-                <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Satay"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
-              </div>
+  <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Item name (English) *</label>
+  <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Satay"
+    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+</div>
+<div>
+  <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>
+    Second language name <span style={{ fontWeight: 400, color: '#aaa' }}>(optional — shown on kitchen/bar screen)</span>
+  </label>
+  <input value={form.name_alt || ''} onChange={e => setForm({ ...form, name_alt: e.target.value })} placeholder="e.g. ไก่ผัดเม็ดมะม่วง, 炒鸡肉, Gà xào..."
+    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #C9A84C', fontSize: 14, boxSizing: 'border-box' }} />
+</div>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Description</label>
                 <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Optional"

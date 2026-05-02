@@ -691,36 +691,30 @@ app.get('/api/tables/status', async (req, res) => {
       const kitchenItems = items.filter(i => !i.is_bar);
 
      const starters = kitchenItems.filter(i => Number(i.course) === 1);
-const startersFired = starters.some(i => i.is_fired);
-const startersDone = starters.length > 0 && starters.every(i => i.status === 'served');
+      const startersFired = starters.some(i => i.is_fired);
+      const startersDone = starters.length > 0 && starters.every(i => i.status === 'served');
 
-const mains = kitchenItems.filter(i => Number(i.course) === 2);
-const mainsFired = mains.some(i => i.is_fired);
-const mainsDone = mains.length > 0 && mains.every(i => i.status === 'served');
+      const mains = kitchenItems.filter(i => Number(i.course) === 2);
+      const mainsFired = mains.some(i => i.is_fired);
+      const mainsDone = mains.length > 0 && mains.every(i => i.status === 'served');
 
-const desserts = kitchenItems.filter(i => Number(i.course) === 3);
-const dessertsFired = desserts.some(i => i.is_fired);
-const dessertsDone = desserts.length > 0 && desserts.every(i => i.status === 'served');
+      const desserts = kitchenItems.filter(i => Number(i.course) === 3);
+      const dessertsFired = desserts.some(i => i.is_fired);
+      const dessertsDone = desserts.length > 0 && desserts.every(i => i.status === 'served');
 
-// Find the MOST RECENT course state
-let colourStatus = 'occupied';
-if (dessertsDone) colourStatus = 'desserts_done';
-else if (dessertsFired) colourStatus = 'desserts_fired';
-else if (mainsDone) colourStatus = 'mains_done';
-else if (mainsFired) colourStatus = 'mains_fired';
-else if (startersDone) colourStatus = 'starters_done';
-else if (startersFired) colourStatus = 'starters_fired';
+      const hasPending = kitchenItems.some(i => i.status !== 'served');
 
-// Show White ONLY when bill printed AND every single kitchen item is served
-const allKitchenServed = kitchenItems.length > 0 && 
-  kitchenItems.every(i => i.status === 'served');
-const noUnfiredItems = kitchenItems.every(i => i.is_fired);
-
-if (order.bill_printed && allKitchenServed && noUnfiredItems) {
-  colourStatus = 'bill_printed';
-}
-// If bill printed but food still not all served — keep course colour
-// This means: Orange/Navy/Grey stays until ALL food is served
+      let colourStatus = 'occupied';
+      if (order.bill_printed && !hasPending) {
+        colourStatus = 'bill_printed';
+      } else {
+        if (dessertsDone) colourStatus = 'desserts_done';
+        else if (dessertsFired) colourStatus = 'desserts_fired';
+        else if (mainsDone) colourStatus = 'mains_done';
+        else if (mainsFired) colourStatus = 'mains_fired';
+        else if (startersDone) colourStatus = 'starters_done';
+        else if (startersFired) colourStatus = 'starters_fired';
+      }
 
       return { ...order, colour_status: colourStatus };
     });

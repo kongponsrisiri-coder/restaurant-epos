@@ -709,8 +709,8 @@ app.get('/api/tables/status', async (req, res) => {
       else if (startersDone) colourStatus = 'starters_done';
       else if (startersFired) colourStatus = 'starters_fired';
 
-      // Only show white if bill printed AND no kitchen food ordered (drinks only table)
-      if (order.bill_printed && kitchenItems.length === 0) {
+      // Only show white if bill printed AND nothing pending AND nothing unfired
+      if (order.bill_printed && !hasPending && !hasUnfired) {
         colourStatus = 'bill_printed';
       }
 

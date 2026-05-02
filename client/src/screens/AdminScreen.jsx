@@ -8,7 +8,7 @@ import {
   getDiscountReasons, addDiscountReason, deleteDiscountReason,
   getStaff, addStaff, updateStaff,
   getSummaryReport, getItemSalesReport,
-  getCategories, updateCategoryBar,
+  getCategories, updateCategoryBar, updateCategoryDefaultCourse,
   getSubcategories, addSubcategory, deleteSubcategory,
   getZReportPreview, saveZReport, getZReportHistory, getBills, getBillItems
 } from '../api';
@@ -1483,18 +1483,56 @@ function SettingsSection() {
 function BarCategoryManager() {
   const [categories, setCategories] = useState([]);
   useEffect(() => { getCategories().then(setCategories); }, []);
-  const toggle = async (cat) => {
+
+  const toggleBar = async (cat) => {
     await updateCategoryBar(cat.id, cat.is_bar ? 0 : 1);
     getCategories().then(setCategories);
   };
+
+  const setDefaultCourse = async (cat, course) => {
+    await updateCategoryDefaultCourse(cat.id, course);
+    getCategories().then(setCategories);
+  };
+
+  const courseColors = { 1: '#3b82f6', 2: '#e94560', 3: '#8b5cf6', 4: '#22c55e' };
+  const courseLabels = { 1: 'Starters', 2: 'Mains', 3: 'Desserts', 4: 'Extra' };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {categories.map(cat => (
-        <div key={cat.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: '#f8f8f8', borderRadius: 8 }}>
-          <span style={{ fontSize: 14, fontWeight: 500 }}>{cat.name}</span>
-          <button onClick={() => toggle(cat)} style={{ padding: '6px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: cat.is_bar ? '#dbeafe' : '#f0f0f0', color: cat.is_bar ? '#1e40af' : '#555' }}>
-            {cat.is_bar ? '🍹 Bar ✓' : 'Not bar'}
-          </button>
+        <div key={cat.id} style={{ background: '#f8f8f8', borderRadius: 10, padding: '12px 16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: cat.is_bar ? 0 : 10 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{cat.name}</span>
+            <button onClick={() => toggleBar(cat)} style={{
+              padding: '6px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
+              fontWeight: 600, fontSize: 12,
+              background: cat.is_bar ? '#dbeafe' : '#f0f0f0',
+              color: cat.is_bar ? '#1e40af' : '#555'
+            }}>
+              {cat.is_bar ? '🍹 Bar ✓' : 'Not bar'}
+            </button>
+          </div>
+
+          {/* Default course selector — only show if NOT a bar category */}
+          {!cat.is_bar && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 6, textTransform: 'uppercase' }}>
+                Default course when ordering:
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[1, 2, 3, 4].map(c => (
+                  <button key={c} onClick={() => setDefaultCourse(cat, c)} style={{
+                    padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    fontWeight: 700, fontSize: 12,
+                    background: (cat.default_course || 1) === c ? courseColors[c] : '#e0e0e0',
+                    color: (cat.default_course || 1) === c ? 'white' : '#555',
+                  }}>
+                    {courseLabels[c]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       ))}
     </div>

@@ -31,7 +31,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         const [menuData, orderData] = await Promise.all([getMenu(), getOrder(orderId)]);
         setMenu(menuData);
         setOrder(orderData);
-        if (menuData.length > 0) setActiveCategory(menuData[0].id);
+        if (menuData.length > 0) {
+  setActiveCategory(menuData[0].id);
+  setActiveCourse(menuData[0].default_course || 1);
+}
       } catch (err) {
         console.error(err);
       } finally {
@@ -50,7 +53,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     const modifiers = await getItemModifiers(item.id);
     const isBar = getItemIsBar(item);
     const cat = menu.find(c => c.id === item.category_id);
-    const course = isBar ? 0 : (cat?.course || activeCourse);
+    const course = isBar ? 0 : (cat?.default_course || activeCourse);
     if (modifiers && modifiers.length > 0) {
       setSelectedModifiers({});
       setModifierPopup({ item, modifiers, course, isBar });
@@ -282,7 +285,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             {menu.map(cat => (
               <button key={cat.id} onClick={() => {
                 setActiveCategory(cat.id);
-                setActiveCourse(cat.course || 1);
+                setActiveCourse(cat.default_course || 1);
                 setActiveSubcat(null);
               }} style={{
                 padding: '10px 20px', borderRadius: 20, border: 'none', cursor: 'pointer',

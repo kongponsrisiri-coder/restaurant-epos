@@ -196,7 +196,7 @@ async function initDB() {
     await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS notes TEXT`);
     await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS employment_status TEXT DEFAULT 'active'`);
     await client.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS name_alt TEXT`);
-
+await client.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS default_course INTEGER DEFAULT 1`);
     // ── Seed starter data ──
     const tablesCount = await client.query('SELECT COUNT(*) as count FROM tables');
     if (parseInt(tablesCount.rows[0].count) === 0) {

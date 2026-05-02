@@ -65,6 +65,7 @@ export const getBill = (orderId) => get(`/api/orders/${orderId}/bill`);
 export const getBarOrders = () => get('/api/orders/bar');
 export const getCategories = () => get('/api/categories');
 export const updateCategoryBar = (id, is_bar) => put(`/api/categories/${id}/bar`, { is_bar });
+export const updateCategoryDefaultCourse = (id, default_course) => put(`/api/categories/${id}/default-course`, { default_course });
 export const getSubcategories = () => get('/api/subcategories');
 export const addSubcategory = (category_id, name) => post('/api/subcategories', { category_id, name });
 export const deleteSubcategory = (id) => del(`/api/subcategories/${id}`);

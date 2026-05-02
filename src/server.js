@@ -83,6 +83,14 @@ app.put('/api/categories/:id/bar', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.put('/api/categories/:id/default-course', async (req, res) => {
+  try {
+    const { default_course } = req.body;
+    await pool.query('UPDATE categories SET default_course = $1 WHERE id = $2', [default_course, req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─────────────────────────────────────────────
 // SUBCATEGORY ROUTES
 // ─────────────────────────────────────────────

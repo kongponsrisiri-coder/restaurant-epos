@@ -68,14 +68,18 @@ export default function LoginScreen({ onLogin }) {
 
         {/* Logo */}
         <div style={{ textAlign: 'center' }}>
-          <div style={{
-            width: 64, height: 64,
-            background: 'linear-gradient(135deg, #0D1B3E, #1A2F6B)',
-            borderRadius: 18,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 30, margin: '0 auto 14px',
-            boxShadow: '0 8px 24px rgba(13,27,62,0.3)'
-          }}>🍜</div>
+         <div style={{
+  width: 64, height: 64,
+  background: 'linear-gradient(135deg, #0D1B3E, #1A2F6B)',
+  borderRadius: 18,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  margin: '0 auto 14px',
+  boxShadow: '0 8px 24px rgba(13,27,62,0.3)',
+  fontSize: 26,
+  gap: 2
+}}>
+  🇹🇭🇬🇧
+</div>
           <div style={{
             fontSize: 30, fontWeight: 800,
             color: '#0D1B3E',

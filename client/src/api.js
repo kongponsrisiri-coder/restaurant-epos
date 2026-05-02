@@ -1,4 +1,20 @@
-export const SERVER_URL = 'https://restaurant-epos-production.up.railway.app';
+const getServerURL = () => {
+  const host = window.location.hostname;
+  // If running on localhost or local IP (192.168.x.x or 10.x.x.x)
+  if (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host.startsWith('192.168.') ||
+    host.startsWith('10.') ||
+    host.startsWith('172.')
+  ) {
+    return `http://${host}:3001`;
+  }
+  // Otherwise use cloud
+  return 'https://restaurant-epos-production.up.railway.app';
+};
+
+export const SERVER_URL = getServerURL();
 
 const get = (url) => fetch(SERVER_URL + url).then(r => r.json());
 const post = (url, data) => fetch(SERVER_URL + url, {

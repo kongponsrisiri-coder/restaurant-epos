@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { SERVER_URL } from '../api';
 import {
   getAllMenu as getMenu, addMenuItem, updateMenuItem,
   getItemModifiers, addModifierGroup, addModifierOption,
@@ -1157,59 +1157,189 @@ function StaffSection() {
   const [staff, setStaff] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editStaff, setEditStaff] = useState(null);
-  const [form, setForm] = useState({ name: '', pin: '', role: 'waiter' });
+  const [selectedStaff, setSelectedStaff] = useState(null);
+  const [form, setForm] = useState({ name: '', pin: '', role: 'waiter', start_date: '', notes: '', employment_status: 'active' });
+  const [filterStatus, setFilterStatus] = useState('active');
 
-  const fetchStaff = async () => { const data = await getStaff(); setStaff(data); };
+  const fetchStaff = async () => {
+    const data = await getStaff();
+    setStaff(data);
+  };
   useEffect(() => { fetchStaff(); }, []);
 
   const handleSave = async () => {
     if (!form.name || (!editStaff && !form.pin)) return alert('Name and PIN are required!');
     if (form.pin && form.pin.length !== 4) return alert('PIN must be 4 digits!');
-    if (editStaff) await updateStaff(editStaff.id, { ...form, is_active: editStaff.is_active });
-    else await addStaff(form);
+    if (editStaff) {
+      await updateStaff(editStaff.id, { ...form, is_active: editStaff.is_active });
+    } else {
+      await addStaff(form);
+    }
     setShowForm(false);
-    setForm({ name: '', pin: '', role: 'waiter' });
+    setForm({ name: '', pin: '', role: 'waiter', start_date: '', notes: '', employment_status: 'active' });
     fetchStaff();
   };
 
-  const toggleActive = async (s) => { await updateStaff(s.id, { ...s, is_active: s.is_active ? 0 : 1 }); fetchStaff(); };
-  const roleColors = { admin: '#e94560', manager: '#f97316', supervisor: '#22c55e', waiter: '#3b82f6', kitchen: '#eab308', bar: '#8b5cf6' };
+  const toggleActive = async (s) => {
+    if (!window.confirm(`${s.is_active ? 'Deactivate' : 'Reactivate'} ${s.name}?`)) return;
+    await updateStaff(s.id, { ...s, is_active: s.is_active ? 0 : 1 });
+    fetchStaff();
+  };
+
+  const handleDelete = async (s) => {
+    if (!window.confirm(`⚠️ Permanently DELETE ${s.name}?\n\nThis cannot be undone!`)) return;
+    if (!window.confirm(`Last warning — delete ${s.name} forever?`)) return;
+    await fetch(`${SERVER_URL}/api/staff/${s.id}`, { method: 'DELETE' });
+    setSelectedStaff(null);
+    fetchStaff();
+  };
+
+  const roleColors = {
+    admin: '#e94560', manager: '#f97316', supervisor: '#22c55e',
+    waiter: '#3b82f6', kitchen: '#eab308', bar: '#8b5cf6'
+  };
+
+  const filteredStaff = staff.filter(s => {
+    if (filterStatus === 'active') return s.is_active;
+    if (filterStatus === 'inactive') return !s.is_active;
+    return true;
+  });
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>Staff Management</h1>
-        <button onClick={() => { setEditStaff(null); setForm({ name: '', pin: '', role: 'waiter' }); setShowForm(true); }} style={{ background: '#e94560', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }}>+ Add Staff</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>👥 Staff Management</h1>
+        <button onClick={() => {
+          setEditStaff(null);
+          setForm({ name: '', pin: '', role: 'waiter', start_date: '', notes: '', employment_status: 'active' });
+          setShowForm(true);
+        }} style={{ background: '#e94560', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }}>
+          + Add Staff
+        </button>
       </div>
+
+      {/* Filter tabs */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        {[
+          { key: 'active', label: `Active (${staff.filter(s => s.is_active).length})` },
+          { key: 'inactive', label: `Inactive (${staff.filter(s => !s.is_active).length})` },
+          { key: 'all', label: `All (${staff.length})` },
+        ].map(f => (
+          <button key={f.key} onClick={() => setFilterStatus(f.key)} style={{
+            padding: '8px 16px', borderRadius: 20, border: 'none', cursor: 'pointer',
+            fontWeight: 600, fontSize: 13,
+            background: filterStatus === f.key ? '#1a1a2e' : '#f0f0f0',
+            color: filterStatus === f.key ? 'white' : '#555'
+          }}>{f.label}</button>
+        ))}
+      </div>
+
+      {/* Staff list */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {staff.map(s => (
-          <div key={s.id} style={{ background: 'white', borderRadius: 12, padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', opacity: s.is_active ? 1 : 0.5 }}>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 600, color: '#1a1a2e' }}>{s.name}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                <span style={{ background: roleColors[s.role] || '#888', color: 'white', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 20 }}>{s.role}</span>
-                <span style={{ fontSize: 12, color: '#888' }}>PIN: ••••</span>
+        {filteredStaff.map(s => (
+          <div key={s.id}>
+            <div
+              onClick={() => setSelectedStaff(selectedStaff?.id === s.id ? null : s)}
+              style={{
+                background: 'white', borderRadius: 12, padding: '16px 20px',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                opacity: s.is_active ? 1 : 0.6,
+                cursor: 'pointer',
+                border: selectedStaff?.id === s.id ? '2px solid #e94560' : '2px solid transparent'
+              }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>{s.name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                  <span style={{ background: roleColors[s.role] || '#888', color: 'white', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 20 }}>{s.role}</span>
+                  {!s.is_active && <span style={{ background: '#fee2e2', color: '#ef4444', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 20 }}>Inactive</span>}
+                  {s.start_date && <span style={{ fontSize: 12, color: '#888' }}>📅 Started: {s.start_date}</span>}
+                  {s.employment_status && s.employment_status !== 'active' && (
+                    <span style={{ fontSize: 12, color: '#f97316', fontWeight: 600 }}>• {s.employment_status}</span>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button onClick={(e) => {
+                  e.stopPropagation();
+                  setEditStaff(s);
+                  setForm({ name: s.name, pin: '', role: s.role, start_date: s.start_date || '', notes: s.notes || '', employment_status: s.employment_status || 'active' });
+                  setShowForm(true);
+                }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#f0f0f0', fontWeight: 600, fontSize: 12 }}>
+                  ✏️ Edit
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); toggleActive(s); }} style={{
+                  padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12,
+                  background: s.is_active ? '#fff3cd' : '#dcfce7',
+                  color: s.is_active ? '#92400e' : '#14532d'
+                }}>
+                  {s.is_active ? 'Deactivate' : 'Reactivate'}
+                </button>
+                <span style={{ color: '#ccc' }}>▾</span>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => { setEditStaff(s); setForm({ name: s.name, pin: '', role: s.role }); setShowForm(true); }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#f0f0f0', fontWeight: 600, fontSize: 12 }}>Edit</button>
-              <button onClick={() => toggleActive(s)} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: s.is_active ? '#dcfce7' : '#fee2e2', color: s.is_active ? '#14532d' : '#991b1b' }}>{s.is_active ? 'Active' : 'Inactive'}</button>
-            </div>
+
+            {/* Expanded staff profile */}
+            {selectedStaff?.id === s.id && (
+              <div style={{ background: '#f8f8f8', borderRadius: '0 0 12px 12px', padding: '16px 20px', border: '2px solid #e94560', borderTop: 'none' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                  <div style={{ background: 'white', borderRadius: 8, padding: '12px 16px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', marginBottom: 4 }}>Start Date</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: '#1a1a2e' }}>{s.start_date || '—'}</div>
+                  </div>
+                  <div style={{ background: 'white', borderRadius: 8, padding: '12px 16px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', marginBottom: 4 }}>Status</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: '#1a1a2e' }}>{s.employment_status || 'Active'}</div>
+                  </div>
+                  <div style={{ background: 'white', borderRadius: 8, padding: '12px 16px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', marginBottom: 4 }}>Member Since</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: '#1a1a2e' }}>
+                      {s.created_at ? new Date(s.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                    </div>
+                  </div>
+                  <div style={{ background: 'white', borderRadius: 8, padding: '12px 16px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', marginBottom: 4 }}>Role</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: roleColors[s.role] || '#1a1a2e', textTransform: 'capitalize' }}>{s.role}</div>
+                  </div>
+                </div>
+                {s.notes && (
+                  <div style={{ background: 'white', borderRadius: 8, padding: '12px 16px', marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', marginBottom: 4 }}>Notes</div>
+                    <div style={{ fontSize: 14, color: '#555', lineHeight: 1.5 }}>{s.notes}</div>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button onClick={() => handleDelete(s)} style={{
+                    padding: '8px 16px', borderRadius: 8, border: 'none',
+                    background: '#fee2e2', color: '#ef4444',
+                    cursor: 'pointer', fontWeight: 700, fontSize: 13
+                  }}>
+                    🗑️ Permanently Delete
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
+
+      {/* Add/Edit Form */}
       {showForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'white', borderRadius: 16, padding: 32, width: 380 }}>
-            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24, color: '#1a1a2e' }}>{editStaff ? 'Edit Staff' : 'Add Staff'}</h2>
+          <div style={{ background: 'white', borderRadius: 16, padding: 32, width: 420, maxHeight: '90vh', overflowY: 'auto' }}>
+            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24, color: '#1a1a2e' }}>
+              {editStaff ? '✏️ Edit Staff' : '+ Add Staff'}
+            </h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Name *</label>
-                <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Full name"
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Full Name *</label>
+                <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Somchai Smith"
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
               <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>{editStaff ? 'New PIN (leave blank to keep)' : 'PIN (4 digits) *'}</label>
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>
+                  {editStaff ? 'New PIN (leave blank to keep)' : 'PIN (4 digits) *'}
+                </label>
                 <input value={form.pin} onChange={e => setForm({ ...form, pin: e.target.value })} placeholder="4 digit PIN" type="password" maxLength={4}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
@@ -1225,10 +1355,34 @@ function StaffSection() {
                   <option value="bar">Bar</option>
                 </select>
               </div>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Start Date</label>
+                <input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Employment Status</label>
+                <select value={form.employment_status} onChange={e => setForm({ ...form, employment_status: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}>
+                  <option value="active">Active</option>
+                  <option value="part-time">Part-time</option>
+                  <option value="probation">Probation</option>
+                  <option value="notice">On Notice</option>
+                  <option value="left">Left</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Notes <span style={{ fontWeight: 400, color: '#aaa' }}>(optional)</span></label>
+                <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
+                  placeholder="e.g. Food hygiene cert expires Jan 2026, allergic to nuts..."
+                  rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box', resize: 'none' }} />
+              </div>
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
               <button onClick={() => setShowForm(false)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
-              <button onClick={handleSave} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 600 }}>{editStaff ? 'Save' : 'Add Staff'}</button>
+              <button onClick={handleSave} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 700 }}>
+                {editStaff ? 'Save Changes' : 'Add Staff'}
+              </button>
             </div>
           </div>
         </div>
@@ -1236,7 +1390,6 @@ function StaffSection() {
     </div>
   );
 }
-
 // ─────────────────────────────────────────────
 // SETTINGS SECTION
 // ─────────────────────────────────────────────

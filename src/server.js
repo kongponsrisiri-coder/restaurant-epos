@@ -918,6 +918,73 @@ app.post('/api/orders/:id/resend', async (req, res) => {
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+// Apply discount to individual item
+app.put('/api/order-items/:id/discount', async (req, res) => {
+  try {
+    const { discount_type, discount_value } = req.body;
+    await pool.query(
+      'UPDATE order_items SET discount_type=$1, discount_value=$2 WHERE id=$3',
+      [discount_type, discount_value, req.params.id]
+    );
+    const itemRes = await pool.query('SELECT order_id FROM order_items WHERE id=$1', [req.params.id]);
+    if (itemRes.rows[0]) {
+      const totalRes = await pool.query(
+        `SELECT SUM(
+          CASE 
+            WHEN discount_type = 'percent' THEN quantity * unit_price * (1 - discount_value/100)
+            WHEN discount_type = 'fixed' THEN quantity * unit_price - discount_value
+            ELSE quantity * unit_price
+          END
+        ) as total FROM order_items WHERE order_id=$1 AND voided=0`,
+        [itemRes.rows[0].order_id]
+      );
+      await pool.query('UPDATE orders SET total=$1 WHERE id=$2', [totalRes.rows[0].total || 0, itemRes.rows[0].order_id]);
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Delete staff
+app.delete('/api/staff/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM staff WHERE id=$1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+// Item discount
+app.put('/api/order-items/:id/discount', async (req, res) => {
+  try {
+    const { discount_type, discount_value } = req.body;
+    await pool.query(
+      'UPDATE order_items SET discount_type=$1, discount_value=$2 WHERE id=$3',
+      [discount_type, discount_value, req.params.id]
+    );
+    const itemRes = await pool.query('SELECT order_id FROM order_items WHERE id=$1', [req.params.id]);
+    if (itemRes.rows[0]) {
+      const totalRes = await pool.query(
+        `SELECT SUM(
+          CASE 
+            WHEN discount_type = 'percent' THEN quantity * unit_price * (1 - COALESCE(discount_value,0)/100)
+            WHEN discount_type = 'fixed' THEN GREATEST(0, quantity * unit_price - COALESCE(discount_value,0))
+            ELSE quantity * unit_price
+          END
+        ) as total FROM order_items WHERE order_id=$1 AND voided=0`,
+        [itemRes.rows[0].order_id]
+      );
+      await pool.query('UPDATE orders SET total=$1 WHERE id=$2',
+        [totalRes.rows[0].total || 0, itemRes.rows[0].order_id]);
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Delete staff permanently
+app.delete('/api/staff/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM staff WHERE id=$1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 // ─────────────────────────────────────────────
 // SOCKET.IO

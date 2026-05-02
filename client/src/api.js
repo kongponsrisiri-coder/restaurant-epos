@@ -82,4 +82,5 @@ export const getBillItems = (orderId) => get(`/api/bills/${orderId}/items`);
 export const getKitchenCompleted = () => get('/api/kitchen/completed');
 export const getBarCompleted = () => get('/api/bar/completed');
 export const resendToKitchen = (orderId, itemIds) => post(`/api/orders/${orderId}/resend`, { item_ids: itemIds });
-
+export const applyItemDiscount = (itemId, discount_type, discount_value) => put(`/api/order-items/${itemId}/discount`, { discount_type, discount_value });
+export const deleteStaff = (id) => del(`/api/staff/${id}`);

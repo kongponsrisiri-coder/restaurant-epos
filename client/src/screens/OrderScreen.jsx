@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen } from '../api';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount } from '../api';
 import BillScreen from './BillScreen';
 
 const COURSE_LABELS = { 1: 'Starters', 2: 'Mains', 3: 'Desserts', 4: 'Extra' };
@@ -41,7 +41,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     fetchData();
   }, [orderId]);
 
-const getItemIsBar = (item) => {
+  const getItemIsBar = (item) => {
     const cat = menu.find(c => c.id === item.category_id);
     return !!cat?.is_bar;
   };
@@ -148,6 +148,21 @@ const getItemIsBar = (item) => {
     }
   };
 
+  const handleItemDiscount = async (item) => {
+    const allowedRoles = ['admin', 'manager', 'supervisor'];
+    if (!allowedRoles.includes(staff?.role)) {
+      alert('⛔ Only Admin, Manager or Supervisor can apply discounts!');
+      return;
+    }
+    const type = window.confirm('OK = percentage %\nCancel = fixed £ amount') ? 'percent' : 'fixed';
+    const value = prompt(type === 'percent' ? 'Discount %:' : 'Discount £:', '10');
+    if (!value) return;
+    const num = parseFloat(value);
+    if (isNaN(num) || num <= 0) return alert('Invalid value!');
+    await applyItemDiscount(item.id, type, num);
+    await fetchOrder();
+  };
+
   const cartTotal = cart.reduce((sum, i) => sum + i.unit_price * i.quantity, 0);
   const subtotal = (order?.total || 0) + cartTotal;
   const discountAmount = order?.discount_value > 0
@@ -186,6 +201,13 @@ const getItemIsBar = (item) => {
 
   return (
     <>
+      <style>{`
+        @keyframes pendingPulse {
+          0%, 100% { border-color: #f59e0b; box-shadow: 0 0 0 0 rgba(245,158,11,0); }
+          50% { border-color: #d97706; box-shadow: 0 0 0 4px rgba(245,158,11,0.15); }
+        }
+      `}</style>
+
       <div style={{ display: 'flex', height: '100%', width: '100%' }}>
 
         {/* LEFT — Menu */}
@@ -398,12 +420,33 @@ const getItemIsBar = (item) => {
                     )}
                   </div>
 
+                  {/* PENDING / UNFIRED items — pulsing orange */}
                   {unfired.map(item => (
-                    <div key={item.id} style={{ marginBottom: 5, padding: '8px 10px', background: '#fef9c3', borderRadius: 8, border: '1px solid #eab308' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                        <span style={{ color: '#713f12', fontWeight: 600 }}>⏳ {item.quantity}× {item.name}</span>
+                    <div key={item.id} style={{
+                      marginBottom: 8, padding: '10px 12px',
+                      background: '#fffbeb', borderRadius: 8,
+                      border: '2px solid #f59e0b',
+                      animation: 'pendingPulse 2s infinite',
+                      position: 'relative'
+                    }}>
+                      <div style={{
+                        position: 'absolute', top: -9, right: 8,
+                        background: '#f59e0b', color: 'white',
+                        fontSize: 9, fontWeight: 800,
+                        padding: '2px 8px', borderRadius: 10,
+                        letterSpacing: 0.5
+                      }}>⏳ PENDING</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, alignItems: 'center' }}>
+                        <span style={{ color: '#92400e', fontWeight: 700, flex: 1 }}>
+                          {item.quantity}× {item.name}
+                        </span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <span style={{ color: '#713f12' }}>£{(item.unit_price * item.quantity).toFixed(2)}</span>
+                          <span style={{ color: '#92400e', fontWeight: 600 }}>£{(item.unit_price * item.quantity).toFixed(2)}</span>
+                          <button onClick={() => handleItemDiscount(item)} style={{
+                            background: '#dcfce7', border: 'none', borderRadius: 4,
+                            padding: '2px 6px', cursor: 'pointer',
+                            color: '#16a34a', fontSize: 10, fontWeight: 700
+                          }}>DISC</button>
                           <button onClick={async () => {
                             const reason = prompt('Void reason:', 'Customer changed mind');
                             if (!reason) return;
@@ -412,19 +455,30 @@ const getItemIsBar = (item) => {
                           }} style={{ background: '#fee2e2', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', color: '#ef4444', fontSize: 10, fontWeight: 700 }}>VOID</button>
                         </div>
                       </div>
-                      {item.notes && <div style={{ fontSize: 11, color: '#92400e', marginLeft: 8 }}>— {item.notes}</div>}
-                      {item.item_note && <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 8 }}>📝 {item.item_note}</div>}
+                      {item.notes && <div style={{ fontSize: 11, color: '#92400e', marginLeft: 8, marginTop: 3 }}>— {item.notes}</div>}
+                      {item.item_note && <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 8, marginTop: 2 }}>📝 {item.item_note}</div>}
+                      {item.discount_value > 0 && (
+                        <div style={{ fontSize: 10, color: '#16a34a', marginLeft: 8, marginTop: 2, fontWeight: 700 }}>
+                          🏷️ {item.discount_type === 'percent' ? `${item.discount_value}% off` : `£${item.discount_value} off`}
+                        </div>
+                      )}
                     </div>
                   ))}
 
+                  {/* FIRED items */}
                   {fired.map(item => (
                     <div key={item.id} style={{ marginBottom: 5 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#555' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#555', alignItems: 'center' }}>
                         <span style={{ flex: 1 }}>
                           {item.status === 'cooked' ? '✅' : item.status === 'served' ? '🍽️' : '🔥'} {item.quantity}× {item.name}
                         </span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
+                          <button onClick={() => handleItemDiscount(item)} style={{
+                            background: '#dcfce7', border: 'none', borderRadius: 4,
+                            padding: '2px 6px', cursor: 'pointer',
+                            color: '#16a34a', fontSize: 10, fontWeight: 700
+                          }}>DISC</button>
                           <button onClick={async () => {
                             const reason = prompt('Void reason:', 'Customer changed mind');
                             if (!reason) return;
@@ -432,22 +486,24 @@ const getItemIsBar = (item) => {
                             await fetchOrder();
                           }} style={{ background: '#fee2e2', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', color: '#ef4444', fontSize: 10, fontWeight: 700 }}>VOID</button>
                           <button onClick={async () => {
-  if (!window.confirm('Resend this item to kitchen?')) return;
-  await resendToKitchen(orderId, [item.id]);
-  await fetchOrder();
-  alert('🔄 Resent to kitchen!');
-}} style={{
-  background: '#dbeafe', border: 'none', borderRadius: 4,
-  padding: '2px 6px', cursor: 'pointer',
-  color: '#1e40af', fontSize: 10, fontWeight: 700, marginLeft: 4
-}}>RESEND</button>
+                            if (!window.confirm('Resend this item to kitchen?')) return;
+                            await resendToKitchen(orderId, [item.id]);
+                            await fetchOrder();
+                            alert('🔄 Resent to kitchen!');
+                          }} style={{ background: '#dbeafe', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', color: '#1e40af', fontSize: 10, fontWeight: 700 }}>RESEND</button>
                         </div>
                       </div>
                       {item.notes && <div style={{ fontSize: 11, color: '#aaa', marginLeft: 16 }}>— {item.notes}</div>}
                       {item.item_note && <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16 }}>📝 {item.item_note}</div>}
+                      {item.discount_value > 0 && (
+                        <div style={{ fontSize: 10, color: '#16a34a', marginLeft: 16, fontWeight: 700 }}>
+                          🏷️ {item.discount_type === 'percent' ? `${item.discount_value}% off` : `£${item.discount_value} off`}
+                        </div>
+                      )}
                     </div>
                   ))}
 
+                  {/* VOIDED items */}
                   {voided.map(item => (
                     <div key={item.id} style={{ marginBottom: 4, opacity: 0.4 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
@@ -487,23 +543,23 @@ const getItemIsBar = (item) => {
                 </div>
               ) : (
                 <button onClick={async () => {
-  const allowedRoles = ['admin', 'manager', 'supervisor'];
-  if (!allowedRoles.includes(staff?.role)) {
-    alert('⛔ Only Admin, Manager or Supervisor can apply discounts!\n\nPlease ask a manager to authorise.');
-    return;
-  }
-  const type = window.confirm('OK = percentage\nCancel = fixed amount') ? 'percent' : 'fixed';
-  const value = prompt(type === 'percent' ? 'Enter %:' : 'Enter £:', '10');
-  if (!value) return;
-  const num = parseFloat(value);
-  if (isNaN(num) || num <= 0) return alert('Invalid value!');
-  const reason = prompt('Reason:', 'Manager approval');
-  if (!reason) return;
-  await applyDiscount(orderId, type, num, reason);
-  await fetchOrder();
-}} style={{ width: '100%', padding: '10px', borderRadius: 8, border: '2px dashed #e94560', background: 'white', color: '#e94560', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
-  + Add Discount
-</button>
+                  const allowedRoles = ['admin', 'manager', 'supervisor'];
+                  if (!allowedRoles.includes(staff?.role)) {
+                    alert('⛔ Only Admin, Manager or Supervisor can apply discounts!\n\nPlease ask a manager to authorise.');
+                    return;
+                  }
+                  const type = window.confirm('OK = percentage\nCancel = fixed amount') ? 'percent' : 'fixed';
+                  const value = prompt(type === 'percent' ? 'Enter %:' : 'Enter £:', '10');
+                  if (!value) return;
+                  const num = parseFloat(value);
+                  if (isNaN(num) || num <= 0) return alert('Invalid value!');
+                  const reason = prompt('Reason:', 'Manager approval');
+                  if (!reason) return;
+                  await applyDiscount(orderId, type, num, reason);
+                  await fetchOrder();
+                }} style={{ width: '100%', padding: '10px', borderRadius: 8, border: '2px dashed #e94560', background: 'white', color: '#e94560', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                  + Add Bill Discount
+                </button>
               )}
             </div>
 
@@ -534,7 +590,7 @@ const getItemIsBar = (item) => {
             </div>
 
             {(orderTotal > 0 || existingItems.some(i => !i.voided)) && (
-  <button onClick={() => setShowBill(true)} style={{
+              <button onClick={() => setShowBill(true)} style={{
                 width: '100%', padding: '14px', borderRadius: 12, border: 'none',
                 background: '#e94560', color: 'white', fontSize: 16, fontWeight: 800, cursor: 'pointer'
               }}>
@@ -648,7 +704,7 @@ const getItemIsBar = (item) => {
         )}
       </div>
 
-      {/* BILL SCREEN — outside the flex div, renders on top of everything */}
+      {/* BILL SCREEN */}
       {showBill && (
         <BillScreen
           orderId={orderId}

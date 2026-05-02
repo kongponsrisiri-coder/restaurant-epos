@@ -108,7 +108,9 @@ async function initDB() {
         cooking_started_at TIMESTAMP,
         served_at TIMESTAMP,
         voided INTEGER DEFAULT 0,
-        void_reason TEXT
+        void_reason TEXT,
+        discount_type TEXT,
+        discount_value REAL DEFAULT 0
       )
     `);
 
@@ -129,7 +131,10 @@ async function initDB() {
         pin TEXT NOT NULL,
         role TEXT DEFAULT 'waiter',
         is_active INTEGER DEFAULT 1,
-        created_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT NOW(),
+        start_date TEXT,
+        notes TEXT,
+        employment_status TEXT DEFAULT 'active'
       )
     `);
 
@@ -183,7 +188,14 @@ async function initDB() {
       )
     `);
 
-    // Seed starter data
+    // ── Add new columns to existing tables if not exist ──
+    await client.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS discount_type TEXT`);
+    await client.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS discount_value REAL DEFAULT 0`);
+    await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS start_date TEXT`);
+    await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS notes TEXT`);
+    await client.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS employment_status TEXT DEFAULT 'active'`);
+
+    // ── Seed starter data ──
     const tablesCount = await client.query('SELECT COUNT(*) as count FROM tables');
     if (parseInt(tablesCount.rows[0].count) === 0) {
       for (let i = 1; i <= 10; i++) {

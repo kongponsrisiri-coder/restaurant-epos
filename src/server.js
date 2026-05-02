@@ -244,7 +244,6 @@ app.get('/api/orders/bar', async (req, res) => {
     );
     const orders = ordersRes.rows;
     if (!orders.length) return res.json([]);
-
     const orderIds = orders.map(o => o.id);
     const itemsRes = await pool.query(
       `SELECT order_items.*, menu_items.name, categories.is_bar
@@ -257,7 +256,6 @@ app.get('/api/orders/bar', async (req, res) => {
        AND categories.is_bar = 1`,
       [orderIds]
     );
-
     const result = orders
       .map(order => ({ ...order, items: itemsRes.rows.filter(i => i.order_id === order.id) }))
       .filter(o => o.items.length > 0);
@@ -274,7 +272,6 @@ app.get('/api/orders/:id', async (req, res) => {
     );
     const order = orderRes.rows[0];
     if (!order) return res.status(404).json({ error: 'Order not found' });
-
     const itemsRes = await pool.query(
       `SELECT order_items.*, menu_items.name, menu_items.category_id, categories.is_bar
        FROM order_items 
@@ -305,7 +302,6 @@ app.post('/api/orders/:id/items', async (req, res) => {
     await client.query('BEGIN');
     const { items } = req.body;
     const orderId = req.params.id;
-
     for (const item of items) {
       const isBar = item.is_bar ? 1 : 0;
       const firedAt = isBar ? new Date().toISOString() : null;
@@ -318,7 +314,6 @@ app.post('/api/orders/:id/items', async (req, res) => {
          isBar, firedAt, firedAt]
       );
     }
-
     const totalRes = await client.query(
       'SELECT SUM(quantity * unit_price) as total FROM order_items WHERE order_id = $1 AND voided = 0',
       [orderId]
@@ -326,7 +321,6 @@ app.post('/api/orders/:id/items', async (req, res) => {
     const total = totalRes.rows[0].total || 0;
     await client.query('UPDATE orders SET total = $1 WHERE id = $2', [total, orderId]);
     await client.query('COMMIT');
-
     const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
     const newItemsRes = await pool.query(
       `SELECT order_items.*, menu_items.name FROM order_items 
@@ -395,7 +389,6 @@ app.put('/api/order-items/:id/void', async (req, res) => {
   try {
     const { reason } = req.body;
     await pool.query('UPDATE order_items SET voided=1, void_reason=$1 WHERE id=$2', [reason, req.params.id]);
-
     const itemRes = await pool.query('SELECT order_id FROM order_items WHERE id = $1', [req.params.id]);
     const item = itemRes.rows[0];
     if (item) {
@@ -405,7 +398,6 @@ app.put('/api/order-items/:id/void', async (req, res) => {
       );
       await pool.query('UPDATE orders SET total=$1 WHERE id=$2', [totalRes.rows[0].total || 0, item.order_id]);
       io.emit('item_voided', { item_id: req.params.id });
-
       const countRes = await pool.query(
         'SELECT COUNT(*) as remaining FROM order_items WHERE order_id=$1 AND voided=0',
         [item.order_id]
@@ -690,7 +682,7 @@ app.get('/api/tables/status', async (req, res) => {
       const items = itemsByOrder[order.id] || [];
       const kitchenItems = items.filter(i => !i.is_bar);
 
-     const starters = kitchenItems.filter(i => Number(i.course) === 1);
+      const starters = kitchenItems.filter(i => Number(i.course) === 1);
       const startersFired = starters.some(i => i.is_fired);
       const startersDone = starters.length > 0 && starters.every(i => i.status === 'served');
 
@@ -702,9 +694,9 @@ app.get('/api/tables/status', async (req, res) => {
       const dessertsFired = desserts.some(i => i.is_fired);
       const dessertsDone = desserts.length > 0 && desserts.every(i => i.status === 'served');
 
-      // Pending = fired but not yet served
+      // hasPending = any kitchen item fired but not yet served
       const hasPending = kitchenItems.some(i => i.is_fired && i.status !== 'served');
-      // Unfired = items saved but not sent to kitchen yet
+      // hasUnfired = any kitchen item saved but not sent to kitchen
       const hasUnfired = kitchenItems.some(i => !i.is_fired);
 
       let colourStatus = 'occupied';
@@ -717,10 +709,16 @@ app.get('/api/tables/status', async (req, res) => {
       else if (startersDone) colourStatus = 'starters_done';
       else if (startersFired) colourStatus = 'starters_fired';
 
-      // Only override with white if bill printed AND nothing pending AND nothing unfired
+      // Only show white if bill printed AND nothing pending AND nothing unfired
       if (order.bill_printed && !hasPending && !hasUnfired) {
         colourStatus = 'bill_printed';
       }
+
+      return { ...order, colour_status: colourStatus };
+    });
+
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/bar/completed', async (req, res) => {
@@ -809,7 +807,6 @@ app.get('/api/z-report/preview', async (req, res) => {
         [from, to]
       )
     ]);
-
     const orders = ordersRes.rows;
     const voids = voidsRes.rows[0];
     const totalSales = orders.reduce((s, o) => s + (o.total || 0), 0);
@@ -821,7 +818,6 @@ app.get('/api/z-report/preview', async (req, res) => {
       if (!o.discount_value) return s;
       return s + (o.discount_type === 'percent' ? (o.total || 0) * (o.discount_value / 100) : o.discount_value);
     }, 0);
-
     res.json({
       orders, open_orders: openRes.rows,
       total_sales: totalSales, total_covers: totalCovers,
@@ -897,7 +893,7 @@ app.get('/api/bills/:id/items', async (req, res) => {
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-// Resend items to kitchen
+
 app.post('/api/orders/:id/resend', async (req, res) => {
   try {
     const { item_ids } = req.body;

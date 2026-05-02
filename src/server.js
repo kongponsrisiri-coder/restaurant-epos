@@ -702,24 +702,16 @@ app.get('/api/tables/status', async (req, res) => {
       const dessertsFired = desserts.some(i => i.is_fired);
       const dessertsDone = desserts.length > 0 && desserts.every(i => i.status === 'served');
 
-      // Determine most advanced ACTIVE course first
-let colourStatus = 'occupied';
+ if (dessertsDone) colourStatus = 'desserts_done';       // ⚫ Grey
+else if (dessertsFired) colourStatus = 'desserts_fired'; // 🩷 Pink
+else if (mainsDone) colourStatus = 'mains_done';         // 🌑 Navy ✅
+else if (mainsFired) colourStatus = 'mains_fired';       // 🔵 Light Blue
+else if (startersDone) colourStatus = 'starters_done';   // 🟠 Orange
+else if (startersFired) colourStatus = 'starters_fired'; // 🟡 Yellow
 
-if (dessertsDone) colourStatus = 'desserts_done';
-else if (dessertsFired) colourStatus = 'desserts_fired';
-else if (mainsDone) colourStatus = 'mains_done';
-else if (mainsFired) colourStatus = 'mains_fired';
-else if (startersDone) colourStatus = 'starters_done';
-else if (startersFired) colourStatus = 'starters_fired';
-
-// Only show bill_printed if NO active cooking is happening
-const hasActiveCooking = kitchenItems.some(i => 
-  i.status !== 'served' && i.is_fired
-);
-const hasUnfired = kitchenItems.some(i => !i.is_fired);
-
+// White ONLY if bill printed AND nothing cooking
 if (order.bill_printed && !hasActiveCooking && !hasUnfired) {
-  colourStatus = 'bill_printed';
+  colourStatus = 'bill_printed'; // ⬜ White
 }
 
       return { ...order, colour_status: colourStatus };

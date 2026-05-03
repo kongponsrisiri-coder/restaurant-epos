@@ -97,3 +97,9 @@ export const importMenuBatch = async (items) => {
   });
   return res.json();
 };
+export const deleteMenuItem = async (id) => {
+  const res = await fetch(`${SERVER_URL}/api/menu/items/${id}`, {
+    method: 'DELETE',
+  });
+  return res.json();
+};

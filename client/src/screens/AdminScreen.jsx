@@ -58,21 +58,14 @@ function BillsSection() {
   useEffect(() => { fetchBills(); }, []);
 
   const handleSelectBill = async (bill) => {
-    if (selectedBill?.id === bill.id) {
-      setSelectedBill(null);
-      setBillItems([]);
-      return;
-    }
+    if (selectedBill?.id === bill.id) { setSelectedBill(null); setBillItems([]); return; }
     setSelectedBill(bill);
     setLoadingItems(true);
     try {
       const items = await getBillItems(bill.id);
       setBillItems(Array.isArray(items) ? items : []);
-    } catch (err) {
-      setBillItems([]);
-    } finally {
-      setLoadingItems(false);
-    }
+    } catch (err) { setBillItems([]); }
+    finally { setLoadingItems(false); }
   };
 
   const totalSales = bills.reduce((s, b) => s + (b.total || 0), 0);
@@ -94,7 +87,6 @@ function BillsSection() {
   return (
     <div style={{ padding: 24 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 20 }}>🧾 Bill Records</h1>
-
       <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div>
@@ -117,7 +109,6 @@ function BillsSection() {
           <button onClick={fetchBills} style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Search</button>
         </div>
       </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
         {[
           { label: 'Total Bills', value: bills.length, color: '#3b82f6' },
@@ -131,7 +122,6 @@ function BillsSection() {
           </div>
         ))}
       </div>
-
       {loading ? (
         <div style={{ textAlign: 'center', color: '#888', padding: 40 }}>Loading...</div>
       ) : (
@@ -140,9 +130,7 @@ function BillsSection() {
             <span>Bill #</span><span>Table</span><span>Cvr</span><span>Date & Time</span><span>Method</span>
             <span style={{ textAlign: 'right' }}>Discount</span><span style={{ textAlign: 'right' }}>Total</span>
           </div>
-
           {bills.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: '#bbb' }}>No bills found for this period</div>}
-
           {bills.map(bill => (
             <div key={bill.id}>
               <div onClick={() => handleSelectBill(bill)} style={{
@@ -168,7 +156,6 @@ function BillsSection() {
                 </span>
                 <span style={{ textAlign: 'right', fontWeight: 700, color: '#1a1a2e' }}>£{(bill.total || 0).toFixed(2)}</span>
               </div>
-
               {selectedBill?.id === bill.id && (
                 <div style={{ background: '#f8fbff', padding: '16px 20px', borderBottom: '1px solid #dbeafe', borderLeft: '4px solid #3b82f6' }}>
                   {loadingItems ? (
@@ -222,7 +209,6 @@ function BillsSection() {
               )}
             </div>
           ))}
-
           {bills.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: '70px 70px 60px 1fr 90px 90px 90px', padding: '14px 20px', background: '#f8f8f8', fontWeight: 800, fontSize: 15 }}>
               <span style={{ color: '#555', gridColumn: '1 / 7' }}>Total — {bills.length} bills</span>
@@ -242,14 +228,14 @@ export default function AdminScreen() {
   const [section, setSection] = useState('trading');
 
   const navItems = [
-    { id: 'trading', label: '📊 Trading' },
-    { id: 'menu', label: '🍽️ Menu' },
+    { id: 'trading',   label: '📊 Trading' },
+    { id: 'menu',      label: '🍽️ Menu' },
     { id: 'tableplan', label: '🗺️ Table Plan' },
-    { id: 'reports', label: '📈 Reports' },
-    { id: 'bills', label: '🧾 Bills' },
-    { id: 'zreport', label: '🔐 Z Report' },
-    { id: 'staff', label: '👥 Staff' },
-    { id: 'settings', label: '⚙️ Settings' },
+    { id: 'reports',   label: '📈 Reports' },
+    { id: 'bills',     label: '🧾 Bills' },
+    { id: 'zreport',   label: '🔐 Z Report' },
+    { id: 'staff',     label: '👥 Staff' },
+    { id: 'settings',  label: '⚙️ Settings' },
   ];
 
   return (
@@ -266,14 +252,14 @@ export default function AdminScreen() {
         ))}
       </div>
       <div style={{ flex: 1, overflowY: 'auto', background: '#f5f5f5' }}>
-        {section === 'trading' && <TradingSection />}
-        {section === 'menu' && <MenuSection />}
+        {section === 'trading'   && <TradingSection />}
+        {section === 'menu'      && <MenuSection />}
         {section === 'tableplan' && <TablePlanSection />}
-        {section === 'reports' && <ReportsSection />}
-        {section === 'bills' && <BillsSection />}
-        {section === 'zreport' && <ZReportSection />}
-        {section === 'staff' && <StaffSection />}
-        {section === 'settings' && <SettingsSection />}
+        {section === 'reports'   && <ReportsSection />}
+        {section === 'bills'     && <BillsSection />}
+        {section === 'zreport'   && <ZReportSection />}
+        {section === 'staff'     && <StaffSection />}
+        {section === 'settings'  && <SettingsSection />}
       </div>
     </div>
   );
@@ -293,8 +279,8 @@ function TradingSection() {
     getSummaryReport(from, to).then(d => { setData(d); setLoading(false); });
   }, [period]);
 
-  const avgPerHead = data?.total_covers > 0 ? data.total_sales / data.total_covers : 0;
-  const avgPerCover = data?.order_count > 0 ? data.total_sales / data.order_count : 0;
+  const avgPerHead  = data?.total_covers > 0 ? data.total_sales / data.total_covers : 0;
+  const avgPerCover = data?.order_count  > 0 ? data.total_sales / data.order_count  : 0;
 
   return (
     <div style={{ padding: 24 }}>
@@ -313,11 +299,11 @@ function TradingSection() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 16, marginBottom: 24 }}>
             {[
-              { label: 'Total Sales', value: `£${(data?.total_sales || 0).toFixed(2)}`, color: '#e94560' },
-              { label: 'Orders', value: data?.order_count || 0, color: '#3b82f6' },
-              { label: 'Covers', value: data?.total_covers || 0, color: '#22c55e' },
-              { label: 'Avg per Cover', value: `£${avgPerHead.toFixed(2)}`, color: '#eab308' },
-              { label: 'Avg Order', value: `£${avgPerCover.toFixed(2)}`, color: '#8b5cf6' },
+              { label: 'Total Sales',    value: `£${(data?.total_sales || 0).toFixed(2)}`, color: '#e94560' },
+              { label: 'Orders',         value: data?.order_count || 0,                    color: '#3b82f6' },
+              { label: 'Covers',         value: data?.total_covers || 0,                   color: '#22c55e' },
+              { label: 'Avg per Cover',  value: `£${avgPerHead.toFixed(2)}`,               color: '#eab308' },
+              { label: 'Avg Order',      value: `£${avgPerCover.toFixed(2)}`,              color: '#8b5cf6' },
             ].map(stat => (
               <div key={stat.label} style={{ background: 'white', borderRadius: 12, padding: '16px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
                 <div style={{ fontSize: 26, fontWeight: 800, color: stat.color }}>{stat.value}</div>
@@ -355,22 +341,345 @@ function TradingSection() {
 }
 
 // ─────────────────────────────────────────────
+// AI MENU SCANNER MODAL
+// ─────────────────────────────────────────────
+function AIScannerModal({ onClose, onImported }) {
+  const [stage, setStage]           = useState('upload');  // upload | scanning | results | importing | done
+  const [file, setFile]             = useState(null);
+  const [fileData, setFileData]     = useState(null);
+  const [scanStep, setScanStep]     = useState(0);
+  const [scannedMenu, setScannedMenu] = useState(null);
+  const [importResult, setImportResult] = useState(null);
+  const [error, setError]           = useState('');
+  const fileInputRef                = useRef(null);
+
+  const SCAN_STEPS = [
+    '👁️ Reading menu layout & text',
+    '🍽️ Identifying dishes & categories',
+    '⚠️ Detecting allergens in each dish',
+    '💷 Estimating prices from context',
+    '🇹🇭 Generating Thai dish names',
+  ];
+
+  // ── File selection ──────────────────────────
+  function handleFile(f) {
+    if (!f) return;
+    setFile(f);
+    const reader = new FileReader();
+    reader.onload = e => setFileData(e.target.result);
+    reader.readAsDataURL(f);
+  }
+
+  // ── Run scan via Railway proxy ───────────────
+  async function runScan() {
+    if (!file || !fileData) return;
+    setError('');
+    setStage('scanning');
+    setScanStep(0);
+
+    // Animate steps
+    let idx = 0;
+    const interval = setInterval(() => {
+      idx++;
+      setScanStep(idx);
+      if (idx >= SCAN_STEPS.length) clearInterval(interval);
+    }, 1800);
+
+    try {
+      const base64     = fileData.split(',')[1];
+      const media_type = file.type || 'image/jpeg';
+
+      const res = await fetch(`${SERVER_URL}/api/ai/scan-menu`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_base64: base64, media_type }),
+      });
+
+      clearInterval(interval);
+      setScanStep(SCAN_STEPS.length);
+
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Scan failed');
+
+      await new Promise(r => setTimeout(r, 600));
+      setScannedMenu(data.menu);
+      setStage('results');
+
+    } catch (err) {
+      clearInterval(interval);
+      setError(err.message || 'Scan failed — try again');
+      setStage('upload');
+    }
+  }
+
+  // ── Import to EPOS ───────────────────────────
+  async function runImport() {
+    if (!scannedMenu) return;
+    setStage('importing');
+
+    const items = scannedMenu.categories.flatMap(cat =>
+      cat.dishes.map(dish => ({
+        name_en:     dish.name_en,
+        name_th:     dish.name_th || null,
+        description: dish.description || null,
+        price:       parseFloat(dish.price) || 0,
+        allergens:   dish.allergens || [],
+        category:    cat.name,
+      }))
+    );
+
+    try {
+      const res  = await fetch(`${SERVER_URL}/api/menu/import-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Import failed');
+      setImportResult(data.summary);
+      setStage('done');
+      onImported(); // refresh menu list
+    } catch (err) {
+      setError(err.message);
+      setStage('results');
+    }
+  }
+
+  const allDishes = scannedMenu?.categories?.flatMap(c => c.dishes) || [];
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+      <div style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: 680, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 80px rgba(0,0,0,0.4)' }}>
+
+        {/* Header */}
+        <div style={{ background: 'linear-gradient(135deg,#1a1a2e,#2d2a4a)', padding: '20px 28px', borderRadius: '20px 20px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ color: 'white', fontWeight: 800, fontSize: 18 }}>🤖 AI Menu Scanner</div>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 2 }}>Upload a menu photo → AI extracts all dishes → Import to EPOS</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', borderRadius: 8, width: 34, height: 34, cursor: 'pointer', fontSize: 18 }}>✕</button>
+        </div>
+
+        <div style={{ padding: 28 }}>
+
+          {/* ── UPLOAD STAGE ── */}
+          {stage === 'upload' && (
+            <div>
+              {error && (
+                <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: '#991b1b', fontSize: 14 }}>
+                  ⚠️ {error}
+                </div>
+              )}
+
+              {/* Drop zone */}
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }}
+                style={{
+                  border: `2px dashed ${file ? '#22c55e' : '#C9A84C'}`,
+                  borderRadius: 16, padding: '40px 24px', textAlign: 'center',
+                  cursor: 'pointer', marginBottom: 20,
+                  background: file ? '#f0fdf4' : '#fffdf0',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <input ref={fileInputRef} type="file" accept="image/*,.pdf" style={{ display: 'none' }}
+                  onChange={e => handleFile(e.target.files[0])} />
+
+                {file ? (
+                  <div>
+                    {file.type.startsWith('image/') && fileData && (
+                      <img src={fileData} alt="preview" style={{ maxHeight: 160, maxWidth: '100%', borderRadius: 10, marginBottom: 12, objectFit: 'contain' }} />
+                    )}
+                    <div style={{ fontWeight: 700, color: '#15803d', fontSize: 15 }}>✅ {file.name}</div>
+                    <div style={{ color: '#888', fontSize: 13, marginTop: 4 }}>{(file.size / 1024 / 1024).toFixed(1)} MB · Click to change</div>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: 40, marginBottom: 12 }}>📷</div>
+                    <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Drop menu photo here or click to upload</div>
+                    <div style={{ color: '#888', fontSize: 13 }}>JPG, PNG, or PDF · Phone photos work great</div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 600, color: '#555' }}>Cancel</button>
+                <button
+                  onClick={runScan}
+                  disabled={!file}
+                  style={{
+                    flex: 2, padding: '12px', borderRadius: 10, border: 'none',
+                    background: file ? '#1a1a2e' : '#ddd',
+                    color: file ? 'white' : '#aaa',
+                    cursor: file ? 'pointer' : 'not-allowed',
+                    fontWeight: 700, fontSize: 15,
+                  }}
+                >
+                  🔍 Scan with AI
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── SCANNING STAGE ── */}
+          {stage === 'scanning' && (
+            <div style={{ textAlign: 'center', padding: '20px 0' }}>
+              <div style={{
+                width: 52, height: 52, border: '4px solid #f0f0f0',
+                borderTop: '4px solid #C9A84C', borderRadius: '50%',
+                margin: '0 auto 20px',
+                animation: 'spin 0.8s linear infinite',
+              }} />
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 6 }}>AI is reading your menu…</div>
+              <div style={{ color: '#888', fontSize: 13, marginBottom: 28 }}>This usually takes 15–30 seconds</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 340, margin: '0 auto' }}>
+                {SCAN_STEPS.map((step, i) => (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '8px 14px', borderRadius: 8, fontSize: 13,
+                    background: i < scanStep ? '#f0fdf4' : i === scanStep ? '#fffdf0' : 'transparent',
+                    color: i < scanStep ? '#15803d' : i === scanStep ? '#C9A84C' : '#aaa',
+                    fontWeight: i === scanStep ? 700 : 400,
+                    border: i === scanStep ? '1px solid #C9A84C30' : '1px solid transparent',
+                  }}>
+                    <span>{i < scanStep ? '✓' : i === scanStep ? '⏳' : '○'}</span>
+                    {step}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── RESULTS STAGE ── */}
+          {stage === 'results' && scannedMenu && (
+            <div>
+              {error && (
+                <div style={{ background: '#fee2e2', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: '#991b1b', fontSize: 14 }}>⚠️ {error}</div>
+              )}
+
+              {/* Summary bar */}
+              <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+                {[
+                  { label: 'Dishes found',     value: allDishes.length,                                            color: '#3b82f6' },
+                  { label: 'Categories',        value: scannedMenu.categories?.length || 0,                        color: '#8b5cf6' },
+                  { label: 'With allergens',    value: allDishes.filter(d => d.allergens?.length > 0).length,      color: '#ef4444' },
+                  { label: 'Prices estimated',  value: allDishes.filter(d => d.price_assumed).length,              color: '#f97316' },
+                ].map(s => (
+                  <div key={s.label} style={{ flex: 1, minWidth: 100, background: '#f8f8f8', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</div>
+                    <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Dish list */}
+              <div style={{ background: '#f8f8f8', borderRadius: 12, overflow: 'hidden', marginBottom: 20, maxHeight: 360, overflowY: 'auto' }}>
+                {scannedMenu.categories?.map(cat => (
+                  <div key={cat.name}>
+                    <div style={{ background: '#1a1a2e', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ color: '#C9A84C', fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>{cat.name}</span>
+                      <span style={{ background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 11, padding: '1px 8px', borderRadius: 10 }}>{cat.dishes?.length} items</span>
+                    </div>
+                    {cat.dishes?.map((dish, i) => (
+                      <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, padding: '12px 16px', borderBottom: '1px solid #eee', background: 'white' }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e' }}>{dish.name_en}</div>
+                          {dish.name_th && <div style={{ fontSize: 12, color: '#C9A84C', marginTop: 1 }}>{dish.name_th}</div>}
+                          {dish.description && <div style={{ fontSize: 12, color: '#888', marginTop: 2, lineHeight: 1.4 }}>{dish.description}</div>}
+                          {dish.allergens?.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                              {dish.allergens.map(a => (
+                                <span key={a} style={{ background: '#fee2e2', color: '#991b1b', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4 }}>{a}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ textAlign: 'right', minWidth: 70 }}>
+                          <div style={{ fontWeight: 800, color: '#e94560', fontSize: 15 }}>£{(dish.price || 0).toFixed(2)}</div>
+                          {dish.price_assumed && <div style={{ fontSize: 10, color: '#f97316', fontWeight: 600 }}>estimated</div>}
+                          <div style={{ fontSize: 10, color: dish.confidence >= 85 ? '#22c55e' : dish.confidence >= 65 ? '#eab308' : '#ef4444', marginTop: 4 }}>
+                            {dish.confidence}% conf.
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => { setStage('upload'); setScannedMenu(null); }} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 600, color: '#555' }}>
+                  ↩ Scan Again
+                </button>
+                <button onClick={runImport} style={{ flex: 2, padding: '12px', borderRadius: 10, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>
+                  🚀 Import {allDishes.length} Dishes to Menu
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── IMPORTING STAGE ── */}
+          {stage === 'importing' && (
+            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <div style={{ fontSize: 40, marginBottom: 16 }}>⏳</div>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>Importing to menu…</div>
+              <div style={{ color: '#888', fontSize: 13, marginTop: 6 }}>Adding {allDishes.length} dishes to your menu</div>
+            </div>
+          )}
+
+          {/* ── DONE STAGE ── */}
+          {stage === 'done' && importResult && (
+            <div style={{ textAlign: 'center', padding: '20px 0' }}>
+              <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
+              <div style={{ fontWeight: 800, fontSize: 20, color: '#15803d', marginBottom: 8 }}>Import Complete!</div>
+              <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginBottom: 24, flexWrap: 'wrap' }}>
+                <div style={{ background: '#f0fdf4', borderRadius: 12, padding: '14px 24px', border: '1px solid #bbf7d0' }}>
+                  <div style={{ fontSize: 28, fontWeight: 800, color: '#15803d' }}>{importResult.inserted}</div>
+                  <div style={{ fontSize: 12, color: '#888' }}>Imported ✓</div>
+                </div>
+                {importResult.skipped > 0 && (
+                  <div style={{ background: '#fffbeb', borderRadius: 12, padding: '14px 24px', border: '1px solid #fde68a' }}>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: '#d97706' }}>{importResult.skipped}</div>
+                    <div style={{ fontSize: 12, color: '#888' }}>Skipped</div>
+                  </div>
+                )}
+              </div>
+              <div style={{ color: '#555', fontSize: 14, marginBottom: 24 }}>
+                Items are now visible in your menu. Review them in the list below.
+              </div>
+              <button onClick={onClose} style={{ padding: '12px 32px', borderRadius: 10, border: 'none', background: '#1a1a2e', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>
+                ✓ Done — Close Scanner
+              </button>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
 // MENU SECTION
 // ─────────────────────────────────────────────
 function MenuSection() {
-  const [menu, setMenu] = useState([]);
-  const [subcategories, setSubcategories] = useState([]);
+  const [menu, setMenu]                     = useState([]);
+  const [subcategories, setSubcategories]   = useState([]);
   const [activeCategory, setActiveCategory] = useState(null);
-  const [showForm, setShowForm] = useState(false);
-  const [editItem, setEditItem] = useState(null);
-  const [form, setForm] = useState({ name: '', name_alt: '', description: '', price: '', category_id: '', subcategory_id: null });
-  const [modifierItem, setModifierItem] = useState(null);
-  const [modifiers, setModifiers] = useState([]);
-  const [newGroup, setNewGroup] = useState({ name: '', required: true, multi_select: false });
-  const [newOption, setNewOption] = useState({ name: '', extra_price: '' });
-  const [activeGroup, setActiveGroup] = useState(null);
+  const [showForm, setShowForm]             = useState(false);
+  const [showScanner, setShowScanner]       = useState(false); // ← NEW
+  const [editItem, setEditItem]             = useState(null);
+  const [form, setForm]                     = useState({ name: '', name_alt: '', description: '', price: '', category_id: '', subcategory_id: null });
+  const [modifierItem, setModifierItem]     = useState(null);
+  const [modifiers, setModifiers]           = useState([]);
+  const [newGroup, setNewGroup]             = useState({ name: '', required: true, multi_select: false });
+  const [newOption, setNewOption]           = useState({ name: '', extra_price: '' });
+  const [activeGroup, setActiveGroup]       = useState(null);
   const [showSubcatManager, setShowSubcatManager] = useState(false);
-  const [newSubcatName, setNewSubcatName] = useState('');
+  const [newSubcatName, setNewSubcatName]   = useState('');
 
   const fetchMenu = async () => {
     const data = await getMenu();
@@ -389,10 +698,10 @@ function MenuSection() {
   };
 
   const openEditForm = (item) => {
-  setForm({ name: item.name, name_alt: item.name_alt || '', description: item.description || '', price: item.price, category_id: item.category_id, subcategory_id: item.subcategory_id || null });
-  setEditItem(item);
-  setShowForm(true);
-};
+    setForm({ name: item.name, name_alt: item.name_alt || '', description: item.description || '', price: item.price, category_id: item.category_id, subcategory_id: item.subcategory_id || null });
+    setEditItem(item);
+    setShowForm(true);
+  };
 
   const handleSave = async () => {
     if (!form.name || !form.price) return alert('Name and price are required!');
@@ -440,12 +749,14 @@ function MenuSection() {
     setModifiers(await getItemModifiers(modifierItem.id));
   };
 
-  const activeItems = menu.find(c => c.id === activeCategory)?.items || [];
-  const activeCatSubs = subcategories.filter(s => s.category_id === activeCategory);
+  const activeItems    = menu.find(c => c.id === activeCategory)?.items || [];
+  const activeCatSubs  = subcategories.filter(s => s.category_id === activeCategory);
 
   return (
     <div style={{ padding: 24 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 20 }}>Menu Manager</h1>
+
+      {/* Category tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         {menu.map(cat => (
           <button key={cat.id} onClick={() => setActiveCategory(cat.id)} style={{
@@ -460,6 +771,7 @@ function MenuSection() {
         }}>⊕ Sub-categories</button>
       </div>
 
+      {/* Sub-category manager */}
       {showSubcatManager && (
         <div style={{ background: '#f0f7ff', borderRadius: 12, padding: 16, marginBottom: 20, border: '1px solid #bfdbfe' }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: '#1e40af', marginBottom: 12 }}>Manage Sub-categories</div>
@@ -492,12 +804,29 @@ function MenuSection() {
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <button onClick={openAddForm} style={{ background: '#e94560', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }}>+ Add Item</button>
+      {/* ── Action buttons row — THIS IS THE KEY CHANGE ── */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginBottom: 16 }}>
+        {/* AI Scanner button */}
+        <button onClick={() => setShowScanner(true)} style={{
+          background: 'linear-gradient(135deg,#1a1a2e,#2d2a4a)',
+          color: 'white', border: 'none', padding: '10px 18px',
+          borderRadius: 10, cursor: 'pointer', fontWeight: 700,
+          fontSize: 14, display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          🤖 AI Scanner
+        </button>
+        {/* Existing add item button */}
+        <button onClick={openAddForm} style={{
+          background: '#e94560', color: 'white', border: 'none',
+          padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600,
+        }}>
+          + Add Item
+        </button>
       </div>
 
+      {/* Menu items list */}
       {activeItems.length === 0 ? (
-        <div style={{ textAlign: 'center', color: '#bbb', marginTop: 60 }}>No items yet — click "+ Add Item"</div>
+        <div style={{ textAlign: 'center', color: '#bbb', marginTop: 60 }}>No items yet — click "+ Add Item" or use 🤖 AI Scanner</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {activeItems.map(item => {
@@ -521,6 +850,15 @@ function MenuSection() {
         </div>
       )}
 
+      {/* AI Scanner Modal */}
+      {showScanner && (
+        <AIScannerModal
+          onClose={() => setShowScanner(false)}
+          onImported={() => { fetchMenu(); setShowScanner(false); }}
+        />
+      )}
+
+      {/* Add/Edit Modal */}
       {showForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: 16, padding: 32, width: 420, maxHeight: '90vh', overflowY: 'auto' }}>
@@ -546,17 +884,17 @@ function MenuSection() {
                 </div>
               )}
               <div>
-  <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Item name (English) *</label>
-  <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Satay"
-    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
-</div>
-<div>
-  <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>
-    Second language name <span style={{ fontWeight: 400, color: '#aaa' }}>(optional — shown on kitchen/bar screen)</span>
-  </label>
-  <input value={form.name_alt || ''} onChange={e => setForm({ ...form, name_alt: e.target.value })} placeholder="e.g. ไก่ผัดเม็ดมะม่วง, 炒鸡肉, Gà xào..."
-    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #C9A84C', fontSize: 14, boxSizing: 'border-box' }} />
-</div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Item name (English) *</label>
+                <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Satay"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>
+                  Second language name <span style={{ fontWeight: 400, color: '#aaa' }}>(optional)</span>
+                </label>
+                <input value={form.name_alt || ''} onChange={e => setForm({ ...form, name_alt: e.target.value })} placeholder="e.g. ไก่ผัดเม็ดมะม่วง"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #C9A84C', fontSize: 14, boxSizing: 'border-box' }} />
+              </div>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Description</label>
                 <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Optional"
@@ -576,6 +914,7 @@ function MenuSection() {
         </div>
       )}
 
+      {/* Modifiers Modal */}
       {modifierItem && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: 16, padding: 32, width: 520, maxHeight: '80vh', overflowY: 'auto' }}>
@@ -898,7 +1237,7 @@ function ZReportSection() {
     setSaved(false);
     try {
       const from = type === 'day' ? todayStart : new Date(fromTime).toISOString();
-      const to = type === 'day' ? todayEnd : new Date(toTime).toISOString();
+      const to   = type === 'day' ? todayEnd   : new Date(toTime).toISOString();
       const data = await getZReportPreview(from, to);
       setReportData({ ...data, from, to });
       setStep(2);
@@ -914,8 +1253,8 @@ function ZReportSection() {
       const ok = window.confirm(`⚠️ ${reportData.open_orders.length} tables still open:\n` + reportData.open_orders.map(o => `Table ${o.table_number}`).join(', ') + '\n\nAre you sure?');
       if (!ok) return;
     }
-    const floatNum = parseFloat(floatAmount) || 0;
-    const pettyNum = parseFloat(pettyCash) || 0;
+    const floatNum  = parseFloat(floatAmount) || 0;
+    const pettyNum  = parseFloat(pettyCash) || 0;
     const actualNum = parseFloat(actualCash) || 0;
     const expectedCash = (reportData.total_cash || 0) - floatNum - pettyNum;
     const difference = actualNum - expectedCash;
@@ -934,12 +1273,12 @@ function ZReportSection() {
     return new Date(dt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
-  const floatNum = parseFloat(floatAmount) || 0;
-  const pettyNum = parseFloat(pettyCash) || 0;
-  const actualNum = parseFloat(actualCash) || 0;
+  const floatNum     = parseFloat(floatAmount) || 0;
+  const pettyNum     = parseFloat(pettyCash) || 0;
+  const actualNum    = parseFloat(actualCash) || 0;
   const expectedCash = reportData ? (reportData.total_cash || 0) - floatNum - pettyNum : 0;
-  const difference = actualNum - expectedCash;
-  const inputStyle = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, boxSizing: 'border-box' };
+  const difference   = actualNum - expectedCash;
+  const inputStyle   = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, boxSizing: 'border-box' };
 
   return (
     <div style={{ padding: 24, maxWidth: 700 }}>
@@ -1022,7 +1361,7 @@ function ZReportSection() {
               {[
                 { label: '💵 Cash Sales', value: reportData.total_cash || 0, color: '#22c55e' },
                 { label: '💳 Card Sales', value: reportData.total_card || 0, color: '#3b82f6' },
-                { label: '🔄 Other', value: reportData.total_other || 0, color: '#8b5cf6' },
+                { label: '🔄 Other',      value: reportData.total_other || 0, color: '#8b5cf6' },
               ].map(p => (
                 <div key={p.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0f0f0', fontSize: 15 }}>
                   <span>{p.label}</span><span style={{ fontWeight: 700, color: p.color }}>£{p.value.toFixed(2)}</span>
@@ -1034,9 +1373,9 @@ function ZReportSection() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
               {[
-                { label: 'Orders', value: reportData.total_orders || 0, color: '#3b82f6' },
-                { label: 'Covers', value: reportData.total_covers || 0, color: '#22c55e' },
-                { label: 'Avg/Cover', value: `£${(reportData.avg_per_cover || 0).toFixed(2)}`, color: '#8b5cf6' },
+                { label: 'Orders',    value: reportData.total_orders || 0,                                 color: '#3b82f6' },
+                { label: 'Covers',    value: reportData.total_covers || 0,                                 color: '#22c55e' },
+                { label: 'Avg/Cover', value: `£${(reportData.avg_per_cover || 0).toFixed(2)}`,             color: '#8b5cf6' },
               ].map(s => (
                 <div key={s.label} style={{ background: '#f8f8f8', borderRadius: 10, padding: 12, textAlign: 'center' }}>
                   <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
@@ -1072,22 +1411,22 @@ function ZReportSection() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
-                <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>💰 Float at Start of Shift <span style={{ fontWeight: 400, color: '#aaa' }}>(cash in till before service)</span></label>
+                <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>💰 Float at Start of Shift</label>
                 <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span>
                   <input type="number" step="0.01" value={floatAmount} onChange={e => setFloatAmount(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} />
                 </div>
               </div>
               <div>
-                <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>🧾 Petty Cash Out <span style={{ fontWeight: 400, color: '#aaa' }}>(cash taken out during shift)</span></label>
+                <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>🧾 Petty Cash Out</label>
                 <div style={{ position: 'relative', marginBottom: 8 }}>
                   <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span>
                   <input type="number" step="0.01" value={pettyCash} onChange={e => setPettyCash(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} />
                 </div>
-                <input value={pettyCashReason} onChange={e => setPettyCashReason(e.target.value)} placeholder="Reason e.g. Bought supplies, staff meal..." style={inputStyle} />
+                <input value={pettyCashReason} onChange={e => setPettyCashReason(e.target.value)} placeholder="Reason e.g. Bought supplies..." style={inputStyle} />
               </div>
               <div>
-                <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>🏦 Actual Cash Counted <span style={{ fontWeight: 400, color: '#aaa' }}>(what you physically count)</span></label>
+                <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>🏦 Actual Cash Counted</label>
                 <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span>
                   <input type="number" step="0.01" value={actualCash} onChange={e => setActualCash(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} />
@@ -1130,9 +1469,9 @@ function ZReportSection() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 16 }}>
               {[
                 { label: 'Total Sales', value: `£${(reportData.total_sales || 0).toFixed(2)}`, color: '#e94560' },
-                { label: 'Cash Sales', value: `£${(reportData.total_cash || 0).toFixed(2)}`, color: '#22c55e' },
-                { label: 'Card Sales', value: `£${(reportData.total_card || 0).toFixed(2)}`, color: '#3b82f6' },
-                { label: 'Orders', value: reportData.total_orders || 0, color: '#8b5cf6' },
+                { label: 'Cash Sales',  value: `£${(reportData.total_cash  || 0).toFixed(2)}`, color: '#22c55e' },
+                { label: 'Card Sales',  value: `£${(reportData.total_card  || 0).toFixed(2)}`, color: '#3b82f6' },
+                { label: 'Orders',      value: reportData.total_orders || 0,                   color: '#8b5cf6' },
               ].map(s => (
                 <div key={s.label} style={{ background: '#f8f8f8', borderRadius: 10, padding: 14, textAlign: 'center' }}>
                   <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
@@ -1169,20 +1508,14 @@ function StaffSection() {
   const [form, setForm] = useState({ name: '', pin: '', role: 'waiter', start_date: '', notes: '', employment_status: 'active' });
   const [filterStatus, setFilterStatus] = useState('active');
 
-  const fetchStaff = async () => {
-    const data = await getStaff();
-    setStaff(data);
-  };
+  const fetchStaff = async () => { const data = await getStaff(); setStaff(data); };
   useEffect(() => { fetchStaff(); }, []);
 
   const handleSave = async () => {
     if (!form.name || (!editStaff && !form.pin)) return alert('Name and PIN are required!');
     if (form.pin && form.pin.length !== 4) return alert('PIN must be 4 digits!');
-    if (editStaff) {
-      await updateStaff(editStaff.id, { ...form, is_active: editStaff.is_active });
-    } else {
-      await addStaff(form);
-    }
+    if (editStaff) await updateStaff(editStaff.id, { ...form, is_active: editStaff.is_active });
+    else await addStaff(form);
     setShowForm(false);
     setForm({ name: '', pin: '', role: 'waiter', start_date: '', notes: '', employment_status: 'active' });
     fetchStaff();
@@ -1202,10 +1535,7 @@ function StaffSection() {
     fetchStaff();
   };
 
-  const roleColors = {
-    admin: '#e94560', manager: '#f97316', supervisor: '#22c55e',
-    waiter: '#3b82f6', kitchen: '#eab308', bar: '#8b5cf6'
-  };
+  const roleColors = { admin: '#e94560', manager: '#f97316', supervisor: '#22c55e', waiter: '#3b82f6', kitchen: '#eab308', bar: '#8b5cf6' };
 
   const filteredStaff = staff.filter(s => {
     if (filterStatus === 'active') return s.is_active;
@@ -1217,98 +1547,64 @@ function StaffSection() {
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>👥 Staff Management</h1>
-        <button onClick={() => {
-          setEditStaff(null);
-          setForm({ name: '', pin: '', role: 'waiter', start_date: '', notes: '', employment_status: 'active' });
-          setShowForm(true);
-        }} style={{ background: '#e94560', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }}>
-          + Add Staff
-        </button>
+        <button onClick={() => { setEditStaff(null); setForm({ name: '', pin: '', role: 'waiter', start_date: '', notes: '', employment_status: 'active' }); setShowForm(true); }}
+          style={{ background: '#e94560', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }}>+ Add Staff</button>
       </div>
-
-      {/* Filter tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {[
-          { key: 'active', label: `Active (${staff.filter(s => s.is_active).length})` },
+          { key: 'active',   label: `Active (${staff.filter(s => s.is_active).length})` },
           { key: 'inactive', label: `Inactive (${staff.filter(s => !s.is_active).length})` },
-          { key: 'all', label: `All (${staff.length})` },
+          { key: 'all',      label: `All (${staff.length})` },
         ].map(f => (
           <button key={f.key} onClick={() => setFilterStatus(f.key)} style={{
-            padding: '8px 16px', borderRadius: 20, border: 'none', cursor: 'pointer',
-            fontWeight: 600, fontSize: 13,
+            padding: '8px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13,
             background: filterStatus === f.key ? '#1a1a2e' : '#f0f0f0',
             color: filterStatus === f.key ? 'white' : '#555'
           }}>{f.label}</button>
         ))}
       </div>
-
-      {/* Staff list */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {filteredStaff.map(s => (
           <div key={s.id}>
-            <div
-              onClick={() => setSelectedStaff(selectedStaff?.id === s.id ? null : s)}
-              style={{
-                background: 'white', borderRadius: 12, padding: '16px 20px',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-                opacity: s.is_active ? 1 : 0.6,
-                cursor: 'pointer',
-                border: selectedStaff?.id === s.id ? '2px solid #e94560' : '2px solid transparent'
-              }}>
+            <div onClick={() => setSelectedStaff(selectedStaff?.id === s.id ? null : s)} style={{
+              background: 'white', borderRadius: 12, padding: '16px 20px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.08)', opacity: s.is_active ? 1 : 0.6, cursor: 'pointer',
+              border: selectedStaff?.id === s.id ? '2px solid #e94560' : '2px solid transparent'
+            }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>{s.name}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
                   <span style={{ background: roleColors[s.role] || '#888', color: 'white', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 20 }}>{s.role}</span>
                   {!s.is_active && <span style={{ background: '#fee2e2', color: '#ef4444', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 20 }}>Inactive</span>}
                   {s.start_date && <span style={{ fontSize: 12, color: '#888' }}>📅 Started: {s.start_date}</span>}
-                  {s.employment_status && s.employment_status !== 'active' && (
-                    <span style={{ fontSize: 12, color: '#f97316', fontWeight: 600 }}>• {s.employment_status}</span>
-                  )}
+                  {s.employment_status && s.employment_status !== 'active' && <span style={{ fontSize: 12, color: '#f97316', fontWeight: 600 }}>• {s.employment_status}</span>}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button onClick={(e) => {
-                  e.stopPropagation();
-                  setEditStaff(s);
-                  setForm({ name: s.name, pin: '', role: s.role, start_date: s.start_date || '', notes: s.notes || '', employment_status: s.employment_status || 'active' });
-                  setShowForm(true);
-                }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#f0f0f0', fontWeight: 600, fontSize: 12 }}>
-                  ✏️ Edit
-                </button>
-                <button onClick={(e) => { e.stopPropagation(); toggleActive(s); }} style={{
+                <button onClick={e => { e.stopPropagation(); setEditStaff(s); setForm({ name: s.name, pin: '', role: s.role, start_date: s.start_date || '', notes: s.notes || '', employment_status: s.employment_status || 'active' }); setShowForm(true); }}
+                  style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#f0f0f0', fontWeight: 600, fontSize: 12 }}>✏️ Edit</button>
+                <button onClick={e => { e.stopPropagation(); toggleActive(s); }} style={{
                   padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12,
-                  background: s.is_active ? '#fff3cd' : '#dcfce7',
-                  color: s.is_active ? '#92400e' : '#14532d'
-                }}>
-                  {s.is_active ? 'Deactivate' : 'Reactivate'}
-                </button>
+                  background: s.is_active ? '#fff3cd' : '#dcfce7', color: s.is_active ? '#92400e' : '#14532d'
+                }}>{s.is_active ? 'Deactivate' : 'Reactivate'}</button>
                 <span style={{ color: '#ccc' }}>▾</span>
               </div>
             </div>
-
-            {/* Expanded staff profile */}
             {selectedStaff?.id === s.id && (
               <div style={{ background: '#f8f8f8', borderRadius: '0 0 12px 12px', padding: '16px 20px', border: '2px solid #e94560', borderTop: 'none' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                  <div style={{ background: 'white', borderRadius: 8, padding: '12px 16px' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', marginBottom: 4 }}>Start Date</div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: '#1a1a2e' }}>{s.start_date || '—'}</div>
-                  </div>
-                  <div style={{ background: 'white', borderRadius: 8, padding: '12px 16px' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', marginBottom: 4 }}>Status</div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: '#1a1a2e' }}>{s.employment_status || 'Active'}</div>
-                  </div>
-                  <div style={{ background: 'white', borderRadius: 8, padding: '12px 16px' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', marginBottom: 4 }}>Member Since</div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: '#1a1a2e' }}>
-                      {s.created_at ? new Date(s.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                  {[
+                    { label: 'Start Date',    value: s.start_date || '—' },
+                    { label: 'Status',        value: s.employment_status || 'Active' },
+                    { label: 'Member Since',  value: s.created_at ? new Date(s.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—' },
+                    { label: 'Role',          value: s.role },
+                  ].map(item => (
+                    <div key={item.label} style={{ background: 'white', borderRadius: 8, padding: '12px 16px' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', marginBottom: 4 }}>{item.label}</div>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: '#1a1a2e' }}>{item.value}</div>
                     </div>
-                  </div>
-                  <div style={{ background: 'white', borderRadius: 8, padding: '12px 16px' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', marginBottom: 4 }}>Role</div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: roleColors[s.role] || '#1a1a2e', textTransform: 'capitalize' }}>{s.role}</div>
-                  </div>
+                  ))}
                 </div>
                 {s.notes && (
                   <div style={{ background: 'white', borderRadius: 8, padding: '12px 16px', marginBottom: 12 }}>
@@ -1317,80 +1613,28 @@ function StaffSection() {
                   </div>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button onClick={() => handleDelete(s)} style={{
-                    padding: '8px 16px', borderRadius: 8, border: 'none',
-                    background: '#fee2e2', color: '#ef4444',
-                    cursor: 'pointer', fontWeight: 700, fontSize: 13
-                  }}>
-                    🗑️ Permanently Delete
-                  </button>
+                  <button onClick={() => handleDelete(s)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#fee2e2', color: '#ef4444', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>🗑️ Permanently Delete</button>
                 </div>
               </div>
             )}
           </div>
         ))}
       </div>
-
-      {/* Add/Edit Form */}
       {showForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: 16, padding: 32, width: 420, maxHeight: '90vh', overflowY: 'auto' }}>
-            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24, color: '#1a1a2e' }}>
-              {editStaff ? '✏️ Edit Staff' : '+ Add Staff'}
-            </h2>
+            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24, color: '#1a1a2e' }}>{editStaff ? '✏️ Edit Staff' : '+ Add Staff'}</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Full Name *</label>
-                <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Somchai Smith"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
-              </div>
-              <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>
-                  {editStaff ? 'New PIN (leave blank to keep)' : 'PIN (4 digits) *'}
-                </label>
-                <input value={form.pin} onChange={e => setForm({ ...form, pin: e.target.value })} placeholder="4 digit PIN" type="password" maxLength={4}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
-              </div>
-              <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Role *</label>
-                <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}>
-                  <option value="admin">Admin</option>
-                  <option value="manager">Manager</option>
-                  <option value="supervisor">Supervisor</option>
-                  <option value="waiter">Waiter</option>
-                  <option value="kitchen">Kitchen</option>
-                  <option value="bar">Bar</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Start Date</label>
-                <input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
-              </div>
-              <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Employment Status</label>
-                <select value={form.employment_status} onChange={e => setForm({ ...form, employment_status: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}>
-                  <option value="active">Active</option>
-                  <option value="part-time">Part-time</option>
-                  <option value="probation">Probation</option>
-                  <option value="notice">On Notice</option>
-                  <option value="left">Left</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Notes <span style={{ fontWeight: 400, color: '#aaa' }}>(optional)</span></label>
-                <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
-                  placeholder="e.g. Food hygiene cert expires Jan 2026, allergic to nuts..."
-                  rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box', resize: 'none' }} />
-              </div>
+              <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Full Name *</label><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Somchai Smith" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
+              <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>{editStaff ? 'New PIN (leave blank to keep)' : 'PIN (4 digits) *'}</label><input value={form.pin} onChange={e => setForm({ ...form, pin: e.target.value })} placeholder="4 digit PIN" type="password" maxLength={4} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
+              <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Role *</label><select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}><option value="admin">Admin</option><option value="manager">Manager</option><option value="supervisor">Supervisor</option><option value="waiter">Waiter</option><option value="kitchen">Kitchen</option><option value="bar">Bar</option></select></div>
+              <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Start Date</label><input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
+              <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Employment Status</label><select value={form.employment_status} onChange={e => setForm({ ...form, employment_status: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}><option value="active">Active</option><option value="part-time">Part-time</option><option value="probation">Probation</option><option value="notice">On Notice</option><option value="left">Left</option></select></div>
+              <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Notes <span style={{ fontWeight: 400, color: '#aaa' }}>(optional)</span></label><textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="e.g. Food hygiene cert expires Jan 2026..." rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box', resize: 'none' }} /></div>
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
               <button onClick={() => setShowForm(false)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
-              <button onClick={handleSave} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 700 }}>
-                {editStaff ? 'Save Changes' : 'Add Staff'}
-              </button>
+              <button onClick={handleSave} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 700 }}>{editStaff ? 'Save Changes' : 'Add Staff'}</button>
             </div>
           </div>
         </div>
@@ -1398,6 +1642,7 @@ function StaffSection() {
     </div>
   );
 }
+
 // ─────────────────────────────────────────────
 // SETTINGS SECTION
 // ─────────────────────────────────────────────
@@ -1504,31 +1749,20 @@ function BarCategoryManager() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: cat.is_bar ? 0 : 10 }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{cat.name}</span>
             <button onClick={() => toggleBar(cat)} style={{
-              padding: '6px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
-              fontWeight: 600, fontSize: 12,
-              background: cat.is_bar ? '#dbeafe' : '#f0f0f0',
-              color: cat.is_bar ? '#1e40af' : '#555'
-            }}>
-              {cat.is_bar ? '🍹 Bar ✓' : 'Not bar'}
-            </button>
+              padding: '6px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12,
+              background: cat.is_bar ? '#dbeafe' : '#f0f0f0', color: cat.is_bar ? '#1e40af' : '#555'
+            }}>{cat.is_bar ? '🍹 Bar ✓' : 'Not bar'}</button>
           </div>
-
-          {/* Default course selector — only show if NOT a bar category */}
           {!cat.is_bar && (
             <div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 6, textTransform: 'uppercase' }}>
-                Default course when ordering:
-              </div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#888', marginBottom: 6, textTransform: 'uppercase' }}>Default course when ordering:</div>
               <div style={{ display: 'flex', gap: 6 }}>
                 {[1, 2, 3, 4].map(c => (
                   <button key={c} onClick={() => setDefaultCourse(cat, c)} style={{
-                    padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                    fontWeight: 700, fontSize: 12,
+                    padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
                     background: (cat.default_course || 1) === c ? courseColors[c] : '#e0e0e0',
                     color: (cat.default_course || 1) === c ? 'white' : '#555',
-                  }}>
-                    {courseLabels[c]}
-                  </button>
+                  }}>{courseLabels[c]}</button>
                 ))}
               </div>
             </div>

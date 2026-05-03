@@ -16,6 +16,18 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
+// Optional: email + SMS services (won't crash if not set up yet)
+let sendBookingConfirmation = async () => {};
+let sendBookingSms = async () => {};
+try {
+  const emailSvc = require('./services/emailService');
+  const smsSvc   = require('./services/smsService');
+  sendBookingConfirmation = emailSvc.sendBookingConfirmation;
+  sendBookingSms          = smsSvc.sendBookingSms;
+} catch (e) {
+  console.log('ℹ️  Email/SMS services not configured yet — skipping');
+}
+
 // ─────────────────────────────────────────────
 // TABLES ROUTES
 // ─────────────────────────────────────────────
@@ -933,7 +945,6 @@ app.post('/api/orders/:id/resend', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Item discount
 app.put('/api/order-items/:id/discount', async (req, res) => {
   try {
     const { discount_type, discount_value } = req.body;
@@ -956,6 +967,306 @@ app.put('/api/order-items/:id/discount', async (req, res) => {
       await pool.query('UPDATE orders SET total=$1 WHERE id=$2',
         [totalRes.rows[0].total || 0, itemRes.rows[0].order_id]);
     }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─────────────────────────────────────────────
+// RESERVATIONS — WIDGET PUBLIC API
+// ─────────────────────────────────────────────
+
+// CORS middleware for public widget endpoints
+const widgetCors = (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+};
+
+// GET availability — time slots for a given date + covers
+app.get('/api/reservations/availability', widgetCors, async (req, res) => {
+  try {
+    const { date, covers = 2, restaurant_id = 'siamepos' } = req.query;
+    if (!date) return res.status(400).json({ error: 'date is required (YYYY-MM-DD)' });
+
+    const coversNum = parseInt(covers, 10);
+    if (isNaN(coversNum) || coversNum < 1) return res.status(400).json({ error: 'covers must be a positive number' });
+
+    // Get restaurant settings
+    const settingsRes = await pool.query(
+      'SELECT * FROM restaurant_settings WHERE restaurant_id = $1', [restaurant_id]
+    );
+    const s = settingsRes.rows[0] || {
+      opening_time: '11:00', last_booking_time: '21:30',
+      slot_interval_mins: 15, max_covers_per_slot: 20,
+      booking_lead_hours: 1, booking_advance_days: 60,
+    };
+
+    // Block past or too-far-future dates
+    const requestedDate = new Date(date + 'T00:00:00');
+    const today = new Date(); today.setHours(0,0,0,0);
+    const maxDate = new Date(today);
+    maxDate.setDate(maxDate.getDate() + (s.booking_advance_days || 60));
+    if (requestedDate < today) return res.json({ slots: [], message: 'Date is in the past' });
+    if (requestedDate > maxDate) return res.json({ slots: [], message: 'Date too far in advance' });
+
+    // Build time slots
+    const [openH, openM]   = String(s.opening_time).slice(0,5).split(':').map(Number);
+    const [closeH, closeM] = String(s.last_booking_time).slice(0,5).split(':').map(Number);
+    const interval = s.slot_interval_mins || 15;
+    const slots = [];
+    let cur = openH * 60 + openM;
+    const end = closeH * 60 + closeM;
+    while (cur <= end) {
+      const h = Math.floor(cur / 60), m = cur % 60;
+      slots.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+      cur += interval;
+    }
+
+    // Get booked covers per slot
+    const bookingsRes = await pool.query(
+      `SELECT TO_CHAR(reservation_time, 'HH24:MI') AS time_str, SUM(covers) AS booked_covers
+       FROM reservations
+       WHERE reservation_date = $1 AND restaurant_id = $2
+         AND status NOT IN ('cancelled','no-show')
+       GROUP BY time_str`,
+      [date, restaurant_id]
+    );
+    const bookedMap = {};
+    bookingsRes.rows.forEach(r => { bookedMap[r.time_str] = parseInt(r.booked_covers, 10); });
+
+    // Block past slots if today
+    const isToday = requestedDate.toDateString() === new Date().toDateString();
+    const nowMins = isToday ? (new Date().getHours() * 60 + new Date().getMinutes() + (s.booking_lead_hours || 1) * 60) : -1;
+
+    const result = slots.map(time => {
+      const [h, m] = time.split(':').map(Number);
+      const slotMins = h * 60 + m;
+      const booked = bookedMap[time] || 0;
+      const remaining = (s.max_covers_per_slot || 20) - booked;
+      const pastCutoff = isToday && slotMins < nowMins;
+      return { time, available: !pastCutoff && remaining >= coversNum, remaining_covers: Math.max(0, remaining), past: pastCutoff };
+    });
+
+    res.json({ date, covers: coversNum, restaurant_id, slots: result });
+  } catch (err) {
+    console.error('GET /api/reservations/availability error:', err);
+    res.status(500).json({ error: 'Failed to load availability' });
+  }
+});
+
+// GET widget settings — brand colour + opening hours
+app.get('/api/reservations/settings/:restaurantId', widgetCors, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT restaurant_id, restaurant_name, brand_colour,
+              TO_CHAR(opening_time, 'HH24:MI')      AS opening_time,
+              TO_CHAR(last_booking_time, 'HH24:MI') AS last_booking_time,
+              slot_interval_mins, max_covers_per_slot,
+              booking_lead_hours, booking_advance_days, is_active
+       FROM restaurant_settings WHERE restaurant_id = $1`,
+      [req.params.restaurantId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Restaurant not found' });
+    const s = result.rows[0];
+    if (!s.is_active) return res.status(403).json({ error: 'Online booking is currently disabled' });
+    res.json(s);
+  } catch (err) {
+    console.error('GET /api/reservations/settings error:', err);
+    res.status(500).json({ error: 'Failed to load settings' });
+  }
+});
+
+// GET all reservations — EPOS screen
+app.get('/api/reservations', async (req, res) => {
+  try {
+    const { date, status, restaurant_id = 'siamepos' } = req.query;
+    let query = `
+      SELECT r.*,
+             TO_CHAR(r.reservation_date, 'YYYY-MM-DD') AS reservation_date,
+             TO_CHAR(r.reservation_time, 'HH24:MI')    AS reservation_time,
+             t.name AS table_name
+      FROM reservations r
+      LEFT JOIN tables t ON r.table_id = t.id
+      WHERE r.restaurant_id = $1
+    `;
+    const params = [restaurant_id];
+    if (date) { params.push(date); query += ` AND r.reservation_date = $${params.length}`; }
+    if (status && status !== 'all') { params.push(status); query += ` AND r.status = $${params.length}`; }
+    query += ' ORDER BY r.reservation_date ASC, r.reservation_time ASC';
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST create reservation — from widget OR EPOS
+app.post('/api/reservations', widgetCors, async (req, res) => {
+  try {
+    const {
+      restaurant_id = 'siamepos', customer_name, customer_phone, customer_email,
+      covers, reservation_date, reservation_time, notes,
+      source = 'widget', table_id = null, status = 'pending',
+    } = req.body;
+
+    if (!customer_name?.trim()) return res.status(400).json({ error: 'Guest name is required' });
+    if (!customer_phone?.trim()) return res.status(400).json({ error: 'Phone number is required' });
+    if (!reservation_date) return res.status(400).json({ error: 'Date is required' });
+    if (!reservation_time) return res.status(400).json({ error: 'Time is required' });
+    const coversNum = parseInt(covers, 10);
+    if (!coversNum || coversNum < 1) return res.status(400).json({ error: 'Covers must be at least 1' });
+
+    // Double-booking check
+    const slotCheck = await pool.query(
+      `SELECT COALESCE(SUM(covers), 0) AS booked
+       FROM reservations
+       WHERE reservation_date = $1
+         AND TO_CHAR(reservation_time, 'HH24:MI') = $2
+         AND restaurant_id = $3
+         AND status NOT IN ('cancelled','no-show')`,
+      [reservation_date, reservation_time.slice(0,5), restaurant_id]
+    );
+    const settingsRes = await pool.query(
+      'SELECT max_covers_per_slot FROM restaurant_settings WHERE restaurant_id = $1', [restaurant_id]
+    );
+    const maxCovers = settingsRes.rows[0]?.max_covers_per_slot || 20;
+    const alreadyBooked = parseInt(slotCheck.rows[0]?.booked || 0, 10);
+    if (alreadyBooked + coversNum > maxCovers) {
+      return res.status(409).json({ error: 'This time slot is no longer available. Please choose another time.' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO reservations
+         (restaurant_id, table_id, customer_name, customer_phone, customer_email,
+          covers, reservation_date, reservation_time, status, notes, source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       RETURNING *`,
+      [
+        restaurant_id, table_id, customer_name.trim(), customer_phone.trim(),
+        customer_email?.trim() || null, coversNum, reservation_date,
+        reservation_time, status, notes?.trim() || null, source,
+      ]
+    );
+
+    const reservation = result.rows[0];
+
+    // Real-time push to EPOS
+    io.emit('new_reservation', {
+      ...reservation,
+      reservation_date: String(reservation.reservation_date).split('T')[0],
+      reservation_time: String(reservation.reservation_time).slice(0,5),
+    });
+
+    // Non-blocking email + SMS
+    if (customer_email) sendBookingConfirmation(reservation).catch(() => {});
+    if (customer_phone) sendBookingSms(reservation).catch(() => {});
+
+    console.log(`📅 New booking [${source}]: ${customer_name} ×${coversNum} on ${reservation_date} at ${reservation_time}`);
+
+    res.status(201).json({
+      success: true,
+      booking_id: reservation.id,
+      message: 'Booking received!',
+      reservation: {
+        id: reservation.id,
+        customer_name: reservation.customer_name,
+        covers: reservation.covers,
+        reservation_date: String(reservation.reservation_date).split('T')[0],
+        reservation_time: String(reservation.reservation_time).slice(0,5),
+        status: reservation.status,
+      },
+    });
+  } catch (err) {
+    console.error('POST /api/reservations error:', err);
+    res.status(500).json({ error: 'Something went wrong. Please try again.' });
+  }
+});
+
+// PUT update reservation — EPOS
+app.put('/api/reservations/:id', async (req, res) => {
+  try {
+    const {
+      customer_name, customer_phone, customer_email,
+      covers, reservation_date, reservation_time,
+      table_id, notes, status,
+    } = req.body;
+    const result = await pool.query(
+      `UPDATE reservations SET
+         customer_name=$1, customer_phone=$2, customer_email=$3,
+         covers=$4, reservation_date=$5, reservation_time=$6,
+         table_id=$7, notes=$8, status=$9, updated_at=NOW()
+       WHERE id=$10 RETURNING *`,
+      [
+        customer_name, customer_phone, customer_email || null,
+        covers, reservation_date, reservation_time,
+        table_id || null, notes || null, status,
+        req.params.id,
+      ]
+    );
+    io.emit('reservation_updated', result.rows[0]);
+    res.json(result.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST seat — marks seated + opens table
+app.post('/api/reservations/:id/seat', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `UPDATE reservations SET status='seated', updated_at=NOW() WHERE id=$1 RETURNING *`,
+      [req.params.id]
+    );
+    const reservation = result.rows[0];
+    if (reservation.table_id) {
+      await pool.query("UPDATE tables SET status='occupied' WHERE id=$1", [reservation.table_id]);
+      io.emit('tableStatusChanged', { id: reservation.table_id, status: 'occupied' });
+    }
+    io.emit('reservation_updated', reservation);
+    res.json(reservation);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE (soft cancel) reservation
+app.delete('/api/reservations/:id', async (req, res) => {
+  try {
+    await pool.query(
+      `UPDATE reservations SET status='cancelled', updated_at=NOW() WHERE id=$1`,
+      [req.params.id]
+    );
+    io.emit('reservation_cancelled', { id: parseInt(req.params.id) });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT update widget settings — Admin panel
+app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
+  try {
+    const {
+      restaurant_name, brand_colour, opening_time, last_booking_time,
+      slot_interval_mins, max_covers_per_slot, booking_lead_hours,
+      booking_advance_days, is_active,
+    } = req.body;
+    await pool.query(
+      `INSERT INTO restaurant_settings
+         (restaurant_id, restaurant_name, brand_colour, opening_time,
+          last_booking_time, slot_interval_mins, max_covers_per_slot,
+          booking_lead_hours, booking_advance_days, is_active)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (restaurant_id) DO UPDATE SET
+         restaurant_name      = EXCLUDED.restaurant_name,
+         brand_colour         = EXCLUDED.brand_colour,
+         opening_time         = EXCLUDED.opening_time,
+         last_booking_time    = EXCLUDED.last_booking_time,
+         slot_interval_mins   = EXCLUDED.slot_interval_mins,
+         max_covers_per_slot  = EXCLUDED.max_covers_per_slot,
+         booking_lead_hours   = EXCLUDED.booking_lead_hours,
+         booking_advance_days = EXCLUDED.booking_advance_days,
+         is_active            = EXCLUDED.is_active`,
+      [
+        req.params.restaurantId, restaurant_name, brand_colour, opening_time,
+        last_booking_time, slot_interval_mins, max_covers_per_slot,
+        booking_lead_hours, booking_advance_days, is_active,
+      ]
+    );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

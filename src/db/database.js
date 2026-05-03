@@ -188,7 +188,59 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
+// Restaurant settings for widget (brand, hours, capacity)
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS restaurant_settings (
+    id SERIAL PRIMARY KEY,
+    restaurant_id VARCHAR(100) UNIQUE NOT NULL DEFAULT 'siamepos',
+    restaurant_name VARCHAR(255) DEFAULT 'My Restaurant',
+    brand_colour VARCHAR(20) DEFAULT '#1a472a',
+    opening_time TIME DEFAULT '11:00',
+    last_booking_time TIME DEFAULT '21:30',
+    slot_interval_mins INTEGER DEFAULT 15,
+    max_covers_per_slot INTEGER DEFAULT 20,
+    booking_lead_hours INTEGER DEFAULT 1,
+    booking_advance_days INTEGER DEFAULT 60,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW()
+  )
+`);
 
+// Seed default row if none exists
+await pool.query(`
+  INSERT INTO restaurant_settings (restaurant_id, restaurant_name)
+  VALUES ('siamepos', 'SiamEPOS Restaurant')
+  ON CONFLICT (restaurant_id) DO NOTHING
+`);
+
+// Reservations table (if not already added)
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS reservations (
+    id SERIAL PRIMARY KEY,
+    restaurant_id VARCHAR(100) DEFAULT 'siamepos',
+    table_id INTEGER REFERENCES tables(id) ON DELETE SET NULL,
+    customer_name VARCHAR(255) NOT NULL,
+    customer_phone VARCHAR(50),
+    customer_email VARCHAR(255),
+    covers INTEGER NOT NULL DEFAULT 2,
+    reservation_date DATE NOT NULL,
+    reservation_time TIME NOT NULL,
+    status VARCHAR(50) DEFAULT 'pending',
+    notes TEXT,
+    source VARCHAR(50) DEFAULT 'epos',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+  )
+`);
+
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS reservation_reminders (
+    id SERIAL PRIMARY KEY,
+    reservation_id INTEGER REFERENCES reservations(id) ON DELETE CASCADE,
+    type VARCHAR(50),
+    sent_at TIMESTAMP DEFAULT NOW()
+  )
+`);
     // ── Add new columns to existing tables if not exist ──
     await client.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS discount_type TEXT`);
     await client.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS discount_value REAL DEFAULT 0`);

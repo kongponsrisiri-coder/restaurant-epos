@@ -145,7 +145,7 @@ app.get('/api/menu', async (req, res) => {
     const [catRes, subRes, itemRes] = await Promise.all([
       pool.query('SELECT * FROM categories ORDER BY sort_order'),
       pool.query('SELECT * FROM subcategories ORDER BY sort_order'),
-      pool.query('SELECT * FROM menu_items WHERE is_available = 1')
+      pool.query('SELECT * FROM menu_items WHERE is_available = 1 ORDER BY sort_order ASC')
     ]);
     const result = catRes.rows.map(cat => ({
       ...cat,
@@ -161,7 +161,7 @@ app.get('/api/menu/all', async (req, res) => {
     const [catRes, subRes, itemRes] = await Promise.all([
       pool.query('SELECT * FROM categories ORDER BY sort_order'),
       pool.query('SELECT * FROM subcategories ORDER BY sort_order'),
-      pool.query('SELECT * FROM menu_items')
+      pool.query('SELECT * FROM menu_items ORDER BY sort_order ASC')
     ]);
     const result = catRes.rows.map(cat => ({
       ...cat,
@@ -267,6 +267,22 @@ app.delete('/api/menu/items/:id', async (req, res) => {
       'DELETE FROM menu_items WHERE id = $1',
       [req.params.id]
     );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+// Update sort order for menu items (drag and drop)
+app.put('/api/menu/items/sort-order', async (req, res) => {
+  try {
+    const { items } = req.body;
+    // items = [{ id: 1, sort_order: 0 }, { id: 2, sort_order: 1 }, ...]
+    for (const item of items) {
+      await pool.query(
+        'UPDATE menu_items SET sort_order = $1 WHERE id = $2',
+        [item.sort_order, item.id]
+      );
+    }
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -250,7 +250,15 @@ await pool.query(`
   ALTER TABLE order_items
   ALTER COLUMN menu_item_id DROP NOT NULL
 `);
+await pool.query(`
+  ALTER TABLE menu_items
+  ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0
+`);
 
+// Set initial sort order based on existing id order
+await pool.query(`
+  UPDATE menu_items SET sort_order = id WHERE sort_order = 0
+`);
 await pool.query(`
   CREATE TABLE IF NOT EXISTS reservation_reminders (
     id SERIAL PRIMARY KEY,

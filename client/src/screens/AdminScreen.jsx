@@ -660,7 +660,7 @@ function MenuSection() {
   const [subcategories, setSubcategories]   = useState([]);
   const [activeCategory, setActiveCategory] = useState(null);
   const [showForm, setShowForm]             = useState(false);
-  const [showScanner, setShowScanner]       = useState(false); // ← NEW
+  const [showScanner, setShowScanner]       = useState(false);
   const [editItem, setEditItem]             = useState(null);
   const [form, setForm]                     = useState({ name: '', name_alt: '', description: '', price: '', category_id: '', subcategory_id: null });
   const [modifierItem, setModifierItem]     = useState(null);
@@ -671,6 +671,11 @@ function MenuSection() {
   const [showSubcatManager, setShowSubcatManager] = useState(false);
   const [newSubcatName, setNewSubcatName]   = useState('');
 
+  // ── Drag state ──────────────────────────────────────
+  const [dragIndex, setDragIndex]   = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [localItems, setLocalItems] = useState([]);
+
   const fetchMenu = async () => {
     const data = await getMenu();
     const subs = await getSubcategories();
@@ -680,6 +685,12 @@ function MenuSection() {
   };
 
   useEffect(() => { fetchMenu(); }, []);
+
+  // Keep localItems in sync when category changes
+  useEffect(() => {
+    const items = menu.find(c => c.id === activeCategory)?.items || [];
+    setLocalItems([...items]);
+  }, [activeCategory, menu]);
 
   const openAddForm = () => {
     setForm({ name: '', description: '', price: '', category_id: activeCategory, subcategory_id: null });
@@ -739,8 +750,63 @@ function MenuSection() {
     setModifiers(await getItemModifiers(modifierItem.id));
   };
 
-  const activeItems    = menu.find(c => c.id === activeCategory)?.items || [];
-  const activeCatSubs  = subcategories.filter(s => s.category_id === activeCategory);
+  // ── Drag and drop handlers ────────────────────────────
+  function handleDragStart(e, index) {
+    setDragIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    // Needed for Firefox
+    e.dataTransfer.setData('text/plain', index);
+  }
+
+  function handleDragOver(e, index) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex(index);
+  }
+
+  function handleDrop(e, dropIndex) {
+    e.preventDefault();
+    if (dragIndex === null || dragIndex === dropIndex) {
+      setDragIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const newItems = [...localItems];
+    const draggedItem = newItems[dragIndex];
+    newItems.splice(dragIndex, 1);
+    newItems.splice(dropIndex, 0, draggedItem);
+
+    setLocalItems(newItems);
+    setDragIndex(null);
+    setDragOverIndex(null);
+
+    // Save new order to database
+    saveSortOrder(newItems);
+  }
+
+  function handleDragEnd() {
+    setDragIndex(null);
+    setDragOverIndex(null);
+  }
+
+  async function saveSortOrder(items) {
+    try {
+      const payload = items.map((item, index) => ({
+        id: item.id,
+        sort_order: index,
+      }));
+      await fetch(`${SERVER_URL}/api/menu/items/sort-order`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: payload }),
+      });
+    } catch (err) {
+      console.error('Failed to save sort order:', err);
+    }
+  }
+
+  const activeCatSubs = subcategories.filter(s => s.category_id === activeCategory);
 
   return (
     <div style={{ padding: 24 }}>
@@ -794,70 +860,132 @@ function MenuSection() {
         </div>
       )}
 
-      {/* ── Action buttons row — THIS IS THE KEY CHANGE ── */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginBottom: 16 }}>
-        {/* AI Scanner button */}
-        <button onClick={() => setShowScanner(true)} style={{
-          background: 'linear-gradient(135deg,#1a1a2e,#2d2a4a)',
-          color: 'white', border: 'none', padding: '10px 18px',
-          borderRadius: 10, cursor: 'pointer', fontWeight: 700,
-          fontSize: 14, display: 'flex', alignItems: 'center', gap: 6,
-        }}>
-          🤖 AI Scanner
-        </button>
-        {/* Existing add item button */}
-        <button onClick={openAddForm} style={{
-          background: '#e94560', color: 'white', border: 'none',
-          padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600,
-        }}>
-          + Add Item
-        </button>
+      {/* Action buttons */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ fontSize: 13, color: '#888' }}>
+          {localItems.length > 0 && '≡ Drag to reorder'}
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={() => setShowScanner(true)} style={{
+            background: 'linear-gradient(135deg,#1a1a2e,#2d2a4a)',
+            color: 'white', border: 'none', padding: '10px 18px',
+            borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 14,
+          }}>🤖 AI Scanner</button>
+          <button onClick={openAddForm} style={{
+            background: '#e94560', color: 'white', border: 'none',
+            padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600,
+          }}>+ Add Item</button>
+        </div>
       </div>
 
-      {/* Menu items list */}
-      {activeItems.length === 0 ? (
-        <div style={{ textAlign: 'center', color: '#bbb', marginTop: 60 }}>No items yet — click "+ Add Item" or use 🤖 AI Scanner</div>
+      {/* Menu items list — draggable */}
+      {localItems.length === 0 ? (
+        <div style={{ textAlign: 'center', color: '#bbb', marginTop: 60 }}>
+          No items yet — click "+ Add Item" or use 🤖 AI Scanner
+        </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {activeItems.map(item => {
-            const subcat = subcategories.find(s => s.id === item.subcategory_id);
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {localItems.map((item, index) => {
+            const subcat      = subcategories.find(s => s.id === item.subcategory_id);
+            const isDragging  = dragIndex === index;
+            const isOver      = dragOverIndex === index;
+
             return (
-              <div key={item.id} style={{ background: 'white', borderRadius: 12, padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', opacity: item.is_available ? 1 : 0.5 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: '#1a1a2e' }}>{item.name}</div>
+              <div
+                key={item.id}
+                draggable
+                onDragStart={e => handleDragStart(e, index)}
+                onDragOver={e => handleDragOver(e, index)}
+                onDrop={e => handleDrop(e, index)}
+                onDragEnd={handleDragEnd}
+                style={{
+                  background: 'white',
+                  borderRadius: 12,
+                  padding: '14px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  boxShadow: isDragging
+                    ? '0 8px 24px rgba(0,0,0,0.15)'
+                    : '0 1px 4px rgba(0,0,0,0.08)',
+                  opacity: isDragging ? 0.5 : 1,
+                  border: isOver
+                    ? '2px solid #3b82f6'
+                    : '2px solid transparent',
+                  transform: isDragging ? 'scale(1.01)' : 'scale(1)',
+                  transition: 'border 0.15s, box-shadow 0.15s',
+                  cursor: 'grab',
+                }}
+              >
+                {/* Drag handle */}
+                <div style={{
+                  color: '#ccc', fontSize: 18, cursor: 'grab',
+                  userSelect: 'none', flexShrink: 0, lineHeight: 1,
+                  display: 'flex', flexDirection: 'column', gap: 2,
+                }}>
+                  <div style={{ display: 'flex', gap: 3 }}>
+                    <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#ccc' }} />
+                    <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#ccc' }} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 3 }}>
+                    <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#ccc' }} />
+                    <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#ccc' }} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 3 }}>
+                    <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#ccc' }} />
+                    <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#ccc' }} />
+                  </div>
+                </div>
+
+                {/* Item info */}
+                <div style={{ flex: 1, opacity: item.is_available ? 1 : 0.5 }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: '#1a1a2e' }}>{item.name}</div>
+                  {item.name_alt && <div style={{ fontSize: 12, color: '#C9A84C', marginTop: 1 }}>{item.name_alt}</div>}
                   {subcat && <div style={{ fontSize: 11, color: '#3b82f6', fontWeight: 600, marginTop: 2 }}>📁 {subcat.name}</div>}
                   {item.description && <div style={{ fontSize: 13, color: '#888' }}>{item.description}</div>}
-                  <div style={{ fontSize: 16, fontWeight: 700, color: '#e94560' }}>£{Number(item.price).toFixed(2)}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#e94560', marginTop: 2 }}>£{Number(item.price).toFixed(2)}</div>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-  <button onClick={() => toggleAvailable(item)} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: item.is_available ? '#dcfce7' : '#fee2e2', color: item.is_available ? '#14532d' : '#991b1b' }}>
-    {item.is_available ? 'Available' : 'Off menu'}
-  </button>
-  <button onClick={() => openModifiers(item)} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#fef9c3', color: '#713f12', fontWeight: 600, fontSize: 12 }}>
-    Options
-  </button>
-  <button onClick={() => openEditForm(item)} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#f0f0f0', fontWeight: 600, fontSize: 12 }}>
-    Edit
-  </button>
-  <button onClick={async () => {
-  if (!window.confirm(`Delete "${item.name}" permanently?`)) return;
-  try {
-    const res = await fetch(`${SERVER_URL}/api/menu/items/${item.id}`, {
-      method: 'DELETE',
-    });
-    const data = await res.json();
-    if (data.success) {
-      fetchMenu();
-    } else {
-      alert('Delete failed: ' + (data.error || 'Unknown error'));
-    }
-  } catch (err) {
-    alert('Delete error: ' + err.message);
-  }
-}} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#fee2e2', color: '#991b1b', fontWeight: 600, fontSize: 12 }}>
-  🗑️
-</button>
-</div>
+
+                {/* Action buttons */}
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}
+                  onMouseDown={e => e.stopPropagation()}
+                >
+                  <button
+                    onClick={e => { e.stopPropagation(); toggleAvailable(item); }}
+                    style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: item.is_available ? '#dcfce7' : '#fee2e2', color: item.is_available ? '#14532d' : '#991b1b' }}
+                  >
+                    {item.is_available ? 'Available' : 'Off menu'}
+                  </button>
+                  <button
+                    onClick={e => { e.stopPropagation(); openModifiers(item); }}
+                    style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#fef9c3', color: '#713f12', fontWeight: 600, fontSize: 12 }}
+                  >
+                    Options
+                  </button>
+                  <button
+                    onClick={e => { e.stopPropagation(); openEditForm(item); }}
+                    style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#f0f0f0', fontWeight: 600, fontSize: 12 }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={async e => {
+                      e.stopPropagation();
+                      if (!window.confirm(`Delete "${item.name}" permanently?`)) return;
+                      try {
+                        const res = await fetch(`${SERVER_URL}/api/menu/items/${item.id}`, { method: 'DELETE' });
+                        const data = await res.json();
+                        if (data.success) fetchMenu();
+                        else alert('Delete failed: ' + (data.error || 'Unknown error'));
+                      } catch (err) {
+                        alert('Delete error: ' + err.message);
+                      }
+                    }}
+                    style={{ padding: '6px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#fee2e2', color: '#991b1b', fontWeight: 600, fontSize: 12 }}
+                  >
+                    🗑️
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -866,11 +994,11 @@ function MenuSection() {
 
       {/* AI Scanner Modal */}
       {showScanner && (
-  <AIScannerModal
-    onClose={() => { fetchMenu(); setShowScanner(false); }}
-    onImported={() => fetchMenu()}
-  />
-)}
+        <AIScannerModal
+          onClose={() => { fetchMenu(); setShowScanner(false); }}
+          onImported={() => fetchMenu()}
+        />
+      )}
 
       {/* Add/Edit Modal */}
       {showForm && (

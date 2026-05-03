@@ -182,10 +182,12 @@ export default function ReservationsScreen({ onClose }) {
   }
 
   const filtered = reservations.filter(r => {
-    const dateOk   = filterDate ? (r.reservation_date || '').startsWith(filterDate) : true;
-    const statusOk = filterStatus === 'all' || r.status === filterStatus;
-    return dateOk && statusOk;
-  });
+  const dateOk   = filterDate ? (r.reservation_date || '').startsWith(filterDate) : true;
+  const statusOk = filterStatus === 'all'
+    ? r.status !== 'cancelled'
+    : r.status === filterStatus;
+  return dateOk && statusOk;
+});
 
   const counts = {};
   ALL_STATUSES.forEach(s => {
@@ -251,11 +253,17 @@ export default function ReservationsScreen({ onClose }) {
               }}>{label}</button>
             ))}
           </div>
-          <button onClick={openAdd} style={{
-            background: '#4CAF50', color: 'white', border: 'none',
-            borderRadius: 8, padding: '9px 18px', cursor: 'pointer',
-            fontWeight: 'bold', fontSize: 14,
-          }}>➕ New Booking</button>
+          <button onClick={loadData} style={{
+  background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none',
+  borderRadius: 8, padding: '9px 14px', cursor: 'pointer',
+  fontWeight: 'bold', fontSize: 18,
+  title: 'Refresh',
+}}>🔄</button>
+<button onClick={openAdd} style={{
+  background: '#4CAF50', color: 'white', border: 'none',
+  borderRadius: 8, padding: '9px 18px', cursor: 'pointer',
+  fontWeight: 'bold', fontSize: 14,
+}}>➕ New Booking</button>
         </div>
       </div>
 

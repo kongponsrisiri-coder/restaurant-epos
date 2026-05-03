@@ -245,10 +245,12 @@ app.delete('/api/modifiers/:id', async (req, res) => {
 
 app.delete('/api/menu/items/:id', async (req, res) => {
   try {
+    // Set menu_item_id to NULL in past orders (preserves order history)
     await pool.query(
-      'DELETE FROM order_item_modifiers WHERE order_item_id IN (SELECT id FROM order_items WHERE menu_item_id = $1)',
+      'UPDATE order_items SET menu_item_id = NULL WHERE menu_item_id = $1',
       [req.params.id]
     );
+    // Delete modifiers
     await pool.query(
       'DELETE FROM modifiers WHERE group_id IN (SELECT id FROM modifier_groups WHERE menu_item_id = $1)',
       [req.params.id]
@@ -257,6 +259,7 @@ app.delete('/api/menu/items/:id', async (req, res) => {
       'DELETE FROM modifier_groups WHERE menu_item_id = $1',
       [req.params.id]
     );
+    // Now safe to delete the item
     await pool.query(
       'DELETE FROM menu_items WHERE id = $1',
       [req.params.id]

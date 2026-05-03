@@ -413,24 +413,34 @@ function AIScannerModal({ onClose, onImported }) {
 
   // Add a single item to the menu
   async function handleAddItem(dish, globalIndex) {
-    setLoadingItem(globalIndex);
-    try {
-      await addMenuItem({
-        name:         dish.name_en,
-        name_alt:     dish.name_th || '',
-        description:  dish.description || '',
-        price:        parseFloat(dish.price) || 0,
-        category_id:  null,
+  setLoadingItem(globalIndex);
+  try {
+    // Get first available category_id as fallback
+    const menuRes = await fetch(`${SERVER_URL}/api/menu/all`);
+    const menuData = await menuRes.json();
+    const firstCategoryId = menuData?.[0]?.id || 1;
+
+    await fetch(`${SERVER_URL}/api/menu/items`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name:           dish.name_en,
+        name_alt:       dish.name_th || '',
+        description:    dish.description || '',
+        price:          parseFloat(dish.price) || 0,
+        category_id:    firstCategoryId,
         subcategory_id: null,
-      });
-      setAddedItems(prev => new Set([...prev, globalIndex]));
-      onImported(); // refresh menu in background
-    } catch (err) {
-      alert('Failed to add item — try again');
-    } finally {
-      setLoadingItem(null);
-    }
+      }),
+    });
+
+    setAddedItems(prev => new Set([...prev, globalIndex]));
+    onImported();
+  } catch (err) {
+    alert('Failed to add item — try again');
+  } finally {
+    setLoadingItem(null);
   }
+}
 
   const allDishes = scannedMenu?.categories?.flatMap(c => c.dishes) || [];
   const addedCount = addedItems.size;
@@ -832,11 +842,11 @@ function MenuSection() {
 
       {/* AI Scanner Modal */}
       {showScanner && (
-        <AIScannerModal
-          onClose={() => setShowScanner(false)}
-          onImported={() => { fetchMenu(); setShowScanner(false); }}
-        />
-      )}
+  <AIScannerModal
+    onClose={() => { fetchMenu(); setShowScanner(false); }}
+    onImported={() => fetchMenu()}
+  />
+)}
 
       {/* Add/Edit Modal */}
       {showForm && (

@@ -424,7 +424,7 @@ function AIScannerModal({ onClose, onImported }) {
         description: dish.description || null,
         price:       parseFloat(dish.price) || 0,
         allergens:   dish.allergens || [],
-        category:    cat.name,
+        category:    null,
       }))
     );
 

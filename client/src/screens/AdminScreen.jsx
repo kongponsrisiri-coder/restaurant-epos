@@ -840,12 +840,23 @@ function MenuSection() {
     Edit
   </button>
   <button onClick={async () => {
-    if (!window.confirm(`Delete "${item.name}" permanently?`)) return;
-    await deleteMenuItem(item.id);
-    fetchMenu();
-  }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#fee2e2', color: '#991b1b', fontWeight: 600, fontSize: 12 }}>
-    🗑️
-  </button>
+  if (!window.confirm(`Delete "${item.name}" permanently?`)) return;
+  try {
+    const res = await fetch(`${SERVER_URL}/api/menu/items/${item.id}`, {
+      method: 'DELETE',
+    });
+    const data = await res.json();
+    if (data.success) {
+      fetchMenu();
+    } else {
+      alert('Delete failed: ' + (data.error || 'Unknown error'));
+    }
+  } catch (err) {
+    alert('Delete error: ' + err.message);
+  }
+}} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#fee2e2', color: '#991b1b', fontWeight: 600, fontSize: 12 }}>
+  🗑️
+</button>
 </div>
               </div>
             );

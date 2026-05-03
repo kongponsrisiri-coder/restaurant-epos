@@ -117,7 +117,6 @@
     padding: 120px 60px 80px;
   }
 
-  /* Thai pattern background */
   .hero::before {
     content: '';
     position: absolute; inset: 0;
@@ -181,7 +180,7 @@
   }
 
   .hero-actions {
-    display: flex; gap: 16px; flex-wrap: wrap;
+    display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
     animation: fadeUp 0.9s ease 0.4s both;
   }
 
@@ -219,8 +218,6 @@
     display: flex; gap: 48px; margin-top: 64px;
     animation: fadeUp 0.9s ease 0.5s both;
   }
-
-  .hero-stat { }
 
   .hero-stat-num {
     font-family: 'Cormorant Garamond', serif;
@@ -331,6 +328,58 @@
     line-height: 1.7; max-width: 560px;
   }
 
+  /* ── RESERVATION HIGHLIGHT BANNER ── */
+  .reservation-banner {
+    background: linear-gradient(135deg, var(--navy) 0%, #0A2456 100%);
+    padding: 40px 60px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 40px; flex-wrap: wrap;
+    border-top: 2px solid var(--gold);
+    border-bottom: 2px solid var(--gold);
+    position: relative; overflow: hidden;
+  }
+
+  .reservation-banner::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image: repeating-linear-gradient(45deg, rgba(201,168,76,0.03) 0px, rgba(201,168,76,0.03) 1px, transparent 1px, transparent 60px);
+  }
+
+  .res-banner-text { position: relative; z-index: 1; }
+
+  .res-banner-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 32px; font-weight: 700; color: white;
+    margin-bottom: 8px;
+  }
+
+  .res-banner-title em { color: var(--gold); font-style: italic; }
+
+  .res-banner-sub {
+    font-size: 15px; color: rgba(255,255,255,0.65);
+    max-width: 480px; line-height: 1.6;
+  }
+
+  .res-banner-stats {
+    display: flex; gap: 40px; position: relative; z-index: 1; flex-wrap: wrap;
+  }
+
+  .res-stat { text-align: center; }
+
+  .res-stat-num {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 40px; font-weight: 700; color: var(--gold);
+    line-height: 1;
+  }
+
+  .res-stat-label {
+    font-size: 12px; color: rgba(255,255,255,0.5);
+    text-transform: uppercase; letter-spacing: 1px;
+    margin-top: 4px;
+  }
+
+  .res-banner-cta { position: relative; z-index: 1; }
+
   /* ── FEATURES ── */
   .features { background: var(--white); }
 
@@ -370,6 +419,11 @@
 
   .feature-card:hover::before { transform: scaleX(1); }
 
+  .feature-card.highlight {
+    border-color: rgba(201,168,76,0.35);
+    background: linear-gradient(160deg, #FDFAF4 0%, #FBF5E6 100%);
+  }
+
   .feature-icon {
     width: 56px; height: 56px;
     background: linear-gradient(135deg, rgba(201,168,76,0.12), rgba(201,168,76,0.06));
@@ -377,6 +431,16 @@
     display: flex; align-items: center; justify-content: center;
     margin-bottom: 20px;
     border: 1px solid rgba(201,168,76,0.2);
+  }
+
+  .feature-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, var(--gold), var(--gold-light));
+    color: var(--navy);
+    font-size: 10px; font-weight: 800;
+    letter-spacing: 1px; text-transform: uppercase;
+    padding: 3px 10px; border-radius: 20px;
+    margin-bottom: 14px;
   }
 
   .feature-title {
@@ -650,6 +714,11 @@
     margin-top: 16px; position: relative; z-index: 1;
   }
 
+  /* ── WIDGET WRAPPER ── */
+  .widget-inline {
+    display: inline-flex; align-items: center;
+  }
+
   /* ── FOOTER ── */
   footer {
     background: #070F24;
@@ -657,8 +726,6 @@
     display: grid; grid-template-columns: 2fr 1fr 1fr 1fr;
     gap: 48px;
   }
-
-  .footer-brand { }
 
   .footer-logo {
     font-family: 'Cormorant Garamond', serif;
@@ -674,7 +741,7 @@
     margin-bottom: 24px;
   }
 
-  .footer-social { display: flex; gap: 12px; }
+  .footer-social { display: flex; gap: 12px; margin-bottom: 20px; }
 
   .social-btn {
     width: 38px; height: 38px; border-radius: 10px;
@@ -730,6 +797,7 @@
     .hero { padding: 100px 28px 60px; }
     .hero h1 { font-size: 48px; }
     .trust-bar { padding: 20px 28px; gap: 28px; }
+    .reservation-banner { padding: 32px 28px; }
   }
 
   @media (max-width: 640px) {
@@ -738,6 +806,7 @@
     .hero-stats { gap: 28px; }
     .nav-links { display: none; }
     footer { grid-template-columns: 1fr; }
+    .res-banner-stats { gap: 24px; }
   }
 
   /* ── SCROLL ANIMATIONS ── */
@@ -761,13 +830,22 @@
 <!-- NAV -->
 <nav>
   <a class="nav-logo" href="#">
- <div class="logo-icon" style="font-size:18px; gap:2px; display:flex; align-items:center; justify-content:center;">🇹🇭🇬🇧</div>
+    <div class="logo-icon" style="font-size:18px; gap:2px; display:flex; align-items:center; justify-content:center;">🇹🇭🇬🇧</div>
     <div class="logo-text">Siam<span>EPOS</span></div>
   </a>
   <ul class="nav-links">
     <li><a href="#features" class="lang-data-en">Features</a><a href="#features" class="lang-data-th">ฟีเจอร์</a></li>
     <li><a href="#how" class="lang-data-en">How It Works</a><a href="#how" class="lang-data-th">วิธีใช้งาน</a></li>
     <li><a href="#pricing" class="lang-data-en">Pricing</a><a href="#pricing" class="lang-data-th">ราคา</a></li>
+    <li>
+      <!-- BOOKING WIDGET — NAV -->
+      <script
+        src="https://restaurant-epos-production.up.railway.app/widget.js"
+        data-restaurant="siamepos"
+        data-color="#C9A84C"
+        data-button-text="Book a Table">
+      </script>
+    </li>
     <li><a href="#demo" class="nav-cta lang-data-en">Book a Demo</a><a href="#demo" class="nav-cta lang-data-th">ทดลองใช้ฟรี</a></li>
   </ul>
   <button class="lang-toggle" onclick="document.body.classList.toggle('thai'); this.textContent = document.body.classList.contains('thai') ? 'EN' : 'ภาษาไทย'">ภาษาไทย</button>
@@ -782,21 +860,28 @@
     <h1 class="lang-data-en">The <em>smarter</em> EPOS for your restaurant</h1>
     <h1 class="lang-data-th">ระบบ EPOS <em>ที่ดีกว่า</em> สำหรับร้านอาหารของคุณ</h1>
 
-    <p class="hero-sub lang-data-en">SiamEPOS is a cloud-based point-of-sale system designed specifically for Thai restaurants in the UK. Real-time kitchen screens, table management, and beautiful reports — all in one place.</p>
-    <p class="hero-sub lang-data-th">SiamEPOS คือระบบ POS บนคลาวด์ที่ออกแบบมาสำหรับร้านอาหารไทยในสหราชอาณาจักร จัดการโต๊ะ ส่งออเดอร์ครัว และดูรายงานได้ทุกที่ทุกเวลา</p>
+    <p class="hero-sub lang-data-en">SiamEPOS is a cloud-based point-of-sale system designed specifically for Thai restaurants in the UK. Online reservations, online orders, and kitchen management — all connected to your EPOS in real time.</p>
+    <p class="hero-sub lang-data-th">SiamEPOS คือระบบ POS บนคลาวด์ที่ออกแบบมาสำหรับร้านอาหารไทยในสหราชอาณาจักร จองโต๊ะออนไลน์ สั่งอาหารออนไลน์ และจัดการครัว — ทุกอย่างเชื่อมกับ EPOS แบบเรียลไทม์</p>
 
     <div class="hero-actions">
       <a href="#demo" class="btn-primary lang-data-en">🚀 Book a Free Demo</a>
       <a href="#demo" class="btn-primary lang-data-th">🚀 ทดลองใช้ฟรี</a>
+      <!-- BOOKING WIDGET — HERO -->
+      <script
+        src="https://restaurant-epos-production.up.railway.app/widget.js"
+        data-restaurant="siamepos"
+        data-color="#C9A84C"
+        data-button-text="📅 Book a Table">
+      </script>
       <a href="#features" class="btn-secondary lang-data-en">See Features →</a>
       <a href="#features" class="btn-secondary lang-data-th">ดูฟีเจอร์ →</a>
     </div>
 
     <div class="hero-stats">
       <div class="hero-stat">
-        <div class="hero-stat-num">100%</div>
-        <div class="hero-stat-label lang-data-en">Cloud Based</div>
-        <div class="hero-stat-label lang-data-th">บนคลาวด์</div>
+        <div class="hero-stat-num">0%</div>
+        <div class="hero-stat-label lang-data-en">Commission</div>
+        <div class="hero-stat-label lang-data-th">ค่าคอมมิชชั่น</div>
       </div>
       <div class="hero-stat">
         <div class="hero-stat-num">£0</div>
@@ -845,6 +930,40 @@
   <div class="trust-item"><span>📞</span> <span class="lang-data-en">Thai-speaking support</span><span class="lang-data-th">ซัพพอร์ตภาษาไทย</span></div>
 </div>
 
+<!-- RESERVATION HIGHLIGHT BANNER -->
+<div class="reservation-banner">
+  <div class="res-banner-text">
+    <div class="res-banner-title lang-data-en">Online reservations — <em>zero commission</em></div>
+    <div class="res-banner-title lang-data-th">จองโต๊ะออนไลน์ — <em>ค่าคอมมิชชั่น 0%</em></div>
+    <p class="res-banner-sub lang-data-en">One line of code on your website. Bookings appear in your EPOS instantly. No OpenTable, no commission, no middleman.</p>
+    <p class="res-banner-sub lang-data-th">โค้ดเพียงบรรทัดเดียวบนเว็บไซต์ของคุณ การจองปรากฏใน EPOS ทันที ไม่มี OpenTable ไม่มีค่าคอม ไม่มีตัวกลาง</p>
+  </div>
+  <div class="res-banner-stats">
+    <div class="res-stat">
+      <div class="res-stat-num">£1-3</div>
+      <div class="res-stat-label lang-data-en">OpenTable per cover</div>
+      <div class="res-stat-label lang-data-th">OpenTable ต่อที่นั่ง</div>
+    </div>
+    <div class="res-stat">
+      <div class="res-stat-num" style="color:white;">vs</div>
+    </div>
+    <div class="res-stat">
+      <div class="res-stat-num">£0</div>
+      <div class="res-stat-label lang-data-en">SiamEPOS per cover</div>
+      <div class="res-stat-label lang-data-th">SiamEPOS ต่อที่นั่ง</div>
+    </div>
+  </div>
+  <div class="res-banner-cta">
+    <!-- BOOKING WIDGET — BANNER (demo of the actual widget) -->
+    <script
+      src="https://restaurant-epos-production.up.railway.app/widget.js"
+      data-restaurant="siamepos"
+      data-color="#C9A84C"
+      data-button-text="Try It Now">
+    </script>
+  </div>
+</div>
+
 <!-- FEATURES -->
 <section class="features" id="features">
   <div class="features-header reveal">
@@ -852,19 +971,24 @@
     <div class="section-label lang-data-th">ครบทุกฟีเจอร์</div>
     <h2 class="section-title lang-data-en">Built for how Thai<br>restaurants actually work</h2>
     <h2 class="section-title lang-data-th">ออกแบบมาเพื่อร้านอาหารไทย<br>โดยเฉพาะ</h2>
-    <p class="section-sub lang-data-en">From the kitchen screen to the bill — every feature has been crafted for the fast-paced Thai restaurant environment.</p>
-    <p class="section-sub lang-data-th">ตั้งแต่หน้าจอครัวไปถึงการชำระเงิน ทุกฟีเจอร์ถูกออกแบบมาสำหรับร้านอาหารไทย</p>
+    <p class="section-sub lang-data-en">From online bookings to the kitchen screen — every feature connects directly to your EPOS in real time.</p>
+    <p class="section-sub lang-data-th">ตั้งแต่การจองออนไลน์ไปถึงหน้าจอครัว ทุกฟีเจอร์เชื่อมต่อกับ EPOS แบบเรียลไทม์</p>
   </div>
 
   <div class="features-grid">
-    <div class="feature-card reveal reveal-delay-1">
-      <div class="feature-icon">🗺️</div>
-      <div class="feature-title lang-data-en">Smart Table Map</div>
-      <div class="feature-title lang-data-th">แผนผังโต๊ะอัจฉริยะ</div>
-      <p class="feature-desc lang-data-en">Colour-coded tables show exactly what stage each table is at — starters, mains, desserts, or bill printed. At a glance, every time.</p>
-      <p class="feature-desc lang-data-th">โต๊ะแสดงสีตามสถานะ — สตาร์เตอร์ เมนหลัก ของหวาน หรือพิมพ์บิลแล้ว มองเห็นได้ทันที</p>
+
+    <!-- FEATURE 1: Online Reservation -->
+    <div class="feature-card highlight reveal reveal-delay-1">
+      <div class="feature-badge lang-data-en">0% Commission</div>
+      <div class="feature-badge lang-data-th">ค่าคอมมิชชั่น 0%</div>
+      <div class="feature-icon">📅</div>
+      <div class="feature-title lang-data-en">Online Reservations</div>
+      <div class="feature-title lang-data-th">จองโต๊ะออนไลน์</div>
+      <p class="feature-desc lang-data-en">Embed a booking widget on your restaurant website with one line of code. Bookings go straight into your EPOS — no OpenTable, no commission, no delays.</p>
+      <p class="feature-desc lang-data-th">ฝังวิดเจ็ตจองโต๊ะบนเว็บไซต์ร้านด้วยโค้ดบรรทัดเดียว การจองเข้าสู่ EPOS ทันที — ไม่มี OpenTable ไม่มีค่าคอม ไม่มีการรอ</p>
     </div>
 
+    <!-- FEATURE 2: Kitchen Display -->
     <div class="feature-card reveal reveal-delay-2">
       <div class="feature-icon">🍳</div>
       <div class="feature-title lang-data-en">Kitchen Display System</div>
@@ -873,15 +997,37 @@
       <p class="feature-desc lang-data-th">ออเดอร์ส่งถึงหน้าจอครัวทันที พร้อมตัวจับเวลาและการจัดการคอร์สอาหาร</p>
     </div>
 
+    <!-- FEATURE 3: Stock Management -->
     <div class="feature-card reveal reveal-delay-3">
-      <div class="feature-icon">🍹</div>
-      <div class="feature-title lang-data-en">Separate Bar Screen</div>
-      <div class="feature-title lang-data-th">หน้าจอบาร์แยกต่างหาก</div>
-      <p class="feature-desc lang-data-en">Drinks go straight to the bar — no more confusion with kitchen orders. Bar items are automatically routed to the bar screen.</p>
-      <p class="feature-desc lang-data-th">เครื่องดื่มส่งตรงไปที่บาร์ ไม่สับสนกับออเดอร์ครัว</p>
+      <div class="feature-icon">📦</div>
+      <div class="feature-title lang-data-en">Stock Management</div>
+      <div class="feature-title lang-data-th">จัดการสต็อกสินค้า</div>
+      <p class="feature-desc lang-data-en">Track your ingredients and stock levels in real time. Get low-stock alerts before you run out, and see exactly what's been used each service.</p>
+      <p class="feature-desc lang-data-th">ติดตามวัตถุดิบและสต็อกสินค้าแบบเรียลไทม์ รับการแจ้งเตือนเมื่อสต็อกต่ำ และดูว่ามีการใช้อะไรไปบ้างในแต่ละบริการ</p>
     </div>
 
-    <div class="feature-card reveal reveal-delay-1">
+    <!-- FEATURE 4: Online Order -->
+    <div class="feature-card highlight reveal reveal-delay-1">
+      <div class="feature-badge lang-data-en">Linked to EPOS</div>
+      <div class="feature-badge lang-data-th">เชื่อมกับ EPOS</div>
+      <div class="feature-icon">🛒</div>
+      <div class="feature-title lang-data-en">Online Ordering</div>
+      <div class="feature-title lang-data-th">สั่งอาหารออนไลน์</div>
+      <p class="feature-desc lang-data-en">Let customers order online from your menu and pay in advance. Orders appear directly on your kitchen screen — no third-party tablet, no extra commission.</p>
+      <p class="feature-desc lang-data-th">ให้ลูกค้าสั่งอาหารออนไลน์จากเมนูของคุณและชำระเงินล่วงหน้า ออเดอร์ปรากฏบนหน้าจอครัวโดยตรง — ไม่มีแท็บเล็ตเพิ่มเติม ไม่มีค่าคอม</p>
+    </div>
+
+    <!-- FEATURE 5: Staff Management -->
+    <div class="feature-card reveal reveal-delay-2">
+      <div class="feature-icon">👥</div>
+      <div class="feature-title lang-data-en">Staff Management</div>
+      <div class="feature-title lang-data-th">จัดการพนักงาน</div>
+      <p class="feature-desc lang-data-en">PIN-based login with roles — waiter, kitchen, bar, supervisor, manager, and admin. Each role sees only what they need.</p>
+      <p class="feature-desc lang-data-th">ล็อกอินด้วย PIN แต่ละบทบาทเห็นเฉพาะที่จำเป็น — บริกร ครัว บาร์ ผู้จัดการ</p>
+    </div>
+
+    <!-- FEATURE 6: Reports -->
+    <div class="feature-card reveal reveal-delay-3">
       <div class="feature-icon">📊</div>
       <div class="feature-title lang-data-en">Live Reports & Z Reports</div>
       <div class="feature-title lang-data-th">รายงานสด & Z Report</div>
@@ -889,21 +1035,6 @@
       <p class="feature-desc lang-data-th">ดูยอดขายแบบเรียลไทม์ Z Report พร้อมสรุปยอดเงินสดและรายการขายแต่ละรายการ</p>
     </div>
 
-    <div class="feature-card reveal reveal-delay-2">
-      <div class="feature-icon">💳</div>
-      <div class="feature-title lang-data-en">Flexible Payments</div>
-      <div class="feature-title lang-data-th">รับชำระได้หลายรูปแบบ</div>
-      <p class="feature-desc lang-data-en">Cash with change calculation, card with tip tracking. Service charge management and discounts with reason codes.</p>
-      <p class="feature-desc lang-data-th">เงินสดพร้อมคำนวณเงินทอน บัตรพร้อมติดตามทิป และจัดการส่วนลดพร้อมเหตุผล</p>
-    </div>
-
-    <div class="feature-card reveal reveal-delay-3">
-      <div class="feature-icon">👥</div>
-      <div class="feature-title lang-data-en">Staff Management</div>
-      <div class="feature-title lang-data-th">จัดการพนักงาน</div>
-      <p class="feature-desc lang-data-en">PIN-based login with roles — waiter, kitchen, bar, supervisor, manager, and admin. Each role sees only what they need.</p>
-      <p class="feature-desc lang-data-th">ล็อกอินด้วย PIN แต่ละบทบาทเห็นเฉพาะที่จำเป็น — บริกร ครัว บาร์ ผู้จัดการ</p>
-    </div>
   </div>
 </section>
 
@@ -978,8 +1109,8 @@
       </div>
       <div class="why-point">
         <div class="why-point-check">✓</div>
-        <div class="why-point-text lang-data-en"><strong>No expensive hardware</strong> — works on the iPads and Android tablets you already own</div>
-        <div class="why-point-text lang-data-th"><strong>ไม่ต้องซื้อฮาร์ดแวร์แพง</strong> — ใช้งานบน iPad และ Android ที่มีอยู่แล้ว</div>
+        <div class="why-point-text lang-data-en"><strong>Zero commission bookings</strong> — own your reservations, pay no per-cover fees ever</div>
+        <div class="why-point-text lang-data-th"><strong>การจองไม่มีค่าคอม</strong> — เป็นเจ้าของการจองของคุณ ไม่มีค่าธรรมเนียมต่อที่นั่ง</div>
       </div>
       <div class="why-point">
         <div class="why-point-check">✓</div>
@@ -1002,10 +1133,10 @@
     <div class="thai-fact">
       <div class="thai-fact-icon">💷</div>
       <div>
-        <div class="thai-fact-title lang-data-en">Save up to £150/month</div>
-        <div class="thai-fact-title lang-data-th">ประหยัดได้ถึง £150 ต่อเดือน</div>
-        <div class="thai-fact-desc lang-data-en">Compared to traditional EPOS providers who charge £100-200/month plus hardware costs.</div>
-        <div class="thai-fact-desc lang-data-th">เมื่อเทียบกับผู้ให้บริการ EPOS ทั่วไปที่คิด £100-200 ต่อเดือน บวกค่าฮาร์ดแวร์</div>
+        <div class="thai-fact-title lang-data-en">Save £1,500–4,500/month vs OpenTable</div>
+        <div class="thai-fact-title lang-data-th">ประหยัดได้ถึง £4,500 ต่อเดือน เทียบกับ OpenTable</div>
+        <div class="thai-fact-desc lang-data-en">A restaurant doing 50 covers/night pays up to £4,500/month in OpenTable commission. With SiamEPOS, you pay £0.</div>
+        <div class="thai-fact-desc lang-data-th">ร้านที่รับ 50 ที่นั่ง/คืน จ่ายค่าคอม OpenTable สูงถึง £4,500/เดือน ด้วย SiamEPOS คุณจ่าย £0</div>
       </div>
     </div>
     <div class="thai-fact">
@@ -1066,12 +1197,14 @@
         <li class="lang-data-th">โต๊ะไม่จำกัด</li>
         <li class="lang-data-en">Kitchen, bar & pass screens</li>
         <li class="lang-data-th">ครัว บาร์ และ Pass screen</li>
-        <li class="lang-data-en">Full reports & analytics</li>
-        <li class="lang-data-th">รายงานและวิเคราะห์ครบ</li>
+        <li class="lang-data-en">Online reservations (0% commission)</li>
+        <li class="lang-data-th">จองโต๊ะออนไลน์ (ค่าคอม 0%)</li>
+        <li class="lang-data-en">Online ordering linked to EPOS</li>
+        <li class="lang-data-th">สั่งอาหารออนไลน์เชื่อมกับ EPOS</li>
+        <li class="lang-data-en">Stock management</li>
+        <li class="lang-data-th">จัดการสต็อก</li>
         <li class="lang-data-en">Unlimited staff accounts</li>
         <li class="lang-data-th">พนักงานไม่จำกัด</li>
-        <li class="lang-data-en">Reservations system</li>
-        <li class="lang-data-th">ระบบจองโต๊ะ</li>
         <li class="lang-data-en">Phone & Thai support</li>
         <li class="lang-data-th">ซัพพอร์ตโทรศัพท์ภาษาไทย</li>
       </ul>
@@ -1125,15 +1258,27 @@
       </button>
     </div>
 
-    <p class="demo-note lang-data-en">No credit card required · Free setup included · Cancel anytime</p>
-    <p class="demo-note lang-data-th">ไม่ต้องใช้บัตรเครดิต · รวมการตั้งค่าฟรี · ยกเลิกได้ทุกเมื่อ</p>
+    <!-- BOOKING WIDGET — DEMO SECTION -->
+    <div style="margin-top: 24px; text-align: center;">
+      <p style="color: rgba(255,255,255,0.4); font-size: 13px; margin-bottom: 12px;" class="lang-data-en">Or use the live booking widget to reserve a table right now</p>
+      <p style="color: rgba(255,255,255,0.4); font-size: 13px; margin-bottom: 12px;" class="lang-data-th">หรือใช้วิดเจ็ตจองโต๊ะเพื่อจองโต๊ะได้เลยตอนนี้</p>
+      <script
+        src="https://restaurant-epos-production.up.railway.app/widget.js"
+        data-restaurant="siamepos"
+        data-color="#C9A84C"
+        data-button-text="📅 Book a Table Now">
+      </script>
+    </div>
+
+    <p class="demo-note lang-data-en" style="margin-top: 20px;">No credit card required · Free setup included · Cancel anytime</p>
+    <p class="demo-note lang-data-th" style="margin-top: 20px;">ไม่ต้องใช้บัตรเครดิต · รวมการตั้งค่าฟรี · ยกเลิกได้ทุกเมื่อ</p>
   </div>
 </section>
 
 <!-- FOOTER -->
 <footer>
   <div class="footer-brand">
-   <div class="footer-logo">🇹🇭🇬🇧 Siam<span>EPOS</span></div>
+    <div class="footer-logo">🇹🇭🇬🇧 Siam<span>EPOS</span></div>
     <p class="footer-tagline lang-data-en">The smart EPOS system built for Thai restaurants across the United Kingdom.</p>
     <p class="footer-tagline lang-data-th">ระบบ EPOS อัจฉริยะสำหรับร้านอาหารไทยทั่วสหราชอาณาจักร</p>
     <div class="footer-social">
@@ -1141,6 +1286,13 @@
       <a href="#" class="social-btn">📸</a>
       <a href="#" class="social-btn">💬</a>
     </div>
+    <!-- BOOKING WIDGET — FOOTER -->
+    <script
+      src="https://restaurant-epos-production.up.railway.app/widget.js"
+      data-restaurant="siamepos"
+      data-color="#C9A84C"
+      data-button-text="Book a Table">
+    </script>
   </div>
 
   <div class="footer-col">
@@ -1181,7 +1333,6 @@
 </div>
 
 <script>
-  // Scroll reveal
   const reveals = document.querySelectorAll('.reveal');
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
@@ -1192,7 +1343,6 @@
   }, { threshold: 0.1 });
   reveals.forEach(el => observer.observe(el));
 
-  // Smooth scroll
   document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function(e) {
       const target = document.querySelector(this.getAttribute('href'));

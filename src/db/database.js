@@ -232,6 +232,11 @@ await pool.query(`
     updated_at TIMESTAMP DEFAULT NOW()
   )
 `);
+// Add allergens column to menu_items if not exists
+await pool.query(`
+  ALTER TABLE menu_items
+  ADD COLUMN IF NOT EXISTS allergens TEXT DEFAULT NULL
+`);
 
 await pool.query(`
   CREATE TABLE IF NOT EXISTS reservation_reminders (

@@ -1272,6 +1272,128 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
+// MENU BATCH IMPORT — AI Scanner
+// ─────────────────────────────────────────────
+
+app.post('/api/menu/import-batch', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { items } = req.body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'No items provided' });
+    }
+
+    // ── Load all categories once ───────────────────────────────
+    const catRes = await client.query('SELECT id, name FROM categories');
+    const categories = catRes.rows;
+
+    // Helper: find category_id by name (case-insensitive, fuzzy)
+    function findCategoryId(categoryName) {
+      if (!categoryName) return null;
+      const search = categoryName.toLowerCase().trim();
+
+      // Exact match first
+      let match = categories.find(c => c.name.toLowerCase() === search);
+      if (match) return match.id;
+
+      // Partial match
+      match = categories.find(c =>
+        c.name.toLowerCase().includes(search) ||
+        search.includes(c.name.toLowerCase())
+      );
+      return match ? match.id : null;
+    }
+
+    await client.query('BEGIN');
+
+    const results = {
+      inserted: [],
+      skipped:  [],
+      errors:   [],
+    };
+
+    for (const item of items) {
+      try {
+        // ── Validate required fields ─────────────────────────
+        if (!item.name_en || !item.name_en.trim()) {
+          results.skipped.push({ item, reason: 'Missing name_en' });
+          continue;
+        }
+
+        const price = parseFloat(item.price);
+        if (isNaN(price) || price < 0) {
+          results.skipped.push({ item, reason: 'Invalid price' });
+          continue;
+        }
+
+        // ── Resolve category ─────────────────────────────────
+        const categoryId = findCategoryId(item.category);
+        // categoryId can be null — item still imports, just uncategorised
+
+        // ── Serialise allergens array → JSON string ──────────
+        let allergensStr = null;
+        if (Array.isArray(item.allergens) && item.allergens.length > 0) {
+          allergensStr = JSON.stringify(item.allergens);
+        } else if (typeof item.allergens === 'string' && item.allergens.trim()) {
+          allergensStr = JSON.stringify([item.allergens]);
+        }
+
+        // ── Insert ───────────────────────────────────────────
+        const insertRes = await client.query(
+          `INSERT INTO menu_items
+             (category_id, name, name_alt, description, price, allergens, is_available)
+           VALUES ($1, $2, $3, $4, $5, $6, 1)
+           RETURNING id, name`,
+          [
+            categoryId,
+            item.name_en.trim(),
+            item.name_th ? item.name_th.trim() : null,
+            item.description ? item.description.trim() : null,
+            price,
+            allergensStr,
+          ]
+        );
+
+        results.inserted.push({
+          id:            insertRes.rows[0].id,
+          name:          insertRes.rows[0].name,
+          category_id:   categoryId,
+          category_name: item.category || null,
+        });
+
+      } catch (itemErr) {
+        results.errors.push({ item, error: itemErr.message });
+      }
+    }
+
+    await client.query('COMMIT');
+
+    console.log(`📥 Batch import: ${results.inserted.length} inserted, ${results.skipped.length} skipped, ${results.errors.length} errors`);
+
+    res.json({
+      success:  true,
+      summary: {
+        total:    items.length,
+        inserted: results.inserted.length,
+        skipped:  results.skipped.length,
+        errors:   results.errors.length,
+      },
+      inserted: results.inserted,
+      skipped:  results.skipped,
+      errors:   results.errors,
+    });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('POST /api/menu/import-batch error:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ─────────────────────────────────────────────
 // SOCKET.IO
 // ─────────────────────────────────────────────
 

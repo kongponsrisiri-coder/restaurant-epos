@@ -85,3 +85,15 @@ export const getBarCompleted = () => get('/api/bar/completed');
 export const resendToKitchen = (orderId, itemIds) => post(`/api/orders/${orderId}/resend`, { item_ids: itemIds });
 export const applyItemDiscount = (itemId, discount_type, discount_value) => put(`/api/order-items/${itemId}/discount`, { discount_type, discount_value });
 export const deleteStaff = (id) => del(`/api/staff/${id}`);
+// ─────────────────────────────────────────────
+// MENU BATCH IMPORT
+// ─────────────────────────────────────────────
+
+export const importMenuBatch = async (items) => {
+  const res = await fetch(`${SERVER_URL}/api/menu/import-batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  });
+  return res.json();
+};

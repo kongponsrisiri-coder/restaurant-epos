@@ -328,9 +328,12 @@ export default function KitchenScreen() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
               {orders.map(order => {
                 const allItems = order.items.filter(i => !i.voided && i.status !== 'served' && i.status !== 'cooked' && !i.is_bar);
-                const upcoming = allItems.filter(i => !i.is_fired);
-                const cooking = allItems.filter(i => i.is_fired && (filter === 'all' || String(i.course || 1) === filter));
-                if (allItems.length === 0) return null;
+
+// Apply course filter to BOTH pending and cooking
+const upcoming = allItems.filter(i => !i.is_fired && (filter === 'all' || String(i.course || 1) === filter));
+const cooking = allItems.filter(i => i.is_fired && (filter === 'all' || String(i.course || 1) === filter));
+
+if (upcoming.length === 0 && cooking.length === 0) return null;
 
                 return (
                   <div key={order.id} style={{ background: '#1a1a1a', borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' }}>
@@ -346,102 +349,107 @@ export default function KitchenScreen() {
 
                     <div style={{ padding: 12 }}>
 
-                      {/* PENDING */}
-                      {upcoming.length > 0 && (
-                        <div style={{
-                          marginBottom: 12, background: '#2d1f00',
-                          borderRadius: 10, padding: '10px 12px',
-                          border: '2px solid #f59e0b',
-                          animation: 'pendingGlow 2s infinite'
-                        }}>
-                          <div style={{
-                            color: '#fbbf24', fontSize: 11, fontWeight: 800,
-                            textTransform: 'uppercase', marginBottom: 10,
-                            letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 8
-                          }}>
-                            <span style={{ background: '#f59e0b', color: '#111', padding: '3px 10px', borderRadius: 20, fontSize: 11 }}>
-                              ⏳ PENDING
-                            </span>
-                          </div>
-                          {(() => {
-                            const byCourse = {};
-                            upcoming.forEach(item => {
-                              const c = item.course || 1;
-                              if (!byCourse[c]) byCourse[c] = [];
-                              byCourse[c].push(item);
-                            });
-                            return Object.keys(byCourse).sort().map(course => (
-                              <div key={course} style={{ marginBottom: 8 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: COURSE_COLORS[course] }} />
-                                  <span style={{ color: COURSE_COLORS[course], fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>
-                                    {COURSE_LABELS[course]}
-                                  </span>
-                                </div>
-                                {byCourse[course].map(item => (
-                                  <div key={item.id} style={{ background: '#3d2800', borderRadius: 8, padding: '10px 12px', marginBottom: 6, border: '1px solid #78350f' }}>
-                                    <ItemName item={item} showAlt={showAlt} altLang={altLang} />
-                                    {item.notes && <div style={{ color: '#d97706', fontSize: 13, marginTop: 4, fontWeight: 600 }}>— {item.notes}</div>}
-                                    {item.item_note && <div style={{ color: '#f87171', fontSize: 13, fontWeight: 700, marginTop: 4 }}>📝 {item.item_note}</div>}
-                                  </div>
-                                ))}
-                              </div>
-                            ));
-                          })()}
-                        </div>
-                      )}
+                      <div style={{ padding: 12 }}>
 
-                      {upcoming.length > 0 && cooking.length > 0 && (
-                        <div style={{ borderTop: '1px solid #333', marginBottom: 12 }} />
-                      )}
+  {/* ── COOKING FIRST ── */}
+  {cooking.length > 0 && (
+    <div>
+      <div style={{ color: '#e94560', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 8, letterSpacing: 1 }}>
+        🔥 Now Cooking
+      </div>
+      {(() => {
+        const byCourse = {};
+        cooking.forEach(item => {
+          const c = item.course || 1;
+          if (!byCourse[c]) byCourse[c] = [];
+          byCourse[c].push(item);
+        });
+        return Object.keys(byCourse).sort().map(course => (
+          <div key={course} style={{ marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: COURSE_COLORS[course] }} />
+              <span style={{ color: COURSE_COLORS[course], fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>
+                {COURSE_LABELS[course]}
+              </span>
+            </div>
+            {byCourse[course].map(item => (
+              <div key={item.id} style={{ background: '#1e3a5f', borderRadius: 10, padding: '12px', marginBottom: 8, border: '2px solid #3b82f6' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ flex: 1 }}>
+                    <ItemName item={item} showAlt={showAlt} altLang={altLang} />
+                    {item.notes && <div style={{ color: '#93c5fd', fontSize: 13, marginTop: 3 }}>{item.notes}</div>}
+                    {item.item_note && <div style={{ color: '#e94560', fontSize: 13, fontWeight: 700, marginTop: 3 }}>📝 {item.item_note}</div>}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+                    <Timer startedAt={item.fired_at || item.cooking_started_at} />
+                    <button onClick={() => markCooked(item.id)} style={{
+                      background: '#22c55e', color: 'white', border: 'none',
+                      borderRadius: 8, padding: '10px 18px', cursor: 'pointer',
+                      fontWeight: 800, fontSize: 15
+                    }}>
+                      ✓ Cooked
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ));
+      })()}
+    </div>
+  )}
 
-                      {/* COOKING */}
-                      {cooking.length > 0 && (
-                        <div>
-                          <div style={{ color: '#e94560', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 8, letterSpacing: 1 }}>
-                            🔥 Now Cooking
-                          </div>
-                          {(() => {
-                            const byCourse = {};
-                            cooking.forEach(item => {
-                              const c = item.course || 1;
-                              if (!byCourse[c]) byCourse[c] = [];
-                              byCourse[c].push(item);
-                            });
-                            return Object.keys(byCourse).sort().map(course => (
-                              <div key={course} style={{ marginBottom: 10 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: COURSE_COLORS[course] }} />
-                                  <span style={{ color: COURSE_COLORS[course], fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>
-                                    {COURSE_LABELS[course]}
-                                  </span>
-                                </div>
-                                {byCourse[course].map(item => (
-                                  <div key={item.id} style={{ background: '#1e3a5f', borderRadius: 10, padding: '12px', marginBottom: 8, border: '2px solid #3b82f6' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                      <div style={{ flex: 1 }}>
-                                        <ItemName item={item} showAlt={showAlt} altLang={altLang} />
-                                        {item.notes && <div style={{ color: '#93c5fd', fontSize: 13, marginTop: 3 }}>{item.notes}</div>}
-                                        {item.item_note && <div style={{ color: '#e94560', fontSize: 13, fontWeight: 700, marginTop: 3 }}>📝 {item.item_note}</div>}
-                                      </div>
-                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
-                                        <Timer startedAt={item.fired_at || item.cooking_started_at} />
-                                        <button onClick={() => markCooked(item.id)} style={{
-                                          background: '#22c55e', color: 'white', border: 'none',
-                                          borderRadius: 8, padding: '10px 18px', cursor: 'pointer',
-                                          fontWeight: 800, fontSize: 15
-                                        }}>
-                                          ✓ Cooked
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ));
-                          })()}
-                        </div>
-                      )}
+  {cooking.length > 0 && upcoming.length > 0 && (
+    <div style={{ borderTop: '1px solid #333', marginBottom: 12, marginTop: 4 }} />
+  )}
+
+  {/* ── PENDING AT BOTTOM ── */}
+  {upcoming.length > 0 && (
+    <div style={{
+      marginTop: 4,
+      background: '#2d1f00',
+      borderRadius: 10, padding: '10px 12px',
+      border: '2px solid #f59e0b',
+      animation: 'pendingGlow 2s infinite'
+    }}>
+      <div style={{
+        color: '#fbbf24', fontSize: 11, fontWeight: 800,
+        textTransform: 'uppercase', marginBottom: 10,
+        letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 8
+      }}>
+        <span style={{ background: '#f59e0b', color: '#111', padding: '3px 10px', borderRadius: 20, fontSize: 11 }}>
+          ⏳ PENDING — WAITING TO FIRE
+        </span>
+        <span style={{ color: '#6b7280', fontSize: 11 }}>{upcoming.length} item{upcoming.length > 1 ? 's' : ''}</span>
+      </div>
+      {(() => {
+        const byCourse = {};
+        upcoming.forEach(item => {
+          const c = item.course || 1;
+          if (!byCourse[c]) byCourse[c] = [];
+          byCourse[c].push(item);
+        });
+        return Object.keys(byCourse).sort().map(course => (
+          <div key={course} style={{ marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: COURSE_COLORS[course] }} />
+              <span style={{ color: COURSE_COLORS[course], fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>
+                {COURSE_LABELS[course]}
+              </span>
+            </div>
+            {byCourse[course].map(item => (
+              <div key={item.id} style={{ background: '#3d2800', borderRadius: 8, padding: '10px 12px', marginBottom: 6, border: '1px solid #78350f' }}>
+                <ItemName item={item} showAlt={showAlt} altLang={altLang} />
+                {item.notes && <div style={{ color: '#d97706', fontSize: 13, marginTop: 4, fontWeight: 600 }}>— {item.notes}</div>}
+                {item.item_note && <div style={{ color: '#f87171', fontSize: 13, fontWeight: 700, marginTop: 4 }}>📝 {item.item_note}</div>}
+              </div>
+            ))}
+          </div>
+        ));
+      })()}
+    </div>
+  )}
+</div>
                     </div>
                   </div>
                 );

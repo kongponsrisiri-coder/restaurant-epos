@@ -242,6 +242,16 @@ await pool.query(`
   ALTER COLUMN menu_item_id DROP NOT NULL
 `);
 await pool.query(`
+  ALTER TABLE order_items
+  ADD COLUMN IF NOT EXISTS item_name VARCHAR(255) DEFAULT NULL
+`);
+
+await pool.query(`
+  ALTER TABLE order_items
+  ALTER COLUMN menu_item_id DROP NOT NULL
+`);
+
+await pool.query(`
   CREATE TABLE IF NOT EXISTS reservation_reminders (
     id SERIAL PRIMARY KEY,
     reservation_id INTEGER REFERENCES reservations(id) ON DELETE CASCADE,

@@ -245,12 +245,16 @@ app.delete('/api/modifiers/:id', async (req, res) => {
 
 app.delete('/api/menu/items/:id', async (req, res) => {
   try {
-    // Set menu_item_id to NULL in past orders (preserves order history)
+    // Preserve item name in order history before removing the link
     await pool.query(
-      'UPDATE order_items SET menu_item_id = NULL WHERE menu_item_id = $1',
+      `UPDATE order_items 
+       SET item_name = COALESCE(item_name, (
+         SELECT name FROM menu_items WHERE id = $1
+       )),
+       menu_item_id = NULL
+       WHERE menu_item_id = $1`,
       [req.params.id]
     );
-    // Delete modifiers
     await pool.query(
       'DELETE FROM modifiers WHERE group_id IN (SELECT id FROM modifier_groups WHERE menu_item_id = $1)',
       [req.params.id]
@@ -259,7 +263,6 @@ app.delete('/api/menu/items/:id', async (req, res) => {
       'DELETE FROM modifier_groups WHERE menu_item_id = $1',
       [req.params.id]
     );
-    // Now safe to delete the item
     await pool.query(
       'DELETE FROM menu_items WHERE id = $1',
       [req.params.id]
@@ -353,17 +356,25 @@ app.post('/api/orders/:id/items', async (req, res) => {
     const { items } = req.body;
     const orderId = req.params.id;
     for (const item of items) {
-      const isBar = item.is_bar ? 1 : 0;
-      const firedAt = isBar ? new Date().toISOString() : null;
-      await client.query(
-        `INSERT INTO order_items 
-         (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at) 
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [orderId, item.menu_item_id, item.quantity, item.unit_price,
-         item.notes || '', item.course || 1, item.item_note || '',
-         isBar, firedAt, firedAt]
-      );
-    }
+  const isBar = item.is_bar ? 1 : 0;
+  const firedAt = isBar ? new Date().toISOString() : null;
+
+  // Save item name as text so bill history survives menu item deletion
+  const nameRes = await client.query(
+    'SELECT name FROM menu_items WHERE id = $1',
+    [item.menu_item_id]
+  );
+  const itemName = nameRes.rows[0]?.name || item.name || 'Unknown item';
+
+  await client.query(
+    `INSERT INTO order_items 
+     (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at, item_name) 
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [orderId, item.menu_item_id, item.quantity, item.unit_price,
+     item.notes || '', item.course || 1, item.item_note || '',
+     isBar, firedAt, firedAt, itemName]
+  );
+}
     const totalRes = await client.query(
       'SELECT SUM(quantity * unit_price) as total FROM order_items WHERE order_id = $1 AND voided = 0',
       [orderId]
@@ -940,10 +951,12 @@ app.get('/api/bills', async (req, res) => {
 app.get('/api/bills/:id/items', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT order_items.*, menu_items.name FROM order_items
-       LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
-       WHERE order_items.order_id=$1 AND order_items.voided=0
-       ORDER BY order_items.course ASC`,
+      `SELECT order_items.*,
+  COALESCE(menu_items.name, order_items.item_name, 'Deleted item') AS name
+ FROM order_items
+ LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
+ WHERE order_items.order_id=$1 AND order_items.voided=0
+ ORDER BY order_items.course ASC`,
       [req.params.id]
     );
     res.json(result.rows);

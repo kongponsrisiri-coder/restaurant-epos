@@ -29,10 +29,6 @@
   .nav-links a:hover { color: var(--gold); }
   .nav-cta { background: linear-gradient(135deg, var(--gold), var(--gold-light)); color: var(--navy) !important; padding: 10px 24px; border-radius: 8px; font-weight: 700 !important; transition: transform 0.2s, box-shadow 0.2s !important; }
   .nav-cta:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(201,168,76,0.4); }
-  /* AI Scanner nav pill */
-  .nav-ai-link { display: inline-flex; align-items: center; gap: 6px; color: var(--gold) !important; border: 1px solid rgba(201,168,76,0.4); padding: 6px 14px; border-radius: 20px; font-size: 13px !important; background: rgba(201,168,76,0.1); transition: all 0.2s !important; }
-  .nav-ai-link:hover { background: rgba(201,168,76,0.2) !important; }
-  .nav-ai-badge { font-size: 9px; font-weight: 800; letter-spacing: 0.08em; background: var(--gold); color: var(--navy); padding: 2px 6px; border-radius: 4px; }
   .lang-toggle { background: rgba(201,168,76,0.15); border: 1px solid rgba(201,168,76,0.4); color: var(--gold); padding: 6px 14px; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 700; font-family: 'Sarabun', sans-serif; transition: all 0.2s; }
   .lang-toggle:hover { background: rgba(201,168,76,0.3); }
 
@@ -50,13 +46,13 @@
   .hero-actions { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; animation: fadeUp 0.9s ease 0.4s both; }
   .btn-primary { background: linear-gradient(135deg, var(--gold), var(--gold-light)); color: var(--navy); padding: 16px 36px; border-radius: 10px; font-size: 16px; font-weight: 800; text-decoration: none; transition: transform 0.2s, box-shadow 0.2s; display: inline-flex; align-items: center; gap: 8px; }
   .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(201,168,76,0.45); }
-  .btn-secondary { background: rgba(255,255,255,0.08); color: white; border: 1px solid rgba(255,255,255,0.2); padding: 16px 36px; border-radius: 10px; font-size: 16px; font-weight: 600; text-decoration: none; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; }
-  .btn-secondary:hover { background: rgba(255,255,255,0.14); border-color: rgba(201,168,76,0.4); }
+  .btn-secondary-hero { background: rgba(255,255,255,0.08); color: white; border: 1px solid rgba(255,255,255,0.2); padding: 16px 36px; border-radius: 10px; font-size: 16px; font-weight: 600; text-decoration: none; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+  .btn-secondary-hero:hover { background: rgba(255,255,255,0.14); border-color: rgba(201,168,76,0.4); }
   .hero-stats { display: flex; gap: 48px; margin-top: 64px; animation: fadeUp 0.9s ease 0.5s both; }
   .hero-stat-num { font-family: 'Cormorant Garamond', serif; font-size: 42px; font-weight: 700; color: var(--gold); line-height: 1; }
   .hero-stat-label { font-size: 12px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
   .hero-visual { position: absolute; right: 60px; top: 50%; transform: translateY(-50%); width: 480px; animation: fadeUp 0.9s ease 0.3s both; z-index: 1; }
-  .screen-mockup { background: rgba(255,255,255,0.06); border: 1px solid rgba(201,168,76,0.25); border-radius: 20px; padding: 20px; backdrop-filter: blur(10px); box-shadow: 0 40px 80px rgba(0,0,0,0.4), 0 0 0 1px rgba(201,168,76,0.1); }
+  .screen-mockup { background: rgba(255,255,255,0.06); border: 1px solid rgba(201,168,76,0.25); border-radius: 20px; padding: 20px; backdrop-filter: blur(10px); box-shadow: 0 40px 80px rgba(0,0,0,0.4); }
   .mockup-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
   .mockup-dot { width: 10px; height: 10px; border-radius: 50%; }
   .mockup-title { color: rgba(255,255,255,0.4); font-size: 12px; margin-left: auto; margin-right: auto; }
@@ -95,7 +91,7 @@
   .res-stat-label { font-size: 12px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
   .res-banner-cta { position: relative; z-index: 1; }
 
-  /* AI SCANNER SECTION */
+  /* AI SCANNER TEASER SECTION */
   .ai-scanner-section { background: linear-gradient(160deg, #0A0F1E 0%, #0D1B3E 50%, #0A1628 100%); padding: 100px 60px; position: relative; overflow: hidden; }
   .ai-scanner-section::before { content: ''; position: absolute; inset: 0; background-image: repeating-linear-gradient(45deg, rgba(201,168,76,0.02) 0px, rgba(201,168,76,0.02) 1px, transparent 1px, transparent 80px); }
   .ai-scanner-inner { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; position: relative; z-index: 1; }
@@ -108,27 +104,7 @@
   .ai-feat-icon { width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0; background: rgba(201,168,76,0.12); border: 1px solid rgba(201,168,76,0.2); display: flex; align-items: center; justify-content: center; font-size: 15px; }
   .ai-feat-text { font-size: 14px; color: rgba(255,255,255,0.7); line-height: 1.5; }
   .ai-feat-text strong { color: white; }
-  .btn-try-scanner { display: inline-flex; align-items: center; gap: 10px; background: linear-gradient(135deg, var(--gold), var(--gold-light)); color: var(--navy); padding: 16px 32px; border-radius: 10px; font-size: 15px; font-weight: 800; text-decoration: none; transition: transform 0.2s, box-shadow 0.2s; }
-  .btn-try-scanner:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(201,168,76,0.4); }
-  .scanner-note { font-size: 12px; color: rgba(255,255,255,0.3); margin-top: 12px; }
-  .scanner-mockup { background: rgba(22,27,34,0.9); border: 1px solid rgba(201,168,76,0.2); border-radius: 20px; overflow: hidden; box-shadow: 0 40px 80px rgba(0,0,0,0.5); }
-  .sm-header { background: rgba(30,37,48,0.95); padding: 16px 20px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-  .sm-dot { width: 10px; height: 10px; border-radius: 50%; }
-  .sm-title { font-size: 11px; color: rgba(255,255,255,0.35); margin: 0 auto; font-family: monospace; }
-  .sm-body { padding: 20px; }
-  .sm-upload { border: 2px dashed rgba(201,168,76,0.3); border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 16px; background: rgba(201,168,76,0.03); }
-  .sm-upload-icon { font-size: 24px; margin-bottom: 6px; }
-  .sm-upload-text { font-size: 11px; color: rgba(255,255,255,0.45); margin-bottom: 10px; }
-  .sm-upload-btn { background: linear-gradient(135deg, var(--gold), var(--gold-light)); color: var(--navy); border: none; padding: 7px 16px; border-radius: 7px; font-size: 11px; font-weight: 700; }
-  .sm-dish { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05); flex-wrap: wrap; }
-  .sm-dish:last-child { border: none; }
-  .sm-dish-info { flex: 1; min-width: 90px; }
-  .sm-dish-name { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.9); }
-  .sm-dish-th { font-size: 11px; color: var(--gold); opacity: 0.75; }
-  .sm-allergen { font-size: 9px; padding: 2px 5px; border-radius: 3px; background: rgba(255,107,107,0.15); border: 1px solid rgba(255,107,107,0.3); color: #FF8E8E; white-space: nowrap; }
-  .sm-price { font-size: 13px; font-weight: 700; color: white; white-space: nowrap; }
-  .sm-conf { width: 32px; height: 3px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; }
-  .sm-conf-fill { height: 100%; background: #4ECDC4; border-radius: 2px; }
+  .coming-soon-badge { display: inline-flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.5); padding: 14px 28px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: default; }
 
   /* FEATURES */
   .features { background: var(--white); }
@@ -142,6 +118,8 @@
   .feature-card.highlight { border-color: rgba(201,168,76,0.35); background: linear-gradient(160deg, #FDFAF4 0%, #FBF5E6 100%); }
   .feature-icon { width: 56px; height: 56px; background: linear-gradient(135deg, rgba(201,168,76,0.12), rgba(201,168,76,0.06)); border-radius: 14px; font-size: 26px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; border: 1px solid rgba(201,168,76,0.2); }
   .feature-badge { display: inline-block; background: linear-gradient(135deg, var(--gold), var(--gold-light)); color: var(--navy); font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; padding: 3px 10px; border-radius: 20px; margin-bottom: 14px; }
+  .feature-badge.coming { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.15); }
+  .feature-badge.coming-light { background: rgba(13,27,62,0.08); color: var(--text-muted); border: 1px solid rgba(13,27,62,0.12); }
   .feature-title { font-size: 19px; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
   .feature-desc { font-size: 14px; color: var(--text-muted); line-height: 1.7; }
 
@@ -200,16 +178,13 @@
   .demo::before { content: ''; position: absolute; width: 800px; height: 800px; background: radial-gradient(circle, rgba(201,168,76,0.08) 0%, transparent 70%); top: 50%; left: 50%; transform: translate(-50%, -50%); }
   .demo .section-title { color: white; }
   .demo .section-sub { color: rgba(255,255,255,0.6); margin: 0 auto 48px; }
-  .demo-form { display: flex; gap: 12px; max-width: 520px; margin: 0 auto; position: relative; z-index: 1; flex-wrap: wrap; justify-content: center; }
   .demo-input { flex: 1; min-width: 240px; padding: 16px 20px; border-radius: 10px; border: 1px solid rgba(201,168,76,0.3); background: rgba(255,255,255,0.07); color: white; font-size: 15px; font-family: 'Sarabun', sans-serif; outline: none; }
   .demo-input::placeholder { color: rgba(255,255,255,0.35); }
   .demo-input:focus { border-color: var(--gold); }
   .demo-note { color: rgba(255,255,255,0.4); font-size: 13px; margin-top: 16px; position: relative; z-index: 1; }
-  .widget-inline { display: inline-flex; align-items: center; }
 
   /* FOOTER */
   footer { background: #070F24; padding: 60px; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 48px; }
-  .footer-brand { }
   .footer-logo { font-family: 'Cormorant Garamond', serif; font-size: 28px; font-weight: 700; color: var(--gold); margin-bottom: 16px; }
   .footer-logo span { color: white; }
   .footer-tagline { color: rgba(255,255,255,0.4); font-size: 14px; line-height: 1.7; max-width: 260px; margin-bottom: 24px; }
@@ -252,8 +227,6 @@
     footer { grid-template-columns: 1fr; }
     .res-banner-stats { gap: 24px; }
   }
-
-  /* SCROLL ANIMATIONS */
   .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.7s ease, transform 0.7s ease; }
   .reveal.visible { opacity: 1; transform: translateY(0); }
   .reveal-delay-1 { transition-delay: 0.1s; }
@@ -264,7 +237,7 @@
 </head>
 <body>
 
-<!-- NAV — Krit's widget kept, AI Scanner link added -->
+<!-- NAV — no scanner link -->
 <nav>
   <a class="nav-logo" href="#">
     <div class="logo-icon" style="font-size:18px; gap:2px; display:flex; align-items:center; justify-content:center;">🇹🇭🇬🇧</div>
@@ -274,10 +247,7 @@
     <li><a href="#features" class="lang-data-en">Features</a><a href="#features" class="lang-data-th">ฟีเจอร์</a></li>
     <li><a href="#how" class="lang-data-en">How It Works</a><a href="#how" class="lang-data-th">วิธีใช้งาน</a></li>
     <li><a href="#pricing" class="lang-data-en">Pricing</a><a href="#pricing" class="lang-data-th">ราคา</a></li>
-    <!-- AI SCANNER NAV LINK — added -->
-    <li><a href="ai-menu-scanner.html" class="nav-ai-link">🤖 AI Scanner <span class="nav-ai-badge">BETA</span></a></li>
     <li>
-      <!-- BOOKING WIDGET — NAV (Krit's) -->
       <script src="https://restaurant-epos-production.up.railway.app/widget.js" data-restaurant="siamepos" data-color="#C9A84C" data-button-text="Book a Table"></script>
     </li>
     <li><a href="#demo" class="nav-cta lang-data-en">Book a Demo</a><a href="#demo" class="nav-cta lang-data-th">ทดลองใช้ฟรี</a></li>
@@ -285,7 +255,7 @@
   <button class="lang-toggle" onclick="document.body.classList.toggle('thai'); this.textContent = document.body.classList.contains('thai') ? 'EN' : 'ภาษาไทย'">ภาษาไทย</button>
 </nav>
 
-<!-- HERO — Krit's widget kept -->
+<!-- HERO -->
 <section class="hero">
   <div class="hero-content">
     <div class="hero-badge lang-data-en">Built for Thai Restaurants in the UK</div>
@@ -297,27 +267,14 @@
     <div class="hero-actions">
       <a href="#demo" class="btn-primary lang-data-en">🚀 Book a Free Demo</a>
       <a href="#demo" class="btn-primary lang-data-th">🚀 ทดลองใช้ฟรี</a>
-      <!-- BOOKING WIDGET — HERO (Krit's) -->
       <script src="https://restaurant-epos-production.up.railway.app/widget.js" data-restaurant="siamepos" data-color="#C9A84C" data-button-text="📅 Book a Table"></script>
-      <a href="#features" class="btn-secondary lang-data-en">See Features →</a>
-      <a href="#features" class="btn-secondary lang-data-th">ดูฟีเจอร์ →</a>
+      <a href="#features" class="btn-secondary-hero lang-data-en">See Features →</a>
+      <a href="#features" class="btn-secondary-hero lang-data-th">ดูฟีเจอร์ →</a>
     </div>
     <div class="hero-stats">
-      <div class="hero-stat">
-        <div class="hero-stat-num">0%</div>
-        <div class="hero-stat-label lang-data-en">Commission</div>
-        <div class="hero-stat-label lang-data-th">ค่าคอมมิชชั่น</div>
-      </div>
-      <div class="hero-stat">
-        <div class="hero-stat-num">£0</div>
-        <div class="hero-stat-label lang-data-en">Hardware Cost</div>
-        <div class="hero-stat-label lang-data-th">ค่าฮาร์ดแวร์</div>
-      </div>
-      <div class="hero-stat">
-        <div class="hero-stat-num">24/7</div>
-        <div class="hero-stat-label lang-data-en">Uptime</div>
-        <div class="hero-stat-label lang-data-th">ใช้งานได้ตลอด</div>
-      </div>
+      <div class="hero-stat"><div class="hero-stat-num">0%</div><div class="hero-stat-label lang-data-en">Commission</div><div class="hero-stat-label lang-data-th">ค่าคอมมิชชั่น</div></div>
+      <div class="hero-stat"><div class="hero-stat-num">£0</div><div class="hero-stat-label lang-data-en">Hardware Cost</div><div class="hero-stat-label lang-data-th">ค่าฮาร์ดแวร์</div></div>
+      <div class="hero-stat"><div class="hero-stat-num">24/7</div><div class="hero-stat-label lang-data-en">Uptime</div><div class="hero-stat-label lang-data-th">ใช้งานได้ตลอด</div></div>
     </div>
   </div>
   <div class="hero-visual">
@@ -354,13 +311,13 @@
   <div class="trust-item"><span>📞</span> <span class="lang-data-en">Thai-speaking support</span><span class="lang-data-th">ซัพพอร์ตภาษาไทย</span></div>
 </div>
 
-<!-- RESERVATION BANNER — Krit's widget kept -->
+<!-- RESERVATION BANNER -->
 <div class="reservation-banner">
   <div class="res-banner-text">
     <div class="res-banner-title lang-data-en">Online reservations — <em>zero commission</em></div>
     <div class="res-banner-title lang-data-th">จองโต๊ะออนไลน์ — <em>ค่าคอมมิชชั่น 0%</em></div>
     <p class="res-banner-sub lang-data-en">One line of code on your website. Bookings appear in your EPOS instantly. No OpenTable, no commission, no middleman.</p>
-    <p class="res-banner-sub lang-data-th">โค้ดเพียงบรรทัดเดียวบนเว็บไซต์ของคุณ การจองปรากฏใน EPOS ทันที ไม่มี OpenTable ไม่มีค่าคอม ไม่มีตัวกลาง</p>
+    <p class="res-banner-sub lang-data-th">โค้ดเพียงบรรทัดเดียวบนเว็บไซต์ของคุณ การจองปรากฏใน EPOS ทันที ไม่มี OpenTable ไม่มีค่าคอม</p>
   </div>
   <div class="res-banner-stats">
     <div class="res-stat"><div class="res-stat-num">£1-3</div><div class="res-stat-label lang-data-en">OpenTable per cover</div><div class="res-stat-label lang-data-th">OpenTable ต่อที่นั่ง</div></div>
@@ -368,20 +325,19 @@
     <div class="res-stat"><div class="res-stat-num">£0</div><div class="res-stat-label lang-data-en">SiamEPOS per cover</div><div class="res-stat-label lang-data-th">SiamEPOS ต่อที่นั่ง</div></div>
   </div>
   <div class="res-banner-cta">
-    <!-- BOOKING WIDGET — BANNER (Krit's) -->
     <script src="https://restaurant-epos-production.up.railway.app/widget.js" data-restaurant="siamepos" data-color="#C9A84C" data-button-text="Try It Now"></script>
   </div>
 </div>
 
-<!-- AI SCANNER SECTION — added -->
+<!-- AI SCANNER TEASER — visual only, no link -->
 <div class="ai-scanner-section" id="ai-scanner">
   <div class="ai-scanner-inner">
     <div class="reveal">
-      <div class="ai-scanner-badge">🤖 New — Beta Feature</div>
+      <div class="ai-scanner-badge">🤖 Coming Soon</div>
       <h2 class="ai-scanner-title lang-data-en">Scan any menu.<br/><em>No typing required.</em></h2>
       <h2 class="ai-scanner-title lang-data-th">สแกนเมนูใดก็ได้<br/><em>ไม่ต้องพิมพ์เอง</em></h2>
-      <p class="ai-scanner-desc lang-data-en">Upload a photo of your menu — our AI reads every dish, detects all 14 UK allergens, generates Thai dish names, and imports everything into SiamEPOS in about 30 seconds.</p>
-      <p class="ai-scanner-desc lang-data-th">อัพโหลดรูปเมนูของคุณ AI ของเราอ่านทุกเมนู ตรวจจับสารก่อภูมิแพ้ทั้ง 14 รายการ สร้างชื่อภาษาไทย และนำเข้าทุกอย่างใน SiamEPOS ใน 30 วินาที</p>
+      <p class="ai-scanner-desc lang-data-en">Photograph your menu and our AI reads every dish, detects all 14 UK allergens, generates Thai dish names, and builds your entire menu in SiamEPOS — in about 30 seconds.</p>
+      <p class="ai-scanner-desc lang-data-th">ถ่ายรูปเมนูของคุณ AI ของเราอ่านทุกเมนู ตรวจจับสารก่อภูมิแพ้ทั้ง 14 รายการ สร้างชื่อภาษาไทย และสร้างเมนูทั้งหมดใน SiamEPOS ใน 30 วินาที</p>
       <div class="ai-scanner-features">
         <div class="ai-feat">
           <div class="ai-feat-icon">⚠️</div>
@@ -399,55 +355,157 @@
           <div class="ai-feat-text lang-data-th"><strong>นำเข้าสู่ SiamEPOS โดยตรง</strong> — คลิกเดียว เมนูครบของคุณพร้อมใช้งานในระบบ</div>
         </div>
       </div>
-      <a href="ai-menu-scanner.html" class="btn-try-scanner lang-data-en">🤖 Try AI Menu Scanner →</a>
-      <a href="ai-menu-scanner.html" class="btn-try-scanner lang-data-th">🤖 ทดลองสแกนเมนูด้วย AI →</a>
-      <p class="scanner-note lang-data-en">Free during beta · Works with photos, PDFs, and scanned menus</p>
-      <p class="scanner-note lang-data-th">ฟรีในช่วงทดสอบ · รองรับรูปถ่าย PDF และเมนูที่สแกน</p>
+      <div class="coming-soon-badge lang-data-en">⏳ Launching soon — available inside SiamEPOS</div>
+      <div class="coming-soon-badge lang-data-th">⏳ เปิดตัวเร็วๆ นี้ — ใช้งานได้ใน SiamEPOS</div>
     </div>
-    <div class="scanner-mockup reveal reveal-delay-2">
-      <div class="sm-header">
-        <div class="sm-dot" style="background:#ff5f57"></div>
-        <div class="sm-dot" style="background:#ffbd2e"></div>
-        <div class="sm-dot" style="background:#28c840"></div>
-        <div class="sm-title">AI Menu Scanner — SiamEPOS</div>
-      </div>
-      <div class="sm-body">
-        <div class="sm-upload">
-          <div class="sm-upload-icon">📷</div>
-          <div class="sm-upload-text">✅ menu.jpg scanned — 24 dishes found</div>
-          <button class="sm-upload-btn">🔍 Scanning complete</button>
-        </div>
-        <div class="sm-dish">
-          <div class="sm-dish-info"><div class="sm-dish-name">Tom Yum Goong</div><div class="sm-dish-th">ต้มยำกุ้ง</div></div>
-          <span class="sm-allergen">Crustaceans</span>&nbsp;<span class="sm-allergen">Fish</span>
-          <div style="flex:1"></div>
-          <div class="sm-price">£9.50</div>&nbsp;
-          <div class="sm-conf"><div class="sm-conf-fill" style="width:95%"></div></div>
-        </div>
-        <div class="sm-dish">
-          <div class="sm-dish-info"><div class="sm-dish-name">Pad Thai</div><div class="sm-dish-th">ผัดไทย</div></div>
-          <span class="sm-allergen">Peanuts</span>&nbsp;<span class="sm-allergen">Eggs</span>
-          <div style="flex:1"></div>
-          <div class="sm-price">£13.00</div>&nbsp;
-          <div class="sm-conf"><div class="sm-conf-fill" style="width:98%"></div></div>
-        </div>
-        <div class="sm-dish">
-          <div class="sm-dish-info"><div class="sm-dish-name">Green Curry</div><div class="sm-dish-th">แกงเขียวหวาน</div></div>
-          <span class="sm-allergen">Fish</span>&nbsp;<span class="sm-allergen">Milk</span>
-          <div style="flex:1"></div>
-          <div class="sm-price">£14.50</div>&nbsp;
-          <div class="sm-conf"><div class="sm-conf-fill" style="width:92%"></div></div>
-        </div>
-        <div style="margin-top:14px; background:rgba(201,168,76,0.08); border:1px solid rgba(201,168,76,0.2); border-radius:8px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center;">
-          <span style="font-size:11px; color:rgba(255,255,255,0.5); font-family:sans-serif;">24 dishes ready to import</span>
-          <span style="font-size:11px; font-weight:700; color:#C9A84C; font-family:sans-serif;">🚀 Import All</span>
-        </div>
-      </div>
+
+    <!-- SVG SCREENSHOT of the AI Scanner -->
+    <div class="reveal reveal-delay-2">
+      <svg viewBox="0 0 520 420" xmlns="http://www.w3.org/2000/svg" style="width:100%; border-radius:16px; box-shadow: 0 40px 80px rgba(0,0,0,0.6);">
+        <!-- Window background -->
+        <rect width="520" height="420" fill="#0D1117" rx="16"/>
+
+        <!-- Header bar -->
+        <rect width="520" height="52" fill="#161B22" rx="16"/>
+        <rect y="36" width="520" height="16" fill="#161B22"/>
+        <rect y="51" width="520" height="1" fill="rgba(255,255,255,0.07)"/>
+
+        <!-- Traffic lights -->
+        <circle cx="20" cy="26" r="6" fill="#FF5F57"/>
+        <circle cx="38" cy="26" r="6" fill="#FFBD2E"/>
+        <circle cx="56" cy="26" r="6" fill="#28C840"/>
+
+        <!-- Thai flag -->
+        <rect x="80" y="16" width="22" height="20" fill="#A51931" rx="2"/>
+        <rect x="80" y="19.5" width="22" height="13" fill="white"/>
+        <rect x="80" y="23" width="22" height="7" fill="#2D2A4A"/>
+
+        <!-- UK flag -->
+        <rect x="106" y="16" width="22" height="20" fill="#012169" rx="2"/>
+        <line x1="106" y1="16" x2="128" y2="36" stroke="white" stroke-width="3"/>
+        <line x1="128" y1="16" x2="106" y2="36" stroke="white" stroke-width="3"/>
+        <line x1="106" y1="16" x2="128" y2="36" stroke="#C8102E" stroke-width="2"/>
+        <line x1="128" y1="16" x2="106" y2="36" stroke="#C8102E" stroke-width="2"/>
+        <line x1="117" y1="16" x2="117" y2="36" stroke="white" stroke-width="5"/>
+        <line x1="106" y1="26" x2="128" y2="26" stroke="white" stroke-width="5"/>
+        <line x1="117" y1="16" x2="117" y2="36" stroke="#C8102E" stroke-width="3"/>
+        <line x1="106" y1="26" x2="128" y2="26" stroke="#C8102E" stroke-width="3"/>
+
+        <!-- SiamEPOS text -->
+        <text x="134" y="30" fill="white" font-size="12" font-weight="700" font-family="sans-serif">Siam<tspan fill="#F0A500">EPOS</tspan></text>
+        <text x="210" y="30" fill="rgba(255,255,255,0.4)" font-size="11" font-family="sans-serif">AI Menu Scanner</text>
+
+        <!-- BETA badge -->
+        <rect x="400" y="17" width="104" height="20" fill="rgba(240,165,0,0.15)" rx="10" stroke="rgba(240,165,0,0.3)" stroke-width="1"/>
+        <text x="452" y="30" fill="#F0A500" font-size="9" font-weight="700" font-family="sans-serif" text-anchor="middle">✦ BETA FEATURE</text>
+
+        <!-- Upload zone (shown as already scanned) -->
+        <rect x="16" y="68" width="488" height="70" fill="rgba(240,165,0,0.05)" rx="12" stroke="rgba(240,165,0,0.3)" stroke-width="1.5" stroke-dasharray="6,4"/>
+        <text x="260" y="98" fill="rgba(255,255,255,0.7)" font-size="12" font-weight="700" font-family="sans-serif" text-anchor="middle">✅ menu.jpg — Scanned successfully</text>
+        <text x="260" y="116" fill="rgba(255,255,255,0.4)" font-size="10" font-family="sans-serif" text-anchor="middle">24 dishes found across 5 categories · 2.4 MB</text>
+
+        <!-- Allergen bar -->
+        <rect x="16" y="150" width="488" height="44" fill="rgba(255,107,107,0.08)" rx="10" stroke="rgba(255,107,107,0.2)" stroke-width="1"/>
+        <text x="28" y="168" fill="#FF6B6B" font-size="8" font-weight="700" font-family="sans-serif">⚠ ALLERGENS DETECTED</text>
+        <!-- Allergen pills -->
+        <rect x="28" y="173" width="38" height="14" fill="rgba(255,107,107,0.2)" rx="7" stroke="rgba(255,107,107,0.4)" stroke-width="1"/>
+        <text x="47" y="183" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Fish</text>
+        <rect x="72" y="173" width="46" height="14" fill="rgba(255,107,107,0.2)" rx="7" stroke="rgba(255,107,107,0.4)" stroke-width="1"/>
+        <text x="95" y="183" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Peanuts</text>
+        <rect x="124" y="173" width="44" height="14" fill="rgba(255,107,107,0.2)" rx="7" stroke="rgba(255,107,107,0.4)" stroke-width="1"/>
+        <text x="146" y="183" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Gluten</text>
+        <rect x="174" y="173" width="38" height="14" fill="rgba(255,107,107,0.2)" rx="7" stroke="rgba(255,107,107,0.4)" stroke-width="1"/>
+        <text x="193" y="183" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Eggs</text>
+        <rect x="218" y="173" width="50" height="14" fill="rgba(255,107,107,0.2)" rx="7" stroke="rgba(255,107,107,0.4)" stroke-width="1"/>
+        <text x="243" y="183" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Soybeans</text>
+        <rect x="274" y="173" width="36" height="14" fill="rgba(255,107,107,0.2)" rx="7" stroke="rgba(255,107,107,0.4)" stroke-width="1"/>
+        <text x="292" y="183" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Milk</text>
+        <rect x="316" y="173" width="44" height="14" fill="rgba(255,107,107,0.2)" rx="7" stroke="rgba(255,107,107,0.4)" stroke-width="1"/>
+        <text x="338" y="183" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Sesame</text>
+
+        <!-- Table header -->
+        <rect x="16" y="204" width="488" height="26" fill="#1E2530" rx="0"/>
+        <rect x="16" y="204" width="488" height="26" fill="#1E2530"/>
+        <rect x="16" y="204" width="4" height="26" fill="#1E2530"/>
+        <rect x="500" y="204" width="4" height="26" fill="#1E2530"/>
+        <text x="28" y="221" fill="rgba(255,255,255,0.4)" font-size="8" font-weight="700" font-family="sans-serif">DISH NAME</text>
+        <text x="168" y="221" fill="rgba(255,255,255,0.4)" font-size="8" font-weight="700" font-family="sans-serif">ALLERGENS</text>
+        <text x="340" y="221" fill="rgba(255,255,255,0.4)" font-size="8" font-weight="700" font-family="sans-serif">PRICE</text>
+        <text x="430" y="221" fill="rgba(255,255,255,0.4)" font-size="8" font-weight="700" font-family="sans-serif">CONFIDENCE</text>
+
+        <!-- Category: Starters -->
+        <rect x="16" y="230" width="488" height="22" fill="rgba(240,165,0,0.06)"/>
+        <text x="28" y="245" fill="#F0A500" font-size="8" font-weight="700" font-family="sans-serif">STARTERS</text>
+        <rect x="100" y="236" width="30" height="12" fill="rgba(255,255,255,0.06)" rx="4"/>
+        <text x="115" y="245" fill="rgba(255,255,255,0.35)" font-size="7" font-family="sans-serif" text-anchor="middle">4 items</text>
+
+        <!-- Row 1: Tom Yum -->
+        <rect x="16" y="252" width="488" height="36" fill="rgba(255,255,255,0.01)"/>
+        <rect x="16" y="287" width="488" height="1" fill="rgba(255,255,255,0.06)"/>
+        <text x="28" y="267" fill="rgba(255,255,255,0.9)" font-size="10" font-weight="600" font-family="sans-serif">Tom Yum Goong</text>
+        <text x="28" y="280" fill="#F0A500" font-size="9" font-family="sans-serif" opacity="0.75">ต้มยำกุ้ง</text>
+        <rect x="168" y="256" width="46" height="13" fill="rgba(255,107,107,0.15)" rx="3" stroke="rgba(255,107,107,0.3)" stroke-width="1"/>
+        <text x="191" y="266" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Crustaceans</text>
+        <rect x="220" y="256" width="30" height="13" fill="rgba(255,107,107,0.15)" rx="3" stroke="rgba(255,107,107,0.3)" stroke-width="1"/>
+        <text x="235" y="266" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Fish</text>
+        <rect x="330" y="256" width="56" height="22" fill="#1E2530" rx="6" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+        <text x="358" y="271" fill="white" font-size="10" font-weight="600" font-family="sans-serif" text-anchor="middle">£9.50</text>
+        <rect x="430" y="262" width="48" height="4" fill="rgba(255,255,255,0.08)" rx="2"/>
+        <rect x="430" y="262" width="46" height="4" fill="#4ECDC4" rx="2"/>
+        <text x="484" y="272" fill="rgba(255,255,255,0.4)" font-size="8" font-family="sans-serif">95%</text>
+
+        <!-- Row 2: Pad Thai -->
+        <rect x="16" y="288" width="488" height="36" fill="rgba(255,255,255,0.015)"/>
+        <rect x="16" y="323" width="488" height="1" fill="rgba(255,255,255,0.06)"/>
+        <text x="28" y="303" fill="rgba(255,255,255,0.9)" font-size="10" font-weight="600" font-family="sans-serif">Pad Thai</text>
+        <text x="28" y="316" fill="#F0A500" font-size="9" font-family="sans-serif" opacity="0.75">ผัดไทย</text>
+        <rect x="168" y="292" width="36" height="13" fill="rgba(255,107,107,0.15)" rx="3" stroke="rgba(255,107,107,0.3)" stroke-width="1"/>
+        <text x="186" y="302" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Peanuts</text>
+        <rect x="210" y="292" width="26" height="13" fill="rgba(255,107,107,0.15)" rx="3" stroke="rgba(255,107,107,0.3)" stroke-width="1"/>
+        <text x="223" y="302" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Eggs</text>
+        <rect x="242" y="292" width="26" height="13" fill="rgba(255,107,107,0.15)" rx="3" stroke="rgba(255,107,107,0.3)" stroke-width="1"/>
+        <text x="255" y="302" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Fish</text>
+        <rect x="330" y="292" width="56" height="22" fill="#1E2530" rx="6" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+        <text x="358" y="307" fill="white" font-size="10" font-weight="600" font-family="sans-serif" text-anchor="middle">£13.00</text>
+        <rect x="430" y="298" width="48" height="4" fill="rgba(255,255,255,0.08)" rx="2"/>
+        <rect x="430" y="298" width="47" height="4" fill="#4ECDC4" rx="2"/>
+        <text x="484" y="308" fill="rgba(255,255,255,0.4)" font-size="8" font-family="sans-serif">98%</text>
+
+        <!-- Row 3: Green Curry -->
+        <rect x="16" y="324" width="488" height="36" fill="rgba(255,255,255,0.01)"/>
+        <text x="28" y="339" fill="rgba(255,255,255,0.9)" font-size="10" font-weight="600" font-family="sans-serif">Green Curry</text>
+        <text x="28" y="352" fill="#F0A500" font-size="9" font-family="sans-serif" opacity="0.75">แกงเขียวหวาน</text>
+        <rect x="168" y="328" width="26" height="13" fill="rgba(255,107,107,0.15)" rx="3" stroke="rgba(255,107,107,0.3)" stroke-width="1"/>
+        <text x="181" y="338" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Fish</text>
+        <rect x="200" y="328" width="28" height="13" fill="rgba(255,107,107,0.15)" rx="3" stroke="rgba(255,107,107,0.3)" stroke-width="1"/>
+        <text x="214" y="338" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Milk</text>
+        <rect x="330" y="328" width="56" height="22" fill="#1E2530" rx="6" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+        <text x="358" y="343" fill="white" font-size="10" font-weight="600" font-family="sans-serif" text-anchor="middle">£14.50</text>
+        <rect x="430" y="334" width="48" height="4" fill="rgba(255,255,255,0.08)" rx="2"/>
+        <rect x="430" y="334" width="44" height="4" fill="#4ECDC4" rx="2"/>
+        <text x="484" y="344" fill="rgba(255,255,255,0.4)" font-size="8" font-family="sans-serif">92%</text>
+
+        <!-- Import footer -->
+        <rect x="16" y="372" width="488" height="36" fill="rgba(240,165,0,0.08)" rx="10" stroke="rgba(240,165,0,0.2)" stroke-width="1"/>
+        <text x="36" y="393" fill="#F0A500" font-size="18" font-weight="800" font-family="sans-serif">24</text>
+        <text x="56" y="393" fill="rgba(255,255,255,0.4)" font-size="8" font-family="sans-serif">dishes ready</text>
+        <text x="120" y="393" fill="#F0A500" font-size="18" font-weight="800" font-family="sans-serif">18</text>
+        <text x="140" y="393" fill="rgba(255,255,255,0.4)" font-size="8" font-family="sans-serif">with allergens</text>
+        <!-- Import button -->
+        <rect x="360" y="378" width="132" height="24" fill="url(#btnGrad)" rx="8"/>
+        <defs>
+          <linearGradient id="btnGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#F0A500"/>
+            <stop offset="100%" style="stop-color:#FF8C00"/>
+          </linearGradient>
+        </defs>
+        <text x="426" y="393" fill="#0D1117" font-size="9" font-weight="800" font-family="sans-serif" text-anchor="middle">🚀 Import All to SiamEPOS</text>
+      </svg>
     </div>
   </div>
 </div>
 
-<!-- FEATURES — Krit's + AI Scanner card added -->
+<!-- FEATURES — no scanner link, card shows Coming Soon -->
 <section class="features" id="features">
   <div class="features-header reveal">
     <div class="section-label lang-data-en">Everything you need</div>
@@ -490,22 +548,21 @@
       <p class="feature-desc lang-data-en">PIN-based login with roles — waiter, kitchen, bar, supervisor, manager, and admin. Each role sees only what they need.</p>
       <p class="feature-desc lang-data-th">ล็อกอินด้วย PIN แต่ละบทบาทเห็นเฉพาะที่จำเป็น — บริกร ครัว บาร์ ผู้จัดการ</p>
     </div>
-    <!-- AI SCANNER FEATURE CARD — added -->
+    <!-- AI Scanner card — Coming Soon, no link -->
     <div class="feature-card reveal reveal-delay-3">
-      <div class="feature-badge lang-data-en">BETA</div><div class="feature-badge lang-data-th">เบต้า</div>
+      <div class="feature-badge coming-light lang-data-en">Coming Soon</div><div class="feature-badge coming-light lang-data-th">เร็วๆ นี้</div>
       <div class="feature-icon">🤖</div>
       <div class="feature-title lang-data-en">AI Menu Scanner</div><div class="feature-title lang-data-th">สแกนเมนูด้วย AI</div>
-      <p class="feature-desc lang-data-en">Photo in, menu built. Upload any menu image and our AI extracts every dish, detects allergens, and imports it all into SiamEPOS — in seconds, not hours.</p>
-      <p class="feature-desc lang-data-th">อัพโหลดรูปเมนู AI สร้างเมนูให้อัตโนมัติ ตรวจจับสารก่อภูมิแพ้ และนำเข้าทุกอย่าง — ไม่กี่วินาที ไม่ใช่ชั่วโมง</p>
+      <p class="feature-desc lang-data-en">Photo in, menu built. Upload any menu image and our AI extracts every dish, detects allergens, and builds it in SiamEPOS — in seconds, not hours.</p>
+      <p class="feature-desc lang-data-th">อัพโหลดรูปเมนู AI สร้างเมนูให้อัตโนมัติ ตรวจจับสารก่อภูมิแพ้ และสร้างเมนูใน SiamEPOS — ไม่กี่วินาที ไม่ใช่ชั่วโมง</p>
     </div>
   </div>
 </section>
 
-<!-- HOW IT WORKS — Krit's version kept -->
+<!-- HOW IT WORKS -->
 <section class="how" id="how">
   <div style="text-align:center; position: relative; z-index:1;" class="reveal">
-    <div class="section-label lang-data-en">Simple setup</div>
-    <div class="section-label lang-data-th">ตั้งค่าง่าย</div>
+    <div class="section-label lang-data-en">Simple setup</div><div class="section-label lang-data-th">ตั้งค่าง่าย</div>
     <h2 class="section-title lang-data-en">Up and running<br>in one afternoon</h2>
     <h2 class="section-title lang-data-th">เริ่มใช้งานได้<br>ภายในหนึ่งบ่าย</h2>
   </div>
@@ -537,7 +594,7 @@
   </div>
 </section>
 
-<!-- WHY THAI — Krit's version kept -->
+<!-- WHY THAI -->
 <section class="why-thai">
   <div class="reveal">
     <div class="section-label lang-data-en">Why SiamEPOS</div><div class="section-label lang-data-th">ทำไมต้อง SiamEPOS</div>
@@ -580,7 +637,7 @@
   </div>
 </section>
 
-<!-- PRICING — Krit's version kept -->
+<!-- PRICING -->
 <section class="pricing" id="pricing">
   <div class="reveal">
     <div class="section-label lang-data-en">Simple pricing</div><div class="section-label lang-data-th">ราคาง่ายๆ</div>
@@ -623,8 +680,7 @@
     </div>
     <div class="pricing-card reveal reveal-delay-3">
       <div class="pricing-tier lang-data-en">Enterprise</div><div class="pricing-tier lang-data-th">เอนเตอร์ไพรส์</div>
-      <div class="pricing-price" style="font-size:36px; padding-top:10px" class="lang-data-en">Custom</div>
-      <div class="pricing-price" style="font-size:36px; padding-top:10px" class="lang-data-th">ติดต่อเรา</div>
+      <div class="pricing-price" style="font-size:36px; padding-top:10px">Custom</div>
       <div class="pricing-period lang-data-en">multiple locations</div><div class="pricing-period lang-data-th">หลายสาขา</div>
       <ul class="pricing-features">
         <li class="lang-data-en">Multiple restaurants</li><li class="lang-data-th">หลายร้าน</li>
@@ -639,7 +695,7 @@
   </div>
 </section>
 
-<!-- DEMO CTA — Krit's widget kept -->
+<!-- DEMO CTA -->
 <section class="demo" id="demo">
   <div style="position:relative; z-index:1; max-width:600px; margin: 0 auto;" class="reveal">
     <div class="section-label lang-data-en">Get started today</div><div class="section-label lang-data-th">เริ่มต้นวันนี้</div>
@@ -647,30 +703,28 @@
     <h2 class="section-title lang-data-th">จองการสาธิตฟรี</h2>
     <p class="section-sub lang-data-en">Leave your details and we'll be in touch within 24 hours to arrange a free demo — in English or Thai.</p>
     <p class="section-sub lang-data-th">ฝากรายละเอียดไว้แล้วเราจะติดต่อกลับภายใน 24 ชั่วโมง เพื่อนัดสาธิตฟรี ภาษาไทยหรืออังกฤษก็ได้</p>
-    <div class="demo-form" style="margin-top: 40px; flex-direction: column; align-items: stretch;">
+    <div style="display:flex; flex-direction:column; max-width:520px; margin:40px auto 0;">
       <input class="demo-input" type="text" placeholder="Restaurant name / ชื่อร้านอาหาร">
-      <input class="demo-input" type="text" placeholder="Your name / ชื่อของคุณ" style="margin-top: 12px;">
-      <input class="demo-input" type="tel" placeholder="Phone / เบอร์โทร" style="margin-top: 12px;">
-      <input class="demo-input" type="email" placeholder="Email" style="margin-top: 12px;">
-      <button onclick="alert('Thank you! We will be in touch within 24 hours.\n\nขอบคุณ! เราจะติดต่อกลับภายใน 24 ชั่วโมง')" class="btn-primary" style="margin-top: 16px; justify-content: center; border: none; cursor: pointer; font-family: Sarabun, sans-serif;">
+      <input class="demo-input" type="text" placeholder="Your name / ชื่อของคุณ" style="margin-top:12px;">
+      <input class="demo-input" type="tel" placeholder="Phone / เบอร์โทร" style="margin-top:12px;">
+      <input class="demo-input" type="email" placeholder="Email" style="margin-top:12px;">
+      <button onclick="alert('Thank you! We will be in touch within 24 hours.\n\nขอบคุณ! เราจะติดต่อกลับภายใน 24 ชั่วโมง')" class="btn-primary" style="margin-top:16px; justify-content:center; border:none; cursor:pointer; font-family:Sarabun,sans-serif;">
         <span class="lang-data-en">🚀 Request Free Demo</span>
         <span class="lang-data-th">🚀 ขอรับการสาธิตฟรี</span>
       </button>
     </div>
-    <div style="margin-top: 24px; text-align: center;">
-      <p style="color: rgba(255,255,255,0.4); font-size: 13px; margin-bottom: 12px;" class="lang-data-en">Or use the live booking widget to reserve a table right now</p>
-      <p style="color: rgba(255,255,255,0.4); font-size: 13px; margin-bottom: 12px;" class="lang-data-th">หรือใช้วิดเจ็ตจองโต๊ะเพื่อจองโต๊ะได้เลยตอนนี้</p>
-      <!-- BOOKING WIDGET — DEMO (Krit's) -->
+    <div style="margin-top:24px; text-align:center;">
+      <p style="color:rgba(255,255,255,0.4); font-size:13px; margin-bottom:12px;" class="lang-data-en">Or book a table at our demo restaurant right now</p>
+      <p style="color:rgba(255,255,255,0.4); font-size:13px; margin-bottom:12px;" class="lang-data-th">หรือจองโต๊ะที่ร้านตัวอย่างได้เลยตอนนี้</p>
       <script src="https://restaurant-epos-production.up.railway.app/widget.js" data-restaurant="siamepos" data-color="#C9A84C" data-button-text="📅 Book a Table Now"></script>
     </div>
-    <p class="demo-note lang-data-en" style="margin-top: 20px;">No credit card required · Free setup included · Cancel anytime</p>
-    <p class="demo-note lang-data-th" style="margin-top: 20px;">ไม่ต้องใช้บัตรเครดิต · รวมการตั้งค่าฟรี · ยกเลิกได้ทุกเมื่อ</p>
+    <p class="demo-note" style="margin-top:20px;" class="lang-data-en">No credit card required · Free setup included · Cancel anytime</p>
   </div>
 </section>
 
-<!-- FOOTER — Krit's widget kept + AI Scanner link added -->
+<!-- FOOTER — no scanner link -->
 <footer>
-  <div class="footer-brand">
+  <div>
     <div class="footer-logo">🇹🇭🇬🇧 Siam<span>EPOS</span></div>
     <p class="footer-tagline lang-data-en">The smart EPOS system built for Thai restaurants across the United Kingdom.</p>
     <p class="footer-tagline lang-data-th">ระบบ EPOS อัจฉริยะสำหรับร้านอาหารไทยทั่วสหราชอาณาจักร</p>
@@ -679,7 +733,6 @@
       <a href="#" class="social-btn">📸</a>
       <a href="#" class="social-btn">💬</a>
     </div>
-    <!-- BOOKING WIDGET — FOOTER (Krit's) -->
     <script src="https://restaurant-epos-production.up.railway.app/widget.js" data-restaurant="siamepos" data-color="#C9A84C" data-button-text="Book a Table"></script>
   </div>
   <div class="footer-col">
@@ -687,8 +740,7 @@
     <ul>
       <li><a href="#features" class="lang-data-en">Features</a><a href="#features" class="lang-data-th">ฟีเจอร์</a></li>
       <li><a href="#pricing" class="lang-data-en">Pricing</a><a href="#pricing" class="lang-data-th">ราคา</a></li>
-      <!-- AI SCANNER FOOTER LINK — added -->
-      <li><a href="ai-menu-scanner.html" class="lang-data-en">AI Menu Scanner ✦</a><a href="ai-menu-scanner.html" class="lang-data-th">สแกนเมนู AI ✦</a></li>
+      <li><a href="#" class="lang-data-en">Roadmap</a><a href="#" class="lang-data-th">แผนพัฒนา</a></li>
       <li><a href="#demo" class="lang-data-en">Book Demo</a><a href="#demo" class="lang-data-th">จองสาธิต</a></li>
     </ul>
   </div>
@@ -718,12 +770,9 @@
 <script>
   const reveals = document.querySelectorAll('.reveal');
   const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) { entry.target.classList.add('visible'); }
-    });
+    entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('visible'); });
   }, { threshold: 0.1 });
   reveals.forEach(el => observer.observe(el));
-
   document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function(e) {
       const target = document.querySelector(this.getAttribute('href'));

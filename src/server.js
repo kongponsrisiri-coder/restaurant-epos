@@ -1405,6 +1405,104 @@ io.on('connection', (socket) => {
 // ─────────────────────────────────────────────
 // START SERVER
 // ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// AI MENU SCANNER PROXY
+// Keeps Anthropic API key safe on server
+// ─────────────────────────────────────────────
+
+app.post('/api/ai/scan-menu', async (req, res) => {
+  try {
+    const { image_base64, media_type } = req.body;
+
+    if (!image_base64) {
+      return res.status(400).json({ error: 'image_base64 is required' });
+    }
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured on server' });
+    }
+
+    const isImage = media_type && media_type.startsWith('image/');
+
+    const contentItem = isImage
+      ? { type: 'image', source: { type: 'base64', media_type, data: image_base64 } }
+      : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: image_base64 } };
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-6',
+        max_tokens: 4000,
+        messages: [{
+          role: 'user',
+          content: [
+            contentItem,
+            {
+              type: 'text',
+              text: `You are an expert restaurant menu reader and UK food safety specialist.
+
+Analyse this menu image/document and extract ALL dishes. For each dish provide:
+1. English name
+2. Thai name (transliterate or translate appropriately)
+3. Short appetising description (1-2 sentences, enticing, accurate)
+4. Price in GBP — if visible use exact price. If not visible, estimate based on UK Thai restaurant market rates (starters £6-10, mains £12-18, desserts £5-8, sides £3-5). Mark assumed prices.
+5. UK 14 allergens present — be thorough: check for gluten (soy sauce, flour), crustaceans, eggs, fish (fish sauce is VERY common in Thai food), peanuts, soybeans, milk, tree nuts, celery, mustard, sesame, sulphites, lupin, molluscs.
+6. Category (Starters, Mains, Curries, Noodles, Rice Dishes, Salads, Desserts, Drinks, Sides, etc.)
+7. Confidence score 0-100 for how certain you are about the extraction
+
+IMPORTANT: Fish sauce (nam pla) is in almost all Thai dishes — always check for Fish allergen. Soy sauce contains Gluten and Soybeans. Pad Thai typically contains peanuts, eggs, fish, soybeans.
+
+Return ONLY valid JSON, no markdown, no explanation:
+{
+  "restaurant_type": "Thai Restaurant",
+  "total_dishes": 0,
+  "categories": [
+    {
+      "name": "Category Name",
+      "dishes": [
+        {
+          "name_en": "English Name",
+          "name_th": "ชื่อภาษาไทย",
+          "description": "Appetising description",
+          "price": 12.50,
+          "price_assumed": false,
+          "allergens": ["Fish","Soybeans","Gluten"],
+          "confidence": 95
+        }
+      ]
+    }
+  ]
+}`
+            }
+          ]
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('Anthropic API error:', errText);
+      return res.status(502).json({ error: 'Anthropic API error', detail: errText });
+    }
+
+    const data = await response.json();
+    const raw = data.content.map(b => b.text || '').join('');
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const menu = JSON.parse(clean);
+
+    console.log(`🍜 Menu scan complete: ${menu.total_dishes || '?'} dishes extracted`);
+    res.json({ success: true, menu });
+
+  } catch (err) {
+    console.error('POST /api/ai/scan-menu error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, '0.0.0.0', () => {

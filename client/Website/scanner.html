@@ -24,18 +24,12 @@
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Sora', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
-
-/* HEADER */
 .header { background: linear-gradient(135deg, #0D1117 0%, #1A1F2E 100%); border-bottom: 1px solid var(--border); padding: 20px 32px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; backdrop-filter: blur(12px); }
-.logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
-.logo-flags { display: flex; align-items: center; gap: 2px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 5px 8px; width: 56px; height: 36px; justify-content: center; }
+.logo { display: flex; align-items: center; gap: 10px; }
+.logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, var(--gold), #FF8C00); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 4px 16px rgba(240,165,0,0.3); }
 .logo-text { font-size: 1rem; font-weight: 700; color: var(--text); }
 .logo-text span { color: var(--gold); }
-.header-back { color: var(--muted); font-size: 0.8rem; text-decoration: none; display: flex; align-items: center; gap: 6px; transition: color 0.2s; }
-.header-back:hover { color: var(--gold); }
 .header-badge { margin-left: auto; background: linear-gradient(135deg, rgba(240,165,0,0.15), rgba(240,165,0,0.05)); border: 1px solid rgba(240,165,0,0.3); color: var(--gold); padding: 5px 14px; border-radius: 50px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; }
-
-/* MAIN */
 .main { max-width: 1100px; margin: 0 auto; padding: 40px 24px 80px; }
 .hero-row { display: flex; align-items: flex-start; gap: 32px; margin-bottom: 40px; }
 .hero-text h1 { font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 800; line-height: 1.2; margin-bottom: 10px; }
@@ -45,8 +39,6 @@ body { font-family: 'Sora', sans-serif; background: var(--bg); color: var(--text
 .stat { display: flex; flex-direction: column; gap: 2px; }
 .stat-num { font-size: 1.4rem; font-weight: 800; color: var(--gold); }
 .stat-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-
-/* UPLOAD */
 .upload-zone { border: 2px dashed rgba(240,165,0,0.3); border-radius: 20px; padding: 60px 40px; text-align: center; background: linear-gradient(135deg, rgba(240,165,0,0.03), rgba(255,209,102,0.02)); cursor: pointer; transition: all 0.25s; position: relative; overflow: hidden; margin-bottom: 32px; }
 .upload-zone:hover, .upload-zone.dragover { border-color: var(--gold); background: linear-gradient(135deg, rgba(240,165,0,0.08), rgba(255,209,102,0.04)); transform: translateY(-2px); box-shadow: 0 20px 60px rgba(240,165,0,0.1); }
 .upload-zone input { display: none; }
@@ -58,8 +50,6 @@ body { font-family: 'Sora', sans-serif; background: var(--bg); color: var(--text
 .upload-btn-row { margin-top: 24px; }
 .btn-upload { background: linear-gradient(135deg, var(--gold), #FF8C00); color: #0D1117; border: none; padding: 12px 28px; border-radius: 10px; font-family: 'Sora', sans-serif; font-size: 0.875rem; font-weight: 700; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 20px rgba(240,165,0,0.3); }
 .btn-upload:hover { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(240,165,0,0.4); }
-
-/* PREVIEW */
 .preview-strip { display: none; align-items: center; gap: 16px; background: var(--surface); border: 1px solid var(--border-active); border-radius: 14px; padding: 16px 20px; margin-bottom: 24px; }
 .preview-strip.show { display: flex; }
 .preview-thumb { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); }
@@ -69,8 +59,6 @@ body { font-family: 'Sora', sans-serif; background: var(--bg); color: var(--text
 .btn-scan { background: linear-gradient(135deg, var(--gold), #FF8C00); color: #0D1117; border: none; padding: 12px 24px; border-radius: 10px; font-family: 'Sora', sans-serif; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
 .btn-scan:hover { transform: translateY(-1px); }
 .btn-scan:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-
-/* SCANNING */
 .scan-progress { display: none; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px; text-align: center; margin-bottom: 32px; }
 .scan-progress.show { display: block; }
 .scan-spinner { width: 48px; height: 48px; border: 3px solid rgba(240,165,0,0.15); border-top-color: var(--gold); border-radius: 50%; margin: 0 auto 20px; animation: spin 0.8s linear infinite; }
@@ -80,8 +68,6 @@ body { font-family: 'Sora', sans-serif; background: var(--bg); color: var(--text
 .scan-step.active { background: rgba(240,165,0,0.1); color: var(--gold); font-weight: 600; }
 .scan-step.done { color: var(--green); }
 .scan-step-icon { font-size: 1rem; width: 20px; text-align: center; }
-
-/* RESULTS */
 .results-section { display: none; }
 .results-section.show { display: block; }
 .results-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
@@ -92,20 +78,16 @@ body { font-family: 'Sora', sans-serif; background: var(--bg); color: var(--text
 .btn-secondary:hover { border-color: var(--gold); color: var(--gold); }
 .btn-import { background: linear-gradient(135deg, var(--gold), #FF8C00); color: #0D1117; border: none; padding: 9px 20px; border-radius: 8px; font-family: 'Sora', sans-serif; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: all 0.2s; }
 .btn-import:hover { transform: translateY(-1px); }
-
-/* ALLERGEN */
 .allergen-summary { background: linear-gradient(135deg, rgba(255,107,107,0.08), rgba(255,107,107,0.03)); border: 1px solid rgba(255,107,107,0.2); border-radius: 14px; padding: 20px 24px; margin-bottom: 24px; }
 .allergen-summary-title { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--red); margin-bottom: 12px; }
 .allergen-pills { display: flex; flex-wrap: wrap; gap: 8px; }
 .allergen-pill { padding: 5px 12px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
 .allergen-pill.detected { background: rgba(255,107,107,0.15); border: 1px solid rgba(255,107,107,0.4); color: var(--red); }
 .allergen-pill.not-detected { background: var(--tag-bg); border: 1px solid var(--border); color: var(--muted); }
-
-/* TABLE */
 .menu-table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
-.menu-table-head { display: grid; grid-template-columns: 2fr 3fr 1fr 120px 80px; background: var(--surface2); border-bottom: 1px solid var(--border); padding: 12px 20px; }
+.menu-table-head { display: grid; grid-template-columns: 2fr 3fr 1fr 120px 80px; gap: 0; background: var(--surface2); border-bottom: 1px solid var(--border); padding: 12px 20px; }
 .th { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
-.menu-item { display: grid; grid-template-columns: 2fr 3fr 1fr 120px 80px; padding: 16px 20px; border-bottom: 1px solid var(--border); align-items: start; transition: background 0.15s; animation: slideIn 0.3s ease both; }
+.menu-item { display: grid; grid-template-columns: 2fr 3fr 1fr 120px 80px; gap: 0; padding: 16px 20px; border-bottom: 1px solid var(--border); align-items: start; transition: background 0.15s; animation: slideIn 0.3s ease both; }
 @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
 .menu-item:hover { background: rgba(255,255,255,0.02); }
 .menu-item:last-child { border-bottom: none; }
@@ -128,8 +110,6 @@ body { font-family: 'Sora', sans-serif; background: var(--bg); color: var(--text
 .category-divider { padding: 10px 20px; background: rgba(240,165,0,0.05); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
 .cat-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
 .cat-count { font-size: 0.68rem; color: var(--muted); background: var(--tag-bg); padding: 2px 8px; border-radius: 4px; }
-
-/* FOOTER */
 .import-footer { background: linear-gradient(135deg, rgba(240,165,0,0.1), rgba(240,165,0,0.04)); border: 1px solid rgba(240,165,0,0.25); border-radius: 14px; padding: 24px 28px; margin-top: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
 .import-stats { display: flex; gap: 32px; flex-wrap: wrap; }
 .import-stat { display: flex; flex-direction: column; gap: 2px; }
@@ -139,7 +119,6 @@ body { font-family: 'Sora', sans-serif; background: var(--bg); color: var(--text
 .btn-import-big:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(240,165,0,0.4); }
 .toast { position: fixed; bottom: 32px; right: 32px; background: var(--green); color: #0D1117; padding: 14px 24px; border-radius: 12px; font-weight: 700; font-size: 0.875rem; box-shadow: 0 8px 32px rgba(78,205,196,0.4); transform: translateY(80px); opacity: 0; transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); z-index: 999; }
 .toast.show { transform: translateY(0); opacity: 1; }
-
 @media (max-width: 700px) {
   .menu-table-head, .menu-item { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto auto; }
   .hero-row { flex-direction: column; }
@@ -149,26 +128,10 @@ body { font-family: 'Sora', sans-serif; background: var(--bg); color: var(--text
 <body>
 
 <div class="header">
-  <!-- SVG FLAG LOGO — replaces noodle emoji -->
-  <a class="logo" href="index.html">
-    <div class="logo-flags">
-      <svg width="22" height="15" viewBox="0 0 32 22" xmlns="http://www.w3.org/2000/svg">
-        <rect width="32" height="22" fill="#A51931" rx="2"/>
-        <rect y="3.5" width="32" height="15" fill="white"/>
-        <rect y="7" width="32" height="8" fill="#2D2A4A"/>
-      </svg>
-      <svg width="22" height="15" viewBox="0 0 60 40" xmlns="http://www.w3.org/2000/svg">
-        <rect width="60" height="40" fill="#012169" rx="2"/>
-        <path d="M0,0 L60,40 M60,0 L0,40" stroke="white" stroke-width="8"/>
-        <path d="M0,0 L60,40 M60,0 L0,40" stroke="#C8102E" stroke-width="5"/>
-        <path d="M30,0 L30,40 M0,20 L60,20" stroke="white" stroke-width="13"/>
-        <path d="M30,0 L30,40 M0,20 L60,20" stroke="#C8102E" stroke-width="8"/>
-      </svg>
-    </div>
+  <div class="logo">
+    <div class="logo-icon">🍜</div>
     <div class="logo-text">Siam<span>EPOS</span></div>
-  </a>
-  <!-- BACK LINK -->
-  <a class="header-back" href="index.html">← Back to website</a>
+  </div>
   <div style="font-size:0.82rem; color:var(--muted); margin-left:8px;">AI Menu Scanner</div>
   <div class="header-badge">✦ BETA FEATURE</div>
 </div>
@@ -233,6 +196,8 @@ body { font-family: 'Sora', sans-serif; background: var(--bg); color: var(--text
       </div>
       <div class="results-actions">
         <button class="btn-secondary" onclick="resetScanner()">↩ Scan Another</button>
+
+        <!-- ✅ CHANGE 1: was onclick="showToast()" -->
         <button class="btn-import" onclick="importToEPOS()">Import to SiamEPOS →</button>
       </div>
     </div>
@@ -255,10 +220,21 @@ body { font-family: 'Sora', sans-serif; background: var(--bg); color: var(--text
 
     <div class="import-footer">
       <div class="import-stats">
-        <div class="import-stat"><span class="import-stat-num" id="totalDishes">0</span><span class="import-stat-label">Dishes ready</span></div>
-        <div class="import-stat"><span class="import-stat-num" id="totalAllergenDishes">0</span><span class="import-stat-label">With allergens</span></div>
-        <div class="import-stat"><span class="import-stat-num" id="totalAssumed">0</span><span class="import-stat-label">Prices assumed</span></div>
+        <div class="import-stat">
+          <span class="import-stat-num" id="totalDishes">0</span>
+          <span class="import-stat-label">Dishes ready</span>
+        </div>
+        <div class="import-stat">
+          <span class="import-stat-num" id="totalAllergenDishes">0</span>
+          <span class="import-stat-label">With allergens</span>
+        </div>
+        <div class="import-stat">
+          <span class="import-stat-num" id="totalAssumed">0</span>
+          <span class="import-stat-label">Prices assumed</span>
+        </div>
       </div>
+
+      <!-- ✅ CHANGE 2: was onclick="showToast()" -->
       <button class="btn-import-big" onclick="importToEPOS()">🚀 Import All to SiamEPOS</button>
     </div>
   </div>
@@ -267,7 +243,7 @@ body { font-family: 'Sora', sans-serif; background: var(--bg); color: var(--text
 <div class="toast" id="toast">✅ Menu imported to SiamEPOS!</div>
 
 <script>
-// Krit's real backend URL
+// ✅ CHANGE 3: SERVER_URL added
 const SERVER_URL = 'https://restaurant-epos-production.up.railway.app';
 
 const UK_ALLERGENS = [
@@ -280,6 +256,7 @@ let currentFile = null;
 let currentFileData = null;
 let scannedMenu = null;
 
+// Drag & drop
 const zone = document.getElementById('uploadZone');
 zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
 zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
@@ -438,7 +415,8 @@ function renderResults(menu) {
   const totalAssumed = allDishes.filter(d => d.price_assumed).length;
   const dishesWithAllergens = allDishes.filter(d => d.allergens && d.allergens.length > 0).length;
 
-  document.getElementById('resultsMeta').textContent = `Found ${totalDishes} dishes across ${totalCats} categories`;
+  document.getElementById('resultsMeta').textContent =
+    `Found ${totalDishes} dishes across ${totalCats} categories`;
   document.getElementById('totalDishes').textContent = totalDishes;
   document.getElementById('totalAllergenDishes').textContent = dishesWithAllergens;
   document.getElementById('totalAssumed').textContent = totalAssumed;
@@ -467,7 +445,8 @@ function renderResults(menu) {
       row.className = 'menu-item';
       row.style.animationDelay = (i * 0.05) + 's';
       const conf = dish.confidence >= 85 ? 'conf-high' : dish.confidence >= 65 ? 'conf-mid' : 'conf-low';
-      const allergenHTML = (dish.allergens || []).map(a => `<span class="allergen-tag">${a}</span>`).join('');
+      const allergenHTML = (dish.allergens || []).map(a =>
+        `<span class="allergen-tag">${a}</span>`).join('');
       row.innerHTML = `
         <div>
           <div class="item-name">${dish.name_en}</div>
@@ -509,7 +488,7 @@ function resetScanner() {
   });
 }
 
-// Krit's real import function — posts to Railway backend
+// ✅ CHANGE 4: Real import function replacing fake showToast()
 async function importToEPOS() {
   if (!scannedMenu) return;
 
@@ -536,6 +515,7 @@ async function importToEPOS() {
 
   if (items.length === 0) { alert('No items to import.'); return; }
 
+  // Disable buttons
   document.querySelectorAll('.btn-import, .btn-import-big').forEach(b => {
     b.disabled = true;
     b.textContent = '⏳ Importing…';
@@ -551,12 +531,14 @@ async function importToEPOS() {
     const data = await res.json();
 
     if (data.success) {
+      // Show toast
       const t = document.getElementById('toast');
       t.textContent = `✅ ${data.summary.inserted} dishes imported to SiamEPOS!` +
         (data.summary.skipped > 0 ? ` (${data.summary.skipped} skipped)` : '');
       t.classList.add('show');
       setTimeout(() => t.classList.remove('show'), 4000);
 
+      // Show result summary below footer
       const old = document.getElementById('importResult');
       if (old) old.remove();
       const div = document.createElement('div');
@@ -576,6 +558,7 @@ async function importToEPOS() {
         </div>
       `;
       document.querySelector('.import-footer').after(div);
+
     } else {
       alert('Import failed: ' + (data.error || 'Unknown error'));
     }

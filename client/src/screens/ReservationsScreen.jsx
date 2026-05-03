@@ -19,8 +19,10 @@ const ALL_STATUSES = ['all', 'pending', 'confirmed', 'seated', 'no-show', 'cance
 
 const TIME_SLOTS = [];
 for (let h = 11; h <= 22; h++) {
-  TIME_SLOTS.push(`${String(h).padStart(2,'0')}:00`);
-  if (h < 22) TIME_SLOTS.push(`${String(h).padStart(2,'0')}:30`);
+  for (let m = 0; m < 60; m += 15) {
+    if (h === 22 && m > 30) break;
+    TIME_SLOTS.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+  }
 }
 
 const MONTH_NAMES = ['January','February','March','April','May','June',

@@ -1409,7 +1409,7 @@ io.on('connection', (socket) => {
 // START SERVER
 // ─────────────────────────────────────────────
 // ─────────────────────────────────────────────
-// AI MENU SCANNER PROXY
+// AI MENU SCANNER PROXY — uses built-in https
 // ─────────────────────────────────────────────
 app.post('/api/ai/scan-menu', async (req, res) => {
   try {
@@ -1420,7 +1420,7 @@ app.post('/api/ai/scan-menu', async (req, res) => {
     }
 
     if (!process.env.ANTHROPIC_API_KEY) {
-      return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set on Railway' });
+      return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set on Railway — check your environment variables' });
     }
 
     const isImage     = media_type && media_type.startsWith('image/');
@@ -1428,30 +1428,23 @@ app.post('/api/ai/scan-menu', async (req, res) => {
       ? { type: 'image',    source: { type: 'base64', media_type, data: image_base64 } }
       : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: image_base64 } };
 
-    const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type':      'application/json',
-        'x-api-key':         process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model:      'claude-opus-4-6',
-        max_tokens: 4000,
-        messages: [{
-          role: 'user',
-          content: [
-            contentItem,
-            {
-              type: 'text',
-              text: `You are an expert restaurant menu reader and UK food safety specialist.
+    const requestBody = JSON.stringify({
+      model:      'claude-opus-4-6',
+      max_tokens: 4000,
+      messages: [{
+        role: 'user',
+        content: [
+          contentItem,
+          {
+            type: 'text',
+            text: `You are an expert restaurant menu reader and UK food safety specialist.
 
 Analyse this menu image/document and extract ALL dishes. For each dish provide:
 1. English name
-2. Thai name (transliterate or translate appropriately)  
+2. Thai name (transliterate or translate)
 3. Short appetising description (1-2 sentences)
-4. Price in GBP — if visible use exact price. If not visible, estimate based on UK Thai restaurant rates (starters £6-10, mains £12-18, desserts £5-8). Mark assumed prices.
-5. UK 14 allergens — check thoroughly: gluten (soy sauce/flour), crustaceans, eggs, fish (fish sauce is in almost all Thai food), peanuts, soybeans, milk, nuts, celery, mustard, sesame, sulphites, lupin, molluscs.
+4. Price in GBP — exact if visible, estimated if not. Mark assumed prices.
+5. UK 14 allergens — gluten, crustaceans, eggs, fish, peanuts, soybeans, milk, nuts, celery, mustard, sesame, sulphites, lupin, molluscs. Fish sauce is in almost all Thai food.
 6. Category (Starters, Mains, Curries, Noodles, Rice Dishes, Salads, Desserts, Drinks, Sides)
 7. Confidence score 0-100
 
@@ -1466,29 +1459,56 @@ Return ONLY valid JSON, no markdown, no explanation:
         {
           "name_en": "English Name",
           "name_th": "ชื่อภาษาไทย",
-          "description": "Description here",
+          "description": "Description",
           "price": 12.50,
           "price_assumed": false,
-          "allergens": ["Fish","Soybeans","Gluten"],
+          "allergens": ["Fish","Soybeans"],
           "confidence": 95
         }
       ]
     }
   ]
 }`
-            }
-          ]
-        }]
-      }),
+          }
+        ]
+      }]
     });
 
-    if (!anthropicRes.ok) {
-      const errText = await anthropicRes.text();
-      console.error('Anthropic error:', errText);
-      return res.status(502).json({ error: 'Anthropic API error — check your API key on Railway' });
+    // Use built-in https — no packages needed
+    const https = require('https');
+
+    const result = await new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'api.anthropic.com',
+        path:     '/v1/messages',
+        method:   'POST',
+        headers: {
+          'Content-Type':      'application/json',
+          'Content-Length':    Buffer.byteLength(requestBody),
+          'x-api-key':         process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+        },
+      };
+
+      const apiReq = https.request(options, (apiRes) => {
+        let data = '';
+        apiRes.on('data', chunk => { data += chunk; });
+        apiRes.on('end', () => {
+          resolve({ status: apiRes.statusCode, body: data });
+        });
+      });
+
+      apiReq.on('error', reject);
+      apiReq.write(requestBody);
+      apiReq.end();
+    });
+
+    if (result.status !== 200) {
+      console.error('Anthropic error:', result.body);
+      return res.status(502).json({ error: 'Anthropic API error — check ANTHROPIC_API_KEY on Railway' });
     }
 
-    const data  = await anthropicRes.json();
+    const data  = JSON.parse(result.body);
     const raw   = data.content.map(b => b.text || '').join('');
     const clean = raw.replace(/```json|```/g, '').trim();
 
@@ -1496,11 +1516,11 @@ Return ONLY valid JSON, no markdown, no explanation:
     try {
       menu = JSON.parse(clean);
     } catch (parseErr) {
-      console.error('JSON parse failed:', clean.slice(0, 200));
-      return res.status(500).json({ error: 'AI returned invalid JSON — try again' });
+      console.error('JSON parse failed. AI returned:', clean.slice(0, 300));
+      return res.status(500).json({ error: 'AI returned invalid JSON — try again with a clearer image' });
     }
 
-    console.log(`🍜 Scan complete: ${menu.total_dishes || '?'} dishes found`);
+    console.log(`🍜 Menu scan complete: ${menu.total_dishes || '?'} dishes`);
     res.json({ success: true, menu });
 
   } catch (err) {

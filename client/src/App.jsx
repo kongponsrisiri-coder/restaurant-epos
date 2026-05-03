@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import LoginScreen from './screens/LoginScreen';
 import TableMapScreen from './screens/TableMapScreen';
 import OrderScreen from './screens/OrderScreen';
@@ -19,12 +19,7 @@ export default function App() {
   if (staff.role === 'kitchen') return <KitchenScreen />;
   if (staff.role === 'bar') return <BarScreen />;
 
-  // ── Reservations screen (full page) ──────────────────────────
-  if (screen === 'reservations') {
-    return <ReservationsScreen onClose={() => setScreen('tables')} />;
-  }
-
-  // ── Order screen (full page) ──────────────────────────────────
+  // ── Order screen (full page — no navbar needed) ───────────────
   if (screen === 'order' && activeOrder) {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f5f5f5' }}>
@@ -149,6 +144,7 @@ export default function App() {
         </div>
       )}
 
+      {/* ── Screen content ── */}
       <main className="main-content">
         {screen === 'tables' && (
           <TableMapScreen
@@ -159,9 +155,10 @@ export default function App() {
             }}
           />
         )}
-        {screen === 'kitchen' && <KitchenScreen />}
-        {screen === 'bar' && <BarScreen />}
-        {screen === 'admin' && <AdminScreen />}
+        {screen === 'reservations' && <ReservationsScreen />}
+        {screen === 'kitchen'      && <KitchenScreen />}
+        {screen === 'bar'          && <BarScreen />}
+        {screen === 'admin'        && <AdminScreen />}
       </main>
     </div>
   );

@@ -44,7 +44,7 @@ async function apiFetch(path, options = {}) {
   return res.json();
 }
 
-export default function ReservationsScreen({ onClose }) {
+export default function ReservationsScreen() {
   const [view, setView]                 = useState('list');
   const [reservations, setReservations] = useState([]);
   const [tables, setTables]             = useState([]);
@@ -235,11 +235,7 @@ export default function ReservationsScreen({ onClose }) {
         justifyContent: 'space-between', flexWrap: 'wrap', gap: 10,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={onClose} style={{
-            background: 'rgba(255,255,255,0.2)', color: 'white',
-            border: 'none', borderRadius: 8, padding: '8px 14px',
-            cursor: 'pointer', fontSize: 18,
-          }}>←</button>
+          
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 'bold' }}>🗓️ Reservations</h1>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

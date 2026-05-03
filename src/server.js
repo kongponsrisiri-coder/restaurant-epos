@@ -183,6 +183,22 @@ app.post('/api/menu/items', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ✅ MUST BE BEFORE /:id — otherwise Express treats "sort-order" as an id
+app.put('/api/menu/items/sort-order', async (req, res) => {
+  try {
+    const { items } = req.body;
+    for (const item of items) {
+      await pool.query(
+        'UPDATE menu_items SET sort_order = $1 WHERE id = $2',
+        [item.sort_order, item.id]
+      );
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.put('/api/menu/items/:id', async (req, res) => {
   try {
     const { name, name_alt, description, price, is_available, subcategory_id, category_id } = req.body;
@@ -272,22 +288,7 @@ app.delete('/api/menu/items/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// Update sort order for menu items (drag and drop)
-app.put('/api/menu/items/sort-order', async (req, res) => {
-  try {
-    const { items } = req.body;
-    // items = [{ id: 1, sort_order: 0 }, { id: 2, sort_order: 1 }, ...]
-    for (const item of items) {
-      await pool.query(
-        'UPDATE menu_items SET sort_order = $1 WHERE id = $2',
-        [item.sort_order, item.id]
-      );
-    }
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+
 
 // ─────────────────────────────────────────────
 // ORDERS ROUTES

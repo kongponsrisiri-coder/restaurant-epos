@@ -1429,7 +1429,7 @@ app.post('/api/ai/scan-menu', async (req, res) => {
       : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: image_base64 } };
 
     const requestBody = JSON.stringify({
-      model:      'claude-opus-4-6',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 4000,
       messages: [{
         role: 'user',

@@ -344,14 +344,15 @@ function TradingSection() {
 // AI MENU SCANNER MODAL
 // ─────────────────────────────────────────────
 function AIScannerModal({ onClose, onImported }) {
-  const [stage, setStage]           = useState('upload');  // upload | scanning | results | importing | done
-  const [file, setFile]             = useState(null);
-  const [fileData, setFileData]     = useState(null);
-  const [scanStep, setScanStep]     = useState(0);
+  const [stage, setStage]             = useState('upload');
+  const [file, setFile]               = useState(null);
+  const [fileData, setFileData]       = useState(null);
+  const [scanStep, setScanStep]       = useState(0);
   const [scannedMenu, setScannedMenu] = useState(null);
-  const [importResult, setImportResult] = useState(null);
-  const [error, setError]           = useState('');
-  const fileInputRef                = useRef(null);
+  const [addedItems, setAddedItems]   = useState(new Set());
+  const [loadingItem, setLoadingItem] = useState(null);
+  const [error, setError]             = useState('');
+  const fileInputRef                  = useRef(null);
 
   const SCAN_STEPS = [
     '👁️ Reading menu layout & text',
@@ -361,7 +362,6 @@ function AIScannerModal({ onClose, onImported }) {
     '🇹🇭 Generating Thai dish names',
   ];
 
-  // ── File selection ──────────────────────────
   function handleFile(f) {
     if (!f) return;
     setFile(f);
@@ -370,14 +370,13 @@ function AIScannerModal({ onClose, onImported }) {
     reader.readAsDataURL(f);
   }
 
-  // ── Run scan via Railway proxy ───────────────
   async function runScan() {
     if (!file || !fileData) return;
     setError('');
     setStage('scanning');
     setScanStep(0);
+    setAddedItems(new Set());
 
-    // Animate steps
     let idx = 0;
     const interval = setInterval(() => {
       idx++;
@@ -412,50 +411,41 @@ function AIScannerModal({ onClose, onImported }) {
     }
   }
 
-  // ── Import to EPOS ───────────────────────────
-  async function runImport() {
-    if (!scannedMenu) return;
-    setStage('importing');
-
-    const items = scannedMenu.categories.flatMap(cat =>
-      cat.dishes.map(dish => ({
-        name_en:     dish.name_en,
-        name_th:     dish.name_th || null,
-        description: dish.description || null,
-        price:       parseFloat(dish.price) || 0,
-        allergens:   dish.allergens || [],
-        category:    null,
-      }))
-    );
-
+  // Add a single item to the menu
+  async function handleAddItem(dish, globalIndex) {
+    setLoadingItem(globalIndex);
     try {
-      const res  = await fetch(`${SERVER_URL}/api/menu/import-batch`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items }),
+      await addMenuItem({
+        name:         dish.name_en,
+        name_alt:     dish.name_th || '',
+        description:  dish.description || '',
+        price:        parseFloat(dish.price) || 0,
+        category_id:  null,
+        subcategory_id: null,
       });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Import failed');
-      setImportResult(data.summary);
-      setStage('done');
-      onImported(); // refresh menu list
+      setAddedItems(prev => new Set([...prev, globalIndex]));
+      onImported(); // refresh menu in background
     } catch (err) {
-      setError(err.message);
-      setStage('results');
+      alert('Failed to add item — try again');
+    } finally {
+      setLoadingItem(null);
     }
   }
 
   const allDishes = scannedMenu?.categories?.flatMap(c => c.dishes) || [];
+  const addedCount = addedItems.size;
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: 680, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 80px rgba(0,0,0,0.4)' }}>
 
         {/* Header */}
-        <div style={{ background: 'linear-gradient(135deg,#1a1a2e,#2d2a4a)', padding: '20px 28px', borderRadius: '20px 20px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ background: 'linear-gradient(135deg,#1a1a2e,#2d2a4a)', padding: '20px 28px', borderRadius: '20px 20px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 }}>
           <div>
             <div style={{ color: 'white', fontWeight: 800, fontSize: 18 }}>🤖 AI Menu Scanner</div>
-            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 2 }}>Upload a menu photo → AI extracts all dishes → Import to EPOS</div>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 2 }}>
+              Upload a menu photo → AI extracts dishes → Add items one by one
+            </div>
           </div>
           <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', borderRadius: 8, width: 34, height: 34, cursor: 'pointer', fontSize: 18 }}>✕</button>
         </div>
@@ -470,8 +460,6 @@ function AIScannerModal({ onClose, onImported }) {
                   ⚠️ {error}
                 </div>
               )}
-
-              {/* Drop zone */}
               <div
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={e => e.preventDefault()}
@@ -481,12 +469,10 @@ function AIScannerModal({ onClose, onImported }) {
                   borderRadius: 16, padding: '40px 24px', textAlign: 'center',
                   cursor: 'pointer', marginBottom: 20,
                   background: file ? '#f0fdf4' : '#fffdf0',
-                  transition: 'all 0.2s',
                 }}
               >
                 <input ref={fileInputRef} type="file" accept="image/*,.pdf" style={{ display: 'none' }}
                   onChange={e => handleFile(e.target.files[0])} />
-
                 {file ? (
                   <div>
                     {file.type.startsWith('image/') && fileData && (
@@ -503,22 +489,15 @@ function AIScannerModal({ onClose, onImported }) {
                   </div>
                 )}
               </div>
-
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 600, color: '#555' }}>Cancel</button>
-                <button
-                  onClick={runScan}
-                  disabled={!file}
-                  style={{
-                    flex: 2, padding: '12px', borderRadius: 10, border: 'none',
-                    background: file ? '#1a1a2e' : '#ddd',
-                    color: file ? 'white' : '#aaa',
-                    cursor: file ? 'pointer' : 'not-allowed',
-                    fontWeight: 700, fontSize: 15,
-                  }}
-                >
-                  🔍 Scan with AI
-                </button>
+                <button onClick={runScan} disabled={!file} style={{
+                  flex: 2, padding: '12px', borderRadius: 10, border: 'none',
+                  background: file ? '#1a1a2e' : '#ddd',
+                  color: file ? 'white' : '#aaa',
+                  cursor: file ? 'pointer' : 'not-allowed',
+                  fontWeight: 700, fontSize: 15,
+                }}>🔍 Scan with AI</button>
               </div>
             </div>
           )}
@@ -543,7 +522,6 @@ function AIScannerModal({ onClose, onImported }) {
                     background: i < scanStep ? '#f0fdf4' : i === scanStep ? '#fffdf0' : 'transparent',
                     color: i < scanStep ? '#15803d' : i === scanStep ? '#C9A84C' : '#aaa',
                     fontWeight: i === scanStep ? 700 : 400,
-                    border: i === scanStep ? '1px solid #C9A84C30' : '1px solid transparent',
                   }}>
                     <span>{i < scanStep ? '✓' : i === scanStep ? '⏳' : '○'}</span>
                     {step}
@@ -556,103 +534,105 @@ function AIScannerModal({ onClose, onImported }) {
           {/* ── RESULTS STAGE ── */}
           {stage === 'results' && scannedMenu && (
             <div>
-              {error && (
-                <div style={{ background: '#fee2e2', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: '#991b1b', fontSize: 14 }}>⚠️ {error}</div>
-              )}
-
               {/* Summary bar */}
-              <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
                 {[
-                  { label: 'Dishes found',     value: allDishes.length,                                            color: '#3b82f6' },
-                  { label: 'Categories',        value: scannedMenu.categories?.length || 0,                        color: '#8b5cf6' },
-                  { label: 'With allergens',    value: allDishes.filter(d => d.allergens?.length > 0).length,      color: '#ef4444' },
-                  { label: 'Prices estimated',  value: allDishes.filter(d => d.price_assumed).length,              color: '#f97316' },
+                  { label: 'Dishes found',  value: allDishes.length,  color: '#3b82f6' },
+                  { label: 'Added so far',  value: addedCount,        color: '#22c55e' },
+                  { label: 'With allergens',value: allDishes.filter(d => d.allergens?.length > 0).length, color: '#ef4444' },
                 ].map(s => (
-                  <div key={s.label} style={{ flex: 1, minWidth: 100, background: '#f8f8f8', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
+                  <div key={s.label} style={{ flex: 1, minWidth: 90, background: '#f8f8f8', borderRadius: 10, padding: '10px 14px', textAlign: 'center' }}>
                     <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</div>
                     <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{s.label}</div>
                   </div>
                 ))}
               </div>
 
-              {/* Dish list */}
-              <div style={{ background: '#f8f8f8', borderRadius: 12, overflow: 'hidden', marginBottom: 20, maxHeight: 360, overflowY: 'auto' }}>
-                {scannedMenu.categories?.map(cat => (
-                  <div key={cat.name}>
-                    <div style={{ background: '#1a1a2e', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ color: '#C9A84C', fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>{cat.name}</span>
-                      <span style={{ background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 11, padding: '1px 8px', borderRadius: 10 }}>{cat.dishes?.length} items</span>
-                    </div>
-                    {cat.dishes?.map((dish, i) => (
-                      <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, padding: '12px 16px', borderBottom: '1px solid #eee', background: 'white' }}>
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e' }}>{dish.name_en}</div>
-                          {dish.name_th && <div style={{ fontSize: 12, color: '#C9A84C', marginTop: 1 }}>{dish.name_th}</div>}
-                          {dish.description && <div style={{ fontSize: 12, color: '#888', marginTop: 2, lineHeight: 1.4 }}>{dish.description}</div>}
-                          {dish.allergens?.length > 0 && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-                              {dish.allergens.map(a => (
-                                <span key={a} style={{ background: '#fee2e2', color: '#991b1b', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4 }}>{a}</span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ textAlign: 'right', minWidth: 70 }}>
-                          <div style={{ fontWeight: 800, color: '#e94560', fontSize: 15 }}>£{(dish.price || 0).toFixed(2)}</div>
-                          {dish.price_assumed && <div style={{ fontSize: 10, color: '#f97316', fontWeight: 600 }}>estimated</div>}
-                          <div style={{ fontSize: 10, color: dish.confidence >= 85 ? '#22c55e' : dish.confidence >= 65 ? '#eab308' : '#ef4444', marginTop: 4 }}>
-                            {dish.confidence}% conf.
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ))}
+              <div style={{ background: '#f0f7ff', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#1e40af' }}>
+                💡 Click <strong>+</strong> to add each item to your menu. You can assign categories in Menu Manager afterwards.
               </div>
 
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => { setStage('upload'); setScannedMenu(null); }} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 600, color: '#555' }}>
+              {/* Dish list with + button per item */}
+              <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+                {(() => {
+                  let globalIndex = 0;
+                  return scannedMenu.categories?.map(cat => (
+                    <div key={cat.name}>
+                      {/* Category header */}
+                      <div style={{ background: '#1a1a2e', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ color: '#C9A84C', fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>{cat.name}</span>
+                        <span style={{ background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 11, padding: '1px 8px', borderRadius: 10 }}>{cat.dishes?.length} items</span>
+                      </div>
+
+                      {/* Dish rows */}
+                      {cat.dishes?.map((dish) => {
+                        const idx     = globalIndex++;
+                        const isAdded = addedItems.has(idx);
+                        const isLoading = loadingItem === idx;
+
+                        return (
+                          <div key={idx} style={{
+                            display: 'flex', alignItems: 'center', gap: 12,
+                            padding: '12px 16px', borderBottom: '1px solid #f0f0f0',
+                            background: isAdded ? '#f0fdf4' : 'white',
+                            transition: 'background 0.2s',
+                          }}>
+                            {/* Dish info */}
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e' }}>{dish.name_en}</span>
+                                {dish.name_th && <span style={{ fontSize: 12, color: '#C9A84C' }}>{dish.name_th}</span>}
+                              </div>
+                              {dish.description && (
+                                <div style={{ fontSize: 12, color: '#888', marginTop: 2, lineHeight: 1.4 }}>{dish.description}</div>
+                              )}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 800, color: '#e94560', fontSize: 14 }}>£{(dish.price || 0).toFixed(2)}</span>
+                                {dish.allergens?.length > 0 && dish.allergens.map(a => (
+                                  <span key={a} style={{ background: '#fee2e2', color: '#991b1b', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4 }}>{a}</span>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Add button */}
+                            <button
+                              onClick={() => !isAdded && !isLoading && handleAddItem(dish, idx)}
+                              disabled={isAdded || isLoading}
+                              style={{
+                                width: 40, height: 40, borderRadius: 10, border: 'none',
+                                cursor: isAdded ? 'default' : 'pointer',
+                                fontWeight: 800, fontSize: 20, flexShrink: 0,
+                                background: isAdded ? '#dcfce7' : isLoading ? '#f0f0f0' : '#e94560',
+                                color: isAdded ? '#15803d' : isLoading ? '#aaa' : 'white',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                transition: 'all 0.2s',
+                              }}
+                            >
+                              {isAdded ? '✓' : isLoading ? '⏳' : '+'}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ));
+                })()}
+              </div>
+
+              {/* Footer */}
+              <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                <button onClick={() => { setStage('upload'); setScannedMenu(null); setAddedItems(new Set()); }}
+                  style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 600, color: '#555' }}>
                   ↩ Scan Again
                 </button>
-                <button onClick={runImport} style={{ flex: 2, padding: '12px', borderRadius: 10, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>
-                  🚀 Import {allDishes.length} Dishes to Menu
+                <button onClick={onClose} style={{
+                  flex: 1, padding: '12px', borderRadius: 10, border: 'none',
+                  background: addedCount > 0 ? '#1a1a2e' : '#f0f0f0',
+                  color: addedCount > 0 ? 'white' : '#aaa',
+                  cursor: 'pointer', fontWeight: 700,
+                }}>
+                  {addedCount > 0 ? `✓ Done — ${addedCount} item${addedCount > 1 ? 's' : ''} added` : 'Close'}
                 </button>
               </div>
-            </div>
-          )}
-
-          {/* ── IMPORTING STAGE ── */}
-          {stage === 'importing' && (
-            <div style={{ textAlign: 'center', padding: '40px 0' }}>
-              <div style={{ fontSize: 40, marginBottom: 16 }}>⏳</div>
-              <div style={{ fontWeight: 700, fontSize: 16 }}>Importing to menu…</div>
-              <div style={{ color: '#888', fontSize: 13, marginTop: 6 }}>Adding {allDishes.length} dishes to your menu</div>
-            </div>
-          )}
-
-          {/* ── DONE STAGE ── */}
-          {stage === 'done' && importResult && (
-            <div style={{ textAlign: 'center', padding: '20px 0' }}>
-              <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
-              <div style={{ fontWeight: 800, fontSize: 20, color: '#15803d', marginBottom: 8 }}>Import Complete!</div>
-              <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginBottom: 24, flexWrap: 'wrap' }}>
-                <div style={{ background: '#f0fdf4', borderRadius: 12, padding: '14px 24px', border: '1px solid #bbf7d0' }}>
-                  <div style={{ fontSize: 28, fontWeight: 800, color: '#15803d' }}>{importResult.inserted}</div>
-                  <div style={{ fontSize: 12, color: '#888' }}>Imported ✓</div>
-                </div>
-                {importResult.skipped > 0 && (
-                  <div style={{ background: '#fffbeb', borderRadius: 12, padding: '14px 24px', border: '1px solid #fde68a' }}>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: '#d97706' }}>{importResult.skipped}</div>
-                    <div style={{ fontSize: 12, color: '#888' }}>Skipped</div>
-                  </div>
-                )}
-              </div>
-              <div style={{ color: '#555', fontSize: 14, marginBottom: 24 }}>
-                Items are now visible in your menu. Review them in the list below.
-              </div>
-              <button onClick={onClose} style={{ padding: '12px 32px', borderRadius: 10, border: 'none', background: '#1a1a2e', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>
-                ✓ Done — Close Scanner
-              </button>
             </div>
           )}
 

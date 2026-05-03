@@ -397,6 +397,43 @@
         #sw-slots-grid { grid-template-columns: repeat(3, 1fr); }
         .sw-row { grid-template-columns: 1fr; }
       }
+        @media (max-width: 480px) {
+  #sw-box {
+    border-radius: 12px;
+    max-height: 95vh;
+  }
+  #sw-overlay {
+    padding: 8px;
+    align-items: flex-end;
+  }
+  #sw-body {
+    padding: 16px;
+  }
+  #sw-header {
+    padding: 14px 16px;
+  }
+  #sw-header h2 {
+    font-size: 16px;
+  }
+  #sw-slots-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 6px;
+  }
+  .sw-slot {
+    padding: 8px 2px;
+    font-size: 12px;
+  }
+  .sw-row {
+    grid-template-columns: 1fr !important;
+  }
+  .sw-btn {
+    padding: 14px;
+    font-size: 15px;
+  }
+  .sw-input {
+    font-size: 16px;
+  }
+}
     `;
     document.head.appendChild(s);
   }

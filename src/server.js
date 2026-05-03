@@ -1222,6 +1222,33 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
     if (customer_phone) sendBookingSms(reservation).catch(() => {});
 
     console.log(`📅 New booking [${source}]: ${customer_name} ×${coversNum} on ${reservation_date} at ${reservation_time}`);
+// Trigger Make.com webhook for email notifications (non-blocking)
+if (process.env.MAKE_BOOKING_WEBHOOK) {
+  const webhookData = JSON.stringify({
+    booking_id:        reservation.id,
+    customer_name:     reservation.customer_name,
+    customer_email:    reservation.customer_email || null,
+    customer_phone:    reservation.customer_phone || null,
+    covers:            reservation.covers,
+    reservation_date:  String(reservation.reservation_date).split('T')[0],
+    reservation_time:  String(reservation.reservation_time).slice(0,5),
+    source:            reservation.source,
+    restaurant_name:   process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant',
+    restaurant_email:  process.env.RESTAURANT_EMAIL || null,
+  });
+
+  const webhookHttps = require('https');
+  const webhookUrl   = new URL(process.env.MAKE_BOOKING_WEBHOOK);
+  const webhookReq   = webhookHttps.request({
+    hostname: webhookUrl.hostname,
+    path:     webhookUrl.pathname + webhookUrl.search,
+    method:   'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(webhookData) },
+  });
+  webhookReq.on('error', e => console.log('Make.com webhook error:', e.message));
+  webhookReq.write(webhookData);
+  webhookReq.end();
+}
 
     res.status(201).json({
       success: true,

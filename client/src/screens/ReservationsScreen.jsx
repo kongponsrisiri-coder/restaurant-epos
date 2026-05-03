@@ -543,51 +543,70 @@ function ReservationCard({ r, onEdit, onSeat, onConfirm, onNoShow, onCancel }) {
 
   return (
     <div style={{
-      background: 'white', borderRadius: 12, padding: 18, marginBottom: 10,
-      boxShadow: '0 1px 6px rgba(0,0,0,0.07)',
-      borderLeft: `5px solid ${sc.dot}`,
+      background: 'white',
+      borderRadius: 8,
+      padding: '8px 14px',
+      marginBottom: 6,
+      boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      borderLeft: `4px solid ${sc.dot}`,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      flexWrap: 'wrap',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-            <span style={{ fontSize: 18, fontWeight: 'bold', color: '#1a472a' }}>{r.customer_name}</span>
-            <span style={{ background: sc.bg, color: sc.color, borderRadius: 12, padding: '3px 10px', fontSize: 12, fontWeight: 'bold' }}>
-              {sc.label}
-            </span>
-            {r.source === 'widget' && (
-              <span style={{ background: '#e8f4fd', color: '#0066cc', borderRadius: 12, padding: '3px 8px', fontSize: 11 }}>
-                🌐 Online
-              </span>
-            )}
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px', fontSize: 14, color: '#555' }}>
-            <span>🕐 <strong>{time}</strong></span>
-            <span>📅 {date}</span>
-            <span>👥 <strong>{r.covers}</strong> covers</span>
-            {r.table_name && <span>🪑 {r.table_name}</span>}
-            {r.customer_phone && <span>📞 {r.customer_phone}</span>}
-            {r.customer_email && <span>✉️ {r.customer_email}</span>}
-          </div>
-          {r.notes && (
-            <div style={{ marginTop: 7, fontSize: 13, color: '#888', fontStyle: 'italic' }}>📝 {r.notes}</div>
-          )}
-        </div>
+      {/* Status dot */}
+      <div style={{ width: 8, height: 8, borderRadius: '50%', background: sc.dot, flexShrink: 0 }} />
 
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-          {r.status === 'pending' && (
-            <button onClick={() => onConfirm(r)} style={actionBtn('#17A2B8')}>✓ Confirm</button>
-          )}
-          {(r.status === 'pending' || r.status === 'confirmed') && (
-            <>
-              <button onClick={() => onSeat(r)} style={actionBtn('#28A745')}>🪑 Seat</button>
-              <button onClick={() => onNoShow(r)} style={actionBtn('#DC3545')}>✗ No Show</button>
-            </>
-          )}
-          <button onClick={() => onEdit(r)} style={actionBtn('#6C757D')}>✏️ Edit</button>
-          {r.status !== 'cancelled' && (
-            <button onClick={() => onCancel(r)} style={actionBtn('#343A40')}>🚫 Cancel</button>
-          )}
-        </div>
+      {/* Name */}
+      <span style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e', minWidth: 120 }}>
+        {r.customer_name}
+      </span>
+
+      {/* Key info chips */}
+      <span style={{ fontSize: 13, color: '#555' }}>🕐 <strong>{time}</strong></span>
+      <span style={{ fontSize: 13, color: '#555' }}>📅 {date}</span>
+      <span style={{ fontSize: 13, color: '#555' }}>👥 <strong>{r.covers}</strong></span>
+      {r.table_name && <span style={{ fontSize: 13, color: '#555' }}>🪑 {r.table_name}</span>}
+      {r.customer_phone && <span style={{ fontSize: 12, color: '#888' }}>📞 {r.customer_phone}</span>}
+
+      {/* Source badge */}
+      {r.source === 'widget' && (
+        <span style={{ background: '#e8f4fd', color: '#0066cc', borderRadius: 10, padding: '1px 7px', fontSize: 11, fontWeight: 600 }}>
+          🌐 Online
+        </span>
+      )}
+
+      {/* Status badge */}
+      <span style={{
+        background: sc.bg, color: sc.color,
+        borderRadius: 10, padding: '2px 8px',
+        fontSize: 11, fontWeight: 700,
+      }}>
+        {sc.label}
+      </span>
+
+      {/* Notes — only if exists */}
+      {r.notes && (
+        <span style={{ fontSize: 11, color: '#aaa', fontStyle: 'italic', flexBasis: '100%', paddingLeft: 18 }}>
+          📝 {r.notes}
+        </span>
+      )}
+
+      {/* Actions — pushed to right */}
+      <div style={{ display: 'flex', gap: 5, marginLeft: 'auto', flexWrap: 'wrap' }}>
+        {r.status === 'pending' && (
+          <button onClick={() => onConfirm(r)} style={actionBtn('#17A2B8')}>✓</button>
+        )}
+        {(r.status === 'pending' || r.status === 'confirmed') && (
+          <>
+            <button onClick={() => onSeat(r)} style={actionBtn('#28A745')}>🪑 Seat</button>
+            <button onClick={() => onNoShow(r)} style={actionBtn('#DC3545')}>✗</button>
+          </>
+        )}
+        <button onClick={() => onEdit(r)} style={actionBtn('#6C757D')}>✏️</button>
+        {r.status !== 'cancelled' && (
+          <button onClick={() => onCancel(r)} style={actionBtn('#343A40')}>🚫</button>
+        )}
       </div>
     </div>
   );

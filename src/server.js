@@ -1192,18 +1192,21 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
       return res.status(409).json({ error: 'This time slot is no longer available. Please choose another time.' });
     }
 
-    const result = await pool.query(
-      `INSERT INTO reservations
-         (restaurant_id, table_id, customer_name, customer_phone, customer_email,
-          covers, reservation_date, reservation_time, status, notes, source)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-       RETURNING *`,
-      [
-        restaurant_id, table_id, customer_name.trim(), customer_phone.trim(),
-        customer_email?.trim() || null, coversNum, reservation_date,
-        reservation_time, status, notes?.trim() || null, source,
-      ]
-    );
+    // Force pending for widget bookings — never allow cancelled on create
+const insertStatus = source === 'widget' ? 'pending' : (status || 'pending');
+
+const result = await pool.query(
+  `INSERT INTO reservations
+     (restaurant_id, table_id, customer_name, customer_phone, customer_email,
+      covers, reservation_date, reservation_time, status, notes, source)
+   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+   RETURNING *`,
+  [
+    restaurant_id, table_id, customer_name.trim(), customer_phone.trim(),
+    customer_email?.trim() || null, coversNum, reservation_date,
+    reservation_time, insertStatus, notes?.trim() || null, source,
+  ]
+);
 
     const reservation = result.rows[0];
 

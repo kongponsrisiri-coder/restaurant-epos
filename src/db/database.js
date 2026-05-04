@@ -255,6 +255,14 @@ await pool.query(`
   ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0
 `);
 
+// Fix widget bookings wrongly set to cancelled
+await pool.query(`
+  UPDATE reservations 
+  SET status = 'pending'
+  WHERE source = 'widget' 
+  AND status = 'cancelled'
+  AND created_at > NOW() - INTERVAL '7 days'
+`); 
 // Set initial sort order based on existing id order
 await pool.query(`
   UPDATE menu_items SET sort_order = id WHERE sort_order = 0

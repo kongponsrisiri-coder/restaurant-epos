@@ -49,7 +49,7 @@ export default function ReservationsScreen() {
   const [reservations, setReservations] = useState([]);
   const [tables, setTables]             = useState([]);
   const [loading, setLoading]           = useState(true);
-  const [filterDate, setFilterDate]     = useState(todayStr());
+  const [filterDate, setFilterDate]     = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [calDate, setCalDate]           = useState(new Date());
   const [showModal, setShowModal]       = useState(false);

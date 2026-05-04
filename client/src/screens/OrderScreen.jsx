@@ -20,6 +20,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const [activeCourse, setActiveCourse] = useState(1);
   const [firingCourse, setFiringCourse] = useState(null);
 
+  // ── Sandy: Mobile layout state ──
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [mobileTab, setMobileTab] = useState('menu');
+
   const fetchOrder = async () => {
     const orderData = await getOrder(orderId);
     setOrder(orderData);
@@ -32,9 +36,9 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         setMenu(menuData);
         setOrder(orderData);
         if (menuData.length > 0) {
-  setActiveCategory(menuData[0].id);
-  setActiveCourse(menuData[0].default_course || 1);
-}
+          setActiveCategory(menuData[0].id);
+          setActiveCourse(menuData[0].default_course || 1);
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -43,6 +47,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     };
     fetchData();
   }, [orderId]);
+
+  // ── Sandy: Listen for screen resize so layout switches automatically ──
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const getItemIsBar = (item) => {
     const cat = menu.find(c => c.id === item.category_id);
@@ -132,6 +143,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
       await addOrderItems(orderId, cart);
       setCart([]);
       await fetchOrder();
+      // Sandy: switch to Order tab on mobile so waiter can see items and fire courses
+      if (isMobile) setMobileTab('order');
       alert('Order saved! Use 🔥 Fire buttons to send courses to kitchen.');
     } catch (err) {
       alert('Failed to send order.');
@@ -158,7 +171,6 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
       alert('⛔ Only Admin, Manager or Supervisor can apply discounts!');
       return;
     }
-    // If item already has discount — offer to remove
     if (item.discount_value > 0) {
       const remove = window.confirm(
         `This item has a discount:\n${item.discount_type === 'percent' ? item.discount_value + '%' : '£' + item.discount_value} off\n\nOK = Remove discount\nCancel = Change discount`
@@ -169,7 +181,6 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         return;
       }
     }
-    // Apply new discount
     const type = window.confirm('OK = percentage %\nCancel = fixed £ amount') ? 'percent' : 'fixed';
     const value = prompt(type === 'percent' ? 'Discount %:' : 'Discount £:', '10');
     if (!value) return;
@@ -209,6 +220,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     cartByCourse[c].push(item);
   });
 
+  // ── Sandy: Badge count — total items in cart + existing sent items ──
+  const badgeCount = cart.reduce((sum, i) => sum + i.quantity, 0) +
+    existingItems.filter(i => !i.voided).reduce((sum, i) => sum + i.quantity, 0);
+
   // Reusable DISC button
   const DiscButton = ({ item }) => (
     <button onClick={() => handleItemDiscount(item)} style={{
@@ -237,27 +252,60 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         }
       `}</style>
 
-      <div style={{ display: 'flex', height: '100%', width: '100%' }}>
+      {/*
+        ── Sandy: Outer wrapper ──
+        Desktop: flex ROW  — LEFT (menu) | RIGHT (order panel, 340px)
+        Mobile:  flex COLUMN — active tab fills space, tab bar pinned to bottom
+      */}
+      <div style={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        height: '100%',
+        width: '100%'
+      }}>
 
-        {/* LEFT — Menu */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* ════════════════════════════════
+            LEFT — Menu
+            Desktop: always visible, flex: 1
+            Mobile:  visible only on 'menu' tab
+            ════════════════════════════════ */}
+        <div style={{
+          flex: 1,
+          display: isMobile && mobileTab !== 'menu' ? 'none' : 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}>
 
           {/* Top bar */}
-          <div style={{ background: 'white', padding: '14px 20px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+          <div style={{
+            background: 'white', padding: '14px 20px', borderBottom: '1px solid #eee',
+            display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0
+          }}>
             <button onClick={async () => {
               const allVoided = existingItems.length > 0 && existingItems.every(i => i.voided);
               const isEmpty = existingItems.length === 0 && cart.length === 0;
               if (allVoided || isEmpty) await payOrder(orderId, 0, 'cancelled');
               onClose();
-            }} style={{ background: '#f0f0f0', border: 'none', borderRadius: 10, padding: '10px 18px', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>
+            }} style={{
+              background: '#f0f0f0', border: 'none', borderRadius: 10,
+              padding: '10px 18px', cursor: 'pointer', fontWeight: 700, fontSize: 15
+            }}>
               ← Back
             </button>
             <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', flex: 1 }}>
               Table {order?.table_number} — Order #{orderId}
-              {order?.covers && <span style={{ fontSize: 14, fontWeight: 400, color: '#888', marginLeft: 8 }}>{order.covers} covers</span>}
+              {order?.covers && (
+                <span style={{ fontSize: 14, fontWeight: 400, color: '#888', marginLeft: 8 }}>
+                  {order.covers} covers
+                </span>
+              )}
             </h2>
             {cart.length > 0 && (
-              <button onClick={sendOrder} style={{ background: '#1a1a2e', color: 'white', border: 'none', borderRadius: 10, padding: '10px 18px', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>
+              <button onClick={sendOrder} style={{
+                background: '#1a1a2e', color: 'white', border: 'none',
+                borderRadius: 10, padding: '10px 18px', cursor: 'pointer',
+                fontWeight: 700, fontSize: 14
+              }}>
                 Send Order
               </button>
             )}
@@ -265,7 +313,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
 
           {/* Course selector */}
           {!activeCatIsBar && (
-            <div style={{ background: '#f8f8f8', padding: '10px 16px', borderBottom: '1px solid #eee', display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+            <div style={{
+              background: '#f8f8f8', padding: '10px 16px', borderBottom: '1px solid #eee',
+              display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0
+            }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: '#888' }}>Course:</span>
               {[1, 2, 3, 4].map(c => (
                 <button key={c} onClick={() => setActiveCourse(c)} style={{
@@ -281,7 +332,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
           )}
 
           {/* Category tabs */}
-          <div style={{ display: 'flex', gap: 8, padding: '10px 16px', background: 'white', borderBottom: '1px solid #eee', overflowX: 'auto', flexShrink: 0 }}>
+          <div style={{
+            display: 'flex', gap: 8, padding: '10px 16px', background: 'white',
+            borderBottom: '1px solid #eee', overflowX: 'auto', flexShrink: 0
+          }}>
             {menu.map(cat => (
               <button key={cat.id} onClick={() => {
                 setActiveCategory(cat.id);
@@ -300,7 +354,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
 
           {/* Sub-category tabs */}
           {activeSubs.length > 0 && (
-            <div style={{ display: 'flex', gap: 6, padding: '8px 16px', background: '#fafafa', borderBottom: '1px solid #eee', overflowX: 'auto', flexShrink: 0 }}>
+            <div style={{
+              display: 'flex', gap: 6, padding: '8px 16px', background: '#fafafa',
+              borderBottom: '1px solid #eee', overflowX: 'auto', flexShrink: 0
+            }}>
               <button onClick={() => setActiveSubcat(null)} style={{
                 padding: '7px 16px', borderRadius: 16, border: 'none', cursor: 'pointer',
                 fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap',
@@ -320,7 +377,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
 
           {/* Menu items grid */}
           <div style={{ flex: 1, overflowY: 'auto', padding: 16, background: '#f5f5f5' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 12 }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))',
+              gap: 12
+            }}>
               {activeItems
                 .filter(item => !activeSubcat || item.subcategory_id === activeSubcat)
                 .map(item => {
@@ -336,12 +397,25 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'}
                       onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                     >
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>{item.name}</div>
-                      {item.description && <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>{item.description}</div>}
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>
+                        {item.name}
+                      </div>
+                      {item.description && (
+                        <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
+                          {item.description}
+                        </div>
+                      )}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 17, fontWeight: 800, color: isBar ? '#1e40af' : '#e94560' }}>£{item.price.toFixed(2)}</span>
+                        <span style={{ fontSize: 17, fontWeight: 800, color: isBar ? '#1e40af' : '#e94560' }}>
+                          £{item.price.toFixed(2)}
+                        </span>
                         {totalQty > 0 && (
-                          <span style={{ background: isBar ? '#1e40af' : '#e94560', color: 'white', borderRadius: '50%', width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700 }}>
+                          <span style={{
+                            background: isBar ? '#1e40af' : '#e94560', color: 'white',
+                            borderRadius: '50%', width: 26, height: 26,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 13, fontWeight: 700
+                          }}>
                             {totalQty}
                           </span>
                         )}
@@ -353,42 +427,111 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
           </div>
         </div>
 
-        {/* RIGHT — Order summary */}
-        <div style={{ width: 340, background: 'white', borderLeft: '1px solid #eee', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-          <div style={{ padding: '14px 20px', borderBottom: '1px solid #eee', flexShrink: 0 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Order Summary</h3>
+        {/* ════════════════════════════════
+            RIGHT — Order Summary
+            Desktop: fixed 340px, always visible
+            Mobile:  full width, visible only on 'order' tab
+            ════════════════════════════════ */}
+        <div style={{
+          width: isMobile ? '100%' : 340,
+          flex: isMobile && mobileTab === 'order' ? '1 1 0' : undefined,
+          background: 'white',
+          borderLeft: isMobile ? 'none' : '1px solid #eee',
+          borderTop: isMobile ? '1px solid #eee' : 'none',
+          display: isMobile && mobileTab !== 'order' ? 'none' : 'flex',
+          flexDirection: 'column',
+          flexShrink: isMobile ? undefined : 0
+        }}>
+
+          {/* Order Summary Header
+              Desktop: simple "Order Summary" label
+              Mobile:  shows table number + Send Order button if cart has items */}
+          <div style={{
+            padding: '14px 20px', borderBottom: '1px solid #eee', flexShrink: 0
+          }}>
+            {isMobile ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>
+                    Table {order?.table_number}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#888', marginTop: 1 }}>
+                    Order #{orderId}{order?.covers ? ` · ${order.covers} covers` : ''}
+                  </div>
+                </div>
+                {cart.length > 0 && (
+                  <button onClick={sendOrder} style={{
+                    background: '#0D1B3E', color: 'white', border: 'none',
+                    borderRadius: 10, padding: '10px 18px', cursor: 'pointer',
+                    fontWeight: 700, fontSize: 14
+                  }}>
+                    ✓ Send Order
+                  </button>
+                )}
+              </div>
+            ) : (
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Order Summary</h3>
+            )}
           </div>
 
+          {/* Scrollable order items */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
 
             {/* Bar items in cart */}
             {cartBar.length > 0 && (
-              <div style={{ marginBottom: 14, background: '#eff6ff', borderRadius: 10, padding: 10, border: '1px solid #bfdbfe' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#1e40af', marginBottom: 8, textTransform: 'uppercase' }}>🍹 Bar — New</div>
+              <div style={{
+                marginBottom: 14, background: '#eff6ff', borderRadius: 10,
+                padding: 10, border: '1px solid #bfdbfe'
+              }}>
+                <div style={{
+                  fontSize: 11, fontWeight: 700, color: '#1e40af',
+                  marginBottom: 8, textTransform: 'uppercase'
+                }}>🍹 Bar — New</div>
                 {cartBar.map((item, idx) => (
                   <div key={idx} style={{ marginBottom: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
-                      <span style={{ flex: 1, color: '#1a1a2e', fontWeight: 600 }}>{item.quantity}× {item.name}</span>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between',
+                      alignItems: 'center', fontSize: 13
+                    }}>
+                      <span style={{ flex: 1, color: '#1a1a2e', fontWeight: 600 }}>
+                        {item.quantity}× {item.name}
+                      </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
-                        <button onClick={() => removeFromCart(item.cartKey, item.item_note)} style={{ background: '#fee2e2', border: 'none', borderRadius: 4, width: 22, height: 22, cursor: 'pointer', color: '#ef4444', fontWeight: 700, fontSize: 14 }}>−</button>
+                        <button onClick={() => removeFromCart(item.cartKey, item.item_note)} style={{
+                          background: '#fee2e2', border: 'none', borderRadius: 4,
+                          width: 22, height: 22, cursor: 'pointer',
+                          color: '#ef4444', fontWeight: 700, fontSize: 14
+                        }}>−</button>
                       </div>
                     </div>
-                    {item.notes && <div style={{ fontSize: 11, color: '#aaa', marginLeft: 16 }}>— {item.notes}</div>}
-                    {item.item_note && <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16 }}>📝 {item.item_note}</div>}
+                    {item.notes && (
+                      <div style={{ fontSize: 11, color: '#aaa', marginLeft: 16 }}>— {item.notes}</div>
+                    )}
+                    {item.item_note && (
+                      <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16 }}>📝 {item.item_note}</div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Existing bar items — WITH DISC button */}
+            {/* Existing bar items */}
             {existingBarItems.filter(i => !i.voided).length > 0 && (
               <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#1e40af', marginBottom: 6, textTransform: 'uppercase' }}>🍹 Bar — Sent</div>
+                <div style={{
+                  fontSize: 11, fontWeight: 700, color: '#1e40af',
+                  marginBottom: 6, textTransform: 'uppercase'
+                }}>🍹 Bar — Sent</div>
                 {existingBarItems.filter(i => !i.voided).map(item => (
                   <div key={item.id} style={{ marginBottom: 6 }}>
-                    <div style={{ fontSize: 13, color: '#555', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ flex: 1 }}>{item.status === 'served' ? '✅' : '🍹'} {item.quantity}× {item.name}</span>
+                    <div style={{
+                      fontSize: 13, color: '#555', display: 'flex',
+                      justifyContent: 'space-between', alignItems: 'center'
+                    }}>
+                      <span style={{ flex: 1 }}>
+                        {item.status === 'served' ? '✅' : '🍹'} {item.quantity}× {item.name}
+                      </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
                         <DiscButton item={item} />
@@ -397,11 +540,19 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                           if (!reason) return;
                           await voidItem(item.id, reason);
                           await fetchOrder();
-                        }} style={{ background: '#fee2e2', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', color: '#ef4444', fontSize: 10, fontWeight: 700 }}>VOID</button>
+                        }} style={{
+                          background: '#fee2e2', border: 'none', borderRadius: 4,
+                          padding: '2px 6px', cursor: 'pointer', color: '#ef4444',
+                          fontSize: 10, fontWeight: 700
+                        }}>VOID</button>
                       </div>
                     </div>
-                    {item.notes && <div style={{ fontSize: 11, color: '#aaa', marginLeft: 16 }}>— {item.notes}</div>}
-                    {item.item_note && <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16 }}>📝 {item.item_note}</div>}
+                    {item.notes && (
+                      <div style={{ fontSize: 11, color: '#aaa', marginLeft: 16 }}>— {item.notes}</div>
+                    )}
+                    {item.item_note && (
+                      <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16 }}>📝 {item.item_note}</div>
+                    )}
                     {item.discount_value > 0 && (
                       <div style={{ fontSize: 10, color: '#92400e', marginLeft: 16, fontWeight: 700 }}>
                         🏷️ {item.discount_type === 'percent' ? `${item.discount_value}% off` : `£${item.discount_value} off`}
@@ -414,22 +565,44 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
 
             {/* Cart items by course */}
             {Object.keys(cartByCourse).sort().map(course => (
-              <div key={course} style={{ marginBottom: 14, background: '#f8f8f8', borderRadius: 10, padding: 10 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: COURSE_COLORS[course] || '#888', marginBottom: 6, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: COURSE_COLORS[course] || '#888' }} />
+              <div key={course} style={{
+                marginBottom: 14, background: '#f8f8f8', borderRadius: 10, padding: 10
+              }}>
+                <div style={{
+                  fontSize: 11, fontWeight: 700, color: COURSE_COLORS[course] || '#888',
+                  marginBottom: 6, textTransform: 'uppercase',
+                  display: 'flex', alignItems: 'center', gap: 6
+                }}>
+                  <div style={{
+                    width: 8, height: 8, borderRadius: '50%',
+                    background: COURSE_COLORS[course] || '#888'
+                  }} />
                   {COURSE_LABELS[course]} — New
                 </div>
                 {cartByCourse[course].map((item, idx) => (
                   <div key={idx} style={{ marginBottom: 6 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
-                      <span style={{ flex: 1, color: '#1a1a2e', fontWeight: 600 }}>{item.quantity}× {item.name}</span>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between',
+                      alignItems: 'center', fontSize: 13
+                    }}>
+                      <span style={{ flex: 1, color: '#1a1a2e', fontWeight: 600 }}>
+                        {item.quantity}× {item.name}
+                      </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
-                        <button onClick={() => removeFromCart(item.cartKey, item.item_note)} style={{ background: '#fee2e2', border: 'none', borderRadius: 4, width: 22, height: 22, cursor: 'pointer', color: '#ef4444', fontWeight: 700, fontSize: 14 }}>−</button>
+                        <button onClick={() => removeFromCart(item.cartKey, item.item_note)} style={{
+                          background: '#fee2e2', border: 'none', borderRadius: 4,
+                          width: 22, height: 22, cursor: 'pointer',
+                          color: '#ef4444', fontWeight: 700, fontSize: 14
+                        }}>−</button>
                       </div>
                     </div>
-                    {item.notes && <div style={{ fontSize: 11, color: '#aaa', marginLeft: 16 }}>— {item.notes}</div>}
-                    {item.item_note && <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16 }}>📝 {item.item_note}</div>}
+                    {item.notes && (
+                      <div style={{ fontSize: 11, color: '#aaa', marginLeft: 16 }}>— {item.notes}</div>
+                    )}
+                    {item.item_note && (
+                      <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16 }}>📝 {item.item_note}</div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -443,17 +616,29 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               const voided = courseItems.filter(i => i.voided);
               return (
                 <div key={course} style={{ marginBottom: 16 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: COURSE_COLORS[course] || '#888', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: COURSE_COLORS[course] || '#888' }} />
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'center', marginBottom: 6
+                  }}>
+                    <div style={{
+                      fontSize: 11, fontWeight: 700, color: COURSE_COLORS[course] || '#888',
+                      textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6
+                    }}>
+                      <div style={{
+                        width: 8, height: 8, borderRadius: '50%',
+                        background: COURSE_COLORS[course] || '#888'
+                      }} />
                       {COURSE_LABELS[course]}
                     </div>
                     {unfired.length > 0 && (
-                      <button onClick={() => handleFireCourse(Number(course))} disabled={firingCourse === Number(course)} style={{
-                        background: COURSE_COLORS[course] || '#888', color: 'white',
-                        border: 'none', borderRadius: 8, padding: '6px 14px',
-                        cursor: 'pointer', fontWeight: 700, fontSize: 12
-                      }}>
+                      <button
+                        onClick={() => handleFireCourse(Number(course))}
+                        disabled={firingCourse === Number(course)}
+                        style={{
+                          background: COURSE_COLORS[course] || '#888', color: 'white',
+                          border: 'none', borderRadius: 8, padding: '6px 14px',
+                          cursor: 'pointer', fontWeight: 700, fontSize: 12
+                        }}>
                         {firingCourse === Number(course) ? '...' : `🔥 Fire ${COURSE_LABELS[course]}`}
                       </button>
                     )}
@@ -472,26 +657,42 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                         position: 'absolute', top: -9, right: 8,
                         background: '#f59e0b', color: 'white',
                         fontSize: 9, fontWeight: 800,
-                        padding: '2px 8px', borderRadius: 10,
-                        letterSpacing: 0.5
+                        padding: '2px 8px', borderRadius: 10, letterSpacing: 0.5
                       }}>⏳ PENDING</div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, alignItems: 'center' }}>
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between',
+                        fontSize: 13, alignItems: 'center'
+                      }}>
                         <span style={{ color: '#92400e', fontWeight: 700, flex: 1 }}>
                           {item.quantity}× {item.name}
                         </span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <span style={{ color: '#92400e', fontWeight: 600 }}>£{(item.unit_price * item.quantity).toFixed(2)}</span>
+                          <span style={{ color: '#92400e', fontWeight: 600 }}>
+                            £{(item.unit_price * item.quantity).toFixed(2)}
+                          </span>
                           <DiscButton item={item} />
                           <button onClick={async () => {
                             const reason = prompt('Void reason:', 'Customer changed mind');
                             if (!reason) return;
                             await voidItem(item.id, reason);
                             await fetchOrder();
-                          }} style={{ background: '#fee2e2', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', color: '#ef4444', fontSize: 10, fontWeight: 700 }}>VOID</button>
+                          }} style={{
+                            background: '#fee2e2', border: 'none', borderRadius: 4,
+                            padding: '2px 6px', cursor: 'pointer', color: '#ef4444',
+                            fontSize: 10, fontWeight: 700
+                          }}>VOID</button>
                         </div>
                       </div>
-                      {item.notes && <div style={{ fontSize: 11, color: '#92400e', marginLeft: 8, marginTop: 3 }}>— {item.notes}</div>}
-                      {item.item_note && <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 8, marginTop: 2 }}>📝 {item.item_note}</div>}
+                      {item.notes && (
+                        <div style={{ fontSize: 11, color: '#92400e', marginLeft: 8, marginTop: 3 }}>
+                          — {item.notes}
+                        </div>
+                      )}
+                      {item.item_note && (
+                        <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 8, marginTop: 2 }}>
+                          📝 {item.item_note}
+                        </div>
+                      )}
                       {item.discount_value > 0 && (
                         <div style={{ fontSize: 10, color: '#92400e', marginLeft: 8, marginTop: 2, fontWeight: 700 }}>
                           🏷️ {item.discount_type === 'percent' ? `${item.discount_value}% off` : `£${item.discount_value} off`}
@@ -503,7 +704,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   {/* FIRED items */}
                   {fired.map(item => (
                     <div key={item.id} style={{ marginBottom: 5 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#555', alignItems: 'center' }}>
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between',
+                        fontSize: 13, color: '#555', alignItems: 'center'
+                      }}>
                         <span style={{ flex: 1 }}>
                           {item.status === 'cooked' ? '✅' : item.status === 'served' ? '🍽️' : '🔥'} {item.quantity}× {item.name}
                         </span>
@@ -515,17 +719,29 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                             if (!reason) return;
                             await voidItem(item.id, reason);
                             await fetchOrder();
-                          }} style={{ background: '#fee2e2', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', color: '#ef4444', fontSize: 10, fontWeight: 700 }}>VOID</button>
+                          }} style={{
+                            background: '#fee2e2', border: 'none', borderRadius: 4,
+                            padding: '2px 6px', cursor: 'pointer', color: '#ef4444',
+                            fontSize: 10, fontWeight: 700
+                          }}>VOID</button>
                           <button onClick={async () => {
                             if (!window.confirm('Resend this item to kitchen?')) return;
                             await resendToKitchen(orderId, [item.id]);
                             await fetchOrder();
                             alert('🔄 Resent to kitchen!');
-                          }} style={{ background: '#dbeafe', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', color: '#1e40af', fontSize: 10, fontWeight: 700 }}>RESEND</button>
+                          }} style={{
+                            background: '#dbeafe', border: 'none', borderRadius: 4,
+                            padding: '2px 6px', cursor: 'pointer', color: '#1e40af',
+                            fontSize: 10, fontWeight: 700
+                          }}>RESEND</button>
                         </div>
                       </div>
-                      {item.notes && <div style={{ fontSize: 11, color: '#aaa', marginLeft: 16 }}>— {item.notes}</div>}
-                      {item.item_note && <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16 }}>📝 {item.item_note}</div>}
+                      {item.notes && (
+                        <div style={{ fontSize: 11, color: '#aaa', marginLeft: 16 }}>— {item.notes}</div>
+                      )}
+                      {item.item_note && (
+                        <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16 }}>📝 {item.item_note}</div>
+                      )}
                       {item.discount_value > 0 && (
                         <div style={{ fontSize: 10, color: '#92400e', marginLeft: 16, fontWeight: 700 }}>
                           🏷️ {item.discount_type === 'percent' ? `${item.discount_value}% off` : `£${item.discount_value} off`}
@@ -559,14 +775,22 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             <div style={{ marginBottom: 10 }}>
               {order?.discount_value > 0 ? (
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <div style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '2px dashed #22c55e', background: '#f0fdf4', color: '#14532d', fontSize: 12, fontWeight: 600, textAlign: 'center' }}>
+                  <div style={{
+                    flex: 1, padding: '8px 10px', borderRadius: 8,
+                    border: '2px dashed #22c55e', background: '#f0fdf4',
+                    color: '#14532d', fontSize: 12, fontWeight: 600, textAlign: 'center'
+                  }}>
                     {order.discount_type === 'percent' ? `${order.discount_value}%` : `£${order.discount_value}`} off — {order.discount_reason}
                   </div>
                   <button onClick={async () => {
                     if (!window.confirm('Remove discount?')) return;
                     await applyDiscount(orderId, null, 0, null);
                     await fetchOrder();
-                  }} style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#fee2e2', color: '#ef4444', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
+                  }} style={{
+                    padding: '8px 12px', borderRadius: 8, border: 'none',
+                    background: '#fee2e2', color: '#ef4444', cursor: 'pointer',
+                    fontWeight: 700, fontSize: 12
+                  }}>
                     Remove
                   </button>
                 </div>
@@ -586,21 +810,36 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   if (!reason) return;
                   await applyDiscount(orderId, type, num, reason);
                   await fetchOrder();
-                }} style={{ width: '100%', padding: '10px', borderRadius: 8, border: '2px dashed #e94560', background: 'white', color: '#e94560', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                }} style={{
+                  width: '100%', padding: '10px', borderRadius: 8,
+                  border: '2px dashed #e94560', background: 'white',
+                  color: '#e94560', cursor: 'pointer', fontWeight: 700, fontSize: 13
+                }}>
                   + Add Bill Discount
                 </button>
               )}
             </div>
 
             {discountAmount > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#22c55e', marginBottom: 4 }}>
+              <div style={{
+                display: 'flex', justifyContent: 'space-between',
+                fontSize: 13, color: '#22c55e', marginBottom: 4
+              }}>
                 <span>Discount</span><span>-£{discountAmount.toFixed(2)}</span>
               </div>
             )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#555', marginBottom: 6 }}>
+
+            <div style={{
+              display: 'flex', justifyContent: 'space-between',
+              fontSize: 13, color: '#555', marginBottom: 6
+            }}>
               <span>Subtotal</span><span>£{afterDiscount.toFixed(2)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+
+            <div style={{
+              display: 'flex', justifyContent: 'space-between',
+              alignItems: 'center', marginBottom: 10
+            }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 13, color: '#555' }}>Service (12.5%)</span>
                 <button onClick={() => setServiceChargeRemoved(!serviceChargeRemoved)} style={{
@@ -608,20 +847,28 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   border: 'none', borderRadius: 6, padding: '3px 10px',
                   cursor: 'pointer', fontSize: 11, fontWeight: 700,
                   color: serviceChargeRemoved ? '#ef4444' : '#14532d'
-                }}>{serviceChargeRemoved ? 'Removed' : 'Remove'}</button>
+                }}>
+                  {serviceChargeRemoved ? 'Removed' : 'Remove'}
+                </button>
               </div>
               <span style={{ fontSize: 13 }}>£{serviceChargeAmount.toFixed(2)}</span>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, borderTop: '2px solid #eee', paddingTop: 10 }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', marginBottom: 14,
+              borderTop: '2px solid #eee', paddingTop: 10
+            }}>
               <span style={{ fontSize: 20, fontWeight: 800 }}>Total</span>
-              <span style={{ fontSize: 20, fontWeight: 800, color: '#e94560' }}>£{orderTotal.toFixed(2)}</span>
+              <span style={{ fontSize: 20, fontWeight: 800, color: '#e94560' }}>
+                £{orderTotal.toFixed(2)}
+              </span>
             </div>
 
             {(orderTotal > 0 || existingItems.some(i => !i.voided)) && (
               <button onClick={() => setShowBill(true)} style={{
                 width: '100%', padding: '14px', borderRadius: 12, border: 'none',
-                background: '#e94560', color: 'white', fontSize: 16, fontWeight: 800, cursor: 'pointer'
+                background: '#e94560', color: 'white', fontSize: 16,
+                fontWeight: 800, cursor: 'pointer'
               }}>
                 View Bill & Pay — £{orderTotal.toFixed(2)}
               </button>
@@ -629,21 +876,122 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
           </div>
         </div>
 
+        {/* ════════════════════════════════
+            MOBILE BOTTOM TAB BAR
+            Only rendered on mobile (isMobile)
+            Deep Navy active state
+            Thai Gold top-border indicator
+            Red badge for item count
+            Minimum 58px height — easy to tap
+            ════════════════════════════════ */}
+        {isMobile && (
+          <div style={{
+            display: 'flex',
+            borderTop: '1px solid #e0e0e0',
+            background: 'white',
+            flexShrink: 0,
+            height: 58
+          }}>
+
+            {/* Menu tab */}
+            <button
+              onClick={() => setMobileTab('menu')}
+              style={{
+                flex: 1,
+                border: 'none',
+                borderTop: mobileTab === 'menu' ? '3px solid #C9A84C' : '3px solid transparent',
+                background: mobileTab === 'menu' ? '#0D1B3E' : '#f8f8f8',
+                color: mobileTab === 'menu' ? 'white' : '#888',
+                fontWeight: 700,
+                fontSize: 15,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                transition: 'background 0.15s'
+              }}
+            >
+              🍽️ Menu
+            </button>
+
+            {/* Order tab */}
+            <button
+              onClick={() => setMobileTab('order')}
+              style={{
+                flex: 1,
+                border: 'none',
+                borderLeft: '1px solid #e0e0e0',
+                borderTop: mobileTab === 'order' ? '3px solid #C9A84C' : '3px solid transparent',
+                background: mobileTab === 'order' ? '#0D1B3E' : '#f8f8f8',
+                color: mobileTab === 'order' ? 'white' : '#888',
+                fontWeight: 700,
+                fontSize: 15,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                transition: 'background 0.15s'
+              }}
+            >
+              📋 Order
+              {badgeCount > 0 && (
+                <span style={{
+                  background: '#e94560',
+                  color: 'white',
+                  borderRadius: '50%',
+                  minWidth: 22,
+                  height: 22,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0 4px'
+                }}>
+                  {badgeCount > 99 ? '99+' : badgeCount}
+                </span>
+              )}
+            </button>
+          </div>
+        )}
+
         {/* MODIFIER POPUP */}
         {modifierPopup && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-            <div style={{ background: 'white', borderRadius: 16, padding: 28, width: 420, maxHeight: '80vh', overflowY: 'auto' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>{modifierPopup.item.name}</h2>
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          }}>
+            <div style={{
+              background: 'white', borderRadius: 16, padding: 28,
+              width: 420, maxWidth: '92vw', maxHeight: '80vh', overflowY: 'auto'
+            }}>
+              <div style={{
+                display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', marginBottom: 8
+              }}>
+                <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>
+                  {modifierPopup.item.name}
+                </h2>
                 {modifierPopup.isBar ? (
-                  <div style={{ background: '#1e40af', color: 'white', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>🍹 Bar</div>
+                  <div style={{
+                    background: '#1e40af', color: 'white', fontSize: 11,
+                    fontWeight: 700, padding: '3px 10px', borderRadius: 20
+                  }}>🍹 Bar</div>
                 ) : (
-                  <div style={{ background: COURSE_COLORS[modifierPopup.course], color: 'white', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>
+                  <div style={{
+                    background: COURSE_COLORS[modifierPopup.course], color: 'white',
+                    fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20
+                  }}>
                     {modifierPopup.course === 1 ? 'Starter' : modifierPopup.course === 2 ? 'Main' : modifierPopup.course === 3 ? 'Dessert' : 'Extra'}
                   </div>
                 )}
               </div>
-              <p style={{ color: '#888', fontSize: 14, marginBottom: 20 }}>£{modifierPopup.item.price.toFixed(2)}</p>
+              <p style={{ color: '#888', fontSize: 14, marginBottom: 20 }}>
+                £{modifierPopup.item.price.toFixed(2)}
+              </p>
               {modifierPopup.modifiers.map(group => (
                 <div key={group.id} style={{ marginBottom: 20 }}>
                   <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 8 }}>
@@ -655,12 +1003,14 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   {group.modifiers?.map(opt => {
                     const selected = (selectedModifiers[group.id] || []).find(m => m.id === opt.id);
                     return (
-                      <div key={opt.id} onClick={() => handleModifierSelect(group.id, opt, group.multi_select)} style={{
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        padding: '12px 16px', borderRadius: 10, marginBottom: 6, cursor: 'pointer',
-                        border: `2px solid ${selected ? '#e94560' : '#eee'}`,
-                        background: selected ? '#fff0f3' : 'white',
-                      }}>
+                      <div key={opt.id}
+                        onClick={() => handleModifierSelect(group.id, opt, group.multi_select)}
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '12px 16px', borderRadius: 10, marginBottom: 6, cursor: 'pointer',
+                          border: `2px solid ${selected ? '#e94560' : '#eee'}`,
+                          background: selected ? '#fff0f3' : 'white',
+                        }}>
                         <span style={{ fontSize: 15, fontWeight: selected ? 700 : 400 }}>{opt.name}</span>
                         <span style={{ fontSize: 14, color: opt.extra_price > 0 ? '#e94560' : '#aaa' }}>
                           {opt.extra_price > 0 ? `+£${opt.extra_price.toFixed(2)}` : 'included'}
@@ -671,8 +1021,15 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 </div>
               ))}
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => setModifierPopup(null)} style={{ flex: 1, padding: '14px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>Cancel</button>
-                <button onClick={confirmModifiers} style={{ flex: 2, padding: '14px', borderRadius: 10, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>Next →</button>
+                <button onClick={() => setModifierPopup(null)} style={{
+                  flex: 1, padding: '14px', borderRadius: 10, border: 'none',
+                  background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15
+                }}>Cancel</button>
+                <button onClick={confirmModifiers} style={{
+                  flex: 2, padding: '14px', borderRadius: 10, border: 'none',
+                  background: '#e94560', color: 'white', cursor: 'pointer',
+                  fontWeight: 700, fontSize: 15
+                }}>Next →</button>
               </div>
             </div>
           </div>
@@ -680,41 +1037,70 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
 
         {/* NOTE POPUP */}
         {notePopup && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-            <div style={{ background: 'white', borderRadius: 16, padding: 28, width: 400 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>{notePopup.item.name}</h2>
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          }}>
+            <div style={{
+              background: 'white', borderRadius: 16, padding: 28,
+              width: 400, maxWidth: '92vw'
+            }}>
+              <div style={{
+                display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', marginBottom: 12
+              }}>
+                <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>
+                  {notePopup.item.name}
+                </h2>
                 {notePopup.isBar ? (
-                  <div style={{ background: '#1e40af', color: 'white', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>🍹 Bar</div>
+                  <div style={{
+                    background: '#1e40af', color: 'white', fontSize: 11,
+                    fontWeight: 700, padding: '3px 10px', borderRadius: 20
+                  }}>🍹 Bar</div>
                 ) : (
-                  <div style={{ background: COURSE_COLORS[notePopup.course], color: 'white', fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>
+                  <div style={{
+                    background: COURSE_COLORS[notePopup.course], color: 'white',
+                    fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20
+                  }}>
                     {notePopup.course === 1 ? 'Starter' : notePopup.course === 2 ? 'Main' : notePopup.course === 3 ? 'Dessert' : 'Extra'}
                   </div>
                 )}
               </div>
               {notePopup.modifiers.length > 0 && (
-                <div style={{ background: '#f8f8f8', borderRadius: 8, padding: '8px 12px', marginBottom: 16, fontSize: 13, color: '#555' }}>
+                <div style={{
+                  background: '#f8f8f8', borderRadius: 8, padding: '8px 12px',
+                  marginBottom: 16, fontSize: 13, color: '#555'
+                }}>
                   {notePopup.modifiers.map(m => m.name).join(', ')}
                 </div>
               )}
               {!notePopup.isBar && (
                 <div style={{ marginBottom: 16 }}>
-                  <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 8 }}>Course:</label>
+                  <label style={{
+                    fontSize: 13, fontWeight: 700, color: '#555',
+                    display: 'block', marginBottom: 8
+                  }}>Course:</label>
                   <div style={{ display: 'flex', gap: 8 }}>
                     {[1, 2, 3, 4].map(c => (
-                      <button key={c} onClick={() => setNotePopup({ ...notePopup, course: c })} style={{
-                        flex: 1, padding: '10px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                        fontWeight: 700, fontSize: 12,
-                        background: notePopup.course === c ? COURSE_COLORS[c] : '#f0f0f0',
-                        color: notePopup.course === c ? 'white' : '#555',
-                      }}>
+                      <button key={c}
+                        onClick={() => setNotePopup({ ...notePopup, course: c })}
+                        style={{
+                          flex: 1, padding: '10px', borderRadius: 8, border: 'none',
+                          cursor: 'pointer', fontWeight: 700, fontSize: 12,
+                          background: notePopup.course === c ? COURSE_COLORS[c] : '#f0f0f0',
+                          color: notePopup.course === c ? 'white' : '#555',
+                        }}>
                         {c === 1 ? 'Starter' : c === 2 ? 'Main' : c === 3 ? 'Dessert' : 'Extra'}
                       </button>
                     ))}
                   </div>
                 </div>
               )}
-              <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 8 }}>
+              <label style={{
+                fontSize: 13, fontWeight: 700, color: '#555',
+                display: 'block', marginBottom: 8
+              }}>
                 Special request: <span style={{ fontWeight: 400, color: '#aaa' }}>(optional)</span>
               </label>
               <textarea
@@ -722,15 +1108,27 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 onChange={e => setNotePopup({ ...notePopup, note: e.target.value })}
                 placeholder="e.g. No onions, extra spicy, allergy — no nuts..."
                 rows={3}
-                style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box', resize: 'none', marginBottom: 16 }}
+                style={{
+                  width: '100%', padding: '12px', borderRadius: 8,
+                  border: '1px solid #ddd', fontSize: 14,
+                  boxSizing: 'border-box', resize: 'none', marginBottom: 16
+                }}
               />
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => setNotePopup(null)} style={{ flex: 1, padding: '14px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>Cancel</button>
-                <button onClick={confirmNote} style={{ flex: 2, padding: '14px', borderRadius: 10, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 16 }}>Add to Order</button>
+                <button onClick={() => setNotePopup(null)} style={{
+                  flex: 1, padding: '14px', borderRadius: 10, border: 'none',
+                  background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15
+                }}>Cancel</button>
+                <button onClick={confirmNote} style={{
+                  flex: 2, padding: '14px', borderRadius: 10, border: 'none',
+                  background: '#e94560', color: 'white', cursor: 'pointer',
+                  fontWeight: 700, fontSize: 16
+                }}>Add to Order</button>
               </div>
             </div>
           </div>
         )}
+
       </div>
 
       {/* BILL SCREEN */}

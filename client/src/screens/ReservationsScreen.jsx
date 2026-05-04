@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { io } from 'socket.io-client';
 
 const SERVER_URL = (() => {
   const host = window.location.hostname;
@@ -49,7 +50,7 @@ export default function ReservationsScreen() {
   const [reservations, setReservations] = useState([]);
   const [tables, setTables]             = useState([]);
   const [loading, setLoading]           = useState(true);
-  const [filterDate, setFilterDate]     = useState('');
+  const [filterDate, setFilterDate]     = useState(todayStr());
   const [filterStatus, setFilterStatus] = useState('all');
   const [calDate, setCalDate]           = useState(new Date());
   const [showModal, setShowModal]       = useState(false);
@@ -57,7 +58,10 @@ export default function ReservationsScreen() {
   const [form, setForm]                 = useState({ ...BLANK_FORM, reservation_date: todayStr() });
   const [saving, setSaving]             = useState(false);
   const [toast, setToast]               = useState(null);
+  const [newAlert, setNewAlert]         = useState(null);
+  const socketRef                       = useRef(null);
 
+  // ── Load data ────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     try {
       const [res, tbls] = await Promise.all([
@@ -75,11 +79,42 @@ export default function ReservationsScreen() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // ── Socket.io — listen for new widget bookings ───────────────
+  useEffect(() => {
+    const socket = io(SERVER_URL, { transports: ['websocket', 'polling'] });
+    socketRef.current = socket;
+
+    socket.on('new_reservation', (reservation) => {
+      console.log('🔔 New reservation received:', reservation);
+      // Add to list immediately without full reload
+      setReservations(prev => {
+        const exists = prev.find(r => r.id === reservation.id);
+        if (exists) return prev;
+        return [...prev, reservation];
+      });
+      // Show alert banner
+      setNewAlert(`New booking from ${reservation.source === 'widget' ? '🌐 website' : 'EPOS'}: ${reservation.customer_name} × ${reservation.covers} on ${reservation.reservation_date}`);
+      setTimeout(() => setNewAlert(null), 6000);
+    });
+
+    socket.on('reservation_updated', (reservation) => {
+      setReservations(prev => prev.map(r => r.id === reservation.id ? { ...r, ...reservation } : r));
+    });
+
+    socket.on('reservation_cancelled', ({ id }) => {
+      setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'cancelled' } : r));
+    });
+
+    return () => socket.disconnect();
+  }, []);
+
+  // ── Toast ────────────────────────────────────────────────────
   function showToast(msg, type = 'success') {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
   }
 
+  // ── Modal ────────────────────────────────────────────────────
   function openAdd() {
     setEditingId(null);
     setForm({ ...BLANK_FORM, reservation_date: filterDate || todayStr() });
@@ -128,14 +163,13 @@ export default function ReservationsScreen() {
     }
   }
 
+  // ── Actions ──────────────────────────────────────────────────
   async function handleSeat(r) {
     if (!window.confirm(`Seat ${r.customer_name} (${r.covers} covers)?`)) return;
     try {
       await apiFetch(`/api/reservations/${r.id}/seat`, { method: 'POST' });
       showToast(`${r.customer_name} seated ✓`);
       loadData();
-      // Go to table map so staff can open the table
-      setTimeout(() => onClose(), 800);
     } catch { showToast('Seating failed', 'error'); }
   }
 
@@ -181,20 +215,22 @@ export default function ReservationsScreen() {
     } catch { showToast('Cancel failed', 'error'); }
   }
 
+  // ── Filter ───────────────────────────────────────────────────
   const filtered = reservations.filter(r => {
-  const dateOk   = filterDate ? (r.reservation_date || '').startsWith(filterDate) : true;
-  const statusOk = filterStatus === 'all'
-    ? r.status !== 'cancelled'
-    : r.status === filterStatus;
-  return dateOk && statusOk;
-});
+    const dateOk   = filterDate ? (r.reservation_date || '').startsWith(filterDate) : true;
+    const statusOk = filterStatus === 'all'
+      ? r.status !== 'cancelled'
+      : r.status === filterStatus;
+    return dateOk && statusOk;
+  });
 
   const counts = {};
   ALL_STATUSES.forEach(s => {
     const base = reservations.filter(r => filterDate ? (r.reservation_date || '').startsWith(filterDate) : true);
-    counts[s] = s === 'all' ? base.length : base.filter(r => r.status === s).length;
+    counts[s] = s === 'all' ? base.filter(r => r.status !== 'cancelled').length : base.filter(r => r.status === s).length;
   });
 
+  // ── Calendar ─────────────────────────────────────────────────
   const calYear     = calDate.getFullYear();
   const calMonth    = calDate.getMonth();
   const firstDow    = new Date(calYear, calMonth, 1).getDay();
@@ -227,6 +263,20 @@ export default function ReservationsScreen() {
         </div>
       )}
 
+      {/* New booking alert banner */}
+      {newAlert && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9998,
+          background: '#1a472a', color: 'white',
+          padding: '12px 24px', textAlign: 'center',
+          fontWeight: 'bold', fontSize: 15,
+          boxShadow: '0 2px 12px rgba(0,0,0,0.3)',
+          animation: 'slideDown 0.3s ease',
+        }}>
+          🔔 {newAlert}
+        </div>
+      )}
+
       {/* Header */}
       <div style={{
         background: 'linear-gradient(135deg,#1a472a 0%,#2d6a4f 100%)',
@@ -234,10 +284,7 @@ export default function ReservationsScreen() {
         display: 'flex', alignItems: 'center',
         justifyContent: 'space-between', flexWrap: 'wrap', gap: 10,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 'bold' }}>🗓️ Reservations</h1>
-        </div>
+        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 'bold' }}>🗓️ Reservations</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', borderRadius: 8, overflow: 'hidden' }}>
             {[['list','📋 List'],['calendar','📅 Calendar']].map(([v, label]) => (
@@ -250,16 +297,14 @@ export default function ReservationsScreen() {
             ))}
           </div>
           <button onClick={loadData} style={{
-  background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none',
-  borderRadius: 8, padding: '9px 14px', cursor: 'pointer',
-  fontWeight: 'bold', fontSize: 18,
-  title: 'Refresh',
-}}>🔄</button>
-<button onClick={openAdd} style={{
-  background: '#4CAF50', color: 'white', border: 'none',
-  borderRadius: 8, padding: '9px 18px', cursor: 'pointer',
-  fontWeight: 'bold', fontSize: 14,
-}}>➕ New Booking</button>
+            background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none',
+            borderRadius: 8, padding: '9px 14px', cursor: 'pointer', fontSize: 18,
+          }}>🔄</button>
+          <button onClick={openAdd} style={{
+            background: '#4CAF50', color: 'white', border: 'none',
+            borderRadius: 8, padding: '9px 18px', cursor: 'pointer',
+            fontWeight: 'bold', fontSize: 14,
+          }}>➕ New Booking</button>
         </div>
       </div>
 
@@ -279,6 +324,12 @@ export default function ReservationsScreen() {
           background: !filterDate ? '#1a472a' : 'white',
           color: !filterDate ? 'white' : '#555',
         }}>All Dates</button>
+        <button onClick={() => setFilterDate(todayStr())} style={{
+          padding: '7px 12px', border: '1px solid #ddd', borderRadius: 6,
+          fontSize: 13, cursor: 'pointer',
+          background: filterDate === todayStr() ? '#1a472a' : 'white',
+          color: filterDate === todayStr() ? 'white' : '#555',
+        }}>Today</button>
         <div style={{ width: 1, height: 28, background: '#e0e0e0', margin: '0 4px' }} />
         {ALL_STATUSES.map(s => (
           <button key={s} onClick={() => setFilterStatus(s)} style={{
@@ -310,8 +361,6 @@ export default function ReservationsScreen() {
             <p>Loading reservations…</p>
           </div>
         ) : view === 'calendar' ? (
-
-          /* Calendar View */
           <div style={{ background: 'white', borderRadius: 14, padding: 28, boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <button onClick={() => setCalDate(new Date(calYear, calMonth-1, 1))} style={calNavBtn}>‹</button>
@@ -354,14 +403,8 @@ export default function ReservationsScreen() {
                 );
               })}
             </div>
-            <p style={{ marginTop: 16, color: '#888', fontSize: 13, textAlign: 'center' }}>
-              Click a day to see its bookings in list view
-            </p>
           </div>
-
         ) : (
-
-          /* List View */
           filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 20px', color: '#888' }}>
               <div style={{ fontSize: 56 }}>📋</div>
@@ -369,7 +412,7 @@ export default function ReservationsScreen() {
               <p style={{ fontSize: 14, color: '#aaa' }}>
                 {filterDate
                   ? `Nothing on ${new Date(filterDate+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'})}`
-                  : 'Try a different filter'}
+                  : 'No bookings yet'}
               </p>
               <button onClick={openAdd} style={{
                 marginTop: 18, background: '#1a472a', color: 'white',
@@ -418,38 +461,32 @@ export default function ReservationsScreen() {
                 cursor: 'pointer', fontSize: 18,
               }}>✕</button>
             </div>
-
             <div style={{ padding: 28 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-
                 <div style={{ gridColumn: '1/-1' }}>
                   <label style={labelSt}>Guest Name *</label>
                   <input value={form.customer_name}
                     onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))}
                     placeholder="e.g. John Smith" style={inputSt} autoFocus />
                 </div>
-
                 <div>
                   <label style={labelSt}>Phone</label>
                   <input type="tel" value={form.customer_phone}
                     onChange={e => setForm(f => ({ ...f, customer_phone: e.target.value }))}
                     placeholder="07700 900000" style={inputSt} />
                 </div>
-
                 <div>
                   <label style={labelSt}>Email</label>
                   <input type="email" value={form.customer_email}
                     onChange={e => setForm(f => ({ ...f, customer_email: e.target.value }))}
                     placeholder="john@example.com" style={inputSt} />
                 </div>
-
                 <div>
                   <label style={labelSt}>Date *</label>
                   <input type="date" value={form.reservation_date}
                     onChange={e => setForm(f => ({ ...f, reservation_date: e.target.value }))}
                     style={inputSt} />
                 </div>
-
                 <div>
                   <label style={labelSt}>Time *</label>
                   <select value={form.reservation_time}
@@ -458,35 +495,24 @@ export default function ReservationsScreen() {
                     {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
-
                 <div>
                   <label style={labelSt}>Covers *</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <button type="button"
-                      onClick={() => setForm(f => ({ ...f, covers: Math.max(1, f.covers-1) }))}
-                      style={ctrBtnSt}>−</button>
-                    <span style={{ fontSize: 20, fontWeight: 'bold', minWidth: 36, textAlign: 'center', color: '#1a472a' }}>
-                      {form.covers}
-                    </span>
-                    <button type="button"
-                      onClick={() => setForm(f => ({ ...f, covers: Math.min(50, f.covers+1) }))}
-                      style={ctrBtnSt}>+</button>
+                    <button type="button" onClick={() => setForm(f => ({ ...f, covers: Math.max(1, f.covers-1) }))} style={ctrBtnSt}>−</button>
+                    <span style={{ fontSize: 20, fontWeight: 'bold', minWidth: 36, textAlign: 'center', color: '#1a472a' }}>{form.covers}</span>
+                    <button type="button" onClick={() => setForm(f => ({ ...f, covers: Math.min(50, f.covers+1) }))} style={ctrBtnSt}>+</button>
                     <span style={{ color: '#888', fontSize: 13 }}>guests</span>
                   </div>
                 </div>
-
                 <div>
                   <label style={labelSt}>Table (optional)</label>
                   <select value={form.table_id}
                     onChange={e => setForm(f => ({ ...f, table_id: e.target.value }))}
                     style={inputSt}>
                     <option value="">— Assign later —</option>
-                    {tables.map(t => (
-                      <option key={t.id} value={t.id}>{t.name} (seats {t.capacity})</option>
-                    ))}
+                    {tables.map(t => <option key={t.id} value={t.id}>{t.name} (seats {t.capacity})</option>)}
                   </select>
                 </div>
-
                 <div>
                   <label style={labelSt}>Status</label>
                   <select value={form.status}
@@ -497,7 +523,6 @@ export default function ReservationsScreen() {
                     ))}
                   </select>
                 </div>
-
                 <div style={{ gridColumn: '1/-1' }}>
                   <label style={labelSt}>Notes / Special Requests</label>
                   <textarea value={form.notes}
@@ -507,7 +532,6 @@ export default function ReservationsScreen() {
                     style={{ ...inputSt, resize: 'vertical', fontFamily: 'Arial, sans-serif' }} />
                 </div>
               </div>
-
               <div style={{ display: 'flex', gap: 10, marginTop: 22, justifyContent: 'flex-end' }}>
                 <button onClick={closeModal} style={{
                   padding: '11px 22px', border: '1px solid #ddd', borderRadius: 8,
@@ -543,59 +567,33 @@ function ReservationCard({ r, onEdit, onSeat, onConfirm, onNoShow, onCancel }) {
 
   return (
     <div style={{
-      background: 'white',
-      borderRadius: 8,
-      padding: '8px 14px',
-      marginBottom: 6,
-      boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-      borderLeft: `4px solid ${sc.dot}`,
-      display: 'flex',
-      alignItems: 'center',
-      gap: 10,
-      flexWrap: 'wrap',
+      background: 'white', borderRadius: 8, padding: '8px 14px', marginBottom: 6,
+      boxShadow: '0 1px 3px rgba(0,0,0,0.06)', borderLeft: `4px solid ${sc.dot}`,
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
     }}>
-      {/* Status dot */}
       <div style={{ width: 8, height: 8, borderRadius: '50%', background: sc.dot, flexShrink: 0 }} />
-
-      {/* Name */}
-      <span style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e', minWidth: 120 }}>
-        {r.customer_name}
-      </span>
-
-      {/* Key info chips */}
+      <span style={{ fontWeight: 700, fontSize: 14, color: '#1a472a', minWidth: 120 }}>{r.customer_name}</span>
       <span style={{ fontSize: 13, color: '#555' }}>🕐 <strong>{time}</strong></span>
       <span style={{ fontSize: 13, color: '#555' }}>📅 {date}</span>
       <span style={{ fontSize: 13, color: '#555' }}>👥 <strong>{r.covers}</strong></span>
       {r.table_name && <span style={{ fontSize: 13, color: '#555' }}>🪑 {r.table_name}</span>}
       {r.customer_phone && <span style={{ fontSize: 12, color: '#888' }}>📞 {r.customer_phone}</span>}
-
-      {/* Source badge */}
       {r.source === 'widget' && (
         <span style={{ background: '#e8f4fd', color: '#0066cc', borderRadius: 10, padding: '1px 7px', fontSize: 11, fontWeight: 600 }}>
           🌐 Online
         </span>
       )}
-
-      {/* Status badge */}
-      <span style={{
-        background: sc.bg, color: sc.color,
-        borderRadius: 10, padding: '2px 8px',
-        fontSize: 11, fontWeight: 700,
-      }}>
+      <span style={{ background: sc.bg, color: sc.color, borderRadius: 10, padding: '2px 8px', fontSize: 11, fontWeight: 700 }}>
         {sc.label}
       </span>
-
-      {/* Notes — only if exists */}
       {r.notes && (
         <span style={{ fontSize: 11, color: '#aaa', fontStyle: 'italic', flexBasis: '100%', paddingLeft: 18 }}>
           📝 {r.notes}
         </span>
       )}
-
-      {/* Actions — pushed to right */}
       <div style={{ display: 'flex', gap: 5, marginLeft: 'auto', flexWrap: 'wrap' }}>
         {r.status === 'pending' && (
-          <button onClick={() => onConfirm(r)} style={actionBtn('#17A2B8')}>✓</button>
+          <button onClick={() => onConfirm(r)} style={actionBtn('#17A2B8')}>✓ Confirm</button>
         )}
         {(r.status === 'pending' || r.status === 'confirmed') && (
           <>

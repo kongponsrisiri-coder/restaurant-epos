@@ -1165,7 +1165,7 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
       covers, reservation_date, reservation_time, notes,
       source = 'widget', table_id = null, status = 'pending',
     } = req.body;
-
+const safeStatus = 'pending';
     if (!customer_name?.trim()) return res.status(400).json({ error: 'Guest name is required' });
     if (!customer_phone?.trim()) return res.status(400).json({ error: 'Phone number is required' });
     if (!reservation_date) return res.status(400).json({ error: 'Date is required' });

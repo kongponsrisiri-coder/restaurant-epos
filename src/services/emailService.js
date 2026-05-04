@@ -23,7 +23,7 @@ function sendResendEmail(to, subject, html) {
     }
 
     const body = JSON.stringify({
-      from:    'SiamEPOS <onboarding@resend.dev>',
+      from:    `${restaurantName} <noreply@siamepos.co.uk>`,
       to:      [to],
       subject: subject,
       html:    html,

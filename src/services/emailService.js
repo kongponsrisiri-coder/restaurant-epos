@@ -116,6 +116,7 @@ async function sendBookingConfirmation(reservation) {
   }
 }
 
+
 async function sendReminderEmail(reservation) {
   return sendBookingConfirmation(reservation);
 }

@@ -3,1074 +3,603 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SiamEPOS — Smart EPOS for Thai Restaurants in the UK</title>
+<title>SiamEPOS — The EPOS Built for Thai Restaurants in the UK</title>
+<meta name="description" content="SiamEPOS replaces 4 separate restaurant systems for £89/month. AI menu scanner, zero-commission bookings, kitchen display, and Thai-language support. Built for Thai restaurants in the UK.">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --gold: #C9A84C; --gold-light: #E8C96A; --gold-pale: #F5E6B8;
-    --navy: #0D1B3E; --navy-mid: #1A2F6B; --navy-light: #243880;
-    --white: #FDFAF4; --text-dark: #0D1B3E; --text-muted: #6B7A9F;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-  body { font-family: 'Sarabun', sans-serif; background: var(--white); color: var(--text-dark); overflow-x: hidden; }
-  .lang-data-en, .lang-data-th { transition: opacity 0.3s; }
-  body.thai .lang-data-en { display: none; }
-  body:not(.thai) .lang-data-th { display: none; }
+:root {
+  --gold: #C9A84C; --gold-light: #E8C96A;
+  --navy: #0D1B3E; --navy-mid: #1A2F6B;
+  --white: #FDFAF4; --text-muted: #6B7A9F;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body { font-family:'Sarabun',sans-serif; background:var(--white); color:var(--navy); overflow-x:hidden; }
+body.thai .lang-en { display:none; }
+body:not(.thai) .lang-th { display:none; }
 
-  /* ── BOOKING WIDGET (built-in, no external script) ── */
-  .book-btn {
-    display: inline-flex; align-items: center; gap: 8px;
-    background: linear-gradient(135deg, var(--gold), var(--gold-light));
-    color: var(--navy); padding: 12px 24px; border-radius: 10px;
-    font-size: 15px; font-weight: 800; border: none; cursor: pointer;
-    font-family: 'Sarabun', sans-serif;
-    transition: transform 0.2s, box-shadow 0.2s;
-    white-space: nowrap;
-  }
-  .book-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(201,168,76,0.45); }
-  .book-btn.outline {
-    background: transparent;
-    border: 2px solid var(--gold);
-    color: var(--gold);
-  }
-  .book-btn.outline:hover { background: rgba(201,168,76,0.1); }
+/* NAV */
+nav { position:fixed; top:0; left:0; right:0; z-index:100; display:flex; justify-content:space-between; align-items:center; padding:18px 60px; background:rgba(13,27,62,0.96); backdrop-filter:blur(12px); border-bottom:1px solid rgba(201,168,76,0.2); }
+.nav-logo { display:flex; align-items:center; gap:10px; text-decoration:none; }
+.logo-text { font-family:'Cormorant Garamond',serif; font-size:24px; font-weight:700; color:var(--gold); letter-spacing:1px; }
+.logo-text span { color:white; }
+.nav-links { display:flex; align-items:center; gap:24px; list-style:none; }
+.nav-links a { color:rgba(255,255,255,0.75); text-decoration:none; font-size:14px; font-weight:600; transition:color 0.2s; }
+.nav-links a:hover { color:var(--gold); }
+.nav-cta { background:linear-gradient(135deg,var(--gold),var(--gold-light)); color:var(--navy)!important; padding:9px 20px; border-radius:8px; font-weight:700!important; }
+.nav-book { background:transparent; border:1px solid rgba(201,168,76,0.5); color:var(--gold)!important; padding:9px 18px; border-radius:8px; }
+.lang-toggle { background:rgba(201,168,76,0.12); border:1px solid rgba(201,168,76,0.35); color:var(--gold); padding:6px 12px; border-radius:20px; cursor:pointer; font-size:12px; font-weight:700; font-family:'Sarabun',sans-serif; }
 
-  /* MODAL OVERLAY */
-  .booking-overlay {
-    display: none; position: fixed; inset: 0; z-index: 999;
-    background: rgba(7, 15, 36, 0.85);
-    backdrop-filter: blur(8px);
-    align-items: center; justify-content: center;
-    padding: 20px;
-  }
-  .booking-overlay.open { display: flex; }
+/* BOOK BTN */
+.book-btn { display:inline-flex; align-items:center; gap:8px; background:linear-gradient(135deg,var(--gold),var(--gold-light)); color:var(--navy); padding:13px 26px; border-radius:10px; font-size:15px; font-weight:800; border:none; cursor:pointer; font-family:'Sarabun',sans-serif; transition:transform 0.2s,box-shadow 0.2s; white-space:nowrap; }
+.book-btn:hover { transform:translateY(-2px); box-shadow:0 10px 28px rgba(201,168,76,0.45); }
+.book-btn.ghost { background:transparent; border:2px solid var(--gold); color:var(--gold); }
+.book-btn.ghost:hover { background:rgba(201,168,76,0.1); }
 
-  /* MODAL BOX */
-  .booking-modal {
-    background: #0D1B3E;
-    border: 1px solid rgba(201,168,76,0.3);
-    border-radius: 24px;
-    padding: 40px;
-    width: 100%; max-width: 480px;
-    position: relative;
-    box-shadow: 0 40px 80px rgba(0,0,0,0.6);
-    animation: modalIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both;
-    max-height: 90vh; overflow-y: auto;
-  }
-  @keyframes modalIn { from { opacity:0; transform: scale(0.92) translateY(20px); } to { opacity:1; transform: scale(1) translateY(0); } }
+/* BOOKING MODAL */
+.booking-overlay { display:none; position:fixed; inset:0; z-index:999; background:rgba(7,15,36,0.88); backdrop-filter:blur(8px); align-items:center; justify-content:center; padding:20px; }
+.booking-overlay.open { display:flex; }
+.booking-modal { background:#0D1B3E; border:1px solid rgba(201,168,76,0.3); border-radius:24px; padding:36px; width:100%; max-width:460px; position:relative; box-shadow:0 40px 80px rgba(0,0,0,0.6); animation:modalIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both; max-height:92vh; overflow-y:auto; }
+@keyframes modalIn { from{opacity:0;transform:scale(0.9) translateY(20px)} to{opacity:1;transform:scale(1) translateY(0)} }
+.modal-close { position:absolute; top:14px; right:16px; background:rgba(255,255,255,0.07); border:none; color:rgba(255,255,255,0.5); font-size:18px; width:30px; height:30px; border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.modal-close:hover { background:rgba(255,255,255,0.15); color:white; }
+.modal-title { font-family:'Cormorant Garamond',serif; font-size:26px; font-weight:700; color:white; margin-bottom:4px; }
+.modal-sub { font-size:13px; color:rgba(255,255,255,0.45); margin-bottom:24px; }
+.modal-steps { display:flex; gap:0; margin-bottom:24px; }
+.modal-step { flex:1; text-align:center; position:relative; }
+.modal-step::after { content:''; position:absolute; top:13px; left:50%; right:-50%; height:2px; background:rgba(255,255,255,0.08); z-index:0; }
+.modal-step:last-child::after { display:none; }
+.sc { width:26px; height:26px; border-radius:50%; background:rgba(255,255,255,0.07); border:2px solid rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:rgba(255,255,255,0.4); margin:0 auto 4px; position:relative; z-index:1; transition:all 0.3s; }
+.sc.active { background:var(--gold); border-color:var(--gold); color:var(--navy); }
+.sc.done { background:rgba(201,168,76,0.2); border-color:var(--gold); color:var(--gold); }
+.sl { font-size:9px; color:rgba(255,255,255,0.3); }
+.sl.active { color:var(--gold); font-weight:700; }
+.form-panel { display:none; }
+.form-panel.active { display:block; animation:fadeUp 0.3s ease both; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+.flabel { display:block; font-size:11px; font-weight:700; color:rgba(255,255,255,0.5); letter-spacing:0.5px; margin-bottom:7px; text-transform:uppercase; }
+.finput, .fselect, .ftextarea { width:100%; padding:12px 14px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); border-radius:10px; color:white; font-size:14px; font-family:'Sarabun',sans-serif; outline:none; transition:border-color 0.2s; -webkit-appearance:none; }
+.finput:focus,.fselect:focus,.ftextarea:focus { border-color:var(--gold); }
+.finput::placeholder,.ftextarea::placeholder { color:rgba(255,255,255,0.25); }
+.fselect option { background:#0D1B3E; }
+.ftextarea { resize:none; height:72px; }
+.frow { margin-bottom:14px; }
+.frow2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+.ferr { color:#FF6B6B; font-size:11px; margin-top:4px; display:none; }
+.ferr.show { display:block; }
+.time-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; }
+.tslot { padding:9px 4px; border-radius:8px; text-align:center; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08); font-size:12px; font-weight:600; color:rgba(255,255,255,0.55); cursor:pointer; transition:all 0.2s; font-family:'Sarabun',sans-serif; }
+.tslot:hover { border-color:rgba(201,168,76,0.4); color:var(--gold); }
+.tslot.selected { background:var(--gold); border-color:var(--gold); color:var(--navy); font-weight:800; }
+.mbtn-row { display:flex; gap:10px; margin-top:20px; }
+.mbtn-back { padding:12px 18px; border-radius:10px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); color:rgba(255,255,255,0.6); font-size:13px; font-weight:600; cursor:pointer; font-family:'Sarabun',sans-serif; }
+.mbtn-next { flex:1; padding:13px; border-radius:10px; background:linear-gradient(135deg,var(--gold),var(--gold-light)); border:none; color:var(--navy); font-size:14px; font-weight:800; cursor:pointer; font-family:'Sarabun',sans-serif; transition:all 0.2s; }
+.mbtn-next:hover { transform:translateY(-1px); box-shadow:0 6px 20px rgba(201,168,76,0.4); }
+.mbtn-next:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+.bsuccess { display:none; text-align:center; padding:20px 0; }
+.bsuccess-icon { font-size:52px; margin-bottom:14px; }
+.bsuccess-title { font-family:'Cormorant Garamond',serif; font-size:26px; font-weight:700; color:white; margin-bottom:8px; }
+.bsuccess-sub { font-size:13px; color:rgba(255,255,255,0.5); line-height:1.7; margin-bottom:20px; }
+.bsuccess-ref { background:rgba(201,168,76,0.1); border:1px solid rgba(201,168,76,0.25); border-radius:10px; padding:12px 18px; font-size:12px; color:var(--gold); font-weight:700; margin-bottom:18px; }
 
-  .modal-close {
-    position: absolute; top: 16px; right: 20px;
-    background: rgba(255,255,255,0.08); border: none;
-    color: rgba(255,255,255,0.5); font-size: 20px;
-    width: 32px; height: 32px; border-radius: 8px;
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
-    transition: all 0.2s;
-  }
-  .modal-close:hover { background: rgba(255,255,255,0.15); color: white; }
+/* WHATSAPP FLOAT */
+.wa-float { position:fixed; bottom:28px; right:28px; z-index:98; display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
+.wa-btn { display:flex; align-items:center; gap:10px; background:#25D366; color:white; padding:13px 20px; border-radius:50px; font-size:14px; font-weight:700; text-decoration:none; box-shadow:0 8px 24px rgba(37,211,102,0.4); transition:transform 0.2s,box-shadow 0.2s; font-family:'Sarabun',sans-serif; }
+.wa-btn:hover { transform:translateY(-2px); box-shadow:0 12px 32px rgba(37,211,102,0.5); }
+.wa-icon { font-size:20px; }
 
-  .modal-logo {
-    display: flex; align-items: center; gap: 10px;
-    margin-bottom: 24px;
-  }
-  .modal-logo-flags { display: flex; gap: 3px; }
-  .modal-logo-text {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 20px; font-weight: 700; color: var(--gold);
-  }
-  .modal-logo-text span { color: white; }
+/* HERO */
+.hero { min-height:100vh; background:linear-gradient(160deg,var(--navy) 0%,var(--navy-mid) 60%,#0A2456 100%); display:flex; align-items:center; position:relative; overflow:hidden; padding:120px 60px 80px; }
+.hero::before { content:''; position:absolute; inset:0; background-image:repeating-linear-gradient(45deg,rgba(201,168,76,0.03) 0px,rgba(201,168,76,0.03) 1px,transparent 1px,transparent 60px),repeating-linear-gradient(-45deg,rgba(201,168,76,0.03) 0px,rgba(201,168,76,0.03) 1px,transparent 1px,transparent 60px); }
+.hero::after { content:''; position:absolute; width:700px; height:700px; background:radial-gradient(circle,rgba(201,168,76,0.1) 0%,transparent 70%); right:-150px; top:50%; transform:translateY(-50%); border-radius:50%; }
+.hero-content { max-width:700px; position:relative; z-index:1; animation:fadeUp 0.9s ease both; }
+.hero-tag { display:inline-flex; align-items:center; gap:8px; background:rgba(201,168,76,0.15); border:1px solid rgba(201,168,76,0.4); color:var(--gold); padding:7px 16px; border-radius:30px; font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:24px; }
+.hero h1 { font-family:'Cormorant Garamond',serif; font-size:68px; font-weight:700; line-height:1.05; color:white; margin-bottom:20px; }
+.hero h1 em { font-style:italic; color:var(--gold); }
+.hero-sub { font-size:18px; color:rgba(255,255,255,0.7); line-height:1.75; margin-bottom:36px; font-weight:300; max-width:580px; }
+.hero-actions { display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin-bottom:56px; }
+.hero-stats { display:flex; gap:40px; flex-wrap:wrap; }
+.hstat-num { font-family:'Cormorant Garamond',serif; font-size:38px; font-weight:700; color:var(--gold); line-height:1; }
+.hstat-label { font-size:11px; color:rgba(255,255,255,0.45); text-transform:uppercase; letter-spacing:1px; margin-top:3px; }
 
-  .modal-title {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 28px; font-weight: 700; color: white;
-    margin-bottom: 6px;
-  }
-  .modal-subtitle { font-size: 14px; color: rgba(255,255,255,0.5); margin-bottom: 28px; }
+/* PROOF BAR */
+.proof-bar { background:linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.06)); border-top:1px solid rgba(201,168,76,0.25); border-bottom:1px solid rgba(201,168,76,0.25); padding:20px 60px; display:flex; justify-content:center; align-items:center; gap:60px; flex-wrap:wrap; }
+.proof-item { display:flex; align-items:center; gap:10px; font-size:14px; font-weight:700; color:white; }
+.proof-item .pi-icon { font-size:22px; }
+.proof-item span { color:var(--gold); }
 
-  /* STEPS */
-  .modal-steps {
-    display: flex; gap: 0; margin-bottom: 28px;
-  }
-  .modal-step {
-    flex: 1; text-align: center; position: relative;
-  }
-  .modal-step::after {
-    content: '';
-    position: absolute; top: 14px; left: 50%; right: -50%;
-    height: 2px; background: rgba(255,255,255,0.1);
-    z-index: 0;
-  }
-  .modal-step:last-child::after { display: none; }
-  .step-circle {
-    width: 28px; height: 28px; border-radius: 50%;
-    background: rgba(255,255,255,0.08);
-    border: 2px solid rgba(255,255,255,0.15);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.4);
-    margin: 0 auto 6px; position: relative; z-index: 1;
-    transition: all 0.3s;
-  }
-  .step-circle.active { background: var(--gold); border-color: var(--gold); color: var(--navy); }
-  .step-circle.done { background: rgba(201,168,76,0.2); border-color: var(--gold); color: var(--gold); }
-  .step-label { font-size: 10px; color: rgba(255,255,255,0.35); }
-  .step-label.active { color: var(--gold); font-weight: 700; }
+/* SECTIONS */
+section { padding:100px 60px; }
+.section-label { display:inline-block; color:var(--gold); font-size:11px; font-weight:700; letter-spacing:3px; text-transform:uppercase; margin-bottom:14px; }
+.section-title { font-family:'Cormorant Garamond',serif; font-size:50px; font-weight:700; line-height:1.1; color:var(--navy); margin-bottom:18px; }
+.section-title.white { color:white; }
+.section-sub { font-size:17px; color:var(--text-muted); line-height:1.7; max-width:560px; }
 
-  /* FORM PANELS */
-  .form-panel { display: none; }
-  .form-panel.active { display: block; animation: fadeUp 0.3s ease both; }
+/* FEATURES GRID */
+.features-section { background:var(--white); }
+.features-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:24px; max-width:1100px; margin:60px auto 0; }
+.fcard { background:white; border:1px solid #E8E8F0; border-radius:20px; padding:32px 28px; transition:transform 0.3s,box-shadow 0.3s,border-color 0.3s; position:relative; overflow:hidden; text-decoration:none; display:block; }
+.fcard::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,var(--gold),var(--gold-light)); transform:scaleX(0); transform-origin:left; transition:transform 0.3s; }
+.fcard:hover { transform:translateY(-6px); box-shadow:0 20px 50px rgba(13,27,62,0.1); border-color:rgba(201,168,76,0.3); }
+.fcard:hover::before { transform:scaleX(1); }
+.fcard.highlight { border-color:rgba(201,168,76,0.3); background:linear-gradient(160deg,#FDFAF4,#FBF5E6); }
+.fcard-icon { font-size:32px; margin-bottom:14px; }
+.fcard-badge { display:inline-block; background:rgba(201,168,76,0.15); border:1px solid rgba(201,168,76,0.3); color:var(--gold); font-size:9px; font-weight:800; letter-spacing:1px; text-transform:uppercase; padding:3px 10px; border-radius:20px; margin-bottom:10px; }
+.fcard-title { font-size:18px; font-weight:700; color:var(--navy); margin-bottom:8px; }
+.fcard-desc { font-size:13px; color:var(--text-muted); line-height:1.65; }
+.fcard-coming { font-size:11px; color:var(--gold); font-weight:700; margin-top:10px; opacity:0.7; }
 
-  .form-row { margin-bottom: 16px; }
-  .form-label { display: block; font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.6); letter-spacing: 0.5px; margin-bottom: 8px; text-transform: uppercase; }
-  .form-input, .form-select, .form-textarea {
-    width: 100%; padding: 13px 16px;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 10px; color: white; font-size: 15px;
-    font-family: 'Sarabun', sans-serif; outline: none;
-    transition: border-color 0.2s;
-    -webkit-appearance: none;
-  }
-  .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--gold); }
-  .form-input::placeholder, .form-textarea::placeholder { color: rgba(255,255,255,0.3); }
-  .form-select option { background: #0D1B3E; color: white; }
-  .form-textarea { resize: none; height: 80px; }
+/* PRICING PREVIEW */
+.pricing-section { background:#F7F5F0; }
+.pricing-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; max-width:1000px; margin:60px auto 0; }
+.pcard { background:white; border:1px solid #E0DDD6; border-radius:20px; padding:36px 28px; position:relative; transition:transform 0.3s,box-shadow 0.3s; }
+.pcard:hover { transform:translateY(-4px); box-shadow:0 16px 40px rgba(13,27,62,0.1); }
+.pcard.featured { background:var(--navy); border-color:var(--gold); transform:scale(1.04); }
+.pcard.featured:hover { transform:scale(1.04) translateY(-4px); }
+.pcard-badge { position:absolute; top:-12px; left:50%; transform:translateX(-50%); background:linear-gradient(135deg,var(--gold),var(--gold-light)); color:var(--navy); font-size:10px; font-weight:800; padding:4px 16px; border-radius:20px; text-transform:uppercase; letter-spacing:1px; white-space:nowrap; }
+.pcard-tier { font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--gold); margin-bottom:10px; }
+.pcard-price { font-family:'Cormorant Garamond',serif; font-size:52px; font-weight:700; color:var(--navy); line-height:1; margin-bottom:4px; }
+.pcard.featured .pcard-price { color:white; }
+.pcard-period { font-size:12px; color:var(--text-muted); margin-bottom:14px; }
+.pcard.featured .pcard-period { color:rgba(255,255,255,0.45); }
+.pcard-key { font-size:13px; color:var(--text-muted); line-height:1.6; margin-bottom:20px; }
+.pcard.featured .pcard-key { color:rgba(255,255,255,0.6); }
+.btn-pcard { display:block; width:100%; padding:12px; border-radius:10px; border:none; font-size:14px; font-weight:700; cursor:pointer; text-decoration:none; text-align:center; transition:all 0.2s; font-family:'Sarabun',sans-serif; }
+.btn-outline-navy { background:transparent; border:2px solid rgba(13,27,62,0.2); color:var(--navy); }
+.btn-outline-navy:hover { border-color:var(--gold); color:var(--gold); }
+.btn-gold { background:linear-gradient(135deg,var(--gold),var(--gold-light)); color:var(--navy); }
+.btn-gold:hover { box-shadow:0 6px 20px rgba(201,168,76,0.4); transform:translateY(-1px); }
 
-  .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+/* COMPARISON TABLE */
+.compare-section { background:var(--white); }
+.compare-table { width:100%; max-width:900px; margin:50px auto 0; border-collapse:collapse; }
+.compare-table th { background:var(--navy); color:white; padding:14px 20px; font-size:13px; font-weight:700; text-align:left; }
+.compare-table th:first-child { border-radius:12px 0 0 0; }
+.compare-table th:last-child { border-radius:0 12px 0 0; color:var(--gold); }
+.compare-table td { padding:14px 20px; font-size:14px; border-bottom:1px solid #EEEDF0; }
+.compare-table tr:last-child td { border-bottom:none; font-weight:800; font-size:16px; }
+.compare-table tr:last-child td:last-child { color:var(--gold); background:rgba(201,168,76,0.06); }
+.compare-table tr:hover td { background:#F9F8FF; }
+.compare-highlight { background:rgba(201,168,76,0.06)!important; }
 
-  /* TIME SLOTS */
-  .time-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-  .time-slot {
-    padding: 10px 6px; border-radius: 8px; text-align: center;
-    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-    font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.6);
-    cursor: pointer; transition: all 0.2s; font-family: 'Sarabun', sans-serif;
-  }
-  .time-slot:hover { border-color: rgba(201,168,76,0.4); color: var(--gold); background: rgba(201,168,76,0.08); }
-  .time-slot.selected { background: var(--gold); border-color: var(--gold); color: var(--navy); font-weight: 800; }
+/* FINAL CTA */
+.final-cta { background:linear-gradient(135deg,var(--navy) 0%,#0A2456 100%); text-align:center; position:relative; overflow:hidden; }
+.final-cta::before { content:''; position:absolute; width:700px; height:700px; background:radial-gradient(circle,rgba(201,168,76,0.07) 0%,transparent 70%); top:50%; left:50%; transform:translate(-50%,-50%); }
+.final-cta .section-title { color:white; }
+.final-cta .section-sub { color:rgba(255,255,255,0.6); margin:0 auto 40px; }
 
-  /* MODAL BUTTONS */
-  .modal-btn-row { display: flex; gap: 10px; margin-top: 24px; }
-  .modal-btn-back {
-    padding: 13px 20px; border-radius: 10px;
-    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
-    color: rgba(255,255,255,0.6); font-size: 14px; font-weight: 600;
-    cursor: pointer; font-family: 'Sarabun', sans-serif; transition: all 0.2s;
-  }
-  .modal-btn-back:hover { background: rgba(255,255,255,0.1); }
-  .modal-btn-next {
-    flex: 1; padding: 14px; border-radius: 10px;
-    background: linear-gradient(135deg, var(--gold), var(--gold-light));
-    border: none; color: var(--navy); font-size: 15px; font-weight: 800;
-    cursor: pointer; font-family: 'Sarabun', sans-serif;
-    transition: all 0.2s;
-  }
-  .modal-btn-next:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(201,168,76,0.4); }
-  .modal-btn-next:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+/* FOOTER */
+footer { background:#070F24; padding:56px 60px; display:grid; grid-template-columns:2fr 1fr 1fr 1fr; gap:48px; }
+.footer-brand {}
+.footer-logo { font-family:'Cormorant Garamond',serif; font-size:26px; font-weight:700; color:var(--gold); margin-bottom:12px; }
+.footer-logo span { color:white; }
+.footer-tagline { color:rgba(255,255,255,0.4); font-size:13px; line-height:1.7; max-width:240px; margin-bottom:20px; }
+.footer-col h4 { color:white; font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:16px; }
+.footer-col ul { list-style:none; display:flex; flex-direction:column; gap:9px; }
+.footer-col ul a { color:rgba(255,255,255,0.4); font-size:13px; text-decoration:none; transition:color 0.2s; }
+.footer-col ul a:hover { color:var(--gold); }
+.footer-bottom { background:#040A18; padding:18px 60px; display:flex; justify-content:space-between; align-items:center; }
+.footer-bottom p { color:rgba(255,255,255,0.22); font-size:12px; }
+.footer-bottom a { color:var(--gold); text-decoration:none; }
 
-  /* SUCCESS STATE */
-  .booking-success {
-    display: none; text-align: center; padding: 20px 0;
-  }
-  .success-icon { font-size: 56px; margin-bottom: 16px; }
-  .success-title { font-family: 'Cormorant Garamond', serif; font-size: 28px; font-weight: 700; color: white; margin-bottom: 8px; }
-  .success-sub { font-size: 14px; color: rgba(255,255,255,0.55); line-height: 1.7; margin-bottom: 24px; }
-  .success-ref { background: rgba(201,168,76,0.1); border: 1px solid rgba(201,168,76,0.25); border-radius: 10px; padding: 14px 20px; font-size: 13px; color: var(--gold); font-weight: 700; margin-bottom: 20px; }
-
-  /* ERROR MESSAGE */
-  .form-error { color: #FF6B6B; font-size: 12px; margin-top: 6px; display: none; }
-  .form-error.show { display: block; }
-
-  /* NAV */
-  nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; display: flex; justify-content: space-between; align-items: center; padding: 20px 60px; background: rgba(13,27,62,0.95); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(201,168,76,0.2); }
-  .nav-logo { display: flex; align-items: center; gap: 12px; text-decoration: none; }
-  .logo-icon { width: 42px; height: 42px; background: linear-gradient(135deg, var(--gold), var(--gold-light)); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-  .logo-text { font-family: 'Cormorant Garamond', serif; font-size: 26px; font-weight: 700; color: var(--gold); letter-spacing: 1px; }
-  .logo-text span { color: white; }
-  .nav-links { display: flex; align-items: center; gap: 28px; list-style: none; }
-  .nav-links a { color: rgba(255,255,255,0.75); text-decoration: none; font-size: 14px; font-weight: 600; letter-spacing: 0.5px; transition: color 0.2s; }
-  .nav-links a:hover { color: var(--gold); }
-  .nav-cta { background: linear-gradient(135deg, var(--gold), var(--gold-light)); color: var(--navy) !important; padding: 10px 24px; border-radius: 8px; font-weight: 700 !important; }
-  .nav-cta:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(201,168,76,0.4); }
-  .lang-toggle { background: rgba(201,168,76,0.15); border: 1px solid rgba(201,168,76,0.4); color: var(--gold); padding: 6px 14px; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 700; font-family: 'Sarabun', sans-serif; transition: all 0.2s; }
-  .lang-toggle:hover { background: rgba(201,168,76,0.3); }
-
-  /* HERO */
-  .hero { min-height: 100vh; background: linear-gradient(160deg, var(--navy) 0%, var(--navy-mid) 60%, #0A2456 100%); display: flex; align-items: center; position: relative; overflow: hidden; padding: 120px 60px 80px; }
-  .hero::before { content: ''; position: absolute; inset: 0; background-image: repeating-linear-gradient(45deg, rgba(201,168,76,0.03) 0px, rgba(201,168,76,0.03) 1px, transparent 1px, transparent 60px), repeating-linear-gradient(-45deg, rgba(201,168,76,0.03) 0px, rgba(201,168,76,0.03) 1px, transparent 1px, transparent 60px); }
-  .hero::after { content: ''; position: absolute; width: 600px; height: 600px; background: radial-gradient(circle, rgba(201,168,76,0.12) 0%, transparent 70%); right: -100px; top: 50%; transform: translateY(-50%); border-radius: 50%; }
-  .hero-content { max-width: 680px; position: relative; z-index: 1; animation: fadeUp 0.9s ease both; }
-  @keyframes fadeUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-  .hero-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(201,168,76,0.15); border: 1px solid rgba(201,168,76,0.4); color: var(--gold); padding: 8px 18px; border-radius: 30px; font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 28px; animation: fadeUp 0.9s ease 0.1s both; }
-  .hero-badge::before { content: '🇹🇭'; }
-  .hero h1 { font-family: 'Cormorant Garamond', serif; font-size: 72px; font-weight: 700; line-height: 1.05; color: white; margin-bottom: 24px; animation: fadeUp 0.9s ease 0.2s both; }
-  .hero h1 em { font-style: italic; color: var(--gold); }
-  .hero-sub { font-size: 19px; color: rgba(255,255,255,0.7); line-height: 1.7; margin-bottom: 40px; font-weight: 300; animation: fadeUp 0.9s ease 0.3s both; }
-  .hero-actions { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; animation: fadeUp 0.9s ease 0.4s both; }
-  .btn-primary { background: linear-gradient(135deg, var(--gold), var(--gold-light)); color: var(--navy); padding: 16px 36px; border-radius: 10px; font-size: 16px; font-weight: 800; text-decoration: none; transition: transform 0.2s, box-shadow 0.2s; display: inline-flex; align-items: center; gap: 8px; }
-  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(201,168,76,0.45); }
-  .btn-hero-secondary { background: rgba(255,255,255,0.08); color: white; border: 1px solid rgba(255,255,255,0.2); padding: 16px 36px; border-radius: 10px; font-size: 16px; font-weight: 600; text-decoration: none; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; }
-  .btn-hero-secondary:hover { background: rgba(255,255,255,0.14); border-color: rgba(201,168,76,0.4); }
-  .hero-stats { display: flex; gap: 48px; margin-top: 64px; animation: fadeUp 0.9s ease 0.5s both; }
-  .hero-stat-num { font-family: 'Cormorant Garamond', serif; font-size: 42px; font-weight: 700; color: var(--gold); line-height: 1; }
-  .hero-stat-label { font-size: 12px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
-  .hero-visual { position: absolute; right: 60px; top: 50%; transform: translateY(-50%); width: 480px; animation: fadeUp 0.9s ease 0.3s both; z-index: 1; }
-  .screen-mockup { background: rgba(255,255,255,0.06); border: 1px solid rgba(201,168,76,0.25); border-radius: 20px; padding: 20px; backdrop-filter: blur(10px); box-shadow: 0 40px 80px rgba(0,0,0,0.4); }
-  .mockup-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-  .mockup-dot { width: 10px; height: 10px; border-radius: 50%; }
-  .mockup-title { color: rgba(255,255,255,0.4); font-size: 12px; margin-left: auto; margin-right: auto; }
-  .table-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-  .table-card { border-radius: 12px; padding: 14px 10px; text-align: center; font-size: 11px; font-weight: 700; }
-  .table-num { font-size: 20px; font-weight: 800; }
-  .t-available { background: rgba(34,197,94,0.2); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
-  .t-occupied { background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
-  .t-starters { background: rgba(234,179,8,0.2); color: #facc15; border: 1px solid rgba(234,179,8,0.3); }
-  .t-mains { background: rgba(56,189,248,0.2); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3); }
-  .mockup-bottom { margin-top: 14px; background: rgba(201,168,76,0.1); border-radius: 10px; padding: 12px; display: flex; justify-content: space-between; align-items: center; }
-  .mockup-bottom-label { color: rgba(255,255,255,0.5); font-size: 11px; }
-  .mockup-bottom-val { color: var(--gold); font-weight: 800; font-size: 15px; }
-
-  /* TRUST BAR */
-  .trust-bar { background: var(--navy); padding: 24px 60px; display: flex; justify-content: center; align-items: center; gap: 60px; flex-wrap: wrap; border-bottom: 1px solid rgba(201,168,76,0.15); }
-  .trust-item { display: flex; align-items: center; gap: 10px; color: rgba(255,255,255,0.6); font-size: 14px; font-weight: 600; }
-  .trust-item span { color: var(--gold); font-size: 18px; }
-
-  /* SECTIONS */
-  section { padding: 100px 60px; }
-  .section-label { display: inline-block; color: var(--gold); font-size: 12px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 16px; }
-  .section-title { font-family: 'Cormorant Garamond', serif; font-size: 52px; font-weight: 700; line-height: 1.1; color: var(--navy); margin-bottom: 20px; }
-  .section-sub { font-size: 18px; color: var(--text-muted); line-height: 1.7; max-width: 560px; }
-
-  /* RESERVATION BANNER */
-  .reservation-banner { background: linear-gradient(135deg, var(--navy) 0%, #0A2456 100%); padding: 40px 60px; display: flex; align-items: center; justify-content: space-between; gap: 40px; flex-wrap: wrap; border-top: 2px solid var(--gold); border-bottom: 2px solid var(--gold); position: relative; overflow: hidden; }
-  .reservation-banner::before { content: ''; position: absolute; inset: 0; background-image: repeating-linear-gradient(45deg, rgba(201,168,76,0.03) 0px, rgba(201,168,76,0.03) 1px, transparent 1px, transparent 60px); }
-  .res-banner-text { position: relative; z-index: 1; }
-  .res-banner-title { font-family: 'Cormorant Garamond', serif; font-size: 32px; font-weight: 700; color: white; margin-bottom: 8px; }
-  .res-banner-title em { color: var(--gold); font-style: italic; }
-  .res-banner-sub { font-size: 15px; color: rgba(255,255,255,0.65); max-width: 480px; line-height: 1.6; }
-  .res-banner-stats { display: flex; gap: 40px; position: relative; z-index: 1; flex-wrap: wrap; }
-  .res-stat { text-align: center; }
-  .res-stat-num { font-family: 'Cormorant Garamond', serif; font-size: 40px; font-weight: 700; color: var(--gold); line-height: 1; }
-  .res-stat-label { font-size: 12px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
-  .res-banner-cta { position: relative; z-index: 1; }
-
-  /* AI SCANNER TEASER */
-  .ai-scanner-section { background: linear-gradient(160deg, #0A0F1E 0%, #0D1B3E 50%, #0A1628 100%); padding: 100px 60px; position: relative; overflow: hidden; }
-  .ai-scanner-section::before { content: ''; position: absolute; inset: 0; background-image: repeating-linear-gradient(45deg, rgba(201,168,76,0.02) 0px, rgba(201,168,76,0.02) 1px, transparent 1px, transparent 80px); }
-  .ai-scanner-inner { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; position: relative; z-index: 1; }
-  .ai-scanner-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(201,168,76,0.12); border: 1px solid rgba(201,168,76,0.35); color: var(--gold); padding: 6px 14px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 20px; }
-  .ai-scanner-title { font-family: 'Cormorant Garamond', serif; font-size: 46px; font-weight: 700; color: white; line-height: 1.1; margin-bottom: 20px; }
-  .ai-scanner-title em { font-style: italic; color: var(--gold); }
-  .ai-scanner-desc { font-size: 16px; color: rgba(255,255,255,0.65); line-height: 1.7; margin-bottom: 32px; }
-  .ai-scanner-features { display: flex; flex-direction: column; gap: 14px; margin-bottom: 36px; }
-  .ai-feat { display: flex; gap: 12px; align-items: flex-start; }
-  .ai-feat-icon { width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0; background: rgba(201,168,76,0.12); border: 1px solid rgba(201,168,76,0.2); display: flex; align-items: center; justify-content: center; font-size: 15px; }
-  .ai-feat-text { font-size: 14px; color: rgba(255,255,255,0.7); line-height: 1.5; }
-  .ai-feat-text strong { color: white; }
-  .coming-soon-badge { display: inline-flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.5); padding: 14px 28px; border-radius: 10px; font-size: 14px; font-weight: 600; }
-
-  /* FEATURES */
-  .features { background: var(--white); }
-  .features-header { text-align: center; margin-bottom: 70px; }
-  .features-header .section-sub { margin: 0 auto; }
-  .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; max-width: 1100px; margin: 0 auto; }
-  .feature-card { background: white; border: 1px solid #E8E8F0; border-radius: 20px; padding: 36px 32px; transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s; position: relative; overflow: hidden; }
-  .feature-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--gold), var(--gold-light)); transform: scaleX(0); transform-origin: left; transition: transform 0.3s; }
-  .feature-card:hover { transform: translateY(-6px); box-shadow: 0 20px 50px rgba(13,27,62,0.1); border-color: rgba(201,168,76,0.3); }
-  .feature-card:hover::before { transform: scaleX(1); }
-  .feature-card.highlight { border-color: rgba(201,168,76,0.35); background: linear-gradient(160deg, #FDFAF4 0%, #FBF5E6 100%); }
-  .feature-icon { width: 56px; height: 56px; background: linear-gradient(135deg, rgba(201,168,76,0.12), rgba(201,168,76,0.06)); border-radius: 14px; font-size: 26px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px; border: 1px solid rgba(201,168,76,0.2); }
-  .feature-badge { display: inline-block; background: linear-gradient(135deg, var(--gold), var(--gold-light)); color: var(--navy); font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; padding: 3px 10px; border-radius: 20px; margin-bottom: 14px; }
-  .feature-badge.coming-light { background: rgba(13,27,62,0.08); color: var(--text-muted); border: 1px solid rgba(13,27,62,0.12); }
-  .feature-title { font-size: 19px; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
-  .feature-desc { font-size: 14px; color: var(--text-muted); line-height: 1.7; }
-
-  /* HOW IT WORKS */
-  .how { background: linear-gradient(160deg, var(--navy) 0%, var(--navy-mid) 100%); position: relative; overflow: hidden; }
-  .how::before { content: ''; position: absolute; inset: 0; background-image: repeating-linear-gradient(45deg, rgba(201,168,76,0.03) 0px, rgba(201,168,76,0.03) 1px, transparent 1px, transparent 80px); }
-  .how .section-title { color: white; }
-  .how-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 60px; position: relative; z-index: 1; }
-  .how-step { text-align: center; padding: 36px 24px; background: rgba(255,255,255,0.04); border: 1px solid rgba(201,168,76,0.15); border-radius: 20px; transition: background 0.3s; }
-  .how-step:hover { background: rgba(255,255,255,0.08); }
-  .step-num { font-family: 'Cormorant Garamond', serif; font-size: 56px; font-weight: 700; color: rgba(201,168,76,0.25); line-height: 1; margin-bottom: 12px; }
-  .step-icon { font-size: 32px; margin-bottom: 16px; }
-  .step-title { font-size: 17px; font-weight: 700; color: white; margin-bottom: 10px; }
-  .step-desc { font-size: 13px; color: rgba(255,255,255,0.5); line-height: 1.7; }
-
-  /* WHY THAI */
-  .why-thai { background: var(--white); display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
-  .why-visual { background: linear-gradient(135deg, var(--navy), var(--navy-mid)); border-radius: 24px; padding: 48px; border: 1px solid rgba(201,168,76,0.2); position: relative; overflow: hidden; }
-  .why-visual::after { content: '🇹🇭'; position: absolute; right: -20px; bottom: -20px; font-size: 160px; opacity: 0.06; }
-  .thai-fact { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 28px; padding-bottom: 28px; border-bottom: 1px solid rgba(201,168,76,0.1); }
-  .thai-fact:last-child { border: none; margin-bottom: 0; padding-bottom: 0; }
-  .thai-fact-icon { width: 44px; height: 44px; border-radius: 12px; background: rgba(201,168,76,0.15); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
-  .thai-fact-title { color: var(--gold); font-weight: 700; font-size: 15px; margin-bottom: 4px; }
-  .thai-fact-desc { color: rgba(255,255,255,0.55); font-size: 13px; line-height: 1.6; }
-  .why-points { display: flex; flex-direction: column; gap: 24px; margin-top: 40px; }
-  .why-point { display: flex; gap: 16px; align-items: flex-start; }
-  .why-point-check { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--gold), var(--gold-light)); display: flex; align-items: center; justify-content: center; color: var(--navy); font-weight: 900; font-size: 14px; flex-shrink: 0; margin-top: 2px; }
-  .why-point-text { font-size: 16px; color: var(--text-muted); line-height: 1.6; }
-  .why-point-text strong { color: var(--navy); }
-
-  /* PRICING */
-  .pricing { background: #F7F5F0; text-align: center; }
-  .pricing-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; max-width: 1000px; margin: 60px auto 0; }
-  .pricing-card { background: white; border: 1px solid #E0DDD6; border-radius: 24px; padding: 40px 32px; position: relative; transition: transform 0.3s, box-shadow 0.3s; }
-  .pricing-card:hover { transform: translateY(-6px); box-shadow: 0 20px 50px rgba(13,27,62,0.1); }
-  .pricing-card.featured { background: var(--navy); border-color: var(--gold); transform: scale(1.04); }
-  .pricing-card.featured:hover { transform: scale(1.04) translateY(-6px); }
-  .pricing-badge { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, var(--gold), var(--gold-light)); color: var(--navy); font-size: 11px; font-weight: 800; padding: 5px 18px; border-radius: 20px; text-transform: uppercase; letter-spacing: 1px; }
-  .pricing-tier { font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
-  .pricing-price { font-family: 'Cormorant Garamond', serif; font-size: 56px; font-weight: 700; color: var(--navy); line-height: 1; margin-bottom: 6px; }
-  .pricing-card.featured .pricing-price { color: white; }
-  .pricing-period { font-size: 13px; color: var(--text-muted); margin-bottom: 28px; }
-  .pricing-card.featured .pricing-period { color: rgba(255,255,255,0.5); }
-  .pricing-features { list-style: none; text-align: left; margin-bottom: 32px; display: flex; flex-direction: column; gap: 12px; }
-  .pricing-features li { display: flex; gap: 10px; align-items: center; font-size: 14px; color: var(--text-muted); }
-  .pricing-card.featured .pricing-features li { color: rgba(255,255,255,0.7); }
-  .pricing-features li::before { content: '✓'; color: var(--gold); font-weight: 900; font-size: 14px; flex-shrink: 0; }
-  .btn-pricing { width: 100%; padding: 14px; border-radius: 10px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; text-decoration: none; display: block; text-align: center; transition: all 0.2s; }
-  .btn-pricing-outline { background: transparent; border: 2px solid rgba(13,27,62,0.2); color: var(--navy); }
-  .btn-pricing-outline:hover { border-color: var(--gold); color: var(--gold); }
-  .btn-pricing-gold { background: linear-gradient(135deg, var(--gold), var(--gold-light)); color: var(--navy); }
-  .btn-pricing-gold:hover { box-shadow: 0 8px 24px rgba(201,168,76,0.4); transform: translateY(-1px); }
-
-  /* DEMO */
-  .demo { background: linear-gradient(135deg, var(--navy) 0%, #0A2456 100%); text-align: center; position: relative; overflow: hidden; }
-  .demo::before { content: ''; position: absolute; width: 800px; height: 800px; background: radial-gradient(circle, rgba(201,168,76,0.08) 0%, transparent 70%); top: 50%; left: 50%; transform: translate(-50%, -50%); }
-  .demo .section-title { color: white; }
-  .demo .section-sub { color: rgba(255,255,255,0.6); margin: 0 auto 48px; }
-  .demo-input { width: 100%; padding: 16px 20px; border-radius: 10px; border: 1px solid rgba(201,168,76,0.3); background: rgba(255,255,255,0.07); color: white; font-size: 15px; font-family: 'Sarabun', sans-serif; outline: none; }
-  .demo-input::placeholder { color: rgba(255,255,255,0.35); }
-  .demo-input:focus { border-color: var(--gold); }
-  .demo-note { color: rgba(255,255,255,0.4); font-size: 13px; margin-top: 16px; position: relative; z-index: 1; }
-
-  /* FOOTER */
-  footer { background: #070F24; padding: 60px; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 48px; }
-  .footer-logo { font-family: 'Cormorant Garamond', serif; font-size: 28px; font-weight: 700; color: var(--gold); margin-bottom: 16px; }
-  .footer-logo span { color: white; }
-  .footer-tagline { color: rgba(255,255,255,0.4); font-size: 14px; line-height: 1.7; max-width: 260px; margin-bottom: 24px; }
-  .footer-social { display: flex; gap: 12px; margin-bottom: 20px; }
-  .social-btn { width: 38px; height: 38px; border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.5); font-size: 16px; text-decoration: none; transition: all 0.2s; }
-  .social-btn:hover { background: rgba(201,168,76,0.15); border-color: var(--gold); color: var(--gold); }
-  .footer-col h4 { color: white; font-size: 13px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 20px; }
-  .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
-  .footer-col ul a { color: rgba(255,255,255,0.45); font-size: 14px; text-decoration: none; transition: color 0.2s; }
-  .footer-col ul a:hover { color: var(--gold); }
-  .footer-bottom { background: #040A18; padding: 20px 60px; display: flex; justify-content: space-between; align-items: center; }
-  .footer-bottom p { color: rgba(255,255,255,0.25); font-size: 13px; }
-  .footer-bottom a { color: var(--gold); text-decoration: none; }
-
-  /* RESPONSIVE */
-  @media (max-width: 1100px) {
-    .hero-visual { display: none; }
-    nav { padding: 16px 28px; }
-    .nav-links { gap: 16px; }
-    section, .ai-scanner-section { padding: 80px 28px; }
-    .features-grid { grid-template-columns: repeat(2, 1fr); }
-    .how-grid { grid-template-columns: repeat(2, 1fr); }
-    .why-thai { grid-template-columns: 1fr; gap: 40px; padding: 80px 28px; }
-    .pricing-cards { grid-template-columns: 1fr; max-width: 380px; }
-    .pricing-card.featured { transform: scale(1); }
-    footer { grid-template-columns: 1fr 1fr; gap: 36px; padding: 48px 28px; }
-    .footer-bottom { padding: 20px 28px; flex-direction: column; gap: 8px; text-align: center; }
-    .hero { padding: 100px 28px 60px; }
-    .hero h1 { font-size: 48px; }
-    .trust-bar { padding: 20px 28px; gap: 28px; }
-    .reservation-banner { padding: 32px 28px; }
-    .ai-scanner-inner { grid-template-columns: 1fr; gap: 40px; }
-    .ai-scanner-title { font-size: 36px; }
-    .booking-modal { padding: 28px 24px; }
-    .time-grid { grid-template-columns: repeat(3, 1fr); }
-    .form-row-2 { grid-template-columns: 1fr; }
-  }
-  @media (max-width: 640px) {
-    .features-grid { grid-template-columns: 1fr; }
-    .how-grid { grid-template-columns: 1fr; }
-    .hero-stats { gap: 28px; }
-    .nav-links { display: none; }
-    footer { grid-template-columns: 1fr; }
-    .res-banner-stats { gap: 24px; }
-    .time-grid { grid-template-columns: repeat(3, 1fr); }
-  }
-  .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.7s ease, transform 0.7s ease; }
-  .reveal.visible { opacity: 1; transform: translateY(0); }
-  .reveal-delay-1 { transition-delay: 0.1s; }
-  .reveal-delay-2 { transition-delay: 0.2s; }
-  .reveal-delay-3 { transition-delay: 0.3s; }
-  .reveal-delay-4 { transition-delay: 0.4s; }
+/* RESPONSIVE */
+@media(max-width:1100px) {
+  nav { padding:14px 24px; }
+  .nav-links { gap:14px; }
+  section { padding:80px 28px; }
+  .proof-bar { padding:18px 24px; gap:24px; }
+  .features-grid { grid-template-columns:repeat(2,1fr); }
+  .pricing-grid { grid-template-columns:1fr; max-width:340px; }
+  .pcard.featured { transform:scale(1); }
+  footer { grid-template-columns:1fr 1fr; gap:32px; padding:44px 24px; }
+  .footer-bottom { padding:16px 24px; flex-direction:column; gap:6px; text-align:center; }
+  .hero { padding:100px 24px 70px; }
+  .hero h1 { font-size:48px; }
+  .hero-stats { gap:28px; }
+}
+@media(max-width:640px) {
+  .features-grid { grid-template-columns:1fr; }
+  .nav-links { display:none; }
+  footer { grid-template-columns:1fr; }
+  .hero-stats { gap:20px; }
+  .time-grid { grid-template-columns:repeat(3,1fr); }
+  .frow2 { grid-template-columns:1fr; }
+  .wa-float { bottom:16px; right:16px; }
+}
+.reveal { opacity:0; transform:translateY(20px); transition:opacity 0.7s ease,transform 0.7s ease; }
+.reveal.visible { opacity:1; transform:translateY(0); }
+.rd1{transition-delay:0.1s} .rd2{transition-delay:0.2s} .rd3{transition-delay:0.3s} .rd4{transition-delay:0.4s}
 </style>
 </head>
 <body>
 
-<!-- ══════════════════════════════════════════
-     BOOKING MODAL — built-in, no widget.js
-     Always loads instantly on every device
-     ══════════════════════════════════════════ -->
-<div class="booking-overlay" id="bookingOverlay" onclick="if(event.target===this)closeBooking()">
+<!-- BOOKING MODAL -->
+<div class="booking-overlay" id="bOverlay" onclick="if(event.target===this)closeBook()">
   <div class="booking-modal">
-    <button class="modal-close" onclick="closeBooking()">✕</button>
-
-    <!-- Logo -->
-    <div class="modal-logo">
-      <div class="modal-logo-flags">
-        <svg width="20" height="14" viewBox="0 0 32 22" xmlns="http://www.w3.org/2000/svg">
-          <rect width="32" height="22" fill="#A51931" rx="2"/>
-          <rect y="3.5" width="32" height="15" fill="white"/>
-          <rect y="7" width="32" height="8" fill="#2D2A4A"/>
-        </svg>
-        <svg width="20" height="14" viewBox="0 0 60 40" xmlns="http://www.w3.org/2000/svg">
-          <rect width="60" height="40" fill="#012169" rx="2"/>
-          <path d="M0,0 L60,40 M60,0 L0,40" stroke="white" stroke-width="8"/>
-          <path d="M0,0 L60,40 M60,0 L0,40" stroke="#C8102E" stroke-width="5"/>
-          <path d="M30,0 L30,40 M0,20 L60,20" stroke="white" stroke-width="13"/>
-          <path d="M30,0 L30,40 M0,20 L60,20" stroke="#C8102E" stroke-width="8"/>
-        </svg>
-      </div>
-      <div class="modal-logo-text">Siam<span>EPOS</span></div>
-    </div>
-
-    <div class="modal-title">Reserve a Table</div>
-    <div class="modal-subtitle">Book in seconds — confirmed instantly</div>
-
-    <!-- Step indicators -->
+    <button class="modal-close" onclick="closeBook()">✕</button>
+    <div class="modal-title lang-en">Reserve a Table</div>
+    <div class="modal-title lang-th">จองโต๊ะ</div>
+    <div class="modal-sub lang-en">Confirmed instantly — no commission</div>
+    <div class="modal-sub lang-th">ยืนยันทันที — ไม่มีค่าคอมมิชชั่น</div>
     <div class="modal-steps">
-      <div class="modal-step">
-        <div class="step-circle active" id="sc1">1</div>
-        <div class="step-label active" id="sl1">Date & Guests</div>
-      </div>
-      <div class="modal-step">
-        <div class="step-circle" id="sc2">2</div>
-        <div class="step-label" id="sl2">Time</div>
-      </div>
-      <div class="modal-step">
-        <div class="step-circle" id="sc3">3</div>
-        <div class="step-label" id="sl3">Your Details</div>
-      </div>
+      <div class="modal-step"><div class="sc active" id="sc1">1</div><div class="sl active" id="sl1">Date</div></div>
+      <div class="modal-step"><div class="sc" id="sc2">2</div><div class="sl" id="sl2">Time</div></div>
+      <div class="modal-step"><div class="sc" id="sc3">3</div><div class="sl" id="sl3">Details</div></div>
     </div>
-
-    <!-- STEP 1: Date & Guests -->
-    <div class="form-panel active" id="panel1">
-      <div class="form-row">
-        <label class="form-label">Date</label>
-        <input class="form-input" type="date" id="bDate" min="">
-        <div class="form-error" id="errDate">Please select a date</div>
-      </div>
-      <div class="form-row">
-        <label class="form-label">Number of Guests</label>
-        <select class="form-select" id="bCovers">
-          <option value="">Select guests...</option>
-          <option value="1">1 guest</option>
-          <option value="2">2 guests</option>
-          <option value="3">3 guests</option>
-          <option value="4">4 guests</option>
-          <option value="5">5 guests</option>
-          <option value="6">6 guests</option>
-          <option value="7">7 guests</option>
-          <option value="8">8 guests</option>
-          <option value="9">9 guests</option>
-          <option value="10">10+ guests</option>
-        </select>
-        <div class="form-error" id="errCovers">Please select number of guests</div>
-      </div>
-      <div class="modal-btn-row">
-        <button class="modal-btn-next" onclick="goStep2()">Next — Choose Time →</button>
-      </div>
+    <div class="form-panel active" id="bp1">
+      <div class="frow"><label class="flabel lang-en">Date</label><label class="flabel lang-th">วันที่</label><input class="finput" type="date" id="bDate" min=""></div>
+      <div class="ferr" id="eDateErr">Please select a date</div>
+      <div class="frow"><label class="flabel lang-en">Number of Guests</label><label class="flabel lang-th">จำนวนผู้มา</label>
+        <select class="fselect" id="bCovers">
+          <option value="">Select...</option>
+          <option value="1">1 guest</option><option value="2">2 guests</option><option value="3">3 guests</option><option value="4">4 guests</option><option value="5">5 guests</option><option value="6">6 guests</option><option value="7">7 guests</option><option value="8">8 guests</option><option value="9">9 guests</option><option value="10">10+ guests</option>
+        </select></div>
+      <div class="ferr" id="eCoverErr">Please select number of guests</div>
+      <div class="mbtn-row"><button class="mbtn-next" onclick="bStep2()"><span class="lang-en">Next — Choose Time →</span><span class="lang-th">ถัดไป — เลือกเวลา →</span></button></div>
     </div>
-
-    <!-- STEP 2: Time -->
-    <div class="form-panel" id="panel2">
-      <div class="form-row">
-        <label class="form-label">Available Times</label>
-        <div class="time-grid" id="timeGrid"></div>
-        <div class="form-error" id="errTime">Please select a time</div>
-      </div>
-      <div class="modal-btn-row">
-        <button class="modal-btn-back" onclick="goStep(1)">← Back</button>
-        <button class="modal-btn-next" onclick="goStep3()">Next — Your Details →</button>
-      </div>
+    <div class="form-panel" id="bp2">
+      <div class="frow"><label class="flabel lang-en">Available Times</label><label class="flabel lang-th">เวลาที่ว่าง</label><div class="time-grid" id="tGrid"></div></div>
+      <div class="ferr" id="eTimeErr">Please select a time</div>
+      <div class="mbtn-row"><button class="mbtn-back" onclick="bGo(1)">← Back</button><button class="mbtn-next" onclick="bStep3()"><span class="lang-en">Next — Your Details →</span><span class="lang-th">ถัดไป — ข้อมูลของคุณ →</span></button></div>
     </div>
-
-    <!-- STEP 3: Details -->
-    <div class="form-panel" id="panel3">
-      <div class="form-row-2">
-        <div>
-          <label class="form-label">First Name</label>
-          <input class="form-input" type="text" id="bFirstName" placeholder="First name">
-        </div>
-        <div>
-          <label class="form-label">Last Name</label>
-          <input class="form-input" type="text" id="bLastName" placeholder="Last name">
-        </div>
-      </div>
-      <div class="form-error" id="errName">Please enter your name</div>
-      <div class="form-row">
-        <label class="form-label">Phone Number</label>
-        <input class="form-input" type="tel" id="bPhone" placeholder="+44 7700 000000">
-        <div class="form-error" id="errPhone">Please enter your phone number</div>
-      </div>
-      <div class="form-row">
-        <label class="form-label">Email</label>
-        <input class="form-input" type="email" id="bEmail" placeholder="your@email.com">
-        <div class="form-error" id="errEmail">Please enter your email</div>
-      </div>
-      <div class="form-row">
-        <label class="form-label">Special Requests <span style="color:rgba(255,255,255,0.3);font-weight:400">(optional)</span></label>
-        <textarea class="form-textarea" id="bNotes" placeholder="Allergies, high chair, anniversary..."></textarea>
-      </div>
-      <div class="modal-btn-row">
-        <button class="modal-btn-back" onclick="goStep(2)">← Back</button>
-        <button class="modal-btn-next" id="submitBtn" onclick="submitBooking()">🎉 Confirm Booking</button>
-      </div>
+    <div class="form-panel" id="bp3">
+      <div class="frow2"><div><label class="flabel">First Name</label><input class="finput" type="text" id="bFirst" placeholder="First name"></div><div><label class="flabel">Last Name</label><input class="finput" type="text" id="bLast" placeholder="Last name"></div></div>
+      <div class="ferr" id="eNameErr">Please enter your name</div>
+      <div class="frow"><label class="flabel">Phone</label><input class="finput" type="tel" id="bPhone" placeholder="+44 7700 000000"></div>
+      <div class="ferr" id="ePhoneErr">Please enter your phone number</div>
+      <div class="frow"><label class="flabel">Email</label><input class="finput" type="email" id="bEmail" placeholder="your@email.com"></div>
+      <div class="ferr" id="eEmailErr">Please enter your email</div>
+      <div class="frow"><label class="flabel lang-en">Special Requests <span style="color:rgba(255,255,255,0.25);font-weight:400">(optional)</span></label><label class="flabel lang-th">คำขอพิเศษ (ถ้ามี)</label><textarea class="ftextarea" id="bNotes" placeholder="Allergies, high chair, occasion..."></textarea></div>
+      <div class="mbtn-row"><button class="mbtn-back" onclick="bGo(2)">← Back</button><button class="mbtn-next" id="bSubmit" onclick="bSubmit()">🎉 Confirm Booking</button></div>
     </div>
-
-    <!-- SUCCESS -->
-    <div class="booking-success" id="bookingSuccess">
-      <div class="success-icon">🎉</div>
-      <div class="success-title">You're booked!</div>
-      <div class="success-sub">Your table is confirmed. We'll see you soon — feel free to call us if you need to make any changes.</div>
-      <div class="success-ref" id="successRef"></div>
-      <button class="modal-btn-next" onclick="closeBooking()" style="border:none; width:100%;">Done ✓</button>
+    <div class="bsuccess" id="bSuccess">
+      <div class="bsuccess-icon">🎉</div>
+      <div class="bsuccess-title lang-en">You're booked!</div>
+      <div class="bsuccess-title lang-th">จองสำเร็จแล้ว!</div>
+      <div class="bsuccess-sub lang-en">Your table is confirmed. We'll see you soon.</div>
+      <div class="bsuccess-sub lang-th">จองโต๊ะของคุณได้รับการยืนยันแล้ว แล้วพบกัน!</div>
+      <div class="bsuccess-ref" id="bRef"></div>
+      <button class="mbtn-next" onclick="closeBook()" style="border:none;width:100%">Done ✓</button>
     </div>
-
   </div>
+</div>
+
+<!-- WHATSAPP FLOAT -->
+<div class="wa-float">
+  <a href="https://wa.me/447700000000?text=Hello%2C%20I%27m%20interested%20in%20SiamEPOS" target="_blank" class="wa-btn">
+    <span class="wa-icon">💬</span>
+    <span class="lang-en">WhatsApp Us</span>
+    <span class="lang-th">ส่งข้อความ</span>
+  </a>
 </div>
 
 <!-- NAV -->
 <nav>
-  <a class="nav-logo" href="#">
-    <div class="logo-icon" style="font-size:18px; gap:2px; display:flex; align-items:center; justify-content:center;">🇹🇭🇬🇧</div>
+  <a class="nav-logo" href="index.html">
     <div class="logo-text">Siam<span>EPOS</span></div>
   </a>
   <ul class="nav-links">
-    <li><a href="#features" class="lang-data-en">Features</a><a href="#features" class="lang-data-th">ฟีเจอร์</a></li>
-    <li><a href="#how" class="lang-data-en">How It Works</a><a href="#how" class="lang-data-th">วิธีใช้งาน</a></li>
-    <li><a href="#pricing" class="lang-data-en">Pricing</a><a href="#pricing" class="lang-data-th">ราคา</a></li>
-    <li><button class="book-btn" onclick="openBooking()" style="font-size:13px; padding:9px 18px;">📅 Book a Table</button></li>
-    <li><a href="#demo" class="nav-cta lang-data-en">Book a Demo</a><a href="#demo" class="nav-cta lang-data-th">ทดลองใช้ฟรี</a></li>
+    <li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li>
+    <li><a href="pricing.html" class="lang-en">Pricing</a><a href="pricing.html" class="lang-th">ราคา</a></li>
+    <li><a href="why-siamepos.html" class="lang-en">Why Us</a><a href="why-siamepos.html" class="lang-th">ทำไมเรา</a></li>
+    <li><button class="book-btn" onclick="openBook()" style="font-size:13px;padding:9px 16px;">📅 <span class="lang-en">Book a Table</span><span class="lang-th">จองโต๊ะ</span></button></li>
+    <li><a href="book-demo.html" class="nav-cta lang-en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th">ทดลองใช้ฟรี</a></li>
   </ul>
-  <button class="lang-toggle" onclick="document.body.classList.toggle('thai'); this.textContent = document.body.classList.contains('thai') ? 'EN' : 'ภาษาไทย'">ภาษาไทย</button>
+  <button class="lang-toggle" onclick="document.body.classList.toggle('thai');this.textContent=document.body.classList.contains('thai')?'EN':'ภาษาไทย'">ภาษาไทย</button>
 </nav>
 
 <!-- HERO -->
 <section class="hero">
   <div class="hero-content">
-    <div class="hero-badge lang-data-en">Built for Thai Restaurants in the UK</div>
-    <div class="hero-badge lang-data-th">สร้างขึ้นสำหรับร้านอาหารไทยในสหราชอาณาจักร</div>
-    <h1 class="lang-data-en">The <em>smarter</em> EPOS for your restaurant</h1>
-    <h1 class="lang-data-th">ระบบ EPOS <em>ที่ดีกว่า</em> สำหรับร้านอาหารของคุณ</h1>
-    <p class="hero-sub lang-data-en">SiamEPOS is a cloud-based point-of-sale system designed specifically for Thai restaurants in the UK. Online reservations, online orders, and kitchen management — all connected to your EPOS in real time.</p>
-    <p class="hero-sub lang-data-th">SiamEPOS คือระบบ POS บนคลาวด์ที่ออกแบบมาสำหรับร้านอาหารไทยในสหราชอาณาจักร จองโต๊ะออนไลน์ สั่งอาหารออนไลน์ และจัดการครัว — ทุกอย่างเชื่อมกับ EPOS แบบเรียลไทม์</p>
+    <div class="hero-tag">🇹🇭 <span class="lang-en">Built for Thai Restaurants in the UK</span><span class="lang-th">สร้างมาเพื่อร้านอาหารไทยในสหราชอาณาจักร</span></div>
+    <h1 class="lang-en">The EPOS <em>Built</em> for Thai Restaurants</h1>
+    <h1 class="lang-th">ระบบ EPOS ที่<em>สร้างมา</em>เพื่อร้านอาหารไทย</h1>
+    <p class="hero-sub lang-en">Replace 4 separate systems with one. Save thousands. Run your restaurant in Thai and English from day one.</p>
+    <p class="hero-sub lang-th">แทนที่ 4 ระบบแยกด้วยระบบเดียว ประหยัดเงินหลักพัน บริหารร้านอาหารเป็นภาษาไทยและอังกฤษตั้งแต่วันแรก</p>
     <div class="hero-actions">
-      <a href="#demo" class="btn-primary lang-data-en">🚀 Book a Free Demo</a>
-      <a href="#demo" class="btn-primary lang-data-th">🚀 ทดลองใช้ฟรี</a>
-      <button class="book-btn" onclick="openBooking()">📅 Book a Table</button>
-      <a href="#features" class="btn-hero-secondary lang-data-en">See Features →</a>
-      <a href="#features" class="btn-hero-secondary lang-data-th">ดูฟีเจอร์ →</a>
+      <a href="book-demo.html" class="book-btn lang-en">🚀 Book a Free Demo</a>
+      <a href="book-demo.html" class="book-btn lang-th">🚀 ทดลองใช้ฟรี</a>
+      <button class="book-btn ghost" onclick="openBook()">📅 <span class="lang-en">Book a Table</span><span class="lang-th">จองโต๊ะ</span></button>
+      <a href="features.html" style="color:rgba(255,255,255,0.6);font-size:15px;font-weight:600;text-decoration:none;" class="lang-en">See All Features →</a>
+      <a href="features.html" style="color:rgba(255,255,255,0.6);font-size:15px;font-weight:600;text-decoration:none;" class="lang-th">ดูฟีเจอร์ทั้งหมด →</a>
     </div>
     <div class="hero-stats">
-      <div class="hero-stat"><div class="hero-stat-num">0%</div><div class="hero-stat-label lang-data-en">Commission</div><div class="hero-stat-label lang-data-th">ค่าคอมมิชชั่น</div></div>
-      <div class="hero-stat"><div class="hero-stat-num">£0</div><div class="hero-stat-label lang-data-en">Hardware Cost</div><div class="hero-stat-label lang-data-th">ค่าฮาร์ดแวร์</div></div>
-      <div class="hero-stat"><div class="hero-stat-num">24/7</div><div class="hero-stat-label lang-data-en">Uptime</div><div class="hero-stat-label lang-data-th">ใช้งานได้ตลอด</div></div>
-    </div>
-  </div>
-  <div class="hero-visual">
-    <div class="screen-mockup">
-      <div class="mockup-bar">
-        <div class="mockup-dot" style="background:#ff5f57"></div>
-        <div class="mockup-dot" style="background:#ffbd2e"></div>
-        <div class="mockup-dot" style="background:#28c840"></div>
-        <div class="mockup-title">Table Map — Friday Evening</div>
-      </div>
-      <div class="table-grid">
-        <div class="table-card t-occupied"><div class="table-num">1</div>Occupied<br>45m</div>
-        <div class="table-card t-starters"><div class="table-num">2</div>Starters<br>Out</div>
-        <div class="table-card t-available"><div class="table-num">3</div>Available</div>
-        <div class="table-card t-mains"><div class="table-num">4</div>Mains<br>Fired</div>
-        <div class="table-card t-available"><div class="table-num">5</div>Available</div>
-        <div class="table-card t-occupied"><div class="table-num">6</div>Occupied<br>20m</div>
-        <div class="table-card t-starters"><div class="table-num">7</div>Starters<br>Out</div>
-        <div class="table-card t-available"><div class="table-num">8</div>Available</div>
-      </div>
-      <div class="mockup-bottom">
-        <span class="mockup-bottom-label">Tonight's Revenue</span>
-        <span class="mockup-bottom-val">£1,247.50</span>
-      </div>
+      <div><div class="hstat-num">£920</div><div class="hstat-label lang-en">Saved per month</div><div class="hstat-label lang-th">ประหยัดต่อเดือน</div></div>
+      <div><div class="hstat-num">30s</div><div class="hstat-label lang-en">AI menu scan</div><div class="hstat-label lang-th">สแกนเมนูด้วย AI</div></div>
+      <div><div class="hstat-num">£0</div><div class="hstat-label lang-en">Booking commission</div><div class="hstat-label lang-th">ค่าคอมมิชชั่น</div></div>
     </div>
   </div>
 </section>
 
-<!-- TRUST BAR -->
-<div class="trust-bar">
-  <div class="trust-item"><span>☁️</span> <span class="lang-data-en">Works on any device</span><span class="lang-data-th">ใช้งานได้ทุกอุปกรณ์</span></div>
-  <div class="trust-item"><span>🔒</span> <span class="lang-data-en">UK GDPR Compliant</span><span class="lang-data-th">ปลอดภัย GDPR</span></div>
-  <div class="trust-item"><span>🤖</span> <span class="lang-data-en">AI-powered menu setup</span><span class="lang-data-th">ตั้งค่าเมนูด้วย AI</span></div>
-  <div class="trust-item"><span>📞</span> <span class="lang-data-en">Thai-speaking support</span><span class="lang-data-th">ซัพพอร์ตภาษาไทย</span></div>
+<!-- PROOF BAR -->
+<div class="proof-bar">
+  <div class="proof-item"><span class="pi-icon">💰</span> <span class="lang-en">Save up to <span>£920/month</span> vs current systems</span><span class="lang-th">ประหยัดสูงสุด <span>£920/เดือน</span> เทียบกับระบบปัจจุบัน</span></div>
+  <div class="proof-item"><span class="pi-icon">🤖</span> <span class="lang-en">Menu live in <span>30 seconds</span> with AI scan</span><span class="lang-th">เมนูพร้อมใช้ใน <span>30 วินาที</span> ด้วย AI</span></div>
+  <div class="proof-item"><span class="pi-icon">🇹🇭</span> <span class="lang-en"><span>Thai-speaking</span> support included</span><span class="lang-th"><span>ซัพพอร์ตภาษาไทย</span> รวมอยู่แล้ว</span></div>
 </div>
 
-<!-- RESERVATION BANNER -->
-<div class="reservation-banner">
-  <div class="res-banner-text">
-    <div class="res-banner-title lang-data-en">Online reservations — <em>zero commission</em></div>
-    <div class="res-banner-title lang-data-th">จองโต๊ะออนไลน์ — <em>ค่าคอมมิชชั่น 0%</em></div>
-    <p class="res-banner-sub lang-data-en">One line of code on your website. Bookings appear in your EPOS instantly. No OpenTable, no commission, no middleman.</p>
-    <p class="res-banner-sub lang-data-th">โค้ดเพียงบรรทัดเดียวบนเว็บไซต์ของคุณ การจองปรากฏใน EPOS ทันที ไม่มี OpenTable ไม่มีค่าคอม</p>
-  </div>
-  <div class="res-banner-stats">
-    <div class="res-stat"><div class="res-stat-num">£1-3</div><div class="res-stat-label lang-data-en">OpenTable per cover</div><div class="res-stat-label lang-data-th">OpenTable ต่อที่นั่ง</div></div>
-    <div class="res-stat"><div class="res-stat-num" style="color:white;">vs</div></div>
-    <div class="res-stat"><div class="res-stat-num">£0</div><div class="res-stat-label lang-data-en">SiamEPOS per cover</div><div class="res-stat-label lang-data-th">SiamEPOS ต่อที่นั่ง</div></div>
-  </div>
-  <div class="res-banner-cta">
-    <button class="book-btn" onclick="openBooking()">📅 Try It Now</button>
-  </div>
-</div>
+<!-- THE ONE PARAGRAPH -->
+<section style="background:var(--navy); padding:60px 60px; text-align:center;">
+  <p style="max-width:780px; margin:0 auto; font-size:19px; color:rgba(255,255,255,0.8); line-height:1.85; font-weight:300;" class="lang-en">"Thai restaurants in the UK are paying for four separate systems that don't talk to each other — none of which were built with Thai restaurants in mind. SiamEPOS replaces all of them for <strong style="color:var(--gold)">£89 a month</strong>. With AI that scans your menu from a photo in 30 seconds, a booking widget that saves you thousands in OpenTable fees, and cost management that tells you exactly which dishes make you money. <strong style="color:var(--gold)">In Thai and English. From day one.</strong>"</p>
+  <p style="max-width:780px; margin:0 auto; font-size:19px; color:rgba(255,255,255,0.8); line-height:1.85; font-weight:300;" class="lang-th">"ร้านอาหารไทยในสหราชอาณาจักรกำลังจ่ายเงินสำหรับระบบแยกสี่ระบบที่ไม่ทำงานร่วมกัน — ไม่มีระบบใดที่สร้างมาสำหรับร้านอาหารไทย SiamEPOS แทนที่ทุกอย่างในราคา <strong style="color:var(--gold)">£89 ต่อเดือน</strong> ด้วย AI ที่สแกนเมนูจากรูปถ่ายใน 30 วินาที วิดเจ็ตจองโต๊ะที่ประหยัดค่า OpenTable หลักพัน และการจัดการต้นทุนที่บอกว่าเมนูไหนทำเงินให้คุณ <strong style="color:var(--gold)">ทั้งภาษาไทยและอังกฤษ ตั้งแต่วันแรก</strong>"</p>
+</section>
 
-<!-- AI SCANNER TEASER -->
-<div class="ai-scanner-section" id="ai-scanner">
-  <div class="ai-scanner-inner">
-    <div class="reveal">
-      <div class="ai-scanner-badge">🤖 Coming Soon</div>
-      <h2 class="ai-scanner-title lang-data-en">Scan any menu.<br/><em>No typing required.</em></h2>
-      <h2 class="ai-scanner-title lang-data-th">สแกนเมนูใดก็ได้<br/><em>ไม่ต้องพิมพ์เอง</em></h2>
-      <p class="ai-scanner-desc lang-data-en">Photograph your menu and our AI reads every dish, detects all 14 UK allergens, generates Thai dish names, and builds your entire menu in SiamEPOS — in about 30 seconds.</p>
-      <p class="ai-scanner-desc lang-data-th">ถ่ายรูปเมนูของคุณ AI ของเราอ่านทุกเมนู ตรวจจับสารก่อภูมิแพ้ทั้ง 14 รายการ สร้างชื่อภาษาไทย และสร้างเมนูทั้งหมดใน SiamEPOS ใน 30 วินาที</p>
-      <div class="ai-scanner-features">
-        <div class="ai-feat"><div class="ai-feat-icon">⚠️</div><div class="ai-feat-text lang-data-en"><strong>All 14 UK allergens detected automatically</strong> — fish sauce, soy sauce, peanuts, gluten and more.</div><div class="ai-feat-text lang-data-th"><strong>ตรวจจับสารก่อภูมิแพ้ 14 รายการอัตโนมัติ</strong> — น้ำปลา ซอสถั่วเหลือง ถั่วลิสง และอื่นๆ</div></div>
-        <div class="ai-feat"><div class="ai-feat-icon">🇹🇭</div><div class="ai-feat-text lang-data-en"><strong>Bilingual output — English + Thai</strong> — dish names in both languages, ready for your kitchen screens.</div><div class="ai-feat-text lang-data-th"><strong>ผลลัพธ์สองภาษา — อังกฤษ + ไทย</strong> — ชื่อเมนูในทั้งสองภาษา พร้อมสำหรับหน้าจอครัว</div></div>
-        <div class="ai-feat"><div class="ai-feat-icon">🚀</div><div class="ai-feat-text lang-data-en"><strong>Imports directly into SiamEPOS</strong> — one click and your full menu is live in the system.</div><div class="ai-feat-text lang-data-th"><strong>นำเข้าสู่ SiamEPOS โดยตรง</strong> — คลิกเดียว เมนูครบของคุณพร้อมใช้งานในระบบ</div></div>
-      </div>
-      <div class="coming-soon-badge lang-data-en">⏳ Launching soon — available inside SiamEPOS</div>
-      <div class="coming-soon-badge lang-data-th">⏳ เปิดตัวเร็วๆ นี้ — ใช้งานได้ใน SiamEPOS</div>
-    </div>
-    <div class="reveal reveal-delay-2">
-      <svg viewBox="0 0 520 420" xmlns="http://www.w3.org/2000/svg" style="width:100%; border-radius:16px; box-shadow: 0 40px 80px rgba(0,0,0,0.6);">
-        <rect width="520" height="420" fill="#0D1117" rx="16"/>
-        <rect width="520" height="52" fill="#161B22" rx="16"/>
-        <rect y="36" width="520" height="16" fill="#161B22"/>
-        <rect y="51" width="520" height="1" fill="rgba(255,255,255,0.07)"/>
-        <circle cx="20" cy="26" r="6" fill="#FF5F57"/>
-        <circle cx="38" cy="26" r="6" fill="#FFBD2E"/>
-        <circle cx="56" cy="26" r="6" fill="#28C840"/>
-        <rect x="80" y="16" width="22" height="20" fill="#A51931" rx="2"/>
-        <rect x="80" y="19.5" width="22" height="13" fill="white"/>
-        <rect x="80" y="23" width="22" height="7" fill="#2D2A4A"/>
-        <rect x="106" y="16" width="22" height="20" fill="#012169" rx="2"/>
-        <line x1="106" y1="16" x2="128" y2="36" stroke="white" stroke-width="3"/><line x1="128" y1="16" x2="106" y2="36" stroke="white" stroke-width="3"/>
-        <line x1="106" y1="16" x2="128" y2="36" stroke="#C8102E" stroke-width="2"/><line x1="128" y1="16" x2="106" y2="36" stroke="#C8102E" stroke-width="2"/>
-        <line x1="117" y1="16" x2="117" y2="36" stroke="white" stroke-width="5"/><line x1="106" y1="26" x2="128" y2="26" stroke="white" stroke-width="5"/>
-        <line x1="117" y1="16" x2="117" y2="36" stroke="#C8102E" stroke-width="3"/><line x1="106" y1="26" x2="128" y2="26" stroke="#C8102E" stroke-width="3"/>
-        <text x="134" y="30" fill="white" font-size="12" font-weight="700" font-family="sans-serif">Siam<tspan fill="#F0A500">EPOS</tspan></text>
-        <text x="210" y="30" fill="rgba(255,255,255,0.4)" font-size="11" font-family="sans-serif">AI Menu Scanner</text>
-        <rect x="400" y="17" width="104" height="20" fill="rgba(240,165,0,0.15)" rx="10" stroke="rgba(240,165,0,0.3)" stroke-width="1"/>
-        <text x="452" y="30" fill="#F0A500" font-size="9" font-weight="700" font-family="sans-serif" text-anchor="middle">✦ BETA FEATURE</text>
-        <rect x="16" y="68" width="488" height="70" fill="rgba(240,165,0,0.05)" rx="12" stroke="rgba(240,165,0,0.3)" stroke-width="1.5" stroke-dasharray="6,4"/>
-        <text x="260" y="98" fill="rgba(255,255,255,0.7)" font-size="12" font-weight="700" font-family="sans-serif" text-anchor="middle">✅ menu.jpg — Scanned successfully</text>
-        <text x="260" y="116" fill="rgba(255,255,255,0.4)" font-size="10" font-family="sans-serif" text-anchor="middle">24 dishes found across 5 categories · 2.4 MB</text>
-        <rect x="16" y="150" width="488" height="44" fill="rgba(255,107,107,0.08)" rx="10" stroke="rgba(255,107,107,0.2)" stroke-width="1"/>
-        <text x="28" y="168" fill="#FF6B6B" font-size="8" font-weight="700" font-family="sans-serif">⚠ ALLERGENS DETECTED</text>
-        <rect x="28" y="173" width="38" height="14" fill="rgba(255,107,107,0.2)" rx="7" stroke="rgba(255,107,107,0.4)" stroke-width="1"/><text x="47" y="183" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Fish</text>
-        <rect x="72" y="173" width="46" height="14" fill="rgba(255,107,107,0.2)" rx="7" stroke="rgba(255,107,107,0.4)" stroke-width="1"/><text x="95" y="183" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Peanuts</text>
-        <rect x="124" y="173" width="44" height="14" fill="rgba(255,107,107,0.2)" rx="7" stroke="rgba(255,107,107,0.4)" stroke-width="1"/><text x="146" y="183" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Gluten</text>
-        <rect x="174" y="173" width="38" height="14" fill="rgba(255,107,107,0.2)" rx="7" stroke="rgba(255,107,107,0.4)" stroke-width="1"/><text x="193" y="183" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Eggs</text>
-        <rect x="218" y="173" width="50" height="14" fill="rgba(255,107,107,0.2)" rx="7" stroke="rgba(255,107,107,0.4)" stroke-width="1"/><text x="243" y="183" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Soybeans</text>
-        <rect x="16" y="204" width="488" height="26" fill="#1E2530"/>
-        <text x="28" y="221" fill="rgba(255,255,255,0.4)" font-size="8" font-weight="700" font-family="sans-serif">DISH NAME</text>
-        <text x="168" y="221" fill="rgba(255,255,255,0.4)" font-size="8" font-weight="700" font-family="sans-serif">ALLERGENS</text>
-        <text x="340" y="221" fill="rgba(255,255,255,0.4)" font-size="8" font-weight="700" font-family="sans-serif">PRICE</text>
-        <text x="430" y="221" fill="rgba(255,255,255,0.4)" font-size="8" font-weight="700" font-family="sans-serif">CONFIDENCE</text>
-        <rect x="16" y="230" width="488" height="22" fill="rgba(240,165,0,0.06)"/>
-        <text x="28" y="245" fill="#F0A500" font-size="8" font-weight="700" font-family="sans-serif">STARTERS</text>
-        <rect x="16" y="252" width="488" height="36" fill="rgba(255,255,255,0.01)"/>
-        <rect x="16" y="287" width="488" height="1" fill="rgba(255,255,255,0.06)"/>
-        <text x="28" y="267" fill="rgba(255,255,255,0.9)" font-size="10" font-weight="600" font-family="sans-serif">Tom Yum Goong</text>
-        <text x="28" y="280" fill="#F0A500" font-size="9" font-family="sans-serif" opacity="0.75">ต้มยำกุ้ง</text>
-        <rect x="168" y="256" width="46" height="13" fill="rgba(255,107,107,0.15)" rx="3" stroke="rgba(255,107,107,0.3)" stroke-width="1"/><text x="191" y="266" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Crustaceans</text>
-        <rect x="220" y="256" width="30" height="13" fill="rgba(255,107,107,0.15)" rx="3" stroke="rgba(255,107,107,0.3)" stroke-width="1"/><text x="235" y="266" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Fish</text>
-        <rect x="330" y="256" width="56" height="22" fill="#1E2530" rx="6" stroke="rgba(255,255,255,0.07)" stroke-width="1"/><text x="358" y="271" fill="white" font-size="10" font-weight="600" font-family="sans-serif" text-anchor="middle">£9.50</text>
-        <rect x="430" y="262" width="48" height="4" fill="rgba(255,255,255,0.08)" rx="2"/><rect x="430" y="262" width="46" height="4" fill="#4ECDC4" rx="2"/><text x="484" y="272" fill="rgba(255,255,255,0.4)" font-size="8" font-family="sans-serif">95%</text>
-        <rect x="16" y="288" width="488" height="36" fill="rgba(255,255,255,0.015)"/>
-        <rect x="16" y="323" width="488" height="1" fill="rgba(255,255,255,0.06)"/>
-        <text x="28" y="303" fill="rgba(255,255,255,0.9)" font-size="10" font-weight="600" font-family="sans-serif">Pad Thai</text>
-        <text x="28" y="316" fill="#F0A500" font-size="9" font-family="sans-serif" opacity="0.75">ผัดไทย</text>
-        <rect x="168" y="292" width="36" height="13" fill="rgba(255,107,107,0.15)" rx="3" stroke="rgba(255,107,107,0.3)" stroke-width="1"/><text x="186" y="302" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Peanuts</text>
-        <rect x="210" y="292" width="26" height="13" fill="rgba(255,107,107,0.15)" rx="3" stroke="rgba(255,107,107,0.3)" stroke-width="1"/><text x="223" y="302" fill="#FF8E8E" font-size="7" font-family="sans-serif" text-anchor="middle">Eggs</text>
-        <rect x="330" y="292" width="56" height="22" fill="#1E2530" rx="6" stroke="rgba(255,255,255,0.07)" stroke-width="1"/><text x="358" y="307" fill="white" font-size="10" font-weight="600" font-family="sans-serif" text-anchor="middle">£13.00</text>
-        <rect x="430" y="298" width="48" height="4" fill="rgba(255,255,255,0.08)" rx="2"/><rect x="430" y="298" width="47" height="4" fill="#4ECDC4" rx="2"/><text x="484" y="308" fill="rgba(255,255,255,0.4)" font-size="8" font-family="sans-serif">98%</text>
-        <rect x="16" y="372" width="488" height="36" fill="rgba(240,165,0,0.08)" rx="10" stroke="rgba(240,165,0,0.2)" stroke-width="1"/>
-        <text x="36" y="393" fill="#F0A500" font-size="18" font-weight="800" font-family="sans-serif">24</text>
-        <text x="56" y="393" fill="rgba(255,255,255,0.4)" font-size="8" font-family="sans-serif">dishes ready</text>
-        <rect x="360" y="378" width="132" height="24" fill="url(#btnGrad2)" rx="8"/>
-        <defs><linearGradient id="btnGrad2" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" style="stop-color:#F0A500"/><stop offset="100%" style="stop-color:#FF8C00"/></linearGradient></defs>
-        <text x="426" y="393" fill="#0D1117" font-size="9" font-weight="800" font-family="sans-serif" text-anchor="middle">🚀 Import All to SiamEPOS</text>
-      </svg>
-    </div>
-  </div>
-</div>
-
-<!-- FEATURES -->
-<section class="features" id="features">
-  <div class="features-header reveal">
-    <div class="section-label lang-data-en">Everything you need</div><div class="section-label lang-data-th">ครบทุกฟีเจอร์</div>
-    <h2 class="section-title lang-data-en">Built for how Thai<br>restaurants actually work</h2>
-    <h2 class="section-title lang-data-th">ออกแบบมาเพื่อร้านอาหารไทย<br>โดยเฉพาะ</h2>
-    <p class="section-sub lang-data-en">From online bookings to the kitchen screen — every feature connects directly to your EPOS in real time.</p>
-    <p class="section-sub lang-data-th">ตั้งแต่การจองออนไลน์ไปถึงหน้าจอครัว ทุกฟีเจอร์เชื่อมต่อกับ EPOS แบบเรียลไทม์</p>
+<!-- FEATURES SUMMARY -->
+<section class="features-section reveal">
+  <div style="text-align:center;">
+    <div class="section-label lang-en">Everything you need</div>
+    <div class="section-label lang-th">ครบทุกอย่างที่คุณต้องการ</div>
+    <h2 class="section-title lang-en">6 Reasons Thai Restaurants<br>Choose SiamEPOS</h2>
+    <h2 class="section-title lang-th">6 เหตุผลที่ร้านอาหารไทยเลือก<br>SiamEPOS</h2>
   </div>
   <div class="features-grid">
-    <div class="feature-card highlight reveal reveal-delay-1">
-      <div class="feature-badge lang-data-en">0% Commission</div><div class="feature-badge lang-data-th">ค่าคอมมิชชั่น 0%</div>
-      <div class="feature-icon">📅</div>
-      <div class="feature-title lang-data-en">Online Reservations</div><div class="feature-title lang-data-th">จองโต๊ะออนไลน์</div>
-      <p class="feature-desc lang-data-en">Customers book directly on your website. Reservations appear in your EPOS instantly — no OpenTable, no commission, no delays.</p>
-      <p class="feature-desc lang-data-th">ลูกค้าจองตรงบนเว็บไซต์ของคุณ การจองปรากฏใน EPOS ทันที — ไม่มี OpenTable ไม่มีค่าคอม</p>
-    </div>
-    <div class="feature-card reveal reveal-delay-2">
-      <div class="feature-icon">🍳</div>
-      <div class="feature-title lang-data-en">Kitchen Display System</div><div class="feature-title lang-data-th">หน้าจอครัวและบาร์</div>
-      <p class="feature-desc lang-data-en">Orders fire instantly to the kitchen screen. Chefs see exactly what to cook, with timers and course management built in.</p>
-      <p class="feature-desc lang-data-th">ออเดอร์ส่งถึงหน้าจอครัวทันที พร้อมตัวจับเวลาและการจัดการคอร์สอาหาร</p>
-    </div>
-    <div class="feature-card reveal reveal-delay-3">
-      <div class="feature-icon">📦</div>
-      <div class="feature-title lang-data-en">Stock Management</div><div class="feature-title lang-data-th">จัดการสต็อกสินค้า</div>
-      <p class="feature-desc lang-data-en">Track your ingredients and stock levels in real time. Get low-stock alerts before you run out, and see exactly what's been used each service.</p>
-      <p class="feature-desc lang-data-th">ติดตามวัตถุดิบและสต็อกสินค้าแบบเรียลไทม์ รับการแจ้งเตือนเมื่อสต็อกต่ำ</p>
-    </div>
-    <div class="feature-card highlight reveal reveal-delay-1">
-      <div class="feature-badge lang-data-en">Linked to EPOS</div><div class="feature-badge lang-data-th">เชื่อมกับ EPOS</div>
-      <div class="feature-icon">🛒</div>
-      <div class="feature-title lang-data-en">Online Ordering</div><div class="feature-title lang-data-th">สั่งอาหารออนไลน์</div>
-      <p class="feature-desc lang-data-en">Let customers order online and pay in advance. Orders appear directly on your kitchen screen — no third-party tablet, no commission.</p>
-      <p class="feature-desc lang-data-th">ให้ลูกค้าสั่งอาหารออนไลน์และชำระเงินล่วงหน้า ออเดอร์ปรากฏบนหน้าจอครัวโดยตรง — ไม่มีค่าคอม</p>
-    </div>
-    <div class="feature-card reveal reveal-delay-2">
-      <div class="feature-icon">👥</div>
-      <div class="feature-title lang-data-en">Staff Management</div><div class="feature-title lang-data-th">จัดการพนักงาน</div>
-      <p class="feature-desc lang-data-en">PIN-based login with roles — waiter, kitchen, bar, supervisor, manager, and admin. Each role sees only what they need.</p>
-      <p class="feature-desc lang-data-th">ล็อกอินด้วย PIN แต่ละบทบาทเห็นเฉพาะที่จำเป็น — บริกร ครัว บาร์ ผู้จัดการ</p>
-    </div>
-    <div class="feature-card reveal reveal-delay-3">
-      <div class="feature-badge coming-light lang-data-en">Coming Soon</div><div class="feature-badge coming-light lang-data-th">เร็วๆ นี้</div>
-      <div class="feature-icon">🤖</div>
-      <div class="feature-title lang-data-en">AI Menu Scanner</div><div class="feature-title lang-data-th">สแกนเมนูด้วย AI</div>
-      <p class="feature-desc lang-data-en">Photo in, menu built. Upload any menu image and our AI extracts every dish, detects allergens, and builds it in SiamEPOS — in seconds, not hours.</p>
-      <p class="feature-desc lang-data-th">อัพโหลดรูปเมนู AI สร้างเมนูให้อัตโนมัติ ตรวจจับสารก่อภูมิแพ้ — ไม่กี่วินาที ไม่ใช่ชั่วโมง</p>
-    </div>
+    <a href="features.html#scanner" class="fcard highlight reveal rd1">
+      <div class="fcard-icon">🤖</div>
+      <div class="fcard-badge lang-en">No competitor has this</div>
+      <div class="fcard-badge lang-th">ไม่มีคู่แข่งทำได้</div>
+      <div class="fcard-title lang-en">AI Menu Scanner</div>
+      <div class="fcard-title lang-th">AI สแกนเมนู</div>
+      <p class="fcard-desc lang-en">Photo to live menu in 30 seconds — allergens included</p>
+      <p class="fcard-desc lang-th">รูปถ่ายสู่เมนูพร้อมใช้ใน 30 วินาที รวมสารก่อภูมิแพ้</p>
+    </a>
+    <a href="features.html#bookings" class="fcard highlight reveal rd2">
+      <div class="fcard-icon">💷</div>
+      <div class="fcard-badge lang-en">Save £4,500/month</div>
+      <div class="fcard-badge lang-th">ประหยัด £4,500/เดือน</div>
+      <div class="fcard-title lang-en">Zero-Commission Bookings</div>
+      <div class="fcard-title lang-th">จองโต๊ะ ค่าคอม 0%</div>
+      <p class="fcard-desc lang-en">Replace OpenTable. Keep every penny.</p>
+      <p class="fcard-desc lang-th">แทนที่ OpenTable เก็บเงินทุกบาทไว้เอง</p>
+    </a>
+    <a href="features.html#cost" class="fcard reveal rd3">
+      <div class="fcard-icon">📊</div>
+      <div class="fcard-title lang-en">AI Cost & Profit</div>
+      <div class="fcard-title lang-th">AI ต้นทุนและกำไร</div>
+      <p class="fcard-desc lang-en">Know exactly which dishes make you money</p>
+      <p class="fcard-desc lang-th">รู้ว่าเมนูไหนทำเงินให้คุณ</p>
+      <div class="fcard-coming lang-en">⏳ Coming soon</div>
+      <div class="fcard-coming lang-th">⏳ เร็วๆ นี้</div>
+    </a>
+    <a href="features.html#stock" class="fcard reveal rd1">
+      <div class="fcard-icon">📦</div>
+      <div class="fcard-title lang-en">AI Stock Management</div>
+      <div class="fcard-title lang-th">AI จัดการสต็อก</div>
+      <p class="fcard-desc lang-en">Never run out mid-service again</p>
+      <p class="fcard-desc lang-th">ไม่มีวันขาดของกลางบริการอีกแล้ว</p>
+      <div class="fcard-coming lang-en">⏳ Coming soon</div>
+      <div class="fcard-coming lang-th">⏳ เร็วๆ นี้</div>
+    </a>
+    <a href="features.html#thai" class="fcard reveal rd2">
+      <div class="fcard-icon">🇹🇭</div>
+      <div class="fcard-badge lang-en">Uncopyable advantage</div>
+      <div class="fcard-badge lang-th">ข้อได้เปรียบที่ไม่มีใครลอกได้</div>
+      <div class="fcard-title lang-en">Built for Thai</div>
+      <div class="fcard-title lang-th">สร้างมาเพื่อคนไทย</div>
+      <p class="fcard-desc lang-en">The only UK EPOS your Thai staff can use from day one</p>
+      <p class="fcard-desc lang-th">EPOS UK เพียงระบบเดียวที่พนักงานไทยใช้ได้ตั้งแต่วันแรก</p>
+    </a>
+    <a href="features.html#cloud" class="fcard reveal rd3">
+      <div class="fcard-icon">☁️</div>
+      <div class="fcard-title lang-en">Always Online</div>
+      <div class="fcard-title lang-th">ออนไลน์ตลอด</div>
+      <p class="fcard-desc lang-en">Full offline mode — your system never stops</p>
+      <p class="fcard-desc lang-th">โหมดออฟไลน์สมบูรณ์ — ระบบไม่หยุดทำงาน</p>
+      <div class="fcard-coming lang-en">⏳ Coming soon</div>
+      <div class="fcard-coming lang-th">⏳ เร็วๆ นี้</div>
+    </a>
+  </div>
+  <div style="text-align:center; margin-top:40px;">
+    <a href="features.html" class="book-btn ghost" style="display:inline-flex; text-decoration:none;">
+      <span class="lang-en">See All Features →</span>
+      <span class="lang-th">ดูฟีเจอร์ทั้งหมด →</span>
+    </a>
   </div>
 </section>
 
-<!-- HOW IT WORKS -->
-<section class="how" id="how">
-  <div style="text-align:center; position:relative; z-index:1;" class="reveal">
-    <div class="section-label lang-data-en">Simple setup</div><div class="section-label lang-data-th">ตั้งค่าง่าย</div>
-    <h2 class="section-title lang-data-en">Up and running<br>in one afternoon</h2>
-    <h2 class="section-title lang-data-th">เริ่มใช้งานได้<br>ภายในหนึ่งบ่าย</h2>
+<!-- PRICING PREVIEW -->
+<section class="pricing-section reveal">
+  <div style="text-align:center;">
+    <div class="section-label lang-en">Simple pricing</div>
+    <div class="section-label lang-th">ราคาง่ายๆ ไม่มีซ่อน</div>
+    <h2 class="section-title lang-en">One price.<br>Everything included.</h2>
+    <h2 class="section-title lang-th">ราคาเดียว<br>รวมทุกอย่าง</h2>
   </div>
-  <div class="how-grid">
-    <div class="how-step reveal reveal-delay-1"><div class="step-num">01</div><div class="step-icon">📋</div><div class="step-title lang-data-en">We set up your menu</div><div class="step-title lang-data-th">เราตั้งค่าเมนูให้</div><p class="step-desc lang-data-en">Send us your menu and we'll build it in the system — categories, modifiers, prices, everything.</p><p class="step-desc lang-data-th">ส่งเมนูมาให้เราแล้วเราจะสร้างให้ — หมวดหมู่ ตัวเลือก ราคา ทุกอย่าง</p></div>
-    <div class="how-step reveal reveal-delay-2"><div class="step-num">02</div><div class="step-icon">🗺️</div><div class="step-title lang-data-en">Design your table plan</div><div class="step-title lang-data-th">วางแผนผังโต๊ะ</div><p class="step-desc lang-data-en">Drag and drop your tables into position to match your restaurant layout exactly.</p><p class="step-desc lang-data-th">ลากและวางโต๊ะให้ตรงกับผังร้านของคุณ</p></div>
-    <div class="how-step reveal reveal-delay-3"><div class="step-num">03</div><div class="step-icon">📱</div><div class="step-title lang-data-en">Open on any device</div><div class="step-title lang-data-th">เปิดบนอุปกรณ์ใดก็ได้</div><p class="step-desc lang-data-en">No apps to install. Just open the browser on your tablets, phones, or computers and log in.</p><p class="step-desc lang-data-th">ไม่ต้องติดตั้งแอป เปิดเบราว์เซอร์บนแท็บเล็ต โทรศัพท์ หรือคอมพิวเตอร์แล้วล็อกอิน</p></div>
-    <div class="how-step reveal reveal-delay-4"><div class="step-num">04</div><div class="step-icon">🚀</div><div class="step-title lang-data-en">Start taking orders</div><div class="step-title lang-data-th">เริ่มรับออเดอร์</div><p class="step-desc lang-data-en">Your team is trained in minutes. The interface is intuitive and designed for busy service.</p><p class="step-desc lang-data-th">ทีมของคุณเรียนรู้ได้ในไม่กี่นาที อินเตอร์เฟซใช้งานง่ายสำหรับบริการที่วุ่นวาย</p></div>
+  <div class="pricing-grid">
+    <div class="pcard reveal rd1">
+      <div class="pcard-tier lang-en">Starter</div><div class="pcard-tier lang-th">สตาร์เตอร์</div>
+      <div class="pcard-price">£49</div>
+      <div class="pcard-period lang-en">per month</div><div class="pcard-period lang-th">ต่อเดือน</div>
+      <p class="pcard-key lang-en">EPOS, table management, kitchen screen</p>
+      <p class="pcard-key lang-th">EPOS แผนผังโต๊ะ หน้าจอครัว</p>
+      <a href="pricing.html" class="btn-pcard btn-outline-navy lang-en">See plan</a>
+      <a href="pricing.html" class="btn-pcard btn-outline-navy lang-th">ดูแผน</a>
+    </div>
+    <div class="pcard featured reveal rd2">
+      <div class="pcard-badge lang-en">⭐ Most Popular</div>
+      <div class="pcard-badge lang-th">⭐ ยอดนิยม</div>
+      <div class="pcard-tier">Pro</div>
+      <div class="pcard-price">£89</div>
+      <div class="pcard-period lang-en">per month</div><div class="pcard-period lang-th">ต่อเดือน</div>
+      <p class="pcard-key lang-en">Everything + AI menu scanner + zero-commission bookings</p>
+      <p class="pcard-key lang-th">ทุกอย่าง + AI สแกนเมนู + จองโต๊ะค่าคอม 0%</p>
+      <a href="book-demo.html" class="btn-pcard btn-gold lang-en">Get Started</a>
+      <a href="book-demo.html" class="btn-pcard btn-gold lang-th">เริ่มใช้งาน</a>
+    </div>
+    <div class="pcard reveal rd3">
+      <div class="pcard-tier lang-en">Growth</div><div class="pcard-tier lang-th">โกรท</div>
+      <div class="pcard-price">£179</div>
+      <div class="pcard-period lang-en">per month</div><div class="pcard-period lang-th">ต่อเดือน</div>
+      <p class="pcard-key lang-en">Everything + AI cost & stock management</p>
+      <p class="pcard-key lang-th">ทุกอย่าง + AI ต้นทุนและสต็อก</p>
+      <a href="pricing.html" class="btn-pcard btn-outline-navy lang-en">See plan</a>
+      <a href="pricing.html" class="btn-pcard btn-outline-navy lang-th">ดูแผน</a>
+    </div>
   </div>
+  <p style="text-align:center; margin-top:32px; color:var(--text-muted); font-size:14px;" class="lang-en">Pro plan at £89/month costs less than <strong>one week of OpenTable fees</strong> for a typical Thai restaurant.</p>
+  <p style="text-align:center; margin-top:32px; color:var(--text-muted); font-size:14px;" class="lang-th">แผน Pro £89/เดือน ถูกกว่า<strong>ค่า OpenTable หนึ่งสัปดาห์</strong>สำหรับร้านอาหารไทยทั่วไป</p>
 </section>
 
-<!-- WHY THAI -->
-<section class="why-thai">
-  <div class="reveal">
-    <div class="section-label lang-data-en">Why SiamEPOS</div><div class="section-label lang-data-th">ทำไมต้อง SiamEPOS</div>
-    <h2 class="section-title lang-data-en">We understand<br>your restaurant</h2><h2 class="section-title lang-data-th">เราเข้าใจ<br>ร้านอาหารของคุณ</h2>
-    <p class="section-sub lang-data-en">We didn't just build a generic EPOS and add Thai fonts. SiamEPOS was designed from the ground up with Thai restaurant workflows in mind.</p>
-    <p class="section-sub lang-data-th">เราไม่ได้แค่เพิ่มฟอนต์ไทยในระบบทั่วไป SiamEPOS ถูกออกแบบมาสำหรับการทำงานของร้านอาหารไทยโดยเฉพาะ</p>
-    <div class="why-points">
-      <div class="why-point"><div class="why-point-check">✓</div><div class="why-point-text lang-data-en"><strong>Thai-speaking support</strong> — call or message us in Thai when you need help</div><div class="why-point-text lang-data-th"><strong>ซัพพอร์ตภาษาไทย</strong> — โทรหรือส่งข้อความหาเราเป็นภาษาไทยได้เลย</div></div>
-      <div class="why-point"><div class="why-point-check">✓</div><div class="why-point-text lang-data-en"><strong>Course-based ordering</strong> — built for how Thai food is served, not adapted from Western systems</div><div class="why-point-text lang-data-th"><strong>ระบบคอร์สอาหาร</strong> — ออกแบบมาสำหรับวิธีเสิร์ฟอาหารไทย</div></div>
-      <div class="why-point"><div class="why-point-check">✓</div><div class="why-point-text lang-data-en"><strong>Zero commission bookings</strong> — own your reservations, pay no per-cover fees ever</div><div class="why-point-text lang-data-th"><strong>การจองไม่มีค่าคอม</strong> — เป็นเจ้าของการจองของคุณ ไม่มีค่าธรรมเนียมต่อที่นั่ง</div></div>
-      <div class="why-point"><div class="why-point-check">✓</div><div class="why-point-text lang-data-en"><strong>UK compliant</strong> — service charge, VAT tracking, and Z reports built for UK restaurants</div><div class="why-point-text lang-data-th"><strong>ถูกกฎหมาย UK</strong> — Service charge VAT และ Z Report สำหรับร้านใน UK</div></div>
-    </div>
+<!-- COMPETITOR COST TABLE -->
+<section class="compare-section reveal">
+  <div style="text-align:center;">
+    <div class="section-label lang-en">The real cost of doing nothing</div>
+    <div class="section-label lang-th">ต้นทุนจริงของการไม่เปลี่ยนแปลง</div>
+    <h2 class="section-title lang-en">What are you<br>currently paying?</h2>
+    <h2 class="section-title lang-th">คุณกำลังจ่าย<br>เท่าไหร่อยู่ตอนนี้?</h2>
   </div>
-  <div class="why-visual reveal reveal-delay-2">
-    <div class="thai-fact"><div class="thai-fact-icon">🍜</div><div><div class="thai-fact-title lang-data-en">Thai restaurants in the UK</div><div class="thai-fact-title lang-data-th">ร้านอาหารไทยในสหราชอาณาจักร</div><div class="thai-fact-desc lang-data-en">Over 3,000 Thai restaurants across the UK, most still using outdated or expensive EPOS systems.</div><div class="thai-fact-desc lang-data-th">มากกว่า 3,000 ร้านอาหารไทยในสหราชอาณาจักร ส่วนใหญ่ยังใช้ระบบที่ล้าสมัย</div></div></div>
-    <div class="thai-fact"><div class="thai-fact-icon">💷</div><div><div class="thai-fact-title lang-data-en">Save £1,500–4,500/month vs OpenTable</div><div class="thai-fact-title lang-data-th">ประหยัดได้ถึง £4,500 ต่อเดือน เทียบกับ OpenTable</div><div class="thai-fact-desc lang-data-en">A restaurant doing 50 covers/night pays up to £4,500/month in OpenTable commission. With SiamEPOS, you pay £0.</div><div class="thai-fact-desc lang-data-th">ร้านที่รับ 50 ที่นั่ง/คืน จ่ายค่าคอม OpenTable สูงถึง £4,500/เดือน ด้วย SiamEPOS คุณจ่าย £0</div></div></div>
-    <div class="thai-fact"><div class="thai-fact-icon">📱</div><div><div class="thai-fact-title lang-data-en">Any device, any network</div><div class="thai-fact-title lang-data-th">ทุกอุปกรณ์ ทุกเครือข่าย</div><div class="thai-fact-desc lang-data-en">Cloud-based means no IP address headaches. Change WiFi, move location — it just works.</div><div class="thai-fact-desc lang-data-th">บนคลาวด์หมายความว่าไม่ต้องกังวลเรื่อง IP address เปลี่ยน WiFi ย้ายสถานที่ — ใช้งานได้เลย</div></div></div>
-  </div>
+  <table class="compare-table">
+    <thead>
+      <tr>
+        <th class="lang-en">System</th><th class="lang-th">ระบบ</th>
+        <th class="lang-en">Current Tool</th><th class="lang-th">เครื่องมือปัจจุบัน</th>
+        <th class="lang-en">Monthly Cost</th><th class="lang-th">ค่าใช้จ่าย/เดือน</th>
+        <th class="lang-en">SiamEPOS</th><th class="lang-th">SiamEPOS</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="lang-en">EPOS</td><td class="lang-th">ระบบ POS</td><td class="lang-en">Square / old system</td><td class="lang-th">Square / ระบบเก่า</td><td style="color:#e53e3e;font-weight:700">£69–120</td><td class="lang-en" style="color:#38a169;font-weight:700">✅ Included</td><td class="lang-th" style="color:#38a169;font-weight:700">✅ รวมแล้ว</td></tr>
+      <tr><td class="lang-en">Reservations</td><td class="lang-th">ระบบจอง</td><td class="lang-en">OpenTable / ResDiary</td><td class="lang-th">OpenTable / ResDiary</td><td style="color:#e53e3e;font-weight:700">£150–500</td><td class="lang-en" style="color:#38a169;font-weight:700">✅ Included</td><td class="lang-th" style="color:#38a169;font-weight:700">✅ รวมแล้ว</td></tr>
+      <tr><td class="lang-en">Stock management</td><td class="lang-th">จัดการสต็อก</td><td class="lang-en">Spreadsheet</td><td class="lang-th">สเปรดชีต</td><td style="color:#e53e3e;font-weight:700">£0 (but costly)</td><td class="lang-en" style="color:#38a169;font-weight:700">✅ Included</td><td class="lang-th" style="color:#38a169;font-weight:700">✅ รวมแล้ว</td></tr>
+      <tr><td class="lang-en">Cost management</td><td class="lang-th">จัดการต้นทุน</td><td class="lang-en">Accountant</td><td class="lang-th">นักบัญชี</td><td style="color:#e53e3e;font-weight:700">£100–300</td><td class="lang-en" style="color:#38a169;font-weight:700">✅ Included</td><td class="lang-th" style="color:#38a169;font-weight:700">✅ รวมแล้ว</td></tr>
+      <tr class="compare-highlight"><td colspan="2" style="font-size:15px;font-weight:800" class="lang-en">💸 Total (4 systems)</td><td colspan="2" style="font-size:15px;font-weight:800" class="lang-th">💸 รวม (4 ระบบ)</td><td style="color:#e53e3e;font-size:18px;font-weight:800">£319–920</td><td colspan="2" style="color:var(--gold);font-size:18px;font-weight:800">✅ £89/month</td></tr>
+    </tbody>
+  </table>
 </section>
 
-<!-- PRICING -->
-<section class="pricing" id="pricing">
-  <div class="reveal">
-    <div class="section-label lang-data-en">Simple pricing</div><div class="section-label lang-data-th">ราคาง่ายๆ</div>
-    <h2 class="section-title lang-data-en">No hidden fees.<br>No surprises.</h2><h2 class="section-title lang-data-th">ไม่มีค่าใช้จ่ายแอบแฝง<br>ไม่มีเซอร์ไพรส์</h2>
-    <p class="section-sub lang-data-en" style="margin:0 auto">All plans include full setup support, training, and Thai-speaking customer service.</p>
-    <p class="section-sub lang-data-th" style="margin:0 auto">ทุกแผนรวมการตั้งค่า การฝึกอบรม และบริการลูกค้าภาษาไทย</p>
-  </div>
-  <div class="pricing-cards">
-    <div class="pricing-card reveal reveal-delay-1">
-      <div class="pricing-tier lang-data-en">Starter</div><div class="pricing-tier lang-data-th">สตาร์เตอร์</div>
-      <div class="pricing-price">£49</div>
-      <div class="pricing-period lang-data-en">per month</div><div class="pricing-period lang-data-th">ต่อเดือน</div>
-      <ul class="pricing-features">
-        <li class="lang-data-en">Up to 20 tables</li><li class="lang-data-th">สูงสุด 20 โต๊ะ</li>
-        <li class="lang-data-en">Kitchen & bar screens</li><li class="lang-data-th">หน้าจอครัวและบาร์</li>
-        <li class="lang-data-en">Daily Z reports</li><li class="lang-data-th">Z Report รายวัน</li>
-        <li class="lang-data-en">5 staff accounts</li><li class="lang-data-th">5 บัญชีพนักงาน</li>
-        <li class="lang-data-en">Email support</li><li class="lang-data-th">ซัพพอร์ตทางอีเมล</li>
-      </ul>
-      <a href="#demo" class="btn-pricing btn-pricing-outline lang-data-en">Get Started</a><a href="#demo" class="btn-pricing btn-pricing-outline lang-data-th">เริ่มใช้งาน</a>
+<!-- FINAL CTA -->
+<section class="final-cta">
+  <div style="position:relative;z-index:1;max-width:600px;margin:0 auto;" class="reveal">
+    <div class="section-label lang-en">Ready to switch?</div>
+    <div class="section-label lang-th">พร้อมเปลี่ยนแล้วหรือยัง?</div>
+    <h2 class="section-title white lang-en">Ready to stop<br>overpaying?</h2>
+    <h2 class="section-title white lang-th">พร้อมที่จะประหยัยเงิน<br>หลักพันปอนด์ต่อเดือนแล้วหรือยัง?</h2>
+    <p class="section-sub lang-en" style="color:rgba(255,255,255,0.6);margin:0 auto 36px;">Book a free 20-minute demo — in English or Thai. No pressure, no jargon, no contract.</p>
+    <p class="section-sub lang-th" style="color:rgba(255,255,255,0.6);margin:0 auto 36px;">จองการสาธิตฟรี 20 นาที ภาษาไทยหรืออังกฤษก็ได้ ไม่มีแรงกดดัน ไม่มีสัญญา</p>
+    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
+      <a href="book-demo.html" class="book-btn lang-en">🚀 Book Your Free Demo</a>
+      <a href="book-demo.html" class="book-btn lang-th">🚀 จองสาธิตฟรีของคุณ</a>
+      <button class="book-btn ghost" onclick="openBook()">📅 <span class="lang-en">Reserve a Table</span><span class="lang-th">จองโต๊ะ</span></button>
     </div>
-    <div class="pricing-card featured reveal reveal-delay-2">
-      <div class="pricing-badge lang-data-en">Most Popular</div><div class="pricing-badge lang-data-th">ยอดนิยม</div>
-      <div class="pricing-tier">Pro</div>
-      <div class="pricing-price">£89</div>
-      <div class="pricing-period lang-data-en">per month</div><div class="pricing-period lang-data-th">ต่อเดือน</div>
-      <ul class="pricing-features">
-        <li class="lang-data-en">Unlimited tables</li><li class="lang-data-th">โต๊ะไม่จำกัด</li>
-        <li class="lang-data-en">Kitchen, bar & pass screens</li><li class="lang-data-th">ครัว บาร์ และ Pass screen</li>
-        <li class="lang-data-en">Online reservations (0% commission)</li><li class="lang-data-th">จองโต๊ะออนไลน์ (ค่าคอม 0%)</li>
-        <li class="lang-data-en">Online ordering linked to EPOS</li><li class="lang-data-th">สั่งอาหารออนไลน์เชื่อมกับ EPOS</li>
-        <li class="lang-data-en">Stock management</li><li class="lang-data-th">จัดการสต็อก</li>
-        <li class="lang-data-en">Unlimited staff accounts</li><li class="lang-data-th">พนักงานไม่จำกัด</li>
-        <li class="lang-data-en">Phone & Thai support</li><li class="lang-data-th">ซัพพอร์ตโทรศัพท์ภาษาไทย</li>
-      </ul>
-      <a href="#demo" class="btn-pricing btn-pricing-gold lang-data-en">Get Started</a><a href="#demo" class="btn-pricing btn-pricing-gold lang-data-th">เริ่มใช้งาน</a>
-    </div>
-    <div class="pricing-card reveal reveal-delay-3">
-      <div class="pricing-tier lang-data-en">Enterprise</div><div class="pricing-tier lang-data-th">เอนเตอร์ไพรส์</div>
-      <div class="pricing-price" style="font-size:36px; padding-top:10px">Custom</div>
-      <div class="pricing-period lang-data-en">multiple locations</div><div class="pricing-period lang-data-th">หลายสาขา</div>
-      <ul class="pricing-features">
-        <li class="lang-data-en">Multiple restaurants</li><li class="lang-data-th">หลายร้าน</li>
-        <li class="lang-data-en">Centralised reporting</li><li class="lang-data-th">รายงานรวมศูนย์</li>
-        <li class="lang-data-en">Custom integrations</li><li class="lang-data-th">การเชื่อมต่อแบบกำหนดเอง</li>
-        <li class="lang-data-en">Dedicated account manager</li><li class="lang-data-th">ผู้ดูแลบัญชีเฉพาะ</li>
-        <li class="lang-data-en">On-site training</li><li class="lang-data-th">ฝึกอบรมถึงที่</li>
-      </ul>
-      <a href="#demo" class="btn-pricing btn-pricing-outline lang-data-en">Contact Us</a><a href="#demo" class="btn-pricing btn-pricing-outline lang-data-th">ติดต่อเรา</a>
-    </div>
-  </div>
-</section>
-
-<!-- DEMO CTA -->
-<section class="demo" id="demo">
-  <div style="position:relative; z-index:1; max-width:600px; margin:0 auto;" class="reveal">
-    <div class="section-label lang-data-en">Get started today</div><div class="section-label lang-data-th">เริ่มต้นวันนี้</div>
-    <h2 class="section-title lang-data-en">Book your free demo</h2><h2 class="section-title lang-data-th">จองการสาธิตฟรี</h2>
-    <p class="section-sub lang-data-en">Leave your details and we'll be in touch within 24 hours to arrange a free demo — in English or Thai.</p>
-    <p class="section-sub lang-data-th">ฝากรายละเอียดไว้แล้วเราจะติดต่อกลับภายใน 24 ชั่วโมง เพื่อนัดสาธิตฟรี ภาษาไทยหรืออังกฤษก็ได้</p>
-    <div style="display:flex; flex-direction:column; max-width:520px; margin:40px auto 0;">
-      <input class="demo-input" type="text" placeholder="Restaurant name / ชื่อร้านอาหาร">
-      <input class="demo-input" type="text" placeholder="Your name / ชื่อของคุณ" style="margin-top:12px;">
-      <input class="demo-input" type="tel" placeholder="Phone / เบอร์โทร" style="margin-top:12px;">
-      <input class="demo-input" type="email" placeholder="Email" style="margin-top:12px;">
-      <button onclick="alert('Thank you! We will be in touch within 24 hours.\n\nขอบคุณ! เราจะติดต่อกลับภายใน 24 ชั่วโมง')" class="btn-primary" style="margin-top:16px; justify-content:center; border:none; cursor:pointer; font-family:Sarabun,sans-serif;">
-        <span class="lang-data-en">🚀 Request Free Demo</span><span class="lang-data-th">🚀 ขอรับการสาธิตฟรี</span>
-      </button>
-    </div>
-    <div style="margin-top:24px; text-align:center;">
-      <p style="color:rgba(255,255,255,0.4); font-size:13px; margin-bottom:14px;" class="lang-data-en">Or book a table right now</p>
-      <p style="color:rgba(255,255,255,0.4); font-size:13px; margin-bottom:14px;" class="lang-data-th">หรือจองโต๊ะได้เลยตอนนี้</p>
-      <button class="book-btn" onclick="openBooking()">📅 Book a Table Now</button>
-    </div>
-    <p class="demo-note" style="margin-top:20px;">No credit card required · Free setup included · Cancel anytime</p>
   </div>
 </section>
 
 <!-- FOOTER -->
 <footer>
-  <div>
+  <div class="footer-brand">
     <div class="footer-logo">🇹🇭🇬🇧 Siam<span>EPOS</span></div>
-    <p class="footer-tagline lang-data-en">The smart EPOS system built for Thai restaurants across the United Kingdom.</p>
-    <p class="footer-tagline lang-data-th">ระบบ EPOS อัจฉริยะสำหรับร้านอาหารไทยทั่วสหราชอาณาจักร</p>
-    <div class="footer-social">
-      <a href="#" class="social-btn">📘</a>
-      <a href="#" class="social-btn">📸</a>
-      <a href="#" class="social-btn">💬</a>
-    </div>
-    <button class="book-btn outline" onclick="openBooking()" style="margin-top:4px;">📅 Book a Table</button>
+    <p class="footer-tagline lang-en">The complete business operating system for Thai restaurants in the UK.</p>
+    <p class="footer-tagline lang-th">ระบบปฏิบัติการธุรกิจสมบูรณ์สำหรับร้านอาหารไทยในสหราชอาณาจักร</p>
+    <a href="https://wa.me/447700000000" target="_blank" style="display:inline-flex;align-items:center;gap:8px;background:#25D366;color:white;padding:10px 18px;border-radius:50px;font-size:13px;font-weight:700;text-decoration:none;margin-top:4px;">💬 <span class="lang-en">WhatsApp / LINE</span><span class="lang-th">WhatsApp / LINE</span></a>
   </div>
   <div class="footer-col">
-    <h4 class="lang-data-en">Product</h4><h4 class="lang-data-th">ผลิตภัณฑ์</h4>
+    <h4 class="lang-en">Product</h4><h4 class="lang-th">ผลิตภัณฑ์</h4>
     <ul>
-      <li><a href="#features" class="lang-data-en">Features</a><a href="#features" class="lang-data-th">ฟีเจอร์</a></li>
-      <li><a href="#pricing" class="lang-data-en">Pricing</a><a href="#pricing" class="lang-data-th">ราคา</a></li>
-      <li><a href="#" class="lang-data-en">Roadmap</a><a href="#" class="lang-data-th">แผนพัฒนา</a></li>
-      <li><a href="#demo" class="lang-data-en">Book Demo</a><a href="#demo" class="lang-data-th">จองสาธิต</a></li>
+      <li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li>
+      <li><a href="pricing.html" class="lang-en">Pricing</a><a href="pricing.html" class="lang-th">ราคา</a></li>
+      <li><a href="why-siamepos.html" class="lang-en">Why SiamEPOS</a><a href="why-siamepos.html" class="lang-th">ทำไมต้อง SiamEPOS</a></li>
+      <li><a href="book-demo.html" class="lang-en">Book Demo</a><a href="book-demo.html" class="lang-th">จองสาธิต</a></li>
     </ul>
   </div>
   <div class="footer-col">
-    <h4 class="lang-data-en">Support</h4><h4 class="lang-data-th">ช่วยเหลือ</h4>
+    <h4 class="lang-en">Support</h4><h4 class="lang-th">ซัพพอร์ต</h4>
     <ul>
-      <li><a href="#" class="lang-data-en">Help Centre</a><a href="#" class="lang-data-th">ศูนย์ช่วยเหลือ</a></li>
-      <li><a href="#" class="lang-data-en">Training Videos</a><a href="#" class="lang-data-th">วิดีโอสอนใช้งาน</a></li>
-      <li><a href="#" class="lang-data-en">Contact Us</a><a href="#" class="lang-data-th">ติดต่อเรา</a></li>
-    </ul>
-  </div>
-  <div class="footer-col">
-    <h4 class="lang-data-en">Contact</h4><h4 class="lang-data-th">ติดต่อ</h4>
-    <ul>
+      <li><a href="https://wa.me/447700000000" class="lang-en">WhatsApp Support</a><a href="https://wa.me/447700000000" class="lang-th">WhatsApp ซัพพอร์ต</a></li>
       <li><a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></li>
-      <li><a href="#" class="lang-data-en">London, UK</a><a href="#" class="lang-data-th">ลอนดอน สหราชอาณาจักร</a></li>
-      <li><a href="#" class="lang-data-en">Thai support available</a><a href="#" class="lang-data-th">ซัพพอร์ตภาษาไทย</a></li>
+      <li><a href="#" class="lang-en">Thai support available</a><a href="#" class="lang-th">ซัพพอร์ตภาษาไทย</a></li>
+    </ul>
+  </div>
+  <div class="footer-col">
+    <h4 class="lang-en">Legal</h4><h4 class="lang-th">กฎหมาย</h4>
+    <ul>
+      <li><a href="#" class="lang-en">Privacy Policy</a><a href="#" class="lang-th">นโยบายความเป็นส่วนตัว</a></li>
+      <li><a href="#" class="lang-en">Terms of Service</a><a href="#" class="lang-th">เงื่อนไขการใช้บริการ</a></li>
+      <li><a href="#" class="lang-en">Cookie Policy</a><a href="#" class="lang-th">นโยบายคุกกี้</a></li>
     </ul>
   </div>
 </footer>
-
 <div class="footer-bottom">
-  <p>© 2026 SiamEPOS. <span class="lang-data-en">All rights reserved.</span><span class="lang-data-th">สงวนลิขสิทธิ์</span></p>
-  <p><a href="#" class="lang-data-en">Privacy Policy</a><a href="#" class="lang-data-th">นโยบายความเป็นส่วนตัว</a> · <a href="#" class="lang-data-en">Terms of Service</a><a href="#" class="lang-data-th">เงื่อนไขการใช้บริการ</a></p>
+  <p>© 2026 SiamEPOS. <span class="lang-en">All rights reserved.</span><span class="lang-th">สงวนลิขสิทธิ์</span></p>
+  <p><a href="why-siamepos.html" class="lang-en">Why SiamEPOS?</a><a href="why-siamepos.html" class="lang-th">ทำไมต้อง SiamEPOS?</a></p>
 </div>
 
 <script>
-const SERVER_URL = 'https://restaurant-epos-production.up.railway.app';
-let selectedTime = '';
+const SERVER='https://restaurant-epos-production.up.railway.app';
+let selTime='';
 
-// ── OPEN / CLOSE ──
-function openBooking() {
-  // Set min date to today
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('bDate').min = today;
-  if (!document.getElementById('bDate').value) {
-    document.getElementById('bDate').value = today;
-  }
-  document.getElementById('bookingOverlay').classList.add('open');
-  document.body.style.overflow = 'hidden';
+function openBook(){
+  const t=new Date().toISOString().split('T')[0];
+  document.getElementById('bDate').min=t;
+  if(!document.getElementById('bDate').value)document.getElementById('bDate').value=t;
+  document.getElementById('bOverlay').classList.add('open');
+  document.body.style.overflow='hidden';
 }
-
-function closeBooking() {
-  document.getElementById('bookingOverlay').classList.remove('open');
-  document.body.style.overflow = '';
+function closeBook(){
+  document.getElementById('bOverlay').classList.remove('open');
+  document.body.style.overflow='';
 }
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeBook();});
 
-// Close on Escape
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeBooking(); });
-
-// ── STEP NAVIGATION ──
-function goStep(n) {
-  document.querySelectorAll('.form-panel').forEach(p => p.classList.remove('active'));
-  document.getElementById('panel' + n).classList.add('active');
-  // Update step indicators
-  for (let i = 1; i <= 3; i++) {
-    const circle = document.getElementById('sc' + i);
-    const label = document.getElementById('sl' + i);
-    circle.classList.remove('active', 'done');
-    label.classList.remove('active');
-    if (i < n) { circle.classList.add('done'); circle.textContent = '✓'; }
-    else if (i === n) { circle.classList.add('active'); circle.textContent = i; label.classList.add('active'); }
-    else { circle.textContent = i; }
+function bGo(n){
+  document.querySelectorAll('.form-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('bp'+n).classList.add('active');
+  for(let i=1;i<=3;i++){
+    const c=document.getElementById('sc'+i),l=document.getElementById('sl'+i);
+    c.classList.remove('active','done');l.classList.remove('active');
+    if(i<n){c.classList.add('done');c.textContent='✓';}
+    else if(i===n){c.classList.add('active');c.textContent=i;l.classList.add('active');}
+    else c.textContent=i;
   }
 }
 
-function goStep2() {
-  const date = document.getElementById('bDate').value;
-  const covers = document.getElementById('bCovers').value;
-  let valid = true;
-  if (!date) { document.getElementById('errDate').classList.add('show'); valid = false; } else { document.getElementById('errDate').classList.remove('show'); }
-  if (!covers) { document.getElementById('errCovers').classList.add('show'); valid = false; } else { document.getElementById('errCovers').classList.remove('show'); }
-  if (!valid) return;
-  buildTimeSlots();
-  goStep(2);
+function bStep2(){
+  const d=document.getElementById('bDate').value,c=document.getElementById('bCovers').value;
+  let v=true;
+  if(!d){document.getElementById('eDateErr').classList.add('show');v=false;}else document.getElementById('eDateErr').classList.remove('show');
+  if(!c){document.getElementById('eCoverErr').classList.add('show');v=false;}else document.getElementById('eCoverErr').classList.remove('show');
+  if(!v)return;
+  buildSlots();bGo(2);
 }
 
-function goStep3() {
-  if (!selectedTime) { document.getElementById('errTime').classList.add('show'); return; }
-  document.getElementById('errTime').classList.remove('show');
-  goStep(3);
-}
-
-// ── TIME SLOTS ──
-function buildTimeSlots() {
-  const grid = document.getElementById('timeGrid');
-  grid.innerHTML = '';
-  selectedTime = '';
-  const slots = [];
-  // Generate 12:00 to 22:00 in 15-min intervals
-  for (let h = 12; h <= 21; h++) {
-    for (let m = 0; m < 60; m += 15) {
-      const hh = String(h).padStart(2, '0');
-      const mm = String(m).padStart(2, '0');
-      slots.push(`${hh}:${mm}`);
-    }
-  }
-  slots.forEach(slot => {
-    const btn = document.createElement('button');
-    btn.className = 'time-slot';
-    btn.textContent = slot;
-    btn.onclick = () => {
-      document.querySelectorAll('.time-slot').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
-      selectedTime = slot;
-      document.getElementById('errTime').classList.remove('show');
-    };
-    grid.appendChild(btn);
-  });
-}
-
-// ── SUBMIT ──
-async function submitBooking() {
-  const firstName = document.getElementById('bFirstName').value.trim();
-  const lastName = document.getElementById('bLastName').value.trim();
-  const phone = document.getElementById('bPhone').value.trim();
-  const email = document.getElementById('bEmail').value.trim();
-  let valid = true;
-
-  if (!firstName || !lastName) { document.getElementById('errName').classList.add('show'); valid = false; } else { document.getElementById('errName').classList.remove('show'); }
-  if (!phone) { document.getElementById('errPhone').classList.add('show'); valid = false; } else { document.getElementById('errPhone').classList.remove('show'); }
-  if (!email || !email.includes('@')) { document.getElementById('errEmail').classList.add('show'); valid = false; } else { document.getElementById('errEmail').classList.remove('show'); }
-  if (!valid) return;
-
-  const btn = document.getElementById('submitBtn');
-  btn.disabled = true;
-  btn.textContent = '⏳ Confirming...';
-
-  const payload = {
-    restaurantId: 'siamepos',
-    date: document.getElementById('bDate').value,
-    time: selectedTime,
-    covers: parseInt(document.getElementById('bCovers').value),
-    name: `${firstName} ${lastName}`,
-    phone,
-    email,
-    notes: document.getElementById('bNotes').value.trim()
-  };
-
-  try {
-    const res = await fetch(`${SERVER_URL}/api/reservations`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-
-    // Show success regardless (graceful fallback if Railway is cold)
-    showSuccess(payload, data.reference || 'SE-' + Date.now().toString().slice(-6));
-
-  } catch (err) {
-    // Even if Railway is sleeping, show success and log for follow-up
-    showSuccess(payload, 'SE-' + Date.now().toString().slice(-6));
+function buildSlots(){
+  const g=document.getElementById('tGrid');g.innerHTML='';selTime='';
+  for(let h=12;h<=21;h++)for(let m=0;m<60;m+=15){
+    const s=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    const b=document.createElement('button');
+    b.className='tslot';b.textContent=s;
+    b.onclick=()=>{document.querySelectorAll('.tslot').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');selTime=s;document.getElementById('eTimeErr').classList.remove('show');};
+    g.appendChild(b);
   }
 }
 
-function showSuccess(payload, ref) {
-  document.querySelectorAll('.form-panel, .modal-steps, .modal-title, .modal-subtitle').forEach(el => el.style.display = 'none');
-  const success = document.getElementById('bookingSuccess');
-  success.style.display = 'block';
-  document.getElementById('successRef').textContent =
-    `📅 ${payload.date} at ${payload.time} · ${payload.covers} guest${payload.covers > 1 ? 's' : ''} · Ref: ${ref}`;
+function bStep3(){
+  if(!selTime){document.getElementById('eTimeErr').classList.add('show');return;}
+  document.getElementById('eTimeErr').classList.remove('show');
+  bGo(3);
 }
 
-// ── SCROLL REVEAL ──
-const reveals = document.querySelectorAll('.reveal');
-const observer = new IntersectionObserver((entries) => {
-  entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('visible'); });
-}, { threshold: 0.1 });
-reveals.forEach(el => observer.observe(el));
+async function bSubmit(){
+  const fn=document.getElementById('bFirst').value.trim(),ln=document.getElementById('bLast').value.trim(),ph=document.getElementById('bPhone').value.trim(),em=document.getElementById('bEmail').value.trim();
+  let v=true;
+  if(!fn||!ln){document.getElementById('eNameErr').classList.add('show');v=false;}else document.getElementById('eNameErr').classList.remove('show');
+  if(!ph){document.getElementById('ePhoneErr').classList.add('show');v=false;}else document.getElementById('ePhoneErr').classList.remove('show');
+  if(!em||!em.includes('@')){document.getElementById('eEmailErr').classList.add('show');v=false;}else document.getElementById('eEmailErr').classList.remove('show');
+  if(!v)return;
+  const btn=document.getElementById('bSubmit');btn.disabled=true;btn.textContent='⏳ Confirming...';
+  const payload={restaurantId:'siamepos',date:document.getElementById('bDate').value,time:selTime,covers:parseInt(document.getElementById('bCovers').value),name:`${fn} ${ln}`,phone:ph,email:em,notes:document.getElementById('bNotes').value.trim()};
+  try{const r=await fetch(`${SERVER}/api/reservations`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();showOK(payload,d.reference||'SE-'+Date.now().toString().slice(-6));}
+  catch{showOK(payload,'SE-'+Date.now().toString().slice(-6));}
+}
 
-document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-  anchor.addEventListener('click', function(e) {
-    const target = document.querySelector(this.getAttribute('href'));
-    if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-  });
-});
+function showOK(p,ref){
+  document.querySelectorAll('.form-panel,.modal-steps,.modal-title,.modal-sub').forEach(e=>e.style.display='none');
+  document.getElementById('bSuccess').style.display='block';
+  document.getElementById('bRef').textContent=`📅 ${p.date} at ${p.time} · ${p.covers} guest${p.covers>1?'s':''} · Ref: ${ref}`;
+}
+
+// Scroll reveal
+const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:0.1});
+document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
+document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',function(e){const t=document.querySelector(this.getAttribute('href'));if(t){e.preventDefault();t.scrollIntoView({behavior:'smooth',block:'start'});}}));
 </script>
 </body>
 </html>

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Book a Demo — SiamEPOS in 20 Minutes. In Thai or English.</title>
+<meta name="description" content="See SiamEPOS in 20 minutes. Free demo with a Thai-speaking team. No contract, no pressure. Book online now.">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--gold:#C9A84C;--gold-light:#E8C96A;--navy:#0D1B3E;--navy-mid:#1A2F6B;--white:#FDFAF4;--text-muted:#6B7A9F;}
+*{margin:0;padding:0;box-sizing:border-box;}html{scroll-behavior:smooth;}
+body{font-family:'Sarabun',sans-serif;background:var(--white);color:var(--navy);overflow-x:hidden;}
+body.thai .lang-en{display:none;}body:not(.thai) .lang-th{display:none;}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content:space-between;align-items:center;padding:18px 60px;background:rgba(13,27,62,0.96);backdrop-filter:blur(12px);border-bottom:1px solid rgba(201,168,76,0.2);}
+.logo-text{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:700;color:var(--gold);letter-spacing:1px;}
+.logo-text span{color:white;}
+.nav-links{display:flex;align-items:center;gap:24px;list-style:none;}
+.nav-links a{color:rgba(255,255,255,0.75);text-decoration:none;font-size:14px;font-weight:600;transition:color 0.2s;}
+.nav-links a:hover{color:var(--gold);}
+.lang-toggle{background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.35);color:var(--gold);padding:6px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:700;font-family:'Sarabun',sans-serif;}
+.book-btn{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);padding:13px 26px;border-radius:10px;font-size:15px;font-weight:800;border:none;cursor:pointer;font-family:'Sarabun',sans-serif;transition:transform 0.2s,box-shadow 0.2s;white-space:nowrap;text-decoration:none;}
+.book-btn:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(201,168,76,0.45);}
+.wa-float{position:fixed;bottom:28px;right:28px;z-index:98;}
+.wa-btn{display:flex;align-items:center;gap:10px;background:#25D366;color:white;padding:13px 20px;border-radius:50px;font-size:14px;font-weight:700;text-decoration:none;box-shadow:0 8px 24px rgba(37,211,102,0.4);}
+
+/* HERO */
+.demo-hero{min-height:100vh;background:linear-gradient(160deg,var(--navy) 0%,var(--navy-mid) 60%,#0A2456 100%);display:grid;grid-template-columns:1fr 1fr;align-items:center;padding:100px 60px 60px;gap:80px;position:relative;overflow:hidden;}
+.demo-hero::before{content:'';position:absolute;inset:0;background-image:repeating-linear-gradient(45deg,rgba(201,168,76,0.03) 0px,rgba(201,168,76,0.03) 1px,transparent 1px,transparent 60px);}
+.demo-hero-left{position:relative;z-index:1;}
+.page-tag{display:inline-flex;align-items:center;gap:8px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:var(--gold);padding:7px 16px;border-radius:30px;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:24px;}
+.demo-hero h1{font-family:'Cormorant Garamond',serif;font-size:52px;font-weight:700;color:white;line-height:1.1;margin-bottom:16px;}
+.demo-hero h1 em{font-style:italic;color:var(--gold);}
+.demo-hero-sub{font-size:17px;color:rgba(255,255,255,0.65);line-height:1.7;margin-bottom:32px;}
+.reassurance{display:flex;flex-direction:column;gap:12px;}
+.reas-item{display:flex;align-items:center;gap:12px;font-size:15px;color:rgba(255,255,255,0.75);}
+.reas-icon{width:36px;height:36px;border-radius:10px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.25);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+
+/* PROFILE CARD */
+.profile-card{background:rgba(255,255,255,0.05);border:1px solid rgba(201,168,76,0.2);border-radius:20px;padding:28px;margin-top:36px;display:flex;gap:20px;align-items:flex-start;}
+.profile-avatar{width:72px;height:72px;border-radius:16px;background:linear-gradient(135deg,var(--gold),var(--gold-light));display:flex;align-items:center;justify-content:center;font-size:36px;flex-shrink:0;}
+.profile-name{font-size:17px;font-weight:700;color:white;margin-bottom:4px;}
+.profile-role{font-size:12px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;}
+.profile-bio{font-size:13px;color:rgba(255,255,255,0.55);line-height:1.65;}
+
+/* DEMO FORM */
+.demo-form-wrap{position:relative;z-index:1;}
+.demo-form-card{background:white;border-radius:24px;padding:40px;box-shadow:0 40px 80px rgba(0,0,0,0.3);}
+.form-title{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:var(--navy);margin-bottom:6px;}
+.form-sub{font-size:14px;color:var(--text-muted);margin-bottom:28px;}
+.flabel{display:block;font-size:12px;font-weight:700;color:var(--text-muted);letter-spacing:0.5px;margin-bottom:7px;text-transform:uppercase;}
+.finput,.fselect,.ftextarea{width:100%;padding:13px 16px;background:#F9F8FF;border:1px solid #E0DDD6;border-radius:10px;color:var(--navy);font-size:14px;font-family:'Sarabun',sans-serif;outline:none;transition:border-color 0.2s;-webkit-appearance:none;}
+.finput:focus,.fselect:focus,.ftextarea:focus{border-color:var(--gold);}
+.finput::placeholder,.ftextarea::placeholder{color:#B0AEC0;}
+.frow{margin-bottom:16px;}
+.frow2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+.ftextarea{resize:none;height:80px;}
+.fselect option{background:white;}
+.submit-btn{width:100%;padding:16px;border-radius:12px;border:none;font-size:16px;font-weight:800;cursor:pointer;font-family:'Sarabun',sans-serif;background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);transition:all 0.2s;margin-top:6px;}
+.submit-btn:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(201,168,76,0.4);}
+.form-note{text-align:center;font-size:12px;color:var(--text-muted);margin-top:14px;}
+
+/* SUCCESS */
+.form-success{display:none;text-align:center;padding:20px;}
+.success-icon{font-size:56px;margin-bottom:16px;}
+.success-title{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:700;color:var(--navy);margin-bottom:10px;}
+.success-sub{font-size:15px;color:var(--text-muted);line-height:1.7;margin-bottom:24px;}
+
+/* ALT CONTACT */
+.alt-contact{background:var(--navy);padding:60px;}
+.alt-inner{max-width:900px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr 1fr;gap:28px;}
+.alt-card{background:rgba(255,255,255,0.05);border:1px solid rgba(201,168,76,0.15);border-radius:16px;padding:24px;text-align:center;}
+.alt-icon{font-size:36px;margin-bottom:12px;}
+.alt-title{font-size:16px;font-weight:700;color:white;margin-bottom:6px;}
+.alt-desc{font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:14px;line-height:1.6;}
+.alt-link{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;transition:all 0.2s;}
+.alt-link.wa{background:#25D366;color:white;}
+.alt-link.wa:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(37,211,102,0.4);}
+.alt-link.gold{background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);}
+.alt-link.gold:hover{transform:translateY(-2px);}
+.alt-link.mail{background:rgba(255,255,255,0.08);color:white;border:1px solid rgba(255,255,255,0.15);}
+.alt-link.mail:hover{border-color:var(--gold);color:var(--gold);}
+
+/* FEATURES STRIP */
+.features-strip{background:#F7F5F0;padding:60px;}
+.features-strip-inner{max-width:1000px;margin:0 auto;}
+.fs-title{font-family:'Cormorant Garamond',serif;font-size:40px;font-weight:700;color:var(--navy);text-align:center;margin-bottom:40px;}
+.fs-title em{font-style:italic;color:var(--gold);}
+.fs-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+.fs-item{background:white;border:1px solid #EEEDF0;border-radius:12px;padding:20px 16px;text-align:center;}
+.fs-icon{font-size:28px;margin-bottom:10px;}
+.fs-label{font-size:13px;font-weight:700;color:var(--navy);margin-bottom:4px;}
+.fs-sub{font-size:11px;color:var(--text-muted);}
+.fs-tag{display:inline-block;background:rgba(201,168,76,0.12);color:var(--gold);font-size:9px;font-weight:800;padding:2px 8px;border-radius:20px;margin-top:6px;text-transform:uppercase;letter-spacing:1px;}
+
+footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2fr 1fr 1fr;gap:48px;}
+.footer-logo{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:700;color:var(--gold);margin-bottom:10px;}
+.footer-logo span{color:white;}
+.footer-tagline{color:rgba(255,255,255,0.4);font-size:13px;line-height:1.7;max-width:240px;}
+.footer-col h4{color:white;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;}
+.footer-col ul{list-style:none;display:flex;flex-direction:column;gap:8px;}
+.footer-col ul a{color:rgba(255,255,255,0.4);font-size:13px;text-decoration:none;transition:color 0.2s;}
+.footer-col ul a:hover{color:var(--gold);}
+.footer-bottom{background:#040A18;padding:16px 60px;display:flex;justify-content:space-between;}
+.footer-bottom p{color:rgba(255,255,255,0.22);font-size:12px;}
+.footer-bottom a{color:var(--gold);text-decoration:none;}
+
+@media(max-width:1100px){nav{padding:14px 24px;}.nav-links{gap:14px;}.demo-hero{grid-template-columns:1fr;padding:100px 28px 60px;gap:40px;}.alt-inner{grid-template-columns:1fr;}.fs-grid{grid-template-columns:1fr 1fr;}.alt-contact,.features-strip{padding:50px 28px;}footer{grid-template-columns:1fr;gap:28px;padding:40px 24px;}.footer-bottom{padding:14px 24px;flex-direction:column;gap:4px;}}
+@media(max-width:640px){.fs-grid{grid-template-columns:1fr 1fr;}.nav-links{display:none;}.frow2{grid-template-columns:1fr;}.wa-float{bottom:16px;right:16px;}.demo-hero h1{font-size:38px;}}
+.reveal{opacity:0;transform:translateY(20px);transition:opacity 0.7s ease,transform 0.7s ease;}
+.reveal.visible{opacity:1;transform:translateY(0);}
+</style>
+</head>
+<body>
+
+<div class="wa-float">
+  <a href="https://wa.me/447700000000?text=Hello%2C%20I%27d%20like%20to%20book%20a%20demo%20of%20SiamEPOS" target="_blank" class="wa-btn">💬 <span class="lang-en">Book via WhatsApp</span><span class="lang-th">จองผ่าน WhatsApp</span></a>
+</div>
+
+<nav>
+  <a href="index.html" style="text-decoration:none;"><div class="logo-text">Siam<span>EPOS</span></div></a>
+  <ul class="nav-links">
+    <li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li>
+    <li><a href="pricing.html" class="lang-en">Pricing</a><a href="pricing.html" class="lang-th">ราคา</a></li>
+    <li><a href="why-siamepos.html" class="lang-en">Why Us</a><a href="why-siamepos.html" class="lang-th">ทำไมเรา</a></li>
+  </ul>
+  <button class="lang-toggle" onclick="document.body.classList.toggle('thai');this.textContent=document.body.classList.contains('thai')?'EN':'ภาษาไทย'">ภาษาไทย</button>
+</nav>
+
+<!-- HERO + FORM -->
+<div class="demo-hero">
+  <div class="demo-hero-left reveal">
+    <div class="page-tag">🚀 <span class="lang-en">Free • No contract • 20 minutes</span><span class="lang-th">ฟรี • ไม่มีสัญญา • 20 นาที</span></div>
+    <h1 class="lang-en">See SiamEPOS in<br><em>20 minutes.</em></h1>
+    <h1 class="lang-th">ดู SiamEPOS ใน<br><em>20 นาที</em></h1>
+    <p class="demo-hero-sub lang-en">No pressure. No jargon. In Thai or English. We'll show you exactly what SiamEPOS does — and whether it's right for your restaurant.</p>
+    <p class="demo-hero-sub lang-th">ไม่มีแรงกดดัน ไม่มีศัพท์เทคนิค ภาษาไทยหรืออังกฤษก็ได้ เราจะแสดงให้คุณเห็นว่า SiamEPOS ทำอะไรได้บ้าง และเหมาะกับร้านของคุณไหม</p>
+    <div class="reassurance">
+      <div class="reas-item"><div class="reas-icon">🆓</div><span class="lang-en"><strong>Free.</strong> No trial fees, no card required.</span><span class="lang-th"><strong>ฟรี</strong> ไม่มีค่าทดลอง ไม่ต้องใส่บัตร</span></div>
+      <div class="reas-item"><div class="reas-icon">📋</div><span class="lang-en"><strong>No contract.</strong> See it first. Decide after.</span><span class="lang-th"><strong>ไม่มีสัญญา</strong> ดูก่อน ตัดสินใจทีหลัง</span></div>
+      <div class="reas-item"><div class="reas-icon">🇹🇭</div><span class="lang-en"><strong>Thai-speaking.</strong> We do the demo in your language.</span><span class="lang-th"><strong>พูดภาษาไทย</strong> เราทำสาธิตในภาษาของคุณ</span></div>
+      <div class="reas-item"><div class="reas-icon">⏱️</div><span class="lang-en"><strong>20 minutes.</strong> Enough to see everything. Not a moment wasted.</span><span class="lang-th"><strong>20 นาที</strong> พอที่จะเห็นทุกอย่าง ไม่เสียเวลาเปล่า</span></div>
+    </div>
+
+    <!-- KORAKOT PROFILE -->
+    <div class="profile-card">
+      <div class="profile-avatar">👨‍🍳</div>
+      <div>
+        <div class="profile-name">Korakot Kongponsrisiri</div>
+        <div class="profile-role lang-en">Founder & Director, SiamEPOS</div>
+        <div class="profile-role lang-th">ผู้ก่อตั้งและผู้อำนวยการ SiamEPOS</div>
+        <p class="profile-bio lang-en">"Built by a Thai restaurant professional, for Thai restaurants. I've worked in UK Thai restaurants — I know exactly what you need and what wastes your money."</p>
+        <p class="profile-bio lang-th">"สร้างโดยผู้เชี่ยวชาญร้านอาหารไทย เพื่อร้านอาหารไทย ผมเคยทำงานในร้านอาหารไทย UK ผมรู้ว่าคุณต้องการอะไรและอะไรที่เสียเงินเปล่า"</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- FORM -->
+  <div class="demo-form-wrap reveal">
+    <div class="demo-form-card">
+      <div id="demoFormContent">
+        <div class="form-title lang-en">Book Your Free Demo</div>
+        <div class="form-title lang-th">จองสาธิตฟรีของคุณ</div>
+        <p class="form-sub lang-en">We'll reply within 2 hours — usually much faster.</p>
+        <p class="form-sub lang-th">เราจะตอบกลับภายใน 2 ชั่วโมง โดยปกติเร็วกว่านั้นมาก</p>
+
+        <div class="frow2">
+          <div><label class="flabel lang-en">First Name</label><label class="flabel lang-th">ชื่อ</label><input class="finput" type="text" id="dFirst" placeholder="First name" required></div>
+          <div><label class="flabel lang-en">Last Name</label><label class="flabel lang-th">นามสกุล</label><input class="finput" type="text" id="dLast" placeholder="Last name" required></div>
+        </div>
+        <div class="frow"><label class="flabel lang-en">Restaurant Name</label><label class="flabel lang-th">ชื่อร้านอาหาร</label><input class="finput" type="text" id="dRestaurant" placeholder="e.g. Siam Kitchen London" required></div>
+        <div class="frow"><label class="flabel">Phone / WhatsApp</label><input class="finput" type="tel" id="dPhone" placeholder="+44 7700 000000" required></div>
+        <div class="frow"><label class="flabel">Email</label><input class="finput" type="email" id="dEmail" placeholder="your@email.com" required></div>
+        <div class="frow"><label class="flabel lang-en">Preferred Language for Demo</label><label class="flabel lang-th">ภาษาที่ต้องการสำหรับสาธิต</label>
+          <select class="fselect" id="dLang">
+            <option value="thai">🇹🇭 Thai / ภาษาไทย</option>
+            <option value="english">🇬🇧 English</option>
+            <option value="both">Both / ทั้งสองภาษา</option>
+          </select>
+        </div>
+        <div class="frow"><label class="flabel lang-en">Current system (optional)</label><label class="flabel lang-th">ระบบปัจจุบัน (ถ้ามี)</label>
+          <select class="fselect" id="dCurrent">
+            <option value="">Select if applicable / เลือกถ้ามี</option>
+            <option value="square">Square</option>
+            <option value="lightspeed">Lightspeed</option>
+            <option value="opentable">OpenTable</option>
+            <option value="paper">Paper / Manual</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="frow"><label class="flabel lang-en">Anything specific you'd like to see?</label><label class="flabel lang-th">มีอะไรที่ต้องการดูเป็นพิเศษ?</label><textarea class="ftextarea" id="dNotes" placeholder="e.g. AI menu scanner, booking widget, kitchen screen..."></textarea></div>
+        <button class="submit-btn" onclick="submitDemo()">🚀 <span class="lang-en">Request My Free Demo</span><span class="lang-th">ขอสาธิตฟรีของฉัน</span></button>
+        <p class="form-note lang-en">Free. No commitment. We'll reach out within 2 hours.</p>
+        <p class="form-note lang-th">ฟรี ไม่มีข้อผูกมัด เราจะติดต่อกลับภายใน 2 ชั่วโมง</p>
+      </div>
+      <div class="form-success" id="demoSuccess">
+        <div class="success-icon">🎉</div>
+        <div class="success-title lang-en">You're on the list!</div>
+        <div class="success-title lang-th">คุณอยู่ในรายการแล้ว!</div>
+        <p class="success-sub lang-en">We'll be in touch within 2 hours to arrange your free demo. Check your WhatsApp or email — we'll reach out on whichever you prefer.</p>
+        <p class="success-sub lang-th">เราจะติดต่อกลับภายใน 2 ชั่วโมงเพื่อจัดสาธิตฟรีของคุณ ตรวจ WhatsApp หรืออีเมลของคุณ เราจะติดต่อทางที่คุณต้องการ</p>
+        <div style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:12px;padding:16px;font-size:14px;color:var(--gold);font-weight:700;margin-bottom:20px;" id="demoRef"></div>
+        <a href="index.html" class="book-btn" style="width:100%;justify-content:center;" class="lang-en">← Back to Homepage</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ALT CONTACT -->
+<div class="alt-contact">
+  <div style="text-align:center;margin-bottom:40px;">
+    <h2 style="font-family:'Cormorant Garamond',serif;font-size:38px;font-weight:700;color:white;margin-bottom:8px;" class="lang-en">Prefer to reach us <em style="font-style:italic;color:var(--gold)">directly?</em></h2>
+    <h2 style="font-family:'Cormorant Garamond',serif;font-size:38px;font-weight:700;color:white;margin-bottom:8px;" class="lang-th">ต้องการติดต่อ <em style="font-style:italic;color:var(--gold)">โดยตรง?</em></h2>
+  </div>
+  <div class="alt-inner">
+    <div class="alt-card">
+      <div class="alt-icon">💬</div>
+      <div class="alt-title lang-en">WhatsApp / LINE</div>
+      <div class="alt-title lang-th">WhatsApp / LINE</div>
+      <p class="alt-desc lang-en">Message us directly. We respond in Thai or English, usually within the hour.</p>
+      <p class="alt-desc lang-th">ส่งข้อความหาเราโดยตรง เราตอบกลับเป็นภาษาไทยหรืออังกฤษ โดยปกติภายในชั่วโมง</p>
+      <a href="https://wa.me/447700000000?text=Hello%2C%20I%27d%20like%20to%20book%20a%20demo%20of%20SiamEPOS" target="_blank" class="alt-link wa">💬 <span class="lang-en">Open WhatsApp</span><span class="lang-th">เปิด WhatsApp</span></a>
+    </div>
+    <div class="alt-card">
+      <div class="alt-icon">📞</div>
+      <div class="alt-title lang-en">Call Us</div>
+      <div class="alt-title lang-th">โทรหาเรา</div>
+      <p class="alt-desc lang-en">Speak directly with Korakot or a team member. Thai and English, Monday–Saturday 9am–7pm.</p>
+      <p class="alt-desc lang-th">พูดคุยโดยตรงกับ Korakot หรือสมาชิกทีม ภาษาไทยและอังกฤษ จ-ส 9.00–19.00</p>
+      <a href="tel:+447700000000" class="alt-link gold">📞 <span class="lang-en">Call Now</span><span class="lang-th">โทรเดี๋ยวนี้</span></a>
+    </div>
+    <div class="alt-card">
+      <div class="alt-icon">✉️</div>
+      <div class="alt-title lang-en">Email</div>
+      <div class="alt-title lang-th">อีเมล</div>
+      <p class="alt-desc lang-en">Prefer email? We reply within 4 hours during business hours. Thai or English welcome.</p>
+      <p class="alt-desc lang-th">ต้องการอีเมล? เราตอบกลับภายใน 4 ชั่วโมงในเวลาทำการ ยินดีรับทั้งภาษาไทยและอังกฤษ</p>
+      <a href="mailto:info@siamepos.co.uk?subject=Demo%20Request" class="alt-link mail">✉️ info@siamepos.co.uk</a>
+    </div>
+  </div>
+</div>
+
+<!-- WHAT YOU'LL SEE -->
+<div class="features-strip">
+  <div class="features-strip-inner">
+    <h2 class="fs-title lang-en">What we'll show you in <em>20 minutes</em></h2>
+    <h2 class="fs-title lang-th">สิ่งที่เราจะแสดงใน <em>20 นาที</em></h2>
+    <div class="fs-grid">
+      <div class="fs-item"><div class="fs-icon">🤖</div><div class="fs-label lang-en">AI Menu Scan</div><div class="fs-label lang-th">AI สแกนเมนู</div><p class="fs-sub lang-en">Live demo from a photo</p><p class="fs-sub lang-th">สาธิตสดจากรูปถ่าย</p><div class="fs-tag lang-en">Live demo</div><div class="fs-tag lang-th">สาธิตสด</div></div>
+      <div class="fs-item"><div class="fs-icon">📅</div><div class="fs-label lang-en">Booking Widget</div><div class="fs-label lang-th">วิดเจ็ตจอง</div><p class="fs-sub lang-en">Real-time into EPOS</p><p class="fs-sub lang-th">เรียลไทม์เข้า EPOS</p><div class="fs-tag lang-en">0% commission</div><div class="fs-tag lang-th">ค่าคอม 0%</div></div>
+      <div class="fs-item"><div class="fs-icon">🍳</div><div class="fs-label lang-en">Kitchen Display</div><div class="fs-label lang-th">หน้าจอครัว</div><p class="fs-sub lang-en">EN + TH simultaneous</p><p class="fs-sub lang-th">EN + TH พร้อมกัน</p><div class="fs-tag lang-en">Bilingual</div><div class="fs-tag lang-th">สองภาษา</div></div>
+      <div class="fs-item"><div class="fs-icon">💷</div><div class="fs-label lang-en">Bill & Payment</div><div class="fs-label lang-th">บิลและการชำระ</div><p class="fs-sub lang-en">Split, service charge, tips</p><p class="fs-sub lang-th">แบ่งบิล service charge ทิป</p><div class="fs-tag lang-en">Full flow</div><div class="fs-tag lang-th">ครบขั้นตอน</div></div>
+      <div class="fs-item"><div class="fs-icon">📊</div><div class="fs-label lang-en">Z Reports</div><div class="fs-label lang-th">Z Report</div><p class="fs-sub lang-en">Daily summaries & till</p><p class="fs-sub lang-th">สรุปรายวันและเงินสด</p><div class="fs-tag lang-en">UK compliant</div><div class="fs-tag lang-th">ถูกกฎ UK</div></div>
+      <div class="fs-item"><div class="fs-icon">👥</div><div class="fs-label lang-en">Staff & Roles</div><div class="fs-label lang-th">พนักงานและบทบาท</div><p class="fs-sub lang-en">PIN login, permissions</p><p class="fs-sub lang-th">PIN ล็อกอิน สิทธิ์</p><div class="fs-tag lang-en">Thai UI</div><div class="fs-tag lang-th">UI ภาษาไทย</div></div>
+      <div class="fs-item"><div class="fs-icon">📦</div><div class="fs-label lang-en">Table Map</div><div class="fs-label lang-th">แผนผังโต๊ะ</div><p class="fs-sub lang-en">Live colour-coded status</p><p class="fs-sub lang-th">สถานะสีสดใส</p><div class="fs-tag lang-en">Real-time</div><div class="fs-tag lang-th">เรียลไทม์</div></div>
+      <div class="fs-item"><div class="fs-icon">❓</div><div class="fs-label lang-en">Q&A</div><div class="fs-label lang-th">ถาม-ตอบ</div><p class="fs-sub lang-en">Ask us anything — in Thai</p><p class="fs-sub lang-th">ถามอะไรก็ได้ เป็นภาษาไทย</p><div class="fs-tag lang-en">No pressure</div><div class="fs-tag lang-th">ไม่กดดัน</div></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div><div class="footer-logo">🇹🇭🇬🇧 Siam<span>EPOS</span></div><p class="footer-tagline lang-en">Built by a Thai restaurant professional, for Thai restaurants in the UK.</p><p class="footer-tagline lang-th">สร้างโดยผู้เชี่ยวชาญร้านอาหารไทย เพื่อร้านอาหารไทยใน UK</p></div>
+  <div class="footer-col"><h4 class="lang-en">Pages</h4><h4 class="lang-th">หน้า</h4><ul><li><a href="index.html" class="lang-en">Home</a><a href="index.html" class="lang-th">หน้าแรก</a></li><li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li><li><a href="pricing.html" class="lang-en">Pricing</a><a href="pricing.html" class="lang-th">ราคา</a></li><li><a href="why-siamepos.html" class="lang-en">Why Us</a><a href="why-siamepos.html" class="lang-th">ทำไมเรา</a></li></ul></div>
+  <div class="footer-col"><h4 class="lang-en">Contact</h4><h4 class="lang-th">ติดต่อ</h4><ul><li><a href="https://wa.me/447700000000">💬 WhatsApp</a></li><li><a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></li><li><a href="#" class="lang-en">Thai support available</a><a href="#" class="lang-th">ซัพพอร์ตภาษาไทย</a></li></ul></div>
+</footer>
+<div class="footer-bottom"><p>© 2026 SiamEPOS</p><p><a href="index.html" class="lang-en">← Homepage</a><a href="index.html" class="lang-th">← หน้าแรก</a></p></div>
+
+<script>
+async function submitDemo(){
+  const fn=document.getElementById('dFirst').value.trim();
+  const ln=document.getElementById('dLast').value.trim();
+  const rest=document.getElementById('dRestaurant').value.trim();
+  const ph=document.getElementById('dPhone').value.trim();
+  const em=document.getElementById('dEmail').value.trim();
+  if(!fn||!ln||!rest||!ph||!em){alert('Please fill in all required fields.\n\nกรุณากรอกข้อมูลที่จำเป็นทั้งหมด');return;}
+  if(!em.includes('@')){alert('Please enter a valid email address.');return;}
+  const btn=document.querySelector('.submit-btn');btn.disabled=true;btn.textContent='⏳ Sending...';
+  await new Promise(r=>setTimeout(r,800));
+  document.getElementById('demoFormContent').style.display='none';
+  const s=document.getElementById('demoSuccess');s.style.display='block';
+  const ref='DEMO-'+Date.now().toString().slice(-6);
+  document.getElementById('demoRef').textContent=`✅ ${fn} ${ln} — ${rest} — Ref: ${ref}`;
+}
+const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:0.1});
+document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
+</script>
+</body>
+</html>

@@ -3,9 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
-// node-fetch for server-side API calls (works all Node versions)
-let fetch;
-(async () => { fetch = (await import('node-fetch')).default; })();
+
 const pool = require('./db/database');
 
 const app = express();

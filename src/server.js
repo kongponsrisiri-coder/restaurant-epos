@@ -24,11 +24,10 @@ let sendBookingConfirmation = async () => {};
 let sendBookingSms = async () => {};
 try {
   const emailSvc = require('./services/emailService');
-  const smsSvc   = require('./services/smsService');
   sendBookingConfirmation = emailSvc.sendBookingConfirmation;
-  sendBookingSms          = smsSvc.sendBookingSms;
+  console.log('✅ Email service loaded');
 } catch (e) {
-  console.log('ℹ️  Email/SMS services not configured yet — skipping');
+  console.log('ℹ️  Email service not configured yet — skipping');
 }
 
 // ─────────────────────────────────────────────

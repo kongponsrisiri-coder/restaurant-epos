@@ -254,7 +254,12 @@ await pool.query(`
   ALTER TABLE menu_items
   ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0
 `);
-
+await pool.query(`
+  UPDATE reservations 
+  SET status = 'pending'
+  WHERE source = 'widget' 
+  AND status = 'cancelled'
+`);
 // Fix widget bookings wrongly set to cancelled
 await pool.query(`
   UPDATE reservations 

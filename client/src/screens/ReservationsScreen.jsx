@@ -303,7 +303,7 @@ export default function ReservationsScreen() {
       </div>
 
       {/* Main Content */}
-      <div style={{ padding: 20, maxWidth: 1100, margin: '0 auto' }}>
+      <div style={{ padding: 20, maxWidth: 1100, margin: '0 auto', overflowY: 'auto', maxHeight: 'calc(100vh - 200px)' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 80, color: '#888' }}>
             <div style={{ fontSize: 48 }}>⏳</div>

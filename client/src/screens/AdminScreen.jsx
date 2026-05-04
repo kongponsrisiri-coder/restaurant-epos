@@ -29,6 +29,23 @@ const getDateRange = (type) => {
 };
 
 // ─────────────────────────────────────────────
+// INVENTORY API HELPERS
+// TODO: Move these to api.js once Krit has built the backend endpoints
+// ─────────────────────────────────────────────
+const invAPI = {
+  getIngredients:   ()         => fetch(`${SERVER_URL}/api/ingredients`).then(r => r.ok ? r.json() : []).catch(() => []),
+  addIngredient:    (data)     => fetch(`${SERVER_URL}/api/ingredients`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
+  updateIngredient: (id, data) => fetch(`${SERVER_URL}/api/ingredients/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
+  deleteIngredient: (id)       => fetch(`${SERVER_URL}/api/ingredients/${id}`, { method: 'DELETE' }).then(r => r.json()),
+  getRecipes:       ()         => fetch(`${SERVER_URL}/api/recipes`).then(r => r.ok ? r.json() : []).catch(() => []),
+  getRecipeForItem: (menuId)   => fetch(`${SERVER_URL}/api/recipes/menu-item/${menuId}`).then(r => r.ok ? r.json() : null).catch(() => null),
+  saveRecipe:       (data)     => fetch(`${SERVER_URL}/api/recipes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
+  updateRecipe:     (id, data) => fetch(`${SERVER_URL}/api/recipes/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
+  getMovements:     ()         => fetch(`${SERVER_URL}/api/stock/movements`).then(r => r.ok ? r.json() : []).catch(() => []),
+  addAdjustment:    (data)     => fetch(`${SERVER_URL}/api/stock/adjustment`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
+};
+
+// ─────────────────────────────────────────────
 // BILLS SECTION
 // ─────────────────────────────────────────────
 function BillsSection() {
@@ -222,6 +239,719 @@ function BillsSection() {
 }
 
 // ─────────────────────────────────────────────
+// INVENTORY SECTION — INGREDIENTS TAB
+// ─────────────────────────────────────────────
+function IngredientsTab() {
+  const [ingredients, setIngredients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [filterCat, setFilterCat] = useState('all');
+  const [showForm, setShowForm] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+
+  const emptyForm = { name_en: '', name_th: '', unit: 'kg', cost_per_unit: '', yield_percentage: '100', category: 'Meat', current_stock: '0', par_level: '', supplier_name: '', allergens: [] };
+  const [form, setForm] = useState(emptyForm);
+
+  const CATEGORIES = ['Meat', 'Seafood', 'Vegetables', 'Dry Goods', 'Sauces', 'Dairy', 'Other'];
+  const UNITS = ['kg', 'g', 'L', 'ml', 'unit'];
+  const ALLERGENS = ['Gluten', 'Crustaceans', 'Eggs', 'Fish', 'Peanuts', 'Soybeans', 'Milk', 'Nuts', 'Sesame', 'Molluscs', 'Sulphites', 'Celery', 'Mustard'];
+
+  const load = async () => {
+    setLoading(true);
+    const data = await invAPI.getIngredients();
+    setIngredients(Array.isArray(data) ? data : []);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const getStatus = (ing) => {
+    if (!ing.current_stock || Number(ing.current_stock) <= 0) return { label: '🔴 OUT', color: '#ef4444', bg: '#fee2e2' };
+    if (ing.par_level && Number(ing.current_stock) < Number(ing.par_level)) return { label: '🟡 LOW', color: '#eab308', bg: '#fef9c3' };
+    return { label: '✅ OK', color: '#22c55e', bg: '#dcfce7' };
+  };
+
+  const getAllergens = (ing) => {
+    try {
+      return typeof ing.allergens === 'string' ? JSON.parse(ing.allergens || '[]') : (ing.allergens || []);
+    } catch { return []; }
+  };
+
+  const filtered = ingredients.filter(ing => {
+    const matchSearch = (ing.name_en || '').toLowerCase().includes(search.toLowerCase()) || (ing.name_th || '').toLowerCase().includes(search.toLowerCase());
+    const matchCat = filterCat === 'all' || ing.category === filterCat;
+    return matchSearch && matchCat;
+  });
+
+  const lowStockCount = ingredients.filter(i => i.par_level && Number(i.current_stock) < Number(i.par_level) && Number(i.current_stock) > 0).length;
+  const outCount = ingredients.filter(i => !i.current_stock || Number(i.current_stock) <= 0).length;
+
+  const openAdd = () => {
+    setEditItem(null);
+    setForm(emptyForm);
+    setShowForm(true);
+  };
+
+  const openEdit = (ing) => {
+    setEditItem(ing);
+    setForm({ ...ing, allergens: getAllergens(ing) });
+    setShowForm(true);
+  };
+
+  const handleSave = async () => {
+    if (!form.name_en || !form.cost_per_unit) return alert('Name and cost per unit are required!');
+    const payload = { ...form, allergens: JSON.stringify(form.allergens || []) };
+    try {
+      if (editItem) await invAPI.updateIngredient(editItem.id, payload);
+      else await invAPI.addIngredient(payload);
+      setShowForm(false);
+      load();
+    } catch (err) {
+      alert('Save failed — has Krit built the inventory backend yet?');
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm('Delete this ingredient? This will affect any recipes that use it.')) return;
+    await invAPI.deleteIngredient(id);
+    load();
+  };
+
+  const toggleAllergen = (a) => {
+    setForm(prev => ({
+      ...prev,
+      allergens: prev.allergens.includes(a) ? prev.allergens.filter(x => x !== a) : [...prev.allergens, a]
+    }));
+  };
+
+  const inputStyle = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' };
+  const labelStyle = { fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 };
+
+  return (
+    <div>
+      {/* Stats row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12, marginBottom: 20 }}>
+        {[
+          { label: 'Total Ingredients', value: ingredients.length, color: '#3b82f6' },
+          { label: 'Low Stock', value: lowStockCount, color: '#eab308' },
+          { label: 'Out of Stock', value: outCount, color: '#ef4444' },
+        ].map(s => (
+          <div key={s.label} style={{ background: 'white', borderRadius: 12, padding: '14px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            <div style={{ fontSize: 26, fontWeight: 800, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Search + filter + add */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search ingredients..."
+          style={{ flex: 1, minWidth: 180, padding: '10px 14px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}
+        />
+        <select value={filterCat} onChange={e => setFilterCat(e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}>
+          <option value="all">All Categories</option>
+          {['Meat', 'Seafood', 'Vegetables', 'Dry Goods', 'Sauces', 'Dairy', 'Other'].map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+        <button onClick={openAdd} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#e94560', color: 'white', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          + Add Ingredient
+        </button>
+      </div>
+
+      {/* Table */}
+      {loading ? (
+        <div style={{ textAlign: 'center', color: '#888', padding: 40 }}>Loading ingredients...</div>
+      ) : (
+        <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 80px 70px 80px 100px 90px', padding: '12px 16px', background: '#f8f8f8', fontWeight: 700, fontSize: 12, color: '#555' }}>
+            <span>Name</span>
+            <span>Category</span>
+            <span>Unit</span>
+            <span style={{ textAlign: 'right' }}>Cost/Unit</span>
+            <span style={{ textAlign: 'right' }}>Yield</span>
+            <span style={{ textAlign: 'right' }}>Stock</span>
+            <span style={{ textAlign: 'center' }}>Status</span>
+            <span style={{ textAlign: 'right' }}>Actions</span>
+          </div>
+          {filtered.length === 0 && (
+            <div style={{ padding: 40, textAlign: 'center', color: '#bbb' }}>
+              {ingredients.length === 0 ? 'No ingredients yet — add your first ingredient or wait for Krit to seed the database.' : 'No ingredients match your search.'}
+            </div>
+          )}
+          {filtered.map(ing => {
+            const status = getStatus(ing);
+            const allergens = getAllergens(ing);
+            return (
+              <div key={ing.id} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 80px 70px 80px 100px 90px', padding: '12px 16px', borderBottom: '1px solid #f0f0f0', fontSize: 13, alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontWeight: 600, color: '#1a1a2e' }}>{ing.name_en}</div>
+                  {ing.name_th && <div style={{ fontSize: 11, color: '#C9A84C', marginTop: 1 }}>{ing.name_th}</div>}
+                  {allergens.length > 0 && (
+                    <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>
+                      {allergens.map(a => (
+                        <span key={a} style={{ background: '#fee2e2', color: '#991b1b', fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4 }}>{a}</span>
+                      ))}
+                    </div>
+                  )}
+                  {ing.supplier_name && <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📦 {ing.supplier_name}</div>}
+                </div>
+                <span style={{ fontSize: 12, color: '#555' }}>{ing.category}</span>
+                <span style={{ fontSize: 12, color: '#555' }}>{ing.unit}</span>
+                <span style={{ textAlign: 'right', fontWeight: 700, color: '#1a1a2e' }}>£{Number(ing.cost_per_unit || 0).toFixed(2)}</span>
+                <span style={{ textAlign: 'right', color: '#555' }}>{ing.yield_percentage}%</span>
+                <span style={{ textAlign: 'right', fontWeight: 600, color: Number(ing.current_stock) <= 0 ? '#ef4444' : '#1a1a2e' }}>
+                  {Number(ing.current_stock || 0).toFixed(1)}{ing.unit}
+                </span>
+                <div style={{ textAlign: 'center' }}>
+                  <span style={{ background: status.bg, color: status.color, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 20 }}>
+                    {status.label}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                  <button onClick={() => openEdit(ing)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Edit</button>
+                  <button onClick={() => handleDelete(ing.id)} style={{ padding: '4px 8px', borderRadius: 6, border: 'none', background: '#fee2e2', color: '#ef4444', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>🗑️</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add / Edit Modal */}
+      {showForm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: 28, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto' }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', marginBottom: 20 }}>{editItem ? '✏️ Edit Ingredient' : '+ New Ingredient'}</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>Name (English) *</label>
+                  <input value={form.name_en} onChange={e => setForm({ ...form, name_en: e.target.value })} placeholder="e.g. Chicken Breast" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Name (Thai)</label>
+                  <input value={form.name_th} onChange={e => setForm({ ...form, name_th: e.target.value })} placeholder="e.g. อกไก่" style={inputStyle} />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>Category</label>
+                  <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={inputStyle}>
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Purchase Unit</label>
+                  <select value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} style={inputStyle}>
+                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>Cost per Unit (£) *</label>
+                  <input type="number" step="0.01" value={form.cost_per_unit} onChange={e => setForm({ ...form, cost_per_unit: e.target.value })} placeholder="e.g. 6.00" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Yield % (post-prep)</label>
+                  <input type="number" step="1" min="1" max="100" value={form.yield_percentage} onChange={e => setForm({ ...form, yield_percentage: e.target.value })} placeholder="e.g. 78" style={inputStyle} />
+                </div>
+              </div>
+              <div style={{ background: '#f0f7ff', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#1e40af' }}>
+                💡 Yield = usable amount after prep. Chicken breast = 78% (trim + skin removal). Fish sauce = 100% (no prep loss).
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>Current Stock ({form.unit})</label>
+                  <input type="number" step="0.1" value={form.current_stock} onChange={e => setForm({ ...form, current_stock: e.target.value })} placeholder="0" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>PAR Level ({form.unit})</label>
+                  <input type="number" step="0.1" value={form.par_level} onChange={e => setForm({ ...form, par_level: e.target.value })} placeholder="Min before reorder" style={inputStyle} />
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>Supplier</label>
+                <input value={form.supplier_name} onChange={e => setForm({ ...form, supplier_name: e.target.value })} placeholder="e.g. Wing Yip, Brakes" style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Allergens (tick all that apply)</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {ALLERGENS.map(a => {
+                    const active = (form.allergens || []).includes(a);
+                    return (
+                      <button key={a} onClick={() => toggleAllergen(a)} style={{
+                        padding: '4px 10px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                        background: active ? '#fee2e2' : '#f0f0f0',
+                        color: active ? '#991b1b' : '#555',
+                      }}>{active ? '✓ ' : ''}{a}</button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+              <button onClick={() => setShowForm(false)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
+              <button onClick={handleSave} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 700 }}>{editItem ? 'Save Changes' : 'Add Ingredient'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// INVENTORY SECTION — RECIPES TAB
+// ─────────────────────────────────────────────
+
+// Food cost calculation helpers
+const calcLineCost = (qty, costPerUnit, yieldPct) => {
+  const q = parseFloat(qty) || 0;
+  const c = parseFloat(costPerUnit) || 0;
+  const y = parseFloat(yieldPct) || 100;
+  if (!q || !c) return 0;
+  return (q * c) / (y / 100);
+};
+
+const fcBadge = (pct) => {
+  if (!pct || pct <= 0) return { color: '#888', bg: '#f0f0f0', label: '—' };
+  if (pct < 35) return { color: '#22c55e', bg: '#dcfce7', label: `${pct.toFixed(1)}% ✅` };
+  if (pct < 42) return { color: '#eab308', bg: '#fef9c3', label: `${pct.toFixed(1)}% 🟡` };
+  return { color: '#ef4444', bg: '#fee2e2', label: `${pct.toFixed(1)}% 🔴` };
+};
+
+function RecipesTab() {
+  const [menuItems, setMenuItems] = useState([]);
+  const [ingredients, setIngredients] = useState([]);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [recipe, setRecipe] = useState(null);
+  const [lines, setLines] = useState([]);
+  const [serves, setServes] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [allRecipes, setAllRecipes] = useState([]);
+
+  // new line form state
+  const [newLine, setNewLine] = useState({ ingredient_id: '', quantity_used: '', unit: 'kg' });
+
+  useEffect(() => {
+    Promise.all([getMenu(), invAPI.getIngredients(), invAPI.getRecipes()]).then(([menu, ings, recs]) => {
+      const flatItems = (Array.isArray(menu) ? menu : []).flatMap(cat => cat.items || []);
+      setMenuItems(flatItems);
+      setIngredients(Array.isArray(ings) ? ings : []);
+      setAllRecipes(Array.isArray(recs) ? recs : []);
+    });
+  }, []);
+
+  const loadRecipe = async (item) => {
+    setSelectedItem(item);
+    setLines([]);
+    setRecipe(null);
+    setServes(1);
+    setNewLine({ ingredient_id: '', quantity_used: '', unit: 'kg' });
+    const data = await invAPI.getRecipeForItem(item.id);
+    if (data) {
+      setRecipe(data);
+      setLines(data.lines || []);
+      setServes(data.serves || 1);
+    }
+  };
+
+  const recipeForItem = (itemId) => allRecipes.find(r => r.menu_item_id === itemId);
+
+  const addLine = () => {
+    if (!newLine.ingredient_id || !newLine.quantity_used) return alert('Select an ingredient and enter a quantity');
+    const ing = ingredients.find(i => i.id === Number(newLine.ingredient_id));
+    if (!ing) return;
+    const lineCost = calcLineCost(newLine.quantity_used, ing.cost_per_unit, ing.yield_percentage);
+    setLines(prev => [...prev, {
+      ingredient_id: Number(newLine.ingredient_id),
+      ingredient_name: ing.name_en,
+      ingredient_name_th: ing.name_th,
+      quantity_used: Number(newLine.quantity_used),
+      unit: newLine.unit || ing.unit,
+      cost_per_unit: ing.cost_per_unit,
+      yield_percentage: ing.yield_percentage,
+      line_cost: lineCost,
+    }]);
+    setNewLine({ ingredient_id: '', quantity_used: '', unit: 'kg' });
+  };
+
+  const removeLine = (index) => {
+    setLines(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const totalCost = lines.reduce((sum, l) => sum + (l.line_cost || 0), 0);
+  const costPerPortion = serves > 0 ? totalCost / serves : 0;
+  const menuPrice = selectedItem ? Number(selectedItem.price) : 0;
+  const foodCostPct = menuPrice > 0 ? (costPerPortion / menuPrice) * 100 : 0;
+  const grossProfit = menuPrice - costPerPortion;
+
+  const fc = fcBadge(foodCostPct);
+
+  const handleSave = async () => {
+    if (!selectedItem) return;
+    if (lines.length === 0) return alert('Add at least one ingredient to the recipe');
+    setSaving(true);
+    try {
+      const payload = { menu_item_id: selectedItem.id, name: selectedItem.name, serves, lines };
+      if (recipe?.id) await invAPI.updateRecipe(recipe.id, payload);
+      else await invAPI.saveRecipe(payload);
+      const recs = await invAPI.getRecipes();
+      setAllRecipes(Array.isArray(recs) ? recs : []);
+      alert('Recipe saved!');
+    } catch (err) {
+      alert('Save failed — has Krit built the recipes backend yet?');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const UNITS = ['kg', 'g', 'L', 'ml', 'unit'];
+
+  return (
+    <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+      {/* Left panel — menu item list */}
+      <div style={{ width: 280, flexShrink: 0 }}>
+        <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+          <div style={{ padding: '12px 16px', background: '#f8f8f8', fontWeight: 700, fontSize: 13, color: '#555' }}>
+            Menu Items ({menuItems.length})
+          </div>
+          {menuItems.length === 0 && (
+            <div style={{ padding: 24, textAlign: 'center', color: '#bbb', fontSize: 13 }}>No menu items found</div>
+          )}
+          {menuItems.map(item => {
+            const rec = recipeForItem(item.id);
+            const isSelected = selectedItem?.id === item.id;
+            return (
+              <div key={item.id} onClick={() => loadRecipe(item)} style={{
+                padding: '12px 16px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer',
+                background: isSelected ? '#f0f7ff' : 'white',
+                borderLeft: isSelected ? '4px solid #3b82f6' : '4px solid transparent',
+              }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: '#1a1a2e' }}>{item.name}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#e94560' }}>£{Number(item.price).toFixed(2)}</span>
+                  {rec ? (
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
+                      background: fcBadge(rec.food_cost_pct).bg,
+                      color: fcBadge(rec.food_cost_pct).color
+                    }}>{rec.food_cost_pct ? `${Number(rec.food_cost_pct).toFixed(1)}%` : 'Has recipe'}</span>
+                  ) : (
+                    <span style={{ fontSize: 11, color: '#eab308', fontWeight: 700 }}>⚠️ No recipe</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Right panel — recipe builder */}
+      <div style={{ flex: 1 }}>
+        {!selectedItem ? (
+          <div style={{ background: 'white', borderRadius: 12, padding: 40, textAlign: 'center', color: '#bbb', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>Select a dish to build its recipe</div>
+            <div style={{ fontSize: 13 }}>Click any item from the left panel to start costing</div>
+          </div>
+        ) : (
+          <div>
+            {/* Dish header */}
+            <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#1a1a2e' }}>{selectedItem.name}</div>
+                  {selectedItem.name_alt && <div style={{ fontSize: 13, color: '#C9A84C', marginTop: 2 }}>{selectedItem.name_alt}</div>}
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: '#e94560' }}>£{Number(selectedItem.price).toFixed(2)}</div>
+                  <div style={{ fontSize: 12, color: '#888' }}>menu price</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#555' }}>Recipe makes</label>
+                <input type="number" min="1" value={serves} onChange={e => setServes(Number(e.target.value))} style={{ width: 60, padding: '6px 8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, textAlign: 'center' }} />
+                <span style={{ fontSize: 13, color: '#888' }}>portion(s)</span>
+              </div>
+            </div>
+
+            {/* Ingredient lines */}
+            <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 90px 36px', padding: '10px 16px', background: '#f8f8f8', fontWeight: 700, fontSize: 12, color: '#555' }}>
+                <span>Ingredient</span>
+                <span style={{ textAlign: 'right' }}>Qty</span>
+                <span style={{ textAlign: 'center' }}>Unit</span>
+                <span style={{ textAlign: 'right' }}>Line Cost</span>
+                <span></span>
+              </div>
+              {lines.length === 0 && (
+                <div style={{ padding: '24px 16px', textAlign: 'center', color: '#bbb', fontSize: 13 }}>No ingredients added yet</div>
+              )}
+              {lines.map((line, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 90px 36px', padding: '10px 16px', borderBottom: '1px solid #f0f0f0', fontSize: 13, alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, color: '#1a1a2e' }}>{line.ingredient_name}</div>
+                    {line.ingredient_name_th && <div style={{ fontSize: 11, color: '#C9A84C' }}>{line.ingredient_name_th}</div>}
+                    <div style={{ fontSize: 10, color: '#aaa' }}>yield {line.yield_percentage}% · £{Number(line.cost_per_unit).toFixed(2)}/{line.unit}</div>
+                  </div>
+                  <span style={{ textAlign: 'right', color: '#555' }}>{line.quantity_used}</span>
+                  <span style={{ textAlign: 'center', color: '#555' }}>{line.unit}</span>
+                  <span style={{ textAlign: 'right', fontWeight: 700, color: '#1a1a2e' }}>£{Number(line.line_cost).toFixed(2)}</span>
+                  <button onClick={() => removeLine(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 18, padding: 0, lineHeight: 1 }}>×</button>
+                </div>
+              ))}
+
+              {/* Add new ingredient row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 90px 36px', padding: '10px 16px', borderTop: '2px dashed #e0e0e0', gap: 6, alignItems: 'center' }}>
+                <select value={newLine.ingredient_id} onChange={e => {
+                  const ing = ingredients.find(i => i.id === Number(e.target.value));
+                  setNewLine({ ...newLine, ingredient_id: e.target.value, unit: ing?.unit || 'kg' });
+                }} style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }}>
+                  <option value="">— Select ingredient —</option>
+                  {ingredients.map(ing => <option key={ing.id} value={ing.id}>{ing.name_en}</option>)}
+                </select>
+                <input type="number" step="0.001" value={newLine.quantity_used} onChange={e => setNewLine({ ...newLine, quantity_used: e.target.value })} placeholder="Qty" style={{ padding: '7px 8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, textAlign: 'right' }} />
+                <select value={newLine.unit} onChange={e => setNewLine({ ...newLine, unit: e.target.value })} style={{ padding: '7px 6px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }}>
+                  {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+                <button onClick={addLine} style={{ padding: '7px 10px', borderRadius: 8, border: 'none', background: '#1a1a2e', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>+ Add</button>
+                <div />
+              </div>
+            </div>
+
+            {/* Totals + food cost */}
+            <div style={{ background: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e', marginBottom: 14 }}>Recipe Costing Summary</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[
+                  { label: `Total recipe cost (${serves} portion${serves > 1 ? 's' : ''})`, value: `£${totalCost.toFixed(2)}`, color: '#555' },
+                  { label: 'Cost per portion', value: `£${costPerPortion.toFixed(2)}`, color: '#1a1a2e', bold: true },
+                  { label: 'Menu price', value: `£${menuPrice.toFixed(2)}`, color: '#e94560', bold: true },
+                  { label: 'Gross profit per dish', value: `£${grossProfit.toFixed(2)}`, color: grossProfit >= 0 ? '#22c55e' : '#ef4444', bold: true },
+                ].map(row => (
+                  <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0', fontSize: 14 }}>
+                    <span style={{ color: '#555' }}>{row.label}</span>
+                    <span style={{ fontWeight: row.bold ? 800 : 400, color: row.color }}>{row.value}</span>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0 0', marginTop: 4, borderTop: '2px solid #eee' }}>
+                  <span style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e' }}>Food Cost %</span>
+                  <span style={{ background: fc.bg, color: fc.color, fontWeight: 800, fontSize: 18, padding: '6px 16px', borderRadius: 20 }}>
+                    {lines.length > 0 ? fc.label : '—'}
+                  </span>
+                </div>
+                {lines.length > 0 && foodCostPct >= 35 && (
+                  <div style={{ background: foodCostPct >= 42 ? '#fee2e2' : '#fef9c3', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: foodCostPct >= 42 ? '#991b1b' : '#713f12' }}>
+                    {foodCostPct >= 42
+                      ? '🔴 Food cost is too high — review portion sizes, pricing, or ingredient sourcing urgently.'
+                      : '🟡 Food cost is above target. Consider adjusting portion or increasing menu price slightly.'}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <button onClick={handleSave} disabled={saving} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: saving ? '#bbb' : '#e94560', color: 'white', fontWeight: 800, fontSize: 16, cursor: saving ? 'default' : 'pointer' }}>
+              {saving ? 'Saving...' : '💾 Save Recipe'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// INVENTORY SECTION — STOCK LOG TAB
+// ─────────────────────────────────────────────
+function StockTab() {
+  const [movements, setMovements] = useState([]);
+  const [ingredients, setIngredients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filterType, setFilterType] = useState('all');
+  const [adjForm, setAdjForm] = useState({ ingredient_id: '', quantity: '', movement_type: 'adjustment', note: '' });
+  const [saving, setSaving] = useState(false);
+
+  const MOVEMENT_TYPES = [
+    { id: 'all', label: 'All' },
+    { id: 'delivery', label: '📦 Delivery' },
+    { id: 'used', label: '🍳 Used' },
+    { id: 'waste', label: '🗑️ Waste' },
+    { id: 'adjustment', label: '✏️ Adjustment' },
+  ];
+
+  const loadAll = async () => {
+    setLoading(true);
+    const [movs, ings] = await Promise.all([invAPI.getMovements(), invAPI.getIngredients()]);
+    setMovements(Array.isArray(movs) ? movs : []);
+    setIngredients(Array.isArray(ings) ? ings : []);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadAll(); }, []);
+
+  const filtered = movements.filter(m => filterType === 'all' || m.movement_type === filterType);
+
+  const typeStyle = (type) => {
+    const map = {
+      delivery:   { color: '#22c55e', bg: '#dcfce7', label: '📦 Delivery' },
+      used:       { color: '#3b82f6', bg: '#dbeafe', label: '🍳 Used' },
+      waste:      { color: '#ef4444', bg: '#fee2e2', label: '🗑️ Waste' },
+      adjustment: { color: '#8b5cf6', bg: '#ede9fe', label: '✏️ Adjustment' },
+    };
+    return map[type] || { color: '#888', bg: '#f0f0f0', label: type };
+  };
+
+  const handleAdjust = async () => {
+    if (!adjForm.ingredient_id || !adjForm.quantity) return alert('Select an ingredient and enter a quantity');
+    setSaving(true);
+    try {
+      await invAPI.addAdjustment(adjForm);
+      setAdjForm({ ingredient_id: '', quantity: '', movement_type: 'adjustment', note: '' });
+      loadAll();
+    } catch (err) {
+      alert('Save failed — has Krit built the stock backend yet?');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const formatDateTime = (dt) => {
+    if (!dt) return '—';
+    return new Date(dt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <div>
+      {/* Quick adjustment form */}
+      <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+        <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 14 }}>📝 Record Stock Movement</div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ flex: 2, minWidth: 160 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>Ingredient</label>
+            <select value={adjForm.ingredient_id} onChange={e => setAdjForm({ ...adjForm, ingredient_id: e.target.value })} style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}>
+              <option value="">— Select —</option>
+              {ingredients.map(i => <option key={i.id} value={i.id}>{i.name_en}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: 1, minWidth: 90 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>Quantity</label>
+            <input type="number" step="0.01" value={adjForm.quantity} onChange={e => setAdjForm({ ...adjForm, quantity: e.target.value })} placeholder="+ or –" style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 130 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>Type</label>
+            <select value={adjForm.movement_type} onChange={e => setAdjForm({ ...adjForm, movement_type: e.target.value })} style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}>
+              <option value="delivery">📦 Delivery</option>
+              <option value="waste">🗑️ Waste</option>
+              <option value="adjustment">✏️ Adjustment</option>
+            </select>
+          </div>
+          <div style={{ flex: 2, minWidth: 140 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>Note (optional)</label>
+            <input value={adjForm.note} onChange={e => setAdjForm({ ...adjForm, note: e.target.value })} placeholder="e.g. Wing Yip delivery" style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+          </div>
+          <button onClick={handleAdjust} disabled={saving} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            {saving ? 'Saving...' : 'Record'}
+          </button>
+        </div>
+        <div style={{ fontSize: 12, color: '#888', marginTop: 8 }}>
+          💡 Use positive numbers for stock in (deliveries), negative numbers for stock out (waste, adjustments)
+        </div>
+      </div>
+
+      {/* Filter tabs */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        {MOVEMENT_TYPES.map(t => (
+          <button key={t.id} onClick={() => setFilterType(t.id)} style={{
+            padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13,
+            background: filterType === t.id ? '#1a1a2e' : '#e0e0e0',
+            color: filterType === t.id ? 'white' : '#555'
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* Movements log */}
+      {loading ? (
+        <div style={{ textAlign: 'center', color: '#888', padding: 40 }}>Loading stock movements...</div>
+      ) : (
+        <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr 90px 80px 1fr', padding: '10px 16px', background: '#f8f8f8', fontWeight: 700, fontSize: 12, color: '#555' }}>
+            <span>Date</span>
+            <span>Ingredient</span>
+            <span style={{ textAlign: 'center' }}>Type</span>
+            <span style={{ textAlign: 'right' }}>Quantity</span>
+            <span style={{ paddingLeft: 12 }}>Note</span>
+          </div>
+          {filtered.length === 0 && (
+            <div style={{ padding: 40, textAlign: 'center', color: '#bbb' }}>
+              {movements.length === 0 ? 'No stock movements recorded yet. Use the form above to record deliveries and adjustments.' : 'No movements match this filter.'}
+            </div>
+          )}
+          {filtered.map((m, i) => {
+            const ts = typeStyle(m.movement_type);
+            const ing = ingredients.find(x => x.id === m.ingredient_id);
+            return (
+              <div key={m.id || i} style={{ display: 'grid', gridTemplateColumns: '130px 1fr 90px 80px 1fr', padding: '10px 16px', borderBottom: '1px solid #f0f0f0', fontSize: 13, alignItems: 'center' }}>
+                <span style={{ color: '#888', fontSize: 12 }}>{formatDateTime(m.created_at)}</span>
+                <div>
+                  <div style={{ fontWeight: 600, color: '#1a1a2e' }}>{ing?.name_en || m.ingredient_name || `ID ${m.ingredient_id}`}</div>
+                  {ing?.name_th && <div style={{ fontSize: 11, color: '#C9A84C' }}>{ing.name_th}</div>}
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <span style={{ background: ts.bg, color: ts.color, fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>{ts.label}</span>
+                </div>
+                <span style={{ textAlign: 'right', fontWeight: 700, color: Number(m.quantity) >= 0 ? '#22c55e' : '#ef4444' }}>
+                  {Number(m.quantity) >= 0 ? '+' : ''}{Number(m.quantity).toFixed(2)}
+                </span>
+                <span style={{ paddingLeft: 12, color: '#888', fontSize: 12 }}>{m.note || '—'}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// INVENTORY SECTION — MAIN WRAPPER
+// ─────────────────────────────────────────────
+function InventorySection() {
+  const [tab, setTab] = useState('ingredients');
+
+  const tabs = [
+    { id: 'ingredients', label: '🧅 Ingredients' },
+    { id: 'recipes',     label: '📋 Recipes & Costs' },
+    { id: 'stock',       label: '📦 Stock Log' },
+  ];
+
+  return (
+    <div style={{ padding: 24 }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>🥬 Inventory & Food Costs</h1>
+      <p style={{ fontSize: 13, color: '#888', marginBottom: 20 }}>Manage ingredients, recipe costing, and stock movements — Growth tier feature</p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            padding: '10px 20px', borderRadius: 20, border: 'none', cursor: 'pointer',
+            fontWeight: 600, fontSize: 14,
+            background: tab === t.id ? '#1a1a2e' : '#e0e0e0',
+            color: tab === t.id ? 'white' : '#555',
+          }}>{t.label}</button>
+        ))}
+      </div>
+      {tab === 'ingredients' && <IngredientsTab />}
+      {tab === 'recipes'     && <RecipesTab />}
+      {tab === 'stock'       && <StockTab />}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
 // MAIN ADMIN SCREEN
 // ─────────────────────────────────────────────
 export default function AdminScreen() {
@@ -235,6 +965,7 @@ export default function AdminScreen() {
     { id: 'bills',     label: '🧾 Bills' },
     { id: 'zreport',   label: '🔐 Z Report' },
     { id: 'staff',     label: '👥 Staff' },
+    { id: 'inventory', label: '🥬 Inventory' },
     { id: 'settings',  label: '⚙️ Settings' },
   ];
 
@@ -259,6 +990,7 @@ export default function AdminScreen() {
         {section === 'bills'     && <BillsSection />}
         {section === 'zreport'   && <ZReportSection />}
         {section === 'staff'     && <StaffSection />}
+        {section === 'inventory' && <InventorySection />}
         {section === 'settings'  && <SettingsSection />}
       </div>
     </div>
@@ -411,36 +1143,34 @@ function AIScannerModal({ onClose, onImported }) {
     }
   }
 
-  // Add a single item to the menu
   async function handleAddItem(dish, globalIndex) {
-  setLoadingItem(globalIndex);
-  try {
-    // Get first available category_id as fallback
-    const menuRes = await fetch(`${SERVER_URL}/api/menu/all`);
-    const menuData = await menuRes.json();
-    const firstCategoryId = menuData?.[0]?.id || 1;
+    setLoadingItem(globalIndex);
+    try {
+      const menuRes = await fetch(`${SERVER_URL}/api/menu/all`);
+      const menuData = await menuRes.json();
+      const firstCategoryId = menuData?.[0]?.id || 1;
 
-    await fetch(`${SERVER_URL}/api/menu/items`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name:           dish.name_en,
-        name_alt:       dish.name_th || '',
-        description:    dish.description || '',
-        price:          parseFloat(dish.price) || 0,
-        category_id:    firstCategoryId,
-        subcategory_id: null,
-      }),
-    });
+      await fetch(`${SERVER_URL}/api/menu/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name:           dish.name_en,
+          name_alt:       dish.name_th || '',
+          description:    dish.description || '',
+          price:          parseFloat(dish.price) || 0,
+          category_id:    firstCategoryId,
+          subcategory_id: null,
+        }),
+      });
 
-    setAddedItems(prev => new Set([...prev, globalIndex]));
-    onImported();
-  } catch (err) {
-    alert('Failed to add item — try again');
-  } finally {
-    setLoadingItem(null);
+      setAddedItems(prev => new Set([...prev, globalIndex]));
+      onImported();
+    } catch (err) {
+      alert('Failed to add item — try again');
+    } finally {
+      setLoadingItem(null);
+    }
   }
-}
 
   const allDishes = scannedMenu?.categories?.flatMap(c => c.dishes) || [];
   const addedCount = addedItems.size;
@@ -449,7 +1179,6 @@ function AIScannerModal({ onClose, onImported }) {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: 680, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 80px rgba(0,0,0,0.4)' }}>
 
-        {/* Header */}
         <div style={{ background: 'linear-gradient(135deg,#1a1a2e,#2d2a4a)', padding: '20px 28px', borderRadius: '20px 20px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 }}>
           <div>
             <div style={{ color: 'white', fontWeight: 800, fontSize: 18 }}>🤖 AI Menu Scanner</div>
@@ -462,7 +1191,6 @@ function AIScannerModal({ onClose, onImported }) {
 
         <div style={{ padding: 28 }}>
 
-          {/* ── UPLOAD STAGE ── */}
           {stage === 'upload' && (
             <div>
               {error && (
@@ -512,7 +1240,6 @@ function AIScannerModal({ onClose, onImported }) {
             </div>
           )}
 
-          {/* ── SCANNING STAGE ── */}
           {stage === 'scanning' && (
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
               <div style={{
@@ -541,10 +1268,8 @@ function AIScannerModal({ onClose, onImported }) {
             </div>
           )}
 
-          {/* ── RESULTS STAGE ── */}
           {stage === 'results' && scannedMenu && (
             <div>
-              {/* Summary bar */}
               <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
                 {[
                   { label: 'Dishes found',  value: allDishes.length,  color: '#3b82f6' },
@@ -562,19 +1287,15 @@ function AIScannerModal({ onClose, onImported }) {
                 💡 Click <strong>+</strong> to add each item to your menu. You can assign categories in Menu Manager afterwards.
               </div>
 
-              {/* Dish list with + button per item */}
               <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
                 {(() => {
                   let globalIndex = 0;
                   return scannedMenu.categories?.map(cat => (
                     <div key={cat.name}>
-                      {/* Category header */}
                       <div style={{ background: '#1a1a2e', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ color: '#C9A84C', fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>{cat.name}</span>
                         <span style={{ background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 11, padding: '1px 8px', borderRadius: 10 }}>{cat.dishes?.length} items</span>
                       </div>
-
-                      {/* Dish rows */}
                       {cat.dishes?.map((dish) => {
                         const idx     = globalIndex++;
                         const isAdded = addedItems.has(idx);
@@ -587,7 +1308,6 @@ function AIScannerModal({ onClose, onImported }) {
                             background: isAdded ? '#f0fdf4' : 'white',
                             transition: 'background 0.2s',
                           }}>
-                            {/* Dish info */}
                             <div style={{ flex: 1 }}>
                               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
                                 <span style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e' }}>{dish.name_en}</span>
@@ -603,8 +1323,6 @@ function AIScannerModal({ onClose, onImported }) {
                                 ))}
                               </div>
                             </div>
-
-                            {/* Add button */}
                             <button
                               onClick={() => !isAdded && !isLoading && handleAddItem(dish, idx)}
                               disabled={isAdded || isLoading}
@@ -628,7 +1346,6 @@ function AIScannerModal({ onClose, onImported }) {
                 })()}
               </div>
 
-              {/* Footer */}
               <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                 <button onClick={() => { setStage('upload'); setScannedMenu(null); setAddedItems(new Set()); }}
                   style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 600, color: '#555' }}>
@@ -671,7 +1388,6 @@ function MenuSection() {
   const [showSubcatManager, setShowSubcatManager] = useState(false);
   const [newSubcatName, setNewSubcatName]   = useState('');
 
-  // ── Drag state ──────────────────────────────────────
   const [dragIndex, setDragIndex]   = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [localItems, setLocalItems] = useState([]);
@@ -686,7 +1402,6 @@ function MenuSection() {
 
   useEffect(() => { fetchMenu(); }, []);
 
-  // Keep localItems in sync when category changes
   useEffect(() => {
     const items = menu.find(c => c.id === activeCategory)?.items || [];
     setLocalItems([...items]);
@@ -750,11 +1465,9 @@ function MenuSection() {
     setModifiers(await getItemModifiers(modifierItem.id));
   };
 
-  // ── Drag and drop handlers ────────────────────────────
   function handleDragStart(e, index) {
     setDragIndex(index);
     e.dataTransfer.effectAllowed = 'move';
-    // Needed for Firefox
     e.dataTransfer.setData('text/plain', index);
   }
 
@@ -781,7 +1494,6 @@ function MenuSection() {
     setDragIndex(null);
     setDragOverIndex(null);
 
-    // Save new order to database
     saveSortOrder(newItems);
   }
 
@@ -812,7 +1524,6 @@ function MenuSection() {
     <div style={{ padding: 24 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 20 }}>Menu Manager</h1>
 
-      {/* Category tabs */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         {menu.map(cat => (
           <button key={cat.id} onClick={() => setActiveCategory(cat.id)} style={{
@@ -827,7 +1538,6 @@ function MenuSection() {
         }}>⊕ Sub-categories</button>
       </div>
 
-      {/* Sub-category manager */}
       {showSubcatManager && (
         <div style={{ background: '#f0f7ff', borderRadius: 12, padding: 16, marginBottom: 20, border: '1px solid #bfdbfe' }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: '#1e40af', marginBottom: 12 }}>Manage Sub-categories</div>
@@ -860,7 +1570,6 @@ function MenuSection() {
         </div>
       )}
 
-      {/* Action buttons */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div style={{ fontSize: 13, color: '#888' }}>
           {localItems.length > 0 && '≡ Drag to reorder'}
@@ -878,7 +1587,6 @@ function MenuSection() {
         </div>
       </div>
 
-      {/* Menu items list — draggable */}
       {localItems.length === 0 ? (
         <div style={{ textAlign: 'center', color: '#bbb', marginTop: 60 }}>
           No items yet — click "+ Add Item" or use 🤖 AI Scanner
@@ -917,7 +1625,6 @@ function MenuSection() {
                   cursor: 'grab',
                 }}
               >
-                {/* Drag handle */}
                 <div style={{
                   color: '#ccc', fontSize: 18, cursor: 'grab',
                   userSelect: 'none', flexShrink: 0, lineHeight: 1,
@@ -937,7 +1644,6 @@ function MenuSection() {
                   </div>
                 </div>
 
-                {/* Item info */}
                 <div style={{ flex: 1, opacity: item.is_available ? 1 : 0.5 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, color: '#1a1a2e' }}>{item.name}</div>
                   {item.name_alt && <div style={{ fontSize: 12, color: '#C9A84C', marginTop: 1 }}>{item.name_alt}</div>}
@@ -946,7 +1652,6 @@ function MenuSection() {
                   <div style={{ fontSize: 15, fontWeight: 700, color: '#e94560', marginTop: 2 }}>£{Number(item.price).toFixed(2)}</div>
                 </div>
 
-                {/* Action buttons */}
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}
                   onMouseDown={e => e.stopPropagation()}
                 >
@@ -992,7 +1697,6 @@ function MenuSection() {
         </div>
       )}
 
-      {/* AI Scanner Modal */}
       {showScanner && (
         <AIScannerModal
           onClose={() => { fetchMenu(); setShowScanner(false); }}
@@ -1000,7 +1704,6 @@ function MenuSection() {
         />
       )}
 
-      {/* Add/Edit Modal */}
       {showForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: 16, padding: 32, width: 420, maxHeight: '90vh', overflowY: 'auto' }}>
@@ -1056,7 +1759,6 @@ function MenuSection() {
         </div>
       )}
 
-      {/* Modifiers Modal */}
       {modifierItem && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: 16, padding: 32, width: 520, maxHeight: '80vh', overflowY: 'auto' }}>
@@ -1515,9 +2217,9 @@ function ZReportSection() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
               {[
-                { label: 'Orders',    value: reportData.total_orders || 0,                                 color: '#3b82f6' },
-                { label: 'Covers',    value: reportData.total_covers || 0,                                 color: '#22c55e' },
-                { label: 'Avg/Cover', value: `£${(reportData.avg_per_cover || 0).toFixed(2)}`,             color: '#8b5cf6' },
+                { label: 'Orders',    value: reportData.total_orders || 0,                     color: '#3b82f6' },
+                { label: 'Covers',    value: reportData.total_covers || 0,                     color: '#22c55e' },
+                { label: 'Avg/Cover', value: `£${(reportData.avg_per_cover || 0).toFixed(2)}`, color: '#8b5cf6' },
               ].map(s => (
                 <div key={s.label} style={{ background: '#f8f8f8', borderRadius: 10, padding: 12, textAlign: 'center' }}>
                   <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
@@ -1650,34 +2352,9 @@ function StaffSection() {
   const [form, setForm] = useState({ name: '', pin: '', role: 'waiter', start_date: '', notes: '', employment_status: 'active' });
   const [filterStatus, setFilterStatus] = useState('active');
 
-  const fetchStaff = async () => { const data = await getStaff(); setStaff(data); };
-  useEffect(() => { fetchStaff(); }, []);
+  useEffect(() => { getStaff().then(setStaff); }, []);
 
-  const handleSave = async () => {
-    if (!form.name || (!editStaff && !form.pin)) return alert('Name and PIN are required!');
-    if (form.pin && form.pin.length !== 4) return alert('PIN must be 4 digits!');
-    if (editStaff) await updateStaff(editStaff.id, { ...form, is_active: editStaff.is_active });
-    else await addStaff(form);
-    setShowForm(false);
-    setForm({ name: '', pin: '', role: 'waiter', start_date: '', notes: '', employment_status: 'active' });
-    fetchStaff();
-  };
-
-  const toggleActive = async (s) => {
-    if (!window.confirm(`${s.is_active ? 'Deactivate' : 'Reactivate'} ${s.name}?`)) return;
-    await updateStaff(s.id, { ...s, is_active: s.is_active ? 0 : 1 });
-    fetchStaff();
-  };
-
-  const handleDelete = async (s) => {
-    if (!window.confirm(`⚠️ Permanently DELETE ${s.name}?\n\nThis cannot be undone!`)) return;
-    if (!window.confirm(`Last warning — delete ${s.name} forever?`)) return;
-    await fetch(`${SERVER_URL}/api/staff/${s.id}`, { method: 'DELETE' });
-    setSelectedStaff(null);
-    fetchStaff();
-  };
-
-  const roleColors = { admin: '#e94560', manager: '#f97316', supervisor: '#22c55e', waiter: '#3b82f6', kitchen: '#eab308', bar: '#8b5cf6' };
+  const roleColors = { admin: '#e94560', manager: '#8b5cf6', supervisor: '#3b82f6', waiter: '#22c55e', kitchen: '#f97316', bar: '#eab308' };
 
   const filteredStaff = staff.filter(s => {
     if (filterStatus === 'active') return s.is_active;
@@ -1685,18 +2362,48 @@ function StaffSection() {
     return true;
   });
 
+  const handleSave = async () => {
+    if (!form.name || (!editStaff && !form.pin)) return alert('Name and PIN are required!');
+    if (form.pin && form.pin.length !== 4) return alert('PIN must be 4 digits!');
+    try {
+      if (editStaff) await updateStaff(editStaff.id, form);
+      else await addStaff(form);
+      setShowForm(false);
+      setEditStaff(null);
+      getStaff().then(setStaff);
+    } catch (err) {
+      alert('Save failed!');
+    }
+  };
+
+  const toggleActive = async (s) => {
+    await updateStaff(s.id, { ...s, is_active: s.is_active ? 0 : 1 });
+    getStaff().then(setStaff);
+  };
+
+  const handleDelete = async (s) => {
+    if (!confirm(`Permanently delete ${s.name}? This cannot be undone.`)) return;
+    try {
+      await fetch(`${SERVER_URL}/api/staff/${s.id}`, { method: 'DELETE' });
+      setSelectedStaff(null);
+      getStaff().then(setStaff);
+    } catch (err) {
+      alert('Delete failed!');
+    }
+  };
+
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>👥 Staff Management</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>👥 Staff</h1>
         <button onClick={() => { setEditStaff(null); setForm({ name: '', pin: '', role: 'waiter', start_date: '', notes: '', employment_status: 'active' }); setShowForm(true); }}
           style={{ background: '#e94560', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }}>+ Add Staff</button>
       </div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {[
-          { key: 'active',   label: `Active (${staff.filter(s => s.is_active).length})` },
+          { key: 'active', label: `Active (${staff.filter(s => s.is_active).length})` },
           { key: 'inactive', label: `Inactive (${staff.filter(s => !s.is_active).length})` },
-          { key: 'all',      label: `All (${staff.length})` },
+          { key: 'all', label: `All (${staff.length})` },
         ].map(f => (
           <button key={f.key} onClick={() => setFilterStatus(f.key)} style={{
             padding: '8px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13,

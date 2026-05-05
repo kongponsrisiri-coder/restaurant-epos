@@ -7,10 +7,12 @@ const RESTAURANT_ADDRESS = '123 Test Street, London, E1 1AA';
 
 function formatDate(dateStr) {
   try {
-    return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-GB', {
+    const str   = dateStr instanceof Date ? dateStr.toISOString() : String(dateStr);
+    const clean = str.split('T')[0];
+    return new Date(clean + 'T12:00:00').toLocaleDateString('en-GB', {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
     });
-  } catch { return dateStr; }
+  } catch { return String(dateStr); }
 }
 
 function formatTime(timeStr) {

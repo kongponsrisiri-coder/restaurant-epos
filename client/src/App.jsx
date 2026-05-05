@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { startMonitoring, onStatusChange, getServerStatus } from './utils/serverDetect';
 import LoginScreen from './screens/LoginScreen';
 import TableMapScreen from './screens/TableMapScreen';
 import OrderScreen from './screens/OrderScreen';
@@ -9,17 +10,35 @@ import ReservationsScreen from './screens/ReservationsScreen';
 import './App.css';
 
 export default function App() {
-  const [staff, setStaff] = useState(null);
-  const [screen, setScreen] = useState('tables');
+  const [staff, setStaff]             = useState(null);
+  const [screen, setScreen]           = useState('tables');
   const [activeOrder, setActiveOrder] = useState(null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen]       = useState(false);
+  const [serverStatus, setServerStatus] = useState(getServerStatus());
   const isMobile = window.innerWidth < 768;
+
+  useEffect(() => {
+    startMonitoring();
+    return onStatusChange((status) => setServerStatus(status));
+  }, []);
+
+  // ── Status badge ──────────────────────────────────────────────
+  const StatusBadge = () => (
+    <span style={{
+      fontSize: 11, fontWeight: 700,
+      padding: '3px 8px', borderRadius: 10,
+      background: serverStatus === 'cloud' ? '#22c55e' : serverStatus === 'local' ? '#f59e0b' : '#ef4444',
+      color: 'white', cursor: 'default',
+    }}>
+      {serverStatus === 'cloud' ? '🟢 Cloud' : serverStatus === 'local' ? '🟡 Local' : '🔴 Offline'}
+    </span>
+  );
 
   if (!staff) return <LoginScreen onLogin={setStaff} />;
   if (staff.role === 'kitchen') return <KitchenScreen />;
   if (staff.role === 'bar') return <BarScreen />;
 
-  // ── Order screen (full page — no navbar needed) ───────────────
+  // ── Order screen ──────────────────────────────────────────────
   if (screen === 'order' && activeOrder) {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f5f5f5' }}>
@@ -40,6 +59,7 @@ export default function App() {
             Siam<span style={{ color: '#C9A84C' }}>EPOS</span>
           </span>
           <div className="navbar-user">
+            <StatusBadge />
             <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
             <button className="logout-btn" onClick={() => setStaff(null)}>Log out</button>
           </div>
@@ -114,6 +134,7 @@ export default function App() {
         )}
 
         <div className="navbar-user">
+          <StatusBadge />
           <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
           <button className="logout-btn" onClick={() => setStaff(null)}>Log out</button>
         </div>
@@ -144,7 +165,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Screen content ── */}
+      {/* Screen content */}
       <main className="main-content">
         {screen === 'tables' && (
           <TableMapScreen

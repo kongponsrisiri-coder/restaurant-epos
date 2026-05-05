@@ -1,23 +1,4 @@
-const nodemailer = require('nodemailer');
-
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false,
-  family: 4,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
-transporter.verify((error, success) => {
-  if (error) {
-    console.error('❌ Email transporter error:', error.message);
-  } else {
-    console.log('✅ Gmail SMTP ready — emails will send');
-  }
-});
+const https = require('https');
 
 const RESTAURANT_NAME    = process.env.RESTAURANT_NAME  || 'SiamEPOS Restaurant';
 const RESTAURANT_EMAIL   = process.env.RESTAURANT_EMAIL || 'info@siamepos.co.uk';
@@ -34,6 +15,53 @@ function formatDate(dateStr) {
 
 function formatTime(timeStr) {
   return timeStr ? String(timeStr).slice(0, 5) : '';
+}
+
+function sendResendEmail(to, subject, html) {
+  return new Promise((resolve, reject) => {
+    if (!process.env.RESEND_API_KEY) {
+      console.log('ℹ️  RESEND_API_KEY not set — skipping email to ' + to);
+      return resolve();
+    }
+
+    const body = JSON.stringify({
+      from:    'SiamEPOS <onboarding@resend.dev>',
+      to:      [to],
+      subject: subject,
+      html:    html,
+    });
+
+    const req = https.request({
+      hostname: 'api.resend.com',
+      path:     '/emails',
+      method:   'POST',
+      headers: {
+        'Authorization':  'Bearer ' + process.env.RESEND_API_KEY,
+        'Content-Type':   'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          console.log('✅ Email sent to ' + to);
+          resolve();
+        } else {
+          console.error('❌ Resend error ' + res.statusCode + ':', data);
+          reject(new Error('Resend error: ' + data));
+        }
+      });
+    });
+
+    req.on('error', err => {
+      console.error('❌ Email request error:', err.message);
+      reject(err);
+    });
+
+    req.write(body);
+    req.end();
+  });
 }
 
 async function sendBookingConfirmation(reservation) {
@@ -88,14 +116,11 @@ async function sendBookingConfirmation(reservation) {
     </div>
   `;
 
-  await transporter.sendMail({
-    from:    `${RESTAURANT_NAME} <${process.env.EMAIL_FROM || RESTAURANT_EMAIL}>`,
-    to:      reservation.customer_email,
-    subject: `Booking Confirmed ✅ — ${RESTAURANT_NAME}`,
-    html,
-  });
-
-  console.log('✅ Confirmation email sent to ' + reservation.customer_email);
+  await sendResendEmail(
+    reservation.customer_email,
+    `Booking Confirmed ✅ — ${RESTAURANT_NAME}`,
+    html
+  );
 }
 
 async function sendReminderEmail(reservation) {
@@ -138,14 +163,11 @@ async function sendReminderEmail(reservation) {
     </div>
   `;
 
-  await transporter.sendMail({
-    from:    `${RESTAURANT_NAME} <${process.env.EMAIL_FROM || RESTAURANT_EMAIL}>`,
-    to:      reservation.customer_email,
-    subject: `Reminder: Your booking tomorrow at ${RESTAURANT_NAME} ⏰`,
-    html,
-  });
-
-  console.log('✅ Reminder email sent to ' + reservation.customer_email);
+  await sendResendEmail(
+    reservation.customer_email,
+    `Reminder: Your booking tomorrow at ${RESTAURANT_NAME} ⏰`,
+    html
+  );
 }
 
 async function sendBookingSms() {

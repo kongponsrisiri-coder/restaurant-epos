@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { SERVER_URL } from '../api';
+import { getServerStatus, getActiveServer, setLocalConfig, testLocalConnection, onStatusChange } from '../utils/serverDetect';
 import {
   getAllMenu as getMenu, addMenuItem, updateMenuItem, deleteMenuItem,
   getItemModifiers, addModifierGroup, addModifierOption,
@@ -2565,6 +2566,7 @@ function SettingsSection() {
           <button onClick={async () => { if (!newReason) return; await addDiscountReason(newReason); setNewReason(''); getDiscountReasons().then(setReasons); }} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 600 }}>Add</button>
         </div>
       </div>
+      <LocalServerSettings />
       <div style={{ background: 'white', borderRadius: 12, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
         <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>🍹 Bar Categories</h2>
         <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>Select which categories show on the Bar screen</p>
@@ -2573,7 +2575,98 @@ function SettingsSection() {
     </div>
   );
 }
+function LocalServerSettings() {
+  const [ip, setIp]               = useState(() => localStorage.getItem('siamepos_local_ip') || '');
+  const [port, setPort]           = useState(() => localStorage.getItem('siamepos_local_port') || '3001');
+  const [testing, setTesting]     = useState(false);
+  const [testResult, setTestResult] = useState(null);
+  const [saved, setSaved]         = useState(false);
+  const [status, setStatus]       = useState(() => getServerStatus());
+  const [activeUrl, setActiveUrl] = useState(() => getActiveServer());
 
+  useEffect(() => {
+    return onStatusChange((s, url) => { setStatus(s); setActiveUrl(url); });
+  }, []);
+
+  const statusInfo = {
+    cloud:   { color: '#22c55e', label: '🟢 Cloud (Railway)' },
+    local:   { color: '#f59e0b', label: '🟡 Local Mini PC' },
+    offline: { color: '#ef4444', label: '🔴 Offline' },
+  };
+  const si = statusInfo[status] || statusInfo.cloud;
+
+  async function handleTest() {
+    if (!ip) return alert('Enter an IP address first');
+    setTesting(true);
+    setTestResult(null);
+    const ok = await testLocalConnection(ip, port);
+    setTestResult(ok
+      ? '✅ Connected! Local server is reachable.'
+      : '❌ Cannot reach that address. Check the IP and make sure the server is running.'
+    );
+    setTesting(false);
+  }
+
+  function handleSave() {
+    setLocalConfig(ip, port);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  const inputStyle = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' };
+
+  return (
+    <div style={{ background: 'white', borderRadius: 12, padding: 24, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+      <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>🖥️ Local Server (Offline Mode)</h2>
+      <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
+        Configure a mini PC on your restaurant WiFi to keep working when internet drops.
+      </p>
+      <div style={{ background: '#f8f8f8', borderRadius: 8, padding: '10px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#555' }}>Current server:</span>
+        <span style={{ fontSize: 13, fontWeight: 800, color: si.color }}>{si.label}</span>
+        <span style={{ fontSize: 11, color: '#aaa' }}>{activeUrl}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+        <div style={{ flex: 2 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Mini PC IP Address</label>
+          <input value={ip} onChange={e => setIp(e.target.value)} placeholder="e.g. 192.168.1.100" style={inputStyle} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Port</label>
+          <input value={port} onChange={e => setPort(e.target.value)} placeholder="3001" style={inputStyle} />
+        </div>
+      </div>
+      {testResult && (
+        <div style={{
+          padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: 13, fontWeight: 600,
+          background: testResult.startsWith('✅') ? '#f0fdf4' : '#fff0f0',
+          color: testResult.startsWith('✅') ? '#166534' : '#991b1b',
+          border: `1px solid ${testResult.startsWith('✅') ? '#bbf7d0' : '#fecaca'}`,
+        }}>
+          {testResult}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+        <button onClick={handleTest} disabled={testing} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+          {testing ? '⏳ Testing...' : '🔌 Test Connection'}
+        </button>
+        <button onClick={handleSave} style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: saved ? '#22c55e' : '#1a1a2e', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>
+          {saved ? '✓ Saved!' : 'Save Local Server'}
+        </button>
+      </div>
+      <div style={{ padding: '12px 14px', borderRadius: 8, background: '#f0f7ff', border: '1px solid #bfdbfe' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', marginBottom: 6 }}>📋 Mini PC Setup Instructions</div>
+        <div style={{ fontSize: 12, color: '#1e40af', lineHeight: 1.9 }}>
+          1. Install Node.js from <strong>nodejs.org</strong><br/>
+          2. Copy the <code style={{ background: '#dbeafe', padding: '1px 4px', borderRadius: 3 }}>restaurant-epos</code> folder to the mini PC<br/>
+          3. Open terminal: <code style={{ background: '#dbeafe', padding: '1px 4px', borderRadius: 3 }}>npm install</code> then <code style={{ background: '#dbeafe', padding: '1px 4px', borderRadius: 3 }}>node src/server.js</code><br/>
+          4. Find IP: run <code style={{ background: '#dbeafe', padding: '1px 4px', borderRadius: 3 }}>ipconfig</code> → look for IPv4 Address<br/>
+          5. Enter that IP above → Test → Save
+        </div>
+      </div>
+    </div>
+  );
+}
 function BarCategoryManager() {
   const [categories, setCategories] = useState([]);
   useEffect(() => { getCategories().then(setCategories); }, []);

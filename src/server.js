@@ -1218,7 +1218,7 @@ const result = await pool.query(
     });
 
     // Non-blocking email + SMS
-    if (customer_email) sendBookingConfirmation(reservation).catch(() => {});
+    if (customer_email) sendBookingConfirmation(reservation).catch(err => console.error('❌ Email error:', err.message));
     if (customer_phone) sendBookingSms(reservation).catch(() => {});
 
     console.log(`📅 New booking [${source}]: ${customer_name} ×${coversNum} on ${reservation_date} at ${reservation_time}`);

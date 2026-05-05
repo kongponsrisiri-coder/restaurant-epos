@@ -37,7 +37,6 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const { order, settings } = bill;
   const serviceChargePercent = parseFloat(settings.service_charge_percent || 12.5) / 100;
 
-  // ✅ FIX: Default to ENABLED unless explicitly set to '0'
   const serviceChargeEnabled = settings.service_charge_enabled !== '0';
 
   const billItems = order.items?.filter(i => !i.voided) || [];
@@ -60,10 +59,18 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const discountRate = subtotal > 0 ? discountAmount / subtotal : 0;
   const afterDiscount = subtotal - discountAmount;
   const serviceCharge = serviceChargeEnabled ? afterDiscount * serviceChargePercent : 0;
-  const billTotal = afterDiscount + serviceCharge;
+
+  // ✅ FIX: Calculate billTotal in pence to avoid floating point bugs
+  const billTotalPence = Math.round(afterDiscount * 100) + Math.round(serviceCharge * 100);
+  const billTotal = billTotalPence / 100;
+
   const amountPaid = parseFloat(paymentInput) || 0;
+  const amountPaidPence = Math.round(amountPaid * 100);
   const change = amountPaid - billTotal;
   const actualTip = selectedMethod !== 'Cash' ? Math.max(0, amountPaid - billTotal) : 0;
+
+  // ✅ FIX: All comparisons use pence to avoid floating point bugs
+  const canPay = amountPaidPence >= billTotalPence && amountPaidPence > 0;
 
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -116,7 +123,8 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   };
 
   const handleConfirmPayment = () => {
-    if (amountPaid < billTotal) {
+    // ✅ FIX: Compare in pence
+    if (amountPaidPence < billTotalPence) {
       alert(`Amount £${amountPaid.toFixed(2)} is less than bill £${billTotal.toFixed(2)}`);
       return;
     }
@@ -596,13 +604,14 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                     £{amountPaid > 0 ? amountPaid.toFixed(2) : '—'}
                   </span>
                 </div>
-                {amountPaid >= billTotal && selectedMethod === 'Cash' && (
+                {/* ✅ FIX: Use canPay (pence comparison) */}
+                {canPay && selectedMethod === 'Cash' && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 20, fontWeight: 800, color: '#22c55e', borderTop: '2px solid #eee', paddingTop: 10, marginTop: 4 }}>
                     <span>💚 Change</span>
-                    <span>£{change.toFixed(2)}</span>
+                    <span>£{Math.max(0, change).toFixed(2)}</span>
                   </div>
                 )}
-                {amountPaid > billTotal && selectedMethod !== 'Cash' && (
+                {canPay && amountPaid > billTotal && selectedMethod !== 'Cash' && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 20, fontWeight: 800, color: '#8b5cf6', borderTop: '2px solid #eee', paddingTop: 10, marginTop: 4 }}>
                     <span>💜 Tip</span>
                     <span>£{actualTip.toFixed(2)}</span>
@@ -632,16 +641,19 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 </div>
               </div>
 
-              <button onClick={handleConfirmPayment} disabled={amountPaid < billTotal} style={{
+              {/* ✅ FIX: Use canPay (pence comparison) for button */}
+              <button onClick={handleConfirmPayment} disabled={!canPay} style={{
                 width: '100%', padding: '18px', borderRadius: 12, border: 'none',
-                background: amountPaid >= billTotal ? '#22c55e' : '#ddd',
+                background: canPay ? '#22c55e' : '#ddd',
                 color: 'white', fontSize: 18, fontWeight: 800,
-                cursor: amountPaid >= billTotal ? 'pointer' : 'not-allowed',
+                cursor: canPay ? 'pointer' : 'not-allowed',
                 marginBottom: 10
               }}>
-                {amountPaid >= billTotal
+                {canPay
                   ? selectedMethod === 'Cash'
-                    ? `✓ Confirm — Give change £${change.toFixed(2)}`
+                    ? change > 0
+                      ? `✓ Confirm — Give change £${change.toFixed(2)}`
+                      : '✓ Confirm — Exact Amount'
                     : actualTip > 0
                       ? `✓ Confirm — Tip £${actualTip.toFixed(2)}`
                       : '✓ Confirm Payment'

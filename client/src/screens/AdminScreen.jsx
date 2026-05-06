@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { SERVER_URL } from '../api';
-import { getServerStatus, getActiveServer, setLocalConfig, testLocalConnection, onStatusChange } from '../utils/serverDetect';
 import {
   getAllMenu as getMenu, addMenuItem, updateMenuItem, deleteMenuItem,
   getItemModifiers, addModifierGroup, addModifierOption,
@@ -44,6 +43,12 @@ const invAPI = {
   updateRecipe:     (id, data) => fetch(`${SERVER_URL}/api/recipes/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
   getMovements:     ()         => fetch(`${SERVER_URL}/api/stock/movements`).then(r => r.ok ? r.json() : []).catch(() => []),
   addAdjustment:    (data)     => fetch(`${SERVER_URL}/api/stock/adjustment`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
+  // Expenses (overheads, labour, other one-off costs)
+  getExpenses:      ()         => fetch(`${SERVER_URL}/api/expenses`).then(r => r.ok ? r.json() : []).catch(() => []),
+  addExpense:       (data)     => fetch(`${SERVER_URL}/api/expenses`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
+  deleteExpense:    (id)       => fetch(`${SERVER_URL}/api/expenses/${id}`, { method: 'DELETE' }).then(r => r.json()),
+  // Supplier invoices
+  saveInvoice:      (data)     => fetch(`${SERVER_URL}/api/supplier-invoices`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
 };
 
 // ─────────────────────────────────────────────
@@ -920,8 +925,531 @@ function StockTab() {
 }
 
 // ─────────────────────────────────────────────
+// INVENTORY SECTION — INVOICE SCANNER TAB
+// ─────────────────────────────────────────────
+function InvoiceScannerTab() {
+  const [stage, setStage] = useState('upload'); // upload | scanning | review | done
+  const [file, setFile] = useState(null);
+  const [fileData, setFileData] = useState(null);
+  const [invoiceData, setInvoiceData] = useState({ supplier_name: '', invoice_date: '', invoice_number: '', total_amount: '' });
+  const [lineItems, setLineItems] = useState([]);
+  const [ingredients, setIngredients] = useState([]);
+  const [error, setError] = useState('');
+  const [confirming, setConfirming] = useState(false);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => { invAPI.getIngredients().then(d => setIngredients(Array.isArray(d) ? d : [])); }, []);
+
+  const handleFile = (f) => {
+    if (!f) return;
+    setFile(f);
+    const reader = new FileReader();
+    reader.onload = e => setFileData(e.target.result);
+    reader.readAsDataURL(f);
+  };
+
+  // Simple fuzzy match: check if extracted name contains ingredient name or vice versa
+  const fuzzyMatch = (extractedName) => {
+    const lower = (extractedName || '').toLowerCase();
+    let best = null;
+    let bestScore = 0;
+    for (const ing of ingredients) {
+      const ingLower = ing.name_en.toLowerCase();
+      const words = ingLower.split(' ');
+      let score = 0;
+      if (lower.includes(ingLower)) score = 10;
+      else if (ingLower.includes(lower.split(' ')[0])) score = 7;
+      else { words.forEach(w => { if (w.length > 3 && lower.includes(w)) score += 3; }); }
+      if (score > bestScore) { bestScore = score; best = ing.id; }
+    }
+    return bestScore >= 3 ? best : null;
+  };
+
+  const runScan = async () => {
+    if (!file || !fileData) return;
+    setError('');
+    setStage('scanning');
+    try {
+      const base64 = fileData.split(',')[1];
+      const media_type = file.type || 'image/jpeg';
+      const res = await fetch(`${SERVER_URL}/api/ai/scan-invoice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_base64: base64, media_type }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Scan failed');
+      const inv = data.invoice;
+      setInvoiceData({
+        supplier_name: inv.supplier_name || '',
+        invoice_date:  inv.invoice_date  || '',
+        invoice_number: inv.invoice_number || '',
+        total_amount:  inv.total_amount  || 0,
+      });
+      const matched = (inv.line_items || []).map(item => ({
+        name_extracted:       item.name       || '',
+        quantity:             item.quantity   || 0,
+        unit:                 item.unit       || 'kg',
+        unit_price:           item.unit_price || 0,
+        line_total:           item.line_total || (item.quantity * item.unit_price) || 0,
+        matched_ingredient_id: fuzzyMatch(item.name),
+      }));
+      setLineItems(matched);
+      setStage('review');
+    } catch (err) {
+      setError(err.message || 'Scan failed — try again');
+      setStage('upload');
+    }
+  };
+
+  const setMatch = (index, ingredientId) => {
+    setLineItems(prev => prev.map((l, i) => i === index ? { ...l, matched_ingredient_id: ingredientId ? Number(ingredientId) : null } : l));
+  };
+
+  const confirmAndRecord = async () => {
+    const matched = lineItems.filter(l => l.matched_ingredient_id);
+    if (matched.length === 0) return alert('No matched items to record — please match at least one ingredient.');
+    setConfirming(true);
+    try {
+      for (const item of matched) {
+        await invAPI.addAdjustment({
+          ingredient_id:  item.matched_ingredient_id,
+          quantity:       item.quantity,
+          movement_type:  'delivery',
+          cost_at_time:   item.unit_price,
+          note: `Invoice ${invoiceData.invoice_number} — ${invoiceData.supplier_name}`.trim(),
+        });
+      }
+      await invAPI.saveInvoice({ ...invoiceData, status: 'processed' });
+      setStage('done');
+    } catch (err) {
+      alert('Record failed — has Krit built the invoice backend yet?');
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const unmatchedCount = lineItems.filter(l => !l.matched_ingredient_id).length;
+  const matchedCount   = lineItems.filter(l =>  l.matched_ingredient_id).length;
+
+  return (
+    <div>
+      {/* ── UPLOAD ── */}
+      {stage === 'upload' && (
+        <div style={{ maxWidth: 600 }}>
+          <div style={{ background: '#f0f7ff', borderRadius: 12, padding: '14px 18px', marginBottom: 20, fontSize: 13, color: '#1e40af' }}>
+            💡 Take a photo of any supplier invoice or delivery note. AI will read every line item and match it to your ingredients automatically.
+          </div>
+          {error && (
+            <div style={{ background: '#fee2e2', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: '#991b1b', fontSize: 14 }}>⚠️ {error}</div>
+          )}
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }}
+            style={{ border: `2px dashed ${file ? '#22c55e' : '#1a1a2e'}`, borderRadius: 16, padding: '48px 24px', textAlign: 'center', cursor: 'pointer', marginBottom: 20, background: file ? '#f0fdf4' : 'white' }}
+          >
+            <input ref={fileInputRef} type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={e => handleFile(e.target.files[0])} />
+            {file ? (
+              <div>
+                {file.type.startsWith('image/') && fileData && (
+                  <img src={fileData} alt="preview" style={{ maxHeight: 140, maxWidth: '100%', borderRadius: 8, marginBottom: 12, objectFit: 'contain' }} />
+                )}
+                <div style={{ fontWeight: 700, color: '#15803d', fontSize: 15 }}>✅ {file.name}</div>
+                <div style={{ color: '#888', fontSize: 13, marginTop: 4 }}>{(file.size / 1024 / 1024).toFixed(1)} MB · Click to change</div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>🧾</div>
+                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Drop invoice photo here or click to upload</div>
+                <div style={{ color: '#888', fontSize: 13 }}>JPG, PNG or PDF · Phone photo is fine</div>
+              </div>
+            )}
+          </div>
+          <button onClick={runScan} disabled={!file} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: file ? '#1a1a2e' : '#ddd', color: file ? 'white' : '#aaa', fontWeight: 700, fontSize: 16, cursor: file ? 'pointer' : 'not-allowed' }}>
+            🤖 Scan Invoice with AI
+          </button>
+        </div>
+      )}
+
+      {/* ── SCANNING ── */}
+      {stage === 'scanning' && (
+        <div style={{ textAlign: 'center', padding: '60px 0' }}>
+          <div style={{ width: 56, height: 56, border: '5px solid #f0f0f0', borderTop: '5px solid #1a1a2e', borderRadius: '50%', margin: '0 auto 24px', animation: 'spin 0.8s linear infinite' }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 8 }}>Reading your invoice…</div>
+          <div style={{ color: '#888', fontSize: 14 }}>AI is extracting supplier, items, quantities and prices</div>
+        </div>
+      )}
+
+      {/* ── REVIEW ── */}
+      {stage === 'review' && (
+        <div>
+          {/* Invoice header — editable */}
+          <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 14 }}>📄 Invoice Details — confirm or correct</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+              {[
+                { label: 'Supplier Name', key: 'supplier_name', placeholder: 'e.g. Wing Yip' },
+                { label: 'Invoice Date',  key: 'invoice_date',  placeholder: 'YYYY-MM-DD', type: 'date' },
+                { label: 'Invoice #',     key: 'invoice_number', placeholder: 'e.g. INV-001' },
+                { label: 'Total (£)',     key: 'total_amount',  placeholder: '0.00', type: 'number' },
+              ].map(f => (
+                <div key={f.key}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>{f.label}</label>
+                  <input
+                    type={f.type || 'text'}
+                    value={invoiceData[f.key]}
+                    onChange={e => setInvoiceData(prev => ({ ...prev, [f.key]: e.target.value }))}
+                    placeholder={f.placeholder}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Match status banner */}
+          {unmatchedCount > 0 && (
+            <div style={{ background: '#fef9c3', borderRadius: 10, padding: '10px 16px', marginBottom: 12, border: '1px solid #fde047', fontSize: 13, color: '#713f12' }}>
+              ⚠️ <strong>{unmatchedCount} item{unmatchedCount > 1 ? 's' : ''} not matched</strong> — use the dropdown to assign them manually, or leave blank to skip.
+            </div>
+          )}
+
+          {/* Line items table */}
+          <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 60px 80px 80px 1fr', padding: '10px 16px', background: '#f8f8f8', fontWeight: 700, fontSize: 12, color: '#555' }}>
+              <span>As on Invoice</span>
+              <span style={{ textAlign: 'right' }}>Qty</span>
+              <span style={{ textAlign: 'center' }}>Unit</span>
+              <span style={{ textAlign: 'right' }}>Unit £</span>
+              <span style={{ textAlign: 'right' }}>Total</span>
+              <span style={{ paddingLeft: 12 }}>Match to Ingredient</span>
+            </div>
+            {lineItems.map((item, i) => {
+              const isUnmatched = !item.matched_ingredient_id;
+              return (
+                <div key={i} style={{
+                  display: 'grid', gridTemplateColumns: '1fr 70px 60px 80px 80px 1fr',
+                  padding: '10px 16px', borderBottom: '1px solid #f0f0f0',
+                  fontSize: 13, alignItems: 'center',
+                  background: isUnmatched ? '#fffbeb' : 'white',
+                }}>
+                  <span style={{ fontWeight: 600, color: '#1a1a2e' }}>{item.name_extracted}</span>
+                  <span style={{ textAlign: 'right', color: '#555' }}>{item.quantity}</span>
+                  <span style={{ textAlign: 'center', color: '#555' }}>{item.unit}</span>
+                  <span style={{ textAlign: 'right', color: '#555' }}>£{Number(item.unit_price).toFixed(2)}</span>
+                  <span style={{ textAlign: 'right', fontWeight: 700 }}>£{Number(item.line_total).toFixed(2)}</span>
+                  <div style={{ paddingLeft: 12 }}>
+                    <select
+                      value={item.matched_ingredient_id || ''}
+                      onChange={e => setMatch(i, e.target.value || null)}
+                      style={{
+                        width: '100%', padding: '6px 8px', borderRadius: 8, fontSize: 13,
+                        border: `2px solid ${isUnmatched ? '#fde047' : '#22c55e'}`,
+                        background: isUnmatched ? '#fffbeb' : '#f0fdf4',
+                        color: isUnmatched ? '#713f12' : '#14532d',
+                      }}
+                    >
+                      <option value="">⚠️ No match — select manually</option>
+                      {ingredients.map(ing => (
+                        <option key={ing.id} value={ing.id}>{ing.name_en}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Confirm row */}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div style={{ flex: 1, fontSize: 13, color: '#555' }}>
+              <span style={{ color: '#22c55e', fontWeight: 700 }}>✅ {matchedCount} matched</span>
+              {unmatchedCount > 0 && <span style={{ color: '#eab308', fontWeight: 700, marginLeft: 10 }}>⚠️ {unmatchedCount} unmatched (will be skipped)</span>}
+            </div>
+            <button onClick={() => { setStage('upload'); setFile(null); setFileData(null); }} style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 600, color: '#555' }}>
+              ↩ Re-scan
+            </button>
+            <button onClick={confirmAndRecord} disabled={confirming || matchedCount === 0} style={{
+              padding: '12px 28px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 15, cursor: confirming ? 'default' : 'pointer',
+              background: confirming || matchedCount === 0 ? '#ddd' : '#1a1a2e', color: 'white'
+            }}>
+              {confirming ? 'Recording...' : `✓ Confirm & Record ${matchedCount} Item${matchedCount !== 1 ? 's' : ''}`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── DONE ── */}
+      {stage === 'done' && (
+        <div style={{ maxWidth: 500, textAlign: 'center', padding: '40px 0' }}>
+          <div style={{ fontSize: 56, marginBottom: 16 }}>✅</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#22c55e', marginBottom: 8 }}>Invoice Recorded!</div>
+          <div style={{ fontSize: 14, color: '#888', marginBottom: 8 }}>
+            Supplier: <strong>{invoiceData.supplier_name || '—'}</strong> · Invoice: <strong>{invoiceData.invoice_number || '—'}</strong>
+          </div>
+          <div style={{ fontSize: 14, color: '#888', marginBottom: 28 }}>
+            {matchedCount} stock movement{matchedCount !== 1 ? 's' : ''} recorded as deliveries
+          </div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+            <button onClick={() => { setStage('upload'); setFile(null); setFileData(null); setLineItems([]); setInvoiceData({ supplier_name: '', invoice_date: '', invoice_number: '', total_amount: '' }); }}
+              style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, cursor: 'pointer' }}>
+              📷 Scan Another Invoice
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// INVENTORY SECTION — COST VS SALES TAB
+// ─────────────────────────────────────────────
+function CostSalesTab() {
+  const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+  const [from, setFrom] = useState(firstOfMonth);
+  const [to, setTo] = useState(today);
+  const [revenue, setRevenue] = useState(null);
+  const [movements, setMovements] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expForm, setExpForm] = useState({ category: 'overhead', description: '', amount: '', date: today });
+  const [savingExp, setSavingExp] = useState(false);
+  const [activeExpSection, setActiveExpSection] = useState(true);
+
+  const loadData = async () => {
+    setLoading(true);
+    const [rev, movs, exps] = await Promise.all([
+      getSummaryReport(from, to),
+      invAPI.getMovements(),
+      invAPI.getExpenses(),
+    ]);
+    setRevenue(rev);
+    setMovements(Array.isArray(movs) ? movs : []);
+    setExpenses(Array.isArray(exps) ? exps : []);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadData(); }, []);
+
+  // COGS: sum delivery movements within date range
+  const cogsMovements = movements.filter(m => {
+    if (m.movement_type !== 'delivery') return false;
+    if (!m.created_at) return false;
+    const d = m.created_at.split('T')[0];
+    return d >= from && d <= to;
+  });
+  const cogs = cogsMovements.reduce((sum, m) => {
+    const cost = Number(m.cost_at_time || 0) * Number(m.quantity || 0);
+    return sum + cost;
+  }, 0);
+
+  // Expenses filtered by date range
+  const filteredExp = expenses.filter(e => {
+    const d = (e.date || '').split('T')[0];
+    return d >= from && d <= to;
+  });
+  const overheads = filteredExp.filter(e => e.category === 'overhead').reduce((s, e) => s + Number(e.amount || 0), 0);
+  const labour    = filteredExp.filter(e => e.category === 'labour').reduce((s, e) => s + Number(e.amount || 0), 0);
+  const other     = filteredExp.filter(e => e.category === 'other').reduce((s, e) => s + Number(e.amount || 0), 0);
+
+  const totalRevenue  = revenue?.total_sales || 0;
+  const grossProfit   = totalRevenue - cogs;
+  const grossMarginPct = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
+  const totalCosts    = cogs + overheads + labour + other;
+  const netProfit     = totalRevenue - totalCosts;
+  const netMarginPct  = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+
+  const marginColor = (pct) => pct >= 25 ? '#22c55e' : pct >= 10 ? '#eab308' : '#ef4444';
+
+  const addExpense = async () => {
+    if (!expForm.description || !expForm.amount) return alert('Description and amount are required');
+    setSavingExp(true);
+    try {
+      await invAPI.addExpense(expForm);
+      setExpForm({ category: 'overhead', description: '', amount: '', date: today });
+      loadData();
+    } catch (err) {
+      alert('Save failed — has Krit built the expenses backend yet?');
+    } finally {
+      setSavingExp(false);
+    }
+  };
+
+  const deleteExpense = async (id) => {
+    if (!confirm('Delete this expense?')) return;
+    await invAPI.deleteExpense(id);
+    loadData();
+  };
+
+  const catLabel = { overhead: '🏢 Overhead', labour: '👥 Labour', other: '📌 Other' };
+  const catColor = { overhead: { color: '#8b5cf6', bg: '#ede9fe' }, labour: { color: '#3b82f6', bg: '#dbeafe' }, other: { color: '#f97316', bg: '#ffedd5' } };
+
+  const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '—';
+
+  return (
+    <div>
+      {/* Date range */}
+      <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>From</label>
+          <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }} />
+        </div>
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>To</label>
+          <input type="date" value={to} onChange={e => setTo(e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }} />
+        </div>
+        <button onClick={loadData} style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, cursor: 'pointer' }}>Calculate</button>
+        {/* Quick period buttons */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[
+            { label: 'This Month', from: firstOfMonth, to: today },
+            { label: 'Last 7 Days', from: new Date(Date.now() - 7 * 864e5).toISOString().split('T')[0], to: today },
+            { label: 'Today', from: today, to: today },
+          ].map(p => (
+            <button key={p.label} onClick={() => { setFrom(p.from); setTo(p.to); }} style={{ padding: '6px 12px', borderRadius: 20, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 600, fontSize: 12, color: '#555' }}>{p.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', color: '#888', padding: 60 }}>Loading...</div>
+      ) : (
+        <>
+          {/* Main KPI cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
+            {[
+              { label: 'Revenue',       value: `£${totalRevenue.toFixed(2)}`,  color: '#1a1a2e', bold: true },
+              { label: 'Ingredient COGS', value: `£${cogs.toFixed(2)}`,        color: '#ef4444' },
+              { label: 'Overheads',     value: `£${overheads.toFixed(2)}`,     color: '#8b5cf6' },
+              { label: 'Labour',        value: `£${labour.toFixed(2)}`,        color: '#3b82f6' },
+              { label: 'Other Costs',   value: `£${other.toFixed(2)}`,         color: '#f97316' },
+              { label: 'Total Costs',   value: `£${totalCosts.toFixed(2)}`,    color: '#ef4444', bold: true },
+            ].map(s => (
+              <div key={s.label} style={{ background: 'white', borderRadius: 12, padding: '14px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+                <div style={{ fontSize: 20, fontWeight: s.bold ? 900 : 800, color: s.color }}>{s.value}</div>
+                <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Margin summary */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+            <div style={{ background: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+              <div style={{ fontSize: 13, color: '#888', marginBottom: 6, fontWeight: 600 }}>GROSS PROFIT (after COGS)</div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: marginColor(grossMarginPct) }}>£{grossProfit.toFixed(2)}</div>
+              <div style={{ fontSize: 14, color: '#555', marginTop: 4 }}>
+                Gross margin: <span style={{ fontWeight: 800, color: marginColor(grossMarginPct) }}>{grossMarginPct.toFixed(1)}%</span>
+              </div>
+              <div style={{ marginTop: 10, background: '#f5f5f5', borderRadius: 8, overflow: 'hidden', height: 8 }}>
+                <div style={{ height: '100%', width: `${Math.min(grossMarginPct, 100)}%`, background: marginColor(grossMarginPct), borderRadius: 8, transition: 'width 0.4s' }} />
+              </div>
+            </div>
+            <div style={{ background: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+              <div style={{ fontSize: 13, color: '#888', marginBottom: 6, fontWeight: 600 }}>NET PROFIT (after all costs)</div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: marginColor(netMarginPct) }}>£{netProfit.toFixed(2)}</div>
+              <div style={{ fontSize: 14, color: '#555', marginTop: 4 }}>
+                Net margin: <span style={{ fontWeight: 800, color: marginColor(netMarginPct) }}>{netMarginPct.toFixed(1)}%</span>
+              </div>
+              <div style={{ marginTop: 10, background: '#f5f5f5', borderRadius: 8, overflow: 'hidden', height: 8 }}>
+                <div style={{ height: '100%', width: `${Math.max(0, Math.min(netMarginPct, 100))}%`, background: marginColor(netMarginPct), borderRadius: 8, transition: 'width 0.4s' }} />
+              </div>
+            </div>
+          </div>
+
+          {/* Waterfall breakdown */}
+          <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 14 }}>📊 Profit Breakdown</div>
+            {[
+              { label: 'Revenue',              value: totalRevenue, color: '#22c55e', sign: '' },
+              { label: '– Ingredient COGS',    value: cogs,         color: '#ef4444', sign: '–' },
+              { label: '= Gross Profit',        value: grossProfit,  color: grossProfit >= 0 ? '#22c55e' : '#ef4444', sign: '', bold: true },
+              { label: '– Overheads',          value: overheads,    color: '#8b5cf6', sign: '–' },
+              { label: '– Labour',             value: labour,       color: '#3b82f6', sign: '–' },
+              { label: '– Other',              value: other,        color: '#f97316', sign: '–' },
+              { label: '= Net Profit',          value: netProfit,    color: netProfit >= 0 ? '#22c55e' : '#ef4444', sign: '', bold: true },
+            ].map(row => (
+              <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: row.bold ? '10px 0' : '7px 0', borderTop: row.bold ? '2px solid #eee' : '1px solid #f5f5f5', marginTop: row.bold ? 4 : 0 }}>
+                <span style={{ fontSize: 14, color: '#555', fontWeight: row.bold ? 700 : 400, paddingLeft: row.sign === '–' ? 16 : 0 }}>{row.label}</span>
+                <span style={{ fontSize: row.bold ? 18 : 14, fontWeight: row.bold ? 800 : 600, color: row.color }}>
+                  {row.sign === '–' ? '–' : ''}£{Math.abs(row.value).toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Add expense form */}
+          <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            <button onClick={() => setActiveExpSection(!activeExpSection)} style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 0, marginBottom: activeExpSection ? 16 : 0 }}>
+              <span style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e' }}>+ Log an Expense</span>
+              <span style={{ color: '#888', fontSize: 14 }}>{activeExpSection ? '▲' : '▼'}</span>
+            </button>
+            {activeExpSection && (
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div style={{ flex: 1, minWidth: 120 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>Category</label>
+                  <select value={expForm.category} onChange={e => setExpForm({ ...expForm, category: e.target.value })} style={{ width: '100%', padding: '9px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}>
+                    <option value="overhead">🏢 Overhead</option>
+                    <option value="labour">👥 Labour</option>
+                    <option value="other">📌 Other</option>
+                  </select>
+                </div>
+                <div style={{ flex: 3, minWidth: 160 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>Description</label>
+                  <input value={expForm.description} onChange={e => setExpForm({ ...expForm, description: e.target.value })} placeholder="e.g. Monthly rent, Gas bill, Chef wages..." style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 100 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>Amount (£)</label>
+                  <input type="number" step="0.01" value={expForm.amount} onChange={e => setExpForm({ ...expForm, amount: e.target.value })} placeholder="0.00" style={{ width: '100%', padding: '9px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 130 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>Date</label>
+                  <input type="date" value={expForm.date} onChange={e => setExpForm({ ...expForm, date: e.target.value })} style={{ width: '100%', padding: '9px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+                </div>
+                <button onClick={addExpense} disabled={savingExp} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#e94560', color: 'white', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  {savingExp ? 'Saving...' : 'Add'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Expenses list */}
+          {filteredExp.length > 0 && (
+            <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+              <div style={{ padding: '12px 16px', background: '#f8f8f8', fontWeight: 700, fontSize: 13, color: '#555' }}>
+                Logged Expenses — {from} to {to}
+              </div>
+              {filteredExp.map((e, i) => {
+                const cc = catColor[e.category] || catColor.other;
+                return (
+                  <div key={e.id || i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid #f0f0f0', fontSize: 13 }}>
+                    <span style={{ background: cc.bg, color: cc.color, fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, whiteSpace: 'nowrap' }}>{catLabel[e.category]}</span>
+                    <span style={{ flex: 1, color: '#1a1a2e' }}>{e.description}</span>
+                    <span style={{ color: '#888', fontSize: 12 }}>{formatDate(e.date)}</span>
+                    <span style={{ fontWeight: 700, color: '#ef4444' }}>£{Number(e.amount).toFixed(2)}</span>
+                    <button onClick={() => deleteExpense(e.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 16, padding: 0 }}>×</button>
+                  </div>
+                );
+              })}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 16px', fontWeight: 800, fontSize: 15, background: '#f8f8f8', color: '#ef4444' }}>
+                Total: £{(overheads + labour + other).toFixed(2)}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
 // INVENTORY SECTION — MAIN WRAPPER
 // ─────────────────────────────────────────────
+function InventorySection() {
+  const [tab, setTab] = useState('ingredients');
+
 function InventorySection() {
   const [tab, setTab] = useState('ingredients');
 
@@ -929,13 +1457,15 @@ function InventorySection() {
     { id: 'ingredients', label: '🧅 Ingredients' },
     { id: 'recipes',     label: '📋 Recipes & Costs' },
     { id: 'stock',       label: '📦 Stock Log' },
+    { id: 'invoices',    label: '🧾 Invoice Scanner' },
+    { id: 'costsales',   label: '💰 Cost vs Sales' },
   ];
 
   return (
     <div style={{ padding: 24 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>🥬 Inventory & Food Costs</h1>
       <p style={{ fontSize: 13, color: '#888', marginBottom: 20 }}>Manage ingredients, recipe costing, and stock movements — Growth tier feature</p>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
         {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
             padding: '10px 20px', borderRadius: 20, border: 'none', cursor: 'pointer',
@@ -948,6 +1478,8 @@ function InventorySection() {
       {tab === 'ingredients' && <IngredientsTab />}
       {tab === 'recipes'     && <RecipesTab />}
       {tab === 'stock'       && <StockTab />}
+      {tab === 'invoices'    && <InvoiceScannerTab />}
+      {tab === 'costsales'   && <CostSalesTab />}
     </div>
   );
 }
@@ -2566,7 +3098,6 @@ function SettingsSection() {
           <button onClick={async () => { if (!newReason) return; await addDiscountReason(newReason); setNewReason(''); getDiscountReasons().then(setReasons); }} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 600 }}>Add</button>
         </div>
       </div>
-      <LocalServerSettings />
       <div style={{ background: 'white', borderRadius: 12, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
         <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>🍹 Bar Categories</h2>
         <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>Select which categories show on the Bar screen</p>
@@ -2575,98 +3106,7 @@ function SettingsSection() {
     </div>
   );
 }
-function LocalServerSettings() {
-  const [ip, setIp]               = useState(() => localStorage.getItem('siamepos_local_ip') || '');
-  const [port, setPort]           = useState(() => localStorage.getItem('siamepos_local_port') || '3001');
-  const [testing, setTesting]     = useState(false);
-  const [testResult, setTestResult] = useState(null);
-  const [saved, setSaved]         = useState(false);
-  const [status, setStatus]       = useState(() => getServerStatus());
-  const [activeUrl, setActiveUrl] = useState(() => getActiveServer());
 
-  useEffect(() => {
-    return onStatusChange((s, url) => { setStatus(s); setActiveUrl(url); });
-  }, []);
-
-  const statusInfo = {
-    cloud:   { color: '#22c55e', label: '🟢 Cloud (Railway)' },
-    local:   { color: '#f59e0b', label: '🟡 Local Mini PC' },
-    offline: { color: '#ef4444', label: '🔴 Offline' },
-  };
-  const si = statusInfo[status] || statusInfo.cloud;
-
-  async function handleTest() {
-    if (!ip) return alert('Enter an IP address first');
-    setTesting(true);
-    setTestResult(null);
-    const ok = await testLocalConnection(ip, port);
-    setTestResult(ok
-      ? '✅ Connected! Local server is reachable.'
-      : '❌ Cannot reach that address. Check the IP and make sure the server is running.'
-    );
-    setTesting(false);
-  }
-
-  function handleSave() {
-    setLocalConfig(ip, port);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  }
-
-  const inputStyle = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' };
-
-  return (
-    <div style={{ background: 'white', borderRadius: 12, padding: 24, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-      <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>🖥️ Local Server (Offline Mode)</h2>
-      <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
-        Configure a mini PC on your restaurant WiFi to keep working when internet drops.
-      </p>
-      <div style={{ background: '#f8f8f8', borderRadius: 8, padding: '10px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: '#555' }}>Current server:</span>
-        <span style={{ fontSize: 13, fontWeight: 800, color: si.color }}>{si.label}</span>
-        <span style={{ fontSize: 11, color: '#aaa' }}>{activeUrl}</span>
-      </div>
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-        <div style={{ flex: 2 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Mini PC IP Address</label>
-          <input value={ip} onChange={e => setIp(e.target.value)} placeholder="e.g. 192.168.1.100" style={inputStyle} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Port</label>
-          <input value={port} onChange={e => setPort(e.target.value)} placeholder="3001" style={inputStyle} />
-        </div>
-      </div>
-      {testResult && (
-        <div style={{
-          padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: 13, fontWeight: 600,
-          background: testResult.startsWith('✅') ? '#f0fdf4' : '#fff0f0',
-          color: testResult.startsWith('✅') ? '#166534' : '#991b1b',
-          border: `1px solid ${testResult.startsWith('✅') ? '#bbf7d0' : '#fecaca'}`,
-        }}>
-          {testResult}
-        </div>
-      )}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-        <button onClick={handleTest} disabled={testing} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
-          {testing ? '⏳ Testing...' : '🔌 Test Connection'}
-        </button>
-        <button onClick={handleSave} style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: saved ? '#22c55e' : '#1a1a2e', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>
-          {saved ? '✓ Saved!' : 'Save Local Server'}
-        </button>
-      </div>
-      <div style={{ padding: '12px 14px', borderRadius: 8, background: '#f0f7ff', border: '1px solid #bfdbfe' }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', marginBottom: 6 }}>📋 Mini PC Setup Instructions</div>
-        <div style={{ fontSize: 12, color: '#1e40af', lineHeight: 1.9 }}>
-          1. Install Node.js from <strong>nodejs.org</strong><br/>
-          2. Copy the <code style={{ background: '#dbeafe', padding: '1px 4px', borderRadius: 3 }}>restaurant-epos</code> folder to the mini PC<br/>
-          3. Open terminal: <code style={{ background: '#dbeafe', padding: '1px 4px', borderRadius: 3 }}>npm install</code> then <code style={{ background: '#dbeafe', padding: '1px 4px', borderRadius: 3 }}>node src/server.js</code><br/>
-          4. Find IP: run <code style={{ background: '#dbeafe', padding: '1px 4px', borderRadius: 3 }}>ipconfig</code> → look for IPv4 Address<br/>
-          5. Enter that IP above → Test → Save
-        </div>
-      </div>
-    </div>
-  );
-}
 function BarCategoryManager() {
   const [categories, setCategories] = useState([]);
   useEffect(() => { getCategories().then(setCategories); }, []);

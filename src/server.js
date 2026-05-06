@@ -1757,7 +1757,33 @@ app.post('/api/stock/adjustment', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 // END INVENTORY ROUTES — SEPOS-016
 // ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+// ALLERGEN ROUTES
+// ═══════════════════════════════════════════════════════
 
+app.get('/api/dish-allergens', async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT * FROM dish_allergens`);
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/dish-allergens/:menuItemId', async (req, res) => {
+  try {
+    const { menuItemId } = req.params;
+    const { allergens } = req.body;
+    const result = await pool.query(
+      `INSERT INTO dish_allergens (menu_item_id, allergens, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (menu_item_id) DO UPDATE SET
+         allergens = EXCLUDED.allergens,
+         updated_at = EXCLUDED.updated_at
+       RETURNING id`,
+      [menuItemId, allergens || '[]']
+    );
+    res.json({ success: true, id: result.rows[0]?.id });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 // ─────────────────────────────────────────────
 // SOCKET.IO
 // ─────────────────────────────────────────────

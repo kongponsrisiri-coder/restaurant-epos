@@ -1515,7 +1515,8 @@ function InvoiceScannerTab() {
       )}
     </div>
   );
-}
+
+  
 
 // ─────────────────────────────────────────────
 // INVENTORY SECTION — COST VS SALES TAB

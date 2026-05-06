@@ -258,7 +258,6 @@ app.delete('/api/modifiers/:id', async (req, res) => {
 
 app.delete('/api/menu/items/:id', async (req, res) => {
   try {
-    // Preserve item name in order history before removing the link
     await pool.query(
       `UPDATE order_items 
        SET item_name = COALESCE(item_name, (
@@ -272,20 +271,13 @@ app.delete('/api/menu/items/:id', async (req, res) => {
       'DELETE FROM modifiers WHERE group_id IN (SELECT id FROM modifier_groups WHERE menu_item_id = $1)',
       [req.params.id]
     );
-    await pool.query(
-      'DELETE FROM modifier_groups WHERE menu_item_id = $1',
-      [req.params.id]
-    );
-    await pool.query(
-      'DELETE FROM menu_items WHERE id = $1',
-      [req.params.id]
-    );
+    await pool.query('DELETE FROM modifier_groups WHERE menu_item_id = $1', [req.params.id]);
+    await pool.query('DELETE FROM menu_items WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 
 // ─────────────────────────────────────────────
 // ORDERS ROUTES
@@ -370,25 +362,22 @@ app.post('/api/orders/:id/items', async (req, res) => {
     const { items } = req.body;
     const orderId = req.params.id;
     for (const item of items) {
-  const isBar = item.is_bar ? 1 : 0;
-  const firedAt = isBar ? new Date().toISOString() : null;
-
-  // Save item name as text so bill history survives menu item deletion
-  const nameRes = await client.query(
-    'SELECT name FROM menu_items WHERE id = $1',
-    [item.menu_item_id]
-  );
-  const itemName = nameRes.rows[0]?.name || item.name || 'Unknown item';
-
-  await client.query(
-    `INSERT INTO order_items 
-     (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at, item_name) 
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-    [orderId, item.menu_item_id, item.quantity, item.unit_price,
-     item.notes || '', item.course || 1, item.item_note || '',
-     isBar, firedAt, firedAt, itemName]
-  );
-}
+      const isBar = item.is_bar ? 1 : 0;
+      const firedAt = isBar ? new Date().toISOString() : null;
+      const nameRes = await client.query(
+        'SELECT name FROM menu_items WHERE id = $1',
+        [item.menu_item_id]
+      );
+      const itemName = nameRes.rows[0]?.name || item.name || 'Unknown item';
+      await client.query(
+        `INSERT INTO order_items 
+         (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at, item_name) 
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [orderId, item.menu_item_id, item.quantity, item.unit_price,
+         item.notes || '', item.course || 1, item.item_note || '',
+         isBar, firedAt, firedAt, itemName]
+      );
+    }
     const totalRes = await client.query(
       'SELECT SUM(quantity * unit_price) as total FROM order_items WHERE order_id = $1 AND voided = 0',
       [orderId]
@@ -966,11 +955,11 @@ app.get('/api/bills/:id/items', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT order_items.*,
-  COALESCE(menu_items.name, order_items.item_name, 'Deleted item') AS name
- FROM order_items
- LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
- WHERE order_items.order_id=$1 AND order_items.voided=0
- ORDER BY order_items.course ASC`,
+       COALESCE(menu_items.name, order_items.item_name, 'Deleted item') AS name
+       FROM order_items
+       LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
+       WHERE order_items.order_id=$1 AND order_items.voided=0
+       ORDER BY order_items.course ASC`,
       [req.params.id]
     );
     res.json(result.rows);
@@ -1032,7 +1021,6 @@ app.put('/api/order-items/:id/discount', async (req, res) => {
 // RESERVATIONS — WIDGET PUBLIC API
 // ─────────────────────────────────────────────
 
-// CORS middleware for public widget endpoints
 const widgetCors = (req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -1041,34 +1029,24 @@ const widgetCors = (req, res, next) => {
   next();
 };
 
-// GET availability — time slots for a given date + covers
 app.get('/api/reservations/availability', widgetCors, async (req, res) => {
   try {
     const { date, covers = 2, restaurant_id = 'siamepos' } = req.query;
     if (!date) return res.status(400).json({ error: 'date is required (YYYY-MM-DD)' });
-
     const coversNum = parseInt(covers, 10);
     if (isNaN(coversNum) || coversNum < 1) return res.status(400).json({ error: 'covers must be a positive number' });
-
-    // Get restaurant settings
-    const settingsRes = await pool.query(
-      'SELECT * FROM restaurant_settings WHERE restaurant_id = $1', [restaurant_id]
-    );
+    const settingsRes = await pool.query('SELECT * FROM restaurant_settings WHERE restaurant_id = $1', [restaurant_id]);
     const s = settingsRes.rows[0] || {
       opening_time: '11:00', last_booking_time: '21:30',
       slot_interval_mins: 15, max_covers_per_slot: 20,
       booking_lead_hours: 1, booking_advance_days: 60,
     };
-
-    // Block past or too-far-future dates
     const requestedDate = new Date(date + 'T00:00:00');
     const today = new Date(); today.setHours(0,0,0,0);
     const maxDate = new Date(today);
     maxDate.setDate(maxDate.getDate() + (s.booking_advance_days || 60));
     if (requestedDate < today) return res.json({ slots: [], message: 'Date is in the past' });
     if (requestedDate > maxDate) return res.json({ slots: [], message: 'Date too far in advance' });
-
-    // Build time slots
     const [openH, openM]   = String(s.opening_time).slice(0,5).split(':').map(Number);
     const [closeH, closeM] = String(s.last_booking_time).slice(0,5).split(':').map(Number);
     const interval = s.slot_interval_mins || 15;
@@ -1080,8 +1058,6 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
       slots.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
       cur += interval;
     }
-
-    // Get booked covers per slot
     const bookingsRes = await pool.query(
       `SELECT TO_CHAR(reservation_time, 'HH24:MI') AS time_str, SUM(covers) AS booked_covers
        FROM reservations
@@ -1092,11 +1068,8 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
     );
     const bookedMap = {};
     bookingsRes.rows.forEach(r => { bookedMap[r.time_str] = parseInt(r.booked_covers, 10); });
-
-    // Block past slots if today
     const isToday = requestedDate.toDateString() === new Date().toDateString();
     const nowMins = isToday ? (new Date().getHours() * 60 + new Date().getMinutes() + (s.booking_lead_hours || 1) * 60) : -1;
-
     const result = slots.map(time => {
       const [h, m] = time.split(':').map(Number);
       const slotMins = h * 60 + m;
@@ -1105,7 +1078,6 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
       const pastCutoff = isToday && slotMins < nowMins;
       return { time, available: !pastCutoff && remaining >= coversNum, remaining_covers: Math.max(0, remaining), past: pastCutoff };
     });
-
     res.json({ date, covers: coversNum, restaurant_id, slots: result });
   } catch (err) {
     console.error('GET /api/reservations/availability error:', err);
@@ -1113,7 +1085,6 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
   }
 });
 
-// GET widget settings — brand colour + opening hours
 app.get('/api/reservations/settings/:restaurantId', widgetCors, async (req, res) => {
   try {
     const result = await pool.query(
@@ -1135,7 +1106,6 @@ app.get('/api/reservations/settings/:restaurantId', widgetCors, async (req, res)
   }
 });
 
-// GET all reservations — EPOS screen
 app.get('/api/reservations', async (req, res) => {
   try {
     const { date, status, restaurant_id = 'siamepos' } = req.query;
@@ -1157,7 +1127,6 @@ app.get('/api/reservations', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST create reservation — from widget OR EPOS
 app.post('/api/reservations', widgetCors, async (req, res) => {
   try {
     const {
@@ -1165,15 +1134,13 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
       covers, reservation_date, reservation_time, notes,
       source = 'widget', table_id = null, status = 'pending',
     } = req.body;
-const safeStatus = 'pending';
+    const safeStatus = 'pending';
     if (!customer_name?.trim()) return res.status(400).json({ error: 'Guest name is required' });
     if (!customer_phone?.trim()) return res.status(400).json({ error: 'Phone number is required' });
     if (!reservation_date) return res.status(400).json({ error: 'Date is required' });
     if (!reservation_time) return res.status(400).json({ error: 'Time is required' });
     const coversNum = parseInt(covers, 10);
     if (!coversNum || coversNum < 1) return res.status(400).json({ error: 'Covers must be at least 1' });
-
-    // Double-booking check
     const slotCheck = await pool.query(
       `SELECT COALESCE(SUM(covers), 0) AS booked
        FROM reservations
@@ -1191,65 +1158,51 @@ const safeStatus = 'pending';
     if (alreadyBooked + coversNum > maxCovers) {
       return res.status(409).json({ error: 'This time slot is no longer available. Please choose another time.' });
     }
-
-    // Force pending for widget bookings — never allow cancelled on create
-const insertStatus = source === 'widget' ? 'pending' : (status || 'pending');
-
-const result = await pool.query(
-  `INSERT INTO reservations
-     (restaurant_id, table_id, customer_name, customer_phone, customer_email,
-      covers, reservation_date, reservation_time, status, notes, source)
-   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-   RETURNING *`,
-  [
-    restaurant_id, table_id, customer_name.trim(), customer_phone.trim(),
-    customer_email?.trim() || null, coversNum, reservation_date,
-    reservation_time, insertStatus, notes?.trim() || null, source,
-  ]
-);
-
+    const insertStatus = source === 'widget' ? 'pending' : (status || 'pending');
+    const result = await pool.query(
+      `INSERT INTO reservations
+         (restaurant_id, table_id, customer_name, customer_phone, customer_email,
+          covers, reservation_date, reservation_time, status, notes, source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       RETURNING *`,
+      [restaurant_id, table_id, customer_name.trim(), customer_phone.trim(),
+       customer_email?.trim() || null, coversNum, reservation_date,
+       reservation_time, insertStatus, notes?.trim() || null, source]
+    );
     const reservation = result.rows[0];
-
-    // Real-time push to EPOS
     io.emit('new_reservation', {
       ...reservation,
       reservation_date: String(reservation.reservation_date).split('T')[0],
       reservation_time: String(reservation.reservation_time).slice(0,5),
     });
-
-    // Non-blocking email + SMS
     if (customer_email) sendBookingConfirmation(reservation).catch(err => console.error('❌ Email error:', err.message));
     if (customer_phone) sendBookingSms(reservation).catch(() => {});
-
     console.log(`📅 New booking [${source}]: ${customer_name} ×${coversNum} on ${reservation_date} at ${reservation_time}`);
-// Trigger Make.com webhook for email notifications (non-blocking)
-if (process.env.MAKE_BOOKING_WEBHOOK) {
-  const webhookData = JSON.stringify({
-    booking_id:        reservation.id,
-    customer_name:     reservation.customer_name,
-    customer_email:    reservation.customer_email || null,
-    customer_phone:    reservation.customer_phone || null,
-    covers:            reservation.covers,
-    reservation_date:  String(reservation.reservation_date).split('T')[0],
-    reservation_time:  String(reservation.reservation_time).slice(0,5),
-    source:            reservation.source,
-    restaurant_name:   process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant',
-    restaurant_email:  process.env.RESTAURANT_EMAIL || null,
-  });
-
-  const webhookHttps = require('https');
-  const webhookUrl   = new URL(process.env.MAKE_BOOKING_WEBHOOK);
-  const webhookReq   = webhookHttps.request({
-    hostname: webhookUrl.hostname,
-    path:     webhookUrl.pathname + webhookUrl.search,
-    method:   'POST',
-    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(webhookData) },
-  });
-  webhookReq.on('error', e => console.log('Make.com webhook error:', e.message));
-  webhookReq.write(webhookData);
-  webhookReq.end();
-}
-
+    if (process.env.MAKE_BOOKING_WEBHOOK) {
+      const webhookData = JSON.stringify({
+        booking_id:        reservation.id,
+        customer_name:     reservation.customer_name,
+        customer_email:    reservation.customer_email || null,
+        customer_phone:    reservation.customer_phone || null,
+        covers:            reservation.covers,
+        reservation_date:  String(reservation.reservation_date).split('T')[0],
+        reservation_time:  String(reservation.reservation_time).slice(0,5),
+        source:            reservation.source,
+        restaurant_name:   process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant',
+        restaurant_email:  process.env.RESTAURANT_EMAIL || null,
+      });
+      const webhookHttps = require('https');
+      const webhookUrl   = new URL(process.env.MAKE_BOOKING_WEBHOOK);
+      const webhookReq   = webhookHttps.request({
+        hostname: webhookUrl.hostname,
+        path:     webhookUrl.pathname + webhookUrl.search,
+        method:   'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(webhookData) },
+      });
+      webhookReq.on('error', e => console.log('Make.com webhook error:', e.message));
+      webhookReq.write(webhookData);
+      webhookReq.end();
+    }
     res.status(201).json({
       success: true,
       booking_id: reservation.id,
@@ -1269,7 +1222,6 @@ if (process.env.MAKE_BOOKING_WEBHOOK) {
   }
 });
 
-// PUT update reservation — EPOS
 app.put('/api/reservations/:id', async (req, res) => {
   try {
     const {
@@ -1283,19 +1235,15 @@ app.put('/api/reservations/:id', async (req, res) => {
          covers=$4, reservation_date=$5, reservation_time=$6,
          table_id=$7, notes=$8, status=$9, updated_at=NOW()
        WHERE id=$10 RETURNING *`,
-      [
-        customer_name, customer_phone, customer_email || null,
-        covers, reservation_date, reservation_time,
-        table_id || null, notes || null, status,
-        req.params.id,
-      ]
+      [customer_name, customer_phone, customer_email || null,
+       covers, reservation_date, reservation_time,
+       table_id || null, notes || null, status, req.params.id]
     );
     io.emit('reservation_updated', result.rows[0]);
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST seat — marks seated + opens table
 app.post('/api/reservations/:id/seat', async (req, res) => {
   try {
     const result = await pool.query(
@@ -1312,7 +1260,6 @@ app.post('/api/reservations/:id/seat', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// DELETE (soft cancel) reservation
 app.delete('/api/reservations/:id', async (req, res) => {
   try {
     await pool.query(
@@ -1324,7 +1271,6 @@ app.delete('/api/reservations/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// PUT update widget settings — Admin panel
 app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
   try {
     const {
@@ -1348,11 +1294,9 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
          booking_lead_hours   = EXCLUDED.booking_lead_hours,
          booking_advance_days = EXCLUDED.booking_advance_days,
          is_active            = EXCLUDED.is_active`,
-      [
-        req.params.restaurantId, restaurant_name, brand_colour, opening_time,
-        last_booking_time, slot_interval_mins, max_covers_per_slot,
-        booking_lead_hours, booking_advance_days, is_active,
-      ]
+      [req.params.restaurantId, restaurant_name, brand_colour, opening_time,
+       last_booking_time, slot_interval_mins, max_covers_per_slot,
+       booking_lead_hours, booking_advance_days, is_active]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1366,111 +1310,49 @@ app.post('/api/menu/import-batch', async (req, res) => {
   const client = await pool.connect();
   try {
     const { items } = req.body;
-
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'No items provided' });
     }
-
-    // ── Load all categories once ───────────────────────────────
     const catRes = await client.query('SELECT id, name FROM categories');
     const categories = catRes.rows;
-
-    // Helper: find category_id by name (case-insensitive, fuzzy)
     function findCategoryId(categoryName) {
       if (!categoryName) return null;
       const search = categoryName.toLowerCase().trim();
-
-      // Exact match first
       let match = categories.find(c => c.name.toLowerCase() === search);
       if (match) return match.id;
-
-      // Partial match
       match = categories.find(c =>
-        c.name.toLowerCase().includes(search) ||
-        search.includes(c.name.toLowerCase())
+        c.name.toLowerCase().includes(search) || search.includes(c.name.toLowerCase())
       );
       return match ? match.id : null;
     }
-
     await client.query('BEGIN');
-
-    const results = {
-      inserted: [],
-      skipped:  [],
-      errors:   [],
-    };
-
+    const results = { inserted: [], skipped: [], errors: [] };
     for (const item of items) {
       try {
-        // ── Validate required fields ─────────────────────────
-        if (!item.name_en || !item.name_en.trim()) {
-          results.skipped.push({ item, reason: 'Missing name_en' });
-          continue;
-        }
-
+        if (!item.name_en || !item.name_en.trim()) { results.skipped.push({ item, reason: 'Missing name_en' }); continue; }
         const price = parseFloat(item.price);
-        if (isNaN(price) || price < 0) {
-          results.skipped.push({ item, reason: 'Invalid price' });
-          continue;
-        }
-
-        // ── Resolve category ─────────────────────────────────
+        if (isNaN(price) || price < 0) { results.skipped.push({ item, reason: 'Invalid price' }); continue; }
         const categoryId = findCategoryId(item.category);
-        // categoryId can be null — item still imports, just uncategorised
-
-        // ── Serialise allergens array → JSON string ──────────
         let allergensStr = null;
         if (Array.isArray(item.allergens) && item.allergens.length > 0) {
           allergensStr = JSON.stringify(item.allergens);
         } else if (typeof item.allergens === 'string' && item.allergens.trim()) {
           allergensStr = JSON.stringify([item.allergens]);
         }
-
-        // ── Insert ───────────────────────────────────────────
         const insertRes = await client.query(
-          `INSERT INTO menu_items
-             (category_id, name, name_alt, description, price, allergens, is_available)
-           VALUES ($1, $2, $3, $4, $5, $6, 1)
-           RETURNING id, name`,
-          [
-            categoryId,
-            item.name_en.trim(),
-            item.name_th ? item.name_th.trim() : null,
-            item.description ? item.description.trim() : null,
-            price,
-            allergensStr,
-          ]
+          `INSERT INTO menu_items (category_id, name, name_alt, description, price, allergens, is_available)
+           VALUES ($1,$2,$3,$4,$5,$6,1) RETURNING id, name`,
+          [categoryId, item.name_en.trim(), item.name_th ? item.name_th.trim() : null,
+           item.description ? item.description.trim() : null, price, allergensStr]
         );
-
-        results.inserted.push({
-          id:            insertRes.rows[0].id,
-          name:          insertRes.rows[0].name,
-          category_id:   categoryId,
-          category_name: item.category || null,
-        });
-
+        results.inserted.push({ id: insertRes.rows[0].id, name: insertRes.rows[0].name, category_id: categoryId, category_name: item.category || null });
       } catch (itemErr) {
         results.errors.push({ item, error: itemErr.message });
       }
     }
-
     await client.query('COMMIT');
-
     console.log(`📥 Batch import: ${results.inserted.length} inserted, ${results.skipped.length} skipped, ${results.errors.length} errors`);
-
-    res.json({
-      success:  true,
-      summary: {
-        total:    items.length,
-        inserted: results.inserted.length,
-        skipped:  results.skipped.length,
-        errors:   results.errors.length,
-      },
-      inserted: results.inserted,
-      skipped:  results.skipped,
-      errors:   results.errors,
-    });
-
+    res.json({ success: true, summary: { total: items.length, inserted: results.inserted.length, skipped: results.skipped.length, errors: results.errors.length }, inserted: results.inserted, skipped: results.skipped, errors: results.errors });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('POST /api/menu/import-batch error:', err);
@@ -1481,37 +1363,18 @@ app.post('/api/menu/import-batch', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// SOCKET.IO
+// AI MENU SCANNER
 // ─────────────────────────────────────────────
 
-io.on('connection', (socket) => {
-  console.log('Screen connected:', socket.id);
-  socket.on('disconnect', () => console.log('Screen disconnected:', socket.id));
-});
-
-// ─────────────────────────────────────────────
-// START SERVER
-// ─────────────────────────────────────────────
-// ─────────────────────────────────────────────
-// AI MENU SCANNER PROXY — uses built-in https
-// ─────────────────────────────────────────────
 app.post('/api/ai/scan-menu', async (req, res) => {
   try {
     const { image_base64, media_type } = req.body;
-
-    if (!image_base64) {
-      return res.status(400).json({ error: 'image_base64 is required' });
-    }
-
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set on Railway — check your environment variables' });
-    }
-
-    const isImage     = media_type && media_type.startsWith('image/');
+    if (!image_base64) return res.status(400).json({ error: 'image_base64 is required' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set on Railway' });
+    const isImage = media_type && media_type.startsWith('image/');
     const contentItem = isImage
-      ? { type: 'image',    source: { type: 'base64', media_type, data: image_base64 } }
+      ? { type: 'image', source: { type: 'base64', media_type, data: image_base64 } }
       : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: image_base64 } };
-
     const requestBody = JSON.stringify({
       model: 'claude-sonnet-4-6',
       max_tokens: 4000,
@@ -1557,45 +1420,31 @@ Return ONLY valid JSON, no markdown, no explanation:
         ]
       }]
     });
-
-    // Use built-in https — no packages needed
     const https = require('https');
-
     const result = await new Promise((resolve, reject) => {
       const options = {
-        hostname: 'api.anthropic.com',
-        path:     '/v1/messages',
-        method:   'POST',
+        hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
         headers: {
-          'Content-Type':      'application/json',
-          'Content-Length':    Buffer.byteLength(requestBody),
-          'x-api-key':         process.env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-        },
+          'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(requestBody),
+          'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01'
+        }
       };
-
       const apiReq = https.request(options, (apiRes) => {
         let data = '';
         apiRes.on('data', chunk => { data += chunk; });
-        apiRes.on('end', () => {
-          resolve({ status: apiRes.statusCode, body: data });
-        });
+        apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: data }));
       });
-
       apiReq.on('error', reject);
       apiReq.write(requestBody);
       apiReq.end();
     });
-
     if (result.status !== 200) {
       console.error('Anthropic error:', result.body);
       return res.status(502).json({ error: 'Anthropic API error — check ANTHROPIC_API_KEY on Railway' });
     }
-
     const data  = JSON.parse(result.body);
     const raw   = data.content.map(b => b.text || '').join('');
     const clean = raw.replace(/```json|```/g, '').trim();
-
     let menu;
     try {
       menu = JSON.parse(clean);
@@ -1603,15 +1452,324 @@ Return ONLY valid JSON, no markdown, no explanation:
       console.error('JSON parse failed. AI returned:', clean.slice(0, 300));
       return res.status(500).json({ error: 'AI returned invalid JSON — try again with a clearer image' });
     }
-
     console.log(`🍜 Menu scan complete: ${menu.total_dishes || '?'} dishes`);
     res.json({ success: true, menu });
-
   } catch (err) {
     console.error('POST /api/ai/scan-menu error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// INVENTORY ROUTES — SEPOS-016
+// ═══════════════════════════════════════════════════════════════════
+
+// AI INVOICE SCANNER
+app.post('/api/ai/scan-invoice', async (req, res) => {
+  try {
+    const { image_base64, media_type } = req.body;
+    if (!image_base64) return res.status(400).json({ success: false, error: 'No image provided' });
+    const INVOICE_PROMPT = `You are reading a supplier invoice or delivery note for a restaurant.
+Extract all information and return ONLY a valid JSON object — no other text, no markdown, no explanation.
+
+Required JSON structure:
+{
+  "supplier_name": "string",
+  "invoice_date": "YYYY-MM-DD",
+  "invoice_number": "string",
+  "total_amount": number,
+  "line_items": [
+    { "name": "string", "quantity": number, "unit": "string", "unit_price": number, "line_total": number }
+  ]
+}
+
+Rules: If a value is missing use null for strings and 0 for numbers. Convert prices to GBP. Return ONLY the JSON object.`;
+    const https = require('https');
+    const requestBody = JSON.stringify({
+      model: 'claude-sonnet-4-6', max_tokens: 2000,
+      messages: [{ role: 'user', content: [
+        { type: 'image', source: { type: 'base64', media_type: media_type || 'image/jpeg', data: image_base64 } },
+        { type: 'text', text: INVOICE_PROMPT }
+      ]}]
+    });
+    const result = await new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(requestBody), 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }
+      };
+      const apiReq = https.request(options, (apiRes) => { let data = ''; apiRes.on('data', chunk => { data += chunk; }); apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: data })); });
+      apiReq.on('error', reject); apiReq.write(requestBody); apiReq.end();
+    });
+    if (result.status !== 200) throw new Error(`Anthropic API error: ${result.body}`);
+    const aiData = JSON.parse(result.body);
+    const invoice = JSON.parse(aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}');
+    return res.json({ success: true, invoice });
+  } catch (err) { return res.status(500).json({ success: false, error: err.message }); }
+});
+
+// AI EXPENSE SCANNER
+app.post('/api/ai/scan-expense', async (req, res) => {
+  try {
+    const { image_base64, media_type } = req.body;
+    if (!image_base64) return res.status(400).json({ success: false, error: 'No image provided' });
+    const EXPENSE_PROMPT = `You are reading a receipt, bill or expense document for a restaurant.
+Extract the key information and return ONLY a valid JSON object — no other text, no markdown.
+
+Required JSON structure:
+{
+  "vendor": "string", "date": "YYYY-MM-DD", "total_amount": number,
+  "description": "string", "category": "overhead|labour|other",
+  "line_items": [{ "description": "string", "amount": number }]
+}
+
+Category: overhead=rent/utilities/insurance/repairs, labour=wages/staff, other=equipment/misc. Return ONLY JSON.`;
+    const https = require('https');
+    const requestBody = JSON.stringify({
+      model: 'claude-sonnet-4-6', max_tokens: 1000,
+      messages: [{ role: 'user', content: [
+        { type: 'image', source: { type: 'base64', media_type: media_type || 'image/jpeg', data: image_base64 } },
+        { type: 'text', text: EXPENSE_PROMPT }
+      ]}]
+    });
+    const result = await new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(requestBody), 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }
+      };
+      const apiReq = https.request(options, (apiRes) => { let data = ''; apiRes.on('data', chunk => { data += chunk; }); apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: data })); });
+      apiReq.on('error', reject); apiReq.write(requestBody); apiReq.end();
+    });
+    if (result.status !== 200) throw new Error(`Anthropic API error: ${result.body}`);
+    const aiData = JSON.parse(result.body);
+    const expense = JSON.parse(aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}');
+    return res.json({ success: true, expense });
+  } catch (err) { return res.status(500).json({ success: false, error: err.message }); }
+});
+
+// EXPENSES CRUD
+app.get('/api/expenses', async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT * FROM expenses ORDER BY date DESC, created_at DESC`);
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/expenses', async (req, res) => {
+  try {
+    const { category, description, amount, date } = req.body;
+    if (!description || !amount) return res.status(400).json({ error: 'description and amount are required' });
+    const result = await pool.query(
+      `INSERT INTO expenses (category, description, amount, date) VALUES ($1,$2,$3,$4) RETURNING id`,
+      [category || 'other', description, parseFloat(amount), date || new Date().toISOString().split('T')[0]]
+    );
+    res.json({ id: result.rows[0].id, success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/expenses/:id', async (req, res) => {
+  try {
+    const result = await pool.query(`DELETE FROM expenses WHERE id = $1`, [req.params.id]);
+    res.json({ success: true, deleted: result.rowCount });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SUPPLIER INVOICES
+app.post('/api/supplier-invoices', async (req, res) => {
+  try {
+    const { supplier_name, invoice_date, invoice_number, total_amount, status } = req.body;
+    const result = await pool.query(
+      `INSERT INTO supplier_invoices (supplier_name, invoice_date, invoice_number, total_amount, status) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      [supplier_name, invoice_date, invoice_number, parseFloat(total_amount) || 0, status || 'processed']
+    );
+    res.json({ id: result.rows[0].id, success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/supplier-invoices', async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT * FROM supplier_invoices ORDER BY created_at DESC LIMIT 100`);
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// INGREDIENTS CRUD
+app.get('/api/ingredients', async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT * FROM ingredients ORDER BY category, name_en`);
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/ingredients/low-stock', async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT * FROM ingredients WHERE par_level IS NOT NULL AND current_stock < par_level ORDER BY name_en`);
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/ingredients', async (req, res) => {
+  try {
+    const { name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens } = req.body;
+    const result = await pool.query(
+      `INSERT INTO ingredients (name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()) RETURNING id`,
+      [name_en, name_th || '', unit || 'kg', parseFloat(cost_per_unit) || 0, parseFloat(yield_percentage) || 100,
+       category || 'Other', parseFloat(current_stock) || 0, par_level ? parseFloat(par_level) : null, supplier_name || '', allergens || '[]']
+    );
+    res.json({ id: result.rows[0].id, success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/ingredients/:id', async (req, res) => {
+  try {
+    const { name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens } = req.body;
+    const result = await pool.query(
+      `UPDATE ingredients SET name_en=$1, name_th=$2, unit=$3, cost_per_unit=$4, yield_percentage=$5,
+       category=$6, current_stock=$7, par_level=$8, supplier_name=$9, allergens=$10, updated_at=NOW() WHERE id=$11`,
+      [name_en, name_th || '', unit || 'kg', parseFloat(cost_per_unit) || 0, parseFloat(yield_percentage) || 100,
+       category || 'Other', parseFloat(current_stock) || 0, par_level ? parseFloat(par_level) : null, supplier_name || '', allergens || '[]', req.params.id]
+    );
+    res.json({ success: true, changes: result.rowCount });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/ingredients/:id', async (req, res) => {
+  try {
+    await pool.query(`DELETE FROM ingredients WHERE id = $1`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// RECIPES CRUD
+app.get('/api/recipes', async (req, res) => {
+  try {
+    const recipesRes = await pool.query(`SELECT * FROM recipes ORDER BY name`);
+    const recipes = recipesRes.rows;
+    if (!recipes.length) return res.json([]);
+    const recipeIds = recipes.map(r => r.id);
+    const linesRes = await pool.query(
+      `SELECT rl.*, i.name_en as ingredient_name, i.name_th as ingredient_name_th, i.cost_per_unit, i.yield_percentage
+       FROM recipe_lines rl JOIN ingredients i ON i.id = rl.ingredient_id WHERE rl.recipe_id = ANY($1)`,
+      [recipeIds]
+    );
+    const linesByRecipe = {};
+    linesRes.rows.forEach(line => { if (!linesByRecipe[line.recipe_id]) linesByRecipe[line.recipe_id] = []; linesByRecipe[line.recipe_id].push(line); });
+    res.json(recipes.map(r => ({ ...r, lines: linesByRecipe[r.id] || [] })));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/recipes/menu-item/:menuItemId', async (req, res) => {
+  try {
+    const recipeRes = await pool.query(`SELECT * FROM recipes WHERE menu_item_id = $1`, [req.params.menuItemId]);
+    if (!recipeRes.rows.length) return res.json(null);
+    const recipe = recipeRes.rows[0];
+    const linesRes = await pool.query(
+      `SELECT rl.*, i.name_en as ingredient_name, i.name_th as ingredient_name_th, i.cost_per_unit, i.yield_percentage
+       FROM recipe_lines rl JOIN ingredients i ON i.id = rl.ingredient_id WHERE rl.recipe_id = $1`,
+      [recipe.id]
+    );
+    recipe.lines = linesRes.rows;
+    res.json(recipe);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/recipes', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { menu_item_id, name, serves, lines } = req.body;
+    const totalCost = (lines || []).reduce((s, l) => s + (parseFloat(l.line_cost) || 0), 0);
+    const costPerPortion = serves > 0 ? totalCost / serves : totalCost;
+    await client.query('BEGIN');
+    const recipeRes = await client.query(
+      `INSERT INTO recipes (menu_item_id, name, serves, total_cost, cost_per_portion, last_calculated) VALUES ($1,$2,$3,$4,$5,NOW()) RETURNING id`,
+      [menu_item_id, name, serves || 1, totalCost, costPerPortion]
+    );
+    const recipeId = recipeRes.rows[0].id;
+    for (const l of (lines || [])) {
+      await client.query(`INSERT INTO recipe_lines (recipe_id, ingredient_id, quantity_used, unit, line_cost) VALUES ($1,$2,$3,$4,$5)`,
+        [recipeId, l.ingredient_id, l.quantity_used, l.unit, l.line_cost]);
+    }
+    await client.query('COMMIT');
+    res.json({ id: recipeId, success: true });
+  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); }
+  finally { client.release(); }
+});
+
+app.put('/api/recipes/:id', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { name, serves, lines } = req.body;
+    const totalCost = (lines || []).reduce((s, l) => s + (parseFloat(l.line_cost) || 0), 0);
+    const costPerPortion = serves > 0 ? totalCost / serves : totalCost;
+    await client.query('BEGIN');
+    await client.query(`UPDATE recipes SET name=$1, serves=$2, total_cost=$3, cost_per_portion=$4, last_calculated=NOW() WHERE id=$5`,
+      [name, serves || 1, totalCost, costPerPortion, req.params.id]);
+    await client.query(`DELETE FROM recipe_lines WHERE recipe_id = $1`, [req.params.id]);
+    for (const l of (lines || [])) {
+      await client.query(`INSERT INTO recipe_lines (recipe_id, ingredient_id, quantity_used, unit, line_cost) VALUES ($1,$2,$3,$4,$5)`,
+        [req.params.id, l.ingredient_id, l.quantity_used, l.unit, l.line_cost]);
+    }
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); }
+  finally { client.release(); }
+});
+
+app.delete('/api/recipes/:id', async (req, res) => {
+  try {
+    await pool.query(`DELETE FROM recipe_lines WHERE recipe_id = $1`, [req.params.id]);
+    await pool.query(`DELETE FROM recipes WHERE id = $1`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// STOCK MOVEMENTS
+app.get('/api/stock/movements', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT sm.*, i.name_en as ingredient_name, i.name_th as ingredient_name_th, i.unit
+       FROM stock_movements sm LEFT JOIN ingredients i ON i.id = sm.ingredient_id
+       ORDER BY sm.created_at DESC LIMIT 500`
+    );
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/stock/adjustment', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { ingredient_id, quantity, movement_type, cost_at_time, note, reference } = req.body;
+    if (!ingredient_id || quantity == null) return res.status(400).json({ error: 'ingredient_id and quantity required' });
+    await client.query('BEGIN');
+    const insertRes = await client.query(
+      `INSERT INTO stock_movements (ingredient_id, movement_type, quantity, cost_at_time, note, reference) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+      [ingredient_id, movement_type || 'adjustment', parseFloat(quantity), parseFloat(cost_at_time) || 0, note || '', reference || '']
+    );
+    const qty = parseFloat(quantity);
+    const delta = (movement_type === 'waste' || qty < 0) ? -Math.abs(qty) : Math.abs(qty);
+    await client.query(`UPDATE ingredients SET current_stock = GREATEST(0, current_stock + $1), updated_at=NOW() WHERE id=$2`, [delta, ingredient_id]);
+    await client.query('COMMIT');
+    res.json({ id: insertRes.rows[0].id, success: true });
+  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); }
+  finally { client.release(); }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// END INVENTORY ROUTES — SEPOS-016
+// ═══════════════════════════════════════════════════════════════════
+
+// ─────────────────────────────────────────────
+// SOCKET.IO
+// ─────────────────────────────────────────────
+
+io.on('connection', (socket) => {
+  console.log('Screen connected:', socket.id);
+  socket.on('disconnect', () => console.log('Screen disconnected:', socket.id));
+});
+
+// ─────────────────────────────────────────────
+// START SERVER
+// ─────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, '0.0.0.0', () => {

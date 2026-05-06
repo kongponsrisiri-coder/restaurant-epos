@@ -928,15 +928,328 @@ function StockTab() {
 // INVENTORY SECTION — INVOICE SCANNER TAB
 // ─────────────────────────────────────────────
 function InvoiceScannerTab() {
-  const [stage, setStage] = useState('upload'); // upload | scanning | review | done
-  const [file, setFile] = useState(null);
-  const [fileData, setFileData] = useState(null);
+  const [mode, setMode]           = useState('invoice'); // 'invoice' | 'expense'
+  const [stage, setStage]         = useState('upload');  // upload | scanning | review | done
+  const [file, setFile]           = useState(null);
+  const [fileData, setFileData]   = useState(null);
   const [invoiceData, setInvoiceData] = useState({ supplier_name: '', invoice_date: '', invoice_number: '', total_amount: '' });
+  const [expenseData, setExpenseData] = useState({ vendor: '', date: today, description: '', category: 'overhead', total_amount: '' });
   const [lineItems, setLineItems] = useState([]);
+  const [expLines, setExpLines]   = useState([]);
   const [ingredients, setIngredients] = useState([]);
-  const [error, setError] = useState('');
+  const [error, setError]         = useState('');
   const [confirming, setConfirming] = useState(false);
-  const fileInputRef = useRef(null);
+  const fileInputRef              = useRef(null);
+
+  useEffect(() => { invAPI.getIngredients().then(d => setIngredients(Array.isArray(d) ? d : [])); }, []);
+
+  const handleFile = (f) => {
+    if (!f) return;
+    setFile(f);
+    const reader = new FileReader();
+    reader.onload = e => setFileData(e.target.result);
+    reader.readAsDataURL(f);
+  };
+
+  const fuzzyMatch = (extractedName) => {
+    const lower = (extractedName || '').toLowerCase();
+    let best = null, bestScore = 0;
+    for (const ing of ingredients) {
+      const ingLower = ing.name_en.toLowerCase();
+      let score = 0;
+      if (lower.includes(ingLower)) score = 10;
+      else if (ingLower.includes(lower.split(' ')[0])) score = 7;
+      else ingLower.split(' ').forEach(w => { if (w.length > 3 && lower.includes(w)) score += 3; });
+      if (score > bestScore) { bestScore = score; best = ing.id; }
+    }
+    return bestScore >= 3 ? best : null;
+  };
+
+  const resetAll = () => {
+    setStage('upload'); setFile(null); setFileData(null); setError('');
+    setLineItems([]); setExpLines([]);
+    setInvoiceData({ supplier_name: '', invoice_date: '', invoice_number: '', total_amount: '' });
+    setExpenseData({ vendor: '', date: today, description: '', category: 'overhead', total_amount: '' });
+  };
+
+  const runScan = async () => {
+    if (!file || !fileData) return;
+    setError(''); setStage('scanning');
+    try {
+      const base64 = fileData.split(',')[1];
+      const media_type = file.type || 'image/jpeg';
+      const endpoint = mode === 'invoice' ? '/api/ai/scan-invoice' : '/api/ai/scan-expense';
+
+      const res = await fetch(`${SERVER_URL}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_base64: base64, media_type }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Scan failed');
+
+      if (mode === 'invoice') {
+        const inv = data.invoice;
+        setInvoiceData({ supplier_name: inv.supplier_name || '', invoice_date: inv.invoice_date || '', invoice_number: inv.invoice_number || '', total_amount: inv.total_amount || 0 });
+        setLineItems((inv.line_items || []).map(item => ({
+          name_extracted: item.name || '',
+          quantity: item.quantity || 0,
+          unit: item.unit || 'kg',
+          unit_price: item.unit_price || 0,
+          line_total: item.line_total || (item.quantity * item.unit_price) || 0,
+          matched_ingredient_id: fuzzyMatch(item.name),
+        })));
+      } else {
+        const exp = data.expense;
+        setExpenseData({ vendor: exp.vendor || '', date: exp.date || today, description: exp.description || '', category: exp.category || 'overhead', total_amount: exp.total_amount || 0 });
+        setExpLines(exp.line_items || []);
+      }
+      setStage('review');
+    } catch (err) {
+      setError(err.message || 'Scan failed — check backend is running');
+      setStage('upload');
+    }
+  };
+
+  const setMatch = (index, ingredientId) => {
+    setLineItems(prev => prev.map((l, i) => i === index ? { ...l, matched_ingredient_id: ingredientId ? Number(ingredientId) : null } : l));
+  };
+
+  const confirmInvoice = async () => {
+    const matched = lineItems.filter(l => l.matched_ingredient_id);
+    if (matched.length === 0) return alert('Match at least one ingredient to record.');
+    setConfirming(true);
+    try {
+      for (const item of matched) {
+        await invAPI.addAdjustment({ ingredient_id: item.matched_ingredient_id, quantity: item.quantity, movement_type: 'delivery', cost_at_time: item.unit_price, note: `Invoice ${invoiceData.invoice_number} — ${invoiceData.supplier_name}`.trim() });
+      }
+      await invAPI.saveInvoice({ ...invoiceData, status: 'processed' });
+      setStage('done');
+    } catch (err) { alert('Record failed — is the backend running?'); }
+    finally { setConfirming(false); }
+  };
+
+  const confirmExpense = async () => {
+    if (!expenseData.description || !expenseData.total_amount) return alert('Description and amount are required.');
+    setConfirming(true);
+    try {
+      await invAPI.addExpense({ category: expenseData.category, description: `${expenseData.vendor ? expenseData.vendor + ' — ' : ''}${expenseData.description}`, amount: expenseData.total_amount, date: expenseData.date });
+      setStage('done');
+    } catch (err) { alert('Record failed — is the backend running?'); }
+    finally { setConfirming(false); }
+  };
+
+  const unmatchedCount = lineItems.filter(l => !l.matched_ingredient_id).length;
+  const matchedCount   = lineItems.filter(l =>  l.matched_ingredient_id).length;
+
+  // ── Shared upload area ──
+  const uploadArea = (
+    <div style={{ maxWidth: 580 }}>
+      <div style={{ background: mode === 'invoice' ? '#f0f7ff' : '#fff8f0', borderRadius: 12, padding: '14px 18px', marginBottom: 20, fontSize: 13, color: mode === 'invoice' ? '#1e40af' : '#92400e', border: `1px solid ${mode === 'invoice' ? '#bfdbfe' : '#fed7aa'}` }}>
+        {mode === 'invoice'
+          ? '💡 Photo your supplier delivery note or invoice. AI reads every line item and matches to your ingredients.'
+          : '💡 Photo any receipt, bill or expense document. AI extracts the cost and auto-categorises it.'}
+      </div>
+      {error && <div style={{ background: '#fee2e2', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: '#991b1b', fontSize: 14 }}>⚠️ {error}</div>}
+      <div
+        onClick={() => fileInputRef.current?.click()}
+        onDragOver={e => e.preventDefault()}
+        onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }}
+        style={{ border: `2px dashed ${file ? '#22c55e' : '#1a1a2e'}`, borderRadius: 16, padding: '44px 24px', textAlign: 'center', cursor: 'pointer', marginBottom: 20, background: file ? '#f0fdf4' : 'white' }}
+      >
+        <input ref={fileInputRef} type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={e => handleFile(e.target.files[0])} />
+        {file ? (
+          <div>
+            {file.type.startsWith('image/') && fileData && <img src={fileData} alt="preview" style={{ maxHeight: 140, maxWidth: '100%', borderRadius: 8, marginBottom: 12, objectFit: 'contain' }} />}
+            <div style={{ fontWeight: 700, color: '#15803d', fontSize: 15 }}>✅ {file.name}</div>
+            <div style={{ color: '#888', fontSize: 13, marginTop: 4 }}>{(file.size / 1024 / 1024).toFixed(1)} MB · Click to change</div>
+          </div>
+        ) : (
+          <div>
+            <div style={{ fontSize: 44, marginBottom: 12 }}>{mode === 'invoice' ? '🧾' : '🧾'}</div>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Drop {mode === 'invoice' ? 'invoice' : 'receipt'} photo here or click</div>
+            <div style={{ color: '#888', fontSize: 13 }}>JPG, PNG or PDF · Phone photo is fine</div>
+          </div>
+        )}
+      </div>
+      <button onClick={runScan} disabled={!file} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: file ? '#1a1a2e' : '#ddd', color: file ? 'white' : '#aaa', fontWeight: 700, fontSize: 16, cursor: file ? 'pointer' : 'not-allowed' }}>
+        🤖 Scan with AI
+      </button>
+    </div>
+  );
+
+  return (
+    <div>
+      {/* Mode switcher */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        {[
+          { id: 'invoice', label: '📦 Supplier Invoice', desc: 'Records stock + delivery' },
+          { id: 'expense', label: '🏢 Expense / Receipt', desc: 'Records overhead cost' },
+        ].map(m => (
+          <button key={m.id} onClick={() => { setMode(m.id); resetAll(); }} style={{
+            flex: 1, padding: '12px 16px', borderRadius: 12, border: 'none', cursor: 'pointer', textAlign: 'left',
+            background: mode === m.id ? '#1a1a2e' : 'white',
+            color: mode === m.id ? 'white' : '#555',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+          }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{m.label}</div>
+            <div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>{m.desc}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* ── UPLOAD ── */}
+      {stage === 'upload' && uploadArea}
+
+      {/* ── SCANNING ── */}
+      {stage === 'scanning' && (
+        <div style={{ textAlign: 'center', padding: '60px 0' }}>
+          <div style={{ width: 56, height: 56, border: '5px solid #f0f0f0', borderTop: '5px solid #1a1a2e', borderRadius: '50%', margin: '0 auto 24px', animation: 'spin 0.8s linear infinite' }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 8 }}>
+            {mode === 'invoice' ? 'Reading invoice…' : 'Reading receipt…'}
+          </div>
+          <div style={{ color: '#888', fontSize: 14 }}>AI is extracting {mode === 'invoice' ? 'supplier, items, quantities and prices' : 'vendor, amount and category'}</div>
+        </div>
+      )}
+
+      {/* ── REVIEW — INVOICE ── */}
+      {stage === 'review' && mode === 'invoice' && (
+        <div>
+          <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 14 }}>📄 Invoice Details — confirm or correct</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))', gap: 12 }}>
+              {[
+                { label: 'Supplier', key: 'supplier_name', placeholder: 'e.g. Wing Yip' },
+                { label: 'Date', key: 'invoice_date', type: 'date' },
+                { label: 'Invoice #', key: 'invoice_number', placeholder: 'e.g. INV-001' },
+                { label: 'Total (£)', key: 'total_amount', type: 'number', placeholder: '0.00' },
+              ].map(f => (
+                <div key={f.key}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>{f.label}</label>
+                  <input type={f.type || 'text'} value={invoiceData[f.key]} onChange={e => setInvoiceData(p => ({ ...p, [f.key]: e.target.value }))} placeholder={f.placeholder}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+                </div>
+              ))}
+            </div>
+          </div>
+          {unmatchedCount > 0 && (
+            <div style={{ background: '#fef9c3', borderRadius: 10, padding: '10px 16px', marginBottom: 12, border: '1px solid #fde047', fontSize: 13, color: '#713f12' }}>
+              ⚠️ <strong>{unmatchedCount} item{unmatchedCount !== 1 ? 's' : ''} not matched</strong> — assign them below or leave blank to skip.
+            </div>
+          )}
+          <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 60px 80px 80px 1fr', padding: '10px 16px', background: '#f8f8f8', fontWeight: 700, fontSize: 12, color: '#555' }}>
+              <span>As on Invoice</span><span style={{ textAlign: 'right' }}>Qty</span><span style={{ textAlign: 'center' }}>Unit</span>
+              <span style={{ textAlign: 'right' }}>Unit £</span><span style={{ textAlign: 'right' }}>Total</span><span style={{ paddingLeft: 12 }}>Match to Ingredient</span>
+            </div>
+            {lineItems.map((item, i) => {
+              const isUnmatched = !item.matched_ingredient_id;
+              return (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 60px 80px 80px 1fr', padding: '10px 16px', borderBottom: '1px solid #f0f0f0', fontSize: 13, alignItems: 'center', background: isUnmatched ? '#fffbeb' : 'white' }}>
+                  <span style={{ fontWeight: 600, color: '#1a1a2e' }}>{item.name_extracted}</span>
+                  <span style={{ textAlign: 'right', color: '#555' }}>{item.quantity}</span>
+                  <span style={{ textAlign: 'center', color: '#555' }}>{item.unit}</span>
+                  <span style={{ textAlign: 'right', color: '#555' }}>£{Number(item.unit_price).toFixed(2)}</span>
+                  <span style={{ textAlign: 'right', fontWeight: 700 }}>£{Number(item.line_total).toFixed(2)}</span>
+                  <div style={{ paddingLeft: 12 }}>
+                    <select value={item.matched_ingredient_id || ''} onChange={e => setMatch(i, e.target.value || null)}
+                      style={{ width: '100%', padding: '6px 8px', borderRadius: 8, fontSize: 13, border: `2px solid ${isUnmatched ? '#fde047' : '#22c55e'}`, background: isUnmatched ? '#fffbeb' : '#f0fdf4', color: isUnmatched ? '#713f12' : '#14532d' }}>
+                      <option value="">⚠️ No match — select manually</option>
+                      {ingredients.map(ing => <option key={ing.id} value={ing.id}>{ing.name_en}</option>)}
+                    </select>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div style={{ flex: 1, fontSize: 13, color: '#555' }}>
+              <span style={{ color: '#22c55e', fontWeight: 700 }}>✅ {matchedCount} matched</span>
+              {unmatchedCount > 0 && <span style={{ color: '#eab308', fontWeight: 700, marginLeft: 10 }}>⚠️ {unmatchedCount} will be skipped</span>}
+            </div>
+            <button onClick={resetAll} style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 600, color: '#555' }}>↩ Re-scan</button>
+            <button onClick={confirmInvoice} disabled={confirming || matchedCount === 0} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 15, cursor: confirming || matchedCount === 0 ? 'default' : 'pointer', background: confirming || matchedCount === 0 ? '#ddd' : '#1a1a2e', color: 'white' }}>
+              {confirming ? 'Recording...' : `✓ Confirm & Record ${matchedCount} Item${matchedCount !== 1 ? 's' : ''}`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── REVIEW — EXPENSE ── */}
+      {stage === 'review' && mode === 'expense' && (
+        <div>
+          <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 14 }}>🧾 Expense Details — confirm or correct</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Vendor / Source</label>
+                <input value={expenseData.vendor} onChange={e => setExpenseData(p => ({ ...p, vendor: e.target.value }))} placeholder="e.g. BG Gas" style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Date</label>
+                <input type="date" value={expenseData.date} onChange={e => setExpenseData(p => ({ ...p, date: e.target.value }))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Category</label>
+                <select value={expenseData.category} onChange={e => setExpenseData(p => ({ ...p, category: e.target.value }))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}>
+                  <option value="overhead">🏢 Overhead</option>
+                  <option value="labour">👥 Labour</option>
+                  <option value="other">📌 Other</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Total Amount (£)</label>
+                <input type="number" step="0.01" value={expenseData.total_amount} onChange={e => setExpenseData(p => ({ ...p, total_amount: e.target.value }))} placeholder="0.00" style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+              </div>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Description</label>
+              <input value={expenseData.description} onChange={e => setExpenseData(p => ({ ...p, description: e.target.value }))} placeholder="e.g. Monthly gas bill, Cleaning supplies, Agency staff" style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+            </div>
+          </div>
+          {expLines.length > 0 && (
+            <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: 16 }}>
+              <div style={{ padding: '10px 16px', background: '#f8f8f8', fontWeight: 700, fontSize: 12, color: '#555' }}>Line Items on Receipt</div>
+              {expLines.map((l, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 16px', borderBottom: '1px solid #f0f0f0', fontSize: 13 }}>
+                  <span style={{ color: '#555' }}>{l.description}</span>
+                  <span style={{ fontWeight: 700 }}>£{Number(l.amount).toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button onClick={resetAll} style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 600, color: '#555' }}>↩ Re-scan</button>
+            <button onClick={confirmExpense} disabled={confirming} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 15, cursor: confirming ? 'default' : 'pointer', background: confirming ? '#ddd' : '#e94560', color: 'white' }}>
+              {confirming ? 'Saving...' : `✓ Save Expense £${Number(expenseData.total_amount).toFixed(2)}`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── DONE ── */}
+      {stage === 'done' && (
+        <div style={{ maxWidth: 480, textAlign: 'center', padding: '40px 0' }}>
+          <div style={{ fontSize: 56, marginBottom: 16 }}>✅</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#22c55e', marginBottom: 8 }}>
+            {mode === 'invoice' ? 'Invoice Recorded!' : 'Expense Saved!'}
+          </div>
+          <div style={{ fontSize: 14, color: '#888', marginBottom: 8 }}>
+            {mode === 'invoice'
+              ? `${matchedCount} delivery movement${matchedCount !== 1 ? 's' : ''} recorded in Stock Log`
+              : `£${Number(expenseData.total_amount).toFixed(2)} added to Cost vs Sales`}
+          </div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 24 }}>
+            <button onClick={resetAll} style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, cursor: 'pointer' }}>
+              📷 Scan Another
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
   useEffect(() => { invAPI.getIngredients().then(d => setIngredients(Array.isArray(d) ? d : [])); }, []);
 
@@ -1447,9 +1760,6 @@ function CostSalesTab() {
 // ─────────────────────────────────────────────
 // INVENTORY SECTION — MAIN WRAPPER
 // ─────────────────────────────────────────────
-function InventorySection() {
-  const [tab, setTab] = useState('ingredients');
-
 function InventorySection() {
   const [tab, setTab] = useState('ingredients');
 

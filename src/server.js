@@ -1469,6 +1469,7 @@ app.post('/api/ai/scan-invoice', async (req, res) => {
   try {
     const { image_base64, media_type } = req.body;
     if (!image_base64) return res.status(400).json({ success: false, error: 'No image provided' });
+
     const INVOICE_PROMPT = `You are reading a supplier invoice or delivery note for a restaurant.
 Extract all information and return ONLY a valid JSON object — no other text, no markdown, no explanation.
 
@@ -1484,34 +1485,55 @@ Required JSON structure:
 }
 
 Rules: If a value is missing use null for strings and 0 for numbers. Convert prices to GBP. Return ONLY the JSON object.`;
+
+    const isImage     = media_type && media_type.startsWith('image/');
+    const contentItem = isImage
+      ? { type: 'image',    source: { type: 'base64', media_type: media_type, data: image_base64 } }
+      : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: image_base64 } };
+
     const https = require('https');
     const requestBody = JSON.stringify({
       model: 'claude-sonnet-4-6', max_tokens: 2000,
       messages: [{ role: 'user', content: [
-        { type: 'image', source: { type: 'base64', media_type: media_type || 'image/jpeg', data: image_base64 } },
+        contentItem,
         { type: 'text', text: INVOICE_PROMPT }
       ]}]
     });
+
     const result = await new Promise((resolve, reject) => {
       const options = {
         hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(requestBody), 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(requestBody),
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01'
+        }
       };
-      const apiReq = https.request(options, (apiRes) => { let data = ''; apiRes.on('data', chunk => { data += chunk; }); apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: data })); });
-      apiReq.on('error', reject); apiReq.write(requestBody); apiReq.end();
+      const apiReq = https.request(options, (apiRes) => {
+        let data = '';
+        apiRes.on('data', chunk => { data += chunk; });
+        apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: data }));
+      });
+      apiReq.on('error', reject);
+      apiReq.write(requestBody);
+      apiReq.end();
     });
+
     if (result.status !== 200) throw new Error(`Anthropic API error: ${result.body}`);
-    const aiData = JSON.parse(result.body);
+    const aiData  = JSON.parse(result.body);
     const invoice = JSON.parse(aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}');
     return res.json({ success: true, invoice });
-  } catch (err) { return res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
-
 // AI EXPENSE SCANNER
 app.post('/api/ai/scan-expense', async (req, res) => {
   try {
     const { image_base64, media_type } = req.body;
     if (!image_base64) return res.status(400).json({ success: false, error: 'No image provided' });
+
     const EXPENSE_PROMPT = `You are reading a receipt, bill or expense document for a restaurant.
 Extract the key information and return ONLY a valid JSON object — no other text, no markdown.
 
@@ -1523,29 +1545,49 @@ Required JSON structure:
 }
 
 Category: overhead=rent/utilities/insurance/repairs, labour=wages/staff, other=equipment/misc. Return ONLY JSON.`;
+
+    const isImage     = media_type && media_type.startsWith('image/');
+    const contentItem = isImage
+      ? { type: 'image',    source: { type: 'base64', media_type: media_type, data: image_base64 } }
+      : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: image_base64 } };
+
     const https = require('https');
     const requestBody = JSON.stringify({
       model: 'claude-sonnet-4-6', max_tokens: 1000,
       messages: [{ role: 'user', content: [
-        { type: 'image', source: { type: 'base64', media_type: media_type || 'image/jpeg', data: image_base64 } },
+        contentItem,
         { type: 'text', text: EXPENSE_PROMPT }
       ]}]
     });
+
     const result = await new Promise((resolve, reject) => {
       const options = {
         hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(requestBody), 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(requestBody),
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01'
+        }
       };
-      const apiReq = https.request(options, (apiRes) => { let data = ''; apiRes.on('data', chunk => { data += chunk; }); apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: data })); });
-      apiReq.on('error', reject); apiReq.write(requestBody); apiReq.end();
+      const apiReq = https.request(options, (apiRes) => {
+        let data = '';
+        apiRes.on('data', chunk => { data += chunk; });
+        apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: data }));
+      });
+      apiReq.on('error', reject);
+      apiReq.write(requestBody);
+      apiReq.end();
     });
+
     if (result.status !== 200) throw new Error(`Anthropic API error: ${result.body}`);
-    const aiData = JSON.parse(result.body);
+    const aiData  = JSON.parse(result.body);
     const expense = JSON.parse(aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}');
     return res.json({ success: true, expense });
-  } catch (err) { return res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
-
 // EXPENSES CRUD
 app.get('/api/expenses', async (req, res) => {
   try {

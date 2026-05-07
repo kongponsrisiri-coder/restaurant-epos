@@ -43,6 +43,10 @@ const invAPI = {
   updateRecipe:     (id, data) => fetch(`${SERVER_URL}/api/recipes/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
   getMovements:     ()         => fetch(`${SERVER_URL}/api/stock/movements`).then(r => r.ok ? r.json() : []).catch(() => []),
   addAdjustment:    (data)     => fetch(`${SERVER_URL}/api/stock/adjustment`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
+  saveInvoice:      (data)     => fetch(`${SERVER_URL}/api/supplier-invoices`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
+  getExpenses:      ()         => fetch(`${SERVER_URL}/api/expenses`).then(r => r.ok ? r.json() : []).catch(() => []),
+  addExpense:       (data)     => fetch(`${SERVER_URL}/api/expenses`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
+  deleteExpense:    (id)       => fetch(`${SERVER_URL}/api/expenses/${id}`, { method: 'DELETE' }).then(r => r.json()),
 };
 
 // ─────────────────────────────────────────────

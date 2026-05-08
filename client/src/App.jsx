@@ -9,11 +9,42 @@ import BarScreen from './screens/BarScreen';
 import ReservationsScreen from './screens/ReservationsScreen';
 import './App.css';
 
+// ── Sandy: Lotus badge logo mark — replaces SVG flags ─────────────
+// Used in both navbars (order screen + main layout)
+// Brand CI: Thai Gold #C9A84C on Deep Navy #0D1B3E
+const LogoBrand = () => (
+  <span className="navbar-brand" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    {/* Lotus badge icon mark */}
+    <svg
+      viewBox="0 0 100 100"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ width: 32, height: 32, flexShrink: 0 }}
+      aria-hidden="true"
+    >
+      <circle cx="50" cy="50" r="45" fill="none" stroke="#C9A84C" strokeWidth="1.8"/>
+      <circle cx="50" cy="50" r="39" fill="none" stroke="#C9A84C" strokeWidth="0.6" opacity="0.28"/>
+      <g transform="translate(50,50)">
+        <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C"/>
+        <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/>
+        <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/>
+        <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/>
+        <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/>
+        <circle cx="0" cy="0" r="9" fill="#0D1B3E"/>
+        <circle cx="0" cy="0" r="5" fill="#C9A84C"/>
+      </g>
+    </svg>
+    {/* Wordmark */}
+    <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, letterSpacing: '-0.5px' }}>
+      <span style={{ color: 'white' }}>Siam</span><span style={{ color: '#C9A84C' }}>EPOS</span>
+    </span>
+  </span>
+);
+
 export default function App() {
-  const [staff, setStaff]             = useState(null);
-  const [screen, setScreen]           = useState('tables');
-  const [activeOrder, setActiveOrder] = useState(null);
-  const [menuOpen, setMenuOpen]       = useState(false);
+  const [staff, setStaff]               = useState(null);
+  const [screen, setScreen]             = useState('tables');
+  const [activeOrder, setActiveOrder]   = useState(null);
+  const [menuOpen, setMenuOpen]         = useState(false);
   const [serverStatus, setServerStatus] = useState(getServerStatus());
   const isMobile = window.innerWidth < 768;
 
@@ -43,21 +74,7 @@ export default function App() {
     return (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f5f5f5' }}>
         <nav className="navbar">
-          <span className="navbar-brand">
-            <svg width="20" height="14" viewBox="0 0 32 22" style={{ marginRight: 3, verticalAlign: 'middle' }}>
-              <rect width="32" height="22" fill="#A51931" rx="2"/>
-              <rect y="3.5" width="32" height="15" fill="white"/>
-              <rect y="7" width="32" height="8" fill="#2D2A4A"/>
-            </svg>
-            <svg width="20" height="14" viewBox="0 0 60 40" style={{ marginRight: 6, verticalAlign: 'middle' }}>
-              <rect width="60" height="40" fill="#012169" rx="2"/>
-              <path d="M0,0 L60,40 M60,0 L0,40" stroke="white" strokeWidth="8"/>
-              <path d="M0,0 L60,40 M60,0 L0,40" stroke="#C8102E" strokeWidth="5"/>
-              <path d="M30,0 L30,40 M0,20 L60,20" stroke="white" strokeWidth="13"/>
-              <path d="M30,0 L30,40 M0,20 L60,20" stroke="#C8102E" strokeWidth="8"/>
-            </svg>
-            Siam<span style={{ color: '#C9A84C' }}>EPOS</span>
-          </span>
+          <LogoBrand />
           <div className="navbar-user">
             <StatusBadge />
             <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
@@ -94,21 +111,7 @@ export default function App() {
   return (
     <div className="app">
       <nav className="navbar">
-        <span className="navbar-brand">
-          <svg width="20" height="14" viewBox="0 0 32 22" style={{ marginRight: 3, verticalAlign: 'middle' }}>
-            <rect width="32" height="22" fill="#A51931" rx="2"/>
-            <rect y="3.5" width="32" height="15" fill="white"/>
-            <rect y="7" width="32" height="8" fill="#2D2A4A"/>
-          </svg>
-          <svg width="20" height="14" viewBox="0 0 60 40" style={{ marginRight: 6, verticalAlign: 'middle' }}>
-            <rect width="60" height="40" fill="#012169" rx="2"/>
-            <path d="M0,0 L60,40 M60,0 L0,40" stroke="white" strokeWidth="8"/>
-            <path d="M0,0 L60,40 M60,0 L0,40" stroke="#C8102E" strokeWidth="5"/>
-            <path d="M30,0 L30,40 M0,20 L60,20" stroke="white" strokeWidth="13"/>
-            <path d="M30,0 L30,40 M0,20 L60,20" stroke="#C8102E" strokeWidth="8"/>
-          </svg>
-          Siam<span style={{ color: '#C9A84C' }}>EPOS</span>
-        </span>
+        <LogoBrand />
 
         {/* Desktop nav */}
         <div className="navbar-links" style={{ display: isMobile ? 'none' : 'flex' }}>

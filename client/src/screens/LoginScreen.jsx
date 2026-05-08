@@ -1,163 +1,189 @@
 import { useState } from 'react';
 import { loginStaff } from '../api';
 
+// ── Sandy: LoginScreen — SiamEPOS Brand CI v1.1 ───────────────────
+// Deep Navy #0D1B3E background · Thai Gold #C9A84C lotus logo
+// Georgia serif wordmark · Action Red #e94560 login button
+
 export default function LoginScreen({ onLogin }) {
-  const [pin, setPin] = useState('');
-  const [error, setError] = useState('');
+  const [pin, setPin]         = useState('');
+  const [error, setError]     = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleNumber = (num) => {
-    if (pin.length < 4) setPin(prev => prev + num);
-  };
-
-  const handleClear = () => { setPin(''); setError(''); };
-
-  const handleLogin = async () => {
-    if (pin.length < 4) return;
+  async function handleLogin(pinToUse) {
+    const p = pinToUse ?? pin;
+    if (!p) return;
     setLoading(true);
     setError('');
     try {
-      const data = await loginStaff(pin);
-      if (data.error) { setError('Wrong PIN. Try again.'); setPin(''); }
-      else onLogin(data);
-    } catch { setError('Wrong PIN. Try again.'); setPin(''); }
-    finally { setLoading(false); }
-  };
+      const staff = await loginStaff(p);
+      if (staff?.error || !staff?.id) {
+        setError('Incorrect PIN. Please try again.');
+        setPin('');
+      } else {
+        onLogin(staff);
+      }
+    } catch {
+      setError('Connection error. Check your network.');
+      setPin('');
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  const buttons = ['1','2','3','4','5','6','7','8','9','C','0','✓'];
+  function pressDigit(d) {
+    if (loading) return;
+    setError('');
+    const next = pin + d;
+    setPin(next);
+    // Auto-submit at 6 digits — most PINs are 4-6 digits
+    // Staff can also press the Login button for shorter PINs
+    if (next.length === 6) {
+      handleLogin(next);
+    }
+  }
+
+  function pressDelete() {
+    setPin(p => p.slice(0, -1));
+    setError('');
+  }
+
+  // Numpad layout: 1-9, blank, 0, ⌫
+  const keys = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
 
   return (
     <div style={{
       minHeight: '100vh',
+      background: '#0D1B3E',
       display: 'flex',
+      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(160deg, #0D1B3E 0%, #1A2F6B 60%, #0A2456 100%)',
-      position: 'relative',
-      overflow: 'hidden',
-      fontFamily: "'Sarabun', sans-serif"
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      padding: 20,
     }}>
-      {/* Background pattern */}
-      <div style={{
-        position: 'absolute', inset: 0,
-        backgroundImage: 'repeating-linear-gradient(45deg, rgba(201,168,76,0.03) 0px, rgba(201,168,76,0.03) 1px, transparent 1px, transparent 60px), repeating-linear-gradient(-45deg, rgba(201,168,76,0.03) 0px, rgba(201,168,76,0.03) 1px, transparent 1px, transparent 60px)'
-      }} />
 
-      {/* Glow */}
-      <div style={{
-        position: 'absolute',
-        width: 400, height: 400,
-        background: 'radial-gradient(circle, rgba(201,168,76,0.1) 0%, transparent 70%)',
-        top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-        borderRadius: '50%'
-      }} />
+      {/* ── Lotus badge + wordmark ─────────────────────────────── */}
+      <div style={{ marginBottom: 36, textAlign: 'center' }}>
+        <svg
+          viewBox="0 0 100 100"
+          xmlns="http://www.w3.org/2000/svg"
+          style={{ width: 80, height: 80, display: 'block', margin: '0 auto 18px' }}
+          aria-label="SiamEPOS logo"
+        >
+          <circle cx="50" cy="50" r="45" fill="none" stroke="#C9A84C" strokeWidth="1.8"/>
+          <circle cx="50" cy="50" r="39" fill="none" stroke="#C9A84C" strokeWidth="0.6" opacity="0.28"/>
+          <g transform="translate(50,50)">
+            <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C"/>
+            <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/>
+            <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/>
+            <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/>
+            <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/>
+            <circle cx="0" cy="0" r="9" fill="#0D1B3E"/>
+            <circle cx="0" cy="0" r="5" fill="#C9A84C"/>
+          </g>
+        </svg>
 
+        <div style={{
+          fontFamily: "Georgia, 'Times New Roman', serif",
+          fontSize: 38, fontWeight: 700, letterSpacing: '-1px', lineHeight: 1,
+        }}>
+          <span style={{ color: 'white' }}>Siam</span>
+          <span style={{ color: '#C9A84C' }}>EPOS</span>
+        </div>
+
+        <div style={{ color: 'rgba(201,168,76,0.55)', fontSize: 12, marginTop: 6, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+          Staff Login
+        </div>
+      </div>
+
+      {/* ── PIN card ───────────────────────────────────────────── */}
       <div style={{
-        background: 'rgba(255,255,255,0.97)',
-        borderRadius: 24,
-        padding: '40px 36px',
-        width: 320,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: 24,
-        position: 'relative',
-        boxShadow: '0 40px 80px rgba(0,0,0,0.4)',
-        border: '1px solid rgba(201,168,76,0.2)'
+        background: 'rgba(255,255,255,0.05)',
+        border: '1px solid rgba(201,168,76,0.2)',
+        borderRadius: 20,
+        padding: '28px 28px 24px',
+        width: '100%',
+        maxWidth: 320,
       }}>
 
-        {/* Logo */}
-        <div style={{ textAlign: 'center' }}>
-        <div style={{
-  width: 72, height: 44,
-  margin: '0 auto 14px',
-  display: 'flex', gap: 6,
-  alignItems: 'center', justifyContent: 'center',
-}}>
-  {/* Thailand flag */}
-  <svg width="32" height="22" viewBox="0 0 32 22" rx="3">
-    <rect width="32" height="22" fill="#A51931" rx="3"/>
-    <rect y="3.5" width="32" height="15" fill="white"/>
-    <rect y="7" width="32" height="8" fill="#2D2A4A"/>
-  </svg>
-  {/* UK flag */}
-  <svg width="32" height="22" viewBox="0 0 60 40" rx="3">
-    <rect width="60" height="40" fill="#012169" rx="3"/>
-    <path d="M0,0 L60,40 M60,0 L0,40" stroke="white" strokeWidth="8"/>
-    <path d="M0,0 L60,40 M60,0 L0,40" stroke="#C8102E" strokeWidth="5"/>
-    <path d="M30,0 L30,40 M0,20 L60,20" stroke="white" strokeWidth="13"/>
-    <path d="M30,0 L30,40 M0,20 L60,20" stroke="#C8102E" strokeWidth="8"/>
-  </svg>
-</div>
-          <div style={{
-            fontSize: 30, fontWeight: 800,
-            color: '#0D1B3E',
-            letterSpacing: 1,
-            fontFamily: 'Georgia, serif'
-          }}>
-            Siam<span style={{ color: '#C9A84C' }}>EPOS</span>
-          </div>
-          <div style={{
-            color: '#888', fontSize: 13, marginTop: 6,
-            letterSpacing: 2, textTransform: 'uppercase',
-            fontWeight: 600
-          }}>Enter your PIN</div>
+        {/* PIN dots / placeholder */}
+        <div style={{ height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 20 }}>
+          {pin.length === 0 ? (
+            <span style={{ color: 'rgba(255,255,255,0.22)', fontSize: 14, letterSpacing: '0.05em' }}>
+              Enter your PIN
+            </span>
+          ) : (
+            Array.from({ length: pin.length }).map((_, i) => (
+              <div key={i} style={{ width: 13, height: 13, borderRadius: '50%', background: '#C9A84C' }} />
+            ))
+          )}
         </div>
 
-        {/* PIN dots */}
-        <div style={{ display: 'flex', gap: 14 }}>
-          {[0,1,2,3].map(i => (
-            <div key={i} style={{
-              width: 16, height: 16,
-              borderRadius: '50%',
-              background: pin.length > i
-                ? 'linear-gradient(135deg, #C9A84C, #E8C96A)'
-                : '#E8E8E8',
-              transition: 'all 0.2s',
-              boxShadow: pin.length > i ? '0 2px 8px rgba(201,168,76,0.4)' : 'none'
-            }} />
-          ))}
-        </div>
-
+        {/* Error message */}
         {error && (
           <div style={{
-            color: '#e94560', fontSize: 13, fontWeight: 600,
-            background: '#fff0f3', padding: '8px 16px',
-            borderRadius: 8, border: '1px solid #fecdd3'
-          }}>{error}</div>
+            background: 'rgba(239,68,68,0.14)',
+            border: '1px solid rgba(239,68,68,0.35)',
+            color: '#fca5a5',
+            borderRadius: 8, padding: '9px 14px',
+            fontSize: 13, textAlign: 'center', marginBottom: 16, fontWeight: 500,
+          }}>
+            {error}
+          </div>
         )}
 
         {/* Numpad */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, width: '100%' }}>
-          {buttons.map(btn => (
-            <button key={btn} onClick={() => {
-              if (btn === 'C') handleClear();
-              else if (btn === '✓') handleLogin();
-              else handleNumber(btn);
-            }}
-            style={{
-              height: 60, borderRadius: 14, border: 'none', fontSize: 22,
-              fontWeight: 700, cursor: 'pointer',
-              background: btn === '✓'
-                ? 'linear-gradient(135deg, #C9A84C, #E8C96A)'
-                : btn === 'C'
-                  ? '#FEE2E2'
-                  : '#F8F8F8',
-              color: btn === '✓' ? '#0D1B3E' : btn === 'C' ? '#EF4444' : '#1a1a2e',
-              boxShadow: btn === '✓' ? '0 4px 12px rgba(201,168,76,0.3)' : 'none',
-              transition: 'transform 0.1s',
-            }}
-            onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'}
-            onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
-            >
-              {loading && btn === '✓' ? '...' : btn}
-            </button>
-          ))}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
+          {keys.map((k, i) => {
+            if (k === '') return <div key={i} />;
+            const isDel = k === '⌫';
+            return (
+              <button
+                key={i}
+                onClick={() => isDel ? pressDelete() : pressDigit(k)}
+                disabled={loading}
+                style={{
+                  height: 58, borderRadius: 12, border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
+                  background: isDel ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.07)',
+                  color: isDel ? '#fca5a5' : 'white',
+                  fontSize: isDel ? 20 : 22, fontWeight: 700,
+                  transition: 'background 0.1s, transform 0.07s',
+                  fontFamily: 'system-ui, -apple-system, sans-serif',
+                }}
+                onMouseDown={e => { if (!loading) e.currentTarget.style.transform = 'scale(0.94)'; }}
+                onMouseUp={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+              >
+                {k}
+              </button>
+            );
+          })}
         </div>
 
-        <div style={{ fontSize: 11, color: '#bbb', textAlign: 'center' }}>
-          Powered by SiamEPOS · siamepos.co.uk
-        </div>
+        {/* Login button */}
+        <button
+          onClick={() => handleLogin()}
+          disabled={loading || pin.length === 0}
+          style={{
+            width: '100%', height: 52, borderRadius: 12, border: 'none',
+            background: loading        ? 'rgba(255,255,255,0.1)'
+                      : pin.length > 0 ? '#e94560'
+                      : 'rgba(255,255,255,0.07)',
+            color: pin.length > 0 && !loading ? 'white' : 'rgba(255,255,255,0.3)',
+            fontSize: 16, fontWeight: 800,
+            cursor: pin.length > 0 && !loading ? 'pointer' : 'default',
+            transition: 'background 0.15s',
+            letterSpacing: '0.03em',
+          }}
+        >
+          {loading ? 'Checking…' : 'Log In'}
+        </button>
+      </div>
+
+      {/* Footer */}
+      <div style={{ marginTop: 36, color: 'rgba(201,168,76,0.3)', fontSize: 12, textAlign: 'center', letterSpacing: '0.05em' }}>
+        siamepos.co.uk
       </div>
     </div>
   );

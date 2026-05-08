@@ -159,4 +159,5 @@ async function sendBookingSms() {
   // SMS not configured
 }
 
+
 module.exports = { sendBookingConfirmation, sendReminderEmail, sendBookingSms };

@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { SERVER_URL } from '../../../api';
 import { invAPI, today } from '../shared';
+import InvoiceHistoryTab from './InvoiceHistoryTab';
 
 export default function InvoiceScannerTab() {
+  const [mainTab, setMainTab]         = useState('scan');
   const [mode, setMode]               = useState('invoice');
   const [stage, setStage]             = useState('upload');
   const [file, setFile]               = useState(null);
@@ -145,6 +147,18 @@ export default function InvoiceScannerTab() {
 
   return (
     <div>
+      {/* Main tab selector — Scan vs History */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '2px solid #f0f0f0', paddingBottom: 16 }}>
+        {[{ id: 'scan', label: '📷 Scan Invoice' }, { id: 'history', label: '📋 Invoice History' }].map(t => (
+          <button key={t.id} onClick={() => setMainTab(t.id)} style={{ padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14, background: mainTab === t.id ? '#1a1a2e' : '#f0f0f0', color: mainTab === t.id ? 'white' : '#555' }}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* Invoice History tab */}
+      {mainTab === 'history' && <InvoiceHistoryTab />}
+
+      {/* Scanner tab */}
+      {mainTab === 'scan' && <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {[{ id: 'invoice', label: '📦 Supplier Invoice', desc: 'Records stock + delivery' }, { id: 'expense', label: '🏢 Expense / Receipt', desc: 'Records overhead cost' }].map(m => (
           <button key={m.id} onClick={() => { setMode(m.id); resetAll(); }} style={{ flex: 1, padding: '12px 16px', borderRadius: 12, border: 'none', cursor: 'pointer', textAlign: 'left', background: mode === m.id ? '#1a1a2e' : 'white', color: mode === m.id ? 'white' : '#555', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
@@ -270,6 +284,7 @@ export default function InvoiceScannerTab() {
           </div>
         </div>
       )}
+      </div>}
     </div>
   );
 }

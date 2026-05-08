@@ -67,8 +67,8 @@ export default function RecipesTab() {
 
   return (
     <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-      {/* Left panel — menu item list */}
-      <div style={{ width: 280, flexShrink: 0 }}>
+      {/* Left panel — independently scrollable so right panel stays locked */}
+      <div style={{ width: 280, flexShrink: 0, maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }}>
         <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
           <div style={{ padding: '12px 16px', background: '#f8f8f8', fontWeight: 700, fontSize: 13, color: '#555' }}>Menu Items ({menuItems.length})</div>
           {menuItems.length === 0 && <div style={{ padding: 24, textAlign: 'center', color: '#bbb', fontSize: 13 }}>No menu items found</div>}
@@ -87,8 +87,8 @@ export default function RecipesTab() {
         </div>
       </div>
 
-      {/* Right panel — recipe builder — STICKY FIX: locks in place while left panel scrolls */}
-      <div style={{ flex: 1, position: 'sticky', top: 0, alignSelf: 'flex-start' }}>
+      {/* Right panel — stays in place naturally while left panel scrolls independently */}
+      <div style={{ flex: 1 }}>
         {!selectedItem ? (
           <div style={{ background: 'white', borderRadius: 12, padding: 40, textAlign: 'center', color: '#bbb', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>

@@ -1,17 +1,9 @@
-const nodemailer = require('nodemailer');
+const https = require('https');
 
 const RESTAURANT_NAME    = process.env.RESTAURANT_NAME  || 'SiamEPOS Restaurant';
 const RESTAURANT_EMAIL   = process.env.RESTAURANT_EMAIL || 'info@siamepos.co.uk';
 const RESTAURANT_PHONE   = '07700 000000';
 const RESTAURANT_ADDRESS = '123 Test Street, London, E1 1AA';
-
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
 
 function formatDate(dateStr) {
   try {
@@ -27,23 +19,51 @@ function formatTime(timeStr) {
   return timeStr ? String(timeStr).slice(0, 5) : '';
 }
 
-async function sendGmailEmail(to, subject, html) {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.log('ℹ️  EMAIL_USER or EMAIL_PASS not set — skipping email to ' + to);
-    return;
-  }
-  try {
-    const info = await transporter.sendMail({
-      from:    `"${RESTAURANT_NAME}" <${process.env.EMAIL_USER}>`,
-      to:      to,
+function sendResendEmail(to, subject, html) {
+  return new Promise((resolve, reject) => {
+    if (!process.env.RESEND_API_KEY) {
+      console.log('ℹ️  RESEND_API_KEY not set — skipping email to ' + to);
+      return resolve();
+    }
+
+    const body = JSON.stringify({
+      from:    `${RESTAURANT_NAME} <noreply@siamepos.co.uk>`,
+      to:      [to],
       subject: subject,
       html:    html,
     });
-    console.log('✅ Email sent to ' + to + ' — ' + info.messageId);
-  } catch (err) {
-    console.error('❌ Email error:', err.message);
-    throw err;
-  }
+
+    const req = https.request({
+      hostname: 'api.resend.com',
+      path:     '/emails',
+      method:   'POST',
+      headers: {
+        'Authorization':  'Bearer ' + process.env.RESEND_API_KEY,
+        'Content-Type':   'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          console.log('✅ Email sent to ' + to);
+          resolve();
+        } else {
+          console.error('❌ Resend error ' + res.statusCode + ':', data);
+          reject(new Error('Resend error: ' + data));
+        }
+      });
+    });
+
+    req.on('error', err => {
+      console.error('❌ Email request error:', err.message);
+      reject(err);
+    });
+
+    req.write(body);
+    req.end();
+  });
 }
 
 async function sendBookingConfirmation(reservation) {
@@ -98,7 +118,7 @@ async function sendBookingConfirmation(reservation) {
     </div>
   `;
 
-  await sendGmailEmail(
+  await sendResendEmail(
     reservation.customer_email,
     `Booking Confirmed ✅ — ${RESTAURANT_NAME}`,
     html
@@ -145,15 +165,13 @@ async function sendReminderEmail(reservation) {
     </div>
   `;
 
-  await sendGmailEmail(
+  await sendResendEmail(
     reservation.customer_email,
     `Reminder: Your booking tomorrow at ${RESTAURANT_NAME} ⏰`,
     html
   );
 }
 
-async function sendBookingSms() {
-  // SMS not configured
-}
+async function sendBookingSms() {}
 
 module.exports = { sendBookingConfirmation, sendReminderEmail, sendBookingSms };

@@ -20,14 +20,18 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
   const [loading, setLoading] = useState(true);
   const [showCoversPopup, setShowCoversPopup] = useState(null);
   const [coversInput, setCoversInput] = useState('');
-  const [viewMode, setViewMode] = useState('plan');
   const [tick, setTick] = useState(0);
 
-  // Move/Merge state
-  const [tableActionPopup, setTableActionPopup] = useState(null); // selected occupied table
+  // Sandy: Mobile state — defaults to grid on mobile (more touch-friendly)
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [viewMode, setViewMode] = useState(window.innerWidth < 768 ? 'grid' : 'plan');
+
+  // Move/Merge state — unchanged
+  const [tableActionPopup, setTableActionPopup] = useState(null);
   const [moveMode, setMoveMode] = useState(false);
   const [mergeMode, setMergeMode] = useState(false);
 
+  // ── Fetch data — unchanged ────────────────────────────
   const fetchData = async () => {
     try {
       const [tablesData, ordersData, statusData] = await Promise.all([
@@ -52,6 +56,17 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
     return () => { clearInterval(interval); clearInterval(timerTick); };
   }, []);
 
+  // Sandy: Resize listener
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // ── Helpers — unchanged ───────────────────────────────
   const getTableColour = (table) => {
     const status = tableStatuses.find(s => s.table_id === table.id);
     if (!status) return COLOUR_MAP.available;
@@ -83,11 +98,11 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
     if (diff > 60) return '#fde68a';
     return 'rgba(255,255,255,0.9)';
   };
-  
+
+  // ── Table click handler — unchanged ───────────────────
   const handleTableClick = async (table) => {
     const existingOrder = openOrders.find(o => o.table_id === table.id);
 
-    // If in move mode — move to this empty table
     if (moveMode && tableActionPopup) {
       if (existingOrder) {
         alert('Please select an empty table to move to!');
@@ -105,7 +120,6 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
       return;
     }
 
-    // If in merge mode — merge this table into the selected table
     if (mergeMode && tableActionPopup) {
       if (!existingOrder) {
         alert('Please select an occupied table to merge with!');
@@ -128,7 +142,6 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
       return;
     }
 
-    // Normal click
     if (existingOrder) {
       setTableActionPopup({ table, order: existingOrder });
     } else {
@@ -152,97 +165,216 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
   return (
     <div style={{ height: 'calc(100vh - 60px)', display: 'flex', flexDirection: 'column' }}>
 
-      {/* Header */}
-      <div style={{ padding: '14px 24px', background: 'white', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>Table Map</h1>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {Object.entries(COLOUR_MAP).map(([key, val]) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <div style={{ width: 10, height: 10, borderRadius: 3, background: val.bg, border: `1px solid ${val.border}` }} />
-                <span style={{ fontSize: 10, color: '#555' }}>{val.label}</span>
-              </div>
-            ))}
-          </div>
+      {/* ════════════════════════════════════════
+          HEADER
+
+          Desktop: title + legend + buttons in one row
+          Mobile:  compact — title + buttons only
+                   legend moves to a strip below
+          ════════════════════════════════════════ */}
+      <div style={{
+        padding: isMobile ? '12px 16px' : '14px 24px',
+        background: 'white',
+        borderBottom: '1px solid #eee',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexShrink: 0,
+        gap: 12
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+          <h1 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 700, color: '#1a1a2e', flexShrink: 0 }}>
+            Table Map
+          </h1>
+
+          {/* Sandy: Legend — desktop only. Moves to strip below on mobile. */}
+          {!isMobile && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {Object.entries(COLOUR_MAP).map(([key, val]) => (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: 3, background: val.bg, border: `1px solid ${val.border}` }} />
+                  <span style={{ fontSize: 10, color: '#555' }}>{val.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          <button onClick={() => setViewMode(viewMode === 'plan' ? 'grid' : 'plan')} style={{ background: '#f0f0f0', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
-            {viewMode === 'plan' ? '⊞ Grid view' : '🗺️ Plan view'}
+          <button
+            onClick={() => setViewMode(viewMode === 'plan' ? 'grid' : 'plan')}
+            style={{
+              background: '#f0f0f0', border: 'none',
+              padding: isMobile ? '10px 14px' : '8px 16px',
+              borderRadius: 8, cursor: 'pointer',
+              fontWeight: 600, fontSize: 13
+            }}>
+            {viewMode === 'plan' ? '⊞ Grid' : '🗺️ Plan'}
           </button>
-          <button onClick={fetchData} style={{ background: '#1a1a2e', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 13 }}>
-            Refresh
+          <button
+            onClick={fetchData}
+            style={{
+              background: '#1a1a2e', color: 'white', border: 'none',
+              padding: isMobile ? '10px 14px' : '8px 16px',
+              borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600
+            }}>
+            ↻
           </button>
         </div>
       </div>
 
-      {/* Move/Merge mode banner */}
+      {/* Sandy: Mobile legend — scrollable horizontal strip below header */}
+      {isMobile && (
+        <div style={{
+          overflowX: 'auto',
+          display: 'flex',
+          gap: 14,
+          padding: '8px 16px',
+          background: 'white',
+          borderBottom: '1px solid #eee',
+          flexShrink: 0
+        }}>
+          {Object.entries(COLOUR_MAP).map(([key, val]) => (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+              <div style={{
+                width: 12, height: 12, borderRadius: 3,
+                background: val.bg, border: `1px solid ${val.border}`,
+                flexShrink: 0
+              }} />
+              <span style={{ fontSize: 11, color: '#555', whiteSpace: 'nowrap' }}>{val.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════
+          MOVE / MERGE MODE BANNER
+
+          Desktop: full text
+          Mobile:  shorter text, stacked layout
+          ════════════════════════════════════════ */}
       {(moveMode || mergeMode) && (
-        <div style={{ background: moveMode ? '#1e40af' : '#8b5cf6', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <div style={{ color: 'white', fontWeight: 700, fontSize: 15 }}>
+        <div style={{
+          background: moveMode ? '#1e40af' : '#8b5cf6',
+          padding: isMobile ? '12px 16px' : '12px 24px',
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          justifyContent: 'space-between',
+          alignItems: isMobile ? 'stretch' : 'center',
+          gap: isMobile ? 10 : 0,
+          flexShrink: 0
+        }}>
+          <div style={{ color: 'white', fontWeight: 700, fontSize: isMobile ? 14 : 15 }}>
             {moveMode
-              ? `🔄 Moving Table ${tableActionPopup?.table.table_number} — tap an empty table to move to`
-              : `🔗 Merging Table ${tableActionPopup?.table.table_number} — tap another occupied table to merge with`
+              ? `🔄 Moving Table ${tableActionPopup?.table.table_number} — tap an empty table`
+              : `🔗 Merging Table ${tableActionPopup?.table.table_number} — tap another occupied table`
             }
           </div>
-          <button onClick={cancelMode} style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+          <button onClick={cancelMode} style={{
+            background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none',
+            padding: isMobile ? '12px' : '8px 16px',
+            borderRadius: 8, cursor: 'pointer', fontWeight: 700,
+            fontSize: 14, textAlign: 'center'
+          }}>
             Cancel
           </button>
         </div>
       )}
 
-      {/* Plan view */}
-      {viewMode === 'plan' && (
-        <div style={{ flex: 1, overflow: 'auto', background: '#f0ede8', position: 'relative', backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)', backgroundSize: '30px 30px' }}>
-          {tables.map(table => {
-            const colours = getTableColour(table);
-            const w = table.width || 80;
-            const h = table.height || 80;
-            const x = table.pos_x || 40;
-            const y = table.pos_y || 40;
-            const time = getTableTime(table.id);
-            const timeColor = getTimeColor(table.id);
-            const isSelected = tableActionPopup?.table.id === table.id;
+      {/* ════════════════════════════════════════
+          PLAN VIEW
 
-            return (
-              <div key={table.id} onClick={() => handleTableClick(table)} style={{
-                position: 'absolute', left: x, top: y, width: w, height: h,
-                borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,
-                background: colours.bg,
-                border: `3px solid ${isSelected ? '#ffffff' : colours.border}`,
-                outline: isSelected ? '3px solid #1a1a2e' : 'none',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', userSelect: 'none',
-                boxShadow: isSelected ? '0 0 20px rgba(0,0,0,0.5)' : '0 2px 8px rgba(0,0,0,0.15)',
-                transition: 'transform 0.1s',
-              }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.06)'; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
-              >
-                <div style={{ fontSize: w > 90 ? 16 : 13, fontWeight: 800, color: colours.text, textAlign: 'center', padding: '0 4px' }}>
-                  {table.table_number}
+          Unchanged — the container already scrolls
+          via overflow: auto. On mobile, a subtle
+          hint nudges users toward grid view.
+          ════════════════════════════════════════ */}
+      {viewMode === 'plan' && (
+        <>
+          {isMobile && (
+            <div style={{
+              background: '#fffbeb',
+              borderBottom: '1px solid #fde68a',
+              padding: '8px 16px',
+              fontSize: 12,
+              color: '#92400e',
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}>
+              💡 Scroll to see all tables · Tap ⊞ Grid for an easier view on this screen
+            </div>
+          )}
+          <div style={{
+            flex: 1, overflow: 'auto',
+            background: '#f0ede8', position: 'relative',
+            backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)',
+            backgroundSize: '30px 30px'
+          }}>
+            {tables.map(table => {
+              const colours = getTableColour(table);
+              const w = table.width || 80;
+              const h = table.height || 80;
+              const x = table.pos_x || 40;
+              const y = table.pos_y || 40;
+              const time = getTableTime(table.id);
+              const timeColor = getTimeColor(table.id);
+              const isSelected = tableActionPopup?.table.id === table.id;
+
+              return (
+                <div key={table.id} onClick={() => handleTableClick(table)} style={{
+                  position: 'absolute', left: x, top: y, width: w, height: h,
+                  borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,
+                  background: colours.bg,
+                  border: `3px solid ${isSelected ? '#ffffff' : colours.border}`,
+                  outline: isSelected ? '3px solid #1a1a2e' : 'none',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', userSelect: 'none',
+                  boxShadow: isSelected ? '0 0 20px rgba(0,0,0,0.5)' : '0 2px 8px rgba(0,0,0,0.15)',
+                  transition: 'transform 0.1s',
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.06)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                >
+                  <div style={{ fontSize: w > 90 ? 16 : 13, fontWeight: 800, color: colours.text, textAlign: 'center', padding: '0 4px' }}>
+                    {table.table_number}
+                  </div>
+                  {time && (
+                    <div style={{
+                      fontSize: 13, fontWeight: 800,
+                      color: '#000000',
+                      marginTop: 3,
+                      background: 'rgba(255,255,255,0.85)',
+                      padding: '2px 6px',
+                      borderRadius: 6
+                    }}>
+                      ⏱ {time}
+                    </div>
+                  )}
                 </div>
-                {time && (
-  <div style={{
-    fontSize: 13, fontWeight: 800,
-    color: '#000000',
-    marginTop: 3,
-    background: 'rgba(255,255,255,0.85)',
-    padding: '2px 6px',
-    borderRadius: 6
-  }}>
-    ⏱ {time}
-  </div>
-)}
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
-      {/* Grid view */}
+      {/* ════════════════════════════════════════
+          GRID VIEW
+
+          Desktop: auto-fill minmax(140px)
+          Mobile:  fixed 2 columns — predictable
+                   on all phone sizes. Larger cards,
+                   larger text, bigger touch targets.
+          ════════════════════════════════════════ */}
       {viewMode === 'grid' && (
-        <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 }}>
+        <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? 12 : 20 }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile
+              ? 'repeat(2, 1fr)'
+              : 'repeat(auto-fill, minmax(140px, 1fr))',
+            gap: isMobile ? 10 : 12
+          }}>
             {tables
               .sort((a, b) => String(a.table_number).localeCompare(String(b.table_number), undefined, { numeric: true }))
               .map(table => {
@@ -255,18 +387,78 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                   <div key={table.id} onClick={() => handleTableClick(table)} style={{
                     background: colours.bg,
                     border: `3px solid ${isSelected ? '#1a1a2e' : colours.border}`,
-                    borderRadius: 14, padding: 16, cursor: 'pointer', textAlign: 'center',
+                    borderRadius: 14,
+                    padding: isMobile ? '20px 12px' : 16,
+                    cursor: 'pointer',
+                    textAlign: 'center',
                     transition: 'transform 0.15s',
-                    boxShadow: isSelected ? '0 0 20px rgba(0,0,0,0.3)' : 'none'
+                    boxShadow: isSelected ? '0 0 20px rgba(0,0,0,0.3)' : 'none',
+                    minHeight: isMobile ? 110 : 'auto'
                   }}
                     onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.04)'}
                     onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                   >
-                    <div style={{ fontSize: 28, fontWeight: 800, color: colours.text }}>{table.table_number}</div>
-                    <div style={{ fontSize: 11, color: colours.text, opacity: 0.8, marginBottom: 2 }}>{table.capacity} seats</div>
-                    <div style={{ fontSize: 11, color: colours.text, opacity: 0.7, marginBottom: 4, fontWeight: 600 }}>{colours.label}</div>
-                    {time && <div style={{ fontSize: 12, fontWeight: 700, color: colours.text, opacity: 0.9 }}>⏱ {time}</div>}
-                    {order && <div style={{ fontSize: 11, color: colours.text, opacity: 0.8, marginTop: 4 }}>{order.covers} cvr · £{(order.total || 0).toFixed(2)}</div>}
+                    {/* Table number — bigger on mobile */}
+                    <div style={{
+                      fontSize: isMobile ? 36 : 28,
+                      fontWeight: 800,
+                      color: colours.text,
+                      lineHeight: 1
+                    }}>
+                      {table.table_number}
+                    </div>
+
+                    {/* Capacity */}
+                    <div style={{
+                      fontSize: isMobile ? 12 : 11,
+                      color: colours.text,
+                      opacity: 0.8,
+                      marginTop: 4,
+                      marginBottom: 2
+                    }}>
+                      {table.capacity} seats
+                    </div>
+
+                    {/* Status label */}
+                    <div style={{
+                      fontSize: isMobile ? 12 : 11,
+                      color: colours.text,
+                      opacity: 0.7,
+                      marginBottom: 4,
+                      fontWeight: 600
+                    }}>
+                      {colours.label}
+                    </div>
+
+                    {/* Timer — larger on mobile, easier to read */}
+                    {time && (
+                      <div style={{
+                        fontSize: isMobile ? 15 : 12,
+                        fontWeight: 800,
+                        color: colours.text,
+                        opacity: 0.95,
+                        background: 'rgba(0,0,0,0.12)',
+                        borderRadius: 8,
+                        padding: isMobile ? '4px 10px' : '2px 6px',
+                        display: 'inline-block',
+                        marginBottom: 2
+                      }}>
+                        ⏱ {time}
+                      </div>
+                    )}
+
+                    {/* Covers + running total */}
+                    {order && (
+                      <div style={{
+                        fontSize: isMobile ? 12 : 11,
+                        color: colours.text,
+                        opacity: 0.85,
+                        marginTop: 4,
+                        fontWeight: 600
+                      }}>
+                        {order.covers} cvr · £{(order.total || 0).toFixed(2)}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -274,47 +466,61 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
         </div>
       )}
 
-      {/* Table action popup */}
+      {/* ════════════════════════════════════════
+          TABLE ACTION POPUP
+          Added maxWidth: 90vw for small phones
+          ════════════════════════════════════════ */}
       {tableActionPopup && !moveMode && !mergeMode && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'white', borderRadius: 20, padding: 28, width: 320, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, padding: 16
+        }}>
+          <div style={{
+            background: 'white', borderRadius: 20, padding: 28,
+            width: 320, maxWidth: '90vw',
+            display: 'flex', flexDirection: 'column', gap: 12
+          }}>
             <div style={{ textAlign: 'center', marginBottom: 8 }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: '#1a1a2e' }}>Table {tableActionPopup.table.table_number}</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: '#1a1a2e' }}>
+                Table {tableActionPopup.table.table_number}
+              </div>
               <div style={{ color: '#888', fontSize: 14 }}>
                 {tableActionPopup.order.covers} covers · £{(tableActionPopup.order.total || 0).toFixed(2)}
               </div>
             </div>
 
-            {/* Open order */}
             <button onClick={() => {
               setTableActionPopup(null);
               onOpenOrder(tableActionPopup.order.id, tableActionPopup.table.id);
             }} style={{
-              padding: '16px', borderRadius: 12, border: 'none',
+              padding: isMobile ? '18px' : '16px',
+              borderRadius: 12, border: 'none',
               background: '#1a1a2e', color: 'white',
               fontSize: 16, fontWeight: 700, cursor: 'pointer'
             }}>
               📋 Open Order
             </button>
 
-            {/* Move table */}
             <button onClick={() => {
               setMoveMode(true);
               setMergeMode(false);
             }} style={{
-              padding: '16px', borderRadius: 12, border: 'none',
+              padding: isMobile ? '18px' : '16px',
+              borderRadius: 12, border: 'none',
               background: '#1e40af', color: 'white',
               fontSize: 16, fontWeight: 700, cursor: 'pointer'
             }}>
               🔄 Move Table
             </button>
 
-            {/* Merge table */}
             <button onClick={() => {
               setMergeMode(true);
               setMoveMode(false);
             }} style={{
-              padding: '16px', borderRadius: 12, border: 'none',
+              padding: isMobile ? '18px' : '16px',
+              borderRadius: 12, border: 'none',
               background: '#8b5cf6', color: 'white',
               fontSize: 16, fontWeight: 700, cursor: 'pointer'
             }}>
@@ -322,7 +528,8 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
             </button>
 
             <button onClick={() => setTableActionPopup(null)} style={{
-              padding: '12px', borderRadius: 10, border: 'none',
+              padding: isMobile ? '16px' : '12px',
+              borderRadius: 10, border: 'none',
               background: '#f0f0f0', color: '#555',
               fontSize: 14, cursor: 'pointer', fontWeight: 600
             }}>
@@ -332,17 +539,34 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
         </div>
       )}
 
-      {/* Covers numpad popup */}
+      {/* ════════════════════════════════════════
+          COVERS NUMPAD POPUP
+          Added maxWidth: 90vw, bigger buttons on mobile
+          ════════════════════════════════════════ */}
       {showCoversPopup && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'white', borderRadius: 20, padding: '32px 28px', width: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
+        <div style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, padding: 16
+        }}>
+          <div style={{
+            background: 'white', borderRadius: 20,
+            padding: isMobile ? '28px 20px' : '32px 28px',
+            width: 300, maxWidth: '90vw',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20
+          }}>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>Table {showCoversPopup.table_number}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>
+                Table {showCoversPopup.table_number}
+              </div>
               <div style={{ color: '#888', fontSize: 14 }}>How many covers?</div>
             </div>
+
             <div style={{ fontSize: 48, fontWeight: 800, color: '#1a1a2e', minHeight: 60 }}>
               {coversInput || '0'}
             </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, width: '100%' }}>
               {['1','2','3','4','5','6','7','8','9','C','0','✓'].map(btn => (
                 <button key={btn} onClick={async () => {
@@ -363,17 +587,26 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                     setCoversInput(prev => prev.length < 2 ? prev + btn : prev);
                   }
                 }} style={{
-                  height: 64, borderRadius: 12, border: 'none', fontSize: 22,
+                  height: isMobile ? 72 : 64,
+                  borderRadius: 12, border: 'none',
+                  fontSize: isMobile ? 26 : 22,
                   fontWeight: 700, cursor: 'pointer',
                   background: btn === '✓' ? '#e94560' : btn === 'C' ? '#f0f0f0' : '#f8f8f8',
                   color: btn === '✓' ? 'white' : '#1a1a2e',
                 }}>{btn}</button>
               ))}
             </div>
-            <button onClick={() => setShowCoversPopup(null)} style={{ color: '#888', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>Cancel</button>
+
+            <button onClick={() => setShowCoversPopup(null)} style={{
+              color: '#888', background: 'none', border: 'none',
+              cursor: 'pointer', fontSize: 14, padding: '8px 20px'
+            }}>
+              Cancel
+            </button>
           </div>
         </div>
       )}
+
     </div>
   );
 }

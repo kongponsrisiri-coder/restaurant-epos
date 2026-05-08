@@ -34,7 +34,7 @@ export default function AdminScreen() {
           <button key={item.id} onClick={() => setSection(item.id)} style={{ background: section === item.id ? '#e94560' : 'none', border: 'none', color: 'white', padding: '12px 20px', textAlign: 'left', cursor: 'pointer', fontSize: 14, fontWeight: section === item.id ? 700 : 400 }}>{item.label}</button>
         ))}
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', background: '#f5f5f5' }}>
+      <div style={{ flex: 1, overflow: section === 'inventory' ? 'hidden' : 'auto', background: '#f5f5f5' }}>
         {section === 'trading'   && <TradingSection />}
         {section === 'menu'      && <MenuSection />}
         {section === 'tableplan' && <TablePlanSection />}

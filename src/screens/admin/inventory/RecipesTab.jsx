@@ -66,9 +66,9 @@ export default function RecipesTab() {
   const UNITS = ['kg', 'g', 'L', 'ml', 'unit'];
 
   return (
-    <div style={{ display: 'flex', gap: 20, height: 'calc(100vh - 230px)' }}>
+    <div style={{ display: 'flex', gap: 20, height: '100%' }}>
       {/* Left panel — own scroll zone */}
-      <div style={{ width: 280, flexShrink: 0, overflowY: 'auto' }}>
+      <div style={{ width: 280, flexShrink: 0, overflowY: 'auto', height: '100%' }}>
         <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
           <div style={{ padding: '12px 16px', background: '#f8f8f8', fontWeight: 700, fontSize: 13, color: '#555' }}>Menu Items ({menuItems.length})</div>
           {menuItems.length === 0 && <div style={{ padding: 24, textAlign: 'center', color: '#bbb', fontSize: 13 }}>No menu items found</div>}
@@ -87,8 +87,8 @@ export default function RecipesTab() {
         </div>
       </div>
 
-      {/* Right panel — own scroll zone, never affected by left panel */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      {/* Right panel — own scroll zone, completely independent from left */}
+      <div style={{ flex: 1, overflowY: 'auto', height: '100%' }}>
         {!selectedItem ? (
           <div style={{ background: 'white', borderRadius: 12, padding: 40, textAlign: 'center', color: '#bbb', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>

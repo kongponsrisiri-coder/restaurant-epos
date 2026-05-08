@@ -6,7 +6,10 @@ const RESTAURANT_PHONE   = '07700 000000';
 const RESTAURANT_ADDRESS = '123 Test Street, London, E1 1AA';
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host:   'smtp.gmail.com',
+  port:   587,
+  secure: false,
+  family: 4,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,

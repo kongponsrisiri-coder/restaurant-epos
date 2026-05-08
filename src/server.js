@@ -1827,35 +1827,6 @@ app.post('/api/dish-allergens/:menuItemId', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/admin/reset-test-data', async (req, res) => {
-  try {
-    await pool.query(`TRUNCATE TABLE order_item_modifiers CASCADE`);
-    await pool.query(`TRUNCATE TABLE order_items CASCADE`);
-    await pool.query(`TRUNCATE TABLE payments CASCADE`);
-    await pool.query(`TRUNCATE TABLE orders CASCADE`);
-    await pool.query(`TRUNCATE TABLE z_reports CASCADE`);
-    await pool.query(`TRUNCATE TABLE reservation_reminders CASCADE`);
-    await pool.query(`TRUNCATE TABLE reservations CASCADE`);
-    await pool.query(`TRUNCATE TABLE stock_movements CASCADE`);
-    await pool.query(`TRUNCATE TABLE recipe_lines CASCADE`);
-    await pool.query(`TRUNCATE TABLE recipes CASCADE`);
-    await pool.query(`TRUNCATE TABLE supplier_invoices CASCADE`);
-    await pool.query(`TRUNCATE TABLE expenses CASCADE`);
-    await pool.query(`TRUNCATE TABLE ingredients CASCADE`);
-    await pool.query(`TRUNCATE TABLE dish_allergens CASCADE`);
-    await pool.query(`ALTER SEQUENCE orders_id_seq RESTART WITH 1`);
-    await pool.query(`ALTER SEQUENCE order_items_id_seq RESTART WITH 1`);
-    await pool.query(`ALTER SEQUENCE payments_id_seq RESTART WITH 1`);
-    await pool.query(`ALTER SEQUENCE reservations_id_seq RESTART WITH 1`);
-    await pool.query(`ALTER SEQUENCE stock_movements_id_seq RESTART WITH 1`);
-    await pool.query(`ALTER SEQUENCE ingredients_id_seq RESTART WITH 1`);
-    await pool.query(`ALTER SEQUENCE expenses_id_seq RESTART WITH 1`);
-    await pool.query(`UPDATE tables SET status = 'available'`);
-    res.json({ success: true, message: 'Test data cleared. System is clean.' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // ─────────────────────────────────────────────
 // SOCKET.IO

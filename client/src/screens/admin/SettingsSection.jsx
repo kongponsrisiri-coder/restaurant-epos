@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse } from '../../api';
+import DiningDurationSettings from './DiningDurationSettings';
 
 function BarCategoryManager() {
   const [categories, setCategories] = useState([]);
@@ -93,6 +94,9 @@ export default function SettingsSection() {
         <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 8 }}>🍹 Bar Categories</h2>
         <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>Select which categories show on the Bar screen</p>
         <BarCategoryManager />
+      </div>
+      <div style={{ marginTop: 20 }}>
+        <DiningDurationSettings />
       </div>
     </div>
   );

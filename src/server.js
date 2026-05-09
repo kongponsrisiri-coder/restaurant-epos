@@ -77,6 +77,105 @@ app.delete('/api/tables/:id', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
+// TABLE COMBINATIONS — linking adjacent tables
+// ─────────────────────────────────────────────
+
+app.get('/api/table-combinations', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM table_combinations WHERE is_active = true ORDER BY id'
+    );
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/table-combinations', async (req, res) => {
+  try {
+    const { table_id_a, table_id_b } = req.body;
+    if (!table_id_a || !table_id_b) return res.status(400).json({ error: 'table_id_a and table_id_b required' });
+    const result = await pool.query(
+      'INSERT INTO table_combinations (table_id_a, table_id_b) VALUES ($1,$2) RETURNING id',
+      [table_id_a, table_id_b]
+    );
+    res.json({ id: result.rows[0].id, success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/table-combinations/:id', async (req, res) => {
+  try {
+    await pool.query(
+      'UPDATE table_combinations SET is_active = false WHERE id = $1',
+      [req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─────────────────────────────────────────────
+// TABLE WALLS — partition walls on the floor plan
+// ─────────────────────────────────────────────
+
+app.get('/api/table-walls', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM table_walls ORDER BY id');
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/table-walls', async (req, res) => {
+  try {
+    const { pos_x, pos_y, width, height } = req.body;
+    const result = await pool.query(
+      'INSERT INTO table_walls (pos_x, pos_y, width, height) VALUES ($1,$2,$3,$4) RETURNING id',
+      [pos_x || 0, pos_y || 0, width || 12, height || 100]
+    );
+    res.json({ id: result.rows[0].id, success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/table-walls/:id', async (req, res) => {
+  try {
+    const { pos_x, pos_y, width, height } = req.body;
+    await pool.query(
+      'UPDATE table_walls SET pos_x=$1, pos_y=$2, width=$3, height=$4 WHERE id=$5',
+      [pos_x, pos_y, width, height, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/table-walls/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM table_walls WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─────────────────────────────────────────────
+// DINING DURATION TIERS — sitting time by party size
+// ─────────────────────────────────────────────
+
+app.get('/api/dining-duration-tiers', async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM dining_duration_tiers WHERE restaurant_id = 'siamepos' ORDER BY covers_min"
+    );
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/dining-duration-tiers/:id', async (req, res) => {
+  try {
+    const { duration_mins } = req.body;
+    await pool.query(
+      'UPDATE dining_duration_tiers SET duration_mins = $1 WHERE id = $2',
+      [duration_mins, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─────────────────────────────────────────────
 // CATEGORIES ROUTES
 // ─────────────────────────────────────────────
 
@@ -1029,101 +1128,55 @@ const widgetCors = (req, res, next) => {
   next();
 };
 
-// ─────────────────────────────────────────────────────────────────────
-// REPLACE the existing /api/reservations/availability route in server.js
-// with this updated version that uses dining duration tiers
-// ─────────────────────────────────────────────────────────────────────
-
 app.get('/api/reservations/availability', widgetCors, async (req, res) => {
   try {
     const { date, covers = 2, restaurant_id = 'siamepos' } = req.query;
     if (!date) return res.status(400).json({ error: 'date is required (YYYY-MM-DD)' });
     const coversNum = parseInt(covers, 10);
     if (isNaN(coversNum) || coversNum < 1) return res.status(400).json({ error: 'covers must be a positive number' });
-
     const settingsRes = await pool.query('SELECT * FROM restaurant_settings WHERE restaurant_id = $1', [restaurant_id]);
     const s = settingsRes.rows[0] || {
       opening_time: '11:00', last_booking_time: '21:30',
       slot_interval_mins: 15, max_covers_per_slot: 20,
       booking_lead_hours: 1, booking_advance_days: 60,
     };
-
     const requestedDate = new Date(date + 'T00:00:00');
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0,0,0,0);
     const maxDate = new Date(today);
     maxDate.setDate(maxDate.getDate() + (s.booking_advance_days || 60));
     if (requestedDate < today) return res.json({ slots: [], message: 'Date is in the past' });
     if (requestedDate > maxDate) return res.json({ slots: [], message: 'Date too far in advance' });
-
-    const [openH, openM]   = String(s.opening_time).slice(0, 5).split(':').map(Number);
-    const [closeH, closeM] = String(s.last_booking_time).slice(0, 5).split(':').map(Number);
+    const [openH, openM]   = String(s.opening_time).slice(0,5).split(':').map(Number);
+    const [closeH, closeM] = String(s.last_booking_time).slice(0,5).split(':').map(Number);
     const interval = s.slot_interval_mins || 15;
     const slots = [];
     let cur = openH * 60 + openM;
     const end = closeH * 60 + closeM;
     while (cur <= end) {
       const h = Math.floor(cur / 60), m = cur % 60;
-      slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+      slots.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
       cur += interval;
     }
-
-    // ── Duration-aware bookings query ────────────────────────────────
-    // For each booking, look up its dining duration tier based on covers
     const bookingsRes = await pool.query(
-      `SELECT
-         TO_CHAR(r.reservation_time, 'HH24:MI') AS time_str,
-         r.covers,
-         COALESCE(d.duration_mins, 90) AS duration_mins
-       FROM reservations r
-       LEFT JOIN dining_duration_tiers d
-         ON r.covers >= d.covers_min
-         AND (d.covers_max IS NULL OR r.covers <= d.covers_max)
-         AND d.restaurant_id = $2
-       WHERE r.reservation_date = $1
-         AND r.restaurant_id = $2
-         AND r.status NOT IN ('cancelled','no-show')`,
+      `SELECT TO_CHAR(reservation_time, 'HH24:MI') AS time_str, SUM(covers) AS booked_covers
+       FROM reservations
+       WHERE reservation_date = $1 AND restaurant_id = $2
+         AND status NOT IN ('cancelled','no-show')
+       GROUP BY time_str`,
       [date, restaurant_id]
     );
-
-    // Convert bookings to { startMins, covers, endMins }
-    const bookings = bookingsRes.rows.map(r => {
-      const [bh, bm] = r.time_str.split(':').map(Number);
-      const startMins = bh * 60 + bm;
-      return {
-        startMins,
-        covers:   parseInt(r.covers, 10),
-        endMins:  startMins + parseInt(r.duration_mins, 10),
-      };
-    });
-
-    const maxCovers = s.max_covers_per_slot || 20;
-    const isToday   = requestedDate.toDateString() === new Date().toDateString();
-    const nowMins   = isToday
-      ? (new Date().getHours() * 60 + new Date().getMinutes() + (s.booking_lead_hours || 1) * 60)
-      : -1;
-
+    const bookedMap = {};
+    bookingsRes.rows.forEach(r => { bookedMap[r.time_str] = parseInt(r.booked_covers, 10); });
+    const isToday = requestedDate.toDateString() === new Date().toDateString();
+    const nowMins = isToday ? (new Date().getHours() * 60 + new Date().getMinutes() + (s.booking_lead_hours || 1) * 60) : -1;
     const result = slots.map(time => {
       const [h, m] = time.split(':').map(Number);
       const slotMins = h * 60 + m;
-
-      // Count covers from any booking that is ACTIVE at this slot
-      // (started at or before, ends after)
-      const activeCovers = bookings.reduce((sum, b) => {
-        if (b.startMins <= slotMins && b.endMins > slotMins) return sum + b.covers;
-        return sum;
-      }, 0);
-
-      const remaining   = maxCovers - activeCovers;
-      const pastCutoff  = isToday && slotMins < nowMins;
-
-      return {
-        time,
-        available:        !pastCutoff && remaining >= coversNum,
-        remaining_covers: Math.max(0, remaining),
-        past:             pastCutoff,
-      };
+      const booked = bookedMap[time] || 0;
+      const remaining = (s.max_covers_per_slot || 20) - booked;
+      const pastCutoff = isToday && slotMins < nowMins;
+      return { time, available: !pastCutoff && remaining >= coversNum, remaining_covers: Math.max(0, remaining), past: pastCutoff };
     });
-
     res.json({ date, covers: coversNum, restaurant_id, slots: result });
   } catch (err) {
     console.error('GET /api/reservations/availability error:', err);
@@ -1515,7 +1568,6 @@ app.post('/api/ai/scan-invoice', async (req, res) => {
   try {
     const { image_base64, media_type } = req.body;
     if (!image_base64) return res.status(400).json({ success: false, error: 'No image provided' });
-
     const INVOICE_PROMPT = `You are reading a supplier invoice or delivery note for a restaurant.
 Extract all information and return ONLY a valid JSON object — no other text, no markdown, no explanation.
 
@@ -1531,55 +1583,34 @@ Required JSON structure:
 }
 
 Rules: If a value is missing use null for strings and 0 for numbers. Convert prices to GBP. Return ONLY the JSON object.`;
-
-    const isImage     = media_type && media_type.startsWith('image/');
-    const contentItem = isImage
-      ? { type: 'image',    source: { type: 'base64', media_type: media_type, data: image_base64 } }
-      : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: image_base64 } };
-
     const https = require('https');
     const requestBody = JSON.stringify({
       model: 'claude-sonnet-4-6', max_tokens: 2000,
       messages: [{ role: 'user', content: [
-        contentItem,
+        { type: 'image', source: { type: 'base64', media_type: media_type || 'image/jpeg', data: image_base64 } },
         { type: 'text', text: INVOICE_PROMPT }
       ]}]
     });
-
     const result = await new Promise((resolve, reject) => {
       const options = {
         hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(requestBody),
-          'x-api-key': process.env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01'
-        }
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(requestBody), 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }
       };
-      const apiReq = https.request(options, (apiRes) => {
-        let data = '';
-        apiRes.on('data', chunk => { data += chunk; });
-        apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: data }));
-      });
-      apiReq.on('error', reject);
-      apiReq.write(requestBody);
-      apiReq.end();
+      const apiReq = https.request(options, (apiRes) => { let data = ''; apiRes.on('data', chunk => { data += chunk; }); apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: data })); });
+      apiReq.on('error', reject); apiReq.write(requestBody); apiReq.end();
     });
-
     if (result.status !== 200) throw new Error(`Anthropic API error: ${result.body}`);
-    const aiData  = JSON.parse(result.body);
+    const aiData = JSON.parse(result.body);
     const invoice = JSON.parse(aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}');
     return res.json({ success: true, invoice });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
-  }
+  } catch (err) { return res.status(500).json({ success: false, error: err.message }); }
 });
+
 // AI EXPENSE SCANNER
 app.post('/api/ai/scan-expense', async (req, res) => {
   try {
     const { image_base64, media_type } = req.body;
     if (!image_base64) return res.status(400).json({ success: false, error: 'No image provided' });
-
     const EXPENSE_PROMPT = `You are reading a receipt, bill or expense document for a restaurant.
 Extract the key information and return ONLY a valid JSON object — no other text, no markdown.
 
@@ -1591,49 +1622,29 @@ Required JSON structure:
 }
 
 Category: overhead=rent/utilities/insurance/repairs, labour=wages/staff, other=equipment/misc. Return ONLY JSON.`;
-
-    const isImage     = media_type && media_type.startsWith('image/');
-    const contentItem = isImage
-      ? { type: 'image',    source: { type: 'base64', media_type: media_type, data: image_base64 } }
-      : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: image_base64 } };
-
     const https = require('https');
     const requestBody = JSON.stringify({
       model: 'claude-sonnet-4-6', max_tokens: 1000,
       messages: [{ role: 'user', content: [
-        contentItem,
+        { type: 'image', source: { type: 'base64', media_type: media_type || 'image/jpeg', data: image_base64 } },
         { type: 'text', text: EXPENSE_PROMPT }
       ]}]
     });
-
     const result = await new Promise((resolve, reject) => {
       const options = {
         hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(requestBody),
-          'x-api-key': process.env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01'
-        }
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(requestBody), 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }
       };
-      const apiReq = https.request(options, (apiRes) => {
-        let data = '';
-        apiRes.on('data', chunk => { data += chunk; });
-        apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: data }));
-      });
-      apiReq.on('error', reject);
-      apiReq.write(requestBody);
-      apiReq.end();
+      const apiReq = https.request(options, (apiRes) => { let data = ''; apiRes.on('data', chunk => { data += chunk; }); apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: data })); });
+      apiReq.on('error', reject); apiReq.write(requestBody); apiReq.end();
     });
-
     if (result.status !== 200) throw new Error(`Anthropic API error: ${result.body}`);
-    const aiData  = JSON.parse(result.body);
+    const aiData = JSON.parse(result.body);
     const expense = JSON.parse(aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}');
     return res.json({ success: true, expense });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
-  }
+  } catch (err) { return res.status(500).json({ success: false, error: err.message }); }
 });
+
 // EXPENSES CRUD
 app.get('/api/expenses', async (req, res) => {
   try {
@@ -1872,139 +1883,6 @@ app.post('/api/dish-allergens/:menuItemId', async (req, res) => {
     res.json({ success: true, id: result.rows[0]?.id });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-
-// ═══════════════════════════════════════════════════════════════════
-// RESERVATION IMPROVEMENTS — Sandy v2
-// Add this block just before the Socket.IO section in server.js
-// ═══════════════════════════════════════════════════════════════════
-
-// ─────────────────────────────────────────────
-// TABLE COMBINATIONS
-// ─────────────────────────────────────────────
-
-app.get('/api/table-combinations', async (req, res) => {
-  try {
-    const { restaurant_id = 'siamepos' } = req.query;
-    const result = await pool.query(
-      `SELECT tc.*, 
-              ta.name as table_a_name, ta.table_number as table_a_number, ta.capacity as table_a_capacity,
-              tb.name as table_b_name, tb.table_number as table_b_number, tb.capacity as table_b_capacity
-       FROM table_combinations tc
-       JOIN tables ta ON ta.id = tc.table_id_a
-       JOIN tables tb ON tb.id = tc.table_id_b
-       WHERE tc.restaurant_id = $1 AND tc.is_active = true
-       ORDER BY tc.id`,
-      [restaurant_id]
-    );
-    res.json(result.rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.post('/api/table-combinations', async (req, res) => {
-  try {
-    const { table_id_a, table_id_b, restaurant_id = 'siamepos' } = req.body;
-    if (!table_id_a || !table_id_b) return res.status(400).json({ error: 'Both table IDs required' });
-    if (table_id_a === table_id_b) return res.status(400).json({ error: 'Cannot combine a table with itself' });
-    const result = await pool.query(
-      `INSERT INTO table_combinations (restaurant_id, table_id_a, table_id_b) VALUES ($1,$2,$3) RETURNING id`,
-      [restaurant_id, table_id_a, table_id_b]
-    );
-    res.json({ id: result.rows[0].id, success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.delete('/api/table-combinations/:id', async (req, res) => {
-  try {
-    await pool.query('UPDATE table_combinations SET is_active = false WHERE id = $1', [req.params.id]);
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ─────────────────────────────────────────────
-// TABLE WALLS
-// ─────────────────────────────────────────────
-
-app.get('/api/table-walls', async (req, res) => {
-  try {
-    const { restaurant_id = 'siamepos' } = req.query;
-    const result = await pool.query(
-      'SELECT * FROM table_walls WHERE restaurant_id = $1 ORDER BY id',
-      [restaurant_id]
-    );
-    res.json(result.rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.post('/api/table-walls', async (req, res) => {
-  try {
-    const { pos_x, pos_y, width, height, restaurant_id = 'siamepos' } = req.body;
-    const result = await pool.query(
-      `INSERT INTO table_walls (restaurant_id, pos_x, pos_y, width, height) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-      [restaurant_id, pos_x || 0, pos_y || 0, width || 8, height || 80]
-    );
-    res.json({ id: result.rows[0].id, success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.put('/api/table-walls/:id', async (req, res) => {
-  try {
-    const { pos_x, pos_y, width, height } = req.body;
-    await pool.query(
-      'UPDATE table_walls SET pos_x=$1, pos_y=$2, width=$3, height=$4 WHERE id=$5',
-      [pos_x, pos_y, width, height, req.params.id]
-    );
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.delete('/api/table-walls/:id', async (req, res) => {
-  try {
-    await pool.query('DELETE FROM table_walls WHERE id = $1', [req.params.id]);
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ─────────────────────────────────────────────
-// DINING DURATION TIERS
-// ─────────────────────────────────────────────
-
-app.get('/api/dining-duration-tiers', async (req, res) => {
-  try {
-    const { restaurant_id = 'siamepos' } = req.query;
-    const result = await pool.query(
-      'SELECT * FROM dining_duration_tiers WHERE restaurant_id = $1 ORDER BY covers_min',
-      [restaurant_id]
-    );
-    res.json(result.rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.put('/api/dining-duration-tiers', async (req, res) => {
-  const client = await pool.connect();
-  try {
-    const { tiers, restaurant_id = 'siamepos' } = req.body;
-    await client.query('BEGIN');
-    await client.query('DELETE FROM dining_duration_tiers WHERE restaurant_id = $1', [restaurant_id]);
-    for (const tier of tiers) {
-      await client.query(
-        'INSERT INTO dining_duration_tiers (restaurant_id, covers_min, covers_max, duration_mins) VALUES ($1,$2,$3,$4)',
-        [restaurant_id, tier.covers_min, tier.covers_max || null, tier.duration_mins]
-      );
-    }
-    await client.query('COMMIT');
-    res.json({ success: true });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
-  } finally {
-    client.release();
-  }
-});
-
-// ═══════════════════════════════════════════════════════════════════
-// END RESERVATION IMPROVEMENTS
-// ═══════════════════════════════════════════════════════════════════
-
 // ─────────────────────────────────────────────
 // SOCKET.IO
 // ─────────────────────────────────────────────

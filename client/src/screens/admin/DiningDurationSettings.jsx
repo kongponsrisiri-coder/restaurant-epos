@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { SERVER_URL } from '../api';
+import { SERVER_URL } from '../../api';
 
 // ─────────────────────────────────────────────────────────────────
 // DiningDurationSettings

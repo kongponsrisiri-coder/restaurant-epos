@@ -4,6 +4,7 @@ const RESTAURANT_NAME    = process.env.RESTAURANT_NAME  || 'SiamEPOS Restaurant'
 const RESTAURANT_EMAIL   = process.env.RESTAURANT_EMAIL || 'info@siamepos.co.uk';
 const RESTAURANT_PHONE   = '07700 000000';
 const RESTAURANT_ADDRESS = '123 Test Street, London, E1 1AA';
+const FROM_EMAIL         = process.env.EMAIL_USER || 'kongponsrisiri@gmail.com';
 
 function formatDate(dateStr) {
   try {
@@ -19,26 +20,26 @@ function formatTime(timeStr) {
   return timeStr ? String(timeStr).slice(0, 5) : '';
 }
 
-function sendResendEmail(to, subject, html) {
+function sendBrevoEmail(to, subject, html) {
   return new Promise((resolve, reject) => {
-    if (!process.env.RESEND_API_KEY) {
-      console.log('ℹ️  RESEND_API_KEY not set — skipping email to ' + to);
+    if (!process.env.BREVO_API_KEY) {
+      console.log('ℹ️  BREVO_API_KEY not set — skipping email to ' + to);
       return resolve();
     }
 
     const body = JSON.stringify({
-      from: `SiamEPOS <onboarding@resend.dev>`,
-      to:      [to],
+      sender:  { name: RESTAURANT_NAME, email: FROM_EMAIL },
+      to:      [{ email: to }],
       subject: subject,
-      html:    html,
+      htmlContent: html,
     });
 
     const req = https.request({
-      hostname: 'api.resend.com',
-      path:     '/emails',
+      hostname: 'api.brevo.com',
+      path:     '/v3/smtp/email',
       method:   'POST',
       headers: {
-        'Authorization':  'Bearer ' + process.env.RESEND_API_KEY,
+        'api-key':        process.env.BREVO_API_KEY,
         'Content-Type':   'application/json',
         'Content-Length': Buffer.byteLength(body),
       },
@@ -50,8 +51,8 @@ function sendResendEmail(to, subject, html) {
           console.log('✅ Email sent to ' + to);
           resolve();
         } else {
-          console.error('❌ Resend error ' + res.statusCode + ':', data);
-          reject(new Error('Resend error: ' + data));
+          console.error('❌ Brevo error ' + res.statusCode + ':', data);
+          reject(new Error('Brevo error: ' + data));
         }
       });
     });
@@ -118,7 +119,7 @@ async function sendBookingConfirmation(reservation) {
     </div>
   `;
 
-  await sendResendEmail(
+  await sendBrevoEmail(
     reservation.customer_email,
     `Booking Confirmed ✅ — ${RESTAURANT_NAME}`,
     html
@@ -165,7 +166,7 @@ async function sendReminderEmail(reservation) {
     </div>
   `;
 
-  await sendResendEmail(
+  await sendBrevoEmail(
     reservation.customer_email,
     `Reminder: Your booking tomorrow at ${RESTAURANT_NAME} ⏰`,
     html

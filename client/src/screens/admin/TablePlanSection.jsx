@@ -1,19 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SERVER_URL, getTables, updateTablePlan, addTable, deleteTable } from '../../api';
 
-// ─────────────────────────────────────────────────────────────────
-// Local API helpers — Krit: add these endpoints to server.js
-// See ticket at bottom of this file
-// ─────────────────────────────────────────────────────────────────
 const apiGet  = url       => fetch(SERVER_URL + url).then(r => r.json());
 const apiPost = (url, d)  => fetch(SERVER_URL + url, { method: 'POST',   headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) }).then(r => r.json());
 const apiPut  = (url, d)  => fetch(SERVER_URL + url, { method: 'PUT',    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) }).then(r => r.json());
 const apiDel  = url       => fetch(SERVER_URL + url, { method: 'DELETE' }).then(r => r.json());
 
-// ─────────────────────────────────────────────────────────────────
-// Graph traversal — walk the combination links to find all
-// tables in the same group (handles chains: T5-T6-T7 = 16p)
-// ─────────────────────────────────────────────────────────────────
 function getGroup(startId, combos) {
   const visited = [startId];
   const queue   = [startId];
@@ -47,41 +39,31 @@ function getAllGroups(combos, tableIds) {
   return groups;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Default tiers (used if backend not ready yet)
-// ─────────────────────────────────────────────────────────────────
 const DEFAULT_TIERS = [
   { id: 1, covers_min: 1, covers_max: 4,    duration_mins: 90  },
   { id: 2, covers_min: 5, covers_max: 8,    duration_mins: 120 },
   { id: 3, covers_min: 9, covers_max: null, duration_mins: 150 },
 ];
 
-// ─────────────────────────────────────────────────────────────────
-// Shared styles
-// ─────────────────────────────────────────────────────────────────
 const lbl = { fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 };
 const inp = { width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box', fontFamily: 'inherit' };
 
-// ─────────────────────────────────────────────────────────────────
-// Component
-// ─────────────────────────────────────────────────────────────────
 export default function TablePlanSection() {
   const [tables,  setTables]  = useState([]);
-  const [combos,  setCombos]  = useState([]);  // { id, table_id_a, table_id_b }
-  const [walls,   setWalls]   = useState([]);  // { id, pos_x, pos_y, width, height }
+  const [combos,  setCombos]  = useState([]);
+  const [walls,   setWalls]   = useState([]);
   const [tiers,   setTiers]   = useState(DEFAULT_TIERS);
 
-  const [dragging, setDragging] = useState(null);  // { type: 'table'|'wall', id }
-  const [selected, setSelected] = useState(null);  // { type: 'table'|'wall', id }
+  const [dragging, setDragging] = useState(null);
+  const [selected, setSelected] = useState(null);
   const [offset,   setOffset]   = useState({ x: 0, y: 0 });
 
-  const [mode,     setMode]     = useState('select'); // 'select' | 'link'
-  const [linkFrom, setLinkFrom] = useState(null);     // table id — first table in link pair
+  const [mode,     setMode]     = useState('select');
+  const [linkFrom, setLinkFrom] = useState(null);
 
   const [toast, setToast] = useState(null);
   const canvasRef = useRef(null);
 
-  // ── Data loading ───────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
     try {
       const [tablesData, combosData, wallsData, tiersData] = await Promise.all([
@@ -113,35 +95,25 @@ export default function TablePlanSection() {
     setTimeout(() => setToast(null), 3000);
   }
 
-  // ── Mouse: canvas background click (deselect) ──────────────────
   const handleCanvasMouseDown = (e) => {
     if (e.target !== canvasRef.current) return;
     setSelected(null);
     if (mode !== 'link') setLinkFrom(null);
   };
 
-  // ── Mouse: table and wall drag ─────────────────────────────────
   const handleMouseDown = (e, type, id) => {
     e.preventDefault();
     e.stopPropagation();
 
-    // Link mode — handle table pair selection
     if (mode === 'link' && type === 'table') {
-      if (!linkFrom) {
-        setLinkFrom(id);
-        return;
-      }
-      if (linkFrom === id) {
-        setLinkFrom(null);
-        return;
-      }
+      if (!linkFrom) { setLinkFrom(id); return; }
+      if (linkFrom === id) { setLinkFrom(null); return; }
       handleAddCombo(linkFrom, id);
       setLinkFrom(null);
       setMode('select');
       return;
     }
 
-    // Select + drag
     setDragging({ type, id });
     setSelected({ type, id });
     const rect = canvasRef.current.getBoundingClientRect();
@@ -181,15 +153,16 @@ export default function TablePlanSection() {
   };
 
   // ── Table operations ───────────────────────────────────────────
-  const handleAddTable = async () => {
+  const handleAddTable = async (shape = 'square') => {
     const maxNum = Math.max(...tables.map(t => Number(t.table_number) || 0), 0);
-    await addTable({ table_number: maxNum + 1, capacity: 4, pos_x: 40, pos_y: 40, shape: 'square', width: 80, height: 80 });
+    const dims = shape === 'rectangle' ? { width: 140, height: 80 } : { width: 80, height: 80 };
+    const cap  = shape === 'rectangle' ? 6 : 4;
+    await addTable({ table_number: maxNum + 1, capacity: cap, pos_x: 40, pos_y: 40, shape, ...dims });
     fetchAll();
   };
 
   const handleDeleteTable = async (id) => {
     if (!window.confirm('Delete this table?')) return;
-    // Remove any combination links involving this table first
     const related = combos.filter(c => c.table_id_a === id || c.table_id_b === id);
     await Promise.all(related.map(c => apiDel(`/api/table-combinations/${c.id}`)));
     await deleteTable(id);
@@ -207,10 +180,11 @@ export default function TablePlanSection() {
   };
 
   // ── Wall operations ────────────────────────────────────────────
-  const handleAddWall = async () => {
-    await apiPost('/api/table-walls', { pos_x: 120, pos_y: 80, width: 12, height: 100 });
+  const handleAddWall = async (direction = 'vertical') => {
+    const dims = direction === 'horizontal' ? { width: 100, height: 12 } : { width: 12, height: 100 };
+    await apiPost('/api/table-walls', { pos_x: 120, pos_y: 80, ...dims });
     fetchAll();
-    showToast('Wall added — drag to position');
+    showToast(direction === 'horizontal' ? '— Horizontal wall added' : '| Vertical wall added');
   };
 
   const handleUpdateWall = async (id, changes) => {
@@ -283,9 +257,6 @@ export default function TablePlanSection() {
       }));
   }
 
-  // ─────────────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────────────
   return (
     <div style={{ padding: 24 }}>
 
@@ -324,13 +295,26 @@ export default function TablePlanSection() {
 
           <div style={{ width: 1, height: 24, background: '#e0e0e0' }} />
 
-          <button onClick={handleAddTable}
-            style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
-            + Table</button>
+          {/* Table shape buttons */}
+          <button onClick={() => handleAddTable('square')}
+            style={{ padding: '8px 10px', borderRadius: 8, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>
+            □ Square</button>
+          <button onClick={() => handleAddTable('round')}
+            style={{ padding: '8px 10px', borderRadius: 8, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>
+            ○ Round</button>
+          <button onClick={() => handleAddTable('rectangle')}
+            style={{ padding: '8px 10px', borderRadius: 8, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>
+            ▬ Rect</button>
 
-          <button onClick={handleAddWall}
-            style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#555', color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
-            + Wall</button>
+          <div style={{ width: 1, height: 24, background: '#e0e0e0' }} />
+
+          {/* Wall direction buttons */}
+          <button onClick={() => handleAddWall('vertical')}
+            style={{ padding: '8px 10px', borderRadius: 8, border: 'none', background: '#555', color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>
+            | Wall</button>
+          <button onClick={() => handleAddWall('horizontal')}
+            style={{ padding: '8px 10px', borderRadius: 8, border: 'none', background: '#555', color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>
+            — Wall</button>
 
           <button onClick={fetchAll}
             style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#f0f0f0', color: '#555', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
@@ -369,9 +353,8 @@ export default function TablePlanSection() {
             backgroundSize: '30px 30px', overflow: 'hidden',
           }}
         >
-          {/* SVG overlay — combination connectors + group labels */}
+          {/* SVG overlay */}
           <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1 }}>
-            {/* Connector lines between each linked pair */}
             {combos.map(c => {
               const a = tableCenter(c.table_id_a);
               const b = tableCenter(c.table_id_b);
@@ -384,8 +367,6 @@ export default function TablePlanSection() {
                 </g>
               );
             })}
-
-            {/* Group capacity badge — shown below each connected group */}
             {groups.map((group, gi) => {
               const cap   = groupCap(group);
               const names = group.map(id => { const t = tables.find(t => t.id === id); return t ? `T${t.table_number}` : ''; }).join('+');
@@ -463,7 +444,7 @@ export default function TablePlanSection() {
 
           {tables.length === 0 && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb', fontSize: 15 }}>
-              Click "+ Table" to start building your floor plan
+              Click a shape button to start building your floor plan
             </div>
           )}
         </div>
@@ -543,7 +524,6 @@ export default function TablePlanSection() {
                     ) : null;
                   })}
 
-                  {/* Full group if in a chain of 3+ */}
                   {(() => {
                     const group = getGroup(selectedTable.id, combos);
                     if (group.length > 2) {
@@ -625,7 +605,6 @@ export default function TablePlanSection() {
           {/* NO SELECTION: groups summary + duration tiers */}
           {!selectedTable && !selectedWall && (
             <>
-              {/* Linked groups */}
               <div style={{ background: 'white', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
                 <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e', marginBottom: 12 }}>Linked Groups</div>
                 {groups.length === 0 ? (
@@ -649,7 +628,6 @@ export default function TablePlanSection() {
                 })}
               </div>
 
-              {/* Dining duration tiers */}
               <div style={{ background: 'white', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
                 <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e', marginBottom: 4 }}>Dining Duration</div>
                 <div style={{ fontSize: 11, color: '#888', marginBottom: 12 }}>
@@ -675,7 +653,6 @@ export default function TablePlanSection() {
             </>
           )}
 
-          {/* Tip */}
           <div style={{ background: '#f8f8f8', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#888', lineHeight: 1.6 }}>
             💡 Drag tables and walls to position<br />
             🟡 Amber tables are linked to a group<br />
@@ -686,102 +663,3 @@ export default function TablePlanSection() {
     </div>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────
-// TICKET FOR KRIT — add these routes to server.js
-// Run DB migrations first (see separate ticket)
-// ─────────────────────────────────────────────────────────────────
-/*
-
-// GET /api/table-combinations
-app.get('/api/table-combinations', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM table_combinations WHERE is_active = true');
-    res.json(result.rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// POST /api/table-combinations
-app.post('/api/table-combinations', async (req, res) => {
-  try {
-    const { table_id_a, table_id_b } = req.body;
-    const result = await pool.query(
-      'INSERT INTO table_combinations (table_id_a, table_id_b) VALUES ($1,$2) RETURNING id',
-      [table_id_a, table_id_b]
-    );
-    res.json({ id: result.rows[0].id, success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// DELETE /api/table-combinations/:id
-app.delete('/api/table-combinations/:id', async (req, res) => {
-  try {
-    await pool.query('UPDATE table_combinations SET is_active = false WHERE id = $1', [req.params.id]);
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// GET /api/table-walls
-app.get('/api/table-walls', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM table_walls ORDER BY id');
-    res.json(result.rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// POST /api/table-walls
-app.post('/api/table-walls', async (req, res) => {
-  try {
-    const { pos_x, pos_y, width, height } = req.body;
-    const result = await pool.query(
-      'INSERT INTO table_walls (pos_x, pos_y, width, height) VALUES ($1,$2,$3,$4) RETURNING id',
-      [pos_x || 0, pos_y || 0, width || 12, height || 100]
-    );
-    res.json({ id: result.rows[0].id, success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// PUT /api/table-walls/:id
-app.put('/api/table-walls/:id', async (req, res) => {
-  try {
-    const { pos_x, pos_y, width, height } = req.body;
-    await pool.query(
-      'UPDATE table_walls SET pos_x=$1, pos_y=$2, width=$3, height=$4 WHERE id=$5',
-      [pos_x, pos_y, width, height, req.params.id]
-    );
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// DELETE /api/table-walls/:id
-app.delete('/api/table-walls/:id', async (req, res) => {
-  try {
-    await pool.query('DELETE FROM table_walls WHERE id = $1', [req.params.id]);
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// GET /api/dining-duration-tiers
-app.get('/api/dining-duration-tiers', async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT * FROM dining_duration_tiers WHERE restaurant_id = $1 ORDER BY covers_min',
-      ['siamepos']
-    );
-    res.json(result.rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// PUT /api/dining-duration-tiers/:id
-app.put('/api/dining-duration-tiers/:id', async (req, res) => {
-  try {
-    const { duration_mins } = req.body;
-    await pool.query(
-      'UPDATE dining_duration_tiers SET duration_mins = $1 WHERE id = $2',
-      [duration_mins, req.params.id]
-    );
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-*/

@@ -4,7 +4,7 @@ const RESTAURANT_NAME    = process.env.RESTAURANT_NAME  || 'SiamEPOS Restaurant'
 const RESTAURANT_EMAIL   = process.env.RESTAURANT_EMAIL || 'info@siamepos.co.uk';
 const RESTAURANT_PHONE   = '07700 000000';
 const RESTAURANT_ADDRESS = '123 Test Street, London, E1 1AA';
-const FROM_EMAIL         = process.env.EMAIL_USER || 'kongponsrisiri@gmail.com';
+const FROM_EMAIL         = 'noreply@siamepos.co.uk';
 
 function formatDate(dateStr) {
   try {

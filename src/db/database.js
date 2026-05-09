@@ -255,6 +255,51 @@ async function initDB() {
       ON CONFLICT (restaurant_id) DO NOTHING
     `);
 
+    // ─────────────────────────────────────────────
+    // SANDY v2 — RESERVATION IMPROVEMENTS
+    // ─────────────────────────────────────────────
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS table_combinations (
+        id SERIAL PRIMARY KEY,
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos',
+        table_id_a INTEGER REFERENCES tables(id) ON DELETE CASCADE,
+        table_id_b INTEGER REFERENCES tables(id) ON DELETE CASCADE,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS table_walls (
+        id SERIAL PRIMARY KEY,
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos',
+        pos_x INTEGER DEFAULT 0,
+        pos_y INTEGER DEFAULT 0,
+        width INTEGER DEFAULT 8,
+        height INTEGER DEFAULT 80,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS dining_duration_tiers (
+        id SERIAL PRIMARY KEY,
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos',
+        covers_min INTEGER NOT NULL,
+        covers_max INTEGER,
+        duration_mins INTEGER NOT NULL DEFAULT 90
+      )
+    `);
+
+    await pool.query(`
+      INSERT INTO dining_duration_tiers (restaurant_id, covers_min, covers_max, duration_mins) VALUES
+        ('siamepos', 1, 4, 90),
+        ('siamepos', 5, 8, 120),
+        ('siamepos', 9, NULL, 150)
+      ON CONFLICT DO NOTHING
+    `);
+
     await pool.query(`
       UPDATE menu_items SET sort_order = id WHERE sort_order = 0 OR sort_order IS NULL
     `);

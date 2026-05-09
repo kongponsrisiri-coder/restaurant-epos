@@ -103,3 +103,21 @@ export const deleteMenuItem = async (id) => {
   });
   return res.json();
 };
+// ─────────────────────────────────────────────────────────────────────
+// Add these exports to the bottom of api.js
+// ─────────────────────────────────────────────────────────────────────
+
+// Table Combinations
+export const getTableCombinations = () => get('/api/table-combinations');
+export const addTableCombination = (table_id_a, table_id_b) => post('/api/table-combinations', { table_id_a, table_id_b });
+export const deleteTableCombination = (id) => del(`/api/table-combinations/${id}`);
+
+// Table Walls
+export const getTableWalls = () => get('/api/table-walls');
+export const addTableWall = (wall) => post('/api/table-walls', wall);
+export const updateTableWall = (id, wall) => put(`/api/table-walls/${id}`, wall);
+export const deleteTableWall = (id) => del(`/api/table-walls/${id}`);
+
+// Dining Duration Tiers
+export const getDiningDurationTiers = () => get('/api/dining-duration-tiers');
+export const updateDiningDurationTiers = (tiers) => put('/api/dining-duration-tiers', { tiers });

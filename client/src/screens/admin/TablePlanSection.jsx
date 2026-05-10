@@ -64,6 +64,7 @@ export default function TablePlanSection() {
   const [toast, setToast] = useState(null);
   const canvasRef = useRef(null);
 
+  // ── Initial load only — never called again except ↻ button ────
   const fetchAll = useCallback(async () => {
     try {
       const [tablesData, combosData, wallsData, tiersData] = await Promise.all([
@@ -73,14 +74,14 @@ export default function TablePlanSection() {
         apiGet('/api/dining-duration-tiers').catch(() => DEFAULT_TIERS),
       ]);
       setTables(tablesData.map((t, i) => ({
-  ...t,
-  pos_x:  t.pos_x  != null ? t.pos_x  : (i % 5) * 120 + 40,
-  pos_y:  t.pos_y  != null ? t.pos_y  : Math.floor(i / 5) * 120 + 40,
-  width:  t.width  != null ? t.width  : 80,
-  height: t.height != null ? t.height : 80,
-  shape:  t.shape  || 'square',
-})));
-
+        ...t,
+        // Use != null so pos 0 is preserved (0 || fallback would wrongly reset)
+        pos_x:  t.pos_x  != null ? t.pos_x  : (i % 5) * 120 + 40,
+        pos_y:  t.pos_y  != null ? t.pos_y  : Math.floor(i / 5) * 120 + 40,
+        width:  t.width  != null ? t.width  : 80,
+        height: t.height != null ? t.height : 80,
+        shape:  t.shape  || 'square',
+      })));
       setCombos(Array.isArray(combosData) ? combosData : []);
       setWalls(Array.isArray(wallsData)   ? wallsData  : []);
       setTiers(Array.isArray(tiersData) && tiersData.length ? tiersData : DEFAULT_TIERS);
@@ -143,21 +144,27 @@ export default function TablePlanSection() {
 
   const handleMouseUp = async () => {
     if (!dragging) return;
-    if (dragging.type === 'table') {
-      const t = tables.find(t => t.id === dragging.id);
+    const id = dragging.id;
+    const type = dragging.type;
+    setDragging(null); // clear dragging state first
+    if (type === 'table') {
+      const t = tables.find(t => t.id === id);
       if (t) await updateTablePlan(t.id, { pos_x: t.pos_x, pos_y: t.pos_y, shape: t.shape, width: t.width, height: t.height, name: t.name, capacity: t.capacity });
     } else {
-      const w = walls.find(w => w.id === dragging.id);
+      const w = walls.find(w => w.id === id);
       if (w) await apiPut(`/api/table-walls/${w.id}`, { pos_x: w.pos_x, pos_y: w.pos_y, width: w.width, height: w.height });
     }
-    setDragging(null);
   };
 
-  // ── Table operations ───────────────────────────────────────────
+  // ── Table operations — optimistic, no fetchAll ─────────────────
   const handleAddTable = async () => {
     const maxNum = Math.max(...tables.map(t => Number(t.table_number) || 0), 0);
-    await addTable({ table_number: maxNum + 1, capacity: 4, pos_x: 40, pos_y: 40, shape: 'square', width: 80, height: 80 });
-    fetchAll();
+    const newNum = maxNum + 1;
+    const newTable = { table_number: newNum, capacity: 4, pos_x: 40, pos_y: 40, shape: 'square', width: 80, height: 80 };
+    const result = await addTable(newTable);
+    if (result?.id) {
+      setTables(prev => [...prev, { ...newTable, id: result.id, status: 'available' }]);
+    }
   };
 
   const handleDeleteTable = async (id) => {
@@ -165,11 +172,12 @@ export default function TablePlanSection() {
     const related = combos.filter(c => c.table_id_a === id || c.table_id_b === id);
     await Promise.all(related.map(c => apiDel(`/api/table-combinations/${c.id}`)));
     await deleteTable(id);
+    setTables(prev => prev.filter(t => t.id !== id));
+    setCombos(prev => prev.filter(c => c.table_id_a !== id && c.table_id_b !== id));
     setSelected(null);
-    fetchAll();
   };
 
-  // Updates local state instantly + saves to DB
+  // Updates local state instantly + saves to DB — no fetchAll
   const updateSelectedTable = async (changes) => {
     if (selected?.type !== 'table') return;
     const t = tables.find(t => t.id === selected.id);
@@ -179,17 +187,18 @@ export default function TablePlanSection() {
     await updateTablePlan(u.id, { pos_x: u.pos_x, pos_y: u.pos_y, shape: u.shape, width: u.width, height: u.height, name: u.name, capacity: u.capacity });
   };
 
-  // Rotate table — swap width and height
   const handleRotateTable = () => {
     if (!selectedTable) return;
     updateSelectedTable({ width: selectedTable.height, height: selectedTable.width });
   };
 
-  // ── Wall operations ────────────────────────────────────────────
+  // ── Wall operations — optimistic, no fetchAll ──────────────────
   const handleAddWall = async (direction = 'vertical') => {
     const dims = direction === 'horizontal' ? { width: 100, height: 12 } : { width: 12, height: 100 };
-    await apiPost('/api/table-walls', { pos_x: 120, pos_y: 80, ...dims });
-    fetchAll();
+    const result = await apiPost('/api/table-walls', { pos_x: 120, pos_y: 80, ...dims });
+    if (result?.id) {
+      setWalls(prev => [...prev, { id: result.id, pos_x: 120, pos_y: 80, ...dims }]);
+    }
     showToast(direction === 'horizontal' ? '— Horizontal wall added' : '| Vertical wall added');
   };
 
@@ -203,26 +212,28 @@ export default function TablePlanSection() {
 
   const handleDeleteWall = async (id) => {
     await apiDel(`/api/table-walls/${id}`);
+    setWalls(prev => prev.filter(w => w.id !== id));
     setSelected(null);
-    fetchAll();
   };
 
-  // ── Combination operations ─────────────────────────────────────
+  // ── Combination operations — optimistic, no fetchAll ──────────
   const handleAddCombo = async (idA, idB) => {
     const already = combos.some(c =>
       (c.table_id_a === idA && c.table_id_b === idB) ||
       (c.table_id_a === idB && c.table_id_b === idA)
     );
     if (already) { showToast('Already linked', 'error'); return; }
-    await apiPost('/api/table-combinations', { table_id_a: idA, table_id_b: idB });
+    const result = await apiPost('/api/table-combinations', { table_id_a: idA, table_id_b: idB });
+    if (result?.id) {
+      setCombos(prev => [...prev, { id: result.id, table_id_a: idA, table_id_b: idB, is_active: true }]);
+    }
     showToast('Tables linked ✓');
-    fetchAll();
   };
 
   const handleRemoveCombo = async (comboId) => {
     await apiDel(`/api/table-combinations/${comboId}`);
+    setCombos(prev => prev.filter(c => c.id !== comboId));
     showToast('Link removed');
-    fetchAll();
   };
 
   const handleRemoveGroup = async (group) => {
@@ -230,8 +241,9 @@ export default function TablePlanSection() {
       group.includes(c.table_id_a) && group.includes(c.table_id_b)
     );
     await Promise.all(groupCombos.map(c => apiDel(`/api/table-combinations/${c.id}`)));
+    const removedIds = new Set(groupCombos.map(c => c.id));
+    setCombos(prev => prev.filter(c => !removedIds.has(c.id)));
     showToast('Group removed');
-    fetchAll();
   };
 
   const handleUpdateTier = async (tier, newDur) => {
@@ -261,7 +273,6 @@ export default function TablePlanSection() {
       }));
   }
 
-  // Determine wall orientation from dimensions
   const wallOrientation = selectedWall
     ? ((selectedWall.width || 12) >= (selectedWall.height || 100) ? 'h' : 'v')
     : 'v';
@@ -313,7 +324,8 @@ export default function TablePlanSection() {
             — Wall</button>
 
           <button onClick={fetchAll}
-            style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#f0f0f0', color: '#555', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+            style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#f0f0f0', color: '#555', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+            title="Reload everything from server">
             ↻</button>
         </div>
       </div>
@@ -472,7 +484,6 @@ export default function TablePlanSection() {
                   </select>
                 </div>
 
-                {/* Rotate button — swaps width and height to flip orientation */}
                 <button
                   onClick={handleRotateTable}
                   style={{ padding: '8px', borderRadius: 8, border: '1.5px solid #1a1a2e', background: 'white', color: '#1a1a2e', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
@@ -523,7 +534,6 @@ export default function TablePlanSection() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
                   <label style={lbl}>Orientation</label>
-                  {/* Controlled select — shows actual current orientation */}
                   <select
                     value={wallOrientation}
                     onChange={e => {
@@ -542,7 +552,6 @@ export default function TablePlanSection() {
                   <label style={lbl}>Thickness</label>
                   <select onChange={e => {
                     const thickness = parseInt(e.target.value);
-                    // Apply thickness to the shorter dimension
                     const isHoriz = wallOrientation === 'h';
                     handleUpdateWall(selectedWall.id, isHoriz ? { height: thickness } : { width: thickness });
                   }} style={inp}>
@@ -555,7 +564,6 @@ export default function TablePlanSection() {
                   <label style={lbl}>Length</label>
                   <select onChange={e => {
                     const length = parseInt(e.target.value);
-                    // Apply length to the longer dimension
                     const isHoriz = wallOrientation === 'h';
                     handleUpdateWall(selectedWall.id, isHoriz ? { width: length } : { height: length });
                   }} style={inp}>

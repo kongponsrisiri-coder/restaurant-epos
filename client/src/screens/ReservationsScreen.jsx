@@ -242,7 +242,7 @@ export default function ReservationsScreen() {
   const isToday = filterDate === todayStr();
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f5f5f5', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div style={{ ...(view === 'plan' ? { height: 'calc(100vh - 56px)', overflow: 'hidden' } : { minHeight: '100vh' }), background: '#f5f5f5', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
 
       {/* Toast */}
       {toast && (

@@ -1,5 +1,7 @@
 /*!
  * SiamEPOS Booking Widget v1.1
+/*!
+ * SiamEPOS Booking Widget v1.1
  * Drop-in reservation widget for any website
  * Usage: <script src="https://restaurant-epos-production.up.railway.app/widget.js"
  *                data-restaurant="siamepos"

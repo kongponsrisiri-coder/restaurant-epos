@@ -153,24 +153,23 @@ export default function ReservationsScreen() {
   function closeModal() { setShowModal(false); setEditingId(null); }
 
   async function handleSave() {
-    if (!form.customer_name.trim()) { showToast('Guest name required', 'error'); return; }
-    if (!form.reservation_date)     { showToast('Date required', 'error'); return; }
-    if (!form.reservation_time)     { showToast('Time required', 'error'); return; }
-    if (!form.covers || form.covers < 1) { showToast('Covers must be at least 1', 'error'); return; }
-    setSaving(true);
-    try {
-      const payload = { ...form, table_id: form.table_id || null, source: 'epos' };
-      if (editingId) {
-        await apiFetch(`/api/reservations/${editingId}`, { method: 'PUT', body: JSON.stringify(payload) });
-        showToast('Booking updated ✓');
-      } else {
-        await apiFetch('/api/reservations', { method: 'POST', body: JSON.stringify(payload) });
-        showToast('Booking created ✓');
-      }
-      closeModal(); loadData();
-    } catch { showToast('Save failed — try again', 'error'); }
-    finally { setSaving(false); }
-  }
+  if (!form.customer_name.trim()) { showToast('Guest name required', 'error'); return; }
+  if (!form.customer_phone.trim()) { showToast('Phone number required', 'error'); return; }
+  if (!form.reservation_date)     { showToast('Date required', 'error'); return; }
+  if (!form.reservation_time)     { showToast('Time required', 'error'); return; }
+  if (!form.covers || form.covers < 1) { showToast('Covers must be at least 1', 'error'); return; }
+  setSaving(true);
+  try {
+    const payload = { ...form, table_id: form.table_id || null, source: 'epos' };
+    const data = editingId
+      ? await apiFetch(`/api/reservations/${editingId}`, { method: 'PUT', body: JSON.stringify(payload) })
+      : await apiFetch('/api/reservations', { method: 'POST', body: JSON.stringify(payload) });
+    if (data?.error) { showToast(data.error, 'error'); return; }
+    showToast(editingId ? 'Booking updated ✓' : 'Booking created ✓');
+    closeModal(); loadData();
+  } catch { showToast('Save failed — try again', 'error'); }
+  finally { setSaving(false); }
+}
 
   async function handleSeat(r) {
     if (!window.confirm(`Seat ${r.customer_name} (${r.covers} covers)?`)) return;
@@ -442,7 +441,7 @@ export default function ReservationsScreen() {
                   <label style={labelSt}>Guest Name *</label>
                   <input value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))} placeholder="e.g. John Smith" style={inputSt} autoFocus />
                 </div>
-                <div><label style={labelSt}>Phone</label><input type="tel" value={form.customer_phone} onChange={e => setForm(f => ({ ...f, customer_phone: e.target.value }))} placeholder="07700 900000" style={inputSt} /></div>
+                <div><label style={labelSt}>Phone*</label><input type="tel" value={form.customer_phone} onChange={e => setForm(f => ({ ...f, customer_phone: e.target.value }))} placeholder="07700 900000" style={inputSt} /></div>
                 <div><label style={labelSt}>Email</label><input type="email" value={form.customer_email} onChange={e => setForm(f => ({ ...f, customer_email: e.target.value }))} placeholder="john@example.com" style={inputSt} /></div>
                 <div><label style={labelSt}>Date *</label><input type="date" value={form.reservation_date} onChange={e => setForm(f => ({ ...f, reservation_date: e.target.value }))} style={inputSt} /></div>
                 <div><label style={labelSt}>Time *</label><select value={form.reservation_time} onChange={e => setForm(f => ({ ...f, reservation_time: e.target.value }))} style={inputSt}>{TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}</select></div>

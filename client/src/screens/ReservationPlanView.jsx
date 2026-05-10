@@ -36,13 +36,10 @@ function getDuration(covers, tiers) {
   return tier ? tier.duration_mins : 90;
 }
 
-// ── Build ordered chains from combination pairs ───────────────────
-// Each chain is a linear sequence of table IDs in order
 function buildTableGroups(combinations, tables) {
   const tableMap = {};
   tables.forEach(t => { tableMap[t.id] = t; });
 
-  // Adjacency list
   const adj = {};
   combinations.forEach(c => {
     if (!adj[c.table_id_a]) adj[c.table_id_a] = [];
@@ -51,7 +48,6 @@ function buildTableGroups(combinations, tables) {
     adj[c.table_id_b].push(c.table_id_a);
   });
 
-  // Union-Find for connected components
   const parent = {};
   function find(x) {
     if (parent[x] == null) parent[x] = x;
@@ -61,7 +57,6 @@ function buildTableGroups(combinations, tables) {
   function union(a, b) { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; }
   combinations.forEach(c => union(c.table_id_a, c.table_id_b));
 
-  // Group by component
   const components = {};
   const allIds = new Set();
   combinations.forEach(c => { allIds.add(c.table_id_a); allIds.add(c.table_id_b); });
@@ -72,19 +67,13 @@ function buildTableGroups(combinations, tables) {
     components[root].push(id);
   });
 
-  // Build ordered chain for each component
   return Object.values(components)
     .filter(ids => ids.length >= 2)
     .map(ids => {
-      // Local adjacency (within this component only)
       const localAdj = {};
       ids.forEach(id => { localAdj[id] = (adj[id] || []).filter(n => ids.includes(n)); });
-
-      // Find an endpoint (degree 1) to start the chain
       const endpoints = ids.filter(id => localAdj[id].length === 1);
       const start = endpoints[0] || ids[0];
-
-      // Walk the chain
       const chain = [start];
       const visited = new Set([start]);
       let cur = start;
@@ -93,67 +82,44 @@ function buildTableGroups(combinations, tables) {
         if (!next) break;
         chain.push(next); visited.add(next); cur = next;
       }
-
       const chainTables = chain.map(id => tableMap[id]).filter(Boolean);
       const capacity = chainTables.reduce((s, t) => s + (t.capacity || 0), 0);
-      return {
-        chain,              // ordered list of table IDs
-        ids: chain,
-        tables: chainTables,
-        capacity,
-        label: chainTables.map(t => `T${t.table_number}`).join('+'),
-      };
+      return { chain, ids: chain, tables: chainTables, capacity, label: chainTables.map(t => `T${t.table_number}`).join('+') };
     });
 }
 
-// ── Enumerate all valid contiguous sub-combinations ───────────────
-// For a chain [A,B,C,D], sub-combos of length>=2: AB, BC, CD, ABC, BCD, ABCD
-// Returns only those with combined capacity >= minCapacity, sorted by capacity asc
 function getSubCombos(tableGroups, tables, minCapacity) {
   const tableMap = {};
   tables.forEach(t => { tableMap[t.id] = t; });
-
   const result = [];
   const seen = new Set();
-
   tableGroups.forEach(group => {
     const chain = group.chain || group.ids;
-
     for (let start = 0; start < chain.length; start++) {
       let capacity = 0;
       for (let end = start; end < chain.length; end++) {
         const t = tableMap[chain[end]];
         if (!t) continue;
         capacity += t.capacity || 0;
-        if (end <= start) continue; // need at least 2 tables
-
+        if (end <= start) continue;
         const subIds = chain.slice(start, end + 1);
         const key = subIds.join('-');
         if (seen.has(key)) continue;
         seen.add(key);
-
         if (capacity >= minCapacity) {
           const subTables = subIds.map(id => tableMap[id]).filter(Boolean);
-          result.push({
-            ids: subIds,
-            tables: subTables,
-            capacity,
-            label: subTables.map(t => `T${t.table_number}`).join('+'),
-          });
+          result.push({ ids: subIds, tables: subTables, capacity, label: subTables.map(t => `T${t.table_number}`).join('+') });
         }
       }
     }
   });
-
   return result.sort((a, b) => a.capacity - b.capacity || a.ids.length - b.ids.length);
 }
 
-// ── Find which table IDs are taken during a booking's time window ─
 function getTakenTableIds(allReservations, currentRes, tiers) {
   const curStart = toMins(currentRes.reservation_time);
   const curEnd   = curStart + getDuration(currentRes.covers, tiers);
   const taken    = new Set();
-
   allReservations.forEach(r => {
     if (r.id === currentRes.id) return;
     if (!r.table_id) return;
@@ -163,23 +129,6 @@ function getTakenTableIds(allReservations, currentRes, tiers) {
     if (curStart < rEnd && curEnd > rStart) taken.add(r.table_id);
   });
   return taken;
-}
-
-// ── Group label helper ────────────────────────────────────────────
-function getGroupForTable(tableId, tableGroups) {
-  return tableGroups.find(g => g.ids.includes(tableId)) || null;
-}
-
-function getAssignedLabel(res, tables, tableGroups) {
-  if (!res.table_id) return null;
-  const table = tables.find(t => t.id === res.table_id);
-  if (!table) return null;
-  // Find which sub-combo was assigned (may not be full group)
-  const group = getGroupForTable(res.table_id, tableGroups);
-  if (!group) return `T${table.table_number}`;
-  // We only store the first table of the combo — reconstruct the label
-  // by checking which group member is assigned
-  return `T${table.table_number}`; // Simple for now
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -214,7 +163,7 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
   const assignTable = async (tableId) => {
     if (!selectedRes) return;
     setAssigning(true);
-    const data = await put(`/api/reservations/${selectedRes.id}`, {
+    await put(`/api/reservations/${selectedRes.id}`, {
       customer_name:    selectedRes.customer_name,
       customer_phone:   selectedRes.customer_phone,
       customer_email:   selectedRes.customer_email || null,
@@ -247,16 +196,12 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
     setSelectedRes(r => ({ ...r, status }));
   };
 
-  const timeStart = toMins(settings?.opening_time || '11:00');
-  const timeEnd   = toMins(settings?.last_booking_time || '22:00') + 90;
-
-  // Capacity bar data for timeline
+  const timeStart      = toMins(settings?.opening_time || '11:00');
+  const timeEnd        = toMins(settings?.last_booking_time || '22:00') + 90;
   const maxCoversPerSlot = settings?.max_covers_per_slot || 20;
 
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 170px)', overflow: 'hidden', flexDirection: 'column' }}>
-
-      {/* Sub-header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 20px', background: '#f8f9fa', borderBottom: '1px solid #e5e7eb', flexShrink: 0, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 4 }}>
           {[['timeline','⏱ Timeline'],['floorplan','🗺 Floor Plan']].map(([v, l]) => (
@@ -267,7 +212,7 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
             </button>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 16, marginLeft: 'auto', alignItems: 'center' }}>
+        <div style={{ marginLeft: 'auto' }}>
           <span style={{ fontSize: 13, color: '#555' }}>
             <strong style={{ color: '#1a1a2e' }}>{active.length}</strong> bookings ·{' '}
             <strong style={{ color: '#e94560' }}>{active.reduce((s, r) => s + r.covers, 0)}</strong> covers ·{' '}
@@ -276,7 +221,6 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
         </div>
       </div>
 
-      {/* Content */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
         {planView === 'timeline' ? (
           <TimelineView
@@ -292,18 +236,12 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
             selectedRes={selectedRes} onSelect={setSelectedRes}
           />
         )}
-
         {selectedRes && (
           <BookingPanel
-            res={selectedRes}
-            allReservations={active}
-            tables={tables}
-            tableGroups={tableGroups}
-            tiers={tiers}
-            onAssign={assignTable}
-            onStatusChange={updateStatus}
-            onClose={() => setSelectedRes(null)}
-            assigning={assigning}
+            res={selectedRes} allReservations={active}
+            tables={tables} tableGroups={tableGroups} tiers={tiers}
+            onAssign={assignTable} onStatusChange={updateStatus}
+            onClose={() => setSelectedRes(null)} assigning={assigning}
           />
         )}
       </div>
@@ -316,19 +254,17 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
 // ═══════════════════════════════════════════════════════════════════
 function TimelineView({ tables, reservations, tiers, tableGroups, settings, timeStart, timeEnd, selectedRes, onSelect }) {
   const SLOT = 30, COL_W = 72, ROW_H = 54, LBL_W = 120;
-  const totalMins = timeEnd - timeStart;
+  const totalMins  = timeEnd - timeStart;
+  const maxPerSlot = settings?.max_covers_per_slot || 20;
   const slots = [];
   for (let m = timeStart; m <= timeEnd; m += SLOT) slots.push(m);
-  const maxPerSlot = settings?.max_covers_per_slot || 20;
 
   const assignedIds = new Set(reservations.filter(r => r.table_id).map(r => r.table_id));
 
-  // Build rows — one per unique assigned table/group, plus unassigned
-  const rowMap = {}; // groupKey → { label, capacity, tableIds, reservations[] }
+  const rowMap = {};
   reservations.filter(r => r.table_id).forEach(r => {
-    // Find if this table is part of a combination that was assigned
     const group = tableGroups.find(g => g.ids.includes(r.table_id));
-    const key = group ? group.ids[0] : r.table_id;
+    const key = group ? `grp-${group.ids[0]}` : `t-${r.table_id}`;
     if (!rowMap[key]) {
       const t = tables.find(t => t.id === r.table_id);
       rowMap[key] = {
@@ -341,29 +277,19 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
     rowMap[key].reservations.push(r);
   });
 
-  // Add individual unassigned tables too (for empty rows)
   tables.sort((a,b) => a.table_number - b.table_number).forEach(t => {
-    if (!assignedIds.has(t.id)) {
-      const group = tableGroups.find(g => g.ids.includes(t.id));
-      const key = group ? `grp-${group.ids[0]}` : `t-${t.id}`;
-      // Skip if group already shown
-      if (group && rowMap[group.ids[0]]) return;
-      if (!rowMap[key]) {
-        rowMap[key] = {
-          key,
-          label: group ? group.label : `T${t.table_number}`,
-          capacity: group ? group.capacity : t.capacity,
-          reservations: [],
-        };
-      }
-    }
+    if (assignedIds.has(t.id)) return;
+    const group = tableGroups.find(g => g.ids.includes(t.id));
+    const key = group ? `grp-${group.ids[0]}` : `t-${t.id}`;
+    if (rowMap[key]) return;
+    rowMap[key] = { key, label: group ? group.label : `T${t.table_number}`, capacity: group ? group.capacity : t.capacity, reservations: [] };
   });
 
   const unassigned = reservations.filter(r => !r.table_id);
   const rows = Object.values(rowMap).sort((a, b) => {
-    const numA = parseInt(a.label.match(/\d+/)?.[0] || 999);
-    const numB = parseInt(b.label.match(/\d+/)?.[0] || 999);
-    return numA - numB;
+    const na = parseInt(a.label.match(/\d+/)?.[0] || 999);
+    const nb = parseInt(b.label.match(/\d+/)?.[0] || 999);
+    return na - nb;
   });
 
   function pxLeft(ts) { return ((toMins(ts) - timeStart) / totalMins) * (slots.length * COL_W); }
@@ -372,8 +298,6 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
   return (
     <div style={{ flex: 1, overflow: 'auto', background: '#fafafa' }}>
       <div style={{ minWidth: LBL_W + slots.length * COL_W + 20 }}>
-
-        {/* Time header */}
         <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 10, background: '#1a1a2e' }}>
           <div style={{ width: LBL_W, flexShrink: 0, padding: '10px 12px', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Table</div>
           {slots.map(m => (
@@ -383,7 +307,6 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
           ))}
         </div>
 
-        {/* Table rows */}
         {rows.map((row, ri) => (
           <div key={row.key} style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', background: ri % 2 === 0 ? 'white' : '#fafafa', height: ROW_H, position: 'relative' }}>
             <div style={{ width: LBL_W, flexShrink: 0, padding: '0 12px', display: 'flex', flexDirection: 'column', justifyContent: 'center', borderRight: '2px solid #e5e7eb', position: 'sticky', left: 0, background: 'inherit', zIndex: 2 }}>
@@ -411,7 +334,6 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
           </div>
         ))}
 
-        {/* Unassigned row */}
         {unassigned.length > 0 && (
           <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', background: '#fffbeb', height: ROW_H, position: 'relative' }}>
             <div style={{ width: LBL_W, flexShrink: 0, padding: '0 12px', display: 'flex', flexDirection: 'column', justifyContent: 'center', borderRight: '2px solid #e5e7eb', position: 'sticky', left: 0, background: '#fffbeb', zIndex: 2 }}>
@@ -421,15 +343,13 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
             <div style={{ flex: 1, position: 'relative' }}>
               {slots.map(m => <div key={m} style={{ position: 'absolute', left: ((m - timeStart) / totalMins) * (slots.length * COL_W), top: 0, bottom: 0, width: 1, background: '#f3f4f6' }} />)}
               {unassigned.map(r => {
-                const c = STATUS_COLORS[r.status] || STATUS_COLORS.pending;
                 const isSel = selectedRes?.id === r.id;
                 return (
                   <div key={r.id} onClick={() => onSelect(r)}
                     style={{ position: 'absolute', left: pxLeft(r.reservation_time) + 2, top: 6, height: ROW_H - 12,
                       width: Math.max(pxWidth(r.reservation_time, r.covers), 70),
                       background: isSel ? '#1a1a2e' : '#fff7ed', border: `2px dashed ${isSel ? '#e94560' : '#f59e0b'}`,
-                      borderRadius: 8, padding: '4px 8px', cursor: 'pointer', overflow: 'hidden', zIndex: isSel ? 5 : 3,
-                      transition: 'all 0.15s' }}>
+                      borderRadius: 8, padding: '4px 8px', cursor: 'pointer', overflow: 'hidden', zIndex: isSel ? 5 : 3, transition: 'all 0.15s' }}>
                     <div style={{ fontSize: 12, fontWeight: 800, color: isSel ? 'white' : '#92400e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.customer_name}</div>
                     <div style={{ fontSize: 10, color: isSel ? 'rgba(255,255,255,0.7)' : '#92400e', opacity: 0.85 }}>{r.reservation_time} · {r.covers}p</div>
                   </div>
@@ -439,7 +359,6 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
           </div>
         )}
 
-        {/* Capacity footer */}
         <div style={{ display: 'flex', background: '#1a1a2e', position: 'sticky', bottom: 0 }}>
           <div style={{ width: LBL_W, flexShrink: 0, padding: '6px 12px', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
             <div>Covers</div>
@@ -470,22 +389,41 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// FLOOR PLAN VIEW
+// FLOOR PLAN VIEW — with scrollable canvas sized to fit all tables
 // ═══════════════════════════════════════════════════════════════════
 function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, onSelect }) {
+  // Compute canvas size from table positions
+  const canvasW = tables.length
+    ? Math.max(900, ...tables.map(t => (t.pos_x || 0) + (t.width || 80) + 80))
+    : 900;
+  const canvasH = tables.length
+    ? Math.max(600, ...tables.map(t => (t.pos_y || 0) + (t.height || 80) + 80))
+    : 600;
+
   function getBookingForTable(tableId) {
     const direct = reservations.find(r => r.table_id === tableId);
     if (direct) return direct;
     const group = tableGroups.find(g => g.ids.includes(tableId));
-    if (group) { for (const id of group.ids) { const f = reservations.find(r => r.table_id === id); if (f) return f; } }
+    if (group) {
+      for (const id of group.ids) {
+        const found = reservations.find(r => r.table_id === id);
+        if (found) return found;
+      }
+    }
     return null;
   }
 
   return (
     <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-      <div style={{ width: 256, borderRight: '1px solid #e5e7eb', background: 'white', overflow: 'auto', flexShrink: 0 }}>
-        <div style={{ padding: '10px 14px', borderBottom: '1px solid #e5e7eb', fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: 1 }}>Bookings · {reservations.length}</div>
-        {reservations.length === 0 && <div style={{ padding: 24, textAlign: 'center', color: '#888', fontSize: 13 }}>No bookings today</div>}
+
+      {/* Booking list */}
+      <div style={{ width: 240, borderRight: '1px solid #e5e7eb', background: 'white', overflow: 'auto', flexShrink: 0 }}>
+        <div style={{ padding: '10px 14px', borderBottom: '1px solid #e5e7eb', fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: 1 }}>
+          Bookings · {reservations.length}
+        </div>
+        {reservations.length === 0 && (
+          <div style={{ padding: 24, textAlign: 'center', color: '#888', fontSize: 13 }}>No bookings today</div>
+        )}
         {reservations.map(r => {
           const c = STATUS_COLORS[r.status] || STATUS_COLORS.pending;
           const isSel = selectedRes?.id === r.id;
@@ -498,39 +436,85 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
                 <div style={{ fontSize: 13, fontWeight: 700, color: isSel ? 'white' : '#1a1a2e' }}>{r.customer_name}</div>
                 <div style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isSel ? 'rgba(255,255,255,0.15)' : c.bg, color: isSel ? 'white' : c.text, textTransform: 'capitalize' }}>{r.status}</div>
               </div>
-              <div style={{ fontSize: 11, color: isSel ? 'rgba(255,255,255,0.6)' : '#9ca3af' }}>{r.reservation_time} · {r.covers}p · {label}</div>
+              <div style={{ fontSize: 11, color: isSel ? 'rgba(255,255,255,0.6)' : '#9ca3af' }}>
+                {r.reservation_time} · {r.covers}p · {label}
+              </div>
+              {r.notes && (
+                <div style={{ fontSize: 11, color: isSel ? 'rgba(255,255,255,0.5)' : '#aaa', marginTop: 2, fontStyle: 'italic', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{r.notes}</div>
+              )}
             </div>
           );
         })}
       </div>
 
-      <div style={{ flex: 1, position: 'relative', overflow: 'auto', background: '#f0ede8', backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)', backgroundSize: '30px 30px', minHeight: 500 }}>
-        <div style={{ position: 'absolute', top: 12, right: 12, background: 'white', borderRadius: 10, padding: '10px 14px', fontSize: 11, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', zIndex: 10 }}>
-          {['pending','confirmed','seated'].map(s => <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}><div style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLORS[s].dot }} /><span style={{ color: '#555', textTransform: 'capitalize' }}>{s}</span></div>)}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, paddingTop: 4, borderTop: '1px solid #f0f0f0' }}><div style={{ width: 8, height: 8, borderRadius: '50%', border: '1px solid #9ca3af', background: 'white' }} /><span style={{ color: '#555' }}>Available</span></div>
-        </div>
-        {tables.map(table => {
-          const booking = getBookingForTable(table.id);
-          const c = booking ? (STATUS_COLORS[booking.status] || STATUS_COLORS.pending) : null;
-          const isSel = selectedRes?.id === booking?.id;
-          const isPrimary = booking && booking.table_id === table.id;
-          const isGroupMember = booking && booking.table_id !== table.id;
-          return (
-            <div key={table.id} onClick={() => booking ? onSelect(booking) : null}
-              style={{ position: 'absolute', left: table.pos_x || 0, top: table.pos_y || 0, width: table.width || 80, height: table.height || 80,
-                borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,
-                background: isSel ? '#1a1a2e' : booking ? c.bg : 'white',
-                border: `3px ${isGroupMember ? 'dashed' : 'solid'} ${isSel ? '#e94560' : booking ? c.border : '#cbd5e1'}`,
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                cursor: booking ? 'pointer' : 'default', userSelect: 'none', zIndex: isSel ? 10 : 3,
-                boxShadow: isSel ? '0 4px 20px rgba(0,0,0,0.25)' : '0 2px 6px rgba(0,0,0,0.08)', transition: 'all 0.15s' }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: isSel ? 'white' : booking ? c.text : '#1a1a2e' }}>{table.table_number}</div>
-              {isPrimary ? <div style={{ fontSize: 9, color: isSel ? 'rgba(255,255,255,0.8)' : c.text, maxWidth: '90%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>{booking.customer_name.split(' ')[0]}</div>
-              : !booking ? <div style={{ fontSize: 9, color: '#9ca3af' }}>{table.capacity}p</div> : null}
+      {/* ── Scrollable canvas ────────────────────────────────────── */}
+      <div style={{ flex: 1, overflow: 'auto', background: '#f0ede8', backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)', backgroundSize: '30px 30px' }}>
+        <div style={{ position: 'relative', width: canvasW, height: canvasH }}>
+
+          {/* Legend */}
+          <div style={{ position: 'absolute', top: 12, right: 12, background: 'white', borderRadius: 10, padding: '10px 14px', fontSize: 11, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', zIndex: 10 }}>
+            {['pending','confirmed','seated'].map(s => (
+              <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLORS[s].dot }} />
+                <span style={{ color: '#555', textTransform: 'capitalize' }}>{s}</span>
+              </div>
+            ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, paddingTop: 4, borderTop: '1px solid #f0f0f0' }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', border: '1px solid #9ca3af', background: 'white' }} />
+              <span style={{ color: '#555' }}>Available</span>
             </div>
-          );
-        })}
-        {tables.length === 0 && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: '#888' }}><div style={{ fontSize: 36 }}>🗺</div><div>Set up your floor plan in Admin → Table Plan first</div></div>}
+          </div>
+
+          {/* Tables */}
+          {tables.map(table => {
+            const booking = getBookingForTable(table.id);
+            const c = booking ? (STATUS_COLORS[booking.status] || STATUS_COLORS.pending) : null;
+            const isSel = selectedRes?.id === booking?.id;
+            const isPrimary    = booking && booking.table_id === table.id;
+            const isGroupMember = booking && booking.table_id !== table.id;
+
+            return (
+              <div key={table.id}
+                onClick={() => booking ? onSelect(booking) : null}
+                title={booking
+                  ? `${booking.customer_name} · ${booking.covers}p · ${booking.reservation_time}`
+                  : `T${table.table_number} — Available`}
+                style={{
+                  position: 'absolute',
+                  left: table.pos_x || 0,
+                  top: table.pos_y || 0,
+                  width: table.width || 80,
+                  height: table.height || 80,
+                  borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,
+                  background: isSel ? '#1a1a2e' : booking ? c.bg : 'white',
+                  border: `3px ${isGroupMember ? 'dashed' : 'solid'} ${isSel ? '#e94560' : booking ? c.border : '#cbd5e1'}`,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  cursor: booking ? 'pointer' : 'default',
+                  userSelect: 'none', zIndex: isSel ? 10 : 3,
+                  boxShadow: isSel ? '0 4px 20px rgba(0,0,0,0.25)' : '0 2px 6px rgba(0,0,0,0.08)',
+                  transition: 'all 0.15s',
+                }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: isSel ? 'white' : booking ? c.text : '#1a1a2e', textAlign: 'center' }}>
+                  {table.table_number}
+                </div>
+                {isPrimary ? (
+                  <div style={{ fontSize: 9, fontWeight: 600, color: isSel ? 'rgba(255,255,255,0.8)' : c.text, textAlign: 'center', maxWidth: '90%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {booking.customer_name.split(' ')[0]}
+                  </div>
+                ) : !booking ? (
+                  <div style={{ fontSize: 9, color: '#9ca3af' }}>{table.capacity}p</div>
+                ) : null}
+              </div>
+            );
+          })}
+
+          {tables.length === 0 && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: '#888' }}>
+              <div style={{ fontSize: 36 }}>🗺</div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Set up your floor plan in Admin → Table Plan first</div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -540,40 +524,24 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
 // BOOKING DETAIL PANEL
 // ═══════════════════════════════════════════════════════════════════
 function BookingPanel({ res, allReservations, tables, tableGroups, tiers, onAssign, onStatusChange, onClose, assigning }) {
-  const duration = getDuration(res.covers, tiers);
-  const endTime  = minsToTime(toMins(res.reservation_time) + duration);
-
-  // Assigned label
+  const duration     = getDuration(res.covers, tiers);
+  const endTime      = minsToTime(toMins(res.reservation_time) + duration);
   const assignedTable = tables.find(t => t.id === res.table_id);
-  const assignedGroup = tableGroups.find(g => g.ids.includes(res.table_id));
+  const takenIds     = getTakenTableIds(allReservations, res, tiers);
 
-  // Which tables are taken at this booking's time (conflict detection)
-  const takenIds = getTakenTableIds(allReservations, res, tiers);
-
-  // Single tables: capacity >= covers AND not taken
   const singleTables = tables
     .filter(t => t.capacity >= res.covers)
     .sort((a, b) => a.capacity - b.capacity || a.table_number - b.table_number);
 
-  // Smart sub-combinations: all valid contiguous sub-combos with capacity >= covers
   const subCombos = getSubCombos(tableGroups, tables, res.covers);
 
-  // Check if a single table is taken
   function isSingleTaken(tableId) { return takenIds.has(tableId) && tableId !== res.table_id; }
-
-  // Check if a combo is taken (any of its tables is taken by another booking)
-  function isComboTaken(combo) {
-    return combo.ids.some(id => takenIds.has(id) && id !== res.table_id);
-  }
-
-  // Check if currently assigned
-  function isAssigned(tableId) { return res.table_id === tableId; }
+  function isComboTaken(combo)    { return combo.ids.some(id => takenIds.has(id) && id !== res.table_id); }
+  function isAssigned(tableId)    { return res.table_id === tableId; }
   function isComboAssigned(combo) { return combo.ids.includes(res.table_id); }
 
   return (
     <div style={{ width: 290, background: 'white', borderLeft: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', flexShrink: 0, overflow: 'auto' }}>
-
-      {/* Header */}
       <div style={{ padding: '14px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <div style={{ fontSize: 15, fontWeight: 800, color: '#1a1a2e' }}>{res.customer_name}</div>
@@ -606,37 +574,30 @@ function BookingPanel({ res, allReservations, tables, tableGroups, tiers, onAssi
 
         {/* Table assignment */}
         <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', marginBottom: 8 }}>
             Assign Table
-            {res.table_id && assignedTable && (
-              <span style={{ color: '#22c55e', marginLeft: 6 }}>
-                {assignedGroup ? assignedGroup.label.split('+').slice(0, assignedGroup.ids.indexOf(res.table_id) + 1).join('+') : `T${assignedTable.table_number}`} ✓
-              </span>
-            )}
+            {assignedTable && <span style={{ color: '#22c55e', marginLeft: 6 }}>T{assignedTable.table_number} ✓</span>}
           </div>
 
-          {/* Single tables */}
           {singleTables.length > 0 && (
             <>
               <div style={{ fontSize: 10, color: '#bbb', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 5 }}>Single Tables</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 5, marginBottom: 12 }}>
                 {singleTables.map(t => {
-                  const taken = isSingleTaken(t.id);
+                  const taken    = isSingleTaken(t.id);
                   const assigned = isAssigned(t.id);
                   return (
-                    <button key={t.id}
-                      onClick={() => !taken && onAssign(t.id)}
-                      disabled={assigning || taken}
-                      title={taken ? `T${t.table_number} is already booked at this time` : `Assign T${t.table_number} (${t.capacity}p)`}
+                    <button key={t.id} onClick={() => !taken && onAssign(t.id)} disabled={assigning || taken}
+                      title={taken ? `T${t.table_number} is already booked at this time` : ''}
                       style={{ padding: '7px 4px', borderRadius: 8,
-                        border: `2px solid ${assigned ? '#22c55e' : taken ? '#fee2e2' : '#e5e7eb'}`,
+                        border: `2px solid ${assigned ? '#22c55e' : taken ? '#fca5a5' : '#e5e7eb'}`,
                         background: assigned ? '#dcfce7' : taken ? '#fef2f2' : 'white',
                         color: assigned ? '#166534' : taken ? '#ef4444' : '#1a1a2e',
                         cursor: taken ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, textAlign: 'center',
-                        opacity: taken && !assigned ? 0.6 : 1 }}>
+                        opacity: taken && !assigned ? 0.65 : 1 }}>
                       <div>T{t.table_number}</div>
                       <div style={{ fontSize: 10, fontWeight: 400, color: taken ? '#ef4444' : '#888' }}>
-                        {taken ? '✕ taken' : `${t.capacity}p`}
+                        {taken ? '✕' : `${t.capacity}p`}
                       </div>
                     </button>
                   );
@@ -645,26 +606,23 @@ function BookingPanel({ res, allReservations, tables, tableGroups, tiers, onAssi
             </>
           )}
 
-          {/* Smart sub-combinations */}
           {subCombos.length > 0 && (
             <>
               <div style={{ fontSize: 10, color: '#bbb', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 5 }}>🔗 Linked Tables</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 10 }}>
                 {subCombos.map(combo => {
-                  const taken   = isComboTaken(combo);
+                  const taken    = isComboTaken(combo);
                   const assigned = isComboAssigned(combo);
                   return (
-                    <button key={combo.label}
-                      onClick={() => !taken && onAssign(combo.ids[0])}
-                      disabled={assigning || taken}
-                      title={taken ? `${combo.label} has a conflict at this time` : `Assign ${combo.label} (${combo.capacity}p max)`}
+                    <button key={combo.label} onClick={() => !taken && onAssign(combo.ids[0])} disabled={assigning || taken}
+                      title={taken ? `${combo.label} has a conflict at this time` : ''}
                       style={{ padding: '9px 12px', borderRadius: 8,
-                        border: `2px solid ${assigned ? '#22c55e' : taken ? '#fee2e2' : '#e5e7eb'}`,
+                        border: `2px solid ${assigned ? '#22c55e' : taken ? '#fca5a5' : '#e5e7eb'}`,
                         background: assigned ? '#dcfce7' : taken ? '#fef2f2' : 'white',
                         color: assigned ? '#166534' : taken ? '#ef4444' : '#1a1a2e',
                         cursor: taken ? 'not-allowed' : 'pointer',
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        fontSize: 13, fontWeight: 700, opacity: taken && !assigned ? 0.6 : 1 }}>
+                        fontSize: 13, fontWeight: 700, opacity: taken && !assigned ? 0.65 : 1 }}>
                       <span>{combo.label}</span>
                       <span style={{ fontSize: 11, color: taken ? '#ef4444' : assigned ? '#166534' : '#888', fontWeight: 600 }}>
                         {taken ? '✕ conflict' : `${combo.capacity}p`}

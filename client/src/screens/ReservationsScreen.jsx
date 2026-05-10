@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
+import ReservationPlanView from './ReservationPlanView';
 
 const SERVER_URL = (() => {
   const host = window.location.hostname;
@@ -37,7 +38,6 @@ const BLANK_FORM = {
 
 function todayStr() { return new Date().toISOString().split('T')[0]; }
 
-// ── Sandy: Date navigation helpers ────────────────────────────────
 function shiftDay(dateStr, delta) {
   const d = new Date((dateStr || todayStr()) + 'T12:00:00');
   d.setDate(d.getDate() + delta);
@@ -201,6 +201,11 @@ export default function ReservationsScreen() {
     return dateOk && statusOk;
   });
 
+  // Reservations for plan view — filtered by date only
+  const planReservations = reservations.filter(r =>
+    filterDate ? (r.reservation_date || '').startsWith(filterDate) : true
+  );
+
   const counts = {};
   ALL_STATUSES.forEach(s => {
     const base = reservations.filter(r => filterDate ? (r.reservation_date || '').startsWith(filterDate) : true);
@@ -259,7 +264,7 @@ export default function ReservationsScreen() {
         <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, fontFamily: 'Georgia, serif' }}>🗓️ Reservations</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', background: 'rgba(255,255,255,0.12)', borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(201,168,76,0.3)' }}>
-            {[['list','📋 List'],['calendar','📅 Calendar'],['customers','👥 Guests']].map(([v, label]) => (
+            {[['list','📋 List'],['calendar','📅 Calendar'],['customers','👥 Guests'],['plan','📐 Plan']].map(([v, label]) => (
               <button key={v} onClick={() => setView(v)} style={{ padding: '8px 14px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: view === v ? 700 : 400, background: view === v ? '#C9A84C' : 'transparent', color: view === v ? '#0D1B3E' : 'white' }}>{label}</button>
             ))}
           </div>
@@ -271,156 +276,157 @@ export default function ReservationsScreen() {
       {/* ── Filter Bar — list view only ──────────────────────────── */}
       {view === 'list' && (
         <div style={{ background: 'white', padding: '10px 20px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #eee', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-
-          {/* Sandy: ◀ [date label + picker] ▶ date navigation */}
           <div style={{ display: 'flex', alignItems: 'center', background: '#f5f5f5', borderRadius: 10, border: '1px solid #e0e0e0', overflow: 'hidden' }}>
-            <button
-              onClick={() => setFilterDate(shiftDay(filterDate, -1))}
-              title="Previous day"
-              style={{ padding: '0 14px', height: 44, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: '#0D1B3E', fontWeight: 700, display: 'flex', alignItems: 'center' }}
-            >◀</button>
+            <button onClick={() => setFilterDate(shiftDay(filterDate, -1))} title="Previous day" style={{ padding: '0 14px', height: 44, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: '#0D1B3E', fontWeight: 700, display: 'flex', alignItems: 'center' }}>◀</button>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '6px 4px', minWidth: 116, borderLeft: '1px solid #e0e0e0', borderRight: '1px solid #e0e0e0' }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: isToday ? '#e94560' : '#0D1B3E', lineHeight: 1.3 }}>
                 {filterDate ? friendlyDate(filterDate) : 'All Dates'}
               </span>
-              <input
-                type="date"
-                value={filterDate || ''}
-                onChange={e => setFilterDate(e.target.value)}
-                style={{ fontSize: 10, color: '#aaa', border: 'none', background: 'transparent', width: '100%', textAlign: 'center', cursor: 'pointer', padding: 0, marginTop: 1 }}
-              />
+              <input type="date" value={filterDate || ''} onChange={e => setFilterDate(e.target.value)}
+                style={{ fontSize: 10, color: '#aaa', border: 'none', background: 'transparent', width: '100%', textAlign: 'center', cursor: 'pointer', padding: 0, marginTop: 1 }} />
             </div>
-            <button
-              onClick={() => setFilterDate(shiftDay(filterDate, 1))}
-              title="Next day"
-              style={{ padding: '0 14px', height: 44, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: '#0D1B3E', fontWeight: 700, display: 'flex', alignItems: 'center' }}
-            >▶</button>
+            <button onClick={() => setFilterDate(shiftDay(filterDate, 1))} title="Next day" style={{ padding: '0 14px', height: 44, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: '#0D1B3E', fontWeight: 700, display: 'flex', alignItems: 'center' }}>▶</button>
           </div>
-
-          {/* Today */}
-          <button
-            onClick={() => setFilterDate(todayStr())}
-            style={{ padding: '8px 14px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: isToday ? 700 : 500, background: isToday ? '#0D1B3E' : 'white', color: isToday ? '#C9A84C' : '#555' }}
-          >Today</button>
-
-          {/* All */}
-          <button
-            onClick={() => setFilterDate('')}
-            style={{ padding: '8px 14px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, cursor: 'pointer', background: !filterDate ? '#0D1B3E' : 'white', color: !filterDate ? 'white' : '#555' }}
-          >All</button>
-
+          <button onClick={() => setFilterDate(todayStr())} style={{ padding: '8px 14px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: isToday ? 700 : 500, background: isToday ? '#0D1B3E' : 'white', color: isToday ? '#C9A84C' : '#555' }}>Today</button>
+          <button onClick={() => setFilterDate('')} style={{ padding: '8px 14px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, cursor: 'pointer', background: !filterDate ? '#0D1B3E' : 'white', color: !filterDate ? 'white' : '#555' }}>All</button>
           <div style={{ width: 1, height: 28, background: '#eee', margin: '0 2px' }} />
-
-          {/* Status tabs */}
           {ALL_STATUSES.map(s => (
             <button key={s} onClick={() => setFilterStatus(s)} style={{ padding: '6px 12px', border: 'none', borderRadius: 20, cursor: 'pointer', fontWeight: filterStatus === s ? 700 : 500, fontSize: 13, background: filterStatus === s ? '#0D1B3E' : '#f0f0f0', color: filterStatus === s ? 'white' : '#555', display: 'flex', alignItems: 'center', gap: 5 }}>
               {s === 'all' ? 'All' : STATUS_CONFIG[s]?.label || s}
               {counts[s] > 0 && <span style={{ background: filterStatus === s ? 'rgba(255,255,255,0.25)' : '#ddd', borderRadius: 10, padding: '1px 6px', fontSize: 11 }}>{counts[s]}</span>}
             </button>
           ))}
-
           <span style={{ marginLeft: 'auto', color: '#888', fontSize: 13 }}>{filtered.length} booking{filtered.length !== 1 ? 's' : ''}</span>
         </div>
       )}
 
-      {/* Main Content */}
-      <div style={{ padding: 20, maxWidth: 1100, margin: '0 auto', overflowY: 'auto', maxHeight: 'calc(100vh - 200px)' }}>
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: 80, color: '#888' }}><div style={{ fontSize: 48 }}>⏳</div><p>Loading…</p></div>
-
-        ) : view === 'calendar' ? (
-          /* ── CALENDAR ──────────────────────────────────────────── */
-          <div style={{ background: 'white', borderRadius: 14, padding: 28, boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <button onClick={() => setCalDate(new Date(calYear, calMonth-1, 1))} style={calNavBtn}>‹</button>
-              <h2 style={{ margin: 0, color: '#0D1B3E', fontSize: 22, fontFamily: 'Georgia, serif' }}>{MONTH_NAMES[calMonth]} {calYear}</h2>
-              <button onClick={() => setCalDate(new Date(calYear, calMonth+1, 1))} style={calNavBtn}>›</button>
+      {/* ── Date bar for Plan view ───────────────────────────────── */}
+      {view === 'plan' && (
+        <div style={{ background: 'white', padding: '10px 20px', display: 'flex', gap: 8, alignItems: 'center', borderBottom: '1px solid #eee', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', background: '#f5f5f5', borderRadius: 10, border: '1px solid #e0e0e0', overflow: 'hidden' }}>
+            <button onClick={() => setFilterDate(shiftDay(filterDate, -1))} style={{ padding: '0 14px', height: 40, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: '#0D1B3E', fontWeight: 700, display: 'flex', alignItems: 'center' }}>◀</button>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '6px 4px', minWidth: 116, borderLeft: '1px solid #e0e0e0', borderRight: '1px solid #e0e0e0' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: isToday ? '#e94560' : '#0D1B3E' }}>{filterDate ? friendlyDate(filterDate) : 'All Dates'}</span>
+              <input type="date" value={filterDate || ''} onChange={e => setFilterDate(e.target.value)}
+                style={{ fontSize: 10, color: '#aaa', border: 'none', background: 'transparent', width: '100%', textAlign: 'center', cursor: 'pointer', padding: 0, marginTop: 1 }} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4, marginBottom: 6 }}>
-              {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => (
-                <div key={d} style={{ textAlign: 'center', fontWeight: 700, color: '#888', fontSize: 12, padding: '6px 0' }}>{d}</div>
-              ))}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 }}>
-              {Array(firstDow).fill(null).map((_,i) => <div key={`e${i}`} />)}
-              {Array.from({ length: daysInMonth }, (_,i) => i+1).map(day => {
-                const dayRes = resForDay(day);
-                const isTdy  = todayDate.getDate()===day && todayDate.getMonth()===calMonth && todayDate.getFullYear()===calYear;
-                const ds     = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                const isSel  = filterDate === ds;
-                return (
-                  <div key={day} onClick={() => calDayClick(day)} style={{ minHeight: 80, padding: '6px 8px', borderRadius: 10, cursor: 'pointer', border: `2px solid ${isSel ? '#0D1B3E' : isTdy ? '#C9A84C' : '#f0f0f0'}`, background: isSel ? '#f0f4ff' : isTdy ? '#fffdf0' : 'white' }}>
-                    <div style={{ fontWeight: isTdy||isSel ? 800 : 400, color: isTdy ? '#C9A84C' : isSel ? '#0D1B3E' : '#333', fontSize: 15, marginBottom: 4 }}>{day}</div>
-                    {dayRes.slice(0,3).map(r => (
-                      <div key={r.id} style={{ fontSize: 11, borderRadius: 4, padding: '2px 5px', marginBottom: 2, background: STATUS_CONFIG[r.status]?.bg||'#f0f0f0', color: STATUS_CONFIG[r.status]?.color||'#333', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {(r.reservation_time||'').slice(0,5)} {r.customer_name}
-                      </div>
-                    ))}
-                    {dayRes.length > 3 && <div style={{ fontSize: 10, color: '#888' }}>+{dayRes.length-3} more</div>}
-                  </div>
-                );
-              })}
-            </div>
+            <button onClick={() => setFilterDate(shiftDay(filterDate, 1))} style={{ padding: '0 14px', height: 40, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: '#0D1B3E', fontWeight: 700, display: 'flex', alignItems: 'center' }}>▶</button>
           </div>
+          <button onClick={() => setFilterDate(todayStr())} style={{ padding: '7px 14px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: isToday ? 700 : 500, background: isToday ? '#0D1B3E' : 'white', color: isToday ? '#C9A84C' : '#555' }}>Today</button>
+        </div>
+      )}
 
-        ) : view === 'customers' ? (
-          /* ── GUEST RECORDS ─────────────────────────────────────── */
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-              <div>
-                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0D1B3E' }}>Guest Records</h2>
-                <p style={{ margin: '2px 0 0', fontSize: 13, color: '#888' }}>{customers.length} guests · sorted by bookings · built from history</p>
+      {/* ── Plan View — full width, no maxWidth wrapper ──────────── */}
+      {view === 'plan' ? (
+        loading ? (
+          <div style={{ textAlign: 'center', padding: 80, color: '#888' }}><div style={{ fontSize: 48 }}>⏳</div><p>Loading…</p></div>
+        ) : (
+          <ReservationPlanView
+            reservations={planReservations}
+            selectedDate={filterDate}
+            onRefresh={loadData}
+          />
+        )
+      ) : (
+        /* ── All other views inside padded container ── */
+        <div style={{ padding: view === 'list' ? 20 : 20, maxWidth: view === 'plan' ? '100%' : 1100, margin: '0 auto', overflowY: 'auto', maxHeight: 'calc(100vh - 200px)' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 80, color: '#888' }}><div style={{ fontSize: 48 }}>⏳</div><p>Loading…</p></div>
+
+          ) : view === 'calendar' ? (
+            /* ── CALENDAR ────────────────────────────────────────── */
+            <div style={{ background: 'white', borderRadius: 14, padding: 28, boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                <button onClick={() => setCalDate(new Date(calYear, calMonth-1, 1))} style={calNavBtn}>‹</button>
+                <h2 style={{ margin: 0, color: '#0D1B3E', fontSize: 22, fontFamily: 'Georgia, serif' }}>{MONTH_NAMES[calMonth]} {calYear}</h2>
+                <button onClick={() => setCalDate(new Date(calYear, calMonth+1, 1))} style={calNavBtn}>›</button>
               </div>
-              <input value={customerSearch} onChange={e => { setCustomerSearch(e.target.value); setSelectedCustomer(null); }}
-                placeholder="Search name or phone…"
-                style={{ padding: '10px 16px', border: '1px solid #ddd', borderRadius: 10, fontSize: 14, width: 230 }} />
-            </div>
-            <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
-              {[{tag:'VIP',dot:'#C9A84C',color:'#92400e'},{tag:'Regular',dot:'#3b82f6',color:'#1e40af'},{tag:'New',dot:'#6b7280',color:'#4b5563'}].map(t => (
-                <div key={t.tag} style={{ background: 'white', borderRadius: 10, padding: '10px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: t.dot }} />
-                  <span style={{ fontWeight: 700, fontSize: 18, color: t.color }}>{customers.filter(c => c.tag === t.tag).length}</span>
-                  <span style={{ fontSize: 13, color: '#888' }}>{t.tag}</span>
-                </div>
-              ))}
-              <div style={{ background: 'white', borderRadius: 10, padding: '10px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontWeight: 700, fontSize: 18, color: '#0D1B3E' }}>{customers.reduce((s,c) => s+c.visitCount, 0)}</span>
-                <span style={{ fontSize: 13, color: '#888' }}>total seated</span>
-              </div>
-            </div>
-            {filteredCustomers.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#888' }}><div style={{ fontSize: 48, marginBottom: 12 }}>👥</div><p>No guests found</p></div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
-                {filteredCustomers.map(c => (
-                  <CustomerCard key={c.key} customer={c} isSelected={selectedCustomer === c.key}
-                    onToggle={() => setSelectedCustomer(selectedCustomer === c.key ? null : c.key)}
-                    onNewBooking={() => { setEditingId(null); setForm({ ...BLANK_FORM, customer_name: c.name, customer_phone: c.phone, customer_email: c.email, reservation_date: todayStr() }); setShowModal(true); }}
-                    formatDate={formatDate}
-                  />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4, marginBottom: 6 }}>
+                {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => (
+                  <div key={d} style={{ textAlign: 'center', fontWeight: 700, color: '#888', fontSize: 12, padding: '6px 0' }}>{d}</div>
                 ))}
               </div>
-            )}
-          </div>
-
-        ) : (
-          /* ── LIST VIEW ─────────────────────────────────────────── */
-          filtered.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#888' }}>
-              <div style={{ fontSize: 56 }}>📋</div>
-              <p style={{ fontSize: 18, margin: '12px 0 4px' }}>No bookings</p>
-              <p style={{ fontSize: 14, color: '#aaa' }}>{filterDate ? friendlyDate(filterDate) : 'No bookings yet'}</p>
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 18, flexWrap: 'wrap' }}>
-                <button onClick={() => setFilterDate(shiftDay(filterDate, -1))} style={{ background: '#f0f0f0', color: '#555', border: 'none', borderRadius: 8, padding: '10px 18px', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>◀ Prev day</button>
-                <button onClick={openAdd} style={{ background: '#e94560', color: 'white', border: 'none', borderRadius: 8, padding: '10px 22px', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>➕ Add Booking</button>
-                <button onClick={() => setFilterDate(shiftDay(filterDate, 1))} style={{ background: '#f0f0f0', color: '#555', border: 'none', borderRadius: 8, padding: '10px 18px', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>Next day ▶</button>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 }}>
+                {Array(firstDow).fill(null).map((_,i) => <div key={`e${i}`} />)}
+                {Array.from({ length: daysInMonth }, (_,i) => i+1).map(day => {
+                  const dayRes = resForDay(day);
+                  const isTdy  = todayDate.getDate()===day && todayDate.getMonth()===calMonth && todayDate.getFullYear()===calYear;
+                  const ds     = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                  const isSel  = filterDate === ds;
+                  return (
+                    <div key={day} onClick={() => calDayClick(day)} style={{ minHeight: 80, padding: '6px 8px', borderRadius: 10, cursor: 'pointer', border: `2px solid ${isSel ? '#0D1B3E' : isTdy ? '#C9A84C' : '#f0f0f0'}`, background: isSel ? '#f0f4ff' : isTdy ? '#fffdf0' : 'white' }}>
+                      <div style={{ fontWeight: isTdy||isSel ? 800 : 400, color: isTdy ? '#C9A84C' : isSel ? '#0D1B3E' : '#333', fontSize: 15, marginBottom: 4 }}>{day}</div>
+                      {dayRes.slice(0,3).map(r => (
+                        <div key={r.id} style={{ fontSize: 11, borderRadius: 4, padding: '2px 5px', marginBottom: 2, background: STATUS_CONFIG[r.status]?.bg||'#f0f0f0', color: STATUS_CONFIG[r.status]?.color||'#333', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {(r.reservation_time||'').slice(0,5)} {r.customer_name}
+                        </div>
+                      ))}
+                      {dayRes.length > 3 && <div style={{ fontSize: 10, color: '#888' }}>+{dayRes.length-3} more</div>}
+                    </div>
+                  );
+                })}
               </div>
             </div>
+
+          ) : view === 'customers' ? (
+            /* ── GUEST RECORDS ───────────────────────────────────── */
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0D1B3E' }}>Guest Records</h2>
+                  <p style={{ margin: '2px 0 0', fontSize: 13, color: '#888' }}>{customers.length} guests · sorted by bookings · built from history</p>
+                </div>
+                <input value={customerSearch} onChange={e => { setCustomerSearch(e.target.value); setSelectedCustomer(null); }}
+                  placeholder="Search name or phone…"
+                  style={{ padding: '10px 16px', border: '1px solid #ddd', borderRadius: 10, fontSize: 14, width: 230 }} />
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+                {[{tag:'VIP',dot:'#C9A84C',color:'#92400e'},{tag:'Regular',dot:'#3b82f6',color:'#1e40af'},{tag:'New',dot:'#6b7280',color:'#4b5563'}].map(t => (
+                  <div key={t.tag} style={{ background: 'white', borderRadius: 10, padding: '10px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: t.dot }} />
+                    <span style={{ fontWeight: 700, fontSize: 18, color: t.color }}>{customers.filter(c => c.tag === t.tag).length}</span>
+                    <span style={{ fontSize: 13, color: '#888' }}>{t.tag}</span>
+                  </div>
+                ))}
+                <div style={{ background: 'white', borderRadius: 10, padding: '10px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 700, fontSize: 18, color: '#0D1B3E' }}>{customers.reduce((s,c) => s+c.visitCount, 0)}</span>
+                  <span style={{ fontSize: 13, color: '#888' }}>total seated</span>
+                </div>
+              </div>
+              {filteredCustomers.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '60px 20px', color: '#888' }}><div style={{ fontSize: 48, marginBottom: 12 }}>👥</div><p>No guests found</p></div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
+                  {filteredCustomers.map(c => (
+                    <CustomerCard key={c.key} customer={c} isSelected={selectedCustomer === c.key}
+                      onToggle={() => setSelectedCustomer(selectedCustomer === c.key ? null : c.key)}
+                      onNewBooking={() => { setEditingId(null); setForm({ ...BLANK_FORM, customer_name: c.name, customer_phone: c.phone, customer_email: c.email, reservation_date: todayStr() }); setShowModal(true); }}
+                      formatDate={formatDate}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
           ) : (
-            filtered.map(r => <ReservationCard key={r.id} r={r} onEdit={openEdit} onSeat={handleSeat} onConfirm={handleConfirm} onNoShow={handleNoShow} onCancel={handleCancel} />)
-          )
-        )}
-      </div>
+            /* ── LIST VIEW ───────────────────────────────────────── */
+            filtered.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#888' }}>
+                <div style={{ fontSize: 56 }}>📋</div>
+                <p style={{ fontSize: 18, margin: '12px 0 4px' }}>No bookings</p>
+                <p style={{ fontSize: 14, color: '#aaa' }}>{filterDate ? friendlyDate(filterDate) : 'No bookings yet'}</p>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 18, flexWrap: 'wrap' }}>
+                  <button onClick={() => setFilterDate(shiftDay(filterDate, -1))} style={{ background: '#f0f0f0', color: '#555', border: 'none', borderRadius: 8, padding: '10px 18px', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>◀ Prev day</button>
+                  <button onClick={openAdd} style={{ background: '#e94560', color: 'white', border: 'none', borderRadius: 8, padding: '10px 22px', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>➕ Add Booking</button>
+                  <button onClick={() => setFilterDate(shiftDay(filterDate, 1))} style={{ background: '#f0f0f0', color: '#555', border: 'none', borderRadius: 8, padding: '10px 18px', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>Next day ▶</button>
+                </div>
+              </div>
+            ) : (
+              filtered.map(r => <ReservationCard key={r.id} r={r} onEdit={openEdit} onSeat={handleSeat} onConfirm={handleConfirm} onNoShow={handleNoShow} onCancel={handleCancel} />)
+            )
+          )}
+        </div>
+      )}
 
       {/* Modal */}
       {showModal && (

@@ -1,5 +1,5 @@
 /*!
- * SiamEPOS Booking Widget v1.0
+ * SiamEPOS Booking Widget v1.1
  * Drop-in reservation widget for any website
  * Usage: <script src="https://restaurant-epos-production.up.railway.app/widget.js"
  *                data-restaurant="siamepos"
@@ -14,20 +14,18 @@
   const script = document.currentScript;
 
   // ── Config from data attributes ──────────────────────────────
-  const RESTAURANT_ID = script?.getAttribute('data-restaurant') || 'siamepos';
-  const BUTTON_TEXT   = script?.getAttribute('data-button-text') || 'Book a Table';
+  const RESTAURANT_ID  = script?.getAttribute('data-restaurant') || 'siamepos';
+  const BUTTON_TEXT    = script?.getAttribute('data-button-text') || 'Book a Table';
   const OVERRIDE_COLOR = script?.getAttribute('data-color') || null;
 
   // ── State ────────────────────────────────────────────────────
-  let settings  = null;
-  let ACCENT    = OVERRIDE_COLOR || '#1a472a';
-  let step      = 1;  // 1=date+covers, 2=time slot, 3=details, 4=success
-  let selected  = { date: '', covers: 2, time: '', slots: [] };
+  let settings = null;
+  let ACCENT   = OVERRIDE_COLOR || '#1a472a';
+  let step     = 1;
+  let selected = { date: '', covers: 2, time: '', slots: [] };
 
   // ── Helpers ──────────────────────────────────────────────────
-  function todayISO() {
-    return new Date().toISOString().split('T')[0];
-  }
+  function todayISO() { return new Date().toISOString().split('T')[0]; }
 
   function maxDateISO() {
     const d = new Date();
@@ -49,13 +47,13 @@
     return '+44' + cleaned;
   }
 
-  function el(id) { return document.getElementById(id); }
-
-  function setHTML(id, html) {
-    const e = el(id);
-    if (e) e.innerHTML = html;
+  function toMins(t) {
+    if (!t) return 0;
+    const [h, m] = String(t).slice(0, 5).split(':').map(Number);
+    return h * 60 + m;
   }
 
+  function el(id) { return document.getElementById(id); }
   function show(id) { const e = el(id); if (e) e.style.display = ''; }
   function hide(id) { const e = el(id); if (e) e.style.display = 'none'; }
 
@@ -83,7 +81,6 @@
       renderButton();
     } catch (err) {
       console.error('[SiamEPOS Widget] Failed to load settings:', err.message);
-      // Fall back to defaults and still render
       injectStyles();
       renderButton();
     }
@@ -108,7 +105,6 @@
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
       }
       #sw-overlay.sw-open { display: flex; }
-
       #sw-box {
         background: #fff;
         border-radius: 18px;
@@ -125,7 +121,6 @@
         from { opacity: 0; transform: translateY(32px) scale(0.97); }
         to   { opacity: 1; transform: translateY(0) scale(1); }
       }
-
       #sw-header {
         background: ${ACCENT};
         padding: 20px 24px;
@@ -134,12 +129,7 @@
         justify-content: space-between;
         flex-shrink: 0;
       }
-      #sw-header h2 {
-        margin: 0;
-        color: #fff;
-        font-size: 19px;
-        font-weight: 700;
-      }
+      #sw-header h2 { margin: 0; color: #fff; font-size: 19px; font-weight: 700; }
       #sw-close {
         background: rgba(255,255,255,0.2);
         border: none;
@@ -155,7 +145,6 @@
         transition: background 0.2s;
       }
       #sw-close:hover { background: rgba(255,255,255,0.3); }
-
       #sw-progress {
         display: flex;
         background: #f5f5f5;
@@ -173,20 +162,9 @@
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
-      .sw-step-tab.active {
-        color: ${ACCENT};
-        border-bottom-color: ${ACCENT};
-      }
-      .sw-step-tab.done {
-        color: #888;
-      }
-
-      #sw-body {
-        padding: 24px;
-        overflow-y: auto;
-        flex: 1;
-      }
-
+      .sw-step-tab.active { color: ${ACCENT}; border-bottom-color: ${ACCENT}; }
+      .sw-step-tab.done { color: #888; }
+      #sw-body { padding: 24px; overflow-y: auto; flex: 1; }
       .sw-label {
         display: block;
         font-size: 13px;
@@ -196,7 +174,6 @@
         margin-top: 18px;
       }
       .sw-label:first-child { margin-top: 0; }
-
       .sw-input {
         width: 100%;
         padding: 12px 14px;
@@ -210,14 +187,8 @@
         background: #fff;
         -webkit-appearance: none;
       }
-      .sw-input:focus {
-        border-color: ${ACCENT};
-        box-shadow: 0 0 0 3px ${ACCENT}25;
-      }
-
+      .sw-input:focus { border-color: ${ACCENT}; box-shadow: 0 0 0 3px ${ACCENT}25; }
       .sw-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-
-      /* Covers stepper */
       .sw-stepper {
         display: flex;
         align-items: center;
@@ -246,16 +217,24 @@
         line-height: 1;
       }
       .sw-step-btn:hover { background: ${ACCENT}; color: #fff; }
-      .sw-covers-num {
-        font-size: 26px;
-        font-weight: 800;
-        min-width: 40px;
-        text-align: center;
-        color: ${ACCENT};
-      }
+      .sw-covers-num { font-size: 26px; font-weight: 800; min-width: 40px; text-align: center; color: ${ACCENT}; }
       .sw-covers-label { color: #888; font-size: 14px; }
 
-      /* Time slots grid */
+      /* Service section headings */
+      .sw-service-heading {
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: ${ACCENT};
+        margin: 16px 0 8px;
+        padding: 6px 10px;
+        background: ${ACCENT}12;
+        border-radius: 6px;
+        border-left: 3px solid ${ACCENT};
+      }
+      .sw-service-heading:first-child { margin-top: 4px; }
+
       #sw-slots-grid {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -281,11 +260,7 @@
         color: ${ACCENT};
         background: ${ACCENT}12;
       }
-      .sw-slot.sw-slot-selected {
-        background: ${ACCENT};
-        border-color: ${ACCENT};
-        color: #fff;
-      }
+      .sw-slot.sw-slot-selected { background: ${ACCENT}; border-color: ${ACCENT}; color: #fff; }
       .sw-slot-unavail {
         background: #f5f5f5;
         color: #ccc;
@@ -293,14 +268,7 @@
         border-color: #eee;
         text-decoration: line-through;
       }
-      #sw-slots-loading {
-        text-align: center;
-        color: #888;
-        padding: 32px 0;
-        font-size: 14px;
-      }
-
-      /* Summary box */
+      #sw-slots-loading { text-align: center; color: #888; padding: 32px 0; font-size: 14px; }
       #sw-summary {
         background: ${ACCENT}10;
         border: 1.5px solid ${ACCENT}40;
@@ -312,8 +280,6 @@
         line-height: 1.7;
       }
       #sw-summary strong { color: ${ACCENT}; }
-
-      /* Buttons */
       .sw-btn {
         width: 100%;
         padding: 15px;
@@ -331,14 +297,7 @@
       .sw-btn-primary { background: ${ACCENT}; color: #fff; }
       .sw-btn-primary:hover { opacity: 0.88; }
       .sw-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-      .sw-btn-back {
-        background: #f0f0f0;
-        color: #555;
-        font-size: 14px;
-        margin-top: 10px;
-      }
-
-      /* Error */
+      .sw-btn-back { background: #f0f0f0; color: #555; font-size: 14px; margin-top: 10px; }
       #sw-error {
         display: none;
         background: #fff0f0;
@@ -349,34 +308,15 @@
         color: #c0392b;
         margin-top: 14px;
       }
-
-      /* Success */
-      #sw-success {
-        text-align: center;
-        padding: 36px 24px;
-      }
+      #sw-success { text-align: center; padding: 36px 24px; }
       #sw-success .sw-tick {
         font-size: 64px;
         display: block;
         animation: swPop 0.5s cubic-bezier(.34,1.56,.64,1);
       }
-      @keyframes swPop {
-        from { transform: scale(0); opacity: 0; }
-        to   { transform: scale(1); opacity: 1; }
-      }
-      #sw-success h3 {
-        color: ${ACCENT};
-        margin: 14px 0 8px;
-        font-size: 22px;
-      }
-      #sw-success p {
-        color: #555;
-        font-size: 14px;
-        line-height: 1.6;
-        margin: 0 0 20px;
-      }
-
-      /* Open button */
+      @keyframes swPop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+      #sw-success h3 { color: ${ACCENT}; margin: 14px 0 8px; font-size: 22px; }
+      #sw-success p { color: #555; font-size: 14px; line-height: 1.6; margin: 0 0 20px; }
       #sw-open-btn {
         display: inline-block;
         padding: 14px 28px;
@@ -392,48 +332,18 @@
         -webkit-tap-highlight-color: transparent;
       }
       #sw-open-btn:hover { opacity: 0.88; }
-
-      @media (max-width: 420px) {
-        #sw-slots-grid { grid-template-columns: repeat(3, 1fr); }
-        .sw-row { grid-template-columns: 1fr; }
+      @media (max-width: 480px) {
+        #sw-box { border-radius: 12px; max-height: 95vh; }
+        #sw-overlay { padding: 8px; align-items: flex-end; }
+        #sw-body { padding: 16px; }
+        #sw-header { padding: 14px 16px; }
+        #sw-header h2 { font-size: 16px; }
+        #sw-slots-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 6px; }
+        .sw-slot { padding: 8px 2px; font-size: 12px; }
+        .sw-row { grid-template-columns: 1fr !important; }
+        .sw-btn { padding: 14px; font-size: 15px; }
+        .sw-input { font-size: 16px; }
       }
-        @media (max-width: 480px) {
-  #sw-box {
-    border-radius: 12px;
-    max-height: 95vh;
-  }
-  #sw-overlay {
-    padding: 8px;
-    align-items: flex-end;
-  }
-  #sw-body {
-    padding: 16px;
-  }
-  #sw-header {
-    padding: 14px 16px;
-  }
-  #sw-header h2 {
-    font-size: 16px;
-  }
-  #sw-slots-grid {
-    grid-template-columns: repeat(3, 1fr) !important;
-    gap: 6px;
-  }
-  .sw-slot {
-    padding: 8px 2px;
-    font-size: 12px;
-  }
-  .sw-row {
-    grid-template-columns: 1fr !important;
-  }
-  .sw-btn {
-    padding: 14px;
-    font-size: 15px;
-  }
-  .sw-input {
-    font-size: 16px;
-  }
-}
     `;
     document.head.appendChild(s);
   }
@@ -455,7 +365,6 @@
   // ── Build widget HTML ────────────────────────────────────────
   function buildHTML() {
     if (el('sw-overlay')) return;
-
     const overlay = document.createElement('div');
     overlay.id = 'sw-overlay';
     overlay.innerHTML = `
@@ -470,13 +379,10 @@
           <div class="sw-step-tab" id="sw-tab-3">3. Details</div>
           <div class="sw-step-tab" id="sw-tab-4">✓ Done</div>
         </div>
-        <div id="sw-body">
-          <!-- Steps injected dynamically -->
-        </div>
+        <div id="sw-body"></div>
       </div>
     `;
     document.body.appendChild(overlay);
-
     el('sw-close').addEventListener('click', closeWidget);
     overlay.addEventListener('click', e => { if (e.target === overlay) closeWidget(); });
   }
@@ -484,7 +390,6 @@
   // ── Step rendering ───────────────────────────────────────────
   function renderStep(n) {
     step = n;
-    // Update tabs
     for (let i = 1; i <= 4; i++) {
       const tab = el(`sw-tab-${i}`);
       if (!tab) continue;
@@ -501,10 +406,8 @@
     el('sw-body').innerHTML = `
       <label class="sw-label">📅 Select Date</label>
       <input class="sw-input" id="sw-date" type="date"
-        min="${todayISO()}"
-        max="${maxDateISO()}"
+        min="${todayISO()}" max="${maxDateISO()}"
         value="${selected.date || todayISO()}" />
-
       <label class="sw-label">👥 Number of Guests</label>
       <div class="sw-stepper">
         <button class="sw-step-btn" id="sw-dec">−</button>
@@ -512,24 +415,14 @@
         <button class="sw-step-btn" id="sw-inc">+</button>
         <span class="sw-covers-label">guests</span>
       </div>
-
       <div id="sw-error"></div>
-      <button class="sw-btn sw-btn-primary" id="sw-next-1">
-        See Available Times →
-      </button>
+      <button class="sw-btn sw-btn-primary" id="sw-next-1">See Available Times →</button>
     `;
-
     el('sw-dec').addEventListener('click', () => {
-      if (selected.covers > 1) {
-        selected.covers--;
-        el('sw-covers-num').textContent = selected.covers;
-      }
+      if (selected.covers > 1) { selected.covers--; el('sw-covers-num').textContent = selected.covers; }
     });
     el('sw-inc').addEventListener('click', () => {
-      if (selected.covers < 30) {
-        selected.covers++;
-        el('sw-covers-num').textContent = selected.covers;
-      }
+      if (selected.covers < 30) { selected.covers++; el('sw-covers-num').textContent = selected.covers; }
     });
     el('sw-next-1').addEventListener('click', () => {
       const dateVal = el('sw-date').value;
@@ -539,20 +432,20 @@
     });
   }
 
-  // Step 2 — Time Slots
+  // Step 2 — Time Slots (with lunch/dinner sections if split service)
   async function renderStep2() {
     el('sw-body').innerHTML = `
       <div style="font-size:14px;color:#666;margin-bottom:14px">
         📅 <strong>${fmtDate(selected.date)}</strong>
-        &nbsp;·&nbsp; 👥 <strong>${selected.covers} guest${selected.covers > 1 ? 's' : ''}</strong>
+        &nbsp;·&nbsp;
+        👥 <strong>${selected.covers} guest${selected.covers > 1 ? 's' : ''}</strong>
       </div>
       <label class="sw-label">🕐 Choose a Time</label>
       <div id="sw-slots-loading">⏳ Loading available times…</div>
-      <div id="sw-slots-grid" style="display:none"></div>
+      <div id="sw-slots-container"></div>
       <div id="sw-error"></div>
       <button class="sw-btn sw-btn-back" id="sw-back-2">← Back</button>
     `;
-
     el('sw-back-2').addEventListener('click', () => renderStep(1));
 
     try {
@@ -563,14 +456,13 @@
       selected.slots = data.slots || [];
 
       hide('sw-slots-loading');
-      const grid = el('sw-slots-grid');
-      grid.style.display = 'grid';
+      const container = el('sw-slots-container');
 
-      const available = selected.slots.filter(s => s.available);
+      const availableSlots = selected.slots.filter(s => s.available);
 
-      if (available.length === 0) {
-        grid.innerHTML = `
-          <div style="grid-column:1/-1;text-align:center;padding:28px 0;color:#888;">
+      if (availableSlots.length === 0) {
+        container.innerHTML = `
+          <div style="text-align:center;padding:28px 0;color:#888;">
             <div style="font-size:36px;margin-bottom:8px">😔</div>
             <p style="margin:0;font-size:14px">
               No availability for ${selected.covers} guest${selected.covers > 1 ? 's' : ''} on this date.<br>
@@ -581,25 +473,65 @@
         return;
       }
 
-      selected.slots.forEach(slot => {
-        const btn = document.createElement('button');
-        btn.className = 'sw-slot' + (!slot.available ? ' sw-slot-unavail' : '');
-        btn.textContent = slot.time;
-        btn.disabled = !slot.available;
-        btn.title = slot.available ? '' : 'Not available';
-        btn.addEventListener('click', () => {
-          if (!slot.available) return;
-          selected.time = slot.time;
-          renderStep(3);
-        });
-        grid.appendChild(btn);
-      });
+      // ── Split service: show Lunch & Dinner sections ──────────
+      const isSplit = settings?.service_type === 'split';
+
+      if (isSplit) {
+        const lunchEnd   = toMins(settings.lunch_service_end   || '14:30');
+        const dinnerStart = toMins(settings.dinner_service_start || '17:30');
+
+        const lunchSlots  = availableSlots.filter(s => toMins(s.time) <= lunchEnd);
+        const dinnerSlots = availableSlots.filter(s => toMins(s.time) >= dinnerStart);
+
+        if (lunchSlots.length > 0) {
+          const heading = document.createElement('div');
+          heading.className = 'sw-service-heading';
+          heading.textContent = '🍜 Lunch';
+          container.appendChild(heading);
+
+          const grid = document.createElement('div');
+          grid.id = 'sw-slots-grid';
+          lunchSlots.forEach(slot => grid.appendChild(makeSlotBtn(slot)));
+          container.appendChild(grid);
+        }
+
+        if (dinnerSlots.length > 0) {
+          const heading = document.createElement('div');
+          heading.className = 'sw-service-heading';
+          heading.textContent = '🍷 Dinner';
+          container.appendChild(heading);
+
+          const grid = document.createElement('div');
+          grid.id = 'sw-slots-grid-dinner';
+          grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:4px;';
+          dinnerSlots.forEach(slot => grid.appendChild(makeSlotBtn(slot)));
+          container.appendChild(grid);
+        }
+
+      } else {
+        // ── All day: single grid of available slots ──────────
+        const grid = document.createElement('div');
+        grid.id = 'sw-slots-grid';
+        availableSlots.forEach(slot => grid.appendChild(makeSlotBtn(slot)));
+        container.appendChild(grid);
+      }
 
     } catch (err) {
       hide('sw-slots-loading');
       showError('Could not load availability. Please try again.');
       console.error('[SiamEPOS Widget] Availability error:', err);
     }
+  }
+
+  function makeSlotBtn(slot) {
+    const btn = document.createElement('button');
+    btn.className = 'sw-slot';
+    btn.textContent = slot.time;
+    btn.addEventListener('click', () => {
+      selected.time = slot.time;
+      renderStep(3);
+    });
+    return btn;
   }
 
   // Step 3 — Guest Details
@@ -611,41 +543,25 @@
         &nbsp;·&nbsp;
         👥 <strong>${selected.covers} guest${selected.covers > 1 ? 's' : ''}</strong>
       </div>
-
       <label class="sw-label">Your Name *</label>
-      <input class="sw-input" id="sw-name" type="text"
-        placeholder="Full name" autocomplete="name" />
-
+      <input class="sw-input" id="sw-name" type="text" placeholder="Full name" autocomplete="name" />
       <label class="sw-label">Phone Number *</label>
-      <input class="sw-input" id="sw-phone" type="tel"
-        placeholder="e.g. 07700 900000" autocomplete="tel" />
-
+      <input class="sw-input" id="sw-phone" type="tel" placeholder="e.g. 07700 900000" autocomplete="tel" />
       <label class="sw-label">Email (optional)</label>
-      <input class="sw-input" id="sw-email" type="email"
-        placeholder="your@email.com" autocomplete="email" />
-
+      <input class="sw-input" id="sw-email" type="email" placeholder="your@email.com" autocomplete="email" />
       <label class="sw-label">Special Requests (optional)</label>
-      <input class="sw-input" id="sw-notes" type="text"
-        placeholder="Allergies, highchair, anniversary…" />
-
+      <input class="sw-input" id="sw-notes" type="text" placeholder="Allergies, highchair, anniversary…" />
       <div id="sw-error"></div>
-
-      <button class="sw-btn sw-btn-primary" id="sw-submit">
-        Confirm Booking
-      </button>
+      <button class="sw-btn sw-btn-primary" id="sw-submit">Confirm Booking</button>
       <button class="sw-btn sw-btn-back" id="sw-back-3">← Back</button>
     `;
-
     el('sw-back-3').addEventListener('click', () => renderStep(2));
     el('sw-submit').addEventListener('click', submitBooking);
-
-    // Auto-focus name field
     setTimeout(() => { const n = el('sw-name'); if (n) n.focus(); }, 100);
   }
 
   // Step 4 — Success
   function renderStep4(bookingData) {
-    // Hide progress bar on success
     el('sw-progress').style.display = 'none';
     el('sw-body').innerHTML = `
       <div id="sw-success">
@@ -654,15 +570,12 @@
         <p>
           <strong>${selected.covers} guest${selected.covers > 1 ? 's' : ''}</strong>
           on <strong>${fmtDate(selected.date)}</strong>
-          at <strong>${selected.time}</strong>
-          <br><br>
+          at <strong>${selected.time}</strong><br><br>
           ${bookingData?.customer_email
             ? 'A confirmation has been sent to your email.'
             : 'The restaurant will be in touch to confirm your booking.'}
         </p>
-        <button class="sw-btn sw-btn-primary" id="sw-done-btn">
-          Done
-        </button>
+        <button class="sw-btn sw-btn-primary" id="sw-done-btn">Done</button>
       </div>
     `;
     el('sw-done-btn').addEventListener('click', closeWidget);
@@ -671,47 +584,34 @@
   // ── Submit booking ───────────────────────────────────────────
   async function submitBooking() {
     hideError();
-
     const name  = el('sw-name')?.value.trim() || '';
     const phone = el('sw-phone')?.value.trim() || '';
     const email = el('sw-email')?.value.trim() || '';
     const notes = el('sw-notes')?.value.trim() || '';
-
     if (!name)  { showError('Please enter your name'); return; }
     if (!phone) { showError('Please enter your phone number'); return; }
-
     const btn = el('sw-submit');
     btn.disabled = true;
     btn.textContent = '⏳ Confirming…';
-
     try {
       const r = await fetch(`${API}/api/reservations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          restaurant_id:    RESTAURANT_ID,
-          customer_name:    name,
-          customer_phone:   fmtPhone(phone),
-          customer_email:   email || null,
-          covers:           selected.covers,
-          reservation_date: selected.date,
-          reservation_time: selected.time,
-          notes:            notes || null,
-          source:           'widget',
+          restaurant_id: RESTAURANT_ID, customer_name: name,
+          customer_phone: fmtPhone(phone), customer_email: email || null,
+          covers: selected.covers, reservation_date: selected.date,
+          reservation_time: selected.time, notes: notes || null, source: 'widget',
         }),
       });
-
       const data = await r.json();
-
       if (!r.ok || data.error) {
         showError(data.error || 'Something went wrong. Please try again.');
         btn.disabled = false;
         btn.textContent = 'Confirm Booking';
         return;
       }
-
       renderStep(4, { ...data.reservation, customer_email: email });
-
     } catch (err) {
       showError('Connection error. Please check your internet and try again.');
       btn.disabled = false;

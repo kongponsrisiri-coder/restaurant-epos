@@ -77,9 +77,7 @@ app.delete('/api/tables/:id', async (req, res) => {
 
 app.get('/api/table-combinations', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM table_combinations WHERE is_active = true ORDER BY id'
-    );
+    const result = await pool.query('SELECT * FROM table_combinations WHERE is_active = true ORDER BY id');
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -159,10 +157,7 @@ app.get('/api/dining-duration-tiers', async (req, res) => {
 app.put('/api/dining-duration-tiers/:id', async (req, res) => {
   try {
     const { duration_mins } = req.body;
-    await pool.query(
-      'UPDATE dining_duration_tiers SET duration_mins = $1 WHERE id = $2',
-      [duration_mins, req.params.id]
-    );
+    await pool.query('UPDATE dining_duration_tiers SET duration_mins = $1 WHERE id = $2', [duration_mins, req.params.id]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -777,7 +772,13 @@ const widgetCors = (req, res, next) => {
   next();
 };
 
-// ── Updated availability route — uses dining duration tiers ──────
+// Helper to convert "HH:MM" string to total minutes
+function toMins(t) {
+  const [h, m] = String(t).slice(0, 5).split(':').map(Number);
+  return h * 60 + m;
+}
+
+// ── Availability — supports all_day and split (lunch/dinner) service ──
 app.get('/api/reservations/availability', widgetCors, async (req, res) => {
   try {
     const { date, covers = 2, restaurant_id = 'siamepos' } = req.query;
@@ -786,7 +787,12 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
     if (isNaN(coversNum) || coversNum < 1) return res.status(400).json({ error: 'covers must be a positive number' });
 
     const settingsRes = await pool.query('SELECT * FROM restaurant_settings WHERE restaurant_id = $1', [restaurant_id]);
-    const s = settingsRes.rows[0] || { opening_time: '11:00', last_booking_time: '21:30', slot_interval_mins: 15, max_covers_per_slot: 20, booking_lead_hours: 1, booking_advance_days: 60 };
+    const s = settingsRes.rows[0] || {
+      opening_time: '11:00', last_booking_time: '21:30',
+      slot_interval_mins: 15, max_covers_per_slot: 20,
+      booking_lead_hours: 1, booking_advance_days: 60,
+      service_type: 'all_day',
+    };
 
     const requestedDate = new Date(date + 'T00:00:00');
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -795,19 +801,41 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
     if (requestedDate < today) return res.json({ slots: [], message: 'Date is in the past' });
     if (requestedDate > maxDate) return res.json({ slots: [], message: 'Date too far in advance' });
 
-    const [openH, openM]   = String(s.opening_time).slice(0, 5).split(':').map(Number);
-    const [closeH, closeM] = String(s.last_booking_time).slice(0, 5).split(':').map(Number);
     const interval = s.slot_interval_mins || 15;
-    const slots = [];
-    let cur = openH * 60 + openM;
-    const end = closeH * 60 + closeM;
-    while (cur <= end) {
-      const h = Math.floor(cur / 60), m = cur % 60;
-      slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
-      cur += interval;
+
+    // Build all possible slots based on service type
+    let slots = [];
+    if (s.service_type === 'split') {
+      // Lunch window
+      const lunchStart = toMins(s.lunch_service_start  || '11:00');
+      const lunchEnd   = toMins(s.lunch_service_end    || '14:30');
+      let cur = lunchStart;
+      while (cur <= lunchEnd) {
+        const h = Math.floor(cur / 60), m = cur % 60;
+        slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+        cur += interval;
+      }
+      // Dinner window
+      const dinnerStart = toMins(s.dinner_service_start || '17:30');
+      const dinnerEnd   = toMins(s.dinner_service_end   || '21:30');
+      cur = dinnerStart;
+      while (cur <= dinnerEnd) {
+        const h = Math.floor(cur / 60), m = cur % 60;
+        slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+        cur += interval;
+      }
+    } else {
+      // All day — single window
+      const openEnd = toMins(s.last_booking_time || '21:30');
+      let cur = toMins(s.opening_time || '11:00');
+      while (cur <= openEnd) {
+        const h = Math.floor(cur / 60), m = cur % 60;
+        slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+        cur += interval;
+      }
     }
 
-    // Duration-aware: each booking blocks covers for its full dining duration
+    // Fetch bookings with dining duration
     const bookingsRes = await pool.query(
       `SELECT TO_CHAR(r.reservation_time, 'HH24:MI') AS time_str, r.covers,
               COALESCE(d.duration_mins, 90) AS duration_mins
@@ -822,8 +850,7 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
     );
 
     const bookings = bookingsRes.rows.map(r => {
-      const [bh, bm] = r.time_str.split(':').map(Number);
-      const startMins = bh * 60 + bm;
+      const startMins = toMins(r.time_str);
       return { startMins, covers: parseInt(r.covers, 10), endMins: startMins + parseInt(r.duration_mins, 10) };
     });
 
@@ -832,11 +859,10 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
     const nowMins   = isToday ? (new Date().getHours() * 60 + new Date().getMinutes() + (s.booking_lead_hours || 1) * 60) : -1;
 
     const result = slots.map(time => {
-      const [h, m] = time.split(':').map(Number);
-      const slotMins = h * 60 + m;
+      const slotMins = toMins(time);
       const activeCovers = bookings.reduce((sum, b) => (b.startMins <= slotMins && b.endMins > slotMins ? sum + b.covers : sum), 0);
-      const remaining  = maxCovers - activeCovers;
-      const pastCutoff = isToday && slotMins < nowMins;
+      const remaining    = maxCovers - activeCovers;
+      const pastCutoff   = isToday && slotMins < nowMins;
       return { time, available: !pastCutoff && remaining >= coversNum, remaining_covers: Math.max(0, remaining), past: pastCutoff };
     });
 
@@ -847,14 +873,31 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
   }
 });
 
+// ── GET reservation settings — includes all new fields ──
 app.get('/api/reservations/settings/:restaurantId', widgetCors, async (req, res) => {
   try {
-    const result = await pool.query(`SELECT restaurant_id, restaurant_name, brand_colour, TO_CHAR(opening_time, 'HH24:MI') AS opening_time, TO_CHAR(last_booking_time, 'HH24:MI') AS last_booking_time, slot_interval_mins, max_covers_per_slot, booking_lead_hours, booking_advance_days, is_active FROM restaurant_settings WHERE restaurant_id = $1`, [req.params.restaurantId]);
+    const result = await pool.query(
+      `SELECT restaurant_id, restaurant_name, brand_colour,
+              TO_CHAR(opening_time, 'HH24:MI')         AS opening_time,
+              TO_CHAR(last_booking_time, 'HH24:MI')    AS last_booking_time,
+              service_type,
+              TO_CHAR(lunch_service_start, 'HH24:MI')  AS lunch_service_start,
+              TO_CHAR(lunch_service_end, 'HH24:MI')    AS lunch_service_end,
+              TO_CHAR(dinner_service_start, 'HH24:MI') AS dinner_service_start,
+              TO_CHAR(dinner_service_end, 'HH24:MI')   AS dinner_service_end,
+              slot_interval_mins, max_covers_per_slot,
+              booking_lead_hours, booking_advance_days, is_active
+       FROM restaurant_settings WHERE restaurant_id = $1`,
+      [req.params.restaurantId]
+    );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Restaurant not found' });
     const s = result.rows[0];
     if (!s.is_active) return res.status(403).json({ error: 'Online booking is currently disabled' });
     res.json(s);
-  } catch (err) { res.status(500).json({ error: 'Failed to load settings' }); }
+  } catch (err) {
+    console.error('GET /api/reservations/settings error:', err);
+    res.status(500).json({ error: 'Failed to load settings' });
+  }
 });
 
 app.get('/api/reservations', async (req, res) => {
@@ -937,11 +980,43 @@ app.delete('/api/reservations/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── PUT reservation settings — saves all fields including lunch/dinner ──
 app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
   try {
-    const { restaurant_name, brand_colour, opening_time, last_booking_time, slot_interval_mins, max_covers_per_slot, booking_lead_hours, booking_advance_days, is_active } = req.body;
-    await pool.query(`INSERT INTO restaurant_settings (restaurant_id, restaurant_name, brand_colour, opening_time, last_booking_time, slot_interval_mins, max_covers_per_slot, booking_lead_hours, booking_advance_days, is_active) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (restaurant_id) DO UPDATE SET restaurant_name=EXCLUDED.restaurant_name, brand_colour=EXCLUDED.brand_colour, opening_time=EXCLUDED.opening_time, last_booking_time=EXCLUDED.last_booking_time, slot_interval_mins=EXCLUDED.slot_interval_mins, max_covers_per_slot=EXCLUDED.max_covers_per_slot, booking_lead_hours=EXCLUDED.booking_lead_hours, booking_advance_days=EXCLUDED.booking_advance_days, is_active=EXCLUDED.is_active`,
-      [req.params.restaurantId, restaurant_name, brand_colour, opening_time, last_booking_time, slot_interval_mins, max_covers_per_slot, booking_lead_hours, booking_advance_days, is_active]);
+    const {
+      restaurant_name, brand_colour, opening_time, last_booking_time,
+      service_type, lunch_service_start, lunch_service_end,
+      dinner_service_start, dinner_service_end,
+      slot_interval_mins, max_covers_per_slot,
+      booking_lead_hours, booking_advance_days, is_active,
+    } = req.body;
+    await pool.query(
+      `INSERT INTO restaurant_settings
+         (restaurant_id, restaurant_name, brand_colour, opening_time, last_booking_time,
+          service_type, lunch_service_start, lunch_service_end,
+          dinner_service_start, dinner_service_end,
+          slot_interval_mins, max_covers_per_slot, booking_lead_hours, booking_advance_days, is_active)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       ON CONFLICT (restaurant_id) DO UPDATE SET
+         restaurant_name      = EXCLUDED.restaurant_name,
+         brand_colour         = EXCLUDED.brand_colour,
+         opening_time         = EXCLUDED.opening_time,
+         last_booking_time    = EXCLUDED.last_booking_time,
+         service_type         = EXCLUDED.service_type,
+         lunch_service_start  = EXCLUDED.lunch_service_start,
+         lunch_service_end    = EXCLUDED.lunch_service_end,
+         dinner_service_start = EXCLUDED.dinner_service_start,
+         dinner_service_end   = EXCLUDED.dinner_service_end,
+         slot_interval_mins   = EXCLUDED.slot_interval_mins,
+         max_covers_per_slot  = EXCLUDED.max_covers_per_slot,
+         booking_lead_hours   = EXCLUDED.booking_lead_hours,
+         booking_advance_days = EXCLUDED.booking_advance_days,
+         is_active            = EXCLUDED.is_active`,
+      [req.params.restaurantId, restaurant_name, brand_colour, opening_time, last_booking_time,
+       service_type || 'all_day', lunch_service_start || '11:00', lunch_service_end || '14:30',
+       dinner_service_start || '17:30', dinner_service_end || '21:30',
+       slot_interval_mins, max_covers_per_slot, booking_lead_hours, booking_advance_days, is_active]
+    );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

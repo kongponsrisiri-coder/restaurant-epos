@@ -248,7 +248,11 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
-
+await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS service_type VARCHAR(20) DEFAULT 'all_day'`);
+await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS lunch_service_start TIME DEFAULT '11:00'`);
+await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS lunch_service_end TIME DEFAULT '14:30'`);
+await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS dinner_service_start TIME DEFAULT '17:30'`);
+await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS dinner_service_end TIME DEFAULT '21:30'`);
     await pool.query(`
       INSERT INTO restaurant_settings (restaurant_id, restaurant_name)
       VALUES ('siamepos', 'SiamEPOS Restaurant')

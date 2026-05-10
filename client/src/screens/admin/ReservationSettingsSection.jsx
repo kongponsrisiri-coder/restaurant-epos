@@ -8,13 +8,8 @@ const inp = {
   border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box',
   fontFamily: 'inherit', color: '#1a1a2e',
 };
-const lbl = {
-  fontSize: 13, fontWeight: 600, color: '#555',
-  display: 'block', marginBottom: 6,
-};
-const hint = {
-  fontSize: 12, color: '#aaa', marginTop: 4,
-};
+const lbl = { fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 };
+const hint = { fontSize: 12, color: '#aaa', marginTop: 4 };
 
 function Field({ label, hint: hintText, children }) {
   return (
@@ -29,54 +24,62 @@ function Field({ label, hint: hintText, children }) {
 function Card({ title, emoji, children }) {
   return (
     <div style={{ background: 'white', borderRadius: 14, padding: 24, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-      <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 20, marginTop: 0 }}>
-        {emoji} {title}
-      </h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {children}
-      </div>
+      <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 20, marginTop: 0 }}>{emoji} {title}</h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>{children}</div>
+    </div>
+  );
+}
+
+function TimeRangePair({ startLabel, endLabel, startValue, endValue, onStartChange, onEndChange, startHint, endHint }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <Field label={startLabel} hint={startHint}>
+        <input type="time" value={startValue} onChange={e => onStartChange(e.target.value)} style={inp} />
+      </Field>
+      <Field label={endLabel} hint={endHint}>
+        <input type="time" value={endValue} onChange={e => onEndChange(e.target.value)} style={inp} />
+      </Field>
     </div>
   );
 }
 
 export default function ReservationSettingsSection() {
   const [settings, setSettings] = useState({
-    restaurant_name:     '',
-    brand_colour:        '#C9A84C',
-    opening_time:        '11:00',
-    last_booking_time:   '21:30',
-    slot_interval_mins:  15,
-    max_covers_per_slot: 20,
-    booking_lead_hours:  1,
+    restaurant_name:      '',
+    brand_colour:         '#C9A84C',
+    service_type:         'all_day',
+    opening_time:         '11:00',
+    last_booking_time:    '21:30',
+    lunch_service_start:  '11:00',
+    lunch_service_end:    '14:30',
+    dinner_service_start: '17:30',
+    dinner_service_end:   '21:30',
+    slot_interval_mins:   15,
+    max_covers_per_slot:  20,
+    booking_lead_hours:   1,
     booking_advance_days: 60,
-    is_active:           true,
+    is_active:            true,
   });
-  const [loading, setLoading]   = useState(true);
-  const [saving,  setSaving]    = useState(false);
-  const [saved,   setSaved]     = useState(false);
-  const [error,   setError]     = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [saved,   setSaved]   = useState(false);
+  const [error,   setError]   = useState(null);
 
   useEffect(() => {
     fetch(`${SERVER_URL}/api/reservations/settings/${RESTAURANT_ID}`)
       .then(r => r.json())
       .then(data => {
-        if (data.error) throw new Error(data.error);
+        if (data.error) return;
         setSettings(prev => ({ ...prev, ...data }));
       })
-      .catch(() => {
-        // Settings may not exist yet — use defaults
-      })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  const set = (key, value) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
-    setSaved(false);
-  };
+  const set = (key, value) => { setSettings(prev => ({ ...prev, [key]: value })); setSaved(false); };
 
   const handleSave = async () => {
-    setSaving(true);
-    setError(null);
+    setSaving(true); setError(null);
     try {
       const res = await fetch(`${SERVER_URL}/api/reservations/settings/${RESTAURANT_ID}`, {
         method: 'PUT',
@@ -94,20 +97,14 @@ export default function ReservationSettingsSection() {
     }
   };
 
-  if (loading) {
-    return (
-      <div style={{ padding: 24, color: '#888', fontSize: 14 }}>Loading reservation settings…</div>
-    );
-  }
+  if (loading) return <div style={{ padding: 24, color: '#888' }}>Loading…</div>;
+
+  const isSplit = settings.service_type === 'split';
 
   return (
     <div style={{ padding: 24, maxWidth: 640 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>
-        Reservation Settings
-      </h1>
-      <p style={{ fontSize: 13, color: '#888', marginBottom: 24 }}>
-        Configure your online booking widget and availability rules.
-      </p>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>Reservation Settings</h1>
+      <p style={{ fontSize: 13, color: '#888', marginBottom: 24 }}>Configure your online booking widget and availability rules.</p>
 
       {error && (
         <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13, color: '#991b1b' }}>
@@ -126,14 +123,8 @@ export default function ReservationSettingsSection() {
               {settings.is_active ? 'Customers can make reservations via the booking widget' : 'No new bookings will be accepted through the widget'}
             </div>
           </div>
-          <button
-            onClick={() => set('is_active', !settings.is_active)}
-            style={{
-              padding: '8px 20px', borderRadius: 8, border: 'none',
-              background: settings.is_active ? '#ef4444' : '#22c55e',
-              color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap',
-            }}
-          >
+          <button onClick={() => set('is_active', !settings.is_active)}
+            style={{ padding: '8px 20px', borderRadius: 8, border: 'none', background: settings.is_active ? '#ef4444' : '#22c55e', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
             {settings.is_active ? 'Disable' : 'Enable'}
           </button>
         </div>
@@ -141,30 +132,79 @@ export default function ReservationSettingsSection() {
 
       {/* Restaurant Info */}
       <Card title="Restaurant Info" emoji="🏢">
-        <Field label="Restaurant Name" hint="Shown on the booking confirmation email">
+        <Field label="Restaurant Name" hint="Shown on booking confirmation emails">
           <input value={settings.restaurant_name} onChange={e => set('restaurant_name', e.target.value)} placeholder="e.g. Siam Thai Restaurant" style={inp} />
         </Field>
-        <Field label="Brand Colour" hint="Used as the accent colour in the booking widget">
+        <Field label="Brand Colour" hint="Accent colour in the booking widget">
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <input type="color" value={settings.brand_colour} onChange={e => set('brand_colour', e.target.value)}
               style={{ width: 48, height: 40, border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer', padding: 2 }} />
-            <input value={settings.brand_colour} onChange={e => set('brand_colour', e.target.value)}
-              placeholder="#C9A84C" style={{ ...inp, flex: 1 }} />
+            <input value={settings.brand_colour} onChange={e => set('brand_colour', e.target.value)} placeholder="#C9A84C" style={{ ...inp, flex: 1 }} />
           </div>
         </Field>
       </Card>
 
-      {/* Opening Hours */}
+      {/* Service Hours */}
       <Card title="Booking Hours" emoji="🕐">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <Field label="First booking slot" hint="Earliest time customers can book">
-            <input type="time" value={settings.opening_time} onChange={e => set('opening_time', e.target.value)} style={inp} />
-          </Field>
-          <Field label="Last booking slot" hint="Latest time customers can book">
-            <input type="time" value={settings.last_booking_time} onChange={e => set('last_booking_time', e.target.value)} style={inp} />
-          </Field>
+
+        {/* Service type toggle */}
+        <div>
+          <label style={lbl}>Service Type</label>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {[
+              { value: 'all_day', label: '☀️ All Day', hint: 'One continuous service' },
+              { value: 'split',   label: '🍱 Lunch & Dinner', hint: 'Two separate sittings' },
+            ].map(opt => (
+              <button key={opt.value} onClick={() => set('service_type', opt.value)}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: 10, border: 'none', cursor: 'pointer', textAlign: 'center',
+                  background: settings.service_type === opt.value ? '#1a1a2e' : '#f0f0f0',
+                  color: settings.service_type === opt.value ? 'white' : '#555',
+                  fontWeight: 700, fontSize: 13,
+                }}>
+                <div>{opt.label}</div>
+                <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.7, marginTop: 2 }}>{opt.hint}</div>
+              </button>
+            ))}
+          </div>
         </div>
-        <Field label="Time slot interval" hint="How often booking slots appear (e.g. every 15 minutes)">
+
+        {/* All day */}
+        {!isSplit && (
+          <TimeRangePair
+            startLabel="First booking slot" endLabel="Last booking slot"
+            startValue={settings.opening_time} endValue={settings.last_booking_time}
+            onStartChange={v => set('opening_time', v)} onEndChange={v => set('last_booking_time', v)}
+            startHint="Earliest time customers can book" endHint="Latest time customers can book"
+          />
+        )}
+
+        {/* Split service */}
+        {isSplit && (
+          <>
+            <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 10, padding: '12px 16px' }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: '#0369a1', marginBottom: 12 }}>🍜 Lunch Service</div>
+              <TimeRangePair
+                startLabel="Lunch opens" endLabel="Last lunch booking"
+                startValue={settings.lunch_service_start} endValue={settings.lunch_service_end}
+                onStartChange={v => set('lunch_service_start', v)} onEndChange={v => set('lunch_service_end', v)}
+                startHint="e.g. 11:00" endHint="e.g. 14:30"
+              />
+            </div>
+
+            <div style={{ background: '#fdf4ff', border: '1px solid #e9d5ff', borderRadius: 10, padding: '12px 16px' }}>
+              <div style={{ fontWeight: 700, fontSize: 13, color: '#7e22ce', marginBottom: 12 }}>🍷 Dinner Service</div>
+              <TimeRangePair
+                startLabel="Dinner opens" endLabel="Last dinner booking"
+                startValue={settings.dinner_service_start} endValue={settings.dinner_service_end}
+                onStartChange={v => set('dinner_service_start', v)} onEndChange={v => set('dinner_service_end', v)}
+                startHint="e.g. 17:30" endHint="e.g. 21:30"
+              />
+            </div>
+          </>
+        )}
+
+        <Field label="Time slot interval" hint="How often booking slots appear">
           <select value={settings.slot_interval_mins} onChange={e => set('slot_interval_mins', parseInt(e.target.value))} style={inp}>
             <option value={15}>Every 15 minutes</option>
             <option value={30}>Every 30 minutes</option>
@@ -175,23 +215,17 @@ export default function ReservationSettingsSection() {
 
       {/* Capacity */}
       <Card title="Capacity & Availability" emoji="👥">
-        <Field label="Maximum covers per slot" hint="Total restaurant capacity — how many covers can be seated at the same time across all tables">
-          <input
-            type="number" min={1} max={500}
-            value={settings.max_covers_per_slot}
-            onChange={e => set('max_covers_per_slot', parseInt(e.target.value) || 1)}
-            style={inp}
-          />
+        <Field label="Maximum covers per slot" hint="Total restaurant capacity — how many covers can be seated across all tables at the same time">
+          <input type="number" min={1} max={500} value={settings.max_covers_per_slot}
+            onChange={e => set('max_covers_per_slot', parseInt(e.target.value) || 1)} style={inp} />
         </Field>
-
-        {/* Visual capacity summary */}
         <div style={{ background: '#f8f8f8', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: '#555', lineHeight: 1.7 }}>
           <div style={{ fontWeight: 700, marginBottom: 4 }}>How this works with Dining Duration:</div>
-          <div>1–4 covers → 90 min sitting → blocks slot + next 6 slots</div>
-          <div>5–8 covers → 120 min sitting → blocks slot + next 8 slots</div>
-          <div>9+ covers → 150 min sitting → blocks slot + next 10 slots</div>
+          <div>1–4 covers → 90 min sitting</div>
+          <div>5–8 covers → 120 min sitting</div>
+          <div>9+ covers → 150 min sitting</div>
           <div style={{ marginTop: 8, color: '#C9A84C', fontWeight: 600 }}>
-            Edit dining duration times in Admin → Table Plan (right panel)
+            Edit dining durations in Admin → Table Plan (right panel when nothing selected)
           </div>
         </div>
       </Card>
@@ -199,36 +233,20 @@ export default function ReservationSettingsSection() {
       {/* Booking Rules */}
       <Card title="Booking Rules" emoji="📋">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <Field label="Booking lead time (hours)" hint="Minimum notice required — e.g. 2 = cannot book less than 2 hours ahead">
-            <input
-              type="number" min={0} max={72}
-              value={settings.booking_lead_hours}
-              onChange={e => set('booking_lead_hours', parseInt(e.target.value) || 0)}
-              style={inp}
-            />
+          <Field label="Booking lead time (hours)" hint="Min notice required — e.g. 2 = can't book less than 2hrs ahead">
+            <input type="number" min={0} max={72} value={settings.booking_lead_hours}
+              onChange={e => set('booking_lead_hours', parseInt(e.target.value) || 0)} style={inp} />
           </Field>
-          <Field label="Advance booking (days)" hint="How far ahead customers can book — e.g. 60 = up to 2 months ahead">
-            <input
-              type="number" min={1} max={365}
-              value={settings.booking_advance_days}
-              onChange={e => set('booking_advance_days', parseInt(e.target.value) || 1)}
-              style={inp}
-            />
+          <Field label="Advance booking (days)" hint="How far ahead customers can book — e.g. 60 = 2 months">
+            <input type="number" min={1} max={365} value={settings.booking_advance_days}
+              onChange={e => set('booking_advance_days', parseInt(e.target.value) || 1)} style={inp} />
           </Field>
         </div>
       </Card>
 
-      {/* Save button */}
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        style={{
-          width: '100%', padding: '16px', borderRadius: 12, border: 'none',
-          background: saved ? '#22c55e' : saving ? '#9ca3af' : '#1a1a2e',
-          color: 'white', cursor: saving ? 'not-allowed' : 'pointer',
-          fontWeight: 800, fontSize: 16, transition: 'background .2s',
-        }}
-      >
+      {/* Save */}
+      <button onClick={handleSave} disabled={saving}
+        style={{ width: '100%', padding: '16px', borderRadius: 12, border: 'none', background: saved ? '#22c55e' : saving ? '#9ca3af' : '#1a1a2e', color: 'white', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 16, transition: 'background .2s' }}>
         {saving ? 'Saving…' : saved ? '✓ Settings Saved!' : 'Save Reservation Settings'}
       </button>
     </div>

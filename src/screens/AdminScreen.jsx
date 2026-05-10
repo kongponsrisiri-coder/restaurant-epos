@@ -9,6 +9,7 @@ import StaffSection     from './admin/StaffSection';
 import AllergenSection  from './admin/AllergenSection';
 import SettingsSection  from './admin/SettingsSection';
 import InventorySection from './admin/inventory/InventorySection';
+import ReservationSettingsSection from './admin/ReservationSettingsSection';
 
 export default function AdminScreen() {
   const [section, setSection] = useState('trading');
@@ -24,6 +25,7 @@ export default function AdminScreen() {
     { id: 'inventory', label: '🥬 Inventory' },
     { id: 'allergens', label: '🌿 Allergens' },
     { id: 'settings',  label: '⚙️ Settings' },
+    { id: 'reservations', label: '📅 Reservations' },
   ];
 
   return (
@@ -45,6 +47,7 @@ export default function AdminScreen() {
         {section === 'inventory' && <InventorySection />}
         {section === 'allergens' && <AllergenSection />}
         {section === 'settings'  && <SettingsSection />}
+        {section === 'reservations' && <ReservationSettingsSection />}
       </div>
     </div>
   );

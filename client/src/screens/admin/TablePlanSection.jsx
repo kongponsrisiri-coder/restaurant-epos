@@ -168,7 +168,7 @@ export default function TablePlanSection() {
     fetchAll();
   };
 
-  // KEY FIX: update local state instantly so canvas reflects shape/size change immediately
+  // Updates local state instantly + saves to DB
   const updateSelectedTable = async (changes) => {
     if (selected?.type !== 'table') return;
     const t = tables.find(t => t.id === selected.id);
@@ -176,6 +176,12 @@ export default function TablePlanSection() {
     const u = { ...t, ...changes };
     setTables(prev => prev.map(tbl => tbl.id === u.id ? u : tbl));
     await updateTablePlan(u.id, { pos_x: u.pos_x, pos_y: u.pos_y, shape: u.shape, width: u.width, height: u.height, name: u.name, capacity: u.capacity });
+  };
+
+  // Rotate table — swap width and height
+  const handleRotateTable = () => {
+    if (!selectedTable) return;
+    updateSelectedTable({ width: selectedTable.height, height: selectedTable.width });
   };
 
   // ── Wall operations ────────────────────────────────────────────
@@ -253,6 +259,11 @@ export default function TablePlanSection() {
         partnerId: c.table_id_a === tableId ? c.table_id_b : c.table_id_a,
       }));
   }
+
+  // Determine wall orientation from dimensions
+  const wallOrientation = selectedWall
+    ? ((selectedWall.width || 12) >= (selectedWall.height || 100) ? 'h' : 'v')
+    : 'v';
 
   return (
     <div style={{ padding: 24 }}>
@@ -460,6 +471,14 @@ export default function TablePlanSection() {
                   </select>
                 </div>
 
+                {/* Rotate button — swaps width and height to flip orientation */}
+                <button
+                  onClick={handleRotateTable}
+                  style={{ padding: '8px', borderRadius: 8, border: '1.5px solid #1a1a2e', background: 'white', color: '#1a1a2e', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+                >
+                  ↻ Rotate Table
+                </button>
+
                 <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: '#555', marginBottom: 8 }}>Can combine with</div>
                   {comboPartnersFor(selectedTable.id).length === 0 && (
@@ -503,19 +522,29 @@ export default function TablePlanSection() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
                   <label style={lbl}>Orientation</label>
-                  <select onChange={e => {
-                    const isH = e.target.value === 'h';
-                    const w = isH ? Math.max(selectedWall.width || 12, selectedWall.height || 100) : Math.min(selectedWall.width || 12, selectedWall.height || 100);
-                    const h = isH ? Math.min(selectedWall.width || 12, selectedWall.height || 100) : Math.max(selectedWall.width || 12, selectedWall.height || 100);
-                    handleUpdateWall(selectedWall.id, { width: w, height: h });
-                  }} style={inp}>
-                    <option value="v">Vertical</option>
-                    <option value="h">Horizontal</option>
+                  {/* Controlled select — shows actual current orientation */}
+                  <select
+                    value={wallOrientation}
+                    onChange={e => {
+                      const isH = e.target.value === 'h';
+                      const w = isH ? Math.max(selectedWall.width || 12, selectedWall.height || 100) : Math.min(selectedWall.width || 12, selectedWall.height || 100);
+                      const h = isH ? Math.min(selectedWall.width || 12, selectedWall.height || 100) : Math.max(selectedWall.width || 12, selectedWall.height || 100);
+                      handleUpdateWall(selectedWall.id, { width: w, height: h });
+                    }}
+                    style={inp}
+                  >
+                    <option value="v">Vertical |</option>
+                    <option value="h">Horizontal —</option>
                   </select>
                 </div>
                 <div>
                   <label style={lbl}>Thickness</label>
-                  <select onChange={e => handleUpdateWall(selectedWall.id, { width: parseInt(e.target.value) })} style={inp}>
+                  <select onChange={e => {
+                    const thickness = parseInt(e.target.value);
+                    // Apply thickness to the shorter dimension
+                    const isHoriz = wallOrientation === 'h';
+                    handleUpdateWall(selectedWall.id, isHoriz ? { height: thickness } : { width: thickness });
+                  }} style={inp}>
                     <option value="8">Thin (8px)</option>
                     <option value="12">Standard (12px)</option>
                     <option value="20">Thick (20px)</option>
@@ -523,7 +552,12 @@ export default function TablePlanSection() {
                 </div>
                 <div>
                   <label style={lbl}>Length</label>
-                  <select onChange={e => handleUpdateWall(selectedWall.id, { height: parseInt(e.target.value) })} style={inp}>
+                  <select onChange={e => {
+                    const length = parseInt(e.target.value);
+                    // Apply length to the longer dimension
+                    const isHoriz = wallOrientation === 'h';
+                    handleUpdateWall(selectedWall.id, isHoriz ? { width: length } : { height: length });
+                  }} style={inp}>
                     <option value="60">Short (60px)</option>
                     <option value="100">Medium (100px)</option>
                     <option value="150">Long (150px)</option>

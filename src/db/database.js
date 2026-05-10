@@ -255,10 +255,6 @@ async function initDB() {
       ON CONFLICT (restaurant_id) DO NOTHING
     `);
 
-    // ─────────────────────────────────────────────
-    // SANDY v2 — RESERVATION IMPROVEMENTS
-    // ─────────────────────────────────────────────
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS table_combinations (
         id SERIAL PRIMARY KEY,
@@ -292,12 +288,26 @@ async function initDB() {
       )
     `);
 
+    // Remove duplicate rows — keep only the lowest id per covers_min
+    await pool.query(`
+      DELETE FROM dining_duration_tiers WHERE id NOT IN (
+        SELECT MIN(id) FROM dining_duration_tiers GROUP BY restaurant_id, covers_min
+      )
+    `);
+
+    // Add unique constraint so duplicates can never happen again
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS dining_tiers_unique
+      ON dining_duration_tiers(restaurant_id, covers_min)
+    `);
+
+    // Seed the 3 tiers — safe to re-run on every restart
     await pool.query(`
       INSERT INTO dining_duration_tiers (restaurant_id, covers_min, covers_max, duration_mins) VALUES
         ('siamepos', 1, 4, 90),
         ('siamepos', 5, 8, 120),
         ('siamepos', 9, NULL, 150)
-      ON CONFLICT DO NOTHING
+      ON CONFLICT (restaurant_id, covers_min) DO NOTHING
     `);
 
     await pool.query(`

@@ -73,13 +73,14 @@ export default function TablePlanSection() {
         apiGet('/api/dining-duration-tiers').catch(() => DEFAULT_TIERS),
       ]);
       setTables(tablesData.map((t, i) => ({
-        ...t,
-        pos_x:  t.pos_x  || (i % 5) * 120 + 40,
-        pos_y:  t.pos_y  || Math.floor(i / 5) * 120 + 40,
-        width:  t.width  || 80,
-        height: t.height || 80,
-        shape:  t.shape  || 'square',
-      })));
+  ...t,
+  pos_x:  t.pos_x  != null ? t.pos_x  : (i % 5) * 120 + 40,
+  pos_y:  t.pos_y  != null ? t.pos_y  : Math.floor(i / 5) * 120 + 40,
+  width:  t.width  != null ? t.width  : 80,
+  height: t.height != null ? t.height : 80,
+  shape:  t.shape  || 'square',
+})));
+
       setCombos(Array.isArray(combosData) ? combosData : []);
       setWalls(Array.isArray(wallsData)   ? wallsData  : []);
       setTiers(Array.isArray(tiersData) && tiersData.length ? tiersData : DEFAULT_TIERS);

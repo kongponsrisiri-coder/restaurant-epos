@@ -54,13 +54,15 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
   const time  = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
   // Calculate totals
-  const activeItems = items.filter(i => !i.voided);
-  const subtotal    = activeItems.reduce((sum, i) => {
-    const itemTotal = i.quantity * i.unit_price;
-    if (i.discount_type === 'percent') return sum + itemTotal * (1 - (i.discount_value || 0) / 100);
-    if (i.discount_type === 'fixed')   return sum + Math.max(0, itemTotal - (i.discount_value || 0));
-    return sum + itemTotal;
-  }, 0);
+ // Use pre-calculated values from BillScreen if provided
+const subtotal       = paymentDetails?.subtotal       ?? activeItems.reduce((s,i) => s + i.quantity * i.unit_price, 0);
+const discountAmount = paymentDetails?.discountAmount  ?? 0;
+const afterDiscount  = subtotal - discountAmount;
+const scAmount       = paymentDetails?.serviceCharge  ?? (scEnabled ? afterDiscount * (scRate / 100) : 0);
+const tip            = parseFloat(paymentDetails?.tip || 0);
+const total          = paymentDetails?.billTotal      ?? (afterDiscount + scAmount + tip);
+const paid           = parseFloat(paymentDetails?.amountPaid || total);
+const change         = paymentDetails?.change         ?? Math.max(0, paid - total);
 
   // Order-level discount
   let discountAmount = 0;

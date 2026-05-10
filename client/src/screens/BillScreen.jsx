@@ -123,23 +123,22 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   // ── Print helpers ────────────────────────────────────────────────
   // Print bill (no payment details yet — for customer to review)
   const handlePrintBill = () => {
-    printReceipt({
-      order:          { ...order },
-      items:          billItems,
-      settings:       { ...settings },
-      paymentDetails: {},
-    });
-  };
+  printReceipt({
+    order: { ...order },
+    items: billItems,
+    settings: { ...settings },
+    paymentDetails: { subtotal, discountAmount, serviceCharge, billTotal },
+  });
+};
 
-  // Print receipt (after payment — includes method, change, tip)
-  const handlePrintReceipt = () => {
-    printReceipt({
-      order:          { ...order },
-      items:          billItems,
-      settings:       { ...settings },
-      paymentDetails: paymentDetails || {},
-    });
-  };
+const handlePrintReceipt = () => {
+  printReceipt({
+    order: { ...order },
+    items: billItems,
+    settings: { ...settings },
+    paymentDetails: { ...paymentDetails, subtotal, discountAmount, serviceCharge, billTotal },
+  });
+};
 
   // ── Payment handlers ─────────────────────────────────────────────
   const handleConfirmPayment = () => {

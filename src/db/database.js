@@ -3,6 +3,10 @@ const { Pool } = require('pg');
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
+  min: 2,
+  max: 10,
+  idleTimeoutMillis: 60000,
+  connectionTimeoutMillis: 3000,
 });
 
 async function initDB() {

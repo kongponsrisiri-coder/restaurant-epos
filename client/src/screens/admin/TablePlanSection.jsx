@@ -64,7 +64,16 @@ export default function TablePlanSection() {
   const [toast, setToast] = useState(null);
   const canvasRef = useRef(null);
 
-  // ── Initial load only — never called again except ↻ button ────
+  // ── Refs so handleMouseUp always reads the LATEST positions ───
+  // (avoids stale closure — React state in event handlers can be stale)
+  const tablesRef  = useRef([]);
+  const wallsRef   = useRef([]);
+  const draggingRef = useRef(null);
+  useEffect(() => { tablesRef.current  = tables;  }, [tables]);
+  useEffect(() => { wallsRef.current   = walls;   }, [walls]);
+  useEffect(() => { draggingRef.current = dragging; }, [dragging]);
+
+  // ── Initial load only ─────────────────────────────────────────
   const fetchAll = useCallback(async () => {
     try {
       const [tablesData, combosData, wallsData, tiersData] = await Promise.all([
@@ -75,7 +84,6 @@ export default function TablePlanSection() {
       ]);
       setTables(tablesData.map((t, i) => ({
         ...t,
-        // Use != null so pos 0 is preserved (0 || fallback would wrongly reset)
         pos_x:  t.pos_x  != null ? t.pos_x  : (i % 5) * 120 + 40,
         pos_y:  t.pos_y  != null ? t.pos_y  : Math.floor(i / 5) * 120 + 40,
         width:  t.width  != null ? t.width  : 80,
@@ -120,8 +128,8 @@ export default function TablePlanSection() {
     setSelected({ type, id });
     const rect = canvasRef.current.getBoundingClientRect();
     const item = type === 'table'
-      ? tables.find(t => t.id === id)
-      : walls.find(w => w.id === id);
+      ? tablesRef.current.find(t => t.id === id)
+      : wallsRef.current.find(w => w.id === id);
     if (item) {
       setOffset({
         x: e.clientX - rect.left - (item.pos_x || 0),
@@ -131,34 +139,46 @@ export default function TablePlanSection() {
   };
 
   const handleMouseMove = (e) => {
-    if (!dragging) return;
+    if (!draggingRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const x = Math.max(0, e.clientX - rect.left - offset.x);
     const y = Math.max(0, e.clientY - rect.top  - offset.y);
-    if (dragging.type === 'table') {
-      setTables(prev => prev.map(t => t.id === dragging.id ? { ...t, pos_x: x, pos_y: y } : t));
+    if (draggingRef.current.type === 'table') {
+      setTables(prev => prev.map(t => t.id === draggingRef.current.id ? { ...t, pos_x: x, pos_y: y } : t));
     } else {
-      setWalls(prev => prev.map(w => w.id === dragging.id ? { ...w, pos_x: x, pos_y: y } : w));
+      setWalls(prev => prev.map(w => w.id === draggingRef.current.id ? { ...w, pos_x: x, pos_y: y } : w));
     }
   };
 
+  // ── KEY FIX: read from refs (latest state) not stale closure ──
   const handleMouseUp = async () => {
-    if (!dragging) return;
-    const id = dragging.id;
-    const type = dragging.type;
-    setDragging(null); // clear dragging state first
-    if (type === 'table') {
-      const t = tables.find(t => t.id === id);
-      if (t) await updateTablePlan(t.id, { pos_x: t.pos_x, pos_y: t.pos_y, shape: t.shape, width: t.width, height: t.height, name: t.name, capacity: t.capacity });
+    const d = draggingRef.current;
+    if (!d) return;
+    setDragging(null);
+
+    if (d.type === 'table') {
+      const t = tablesRef.current.find(t => t.id === d.id);
+      if (t) {
+        await updateTablePlan(t.id, {
+          pos_x: t.pos_x, pos_y: t.pos_y,
+          shape: t.shape, width: t.width, height: t.height,
+          name: t.name, capacity: t.capacity,
+          table_number: t.table_number,   // ← was missing before
+        });
+      }
     } else {
-      const w = walls.find(w => w.id === id);
-      if (w) await apiPut(`/api/table-walls/${w.id}`, { pos_x: w.pos_x, pos_y: w.pos_y, width: w.width, height: w.height });
+      const w = wallsRef.current.find(w => w.id === d.id);
+      if (w) {
+        await apiPut(`/api/table-walls/${w.id}`, {
+          pos_x: w.pos_x, pos_y: w.pos_y, width: w.width, height: w.height,
+        });
+      }
     }
   };
 
   // ── Table operations — optimistic, no fetchAll ─────────────────
   const handleAddTable = async () => {
-    const maxNum = Math.max(...tables.map(t => Number(t.table_number) || 0), 0);
+    const maxNum = Math.max(...tablesRef.current.map(t => Number(t.table_number) || 0), 0);
     const newNum = maxNum + 1;
     const newTable = { table_number: newNum, capacity: 4, pos_x: 40, pos_y: 40, shape: 'square', width: 80, height: 80 };
     const result = await addTable(newTable);
@@ -177,14 +197,18 @@ export default function TablePlanSection() {
     setSelected(null);
   };
 
-  // Updates local state instantly + saves to DB — no fetchAll
   const updateSelectedTable = async (changes) => {
     if (selected?.type !== 'table') return;
-    const t = tables.find(t => t.id === selected.id);
+    const t = tablesRef.current.find(t => t.id === selected.id);
     if (!t) return;
     const u = { ...t, ...changes };
     setTables(prev => prev.map(tbl => tbl.id === u.id ? u : tbl));
-    await updateTablePlan(u.id, { pos_x: u.pos_x, pos_y: u.pos_y, shape: u.shape, width: u.width, height: u.height, name: u.name, capacity: u.capacity });
+    await updateTablePlan(u.id, {
+      pos_x: u.pos_x, pos_y: u.pos_y,
+      shape: u.shape, width: u.width, height: u.height,
+      name: u.name, capacity: u.capacity,
+      table_number: u.table_number,
+    });
   };
 
   const handleRotateTable = () => {
@@ -203,7 +227,7 @@ export default function TablePlanSection() {
   };
 
   const handleUpdateWall = async (id, changes) => {
-    const w = walls.find(w => w.id === id);
+    const w = wallsRef.current.find(w => w.id === id);
     if (!w) return;
     const u = { ...w, ...changes };
     setWalls(prev => prev.map(wl => wl.id === id ? u : wl));
@@ -325,7 +349,7 @@ export default function TablePlanSection() {
 
           <button onClick={fetchAll}
             style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#f0f0f0', color: '#555', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
-            title="Reload everything from server">
+            title="Reload from server">
             ↻</button>
         </div>
       </div>
@@ -484,10 +508,8 @@ export default function TablePlanSection() {
                   </select>
                 </div>
 
-                <button
-                  onClick={handleRotateTable}
-                  style={{ padding: '8px', borderRadius: 8, border: '1.5px solid #1a1a2e', background: 'white', color: '#1a1a2e', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
-                >
+                <button onClick={handleRotateTable}
+                  style={{ padding: '8px', borderRadius: 8, border: '1.5px solid #1a1a2e', background: 'white', color: '#1a1a2e', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
                   ↻ Rotate Table
                 </button>
 
@@ -552,8 +574,7 @@ export default function TablePlanSection() {
                   <label style={lbl}>Thickness</label>
                   <select onChange={e => {
                     const thickness = parseInt(e.target.value);
-                    const isHoriz = wallOrientation === 'h';
-                    handleUpdateWall(selectedWall.id, isHoriz ? { height: thickness } : { width: thickness });
+                    handleUpdateWall(selectedWall.id, wallOrientation === 'h' ? { height: thickness } : { width: thickness });
                   }} style={inp}>
                     <option value="8">Thin (8px)</option>
                     <option value="12">Standard (12px)</option>
@@ -564,8 +585,7 @@ export default function TablePlanSection() {
                   <label style={lbl}>Length</label>
                   <select onChange={e => {
                     const length = parseInt(e.target.value);
-                    const isHoriz = wallOrientation === 'h';
-                    handleUpdateWall(selectedWall.id, isHoriz ? { width: length } : { height: length });
+                    handleUpdateWall(selectedWall.id, wallOrientation === 'h' ? { width: length } : { height: length });
                   }} style={inp}>
                     <option value="60">Short (60px)</option>
                     <option value="100">Medium (100px)</option>

@@ -9,21 +9,23 @@ import StaffSection     from './admin/StaffSection';
 import AllergenSection  from './admin/AllergenSection';
 import SettingsSection  from './admin/SettingsSection';
 import InventorySection from './admin/inventory/InventorySection';
+import ReservationSettingsSection from './admin/ReservationSettingsSection';
 
 export default function AdminScreen() {
   const [section, setSection] = useState('trading');
 
   const navItems = [
-    { id: 'trading',   label: '📊 Trading' },
-    { id: 'menu',      label: '🍽️ Menu' },
-    { id: 'tableplan', label: '🗺️ Table Plan' },
-    { id: 'reports',   label: '📈 Reports' },
-    { id: 'bills',     label: '🧾 Bills' },
-    { id: 'zreport',   label: '🔐 Z Report' },
-    { id: 'staff',     label: '👥 Staff' },
-    { id: 'inventory', label: '🥬 Inventory' },
-    { id: 'allergens', label: '🌿 Allergens' },
-    { id: 'settings',  label: '⚙️ Settings' },
+    { id: 'trading',      label: '📊 Trading' },
+    { id: 'menu',         label: '🍽️ Menu' },
+    { id: 'tableplan',    label: '🗺️ Table Plan' },
+    { id: 'reports',      label: '📈 Reports' },
+    { id: 'bills',        label: '🧾 Bills' },
+    { id: 'zreport',      label: '🔐 Z Report' },
+    { id: 'staff',        label: '👥 Staff' },
+    { id: 'inventory',    label: '🥬 Inventory' },
+    { id: 'allergens',    label: '🌿 Allergens' },
+    { id: 'settings',     label: '⚙️ Settings' },
+    { id: 'reservations', label: '📅 Reservations' },
   ];
 
   return (
@@ -35,16 +37,17 @@ export default function AdminScreen() {
         ))}
       </div>
       <div style={{ flex: 1, overflow: section === 'inventory' ? 'hidden' : 'auto', background: '#f5f5f5' }}>
-        {section === 'trading'   && <TradingSection />}
-        {section === 'menu'      && <MenuSection />}
-        {section === 'tableplan' && <TablePlanSection />}
-        {section === 'reports'   && <ReportsSection />}
-        {section === 'bills'     && <BillsSection />}
-        {section === 'zreport'   && <ZReportSection />}
-        {section === 'staff'     && <StaffSection />}
-        {section === 'inventory' && <InventorySection />}
-        {section === 'allergens' && <AllergenSection />}
-        {section === 'settings'  && <SettingsSection />}
+        {section === 'trading'      && <TradingSection />}
+        {section === 'menu'         && <MenuSection />}
+        {section === 'tableplan'    && <TablePlanSection />}
+        {section === 'reports'      && <ReportsSection />}
+        {section === 'bills'        && <BillsSection />}
+        {section === 'zreport'      && <ZReportSection />}
+        {section === 'staff'        && <StaffSection />}
+        {section === 'inventory'    && <InventorySection />}
+        {section === 'allergens'    && <AllergenSection />}
+        {section === 'settings'     && <SettingsSection />}
+        {section === 'reservations' && <ReservationSettingsSection />}
       </div>
     </div>
   );

@@ -124,7 +124,29 @@ p{font-weight:300;line-height:1.7;color:var(--stone);}
 .reveal.visible{opacity:1;transform:translateY(0);}
 
 @media(max-width:768px){
-  h1,.h1{font-size:30px;} h2,.h2{font-size:22px;}
+  h1,.h1{font-size:30px;
+
+  .nav{padding:0 16px;}
+  .nav__name{letter-spacing:0.16em;}
+  .nav__burger{display:inline-block;}
+  .nav__reserve{display:none;}
+  .nav__links{display:none;position:fixed;top:60px;left:0;right:0;background:var(--ivory);border-bottom:var(--border);flex-direction:column;gap:0;padding:6px 0;box-shadow:0 6px 20px rgba(0,0,0,0.08);}
+  body.menu-open .nav__links{display:flex;}
+  body.menu-open{overflow:hidden;}
+  .nav__links li{width:100%;}
+  .nav__links a{display:block;padding:14px 24px;border-bottom:var(--divider);font-size:14px;letter-spacing:0.08em;}
+  .nav__links a:last-child,.nav__links li:last-child a{border-bottom:none;}
+  [style*="grid-template-columns:repeat(3"],[style*="grid-template-columns: repeat(3"],
+  [style*="grid-template-columns:repeat(2"],[style*="grid-template-columns: repeat(2"],
+  [style*="grid-template-columns:1fr 1fr"],[style*="grid-template-columns: 1fr 1fr"],
+  [style*="grid-template-columns:1fr 1.4fr"],[style*="grid-template-columns: 1fr 1.4fr"]{
+    grid-template-columns:1fr !important;gap:32px !important;
+  }
+  [style*="gap:64px"],[style*="gap: 64px"],[style*="gap:80px"],[style*="gap: 80px"]{gap:32px !important;}
+  [style*="padding:40px"]{padding:24px !important;}
+  [style*="padding:32px"]{padding:24px !important;}
+  iframe{height:280px !important;}
+} h2,.h2{font-size:22px;}
   .nav__links{display:none;}
   .hero{padding:56px 20px 48px;}
   .features{grid-template-columns:1fr;}
@@ -135,6 +157,7 @@ p{font-weight:300;line-height:1.7;color:var(--stone);}
   .footer{flex-direction:column;gap:8px;text-align:center;}
   .section{padding:48px 20px;}
 }
+.nav__burger{display:none;background:none;border:none;font-size:22px;line-height:1;color:var(--charcoal);cursor:pointer;padding:4px 6px;font-family:var(--font);}
 </style>
 </head>
 <body>
@@ -142,7 +165,7 @@ p{font-weight:300;line-height:1.7;color:var(--stone);}
   <a class="nav__brand" href="index.html"><span class="nav__dot"></span><span class="nav__name">Baan Siam</span></a>
   <ul class="nav__links"><li><a href="about.html">About</a></li><li><a href="menu.html">Menu</a></li><li><a href="book.html">Book a Table</a></li><li><a href="order.html">Order Online</a></li><li><a href="contact.html" class="active">Contact</a></li></ul>
   <div class="nav__right">
-    <a href="book.html" class="btn btn--outline nav__reserve">Reserve</a>
+    <button class="nav__burger" aria-label="Open menu" aria-expanded="false">☰</button><a href="book.html" class="btn btn--outline nav__reserve">Reserve</a>
   </div>
 </nav>
 
@@ -211,5 +234,6 @@ p{font-weight:300;line-height:1.7;color:var(--stone);}
 
 <!-- SiamEPOS Takeaway Widget — binds to [data-siamepos-takeaway] -->
 <script src="https://restaurant-epos-production.up.railway.app/takeaway-widget.js"></script>
+<script>document.querySelectorAll('.nav__burger').forEach(function(b){b.addEventListener('click',function(){document.body.classList.toggle('menu-open');});});document.querySelectorAll('.nav__links a').forEach(function(a){a.addEventListener('click',function(){document.body.classList.remove('menu-open');});});</script>
 </body>
 </html>

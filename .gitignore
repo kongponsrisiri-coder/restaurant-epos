@@ -1,3 +1,7 @@
 node_modules
 restaurant.db
+restaurant-local.db
+restaurant-local.db-journal
+restaurant-local.db-wal
+restaurant-local.db-shm
 .env

@@ -36,12 +36,17 @@ function startLocalServer() {
 
   // ELECTRON_RUN_AS_NODE makes the Electron binary execute the script as plain Node —
   // so production installs don't require a separately installed Node runtime.
+  // DB_MODE=local + SQLITE_PATH route the server through src/db/dbAdapter to SQLite.
+  const sqlitePath = path.join(app.getPath('userData'), 'siamepos-local.db');
+
   serverProcess = spawn(process.execPath, [serverEntry], {
     cwd: PROJECT_ROOT,
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',
       PORT: process.env.PORT || '3001',
+      DB_MODE: 'local',
+      SQLITE_PATH: sqlitePath,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

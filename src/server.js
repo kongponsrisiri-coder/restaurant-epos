@@ -4,7 +4,7 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 
-const pool = require('./db/database');
+const pool = require('./db/dbAdapter');
 
 const app = express();
 const httpServer = http.createServer(app);

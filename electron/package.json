@@ -9,7 +9,8 @@
     "start:dev": "ELECTRON_DEV=1 electron .",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
-    "build:all": "electron-builder -mwl"
+    "build:all": "electron-builder -mwl",
+    "rebuild:native": "node scripts/rebuild-native.js"
   },
   "build": {
     "appId": "uk.co.siamepos.pro",
@@ -25,20 +26,28 @@
       "build/**"
     ],
     "extraResources": [
-      { "from": "../client/dist", "to": "client-dist" }
+      {
+        "from": "../client/dist",
+        "to": "client-dist"
+      }
     ],
     "mac": {
       "icon": "build/icon.png",
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "category": "public.app-category.business"
     },
     "win": {
       "icon": "build/icon.png",
-      "target": ["nsis"]
+      "target": [
+        "nsis"
+      ]
     },
     "publish": null
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8"
   },

@@ -184,8 +184,9 @@ p{font-weight:300;line-height:1.7;color:var(--stone);}
           </div>
         </div>
         <div style="margin-top:24px;display:flex;gap:10px;flex-wrap:wrap;">
-          <a href="book.html" class="btn btn--solid lang-en">Reserve a Table</a>
-          <a href="mailto:hello@baansiam.co.uk" class="btn btn--outline lang-en">Email Us</a>
+          <a href="book.html" class="btn btn--solid">Reserve a Table</a>
+          <button class="btn btn--outline-sm" data-siamepos-takeaway>Order Takeaway</button>
+          <a href="mailto:hello@baansiam.co.uk" class="btn btn--outline">Email Us</a>
         </div>
       </div>
       <div>
@@ -207,5 +208,8 @@ p{font-weight:300;line-height:1.7;color:var(--stone);}
   </p>
 </footer>
 <script>const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:.08});document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));</script>
+
+<!-- SiamEPOS Takeaway Widget — binds to [data-siamepos-takeaway] -->
+<script src="https://restaurant-epos-production.up.railway.app/takeaway-widget.js"></script>
 </body>
 </html>

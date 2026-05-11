@@ -200,12 +200,24 @@ p{font-weight:300;line-height:1.7;color:var(--stone);}
   </div>
 </section>
 
+<section class="section section--linen section--center reveal">
+  <div class="container" style="max-width:560px;">
+    <p class="label label--accent" style="margin-bottom:14px;">Visit Baan Siam</p>
+    <h2 style="margin-bottom:16px;">Reserve a table or order in</h2>
+    <p style="margin-bottom:32px;">Direct bookings. Direct takeaway. No commission, no middlemen — straight from our kitchen to your table or doorstep.</p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+      <a href="book.html" class="btn btn--solid">Reserve a Table</a>
+      <button class="btn btn--outline-sm" data-siamepos-takeaway>Order Takeaway</button>
+    </div>
+  </div>
+</section>
+
 <section class="section section--center reveal">
   <div class="container" style="max-width:560px;">
     <p class="label label--muted" style="margin-bottom:12px;">Technology</p>
-    <h2 class="lang-en" style="margin-bottom:14px;">Powered by SiamEPOS</h2>
-    <p class="lang-en" style="margin-bottom:28px;">Baan Siam uses <a href="https://siamepos.co.uk" target="_blank" style="color:var(--teak);">SiamEPOS</a> — the Thai Restaurant Management System — to manage reservations, allergen information, kitchen operations and stock control.</p>
-    <a href="https://siamepos.co.uk" target="_blank" class="btn btn--outline-sm lang-en">Learn about SiamEPOS →</a>
+    <h2 style="margin-bottom:14px;">Powered by SiamEPOS</h2>
+    <p style="margin-bottom:28px;">Baan Siam uses <a href="https://siamepos.co.uk" target="_blank" style="color:var(--teak);">SiamEPOS</a> — the Thai Restaurant Management System — to manage reservations, allergen information, kitchen operations and stock control.</p>
+    <a href="https://siamepos.co.uk" target="_blank" class="btn btn--outline-sm">Learn about SiamEPOS →</a>
   </div>
 </section>
 
@@ -216,5 +228,8 @@ p{font-weight:300;line-height:1.7;color:var(--stone);}
   </p>
 </footer>
 <script>const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:.08});document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));</script>
+
+<!-- SiamEPOS Takeaway Widget — binds to [data-siamepos-takeaway] -->
+<script src="https://restaurant-epos-production.up.railway.app/takeaway-widget.js"></script>
 </body>
 </html>

@@ -137,18 +137,27 @@ async function upsertRows(table, pk, rows) {
   const localCols = await getLocalColumns(table);
   if (localCols.length === 0) return 0;
 
-  const cloudCols = Object.keys(rows[0]);
-  const cols = cloudCols.filter((c) => localCols.includes(c));
-  if (!cols.includes(pk)) return 0;
-
-  const placeholders = cols.map((_, i) => `$${i + 1}`).join(',');
-  const updates = cols.filter((c) => c !== pk).map((c) => `${c}=excluded.${c}`).join(',');
-  const sql = `INSERT INTO ${table} (${cols.join(',')}) VALUES (${placeholders}) ON CONFLICT(${pk}) DO UPDATE SET ${updates}`;
-
   let n = 0;
   for (const row of rows) {
+    // Build the column list per row, dropping null/undefined cloud values so
+    // they don't clobber non-null local defaults (e.g. staff.is_active=1 from
+    // the seed when cloud returns is_active=null, or pin which cloud never
+    // sends at all but local needs to keep).
+    const cols = Object.keys(row).filter(
+      (c) => localCols.includes(c) && row[c] !== null && row[c] !== undefined
+    );
+    if (!cols.includes(pk)) continue;
+
+    const placeholders = cols.map((_, i) => `$${i + 1}`).join(',');
+    const updateCols = cols.filter((c) => c !== pk);
+    const updates = updateCols.map((c) => `${c}=excluded.${c}`).join(',');
+
+    // No non-pk columns to update — skip the row.
+    if (updates === '') continue;
+
+    const sql = `INSERT INTO ${table} (${cols.join(',')}) VALUES (${placeholders}) ON CONFLICT(${pk}) DO UPDATE SET ${updates}`;
     try {
-      await pool.query(sql, cols.map((c) => row[c] ?? null));
+      await pool.query(sql, cols.map((c) => row[c]));
       n++;
     } catch (err) {
       console.warn(`[sync] pull upsert ${table}#${row[pk]} failed:`, err.message);

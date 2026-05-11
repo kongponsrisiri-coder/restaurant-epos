@@ -147,3 +147,7 @@ export const getClockRecords = (from, to)  => get(`/api/clock/records?from=${enc
 // SEPOS-030 — staff performance report
 export const getStaffPerformance = (from, to) =>
   get(`/api/reports/staff-performance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+
+// SEPOS-021 — VAT report (date range)
+export const getVatReport = (from, to) =>
+  get(`/api/reports/vat?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);

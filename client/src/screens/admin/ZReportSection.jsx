@@ -133,6 +133,27 @@ export default function ZReportSection() {
               <div style={{ flex: 1, background: '#fff0f3', borderRadius: 10, padding: 12, border: '1px solid #fecdd3' }}><div style={{ fontSize: 11, color: '#888' }}>Void Items</div><div style={{ fontSize: 18, fontWeight: 800, color: '#e94560' }}>{reportData.void_count || 0} items</div></div>
             </div>
 
+            {/* SEPOS-021 — VAT breakdown */}
+            {Array.isArray(reportData.vat_breakdown) && reportData.vat_breakdown.length > 0 && (
+              <div style={{ marginTop: 12, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#1e40af', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  VAT breakdown
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {reportData.vat_breakdown.map(b => (
+                    <div key={b.rate} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
+                      <span style={{ color: '#555' }}>@ {b.rate}% — net £{Number(b.net || 0).toFixed(2)}</span>
+                      <span style={{ color: '#1e40af', fontWeight: 700 }}>£{Number(b.vat || 0).toFixed(2)}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #bfdbfe', paddingTop: 6, marginTop: 2, fontSize: 13, fontWeight: 800 }}>
+                    <span>Total VAT</span>
+                    <span style={{ color: '#1e40af' }}>£{Number(reportData.vat_total || 0).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* SEPOS-023 — voids by type */}
             {Array.isArray(reportData.voids_by_type) && reportData.voids_by_type.length > 0 && (
               <div style={{ marginTop: 12, background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 10, padding: 12 }}>

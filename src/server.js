@@ -253,10 +253,10 @@ app.get('/api/menu/all', async (req, res) => {
 
 app.post('/api/menu/items', async (req, res) => {
   try {
-    const { category_id, subcategory_id, name, name_alt, description, price } = req.body;
+    const { category_id, subcategory_id, name, name_alt, description, price, vat_rate } = req.body;
     const result = await pool.query(
-      'INSERT INTO menu_items (category_id, subcategory_id, name, name_alt, description, price) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
-      [category_id, subcategory_id || null, name, name_alt || null, description, price]
+      'INSERT INTO menu_items (category_id, subcategory_id, name, name_alt, description, price, vat_rate) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
+      [category_id, subcategory_id || null, name, name_alt || null, description, price, vat_rate ?? 20]
     );
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -274,10 +274,10 @@ app.put('/api/menu/items/sort-order', async (req, res) => {
 
 app.put('/api/menu/items/:id', async (req, res) => {
   try {
-    const { name, name_alt, description, price, is_available, subcategory_id, category_id } = req.body;
+    const { name, name_alt, description, price, is_available, subcategory_id, category_id, vat_rate } = req.body;
     await pool.query(
-      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, subcategory_id=$6, category_id=$7 WHERE id=$8',
-      [name, name_alt || null, description, price, is_available, subcategory_id || null, category_id, req.params.id]
+      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, subcategory_id=$6, category_id=$7, vat_rate=COALESCE($8, vat_rate) WHERE id=$9',
+      [name, name_alt || null, description, price, is_available, subcategory_id || null, category_id, vat_rate ?? null, req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -521,7 +521,7 @@ app.get('/api/orders/:id/bill', async (req, res) => {
   try {
     const [orderRes, itemsRes, settingsRes] = await Promise.all([
       pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id=$1`, [req.params.id]),
-      pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id=$1 AND order_items.voided=0`, [req.params.id]),
+      pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt, menu_items.vat_rate FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id=$1 AND order_items.voided=0`, [req.params.id]),
       pool.query('SELECT * FROM settings')
     ]);
     const settings = {};
@@ -730,23 +730,41 @@ app.put('/api/orders/:id/merge', async (req, res) => {
 app.get('/api/z-report/preview', async (req, res) => {
   try {
     const { from, to } = req.query;
-    const [ordersRes, openRes, voidsRes, voidsByTypeRes] = await Promise.all([
+    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes] = await Promise.all([
       pool.query(`SELECT orders.*, tables.table_number, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp ORDER BY orders.closed_at DESC`, [from, to]),
       pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='open'`),
       pool.query(`SELECT COUNT(*) as void_count, SUM(order_items.unit_price * order_items.quantity) as void_value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp`, [from, to]),
       // SEPOS-023: breakdown by void_type
       pool.query(`SELECT COALESCE(order_items.void_type, 'Uncategorised') AS void_type, COUNT(*) AS count, COALESCE(SUM(order_items.unit_price * order_items.quantity), 0) AS value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp GROUP BY order_items.void_type ORDER BY value DESC`, [from, to]),
+      // SEPOS-021: rows for VAT breakdown (aggregated in JS)
+      pool.query(`SELECT COALESCE(mi.vat_rate, 20) AS vat_rate, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id LEFT JOIN orders o ON o.id = oi.order_id WHERE o.status='closed' AND oi.voided=0 AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp`, [from, to]),
     ]);
     const orders = ordersRes.rows;
     const voids = voidsRes.rows[0];
     const voidsByType = voidsByTypeRes.rows;
+
+    // VAT breakdown — same maths as /api/reports/vat
+    const vatBuckets = new Map();
+    for (const row of vatRowsRes.rows) {
+      const rate = Number(row.vat_rate ?? 20);
+      let gross = Number(row.quantity || 0) * Number(row.unit_price || 0);
+      if (row.discount_type === 'percent') gross *= 1 - (Number(row.discount_value || 0) / 100);
+      else if (row.discount_type === 'fixed') gross = Math.max(0, gross - Number(row.discount_value || 0));
+      const net = rate > 0 ? gross * (100 / (100 + rate)) : gross;
+      const vat = gross - net;
+      const b = vatBuckets.get(rate) || { rate, net: 0, vat: 0, gross: 0 };
+      b.net += net; b.vat += vat; b.gross += gross;
+      vatBuckets.set(rate, b);
+    }
+    const vatBreakdown = [...vatBuckets.values()].sort((a, b) => a.rate - b.rate);
+    const vatTotal = vatBreakdown.reduce((a, b) => a + b.vat, 0);
     const totalSales = orders.reduce((s, o) => s + (o.total || 0), 0);
     const totalCovers = orders.reduce((s, o) => s + (o.covers || 0), 0);
     const totalCash = orders.filter(o => o.method === 'Cash').reduce((s, o) => s + (o.paid_amount || 0), 0);
     const totalCard = orders.filter(o => o.method === 'Card').reduce((s, o) => s + (o.paid_amount || 0), 0);
     const totalOther = orders.filter(o => o.method !== 'Cash' && o.method !== 'Card').reduce((s, o) => s + (o.paid_amount || 0), 0);
     const totalDiscounts = orders.reduce((s, o) => { if (!o.discount_value) return s; return s + (o.discount_type === 'percent' ? (o.total || 0) * (o.discount_value / 100) : o.discount_value); }, 0);
-    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_covers: totalCovers, total_orders: orders.length, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: orders.length > 0 ? totalSales / orders.length : 0 });
+    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_covers: totalCovers, total_orders: orders.length, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: orders.length > 0 ? totalSales / orders.length : 0 });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1363,6 +1381,52 @@ app.get('/api/network-info', (req, res) => {
     }
   }
   res.json({ ip: '127.0.0.1', port, url: `http://127.0.0.1:${port}` });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// SEPOS-021 — VAT report (date range)
+// Treats prices as VAT-inclusive (UK hospitality convention). For each
+// closed order_item in the window, group by vat_rate and compute net /
+// vat / gross from the item's quantity * unit_price (post any per-item
+// discount). Service charge + bill-level discounts are out of scope.
+// ─────────────────────────────────────────────────────────────────────
+app.get('/api/reports/vat', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const fromTs = from || '1970-01-01';
+    const toTs   = to   || '2999-12-31';
+    const r = await pool.query(`
+      SELECT COALESCE(mi.vat_rate, 20) AS vat_rate,
+             oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value
+      FROM order_items oi
+      LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+      LEFT JOIN orders o ON o.id = oi.order_id
+      WHERE o.status='closed' AND oi.voided=0
+        AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
+    `, [fromTs, toTs]);
+
+    const byRate = new Map();
+    for (const row of r.rows) {
+      const rate = Number(row.vat_rate ?? 20);
+      let gross = Number(row.quantity || 0) * Number(row.unit_price || 0);
+      if (row.discount_type === 'percent') gross *= 1 - (Number(row.discount_value || 0) / 100);
+      else if (row.discount_type === 'fixed') gross = Math.max(0, gross - Number(row.discount_value || 0));
+      const net = rate > 0 ? gross * (100 / (100 + rate)) : gross;
+      const vat = gross - net;
+      const bucket = byRate.get(rate) || { rate, net: 0, vat: 0, gross: 0, items: 0 };
+      bucket.net   += net;
+      bucket.vat   += vat;
+      bucket.gross += gross;
+      bucket.items += Number(row.quantity || 0);
+      byRate.set(rate, bucket);
+    }
+    const breakdown = [...byRate.values()].sort((a, b) => a.rate - b.rate);
+    const total = breakdown.reduce(
+      (a, b) => ({ net: a.net + b.net, vat: a.vat + b.vat, gross: a.gross + b.gross, items: a.items + b.items }),
+      { net: 0, vat: 0, gross: 0, items: 0 }
+    );
+    res.json({ from: fromTs, to: toTs, breakdown, total });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ─────────────────────────────────────────────────────────────────────

@@ -50,6 +50,26 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     return sum + p - d;
   }, 0);
 
+  // SEPOS-021 — VAT breakdown by rate. UK convention: menu prices are
+  // VAT-inclusive, so net = gross × 100 / (100 + rate). Service charge
+  // and bill-level discount are out of the VAT scope.
+  const vatBuckets = {};
+  for (const i of billItems) {
+    const rate = Number(i.vat_rate ?? 20);
+    let g = i.unit_price * i.quantity;
+    if (i.discount_value > 0) {
+      g -= i.discount_type === 'percent' ? g * (i.discount_value / 100) : Math.min(i.discount_value, g);
+    }
+    const net = rate > 0 ? g * (100 / (100 + rate)) : g;
+    const vat = g - net;
+    if (!vatBuckets[rate]) vatBuckets[rate] = { rate, net: 0, vat: 0, gross: 0 };
+    vatBuckets[rate].net   += net;
+    vatBuckets[rate].vat   += vat;
+    vatBuckets[rate].gross += g;
+  }
+  const vatBreakdown = Object.values(vatBuckets).sort((a, b) => a.rate - b.rate);
+  const vatTotal = vatBreakdown.reduce((s, b) => s + b.vat, 0);
+
   const discountAmount = order.discount_value > 0
     ? order.discount_type === 'percent' ? subtotal * (order.discount_value / 100) : parseFloat(order.discount_value)
     : 0;
@@ -182,6 +202,21 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:14, marginBottom:6, color:'#555' }}><span>Subtotal</span><span>£{subtotal.toFixed(2)}</span></div>
                 {discountAmount>0 && <div style={{ display:'flex', justifyContent:'space-between', fontSize:14, marginBottom:6, color:'#22c55e' }}><span>Discount ({order.discount_reason})</span><span>-£{discountAmount.toFixed(2)}</span></div>}
                 {serviceChargeEnabled && <div style={{ display:'flex', justifyContent:'space-between', fontSize:14, marginBottom:6, color:'#555' }}><span>Service charge ({parseFloat(settings.service_charge_rate||settings.service_charge_percent||12.5)}%)</span><span>£{serviceCharge.toFixed(2)}</span></div>}
+                {/* SEPOS-021 VAT breakdown — informational; prices are VAT-inclusive */}
+                {vatTotal > 0 && (
+                  <div style={{ marginTop:8, padding:'8px 10px', background:'#f8f8f8', borderRadius:8, fontSize:12, color:'#555' }}>
+                    <div style={{ fontWeight:700, marginBottom:4, color:'#1a1a2e' }}>VAT included</div>
+                    {vatBreakdown.map(b => (
+                      <div key={b.rate} style={{ display:'flex', justifyContent:'space-between' }}>
+                        <span>@ {b.rate}% on £{b.net.toFixed(2)} net</span>
+                        <span>£{b.vat.toFixed(2)}</span>
+                      </div>
+                    ))}
+                    <div style={{ display:'flex', justifyContent:'space-between', borderTop:'1px solid #e0e0e0', marginTop:4, paddingTop:4, fontWeight:700 }}>
+                      <span>Total VAT</span><span>£{vatTotal.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:24, fontWeight:800, marginTop:10, color:'#1a1a2e' }}><span>TOTAL</span><span>£{billTotal.toFixed(2)}</span></div>
               </div>
               <div style={{ textAlign:'center', fontSize:12, color:'#888', borderTop:'1px dashed #ccc', paddingTop:12 }}>{settings.receipt_footer||'Thank you for dining with us!'}</div>

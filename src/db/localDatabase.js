@@ -65,7 +65,8 @@ function initSchema() {
       price REAL NOT NULL,
       is_available INTEGER DEFAULT 1,
       allergens TEXT DEFAULT NULL,
-      sort_order INTEGER DEFAULT 0
+      sort_order INTEGER DEFAULT 0,
+      vat_rate REAL DEFAULT 20.0
     );
 
     CREATE TABLE IF NOT EXISTS modifier_groups (
@@ -299,6 +300,8 @@ function runMigrations() {
   addColumnIfMissing('order_items', 'void_type', 'TEXT');
   // SEPOS-030: staff attribution on orders
   addColumnIfMissing('orders', 'staff_id', 'INTEGER');
+  // SEPOS-021: VAT rate per menu item
+  addColumnIfMissing('menu_items', 'vat_rate', 'REAL DEFAULT 20.0');
 }
 
 function seedDefaults() {

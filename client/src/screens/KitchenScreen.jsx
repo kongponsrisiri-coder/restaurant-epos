@@ -192,7 +192,7 @@ export default function KitchenScreen() {
   completedItems.forEach(item => {
     const key = item.order_id;
     if (!completedByOrder[key]) {
-      completedByOrder[key] = { order_id: item.order_id, table_number: item.table_number, covers: item.covers, items: [] };
+      completedByOrder[key] = { order_id: item.order_id, table_number: item.table_number, covers: item.covers, items: [], order_type: item.order_type, customer_name: item.customer_name, pickup_time: item.pickup_time };
     }
     completedByOrder[key].items.push(item);
   });

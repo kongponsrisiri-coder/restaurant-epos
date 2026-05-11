@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Website Design for Thai Restaurants &mdash; SiamEPOS</title>
+<meta name="description" content="SiamEPOS builds beautiful bilingual websites for Thai restaurants in the UK. Menu, bookings, online ordering, photos — ready in 48 hours. From £299.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='50' fill='%230D1B3E'/%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%23C9A84C' stroke-width='1.8'/%3E%3Cg transform='translate(50,50)'%3E%3Cpath d='M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z' fill='%23C9A84C'/%3E%3Ccircle cx='0' cy='0' r='5' fill='%23C9A84C'/%3E%3C/g%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--gold:#C9A84C;--gold-light:#E8C96A;--navy:#0D1B3E;--navy-mid:#1A2F6B;--white:#FDFAF4;--text-muted:#6B7A9F;}
+*{margin:0;padding:0;box-sizing:border-box;}html{scroll-behavior:smooth;}
+body{font-family:'Sarabun',sans-serif;background:var(--white);color:var(--navy);overflow-x:hidden;}
+body.thai .lang-en{display:none;}body:not(.thai) .lang-th{display:none;}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content:space-between;align-items:center;padding:12px 60px;background:rgba(13,27,62,0.97);backdrop-filter:blur(12px);border-bottom:1px solid rgba(201,168,76,0.2);}
+.nav-logo{display:flex;align-items:center;text-decoration:none;}
+.nav-links{display:flex;align-items:center;gap:24px;list-style:none;}
+.nav-links a{color:rgba(255,255,255,0.75);text-decoration:none;font-size:14px;font-weight:600;transition:color 0.2s;}
+.nav-links a:hover,.nav-links a.active{color:var(--gold);}
+.nav-cta{background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy)!important;padding:9px 20px;border-radius:8px;font-weight:700!important;}
+.lang-toggle{background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.35);color:var(--gold);padding:6px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:700;font-family:'Sarabun',sans-serif;}
+.wa-float{position:fixed;bottom:28px;right:28px;z-index:98;}
+.wa-btn{display:flex;align-items:center;gap:10px;background:#25D366;color:white;padding:13px 20px;border-radius:50px;font-size:14px;font-weight:700;text-decoration:none;box-shadow:0 8px 24px rgba(37,211,102,0.4);}
+.hero{background:linear-gradient(160deg,var(--navy) 0%,var(--navy-mid) 100%);padding:140px 60px 90px;position:relative;overflow:hidden;text-align:center;}
+.hero::before{content:'';position:absolute;inset:0;background-image:repeating-linear-gradient(45deg,rgba(201,168,76,0.03) 0,rgba(201,168,76,0.03) 1px,transparent 1px,transparent 52px);}
+.hero-tag{display:inline-flex;align-items:center;gap:8px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:var(--gold);padding:7px 16px;border-radius:30px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:24px;}
+.hero h1{font-family:'Cormorant Garamond',serif;font-size:62px;font-weight:700;color:white;line-height:1.05;margin-bottom:20px;}
+.hero h1 em{font-style:italic;color:var(--gold);}
+.hero-sub{font-size:18px;color:rgba(255,255,255,0.7);line-height:1.75;max-width:620px;margin:0 auto 40px;}
+.book-btn{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);padding:14px 28px;border-radius:10px;font-size:15px;font-weight:800;text-decoration:none;transition:transform 0.2s,box-shadow 0.2s;font-family:'Sarabun',sans-serif;}
+.book-btn:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(201,168,76,0.45);}
+.book-btn.ghost{background:transparent;border:2px solid var(--gold);color:var(--gold);}
+section{padding:80px 60px;}
+.section-label{display:inline-block;color:var(--gold);font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px;}
+.section-title{font-family:'Cormorant Garamond',serif;font-size:48px;font-weight:700;color:var(--navy);margin-bottom:16px;line-height:1.1;}
+.section-title.white{color:white;}
+.section-sub{font-size:16px;color:var(--text-muted);line-height:1.7;max-width:560px;}
+.what-you-get{background:var(--white);}
+.wig-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;max-width:1100px;margin:48px auto 0;}
+.wig-card{background:white;border:1px solid #E8E4DC;border-radius:16px;padding:24px 20px;text-align:center;}
+.wig-icon{font-size:32px;margin-bottom:12px;}
+.wig-title{font-size:15px;font-weight:700;color:var(--navy);margin-bottom:6px;}
+.wig-desc{font-size:13px;color:var(--text-muted);line-height:1.6;}
+.packages{background:#F7F5F0;}
+.pkg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:1000px;margin:48px auto 0;}
+.pkg-card{background:white;border:1px solid #E0DDD6;border-radius:20px;padding:36px 28px;position:relative;}
+.pkg-card.featured{background:var(--navy);border-color:var(--gold);transform:scale(1.03);}
+.pkg-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);font-size:9px;font-weight:800;padding:4px 16px;border-radius:20px;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;}
+.pkg-tier{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;}
+.pkg-price{font-family:'Cormorant Garamond',serif;font-size:52px;font-weight:700;color:var(--navy);line-height:1;}
+.pkg-card.featured .pkg-price{color:white;}
+.pkg-monthly{font-size:13px;color:var(--text-muted);margin-bottom:16px;}
+.pkg-card.featured .pkg-monthly{color:rgba(255,255,255,0.45);}
+.pkg-features{list-style:none;font-size:13px;line-height:2.1;color:var(--text-muted);margin-bottom:24px;}
+.pkg-card.featured .pkg-features{color:rgba(255,255,255,0.65);}
+.pkg-features li::before{content:'\2713  ';color:var(--gold);font-weight:800;}
+.btn-pkg{display:block;width:100%;padding:12px;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;text-decoration:none;text-align:center;font-family:'Sarabun',sans-serif;}
+.btn-navy{border:2px solid rgba(13,27,62,0.2);color:var(--navy);background:transparent;}
+.btn-navy:hover{border-color:var(--gold);color:var(--gold);}
+.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);border:none;}
+.btn-gold:hover{box-shadow:0 6px 20px rgba(201,168,76,0.4);}
+.process{background:var(--white);}
+.process-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;max-width:1000px;margin:48px auto 0;position:relative;}
+.process-grid::before{content:'';position:absolute;top:24px;left:12.5%;right:12.5%;height:2px;background:linear-gradient(90deg,var(--gold),var(--gold-light));z-index:0;}
+.proc-step{text-align:center;position:relative;z-index:1;padding:0 16px;}
+.proc-num{width:48px;height:48px;border-radius:50%;background:var(--navy);color:var(--gold);font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;border:3px solid var(--gold);}
+.proc-title{font-size:14px;font-weight:700;color:var(--navy);margin-bottom:6px;}
+.proc-desc{font-size:12px;color:var(--text-muted);line-height:1.6;}
+.portfolio{background:#F7F5F0;text-align:center;}
+.portfolio-placeholder{background:white;border:2px dashed #D0CCC4;border-radius:20px;padding:60px 40px;max-width:700px;margin:40px auto 0;}
+.portfolio-placeholder h3{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:700;color:var(--navy);margin-bottom:10px;}
+.portfolio-placeholder p{font-size:15px;color:var(--text-muted);line-height:1.7;}
+.cta-section{background:var(--navy);text-align:center;padding:80px 60px;}
+footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2fr 1fr 1fr;gap:48px;}
+.footer-brand-row{display:flex;align-items:center;gap:14px;margin-bottom:12px;}
+.footer-wordmark{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:var(--gold);}.footer-wordmark span{color:white;}
+.footer-tagline{color:rgba(255,255,255,0.4);font-size:13px;line-height:1.7;max-width:240px;}
+.footer-col h4{color:white;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;}
+.footer-col ul{list-style:none;display:flex;flex-direction:column;gap:8px;}
+.footer-col ul a{color:rgba(255,255,255,0.4);font-size:13px;text-decoration:none;}.footer-col ul a:hover{color:var(--gold);}
+.footer-btm{background:#040A18;padding:16px 60px;display:flex;justify-content:space-between;}
+.footer-btm p{color:rgba(255,255,255,0.2);font-size:12px;}.footer-btm a{color:var(--gold);text-decoration:none;}
+@media(max-width:1100px){nav{padding:12px 24px;}.nav-links{gap:12px;}.hero{padding:110px 24px 70px;}.hero h1{font-size:42px;}section{padding:60px 24px;}.wig-grid,.pkg-grid{grid-template-columns:1fr;max-width:400px;}.pkg-card.featured{transform:scale(1);}.process-grid{grid-template-columns:repeat(2,1fr);}.process-grid::before{display:none;}footer{grid-template-columns:1fr;padding:36px 24px;}.footer-btm{padding:14px 24px;flex-direction:column;gap:6px;}}
+@media(max-width:640px){.nav-links{display:none;}}
+</style>
+</head>
+<body>
+
+<div class="wa-float">
+  <a href="https://wa.me/447700000000" target="_blank" class="wa-btn">&#x1F4AC; <span class="lang-en">WhatsApp Us</span><span class="lang-th">&#x0E40;&#x0E27;&#x0E47;&#x0E1A;&#x0E44;&#x0E0B;&#x0E15;&#x0E4C;&#x0E23;&#x0E32;&#x0E04;&#x0E32;&#x0E40;&#x0E17;&#x0E48;&#x0E32;&#x0E44;&#x0E2B;&#x0E23;&#x0E48;</span></a>
+</div>
+
+<nav>
+  <a href="index.html" class="nav-logo"><svg width="170" height="50" viewBox="0 0 340 100" xmlns="http://www.w3.org/2000/svg"><circle cx="52" cy="50" r="44" fill="none" stroke="#C9A84C" stroke-width="1.5"/><circle cx="52" cy="50" r="38" fill="none" stroke="#C9A84C" stroke-width="0.5" opacity="0.28"/><g transform="translate(52,50)"><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/><circle cx="0" cy="0" r="8" fill="#0D1B3E"/><circle cx="0" cy="0" r="4.5" fill="#C9A84C"/></g><line x1="110" y1="16" x2="110" y2="84" stroke="#C9A84C" stroke-width="0.8" opacity="0.32"/><text x="126" y="58" font-family="Georgia, serif" font-size="40" font-weight="700" letter-spacing="-1"><tspan fill="white">Siam</tspan><tspan fill="#C9A84C">EPOS</tspan></text></svg></a>
+  <ul class="nav-links">
+    <li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">&#x0E1F;&#x0E35;&#x0E40;&#x0E08;&#x0E2D;&#x0E23;&#x0E4C;</a></li>
+    <li><a href="pricing.html" class="lang-en">Pricing</a><a href="pricing.html" class="lang-th">&#x0E23;&#x0E32;&#x0E04;&#x0E32;</a></li>
+    <li><a href="website-design.html" class="active lang-en">Website Design</a><a href="website-design.html" class="active lang-th">&#x0E2D;&#x0E2D;&#x0E01;&#x0E41;&#x0E1A;&#x0E1A;&#x0E40;&#x0E27;&#x0E47;&#x0E1A;</a></li>
+    <li><a href="book-demo.html" class="nav-cta lang-en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th">&#x0E17;&#x0E14;&#x0E25;&#x0E2D;&#x0E07;&#x0E1F;&#x0E23;&#x0E35;</a></li>
+  </ul>
+  <button class="lang-toggle" onclick="document.body.classList.toggle('thai');this.textContent=document.body.classList.contains('thai')?'EN':'&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;'">&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;</button>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div style="position:relative;z-index:1;">
+    <div class="hero-tag">&#x1F3E8; <span class="lang-en">For Thai Restaurants in the UK</span><span class="lang-th">&#x0E2A;&#x0E33;&#x0E2B;&#x0E23;&#x0E31;&#x0E1A;&#x0E23;&#x0E49;&#x0E32;&#x0E19;&#x0E2D;&#x0E32;&#x0E2B;&#x0E32;&#x0E23;&#x0E44;&#x0E17;&#x0E22;&#x0E43;&#x0E19; UK</span></div>
+    <h1 class="lang-en">We build beautiful websites<br>for <em>Thai restaurants</em></h1>
+    <h1 class="lang-th">&#x0E40;&#x0E23;&#x0E32;&#x0E2A;&#x0E23;&#x0E49;&#x0E32;&#x0E07;&#x0E40;&#x0E27;&#x0E47;&#x0E1A;&#x0E44;&#x0E0B;&#x0E15;&#x0E4C;&#x0E2A;&#x0E27;&#x0E22;&#x0E07;&#x0E32;&#x0E21;<br><em>&#x0E2A;&#x0E33;&#x0E2B;&#x0E23;&#x0E31;&#x0E1A;&#x0E23;&#x0E49;&#x0E32;&#x0E19;&#x0E2D;&#x0E32;&#x0E2B;&#x0E32;&#x0E23;&#x0E44;&#x0E17;&#x0E22;</em></h1>
+    <p class="hero-sub lang-en">Too busy to build a website? We do it for you. Menu, bookings, online ordering, photos, Google Maps &mdash; ready in 48 hours. In Thai and English.</p>
+    <p class="hero-sub lang-th">&#x0E44;&#x0E21;&#x0E48;&#x0E21;&#x0E35;&#x0E40;&#x0E27;&#x0E25;&#x0E32;&#x0E2A;&#x0E23;&#x0E49;&#x0E32;&#x0E07;&#x0E40;&#x0E27;&#x0E47;&#x0E1A;&#x0E44;&#x0E0B;&#x0E15;&#x0E4C;? &#x0E40;&#x0E23;&#x0E32;&#x0E17;&#x0E33;&#x0E43;&#x0E2B;&#x0E49; &#x0E40;&#x0E21;&#x0E19;&#x0E39; &#x0E08;&#x0E2D;&#x0E07;&#x0E42;&#x0E15;&#x0E4A;&#x0E30; &#x0E2A;&#x0E31;&#x0E48;&#x0E07;&#x0E2D;&#x0E2D;&#x0E19;&#x0E44;&#x0E25;&#x0E19;&#x0E4C; &#x0E23;&#x0E39;&#x0E1B;&#x0E20;&#x0E32;&#x0E1E; &#x0E44;&#x0E17;&#x0E22;+&#x0E2D;&#x0E31;&#x0E07;&#x0E01;&#x0E24;&#x0E29; &#x0E40;&#x0E2A;&#x0E23;&#x0E47;&#x0E08;&#x0E43;&#x0E19; 48 &#x0E0A;&#x0E31;&#x0E48;&#x0E27;&#x0E42;&#x0E21;&#x0E07;</p>
+    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
+      <a href="https://wa.me/447700000000" class="book-btn lang-en">&#x1F4AC; WhatsApp Us Now</a>
+      <a href="https://wa.me/447700000000" class="book-btn lang-th">&#x1F4AC; &#x0E15;&#x0E34;&#x0E14;&#x0E15;&#x0E48;&#x0E2D;&#x0E40;&#x0E23;&#x0E32;&#x0E40;&#x0E14;&#x0E35;&#x0E22;&#x0E27;&#x0E19;&#x0E35;&#x0E49;</a>
+      <a href="#packages" class="book-btn ghost lang-en">View Packages &darr;</a>
+      <a href="#packages" class="book-btn ghost lang-th">&#x0E14;&#x0E39;&#x0E41;&#x0E1C;&#x0E19; &darr;</a>
+    </div>
+  </div>
+</div>
+
+<!-- WHAT YOU GET -->
+<section class="what-you-get">
+  <div style="max-width:1100px;margin:0 auto;text-align:center;">
+    <div class="section-label lang-en">What&rsquo;s included</div>
+    <div class="section-label lang-th">&#x0E2A;&#x0E34;&#x0E48;&#x0E07;&#x0E17;&#x0E35;&#x0E48;&#x0E23;&#x0E27;&#x0E21;&#x0E2D;&#x0E22;&#x0E39;&#x0E48;</div>
+    <h2 class="section-title lang-en">Everything a Thai restaurant website needs</h2>
+    <h2 class="section-title lang-th">&#x0E17;&#x0E38;&#x0E01;&#x0E2D;&#x0E22;&#x0E48;&#x0E32;&#x0E07;&#x0E17;&#x0E35;&#x0E48;&#x0E40;&#x0E27;&#x0E47;&#x0E1A;&#x0E23;&#x0E49;&#x0E32;&#x0E19;&#x0E2D;&#x0E32;&#x0E2B;&#x0E32;&#x0E23;&#x0E44;&#x0E17;&#x0E22;&#x0E15;&#x0E49;&#x0E2D;&#x0E07;&#x0E01;&#x0E32;&#x0E23;</h2>
+    <div class="wig-grid">
+      <div class="wig-card"><div class="wig-icon">&#x1F1F9;&#x1F1ED;</div><div class="wig-title lang-en">Bilingual Thai &amp; English</div><div class="wig-title lang-th">&#x0E2A;&#x0E2D;&#x0E07;&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;+&#x0E2D;&#x0E31;&#x0E07;&#x0E01;&#x0E24;&#x0E29;</div><p class="wig-desc lang-en">Every page in Thai and English. Your staff can read it. Your customers can read it.</p><p class="wig-desc lang-th">&#x0E17;&#x0E38;&#x0E01;&#x0E2B;&#x0E19;&#x0E49;&#x0E32;&#x0E40;&#x0E1b;&#x0E47;&#x0E19;&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;&#x0E41;&#x0E25;&#x0E30;&#x0E2d;&#x0E31;&#x0E07;&#x0E01;&#x0E24;&#x0E29;</p></div>
+      <div class="wig-card"><div class="wig-icon">&#x1F4C5;</div><div class="wig-title lang-en">Booking Widget Built In</div><div class="wig-title lang-th">&#x0E27;&#x0E34;&#x0E14;&#x0E40;&#x0E08;&#x0E47;&#x0E15;&#x0E08;&#x0E2D;&#x0E07;&#x0E23;&#x0E27;&#x0E21;&#x0E2D;&#x0E22;&#x0E39;&#x0E48;</div><p class="wig-desc lang-en">Zero-commission SiamEPOS booking widget installed on every site. No OpenTable needed.</p><p class="wig-desc lang-th">&#x0E27;&#x0E34;&#x0E14;&#x0E40;&#x0E08;&#x0E47;&#x0E15;&#x0E08;&#x0E2d;&#x0E07; SiamEPOS &#x0E04;&#x0E48;&#x0E32;&#x0E04;&#x0E2d;&#x0E21; 0%</p></div>
+      <div class="wig-card"><div class="wig-icon">&#x1F6D2;</div><div class="wig-title lang-en">Online Ordering Ready</div><div class="wig-title lang-th">&#x0E2a;&#x0E31;&#x0E48;&#x0E07;&#x0E2d;&#x0E2d;&#x0E19;&#x0E44;&#x0E25;&#x0E19;&#x0E4c;&#x0E1e;&#x0E23;&#x0E49;&#x0E2d;&#x0E21;</div><p class="wig-desc lang-en">Full Site and Premium sites include takeaway ordering. No Just Eat commission.</p><p class="wig-desc lang-th">&#x0E44;&#x0E21;&#x0E48;&#x0E21;&#x0E35;&#x0E04;&#x0E48;&#x0E32;&#x0E04;&#x0E2d;&#x0E21; Just Eat</p></div>
+      <div class="wig-card"><div class="wig-icon">&#x1F4F1;</div><div class="wig-title lang-en">Mobile First</div><div class="wig-title lang-th">Mobile First</div><p class="wig-desc lang-en">Looks perfect on every phone, tablet and desktop. Fast loading on 4G.</p><p class="wig-desc lang-th">&#x0E2a;&#x0E27;&#x0E22;&#x0E07;&#x0E32;&#x0E21;&#x0E17;&#x0E38;&#x0E01;&#x0E2d;&#x0E38;&#x0E1b;&#x0E01;&#x0E23;&#x0E13;&#x0E4c;</p></div>
+      <div class="wig-card"><div class="wig-icon">&#x1F4F8;</div><div class="wig-title lang-en">Photo Gallery</div><div class="wig-title lang-th">&#x0E04;&#x0E25;&#x0E31;&#x0E07;&#x0E20;&#x0E32;&#x0E1e;</div><p class="wig-desc lang-en">Showcase your food, your restaurant and your team. We advise on what photos to take.</p><p class="wig-desc lang-th">&#x0E2a;&#x0E41;&#x0E14;&#x0E07;&#x0E2d;&#x0E32;&#x0E2b;&#x0E32;&#x0E23; &#x0E23;&#x0E49;&#x0E32;&#x0E19; &#x0E41;&#x0E25;&#x0E30;&#x0E17;&#x0E35;&#x0E21;</p></div>
+      <div class="wig-card"><div class="wig-icon">&#x1F5FA;&#xFE0F;</div><div class="wig-title lang-en">Google Maps &amp; SEO</div><div class="wig-title lang-th">Google Maps &amp; SEO</div><p class="wig-desc lang-en">Google Maps embedded, SEO optimised so customers find you when searching for Thai food nearby.</p><p class="wig-desc lang-th">&#x0E25;&#x0E39;&#x0E01;&#x0E04;&#x0E49;&#x0E32;&#x0E04;&#x0E49;&#x0E19;&#x0E2b;&#x0E32;&#x0E40;&#x0E08;&#x0E2d;&#x0E04;&#x0E38;&#x0E13;&#x0E44;&#x0E14;&#x0E49;&#x0E07;&#x0E48;&#x0E32;&#x0E22;</p></div>
+      <div class="wig-card"><div class="wig-icon">&#x1F9EE;</div><div class="wig-title lang-en">Digital Menu</div><div class="wig-title lang-th">&#x0E40;&#x0E21;&#x0E19;&#x0E39;&#x0E14;&#x0E34;&#x0E08;&#x0E34;&#x0E17;&#x0E31;&#x0E25;</div><p class="wig-desc lang-en">Your full menu online with photos, allergens, descriptions. Synced with SiamEPOS.</p><p class="wig-desc lang-th">&#x0E40;&#x0E21;&#x0E19;&#x0E39;&#x0E04;&#x0E23;&#x0E1a;&#x0E2a;&#x0E21;&#x0E1a;&#x0E39;&#x0E23;&#x0E13;&#x0E4c;&#x0E2d;&#x0E2d;&#x0E19;&#x0E44;&#x0E25;&#x0E19;&#x0E4c;</p></div>
+      <div class="wig-card"><div class="wig-icon">&#x1F4CA;</div><div class="wig-title lang-en">You Own the Data</div><div class="wig-title lang-th">&#x0E04;&#x0E38;&#x0E13;&#x0E40;&#x0E1b;&#x0E47;&#x0E19;&#x0E40;&#x0E08;&#x0E49;&#x0E32;&#x0E02;&#x0E2d;&#x0E07;&#x0E02;&#x0E49;&#x0E2d;&#x0E21;&#x0E39;&#x0E25;</div><p class="wig-desc lang-en">Every customer who books or orders gives you their email and phone. Yours to keep, yours to market to.</p><p class="wig-desc lang-th">&#x0E17;&#x0E38;&#x0E01;&#x0E2d;&#x0E35;&#x0E40;&#x0E21;&#x0E25;&#x0E41;&#x0E25;&#x0E30;&#x0E40;&#x0E1a;&#x0E2d;&#x0E23;&#x0E4c;&#x0E42;&#x0E17;&#x0E23;&#x0E40;&#x0E1b;&#x0E47;&#x0E19;&#x0E02;&#x0E2d;&#x0E07;&#x0E04;&#x0E38;&#x0E13;</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- PACKAGES -->
+<section class="packages" id="packages">
+  <div style="max-width:1100px;margin:0 auto;text-align:center;">
+    <div class="section-label lang-en">Pricing</div><div class="section-label lang-th">&#x0E23;&#x0E32;&#x0E04;&#x0E32;</div>
+    <h2 class="section-title lang-en">Simple, honest pricing</h2>
+    <h2 class="section-title lang-th">&#x0E23;&#x0E32;&#x0E04;&#x0E32;&#x0E0A;&#x0E31;&#x0E14;&#x0E40;&#x0E08;&#x0E19;&#x0E44;&#x0E21;&#x0E48;&#x0E0b;&#x0E31;&#x0E1a;&#x0E0b;&#x0E49;&#x0E2d;&#x0E19;</h2>
+    <div class="pkg-grid">
+      <div class="pkg-card">
+        <div class="pkg-tier">Starter Site</div>
+        <div class="pkg-price">&pound;299</div>
+        <div class="pkg-monthly lang-en">+ &pound;29/month hosting &amp; updates</div>
+        <div class="pkg-monthly lang-th">+ &pound;29/&#x0E40;&#x0E14;&#x0E37;&#x0E2d;&#x0E19; hosting</div>
+        <ul class="pkg-features">
+          <li class="lang-en">4-page bilingual website</li><li class="lang-th">4 &#x0E2b;&#x0E19;&#x0E49;&#x0E32;&#x0E2A;&#x0E2D;&#x0E07;&#x0E20;&#x0E32;&#x0E29;&#x0E32;</li>
+          <li class="lang-en">Booking widget installed</li><li class="lang-th">&#x0E27;&#x0E34;&#x0E14;&#x0E40;&#x0E08;&#x0E47;&#x0E15;&#x0E08;&#x0E2D;&#x0E07;&#x0E15;&#x0E34;&#x0E14;&#x0E15;&#x0E31;&#x0E49;&#x0E07;&#x0E41;&#x0E25;&#x0E49;&#x0E27;</li>
+          <li class="lang-en">Digital menu</li><li class="lang-th">&#x0E40;&#x0E21;&#x0E19;&#x0E39;&#x0E14;&#x0E34;&#x0E08;&#x0E34;&#x0E17;&#x0E31;&#x0E25;</li>
+          <li class="lang-en">Google Maps + contact page</li><li class="lang-th">Google Maps + &#x0E15;&#x0E34;&#x0E14;&#x0E15;&#x0E48;&#x0E2D;</li>
+          <li class="lang-en">Mobile responsive</li><li class="lang-th">&#x0E23;&#x0E2d;&#x0E07;&#x0E23;&#x0E31;&#x0E1a;&#x0E2a;&#x0E21;&#x0E32;&#x0E23;&#x0E4c;&#x0E17;&#x0E42;&#x0E1f;&#x0E19;</li>
+          <li class="lang-en">Ready in 48 hours</li><li class="lang-th">&#x0E40;&#x0E2a;&#x0E23;&#x0E47;&#x0E08;&#x0E43;&#x0E19; 48 &#x0E0a;&#x0E31;&#x0E48;&#x0E27;&#x0E42;&#x0E21;&#x0E07;</li>
+        </ul>
+        <a href="https://wa.me/447700000000" class="btn-pkg btn-navy lang-en">Get Started</a>
+        <a href="https://wa.me/447700000000" class="btn-pkg btn-navy lang-th">&#x0E40;&#x0E23;&#x0E34;&#x0E48;&#x0E21;&#x0E15;&#x0E49;&#x0E19;</a>
+      </div>
+      <div class="pkg-card featured">
+        <div class="pkg-badge lang-en">Most Popular</div><div class="pkg-badge lang-th">&#x0E19;&#x0E34;&#x0E22;&#x0E21;&#x0E17;&#x0E35;&#x0E48;&#x0E2A;&#x0E38;&#x0E14;</div>
+        <div class="pkg-tier">Full Site</div>
+        <div class="pkg-price">&pound;499</div>
+        <div class="pkg-monthly lang-en">+ &pound;39/month hosting &amp; updates</div>
+        <div class="pkg-monthly lang-th">+ &pound;39/&#x0E40;&#x0E14;&#x0E37;&#x0E2d;&#x0E19; hosting</div>
+        <ul class="pkg-features">
+          <li class="lang-en">8-page bilingual website</li><li class="lang-th">8 &#x0E2b;&#x0E19;&#x0E49;&#x0E32;&#x0E2a;&#x0E2d;&#x0E07;&#x0E20;&#x0E32;&#x0E29;&#x0E32;</li>
+          <li class="lang-en">Online ordering integrated</li><li class="lang-th">&#x0E2a;&#x0E31;&#x0E48;&#x0E07;&#x0E2d;&#x0E2d;&#x0E19;&#x0E44;&#x0E25;&#x0E19;&#x0E4c;&#x0E23;&#x0E27;&#x0E21;&#x0E2d;&#x0E22;&#x0E39;&#x0E48;</li>
+          <li class="lang-en">Full menu with photos &amp; allergens</li><li class="lang-th">&#x0E40;&#x0E21;&#x0E19;&#x0E39;+&#x0E23;&#x0E39;&#x0E1b;+&#x0E2A;&#x0E32;&#x0E23;&#x0E01;&#x0E48;&#x0E2d;&#x0E20;&#x0E39;&#x0E21;&#x0E34;&#x0E41;&#x0E1e;&#x0E49;</li>
+          <li class="lang-en">Photo gallery</li><li class="lang-th">&#x0E04;&#x0E25;&#x0E31;&#x0E07;&#x0E20;&#x0E32;&#x0E1e;</li>
+          <li class="lang-en">SEO optimised</li><li class="lang-th">&#x0E40;&#x0E1e;&#x0E34;&#x0E48;&#x0E21; SEO</li>
+          <li class="lang-en">Customer data you own</li><li class="lang-th">&#x0E02;&#x0E49;&#x0E2d;&#x0E21;&#x0E39;&#x0E25;&#x0E25;&#x0E39;&#x0E01;&#x0E04;&#x0E49;&#x0E32;&#x0E40;&#x0E1b;&#x0E47;&#x0E19;&#x0E02;&#x0E2d;&#x0E07;&#x0E04;&#x0E38;&#x0E13;</li>
+          <li class="lang-en">Ready in 48 hours</li><li class="lang-th">&#x0E40;&#x0E2a;&#x0E23;&#x0E47;&#x0E08;&#x0E43;&#x0E19; 48 &#x0E0a;&#x0E31;&#x0E48;&#x0E27;&#x0E42;&#x0E21;&#x0E07;</li>
+        </ul>
+        <a href="https://wa.me/447700000000" class="btn-pkg btn-gold lang-en">Get Started</a>
+        <a href="https://wa.me/447700000000" class="btn-pkg btn-gold lang-th">&#x0E40;&#x0E23;&#x0E34;&#x0E48;&#x0E21;&#x0E15;&#x0E49;&#x0E19;</a>
+      </div>
+      <div class="pkg-card">
+        <div class="pkg-tier">Premium Site</div>
+        <div class="pkg-price">&pound;799</div>
+        <div class="pkg-monthly lang-en">+ &pound;59/month hosting &amp; updates</div>
+        <div class="pkg-monthly lang-th">+ &pound;59/&#x0E40;&#x0E14;&#x0E37;&#x0E2d;&#x0E19; hosting</div>
+        <ul class="pkg-features">
+          <li class="lang-en">Custom design from scratch</li><li class="lang-th">&#x0E2d;&#x0E2d;&#x0E01;&#x0E41;&#x0E1a;&#x0E1a;&#x0E43;&#x0E2b;&#x0E21;&#x0E48;&#x0E17;&#x0E31;&#x0E49;&#x0E07;&#x0E2b;&#x0E21;&#x0E14;</li>
+          <li class="lang-en">Unlimited pages</li><li class="lang-th">&#x0E44;&#x0E21;&#x0E48;&#x0E08;&#x0E33;&#x0E01;&#x0E31;&#x0E14;&#x0E08;&#x0E33;&#x0E19;&#x0E27;&#x0E19;&#x0E2b;&#x0E19;&#x0E49;&#x0E32;</li>
+          <li class="lang-en">Photography brief + guidance</li><li class="lang-th">&#x0E41;&#x0E19;&#x0E30;&#x0E19;&#x0E33;&#x0E01;&#x0E32;&#x0E23;&#x0E16;&#x0E48;&#x0E32;&#x0E22;&#x0E20;&#x0E32;&#x0E1e;</li>
+          <li class="lang-en">Social media setup</li><li class="lang-th">&#x0E15;&#x0E31;&#x0E49;&#x0E07;&#x0E04;&#x0E48;&#x0E32; social media</li>
+          <li class="lang-en">Google Ads ready</li><li class="lang-th">&#x0E1e;&#x0E23;&#x0E49;&#x0E2d;&#x0E21; Google Ads</li>
+          <li class="lang-en">Priority support &amp; updates</li><li class="lang-th">&#x0E0b;&#x0E31;&#x0E1e;&#x0E1e;&#x0E2d;&#x0E23;&#x0E4c;&#x0E15;&#x0E41;&#x0E25;&#x0E30;&#x0E2d;&#x0E31;&#x0E1e;&#x0E40;&#x0E14;&#x0E15;&#x0E1e;&#x0E34;&#x0E40;&#x0E28;&#x0E29;</li>
+        </ul>
+        <a href="https://wa.me/447700000000" class="btn-pkg btn-navy lang-en">Get Started</a>
+        <a href="https://wa.me/447700000000" class="btn-pkg btn-navy lang-th">&#x0E40;&#x0E23;&#x0E34;&#x0E48;&#x0E21;&#x0E15;&#x0E49;&#x0E19;</a>
+      </div>
+    </div>
+    <p style="margin-top:24px;font-size:14px;color:var(--text-muted);" class="lang-en">&#x1F4E6; Bundle with any SiamEPOS plan &mdash; one invoice, one support call, one system.</p>
+    <p style="margin-top:24px;font-size:14px;color:var(--text-muted);" class="lang-th">&#x1F4E6; &#x0E23;&#x0E27;&#x0E21;&#x0E01;&#x0E31;&#x0E1a;&#x0E41;&#x0E1c;&#x0E19; SiamEPOS &#x2014; &#x0E43;&#x0E1a;&#x0E41;&#x0E08;&#x0E49;&#x0E07;&#x0E2b;&#x0E19;&#x0E35;&#x0E49;&#x0E40;&#x0E14;&#x0E35;&#x0E22;&#x0E27; &#x0E23;&#x0E30;&#x0E1a;&#x0E1a;&#x0E40;&#x0E14;&#x0E35;&#x0E22;&#x0E27;</p>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="process">
+  <div style="max-width:1000px;margin:0 auto;text-align:center;">
+    <div class="section-label lang-en">How it works</div><div class="section-label lang-th">&#x0E01;&#x0E23;&#x0E30;&#x0E1a;&#x0E27;&#x0E19;&#x0E01;&#x0E32;&#x0E23;</div>
+    <h2 class="section-title lang-en">Ready in 48 hours</h2>
+    <h2 class="section-title lang-th">&#x0E40;&#x0E2A;&#x0E23;&#x0E47;&#x0E08;&#x0E20;&#x0E32;&#x0E22;&#x0E43;&#x0E19; 48 &#x0E0A;&#x0E31;&#x0E48;&#x0E27;&#x0E42;&#x0E21;&#x0E07;</h2>
+    <div class="process-grid">
+      <div class="proc-step"><div class="proc-num">1</div><div class="proc-title lang-en">WhatsApp Us</div><div class="proc-title lang-th">&#x0E15;&#x0E34;&#x0E14;&#x0E15;&#x0E48;&#x0E2D;&#x0E40;&#x0E23;&#x0E32;</div><p class="proc-desc lang-en">Tell us your restaurant name, send us your menu and a few photos.</p><p class="proc-desc lang-th">&#x0E1A;&#x0E2D;&#x0E01;&#x0E0A;&#x0E37;&#x0E48;&#x0E2D;&#x0E23;&#x0E49;&#x0E32;&#x0E19; &#x0E2A;&#x0E48;&#x0E07;&#x0E40;&#x0E21;&#x0E19;&#x0E39;&#x0E41;&#x0E25;&#x0E30;&#x0E23;&#x0E39;&#x0E1B;&#x0E20;&#x0E32;&#x0E1E;</p></div>
+      <div class="proc-step"><div class="proc-num">2</div><div class="proc-title lang-en">We Build It</div><div class="proc-title lang-th">&#x0E40;&#x0E23;&#x0E32;&#x0E2A;&#x0E23;&#x0E49;&#x0E32;&#x0E07;</div><p class="proc-desc lang-en">We design and build your website in Thai and English. Booking widget included.</p><p class="proc-desc lang-th">&#x0E2A;&#x0E23;&#x0E49;&#x0E32;&#x0E07;&#x0E40;&#x0E27;&#x0E47;&#x0E1A;&#x0E44;&#x0E0B;&#x0E15;&#x0E4C;&#x0E20;&#x0E32;&#x0E22;&#x0E43;&#x0E19; 48 &#x0E0A;&#x0E31;&#x0E48;&#x0E27;&#x0E42;&#x0E21;&#x0E07;</p></div>
+      <div class="proc-step"><div class="proc-num">3</div><div class="proc-title lang-en">You Review</div><div class="proc-title lang-th">&#x0E04;&#x0E38;&#x0E13;&#x0E15;&#x0E23;&#x0E27;&#x0E08;&#x0E2A;&#x0E2D;&#x0E1a;</div><p class="proc-desc lang-en">We share a preview link. You request any changes. We fix them same day.</p><p class="proc-desc lang-th">&#x0E14;&#x0E39;&#x0E15;&#x0E31;&#x0E27;&#x0E2D;&#x0E22;&#x0E48;&#x0E32;&#x0E07; &#x0E02;&#x0E2D;&#x0E41;&#x0E01;&#x0E49;&#x0E44;&#x0E02;&#x0E44;&#x0E14;&#x0E49;&#x0E40;&#x0E25;&#x0E22;</p></div>
+      <div class="proc-step"><div class="proc-num">4</div><div class="proc-title lang-en">Go Live</div><div class="proc-title lang-th">&#x0E2D;&#x0E2D;&#x0E19;&#x0E44;&#x0E25;&#x0E19;&#x0E4C;</div><p class="proc-desc lang-en">Your website goes live. Bookings and orders start coming in immediately.</p><p class="proc-desc lang-th">&#x0E40;&#x0E27;&#x0E47;&#x0E1A;&#x0E44;&#x0E0B;&#x0E15;&#x0E4C;&#x0E2D;&#x0E2D;&#x0E19;&#x0E44;&#x0E25;&#x0E19;&#x0E4C; &#x0E01;&#x0E32;&#x0E23;&#x0E08;&#x0E2D;&#x0E07;&#x0E41;&#x0E25;&#x0E30;&#x0E2D;&#x0E2D;&#x0E40;&#x0E14;&#x0E2D;&#x0E23;&#x0E4C;&#x0E40;&#x0E23;&#x0E34;&#x0E48;&#x0E21;&#x0E17;&#x0E31;&#x0E19;&#x0E17;&#x0E35;</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- PORTFOLIO PLACEHOLDER -->
+<section class="portfolio">
+  <div style="max-width:900px;margin:0 auto;">
+    <div style="text-align:center;margin-bottom:0;">
+      <div class="section-label lang-en">Our work</div><div class="section-label lang-th">&#x0E1c;&#x0E25;&#x0E07;&#x0E32;&#x0E19;&#x0E02;&#x0E2d;&#x0E07;&#x0E40;&#x0E23;&#x0E32;</div>
+      <h2 class="section-title lang-en">Examples coming soon</h2>
+      <h2 class="section-title lang-th">&#x0E15;&#x0E31;&#x0E27;&#x0E2d;&#x0E22;&#x0E48;&#x0E32;&#x0E07;&#x0E01;&#x0E33;&#x0E25;&#x0E31;&#x0E07;&#x0E08;&#x0E30;&#x0E21;&#x0E32;&#x0E16;&#x0E36;&#x0E07;</h2>
+    </div>
+    <div class="portfolio-placeholder">
+      <div style="font-size:48px;margin-bottom:16px;">&#x1F3E8;</div>
+      <h3 class="lang-en">Be our first client restaurant</h3>
+      <h3 class="lang-th">&#x0E40;&#x0E1b;&#x0E47;&#x0E19;&#x0E23;&#x0E49;&#x0E32;&#x0E19;&#x0E41;&#x0E23;&#x0E01;&#x0E02;&#x0E2d;&#x0E07;&#x0E40;&#x0E23;&#x0E32;</h3>
+      <p class="lang-en" style="margin-top:10px;">We&rsquo;re actively building our first client sites. If you&rsquo;d like to be featured here with a discount in exchange &mdash; <a href="https://wa.me/447700000000" style="color:var(--gold);">WhatsApp us</a>.</p>
+      <p class="lang-th" style="margin-top:10px;">&#x0E40;&#x0E23;&#x0E32;&#x0E01;&#x0E33;&#x0E25;&#x0E31;&#x0E07;&#x0E2a;&#x0E23;&#x0E49;&#x0E32;&#x0E07;&#x0E40;&#x0E27;&#x0E47;&#x0E1a;&#x0E41;&#x0E23;&#x0E01;&#x0E2d;&#x0E22;&#x0E39;&#x0E48; &#x0E16;&#x0E49;&#x0E32;&#x0E2a;&#x0E19;&#x0E43;&#x0E08;&#x0E23;&#x0E31;&#x0E1a;&#x0E2a;&#x0E48;&#x0E27;&#x0E19;&#x0E25;&#x0E14;&#x0E40;&#x0E1b;&#x0E47;&#x0E19;&#x0E15;&#x0E31;&#x0E27;&#x0E2d;&#x0E22;&#x0E48;&#x0E32;&#x0E07; &#x2014; <a href="https://wa.me/447700000000" style="color:var(--gold);">&#x0E15;&#x0E34;&#x0E14;&#x0E15;&#x0E48;&#x0E2d;&#x0E40;&#x0E23;&#x0E32;</a></p>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <h2 style="font-family:'Cormorant Garamond',serif;font-size:48px;font-weight:700;color:white;margin-bottom:10px;" class="lang-en">Ready to get your website?</h2>
+  <h2 style="font-family:'Cormorant Garamond',serif;font-size:48px;font-weight:700;color:white;margin-bottom:10px;" class="lang-th">&#x0E1e;&#x0E23;&#x0E49;&#x0E2d;&#x0E21;&#x0E43;&#x0E2b;&#x0E49;&#x0E40;&#x0E23;&#x0E32;&#x0E2a;&#x0E23;&#x0E49;&#x0E32;&#x0E07;&#x0E40;&#x0E27;&#x0E47;&#x0E1a;&#x0E43;&#x0E2b;&#x0E49;&#x0E04;&#x0E38;&#x0E13;&#x0E41;&#x0E25;&#x0E49;&#x0E27;&#x0E44;&#x0E2b;&#x0E21;?</h2>
+  <p style="font-size:16px;color:rgba(255,255,255,0.55);margin-bottom:36px;" class="lang-en">WhatsApp us now. Tell us your restaurant name. We&rsquo;ll have a first draft for you in 48 hours.</p>
+  <p style="font-size:16px;color:rgba(255,255,255,0.55);margin-bottom:36px;" class="lang-th">&#x0E2A;&#x0E48;&#x0E07; WhatsApp &#x0E40;&#x0E14;&#x0E35;&#x0E22;&#x0E27;&#x0E19;&#x0E35;&#x0E49; &#x0E40;&#x0E23;&#x0E32;&#x0E08;&#x0E30;&#x0E21;&#x0E35;&#x0E15;&#x0E31;&#x0E27;&#x0E2D;&#x0E22;&#x0E48;&#x0E32;&#x0E07;&#x0E43;&#x0E2B;&#x0E49;&#x0E04;&#x0E38;&#x0E13;&#x0E20;&#x0E32;&#x0E22;&#x0E43;&#x0E19; 48 &#x0E0A;&#x0E31;&#x0E48;&#x0E27;&#x0E42;&#x0E21;&#x0E07;</p>
+  <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
+    <a href="https://wa.me/447700000000" class="book-btn lang-en">&#x1F4AC; WhatsApp Us Now</a>
+    <a href="https://wa.me/447700000000" class="book-btn lang-th">&#x1F4AC; &#x0E15;&#x0E34;&#x0E14;&#x0E15;&#x0E48;&#x0E2D;&#x0E40;&#x0E23;&#x0E32;&#x0E40;&#x0E14;&#x0E35;&#x0E22;&#x0E27;&#x0E19;&#x0E35;&#x0E49;</a>
+    <a href="mailto:info@siamepos.co.uk" style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.08);color:white;padding:14px 28px;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none;border:1px solid rgba(255,255,255,0.15);">&#x1F4E7; info@siamepos.co.uk</a>
+  </div>
+</section>
+
+<footer>
+  <div><div class="footer-brand-row"><svg width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="none" stroke="#C9A84C" stroke-width="1.8"/><circle cx="50" cy="50" r="39" fill="none" stroke="#C9A84C" stroke-width="0.6" opacity="0.28"/><g transform="translate(50,50)"><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/><circle cx="0" cy="0" r="9" fill="#0D1B3E"/><circle cx="0" cy="0" r="5" fill="#C9A84C"/></g></svg><div class="footer-wordmark">Siam<span>EPOS</span></div></div>
+  <p class="footer-tagline lang-en">The Thai Restaurant Management System. Built by Thai, for Thai.</p>
+  <p class="footer-tagline lang-th">&#x0E23;&#x0E30;&#x0E1a;&#x0E1a;&#x0E1a;&#x0E23;&#x0E34;&#x0E2b;&#x0E32;&#x0E23;&#x0E23;&#x0E49;&#x0E32;&#x0E19;&#x0E2d;&#x0E32;&#x0E2b;&#x0E32;&#x0E23;&#x0E44;&#x0E17;&#x0E22;&#x0E04;&#x0E23;&#x0E1a;&#x0E27;&#x0E07;&#x0E08;&#x0E23;</p></div>
+  <div class="footer-col"><h4 class="lang-en">Pages</h4><h4 class="lang-th">&#x0E2b;&#x0E19;&#x0E49;&#x0E32;</h4><ul>
+    <li><a href="index.html" class="lang-en">Home</a><a href="index.html" class="lang-th">&#x0E2b;&#x0E19;&#x0E49;&#x0E32;&#x0E41;&#x0E23;&#x0E01;</a></li>
+    <li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">&#x0E1f;&#x0E35;&#x0E40;&#x0E08;&#x0E2d;&#x0E23;&#x0E4c;</a></li>
+    <li><a href="pricing.html" class="lang-en">Pricing</a><a href="pricing.html" class="lang-th">&#x0E23;&#x0E32;&#x0E04;&#x0E32;</a></li>
+    <li><a href="book-demo.html" class="lang-en">Book Demo</a><a href="book-demo.html" class="lang-th">&#x0E08;&#x0E2d;&#x0E07;&#x0E40;&#x0E14;&#x0E42;&#x0E21;</a></li>
+  </ul></div>
+  <div class="footer-col"><h4>Contact</h4><ul>
+    <li><a href="https://wa.me/447700000000">&#x1F4AC; WhatsApp</a></li>
+    <li><a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></li>
+  </ul></div>
+</footer>
+<div class="footer-btm"><p>SiamEPOS&trade; is a registered trademark of Korakot Kongponsrisiri &middot; UK00004385501 &middot; &copy; 2026 SiamEPOS. All rights reserved.</p><p><a href="index.html">&larr; Home</a></p></div>
+
+<script>
+const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:0.08});
+document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
+</script>
+</body>
+</html>

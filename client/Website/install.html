@@ -136,8 +136,39 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
 .wa-btn{display:flex;align-items:center;gap:10px;background:#25D366;color:white;padding:13px 20px;border-radius:50px;font-size:14px;font-weight:700;text-decoration:none;box-shadow:0 8px 24px rgba(37,211,102,0.4);}
 
 @media(max-width:1100px){nav{padding:12px 24px;}.nav-links{gap:12px;}.hero{padding:110px 24px 60px;}.hero-inner{grid-template-columns:1fr;gap:36px;}.widget-preview{display:none;}.platforms,.tiers,.help-section{padding:60px 24px;}.tier-grid{grid-template-columns:repeat(2,1fr);}.help-cards{grid-template-columns:1fr;}footer{grid-template-columns:1fr;padding:36px 24px;}.footer-btm{padding:14px 24px;flex-direction:column;gap:4px;}}
-@media(max-width:640px){.tab-btn{font-size:12px;padding:10px 14px;}.tier-grid{grid-template-columns:1fr;}.nav-links{display:none;}}
+@media(max-width:640px){.tab-btn{font-size:12px;padding:10px 14px;
+
+  .nav-burger{display:inline-block;}
+  .lang-toggle{font-size:11px;padding:6px 10px;}
+  nav{padding:14px 18px;}
+  .nav-logo svg{width:140px;height:42px;}
+  .nav-links{display:none !important;position:fixed;top:62px;left:0;right:0;background:var(--navy,#0D1B3E);border-top:1px solid rgba(201,168,76,0.2);flex-direction:column;gap:0;padding:8px 0;z-index:200;}
+  body.menu-open .nav-links{display:flex !important;}
+  body.menu-open{overflow:hidden;}
+  .nav-links li{width:100%;}
+  .nav-links li a{display:block;padding:14px 24px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:15px;}
+  .nav-links li:last-child a{border-bottom:none;}
+  .hero h1{font-size:36px !important;line-height:1.15 !important;}
+  .hero p,.hero-sub{font-size:15px !important;}
+  .hero-actions{flex-direction:column;align-items:stretch;}
+  .hero-actions .book-btn,.hero-actions a{width:100%;text-align:center;}
+  .hero-stats{flex-direction:column;gap:16px !important;}
+  .features-grid,.fcards,.pcards,.feat-inner{grid-template-columns:1fr !important;gap:32px !important;}
+  .feat-inner.rev{direction:ltr;}
+  [style*="grid-template-columns:repeat(3"],[style*="grid-template-columns: repeat(3"],
+  [style*="grid-template-columns:repeat(4"],[style*="grid-template-columns: repeat(4"],
+  [style*="grid-template-columns:1fr 1fr"],[style*="grid-template-columns: 1fr 1fr"],
+  [style*="grid-template-columns:1fr 1.4fr"],[style*="grid-template-columns: 1fr 1.4fr"]{
+    grid-template-columns:1fr !important;gap:24px !important;
+  }
+  [style*="gap:80px"],[style*="gap:64px"],[style*="gap: 80px"],[style*="gap: 64px"]{gap:32px !important;}
+  iframe{height:280px !important;}
+  section,.feat-section{padding:56px 20px !important;}.tier-grid{grid-template-columns:1fr;}
+}
 .reveal{opacity:0;transform:translateY(16px);transition:opacity 0.6s,transform 0.6s;}.reveal.visible{opacity:1;transform:translateY(0);}
+
+.nav-burger{display:none;background:none;border:none;color:white;font-size:24px;line-height:1;cursor:pointer;padding:4px 6px;margin-left:6px;}
+.nav-burger:hover{color:var(--gold);}
 </style>
 </head>
 <body>
@@ -170,7 +201,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <li><a href="index.html#install" class="active lang-en">Install Widget</a><a href="index.html#install" class="active lang-th">&#x0E15;&#x0E34;&#x0E14;&#x0E15;&#x0E31;&#x0E49;&#x0E07;&#x0E27;&#x0E34;&#x0E14;&#x0E40;&#x0E08;&#x0E47;&#x0E15;</a></li>
     <li><a href="book-demo.html" class="nav-cta lang-en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th">&#x0E17;&#x0E14;&#x0E25;&#x0E2D;&#x0E07;&#x0E1F;&#x0E23;&#x0E35;</a></li>
   </ul>
-  <button class="lang-toggle" onclick="document.body.classList.toggle('thai');this.textContent=document.body.classList.contains('thai')?'EN':'&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;'">&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;</button>
+  <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" onclick="document.body.classList.toggle('thai');this.textContent=document.body.classList.contains('thai')?'EN':'&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;'">&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;</button>
 </nav>
 
 <!-- HERO -->
@@ -662,5 +693,6 @@ function copyCode(sourceId, btnId) {
 const obs = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); }), {threshold: 0.08});
 document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
 </script>
+<script>document.querySelectorAll('.nav-burger').forEach(function(b){b.addEventListener('click',function(){document.body.classList.toggle('menu-open');});});document.querySelectorAll('.nav-links a').forEach(function(a){a.addEventListener('click',function(){document.body.classList.remove('menu-open');});});</script>
 </body>
 </html>

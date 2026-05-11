@@ -105,9 +105,40 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
 .footer-bottom a{color:var(--gold);text-decoration:none;}
 
 @media(max-width:1100px){nav{padding:14px 24px;}.nav-links{gap:14px;}.demo-hero{grid-template-columns:1fr;padding:100px 28px 60px;gap:40px;}.alt-inner{grid-template-columns:1fr;}.fs-grid{grid-template-columns:1fr 1fr;}.alt-contact,.features-strip{padding:50px 28px;}footer{grid-template-columns:1fr;gap:28px;padding:40px 24px;}.footer-bottom{padding:14px 24px;flex-direction:column;gap:4px;}}
-@media(max-width:640px){.fs-grid{grid-template-columns:1fr 1fr;}.nav-links{display:none;}.frow2{grid-template-columns:1fr;}.wa-float{bottom:16px;right:16px;}.demo-hero h1{font-size:38px;}}
+@media(max-width:640px){.fs-grid{grid-template-columns:1fr 1fr;
+
+  .nav-burger{display:inline-block;}
+  .lang-toggle{font-size:11px;padding:6px 10px;}
+  nav{padding:14px 18px;}
+  .nav-logo svg{width:140px;height:42px;}
+  .nav-links{display:none !important;position:fixed;top:62px;left:0;right:0;background:var(--navy,#0D1B3E);border-top:1px solid rgba(201,168,76,0.2);flex-direction:column;gap:0;padding:8px 0;z-index:200;}
+  body.menu-open .nav-links{display:flex !important;}
+  body.menu-open{overflow:hidden;}
+  .nav-links li{width:100%;}
+  .nav-links li a{display:block;padding:14px 24px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:15px;}
+  .nav-links li:last-child a{border-bottom:none;}
+  .hero h1{font-size:36px !important;line-height:1.15 !important;}
+  .hero p,.hero-sub{font-size:15px !important;}
+  .hero-actions{flex-direction:column;align-items:stretch;}
+  .hero-actions .book-btn,.hero-actions a{width:100%;text-align:center;}
+  .hero-stats{flex-direction:column;gap:16px !important;}
+  .features-grid,.fcards,.pcards,.feat-inner{grid-template-columns:1fr !important;gap:32px !important;}
+  .feat-inner.rev{direction:ltr;}
+  [style*="grid-template-columns:repeat(3"],[style*="grid-template-columns: repeat(3"],
+  [style*="grid-template-columns:repeat(4"],[style*="grid-template-columns: repeat(4"],
+  [style*="grid-template-columns:1fr 1fr"],[style*="grid-template-columns: 1fr 1fr"],
+  [style*="grid-template-columns:1fr 1.4fr"],[style*="grid-template-columns: 1fr 1.4fr"]{
+    grid-template-columns:1fr !important;gap:24px !important;
+  }
+  [style*="gap:80px"],[style*="gap:64px"],[style*="gap: 80px"],[style*="gap: 64px"]{gap:32px !important;}
+  iframe{height:280px !important;}
+  section,.feat-section{padding:56px 20px !important;}.wa-float{bottom:16px;right:16px;}.demo-hero h1{font-size:38px;}
+}
 .reveal{opacity:0;transform:translateY(20px);transition:opacity 0.7s ease,transform 0.7s ease;}
 .reveal.visible{opacity:1;transform:translateY(0);}
+
+.nav-burger{display:none;background:none;border:none;color:white;font-size:24px;line-height:1;cursor:pointer;padding:4px 6px;margin-left:6px;}
+.nav-burger:hover{color:var(--gold);}
 </style>
 </head>
 <body>
@@ -123,7 +154,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <li><a href="pricing.html" class="lang-en">Pricing</a><a href="pricing.html" class="lang-th">ราคา</a></li>
     <li><a href="why-siamepos.html" class="lang-en">Why Us</a><a href="why-siamepos.html" class="lang-th">ทำไมเรา</a></li>
   </ul>
-  <button class="lang-toggle" onclick="document.body.classList.toggle('thai');this.textContent=document.body.classList.contains('thai')?'EN':'ภาษาไทย'">ภาษาไทย</button>
+  <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" onclick="document.body.classList.toggle('thai');this.textContent=document.body.classList.contains('thai')?'EN':'ภาษาไทย'">ภาษาไทย</button>
 </nav>
 
 <!-- HERO + FORM -->
@@ -283,5 +314,6 @@ async function submitDemo(){
 const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:0.1});
 document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
 </script>
+<script>document.querySelectorAll('.nav-burger').forEach(function(b){b.addEventListener('click',function(){document.body.classList.toggle('menu-open');});});document.querySelectorAll('.nav-links a').forEach(function(a){a.addEventListener('click',function(){document.body.classList.remove('menu-open');});});</script>
 </body>
 </html>

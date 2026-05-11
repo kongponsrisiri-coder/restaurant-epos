@@ -5,6 +5,8 @@ const cors = require('cors');
 const path = require('path');
 
 const pool = require('./db/dbAdapter');
+const offlineQueue = require('./services/offlineQueue');
+const syncService = require('./services/syncService');
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -367,7 +369,9 @@ app.post('/api/orders', async (req, res) => {
     const { table_id, covers } = req.body;
     const result = await pool.query("INSERT INTO orders (table_id, status, covers, opened_at) VALUES ($1, 'open', $2, NOW()) RETURNING id", [table_id, covers || 1]);
     await pool.query("UPDATE tables SET status = 'occupied' WHERE id = $1", [table_id]);
-    res.json({ id: result.rows[0].id, success: true });
+    const localOrderId = result.rows[0].id;
+    await offlineQueue.enqueue('create_order', { localOrderId, table_id, covers: covers || 1 });
+    res.json({ id: localOrderId, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -394,6 +398,7 @@ app.post('/api/orders/:id/items', async (req, res) => {
     const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
     const newItemsRes = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id = $1 AND order_items.is_fired = 1 AND order_items.status = 'cooking'`, [orderId]);
     io.emit('new_order_items', { order: orderRes.rows[0], items: newItemsRes.rows });
+    await offlineQueue.enqueue('add_items', { localOrderId: Number(orderId), items });
     res.json({ success: true, total });
   } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); }
   finally { client.release(); }
@@ -410,6 +415,7 @@ app.put('/api/orders/:id/fire-course/:course', async (req, res) => {
     const orderRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [id]);
     const itemsRes = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id = $1 AND order_items.course = $2 AND order_items.is_fired = 1`, [id, course]);
     io.emit('course_fired', { order: orderRes.rows[0], course: Number(course), items: itemsRes.rows });
+    await offlineQueue.enqueue('fire_course', { localOrderId: Number(id), course: Number(course) });
     res.json({ success: true, changes: result.rowCount });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -433,6 +439,7 @@ app.put('/api/order-items/:id/void', async (req, res) => {
   try {
     const { reason } = req.body;
     await pool.query('UPDATE order_items SET voided=1, void_reason=$1 WHERE id=$2', [reason, req.params.id]);
+    await offlineQueue.enqueue('void_item', { localItemId: Number(req.params.id), reason });
     const itemRes = await pool.query('SELECT order_id FROM order_items WHERE id = $1', [req.params.id]);
     const item = itemRes.rows[0];
     if (item) {
@@ -467,6 +474,7 @@ app.post('/api/orders/:id/pay', async (req, res) => {
     const orderRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [orderId]);
     if (orderRes.rows[0]) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [orderRes.rows[0].table_id]);
     io.emit('order_closed', { order_id: orderId });
+    await offlineQueue.enqueue('pay_order', { localOrderId: Number(orderId), amount, method });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1293,9 +1301,22 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => console.log('Screen disconnected:', socket.id));
 });
 
+// Offline-mode sync status (consumed by Electron's title-bar indicator).
+app.get('/api/sync-status', async (req, res) => {
+  try {
+    const queueSize = await offlineQueue.pendingCount();
+    res.json({
+      mode: offlineQueue.isLocal ? 'local' : 'cloud',
+      status: syncService.getStatus(),
+      queueSize: Number(queueSize),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('✅ EPOS server is running on port ' + PORT);
   console.log('');
+  syncService.start();
 });

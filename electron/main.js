@@ -9,6 +9,42 @@ const DEV_URL = 'http://localhost:5173';
 let mainWindow = null;
 let tray = null;
 let serverProcess = null;
+let statusPollHandle = null;
+let lastStatus = null;
+
+const STATUS_POLL_MS = 5000;
+const STATUS_EMOJI = { cloud: '🟢', local: '🟡', syncing: '🔴' };
+
+async function pollSyncStatus() {
+  if (!mainWindow) return;
+  try {
+    const r = await fetch(`http://127.0.0.1:${process.env.PORT || 3001}/api/sync-status`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    if (!r.ok) throw new Error(r.statusText);
+    const { status, queueSize } = await r.json();
+    if (status === lastStatus) return;
+    lastStatus = status;
+    const emoji = STATUS_EMOJI[status] || '⚪';
+    const suffix = queueSize > 0 ? ` (${queueSize} queued)` : '';
+    mainWindow.setTitle(`${emoji} SiamEPOS${suffix}`);
+  } catch {
+    // Server not up yet, or transient — leave the existing title alone.
+  }
+}
+
+function startStatusPoll() {
+  if (statusPollHandle) return;
+  statusPollHandle = setInterval(pollSyncStatus, STATUS_POLL_MS);
+  pollSyncStatus();
+}
+
+function stopStatusPoll() {
+  if (statusPollHandle) {
+    clearInterval(statusPollHandle);
+    statusPollHandle = null;
+  }
+}
 
 function resolveClientIndex() {
   // Packaged: client/dist is in extraResources under "client-dist"
@@ -47,6 +83,9 @@ function startLocalServer() {
       PORT: process.env.PORT || '3001',
       DB_MODE: 'local',
       SQLITE_PATH: sqlitePath,
+      // CLOUD_API_URL controls the Phase 3 sync target. Pass it through from
+      // the launching shell if set; otherwise the queue accumulates with no push.
+      ...(process.env.CLOUD_API_URL ? { CLOUD_API_URL: process.env.CLOUD_API_URL } : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -157,6 +196,7 @@ app.whenReady().then(() => {
   startLocalServer();
   createWindow();
   createTray();
+  startStatusPoll();
   if (app.isPackaged) setupAutoUpdater();
 
   app.on('activate', () => {
@@ -165,6 +205,7 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', () => {
+  stopStatusPoll();
   stopLocalServer();
 });
 

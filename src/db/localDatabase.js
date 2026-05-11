@@ -291,6 +291,13 @@ function initSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_webhook_fires_event_entity ON webhook_fires(event_type, entity_key);
 
+    -- SEPOS — sync engine state (e.g. cursor for closed-orders pull)
+    CREATE TABLE IF NOT EXISTS sync_state (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Offline action queue (Phase 3 consumer)
     CREATE TABLE IF NOT EXISTS sync_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

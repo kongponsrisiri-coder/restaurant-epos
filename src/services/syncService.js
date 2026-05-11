@@ -271,6 +271,70 @@ async function pullFromCloud() {
   if (itemIds.length > 0) {
     await pullModifiersForMenuItems(itemIds);
   }
+
+  // Closed orders + items + payments — gated by SYNC_SECRET.
+  await pullClosedOrders();
+}
+
+// SEPOS — pull closed orders + items + payments from the cloud.
+// Paginated by closed_at; the last seen timestamp is persisted in
+// sync_state so subsequent ticks only pull the delta.
+async function readSyncState(key) {
+  try {
+    const r = await pool.query('SELECT value FROM sync_state WHERE key = $1', [key]);
+    return r.rows[0]?.value || null;
+  } catch { return null; }
+}
+async function writeSyncState(key, value) {
+  try {
+    // SQLite UPSERT — works in both PG and SQLite since 3.24.
+    await pool.query(
+      `INSERT INTO sync_state (key, value, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`,
+      [key, value]
+    );
+  } catch (err) { console.warn('[sync] writeSyncState failed:', err.message); }
+}
+
+async function pullClosedOrders() {
+  if (!offlineQueue.isLocal || !CLOUD_API_URL) return;
+  if (!process.env.SYNC_SECRET) {
+    // Without a shared secret the server-side feed refuses; skip quietly.
+    return;
+  }
+  let since = (await readSyncState('closed_orders_since')) || '1970-01-01';
+  let pulled = 0;
+  for (let safety = 0; safety < 200; safety++) {  // hard cap to avoid runaway
+    let payload;
+    try {
+      const r = await fetch(`${CLOUD_API_URL}/api/sync/closed-orders?since=${encodeURIComponent(since)}&limit=500`, {
+        headers: { 'x-sync-secret': process.env.SYNC_SECRET },
+        signal: AbortSignal.timeout(PING_TIMEOUT_MS * 2),
+      });
+      if (!r.ok) {
+        console.warn(`[sync] closed-orders pull ${r.status}`);
+        return;
+      }
+      payload = await r.json();
+    } catch (err) {
+      console.warn('[sync] closed-orders pull failed:', err.message);
+      return;
+    }
+
+    const { orders = [], order_items = [], payments = [], max_closed_at, has_more } = payload;
+    if (orders.length === 0) break;
+
+    // Upsert in FK-friendly order: orders first (parents), then items + payments.
+    await upsertRows('orders',      'id', orders);
+    await upsertRows('order_items', 'id', order_items);
+    await upsertRows('payments',    'id', payments);
+    pulled += orders.length;
+
+    since = max_closed_at;
+    await writeSyncState('closed_orders_since', String(since));
+    if (!has_more) break;
+  }
+  if (pulled > 0) console.log(`[sync] closed-orders: ${pulled} pulled`);
 }
 
 async function isMenuEmpty() {
@@ -356,4 +420,4 @@ function stop() {
   }
 }
 
-module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, tick };
+module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, tick };

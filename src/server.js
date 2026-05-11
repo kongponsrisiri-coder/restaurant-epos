@@ -1925,6 +1925,51 @@ app.get('/api/clock/records', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Closed-orders feed for the Electron pull. Gated by SYNC_SECRET header
+// so order data isn't world-readable on a public Railway URL. Returns
+// orders + order_items + payments in one round-trip, paginated by
+// closed_at + id so the client can resume.
+app.get('/api/sync/closed-orders', async (req, res) => {
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected) {
+    return res.status(503).json({ error: 'SYNC_SECRET not set on this server — closed-orders sync is disabled' });
+  }
+  if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+
+  try {
+    const since = req.query.since || '1970-01-01';
+    const limit = Math.min(parseInt(req.query.limit || '500', 10), 1000);
+
+    const ordersRes = await pool.query(`
+      SELECT * FROM orders
+      WHERE status='closed' AND closed_at > $1::timestamp
+      ORDER BY closed_at ASC, id ASC
+      LIMIT $2
+    `, [since, limit]);
+    const orders = ordersRes.rows;
+    if (orders.length === 0) return res.json({ orders: [], order_items: [], payments: [], has_more: false, max_closed_at: since });
+
+    const ids = orders.map(o => o.id);
+    const [itemsRes, paymentsRes] = await Promise.all([
+      pool.query('SELECT * FROM order_items WHERE order_id = ANY($1::int[])', [ids]),
+      pool.query('SELECT * FROM payments    WHERE order_id = ANY($1::int[])', [ids]),
+    ]);
+
+    const max_closed_at = orders[orders.length - 1].closed_at;
+    res.json({
+      orders,
+      order_items: itemsRes.rows,
+      payments:    paymentsRes.rows,
+      max_closed_at,
+      has_more: orders.length === limit,
+    });
+  } catch (err) {
+    console.error('GET /api/sync/closed-orders error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Force a cloud→local pull immediately (operator can hit this if the menu
 // looks stale without waiting for the next interval). No-op in cloud mode.
 app.post('/api/sync/pull', async (req, res) => {

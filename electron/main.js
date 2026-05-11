@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, shell, clipboard } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, shell, clipboard, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -10,6 +10,175 @@ const DEV_URL = 'http://localhost:5173';
 
 // Single source of truth for the app icon — same lotus the PWA uses.
 const APP_ICON_PATH = path.join(PROJECT_ROOT, 'client', 'public', 'icon-512.png');
+
+// Per-install config — restaurant name, cloud URL, restaurant id. Lives at
+// electron/config.json in dev (matches your repo layout) and in userData
+// in packaged builds (the .app bundle is read-only there).
+function getConfigPath() {
+  if (app.isPackaged) {
+    return path.join(app.getPath('userData'), 'config.json');
+  }
+  return path.join(__dirname, 'config.json');
+}
+
+function loadConfig() {
+  try {
+    const p = getConfigPath();
+    if (!fs.existsSync(p)) return null;
+    return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch (err) {
+    console.warn('[config] load failed:', err.message);
+    return null;
+  }
+}
+
+function saveConfig(data) {
+  const p = getConfigPath();
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, JSON.stringify(data, null, 2));
+}
+
+// IPC handler registered once at module load — setup window invokes it.
+ipcMain.handle('save-config', async (event, data) => {
+  if (!data || !data.restaurant_name || !data.cloud_api_url || !data.restaurant_id) {
+    return { success: false, error: 'All three fields are required.' };
+  }
+  try { new URL(data.cloud_api_url); }
+  catch { return { success: false, error: 'Cloud API URL is not a valid URL.' }; }
+  if (!/^[a-z0-9-]+$/i.test(data.restaurant_id)) {
+    return { success: false, error: 'Restaurant ID can only contain letters, numbers and dashes.' };
+  }
+  saveConfig({ ...data, configured_at: new Date().toISOString() });
+  return { success: true };
+});
+
+async function runSetupWizard() {
+  return new Promise((resolve) => {
+    const setupWin = new BrowserWindow({
+      width: 580,
+      height: 640,
+      title: 'SiamEPOS — First-time Setup',
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      backgroundColor: '#0D1B3E',
+      icon: APP_ICON_PATH,
+      autoHideMenuBar: true,
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+    setupWin.setMenuBarVisibility(false);
+
+    const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>SiamEPOS — First-time Setup</title>
+<style>
+  body { margin:0; padding:36px 36px 28px; background:#0D1B3E; color:white;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
+  h1 { margin:0 0 4px; font-size:24px; color:#C9A84C;
+    font-family: Georgia, 'Times New Roman', serif; }
+  .subtitle { color:rgba(201,168,76,0.65); font-size:12px;
+    letter-spacing:0.08em; text-transform:uppercase; margin-bottom:16px; }
+  .intro { font-size:13px; color:rgba(255,255,255,0.7);
+    line-height:1.6; margin-bottom:22px; }
+  label { display:block; font-size:12px; font-weight:700;
+    color:rgba(255,255,255,0.85); margin:14px 0 6px;
+    text-transform:uppercase; letter-spacing:0.05em; }
+  input { width:100%; padding:11px 14px; border-radius:10px;
+    border:1px solid rgba(201,168,76,0.3); background:rgba(255,255,255,0.05);
+    color:white; font-size:15px; box-sizing:border-box;
+    font-family:inherit; }
+  input:focus { outline:none; border-color:#C9A84C;
+    background:rgba(255,255,255,0.08); }
+  .hint { font-size:11px; color:rgba(255,255,255,0.45); margin-top:4px; }
+  #error { display:none; background:rgba(239,68,68,0.15);
+    border:1px solid rgba(239,68,68,0.4); color:#fca5a5;
+    padding:10px 14px; border-radius:8px; font-size:13px; margin-top:18px; }
+  #error.show { display:block; }
+  button { width:100%; margin-top:22px; padding:14px;
+    border-radius:10px; border:none; cursor:pointer;
+    background:#C9A84C; color:#0D1B3E; font-weight:700; font-size:15px;
+    transition:background 0.15s; }
+  button:hover:not(:disabled) { background:#d5b85e; }
+  button:disabled { background:rgba(201,168,76,0.3);
+    color:rgba(13,27,62,0.5); cursor:not-allowed; }
+</style></head>
+<body>
+  <h1>Welcome to SiamEPOS Pro</h1>
+  <div class="subtitle">First-time setup</div>
+  <div class="intro">
+    Tell us about your restaurant. This is saved locally and only needs to be done once per machine.
+  </div>
+
+  <label for="name">Restaurant name</label>
+  <input id="name" type="text" placeholder="e.g. Siam Garden" autofocus />
+
+  <label for="url">Cloud API URL</label>
+  <input id="url" type="url" placeholder="https://your-app.up.railway.app" />
+  <div class="hint">The Railway backend SiamEPOS will sync to.</div>
+
+  <label for="rid">Restaurant ID</label>
+  <input id="rid" type="text" placeholder="siamepos-001" />
+  <div class="hint">Lowercase letters, numbers and dashes. Identifies this restaurant in the cloud.</div>
+
+  <div id="error"></div>
+
+  <button id="save">Save &amp; Launch SiamEPOS</button>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const errEl = $('error');
+  const btn   = $('save');
+
+  function showError(msg) { errEl.textContent = msg; errEl.classList.add('show'); }
+  function clearError() { errEl.classList.remove('show'); }
+
+  btn.addEventListener('click', async () => {
+    clearError();
+    const data = {
+      restaurant_name: $('name').value.trim(),
+      cloud_api_url:   $('url').value.trim(),
+      restaurant_id:   $('rid').value.trim(),
+    };
+    if (!data.restaurant_name || !data.cloud_api_url || !data.restaurant_id) {
+      return showError('Please fill in all three fields.');
+    }
+    if (!/^https?:\\/\\//i.test(data.cloud_api_url)) {
+      return showError('Cloud API URL must start with http:// or https://');
+    }
+    if (!/^[a-z0-9-]+$/i.test(data.restaurant_id)) {
+      return showError('Restaurant ID can only contain letters, numbers and dashes.');
+    }
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    try {
+      const result = await window.siamepos.saveConfig(data);
+      if (result && result.success) {
+        window.close();
+      } else {
+        showError((result && result.error) || 'Failed to save config.');
+        btn.disabled = false;
+        btn.textContent = 'Save & Launch SiamEPOS';
+      }
+    } catch (e) {
+      showError(String(e));
+      btn.disabled = false;
+      btn.textContent = 'Save & Launch SiamEPOS';
+    }
+  });
+<\/script>
+</body></html>`;
+
+    setupWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+
+    setupWin.on('closed', () => {
+      // Re-read config — non-null means setup completed successfully.
+      resolve(loadConfig());
+    });
+  });
+}
 
 let mainWindow = null;
 let setupWindow = null;
@@ -389,7 +558,7 @@ function setupAutoUpdater() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Dock icon (macOS only — Linux/Windows ignore this).
   if (process.platform === 'darwin' && app.dock && fs.existsSync(APP_ICON_PATH)) {
     try { app.dock.setIcon(APP_ICON_PATH); } catch (err) {
@@ -397,15 +566,34 @@ app.whenReady().then(() => {
     }
   }
 
+  // First-time setup — block until the operator fills in the wizard.
+  // If they close it without saving, config stays null → exit cleanly.
+  let config = loadConfig();
+  if (!config) {
+    config = await runSetupWizard();
+    if (!config) {
+      console.log('[setup] cancelled — quitting');
+      app.quit();
+      return;
+    }
+    console.log('[setup] complete:', config.restaurant_name, '→', config.cloud_api_url);
+  }
+
+  // Config supplies CLOUD_API_URL unless the launching shell already set it
+  // (env wins so start-siamepos.sh / ad-hoc testing can override). The
+  // spawned server reads process.env, so writing here is sufficient.
+  if (config.cloud_api_url && !process.env.CLOUD_API_URL) {
+    process.env.CLOUD_API_URL = config.cloud_api_url;
+  }
+  if (config.restaurant_id && !process.env.RESTAURANT_ID) {
+    process.env.RESTAURANT_ID = config.restaurant_id;
+  }
+
   startLocalServer();
   createWindow();
   createTray();
   startStatusPoll();
   if (app.isPackaged) setupAutoUpdater();
-
-  // Network-setup window is no longer auto-shown — operators reach it from
-  // the Admin → Settings page (Network Setup card) or the tray's "Show
-  // network setup…" item. Keeps first launch focused on the login screen.
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

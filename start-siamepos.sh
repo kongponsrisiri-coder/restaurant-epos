@@ -17,4 +17,7 @@ cd /Users/korakot/Desktop/restaurant-epos/electron || {
   exit 1
 }
 
-CLOUD_API_URL=https://restaurant-epos-production.up.railway.app exec npm start
+# CLOUD_API_URL is no longer hard-coded here — electron/config.json (filled
+# via the first-launch setup wizard) is now the source of truth. The env
+# var still wins if exported by the calling shell for ad-hoc overrides.
+exec npm start

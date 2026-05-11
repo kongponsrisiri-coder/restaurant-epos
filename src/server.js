@@ -7,6 +7,7 @@ const path = require('path');
 const pool = require('./db/dbAdapter');
 const offlineQueue = require('./services/offlineQueue');
 const syncService = require('./services/syncService');
+const makeWebhooks = require('./services/makeWebhooks');
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -1945,10 +1946,20 @@ app.get('/api/sync-status', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Manual trigger for the Make.com cron (useful for testing). Returns
+// the per-event results so the operator can see what fired.
+app.post('/api/webhooks/run-now', async (req, res) => {
+  try {
+    const results = await makeWebhooks.runAll();
+    res.json({ success: true, results });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('✅ EPOS server is running on port ' + PORT);
   console.log('');
   syncService.start();
+  makeWebhooks.start();
 });

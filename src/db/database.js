@@ -145,6 +145,17 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
+
+    // SEPOS-033 Phase 3 — Make.com webhook fire audit (dedupe)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS webhook_fires (
+        id SERIAL PRIMARY KEY,
+        event_type VARCHAR(50),
+        entity_key VARCHAR(255),
+        fired_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_webhook_fires_event_entity ON webhook_fires(event_type, entity_key)`);
     await pool.query(`ALTER TABLE order_items ALTER COLUMN menu_item_id DROP NOT NULL`).catch(() => {});
 
     await pool.query(`

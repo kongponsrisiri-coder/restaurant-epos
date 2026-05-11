@@ -282,6 +282,15 @@ function initSchema() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- SEPOS-033 Phase 3 — Make.com webhook fire audit (dedupe)
+    CREATE TABLE IF NOT EXISTS webhook_fires (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_type TEXT,
+      entity_key TEXT,
+      fired_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_webhook_fires_event_entity ON webhook_fires(event_type, entity_key);
+
     -- Offline action queue (Phase 3 consumer)
     CREATE TABLE IF NOT EXISTS sync_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -30,6 +30,7 @@ const PULL_TABLES = [
   { path: '/api/table-walls',            table: 'table_walls',            pk: 'id' },
   { path: '/api/table-combinations',     table: 'table_combinations',     pk: 'id' },
   { path: '/api/dining-duration-tiers',  table: 'dining_duration_tiers',  pk: 'id' },
+  { path: '/api/reservations',           table: 'reservations',           pk: 'id' },
 ];
 
 let initialSyncDone = false;

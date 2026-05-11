@@ -131,6 +131,20 @@ async function initDB() {
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS vat_rate DECIMAL(5,2) DEFAULT 20.0`); // SEPOS-021
     await pool.query(`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS marketing_consent INTEGER DEFAULT 0`); // SEPOS-033 (GDPR)
     await pool.query(`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS unsubscribed_at TIMESTAMP`); // SEPOS-033
+
+    // SEPOS-033 Phase 2 — campaign audit log
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS campaigns (
+        id SERIAL PRIMARY KEY,
+        subject VARCHAR(500),
+        body TEXT,
+        segment VARCHAR(50),
+        recipient_count INTEGER DEFAULT 0,
+        sent_count INTEGER DEFAULT 0,
+        failed_count INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
     await pool.query(`ALTER TABLE order_items ALTER COLUMN menu_item_id DROP NOT NULL`).catch(() => {});
 
     await pool.query(`

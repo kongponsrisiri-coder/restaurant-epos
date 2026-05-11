@@ -7,6 +7,7 @@ import BillsSection     from './admin/BillsSection';
 import ZReportSection   from './admin/ZReportSection';
 import StaffSection     from './admin/StaffSection';
 import CustomersSection   from './admin/CustomersSection';
+import CampaignsSection   from './admin/CampaignsSection';
 import ClockRecordsSection from './admin/ClockRecordsSection';
 import StaffPerformanceSection from './admin/StaffPerformanceSection';
 import VATReportSection from './admin/VATReportSection';
@@ -27,6 +28,7 @@ export default function AdminScreen() {
     { id: 'zreport',      label: '🔐 Z Report' },
     { id: 'staff',        label: '👥 Staff' },
     { id: 'customers',    label: '🧑‍🤝‍🧑 Customers' },
+    { id: 'campaigns',    label: '📧 Campaigns' },
     { id: 'clock',        label: '🕐 Clock Records' },
     { id: 'performance',  label: '📊 Staff Performance' },
     { id: 'vat',          label: '🧾 VAT Report' },
@@ -53,6 +55,7 @@ export default function AdminScreen() {
         {section === 'zreport'      && <ZReportSection />}
         {section === 'staff'        && <StaffSection />}
         {section === 'customers'    && <CustomersSection />}
+        {section === 'campaigns'    && <CampaignsSection />}
         {section === 'clock'        && <ClockRecordsSection />}
         {section === 'performance'  && <StaffPerformanceSection />}
         {section === 'vat'          && <VATReportSection />}

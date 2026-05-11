@@ -1398,6 +1398,177 @@ app.get('/api/network-info', (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
+// SEPOS-033 Phase 2 — email campaigns + unsubscribe
+// ─────────────────────────────────────────────────────────────────────
+const crypto = require('crypto');
+function unsubscribeToken(email) {
+  const secret = process.env.UNSUB_SECRET || 'siamepos-default-unsub-secret-change-me';
+  const e = String(email || '').trim().toLowerCase();
+  const hmac = crypto.createHmac('sha256', secret).update(e).digest('hex').slice(0, 16);
+  return Buffer.from(e).toString('base64url') + '.' + hmac;
+}
+function parseUnsubscribeToken(token) {
+  try {
+    const [b64, hmac] = String(token || '').split('.');
+    if (!b64 || !hmac) return null;
+    const email = Buffer.from(b64, 'base64url').toString('utf8');
+    const secret = process.env.UNSUB_SECRET || 'siamepos-default-unsub-secret-change-me';
+    const expected = crypto.createHmac('sha256', secret).update(email).digest('hex').slice(0, 16);
+    if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(hmac))) return null;
+    return email;
+  } catch { return null; }
+}
+
+function buildCampaignEmail({ subject, body, customer_name, customer_email, restaurantName, restaurantAddress }) {
+  const safeName = (customer_name || 'there').replace(/[<>]/g, '');
+  const personalisedBody = String(body || '').replace(/\{\{\s*name\s*\}\}/gi, safeName);
+  const unsubUrl = `${process.env.PUBLIC_API_URL || 'https://restaurant-epos-production.up.railway.app'}/api/unsubscribe?token=${encodeURIComponent(unsubscribeToken(customer_email))}`;
+  const html = `
+<!doctype html>
+<html><body style="margin:0;padding:0;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#1a1a2e;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f5f5f5;padding:24px 0;">
+    <tr><td align="center">
+      <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+        <tr><td style="background:#0D1B3E;padding:24px 30px;color:#C9A84C;font-family:Georgia,serif;font-size:24px;font-weight:700;">${restaurantName}</td></tr>
+        <tr><td style="padding:30px;line-height:1.6;font-size:15px;color:#1a1a2e;">${personalisedBody}</td></tr>
+        <tr><td style="padding:20px 30px;background:#fafafa;border-top:1px solid #eee;font-size:11px;color:#888;line-height:1.5;">
+          <div style="margin-bottom:6px;"><strong>${restaurantName}</strong>${restaurantAddress ? ' · ' + restaurantAddress : ''}</div>
+          <div>You're receiving this because you booked a table with us and opted in to marketing emails.
+            <a href="${unsubUrl}" style="color:#888;text-decoration:underline;">Unsubscribe</a> at any time.</div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`.trim();
+  return html;
+}
+
+async function fetchCustomersForSegment(segment) {
+  // Reuse the same aggregation as /api/customers but inline so we can
+  // filter at SQL level for consent + unsubscribed.
+  const r = await pool.query(`
+    SELECT LOWER(TRIM(r.customer_email)) AS email_key,
+           MIN(r.customer_email) AS customer_email,
+           MIN(r.customer_name) AS customer_name,
+           COUNT(DISTINCT r.id) AS total_visits,
+           MAX(r.reservation_date) AS last_visit,
+           COALESCE(SUM(o.total), 0) AS total_spend,
+           MAX(CASE WHEN r.unsubscribed_at IS NOT NULL THEN 1 ELSE 0 END) AS unsubscribed,
+           MAX(COALESCE(r.marketing_consent, 0)) AS marketing_consent
+    FROM reservations r
+    LEFT JOIN orders o
+      ON o.table_id = r.table_id
+     AND DATE(o.opened_at) = r.reservation_date
+     AND o.status = 'closed'
+    WHERE r.customer_email IS NOT NULL AND TRIM(r.customer_email) <> ''
+    GROUP BY LOWER(TRIM(r.customer_email))
+  `);
+  const today = new Date();
+  return r.rows
+    .filter(c => Number(c.unsubscribed) === 0 && Number(c.marketing_consent) === 1)
+    .map(c => {
+      const visits = Number(c.total_visits || 0);
+      const spend  = Number(c.total_spend  || 0);
+      const days   = c.last_visit ? Math.floor((today - new Date(c.last_visit)) / 86400000) : null;
+      let status;
+      if (days !== null && days > 60) status = 'Lapsed';
+      else if (visits >= 5 || spend >= 200) status = 'VIP';
+      else if (visits >= 2) status = 'Regular';
+      else status = 'New';
+      return { ...c, status };
+    })
+    .filter(c => segment === 'All' || c.status === segment);
+}
+
+// Public unsubscribe endpoint — clicked from inside an email
+app.get('/api/unsubscribe', async (req, res) => {
+  const email = parseUnsubscribeToken(req.query.token);
+  if (!email) {
+    return res.status(400).type('html').send(
+      '<html><body style="font-family:sans-serif;padding:60px;text-align:center;color:#555;">Invalid unsubscribe link.</body></html>'
+    );
+  }
+  try {
+    await pool.query(
+      `UPDATE reservations SET unsubscribed_at = NOW() WHERE LOWER(TRIM(customer_email)) = $1 AND unsubscribed_at IS NULL`,
+      [email]
+    );
+    res.type('html').send(`
+      <html><body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:60px;text-align:center;color:#1a1a2e;background:#f5f5f5;min-height:100vh;margin:0;">
+        <div style="background:white;max-width:480px;margin:60px auto;padding:40px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+          <h1 style="color:#C9A84C;font-family:Georgia,serif;">You're unsubscribed</h1>
+          <p style="color:#555;line-height:1.6;">We've removed <strong>${email.replace(/[<>"]/g, '')}</strong> from our marketing list. You won't receive any more promotional emails from us.</p>
+          <p style="color:#888;font-size:13px;margin-top:30px;">If this was a mistake, contact the restaurant to opt back in.</p>
+        </div>
+      </body></html>`);
+  } catch (err) {
+    res.status(500).type('html').send('<html><body>Something went wrong. Please try again later.</body></html>');
+  }
+});
+
+// Count recipients for a segment before sending — let the UI show
+// "Send to N people" without leaking the full list to the renderer.
+app.get('/api/campaigns/recipient-count', async (req, res) => {
+  try {
+    const list = await fetchCustomersForSegment(req.query.segment || 'All');
+    res.json({ count: list.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Past campaigns (newest first)
+app.get('/api/campaigns', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT id, subject, segment, recipient_count, sent_count, failed_count, created_at FROM campaigns ORDER BY id DESC LIMIT 50');
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Send a campaign. Reads {subject, body, segment}, resolves recipient list,
+// fires Brevo sends sequentially, records the campaign + counts.
+app.post('/api/campaigns/send', async (req, res) => {
+  try {
+    const { subject, body, segment } = req.body;
+    if (!subject || !subject.trim()) return res.status(400).json({ error: 'Subject is required' });
+    if (!body    || !body.trim())    return res.status(400).json({ error: 'Body is required' });
+    if (!process.env.BREVO_API_KEY)  return res.status(500).json({ error: 'BREVO_API_KEY is not set on the server' });
+    const recipients = await fetchCustomersForSegment(segment || 'All');
+    if (recipients.length === 0)     return res.status(400).json({ error: 'No opted-in customers in this segment' });
+
+    const camp = await pool.query(
+      `INSERT INTO campaigns (subject, body, segment, recipient_count) VALUES ($1,$2,$3,$4) RETURNING id`,
+      [subject.trim(), body, segment || 'All', recipients.length]
+    );
+    const campaignId = camp.rows[0].id;
+
+    const restaurantName    = process.env.RESTAURANT_NAME    || 'SiamEPOS Restaurant';
+    const restaurantAddress = process.env.RESTAURANT_ADDRESS || '';
+    const { sendBrevoEmail } = require('./services/emailService');
+
+    let sent = 0, failed = 0;
+    for (const c of recipients) {
+      const html = buildCampaignEmail({
+        subject, body,
+        customer_name:  c.customer_name,
+        customer_email: c.customer_email,
+        restaurantName, restaurantAddress,
+      });
+      try {
+        await sendBrevoEmail(c.customer_email, subject, html);
+        sent++;
+      } catch (err) {
+        console.error('[campaign] send failed for', c.customer_email, err.message);
+        failed++;
+      }
+    }
+    await pool.query('UPDATE campaigns SET sent_count=$1, failed_count=$2 WHERE id=$3', [sent, failed, campaignId]);
+    res.json({ success: true, campaign_id: campaignId, recipient_count: recipients.length, sent, failed });
+  } catch (err) {
+    console.error('POST /api/campaigns/send error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────
 // SEPOS-033 — customer CRM
 // Aggregates the reservations table by email (case-insensitive) to give
 // the owner a customer list with visit counts, first/last visit, status

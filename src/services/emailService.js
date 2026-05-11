@@ -175,4 +175,4 @@ async function sendReminderEmail(reservation) {
 
 async function sendBookingSms() {}
 
-module.exports = { sendBookingConfirmation, sendReminderEmail, sendBookingSms };
+module.exports = { sendBookingConfirmation, sendReminderEmail, sendBookingSms, sendBrevoEmail };

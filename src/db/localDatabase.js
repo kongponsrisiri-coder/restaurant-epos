@@ -270,6 +270,18 @@ function initSchema() {
     CREATE UNIQUE INDEX IF NOT EXISTS dining_tiers_unique
       ON dining_duration_tiers(restaurant_id, covers_min);
 
+    -- SEPOS-033 Phase 2 — campaign audit log
+    CREATE TABLE IF NOT EXISTS campaigns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      subject TEXT,
+      body TEXT,
+      segment TEXT,
+      recipient_count INTEGER DEFAULT 0,
+      sent_count INTEGER DEFAULT 0,
+      failed_count INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Offline action queue (Phase 3 consumer)
     CREATE TABLE IF NOT EXISTS sync_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

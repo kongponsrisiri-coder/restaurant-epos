@@ -158,3 +158,8 @@ export const getWastageReport = (from, to) =>
 
 // SEPOS-033 — customer CRM (Phase 1)
 export const getCustomers = () => get('/api/customers');
+
+// SEPOS-033 Phase 2 — email campaigns
+export const getCampaigns      = ()                    => get('/api/campaigns');
+export const getRecipientCount = (segment)             => get(`/api/campaigns/recipient-count?segment=${encodeURIComponent(segment)}`);
+export const sendCampaign      = (subject, body, segment) => post('/api/campaigns/send', { subject, body, segment });

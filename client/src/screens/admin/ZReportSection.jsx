@@ -132,6 +132,27 @@ export default function ZReportSection() {
               <div style={{ flex: 1, background: '#f0fdf4', borderRadius: 10, padding: 12, border: '1px solid #bbf7d0' }}><div style={{ fontSize: 11, color: '#888' }}>Discounts Given</div><div style={{ fontSize: 18, fontWeight: 800, color: '#22c55e' }}>£{(reportData.total_discounts || 0).toFixed(2)}</div></div>
               <div style={{ flex: 1, background: '#fff0f3', borderRadius: 10, padding: 12, border: '1px solid #fecdd3' }}><div style={{ fontSize: 11, color: '#888' }}>Void Items</div><div style={{ fontSize: 18, fontWeight: 800, color: '#e94560' }}>{reportData.void_count || 0} items</div></div>
             </div>
+
+            {/* SEPOS-023 — voids by type */}
+            {Array.isArray(reportData.voids_by_type) && reportData.voids_by_type.length > 0 && (
+              <div style={{ marginTop: 12, background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 10, padding: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#9a3412', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Void breakdown
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {reportData.voids_by_type.map(v => (
+                    <div key={v.void_type} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
+                      <span style={{ color: '#555' }}>
+                        {v.void_type === 'Comp' ? '🎁 ' : ''}{v.void_type}
+                      </span>
+                      <span style={{ color: '#9a3412', fontWeight: 700 }}>
+                        {v.count} · £{Number(v.value || 0).toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={() => setStep(3)} style={{ flex: 2, padding: '16px', borderRadius: 12, border: 'none', background: '#1a1a2e', color: 'white', fontSize: 16, fontWeight: 800, cursor: 'pointer' }}>Next — Till Reconciliation →</button>

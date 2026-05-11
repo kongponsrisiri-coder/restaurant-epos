@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount } from '../api';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff } from '../api';
 import BillScreen from './BillScreen';
 
 const COURSE_LABELS = { 1: 'Starters', 2: 'Mains', 3: 'Desserts', 4: 'Extra' };
@@ -168,16 +168,41 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   // window.prompt() is disabled in Electron, so we route this through a
   // React modal (voidPopup) instead of native prompts.
   const handleVoidItem = (item) => {
-    setVoidPopup({ item, qty: item.quantity, reason: 'Customer changed mind' });
+    setVoidPopup({ item, qty: item.quantity, reason: '', type: null, managerPin: '', authError: '' });
   };
+
+  // SEPOS-023 — void types. "Comp" needs a manager PIN if the current
+  // staff isn't admin/manager/supervisor.
+  const VOID_TYPES = ['Wastage', 'Wrong Order', 'Customer Changed Mind', 'Comp'];
+  const MANAGER_ROLES = ['admin', 'manager', 'supervisor'];
 
   const confirmVoid = async () => {
     if (!voidPopup) return;
-    const { item, qty, reason } = voidPopup;
-    if (!reason || !reason.trim()) return;
+    const { item, qty, reason, type, managerPin } = voidPopup;
+    if (!type) {
+      setVoidPopup({ ...voidPopup, authError: 'Pick a void type.' });
+      return;
+    }
+    if (type === 'Comp' && !MANAGER_ROLES.includes(staff?.role)) {
+      if (!managerPin) {
+        setVoidPopup({ ...voidPopup, authError: 'Manager PIN required for Comp.' });
+        return;
+      }
+      try {
+        const mgr = await loginStaff(managerPin);
+        if (!mgr?.id || !MANAGER_ROLES.includes(mgr.role)) {
+          setVoidPopup({ ...voidPopup, authError: 'Not a manager PIN.' });
+          return;
+        }
+      } catch {
+        setVoidPopup({ ...voidPopup, authError: 'PIN check failed.' });
+        return;
+      }
+    }
     const n = Math.max(1, Math.min(item.quantity, Number(qty) || item.quantity));
+    const finalReason = (reason && reason.trim()) || type;
     setVoidPopup(null);
-    await voidItem(item.id, reason.trim(), n);
+    await voidItem(item.id, finalReason, n, type);
     await fetchOrder();
   };
 
@@ -1238,6 +1263,50 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 {voidPopup.item.quantity}× {voidPopup.item.name}
               </div>
 
+              {/* Void type — required (SEPOS-023) */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>
+                  Void type
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {VOID_TYPES.map(t => {
+                    const sel = voidPopup.type === t;
+                    const isComp = t === 'Comp';
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => setVoidPopup({ ...voidPopup, type: t, authError: '' })}
+                        style={{
+                          padding: '10px 12px', borderRadius: 8,
+                          border: '2px solid ' + (sel ? (isComp ? '#8b5cf6' : '#1a1a2e') : '#e0e0e0'),
+                          background: sel ? (isComp ? '#ede9fe' : '#1a1a2e') : 'white',
+                          color: sel ? (isComp ? '#5b21b6' : 'white') : '#555',
+                          cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                        }}>
+                        {isComp ? '🎁 ' : ''}{t}
+                      </button>
+                    );
+                  })}
+                </div>
+                {voidPopup.type === 'Comp' && !MANAGER_ROLES.includes(staff?.role) && (
+                  <div style={{ marginTop: 10 }}>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: '#5b21b6', display: 'block', marginBottom: 4 }}>
+                      Manager PIN (Comp requires approval)
+                    </label>
+                    <input
+                      type="password"
+                      value={voidPopup.managerPin || ''}
+                      onChange={(e) => setVoidPopup({ ...voidPopup, managerPin: e.target.value, authError: '' })}
+                      placeholder="••••"
+                      style={{
+                        width: '100%', padding: '10px 12px', borderRadius: 8,
+                        border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
               {voidPopup.item.quantity > 1 && (
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>
@@ -1272,16 +1341,15 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 </div>
               )}
 
-              <div style={{ marginBottom: 18 }}>
+              <div style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>
-                  Reason
+                  Additional notes <span style={{ fontWeight: 400, color: '#aaa' }}>(optional)</span>
                 </label>
                 <input
                   type="text"
                   value={voidPopup.reason}
                   onChange={(e) => setVoidPopup({ ...voidPopup, reason: e.target.value })}
-                  placeholder="Customer changed mind"
-                  autoFocus
+                  placeholder="e.g. dropped on floor, customer allergic..."
                   style={{
                     width: '100%', padding: '10px 12px', borderRadius: 8,
                     border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box'
@@ -1289,17 +1357,25 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 />
               </div>
 
+              {voidPopup.authError && (
+                <div style={{
+                  background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
+                  color: '#ef4444', padding: '8px 12px', borderRadius: 8,
+                  fontSize: 13, marginBottom: 12
+                }}>{voidPopup.authError}</div>
+              )}
+
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={() => setVoidPopup(null)} style={{
                   flex: 1, padding: '12px', borderRadius: 10, border: 'none',
                   background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15
                 }}>Cancel</button>
                 <button onClick={confirmVoid}
-                  disabled={!voidPopup.reason || !voidPopup.reason.trim()}
+                  disabled={!voidPopup.type}
                   style={{
                     flex: 1, padding: '12px', borderRadius: 10, border: 'none',
-                    background: voidPopup.reason && voidPopup.reason.trim() ? '#ef4444' : '#fca5a5',
-                    color: 'white', cursor: voidPopup.reason && voidPopup.reason.trim() ? 'pointer' : 'not-allowed',
+                    background: voidPopup.type ? '#ef4444' : '#fca5a5',
+                    color: 'white', cursor: voidPopup.type ? 'pointer' : 'not-allowed',
                     fontWeight: 700, fontSize: 15
                   }}>Void</button>
               </div>

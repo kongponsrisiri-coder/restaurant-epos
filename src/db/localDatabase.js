@@ -116,6 +116,7 @@ function initSchema() {
       served_at TIMESTAMP,
       voided INTEGER DEFAULT 0,
       void_reason TEXT,
+      void_type TEXT,
       discount_type TEXT,
       discount_value REAL,
       resend_reason TEXT
@@ -284,6 +285,8 @@ function addColumnIfMissing(table, column, definition) {
 function runMigrations() {
   // SEPOS-024: resend reason on order_items
   addColumnIfMissing('order_items', 'resend_reason', 'TEXT');
+  // SEPOS-023: void type on order_items
+  addColumnIfMissing('order_items', 'void_type', 'TEXT');
 }
 
 function seedDefaults() {

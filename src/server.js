@@ -446,7 +446,7 @@ app.put('/api/order-items/:id/status', async (req, res) => {
 
 app.put('/api/order-items/:id/void', async (req, res) => {
   try {
-    const { reason, quantity: voidQty } = req.body;
+    const { reason, quantity: voidQty, void_type } = req.body;
     // Look up the original item up front — partial void needs its quantity.
     const origRes = await pool.query('SELECT * FROM order_items WHERE id = $1', [req.params.id]);
     const orig = origRes.rows[0];
@@ -463,16 +463,16 @@ app.put('/api/order-items/:id/void', async (req, res) => {
         `INSERT INTO order_items
            (order_id, menu_item_id, item_name, quantity, unit_price, notes, course, item_note,
             status, is_fired, fired_at, cooking_started_at, served_at, voided, void_reason,
-            discount_type, discount_value)
+            void_type, discount_type, discount_value)
          SELECT order_id, menu_item_id, item_name, $1, unit_price, notes, course, item_note,
             status, is_fired, fired_at, cooking_started_at, served_at, 1, $2,
-            discount_type, discount_value
-         FROM order_items WHERE id=$3`,
-        [qtyToVoid, reason, req.params.id]
+            $3, discount_type, discount_value
+         FROM order_items WHERE id=$4`,
+        [qtyToVoid, reason, void_type || null, req.params.id]
       );
     } else {
       // Full void — existing behaviour.
-      await pool.query('UPDATE order_items SET voided=1, void_reason=$1 WHERE id=$2', [reason, req.params.id]);
+      await pool.query('UPDATE order_items SET voided=1, void_reason=$1, void_type=$2 WHERE id=$3', [reason, void_type || null, req.params.id]);
     }
     await offlineQueue.enqueue('void_item', { localItemId: Number(req.params.id), reason, quantity: qtyToVoid });
     const itemRes = await pool.query('SELECT order_id FROM order_items WHERE id = $1', [req.params.id]);
@@ -727,20 +727,23 @@ app.put('/api/orders/:id/merge', async (req, res) => {
 app.get('/api/z-report/preview', async (req, res) => {
   try {
     const { from, to } = req.query;
-    const [ordersRes, openRes, voidsRes] = await Promise.all([
+    const [ordersRes, openRes, voidsRes, voidsByTypeRes] = await Promise.all([
       pool.query(`SELECT orders.*, tables.table_number, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp ORDER BY orders.closed_at DESC`, [from, to]),
       pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='open'`),
-      pool.query(`SELECT COUNT(*) as void_count, SUM(order_items.unit_price * order_items.quantity) as void_value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp`, [from, to])
+      pool.query(`SELECT COUNT(*) as void_count, SUM(order_items.unit_price * order_items.quantity) as void_value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp`, [from, to]),
+      // SEPOS-023: breakdown by void_type
+      pool.query(`SELECT COALESCE(order_items.void_type, 'Uncategorised') AS void_type, COUNT(*) AS count, COALESCE(SUM(order_items.unit_price * order_items.quantity), 0) AS value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp GROUP BY order_items.void_type ORDER BY value DESC`, [from, to]),
     ]);
     const orders = ordersRes.rows;
     const voids = voidsRes.rows[0];
+    const voidsByType = voidsByTypeRes.rows;
     const totalSales = orders.reduce((s, o) => s + (o.total || 0), 0);
     const totalCovers = orders.reduce((s, o) => s + (o.covers || 0), 0);
     const totalCash = orders.filter(o => o.method === 'Cash').reduce((s, o) => s + (o.paid_amount || 0), 0);
     const totalCard = orders.filter(o => o.method === 'Card').reduce((s, o) => s + (o.paid_amount || 0), 0);
     const totalOther = orders.filter(o => o.method !== 'Cash' && o.method !== 'Card').reduce((s, o) => s + (o.paid_amount || 0), 0);
     const totalDiscounts = orders.reduce((s, o) => { if (!o.discount_value) return s; return s + (o.discount_type === 'percent' ? (o.total || 0) * (o.discount_value / 100) : o.discount_value); }, 0);
-    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_covers: totalCovers, total_orders: orders.length, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: orders.length > 0 ? totalSales / orders.length : 0 });
+    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_covers: totalCovers, total_orders: orders.length, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: orders.length > 0 ? totalSales / orders.length : 0 });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

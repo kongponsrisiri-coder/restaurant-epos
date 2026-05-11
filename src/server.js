@@ -393,15 +393,17 @@ app.post('/api/orders/:id/items', async (req, res) => {
     await client.query('BEGIN');
     const { items } = req.body;
     const orderId = req.params.id;
+    const firedBarIds = []; // SEPOS-032: bar items deplete stock on add
     for (const item of items) {
       const isBar = item.is_bar ? 1 : 0;
       const firedAt = isBar ? new Date().toISOString() : null;
       const nameRes = await client.query('SELECT name FROM menu_items WHERE id = $1', [item.menu_item_id]);
       const itemName = nameRes.rows[0]?.name || item.name || 'Unknown item';
-      await client.query(
-        `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at, item_name) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      const ins = await client.query(
+        `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at, item_name) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
         [orderId, item.menu_item_id, item.quantity, item.unit_price, item.notes || '', item.course || 1, item.item_note || '', isBar, firedAt, firedAt, itemName]
       );
+      if (isBar) firedBarIds.push(ins.rows[0].id);
     }
     const totalRes = await client.query('SELECT SUM(quantity * unit_price) as total FROM order_items WHERE order_id = $1 AND voided = 0', [orderId]);
     const total = totalRes.rows[0].total || 0;
@@ -411,6 +413,8 @@ app.post('/api/orders/:id/items', async (req, res) => {
     const newItemsRes = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id = $1 AND order_items.is_fired = 1 AND order_items.status = 'cooking'`, [orderId]);
     io.emit('new_order_items', { order: orderRes.rows[0], items: newItemsRes.rows });
     await offlineQueue.enqueue('add_items', { localOrderId: Number(orderId), items });
+    // SEPOS-032: bar items go is_fired=1 immediately → deplete stock now
+    if (firedBarIds.length > 0) await depleteStockForItems(firedBarIds, 'sale');
     res.json({ success: true, total });
   } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); }
   finally { client.release(); }
@@ -420,10 +424,18 @@ app.put('/api/orders/:id/fire-course/:course', async (req, res) => {
   try {
     const { id, course } = req.params;
     const now = new Date().toISOString();
+    // SEPOS-032: capture ids about-to-be-fired before the UPDATE so we
+    // can deplete stock for exactly that set.
+    const aboutToFireRes = await pool.query(
+      `SELECT id FROM order_items WHERE order_id=$1 AND course=$2 AND is_fired=0 AND voided=0 AND menu_item_id IN (SELECT menu_items.id FROM menu_items LEFT JOIN categories ON menu_items.category_id = categories.id WHERE categories.is_bar = 0 OR categories.is_bar IS NULL)`,
+      [id, course]
+    );
+    const firedIds = aboutToFireRes.rows.map(r => r.id);
     const result = await pool.query(
       `UPDATE order_items SET is_fired=1, fired_at=$1, status='cooking', cooking_started_at=$2 WHERE order_id=$3 AND course=$4 AND is_fired=0 AND voided=0 AND menu_item_id IN (SELECT menu_items.id FROM menu_items LEFT JOIN categories ON menu_items.category_id = categories.id WHERE categories.is_bar = 0 OR categories.is_bar IS NULL)`,
       [now, now, id, course]
     );
+    await depleteStockForItems(firedIds, 'sale');
     const orderRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [id]);
     const itemsRes = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id = $1 AND order_items.course = $2 AND order_items.is_fired = 1`, [id, course]);
     io.emit('course_fired', { order: orderRes.rows[0], course: Number(course), items: itemsRes.rows });
@@ -816,6 +828,8 @@ app.post('/api/orders/:id/resend', async (req, res) => {
       `UPDATE order_items SET status='cooking', fired_at=$1, cooking_started_at=$1, resend_reason=$2 WHERE id = ANY($3::int[])`,
       [now, reason || null, item_ids]
     );
+    // SEPOS-032: resend = kitchen makes the dish again → consume ingredients again
+    await depleteStockForItems(item_ids, 'sale');
     const orderRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [req.params.id]);
     const itemsRes = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.id = ANY($1::int[])`, [item_ids]);
     io.emit('course_fired', { order: orderRes.rows[0], course: 0, items: itemsRes.rows });
@@ -1382,6 +1396,52 @@ app.get('/api/network-info', (req, res) => {
   }
   res.json({ ip: '127.0.0.1', port, url: `http://127.0.0.1:${port}` });
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// SEPOS-032 — stock depletion on sale
+// Walks each given order_item → its recipe → recipe_lines, and inserts
+// a negative-quantity stock_movement per ingredient plus decrements
+// ingredients.current_stock. Caller-driven; we don't dedupe here, so
+// callers must only invoke at genuine "ingredients consumed" moments
+// (item added as bar, kitchen course fired, item resent).
+// Items without a recipe are silently skipped (£0 cost is the same
+// behaviour as the wastage report).
+// ─────────────────────────────────────────────────────────────────────
+async function depleteStockForItems(itemIds, source = 'sale') {
+  if (!Array.isArray(itemIds) || itemIds.length === 0) return;
+  try {
+    const rows = await pool.query(`
+      SELECT oi.id AS order_item_id, oi.quantity AS dish_qty,
+             rl.ingredient_id, rl.quantity_used,
+             COALESCE(r.serves, 1) AS serves,
+             COALESCE(i.cost_per_unit, 0) AS cost_per_unit
+      FROM order_items oi
+      JOIN recipes r       ON r.menu_item_id = oi.menu_item_id
+      JOIN recipe_lines rl ON rl.recipe_id   = r.id
+      JOIN ingredients i   ON i.id           = rl.ingredient_id
+      WHERE oi.id = ANY($1::int[])
+    `, [itemIds]);
+
+    for (const row of rows.rows) {
+      const serves     = Math.max(1, Number(row.serves || 1));
+      const perPortion = Number(row.quantity_used || 0) / serves;
+      const totalQty   = perPortion * Number(row.dish_qty || 0);
+      if (totalQty <= 0) continue;
+      await pool.query(
+        `INSERT INTO stock_movements (ingredient_id, movement_type, quantity, cost_at_time, reference, note)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [row.ingredient_id, source, -totalQty, Number(row.cost_per_unit || 0),
+         `order_item:${row.order_item_id}`, '']
+      );
+      await pool.query(
+        `UPDATE ingredients SET current_stock = GREATEST(0, current_stock - $1) WHERE id = $2`,
+        [totalQty, row.ingredient_id]
+      );
+    }
+  } catch (err) {
+    console.error('[stock] depleteStockForItems failed:', err.message);
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────
 // SEPOS-031 — wastage cost report

@@ -158,6 +158,8 @@ export const getWastageReport = (from, to) =>
 
 // SEPOS-033 — customer CRM (Phase 1)
 export const getCustomers = () => get('/api/customers');
+export const setCustomerConsent = (email, consent) =>
+  put('/api/customers/marketing-consent', { email, consent });
 
 // SEPOS-033 Phase 2 — email campaigns
 export const getCampaigns      = ()                    => get('/api/campaigns');

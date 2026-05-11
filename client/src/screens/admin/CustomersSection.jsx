@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getCustomers } from '../../api';
+import { getCustomers, setCustomerConsent } from '../../api';
 
 // SEPOS-033 Phase 1 — Customer CRM.
 // Aggregates reservations by email, computes status from visits + spend.
@@ -180,11 +180,26 @@ export default function CustomersSection() {
                     <td style={{ padding:'10px 6px', textAlign:'right', fontWeight:700 }}>£{Number(c.total_spend || 0).toFixed(2)}</td>
                     <td style={{ padding:'10px 6px' }}>
                       {c.unsubscribed ? (
-                        <span style={{ background:'#fee2e2', color:'#991b1b', padding:'2px 8px', borderRadius:6, fontSize:10, fontWeight:700 }}>OPTED OUT</span>
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm(`Re-opt-in ${c.customer_email}? They previously unsubscribed.`)) return;
+                            await setCustomerConsent(c.customer_email, true); load();
+                          }}
+                          style={{ background:'#fee2e2', color:'#991b1b', padding:'3px 9px', borderRadius:6, fontSize:10, fontWeight:700, border:'none', cursor:'pointer' }}
+                          title="Click to re-opt-in (requires operator to have fresh consent)"
+                        >OPTED OUT</button>
                       ) : c.marketing_consent ? (
-                        <span style={{ background:'#dcfce7', color:'#166534', padding:'2px 8px', borderRadius:6, fontSize:10, fontWeight:700 }}>OPTED IN</span>
+                        <button
+                          onClick={async () => { await setCustomerConsent(c.customer_email, false); load(); }}
+                          style={{ background:'#dcfce7', color:'#166534', padding:'3px 9px', borderRadius:6, fontSize:10, fontWeight:700, border:'none', cursor:'pointer' }}
+                          title="Click to opt out"
+                        >OPTED IN</button>
                       ) : (
-                        <span style={{ color:'#aaa', fontSize:11 }}>—</span>
+                        <button
+                          onClick={async () => { await setCustomerConsent(c.customer_email, true); load(); }}
+                          style={{ background:'#0D1B3E', color:'#C9A84C', padding:'3px 9px', borderRadius:6, fontSize:10, fontWeight:700, border:'none', cursor:'pointer' }}
+                          title="Only opt in when you have legitimate consent (verbal, signed, etc.)"
+                        >+ Opt in</button>
                       )}
                     </td>
                   </tr>
@@ -196,6 +211,9 @@ export default function CustomersSection() {
         <div style={{ fontSize:11, color:'#aaa', marginTop:14, lineHeight:1.5 }}>
           Status: <strong>VIP</strong> = 5+ visits or £200+ lifetime · <strong>Regular</strong> = 2-4 visits · <strong>New</strong> = 1 visit · <strong>Lapsed</strong> = no visit in 60+ days.
           Spend estimate joins orders on table_id + reservation date — accuracy will improve once orders are explicitly linked to reservations.
+          <br/><br/>
+          <strong>Marketing consent:</strong> only <span style={{ background:'#dcfce7', color:'#166534', padding:'1px 6px', borderRadius:4, fontWeight:700 }}>OPTED IN</span> customers receive campaigns.
+          New widget bookings can tick consent themselves; for off-widget bookings (phone, walk-in) click <span style={{ background:'#0D1B3E', color:'#C9A84C', padding:'1px 6px', borderRadius:4, fontWeight:700 }}>+ Opt in</span> only when you have legitimate consent.
         </div>
       </div>
     </div>

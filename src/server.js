@@ -1611,6 +1611,35 @@ async function sendTakeawayConfirmation({ order_id, customer_name, customer_emai
   await sendBrevoEmail(customer_email, `Takeaway order ${orderNumber} confirmed`, html);
 }
 
+// Manual opt-in / opt-out toggle for a customer email. Used by the
+// Customers tab when an operator gets legitimate consent off-widget
+// (verbal at the table, phone booking, etc.) and wants the customer
+// to start showing up in campaign segments.
+app.put('/api/customers/marketing-consent', async (req, res) => {
+  try {
+    const { email, consent } = req.body;
+    if (!email || !email.trim()) return res.status(400).json({ error: 'email required' });
+    const optIn = !!consent;
+    const emailKey = String(email).trim().toLowerCase();
+    if (optIn) {
+      // Flip every reservation row with this email to consented + clear any
+      // prior unsubscribe so they're eligible immediately.
+      await pool.query(
+        `UPDATE reservations SET marketing_consent = 1, unsubscribed_at = NULL
+         WHERE LOWER(TRIM(customer_email)) = $1`,
+        [emailKey]
+      );
+    } else {
+      await pool.query(
+        `UPDATE reservations SET marketing_consent = 0
+         WHERE LOWER(TRIM(customer_email)) = $1`,
+        [emailKey]
+      );
+    }
+    res.json({ success: true, email: emailKey, consent: optIn });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─────────────────────────────────────────────────────────────────────
 // SEPOS-033 Phase 2 — email campaigns + unsubscribe
 // ─────────────────────────────────────────────────────────────────────

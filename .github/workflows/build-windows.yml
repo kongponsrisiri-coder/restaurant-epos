@@ -1,0 +1,54 @@
+name: Build Windows Installer
+
+on:
+  workflow_dispatch:  # manual trigger from the Actions tab
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20         # Electron 33 bundles Node 20
+          cache: npm
+
+      - name: Install root dependencies
+        # Brings in pg / express / socket.io / better-sqlite3 (Windows
+        # prebuild auto-downloaded by prebuild-install).
+        run: npm install
+
+      - name: Build React frontend
+        run: |
+          cd client
+          npm install
+          npm run build
+
+      - name: Install Electron + rebuild native modules
+        # rebuild:native re-fetches better-sqlite3 for Electron's Node
+        # ABI (v130). Without this step the bundled .node file would be
+        # built for Node 20's ABI and refuse to load inside Electron.
+        run: |
+          cd electron
+          npm install
+          npm run rebuild:native
+
+      - name: Build Windows installer
+        run: |
+          cd electron
+          npm run build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: SiamEPOS-Windows
+          path: electron/dist-electron/*.exe
+          if-no-files-found: error
+          retention-days: 14

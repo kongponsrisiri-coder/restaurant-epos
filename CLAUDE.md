@@ -17,7 +17,10 @@ Owner: Korakot Kongponsrisiri | info@siamepos.co.uk
 
 ## File Structure
 - Backend: src/server.js, src/db/database.js (PG), src/db/localDatabase.js (SQLite), src/db/dbAdapter.js
-- Sync: src/services/offlineQueue.js, src/services/syncService.js
+- Sync engine: src/services/offlineQueue.js, src/services/syncService.js
+- Email: src/services/emailService.js (Brevo — exports sendBrevoEmail, sendBookingConfirmation)
+- Make.com webhooks: src/services/makeWebhooks.js (hourly cron: lapsed/booking/birthday)
+- Booking widget (public): public/widget.js
 - Frontend: client/src/
 - Screens: client/src/screens/
 - Admin sections: client/src/screens/admin/
@@ -29,8 +32,17 @@ Owner: Korakot Kongponsrisiri | info@siamepos.co.uk
 - `git push` → Railway auto-deploys backend, Netlify auto-deploys frontend
 - Desktop installers: `git tag vX.Y.Z && git push origin vX.Y.Z` triggers
   `.github/workflows/release.yml` (builds Mac DMG on macos-latest + Windows
-  EXE on windows-latest, attaches both to a GitHub Release)
+  EXE on windows-latest, attaches both + `latest-mac.yml` + `latest.yml` +
+  `.blockmap` files to a GitHub Release).
+- **Desktop auto-update is live** via electron-updater hooked to the
+  public GitHub repo. Once an install is on a build with the publish
+  config, every subsequent tag push downloads silently in the background
+  and applies on next restart. **First install on a machine still needs
+  a manual reinstall** to get onto a build with the publish config.
 - Manual local Mac build: `cd electron && npm run rebuild:native && npm run build:mac`
+- PWA service worker (client/public/sw.js) — bump `CACHE_NAME` (vN) when
+  a release contains UI changes you need iPads to pick up immediately;
+  otherwise they hold the previous cache for days.
 - Always commit with a clear message referencing the ticket number
 
 ## Critical Coding Rules
@@ -54,6 +66,19 @@ Owner: Korakot Kongponsrisiri | info@siamepos.co.uk
 - service_charge_enabled: stored as '1'/'0' string
 - VAT rate per menu item: menu_items.vat_rate (default 20, prices VAT-inclusive)
 
+## Railway env vars (production)
+- `DATABASE_URL` — Postgres connection (auto-set by Railway)
+- `BREVO_API_KEY` — booking confirmations + campaign sends
+- `RESTAURANT_NAME`, `RESTAURANT_EMAIL`, `RESTAURANT_ADDRESS` — used in
+  email headers, footers, webhook payloads
+- `ANTHROPIC_API_KEY` — menu-photo extraction (InvoiceScanner)
+- `UNSUB_SECRET` — HMAC secret for unsubscribe tokens (has insecure default)
+- `PUBLIC_API_URL` — used to build absolute unsubscribe links in emails
+- `MAKE_BOOKING_WEBHOOK` — fires on every new booking
+- `MAKE_LAPSED_WEBHOOK` — fires when a customer's last visit > 60 days ago
+- `MAKE_BOOKING_COMPLETED_WEBHOOK` — fires 24h after a reservation date
+- `MAKE_BIRTHDAY_WEBHOOK` — wired but no-op until DOB capture lands
+
 ## DB Mode (Electron only)
 - `DB_MODE=local` + `SQLITE_PATH` env var → src/db/dbAdapter.js routes to SQLite
 - `DB_MODE=cloud` (default) → PostgreSQL (Railway)
@@ -75,6 +100,8 @@ client/src/screens/admin/StaffSection.jsx
 client/src/screens/admin/ClockRecordsSection.jsx           # SEPOS-022
 client/src/screens/admin/StaffPerformanceSection.jsx       # SEPOS-030
 client/src/screens/admin/VATReportSection.jsx              # SEPOS-021
+client/src/screens/admin/CustomersSection.jsx              # SEPOS-033 P1
+client/src/screens/admin/CampaignsSection.jsx              # SEPOS-033 P2
 client/src/screens/admin/AllergenSection.jsx
 client/src/screens/admin/ReservationSettingsSection.jsx
 client/src/screens/admin/DiningDurationSettings.jsx
@@ -99,11 +126,24 @@ client/src/screens/admin/inventory/CostSalesTab.jsx
 - SEPOS-030 — Staff performance report (orders, turn time, dessert ratio)
 - SEPOS-031 — Wastage cost reporting (voided × recipe.cost_per_portion)
 - SEPOS-032 — Auto stock depletion on sale + resend
-- SEPOS-PRO-001 (phases 1-4) — Electron shell, SQLite, offline queue, cloud↔local sync
+- SEPOS-033 (3 phases) — Customer CRM, Brevo email campaigns, Make.com
+  webhook triggers (lapsed / booking_completed / birthday_month), GDPR
+  consent checkbox on the booking widget + HMAC-signed unsubscribe flow
+- SEPOS-PRO-001 (phases 1-4 + auto-update) — Electron shell, SQLite,
+  offline queue, cloud↔local sync, electron-updater via GitHub Releases
 
-### Deferred (need external dependencies)
+### Known limitations / future tickets
 - SEPOS-021 HMRC submission — needs HMRC OAuth sandbox creds
 - SEPOS-025 — Receipt printer hardware (ESC/POS direct) — needs Epson/Star device
 - SEPOS-026 — Kitchen printer — same device dependency
 - SEPOS-027 — Reservations + walk-in management — SMS needs Twilio creds
 - SEPOS-029 — Client onboarding package — Railway template + email service
+- **SEPOS-033 birthday** — wired but no-op until customer_birthday is
+  captured (separate ticket: add field to booking widget + reservations schema)
+- **Persistent order-item ID mapping** — sync engine has in-memory
+  local→cloud order id translation; voids of items from earlier sessions
+  can stick in sync_queue. Workaround: `DELETE FROM sync_queue` periodically.
+  Proper fix is a `id_map` table in SQLite.
+- **Orders ↔ reservations linkage** — orders don't carry reservation_id, so
+  Customer total_spend is heuristic (table_id + date join). Add
+  orders.reservation_id when accurate per-customer revenue matters.

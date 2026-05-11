@@ -21,6 +21,7 @@ Owner: Korakot Kongponsrisiri | info@siamepos.co.uk
 - Email: src/services/emailService.js (Brevo — exports sendBrevoEmail, sendBookingConfirmation)
 - Make.com webhooks: src/services/makeWebhooks.js (hourly cron: lapsed/booking/birthday)
 - Booking widget (public): public/widget.js
+- Takeaway widget (public): public/takeaway-widget.js (SEPOS-034)
 - Frontend: client/src/
 - Screens: client/src/screens/
 - Admin sections: client/src/screens/admin/
@@ -78,14 +79,25 @@ Owner: Korakot Kongponsrisiri | info@siamepos.co.uk
 - `MAKE_LAPSED_WEBHOOK` — fires when a customer's last visit > 60 days ago
 - `MAKE_BOOKING_COMPLETED_WEBHOOK` — fires 24h after a reservation date
 - `MAKE_BIRTHDAY_WEBHOOK` — wired but no-op until DOB capture lands
+- `SYNC_SECRET` — HMAC for the auth-gated `/api/sync/closed-orders` feed.
+  MUST match the same value in each Electron install's `config.json`
+  (or `SYNC_SECRET` env) or the pull is silently skipped.
 
 ## DB Mode (Electron only)
 - `DB_MODE=local` + `SQLITE_PATH` env var → src/db/dbAdapter.js routes to SQLite
 - `DB_MODE=cloud` (default) → PostgreSQL (Railway)
-- Sync engine pushes queued mutations to `CLOUD_API_URL` when reachable,
-  pulls menu / staff / settings / tables back to local SQLite
+- Sync engine pulls cloud → local:
+    • flat tables: menu, staff, settings, tables, walls, combinations,
+      tiers, **reservations** (since cb0496d)
+    • nested menu tree (categories + subcategories + items + modifiers)
+    • **closed orders + items + payments** since 59f4ced — paginated by
+      `closed_at`, cursor stored in `sync_state` table, gated by
+      `SYNC_SECRET` (silently skipped without it)
+- Push: queued mutations pushed to `CLOUD_API_URL` when reachable.
+  Reservations push not wired yet (Mac-created reservations stay local).
 - Per-install config lives at electron/config.json (dev) or
-  userData/config.json (packaged) — created by the first-launch wizard
+  userData/config.json (packaged) — created by the first-launch wizard.
+  Fields: restaurant_name, cloud_api_url, restaurant_id, sync_secret
 
 ## AdminScreen Structure (refactored 8 May 2026)
 AdminScreen.jsx is a shell only. Always edit the specific section file:
@@ -129,8 +141,16 @@ client/src/screens/admin/inventory/CostSalesTab.jsx
 - SEPOS-033 (3 phases) — Customer CRM, Brevo email campaigns, Make.com
   webhook triggers (lapsed / booking_completed / birthday_month), GDPR
   consent checkbox on the booking widget + HMAC-signed unsubscribe flow
-- SEPOS-PRO-001 (phases 1-4 + auto-update) — Electron shell, SQLite,
-  offline queue, cloud↔local sync, electron-updater via GitHub Releases
+- SEPOS-034 — Online takeaway ordering (mock payment for sales demo).
+  Public widget at /takeaway-widget.js with 5-step modal (pickup time →
+  menu+cart → contact → mock pay → success). New endpoints under
+  /api/takeaway/*. Kitchen view tags takeaway orders 🥡 with customer
+  name + pickup time. Stock depletion + Brevo confirmation email
+  flow on through. Real Stripe deferred to SEPOS-040.
+- SEPOS-PRO-001 (phases 1-4 + auto-update + closed-orders pull) —
+  Electron shell, SQLite, offline queue, cloud↔local sync, electron-
+  updater via GitHub Releases, reservations + closed-orders pulled
+  to local for offline bill history
 
 ### Known limitations / future tickets
 - SEPOS-021 HMRC submission — needs HMRC OAuth sandbox creds
@@ -140,6 +160,11 @@ client/src/screens/admin/inventory/CostSalesTab.jsx
 - SEPOS-029 — Client onboarding package — Railway template + email service
 - **SEPOS-033 birthday** — wired but no-op until customer_birthday is
   captured (separate ticket: add field to booking widget + reservations schema)
+- **SEPOS-040** — Real Stripe payment on takeaway widget. Per-restaurant
+  pk_live/sk_live in their own Railway env (SiamEPOS never holds funds).
+  Schema already prepared: payment_status flips mock → pending → paid,
+  payment_intent_id stores Stripe ref. Widget's mock-pay step is the
+  only UI piece that needs replacement.
 - **Persistent order-item ID mapping** — sync engine has in-memory
   local→cloud order id translation; voids of items from earlier sessions
   can stick in sync_queue. Workaround: `DELETE FROM sync_queue` periodically.
@@ -147,3 +172,5 @@ client/src/screens/admin/inventory/CostSalesTab.jsx
 - **Orders ↔ reservations linkage** — orders don't carry reservation_id, so
   Customer total_spend is heuristic (table_id + date join). Add
   orders.reservation_id when accurate per-customer revenue matters.
+- **Reservations push** — Mac-created bookings stay local. Cloud → local
+  pull is wired, push isn't. Add to syncService when needed.

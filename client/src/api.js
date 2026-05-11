@@ -53,7 +53,8 @@ export const addModifierGroup = (itemId, group) => post(`/api/menu/items/${itemI
 export const addModifierOption = (groupId, option) => post(`/api/modifier-groups/${groupId}/options`, option);
 export const deleteModifierGroup = (groupId) => del(`/api/modifier-groups/${groupId}`);
 export const deleteModifier = (modifierId) => del(`/api/modifiers/${modifierId}`);
-export const voidItem = (itemId, reason) => put(`/api/order-items/${itemId}/void`, { reason });
+export const voidItem = (itemId, reason, quantity) =>
+  put(`/api/order-items/${itemId}/void`, quantity ? { reason, quantity } : { reason });
 export const applyDiscount = (orderId, discount_type, discount_value, discount_reason) => put(`/api/orders/${orderId}/discount`, { discount_type, discount_value, discount_reason });
 export const getSettings = () => get('/api/settings');
 export const updateSettings = (settings) => put('/api/settings', settings);

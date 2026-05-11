@@ -137,6 +137,50 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     });
   };
 
+  // ── Quick +/− from the menu grid badge ──────────────────────────────
+  // Increments the most-recent cart line for this menu item (so repeating
+  // the same drink/dish is one tap). If nothing's in the cart yet for it,
+  // fall back to the normal modifier/note flow.
+  const incrementInCart = (item) => {
+    const matching = cart.filter(c => c.menu_item_id === item.id);
+    if (matching.length === 0) {
+      handleItemClick(item);
+      return;
+    }
+    const target = matching[matching.length - 1];
+    setCart(prev => prev.map(c =>
+      (c.cartKey === target.cartKey && c.item_note === target.item_note)
+        ? { ...c, quantity: c.quantity + 1 }
+        : c
+    ));
+  };
+
+  const decrementInCart = (item) => {
+    const matching = cart.filter(c => c.menu_item_id === item.id);
+    if (matching.length === 0) return;
+    const target = matching[matching.length - 1];
+    removeFromCart(target.cartKey, target.item_note);
+  };
+
+  // ── Void with optional partial quantity ─────────────────────────────
+  const handleVoidItem = async (item) => {
+    let qty = item.quantity;
+    if (item.quantity > 1) {
+      const input = prompt(`How many to void? (1 to ${item.quantity})`, String(item.quantity));
+      if (input === null) return;
+      const n = parseInt(input, 10);
+      if (isNaN(n) || n < 1 || n > item.quantity) {
+        alert(`Please enter a number between 1 and ${item.quantity}.`);
+        return;
+      }
+      qty = n;
+    }
+    const reason = prompt('Void reason:', 'Customer changed mind');
+    if (!reason) return;
+    await voidItem(item.id, reason, qty);
+    await fetchOrder();
+  };
+
   const sendOrder = async () => {
     if (cart.length === 0) return alert('No items to send!');
     try {
@@ -410,14 +454,37 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                           £{item.price.toFixed(2)}
                         </span>
                         {totalQty > 0 && (
-                          <span style={{
-                            background: isBar ? '#1e40af' : '#e94560', color: 'white',
-                            borderRadius: '50%', width: 26, height: 26,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 13, fontWeight: 700
-                          }}>
-                            {totalQty}
-                          </span>
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              display: 'flex', alignItems: 'center',
+                              background: '#0D1B3E', color: '#C9A84C',
+                              borderRadius: 16, height: 28, overflow: 'hidden',
+                              boxShadow: '0 1px 4px rgba(13,27,62,0.25)',
+                            }}>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); decrementInCart(item); }}
+                              style={{
+                                background: 'transparent', border: 'none', color: '#C9A84C',
+                                cursor: 'pointer', width: 28, height: 28,
+                                fontWeight: 800, fontSize: 18, lineHeight: 1,
+                              }}
+                              aria-label="Remove one"
+                            >−</button>
+                            <span style={{
+                              fontWeight: 800, fontSize: 13, minWidth: 18,
+                              textAlign: 'center', padding: '0 2px',
+                            }}>{totalQty}</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); incrementInCart(item); }}
+                              style={{
+                                background: 'transparent', border: 'none', color: '#C9A84C',
+                                cursor: 'pointer', width: 28, height: 28,
+                                fontWeight: 800, fontSize: 18, lineHeight: 1,
+                              }}
+                              aria-label="Add one"
+                            >+</button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -535,12 +602,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
                         <DiscButton item={item} />
-                        <button onClick={async () => {
-                          const reason = prompt('Void reason:', 'Customer changed mind');
-                          if (!reason) return;
-                          await voidItem(item.id, reason);
-                          await fetchOrder();
-                        }} style={{
+                        <button onClick={() => handleVoidItem(item)} style={{
                           background: '#fee2e2', border: 'none', borderRadius: 4,
                           padding: '2px 6px', cursor: 'pointer', color: '#ef4444',
                           fontSize: 10, fontWeight: 700
@@ -671,12 +733,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                             £{(item.unit_price * item.quantity).toFixed(2)}
                           </span>
                           <DiscButton item={item} />
-                          <button onClick={async () => {
-                            const reason = prompt('Void reason:', 'Customer changed mind');
-                            if (!reason) return;
-                            await voidItem(item.id, reason);
-                            await fetchOrder();
-                          }} style={{
+                          <button onClick={() => handleVoidItem(item)} style={{
                             background: '#fee2e2', border: 'none', borderRadius: 4,
                             padding: '2px 6px', cursor: 'pointer', color: '#ef4444',
                             fontSize: 10, fontWeight: 700
@@ -714,12 +771,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
                           <DiscButton item={item} />
-                          <button onClick={async () => {
-                            const reason = prompt('Void reason:', 'Customer changed mind');
-                            if (!reason) return;
-                            await voidItem(item.id, reason);
-                            await fetchOrder();
-                          }} style={{
+                          <button onClick={() => handleVoidItem(item)} style={{
                             background: '#fee2e2', border: 'none', borderRadius: 4,
                             padding: '2px 6px', cursor: 'pointer', color: '#ef4444',
                             fontSize: 10, fontWeight: 700

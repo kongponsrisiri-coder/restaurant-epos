@@ -437,9 +437,35 @@ app.put('/api/order-items/:id/status', async (req, res) => {
 
 app.put('/api/order-items/:id/void', async (req, res) => {
   try {
-    const { reason } = req.body;
-    await pool.query('UPDATE order_items SET voided=1, void_reason=$1 WHERE id=$2', [reason, req.params.id]);
-    await offlineQueue.enqueue('void_item', { localItemId: Number(req.params.id), reason });
+    const { reason, quantity: voidQty } = req.body;
+    // Look up the original item up front — partial void needs its quantity.
+    const origRes = await pool.query('SELECT * FROM order_items WHERE id = $1', [req.params.id]);
+    const orig = origRes.rows[0];
+    if (!orig) return res.status(404).json({ error: 'Item not found' });
+
+    const qtyToVoid = Number.isFinite(Number(voidQty)) ? Number(voidQty) : orig.quantity;
+    if (qtyToVoid < orig.quantity && qtyToVoid >= 1) {
+      // Partial void: shrink the original row, insert a voided-ghost copy
+      // that carries the same per-item state (status/fired/served/etc.) so
+      // reports and the kitchen screen treat it consistently.
+      const remaining = orig.quantity - qtyToVoid;
+      await pool.query('UPDATE order_items SET quantity=$1 WHERE id=$2', [remaining, req.params.id]);
+      await pool.query(
+        `INSERT INTO order_items
+           (order_id, menu_item_id, item_name, quantity, unit_price, notes, course, item_note,
+            status, is_fired, fired_at, cooking_started_at, served_at, voided, void_reason,
+            discount_type, discount_value)
+         SELECT order_id, menu_item_id, item_name, $1, unit_price, notes, course, item_note,
+            status, is_fired, fired_at, cooking_started_at, served_at, 1, $2,
+            discount_type, discount_value
+         FROM order_items WHERE id=$3`,
+        [qtyToVoid, reason, req.params.id]
+      );
+    } else {
+      // Full void — existing behaviour.
+      await pool.query('UPDATE order_items SET voided=1, void_reason=$1 WHERE id=$2', [reason, req.params.id]);
+    }
+    await offlineQueue.enqueue('void_item', { localItemId: Number(req.params.id), reason, quantity: qtyToVoid });
     const itemRes = await pool.query('SELECT order_id FROM order_items WHERE id = $1', [req.params.id]);
     const item = itemRes.rows[0];
     if (item) {

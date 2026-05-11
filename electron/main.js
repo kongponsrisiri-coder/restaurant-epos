@@ -411,7 +411,7 @@ function startLocalServer() {
   if (serverProcess) return;
 
   const serverEntry = app.isPackaged
-    ? path.join(process.resourcesPath, 'server-src', 'server.js')
+    ? path.join(process.resourcesPath, 'src', 'server.js')
     : path.join(PROJECT_ROOT, 'src', 'server.js');
 
   if (!fs.existsSync(serverEntry)) {
@@ -569,6 +569,7 @@ app.whenReady().then(async () => {
   // First-time setup — block until the operator fills in the wizard.
   // If they close it without saving, config stays null → exit cleanly.
   let config = loadConfig();
+  let justSetUp = false;
   if (!config) {
     config = await runSetupWizard();
     if (!config) {
@@ -576,7 +577,19 @@ app.whenReady().then(async () => {
       app.quit();
       return;
     }
+    justSetUp = true;
     console.log('[setup] complete:', config.restaurant_name, '→', config.cloud_api_url);
+  }
+
+  // Packaged installs only: register the .app as a login item so the kitchen
+  // PC auto-launches SiamEPOS at boot. Done once just after first setup —
+  // afterwards the operator can toggle it in System Settings if they want.
+  if (justSetUp && app.isPackaged && (process.platform === 'darwin' || process.platform === 'win32')) {
+    try {
+      app.setLoginItemSettings({ openAtLogin: true, openAsHidden: false });
+    } catch (err) {
+      console.warn('[setup] login-item registration failed:', err.message);
+    }
   }
 
   // Config supplies CLOUD_API_URL unless the launching shell already set it

@@ -15,6 +15,7 @@
   "build": {
     "appId": "uk.co.siamepos.pro",
     "productName": "SiamEPOS",
+    "artifactName": "${productName} Setup.${ext}",
     "asar": true,
     "directories": {
       "output": "dist-electron",
@@ -26,23 +27,40 @@
       "build/**"
     ],
     "extraResources": [
+      { "from": "../client/dist",     "to": "client-dist" },
+      { "from": "../src",             "to": "src" },
+      { "from": "../package.json",    "to": "package.json" },
       {
-        "from": "../client/dist",
-        "to": "client-dist"
+        "from": "../node_modules",
+        "to": "node_modules",
+        "filter": [
+          "**/*",
+          "!**/.DS_Store",
+          "!**/{test,tests,docs,doc,example,examples}/**",
+          "!**/*.md",
+          "!**/*.markdown",
+          "!**/{.bin,.cache,.github,.vscode}/**"
+        ]
       }
     ],
     "mac": {
       "icon": "../client/public/icon-512.png",
-      "target": [
-        "dmg"
-      ],
+      "target": [{ "target": "dmg", "arch": ["arm64"] }],
       "category": "public.app-category.business"
+    },
+    "dmg": {
+      "title": "SiamEPOS Setup"
     },
     "win": {
       "icon": "../client/public/icon-512.png",
-      "target": [
-        "nsis"
-      ]
+      "target": [{ "target": "nsis", "arch": ["x64"] }]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "SiamEPOS"
     },
     "publish": null
   },

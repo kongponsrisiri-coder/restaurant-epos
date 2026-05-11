@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { loginStaff } from '../api';
+import { loginStaff, clockIn, clockOut } from '../api';
 
 // ── Sandy: LoginScreen — SiamEPOS Brand CI v1.1 ───────────────────
 // Deep Navy #0D1B3E background · Thai Gold #C9A84C lotus logo
@@ -8,6 +8,7 @@ import { loginStaff } from '../api';
 export default function LoginScreen({ onLogin }) {
   const [pin, setPin]         = useState('');
   const [error, setError]     = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleLogin(pinToUse) {
@@ -15,6 +16,7 @@ export default function LoginScreen({ onLogin }) {
     if (!p) return;
     setLoading(true);
     setError('');
+    setSuccess('');
     try {
       const staff = await loginStaff(p);
       if (staff?.error || !staff?.id) {
@@ -31,9 +33,36 @@ export default function LoginScreen({ onLogin }) {
     }
   }
 
+  // SEPOS-022 — clock in/out. PIN identifies the staff member; we
+  // don't log them into the POS, just record the event.
+  async function handleClock(kind) {
+    if (!pin) { setError('Enter your PIN first.'); return; }
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      const r = await (kind === 'in' ? clockIn(pin) : clockOut(pin));
+      if (r?.error || !r?.name) {
+        setError(r?.error || 'Clock action failed.');
+        setPin('');
+      } else {
+        const t = new Date(r.event_at).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+        setSuccess(`✓ ${r.name} clocked ${kind.toUpperCase()} at ${t}`);
+        setPin('');
+        setTimeout(() => setSuccess(''), 4000);
+      }
+    } catch {
+      setError('Connection error. Check your network.');
+      setPin('');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function pressDigit(d) {
     if (loading) return;
     setError('');
+    setSuccess('');
     const next = pin + d;
     setPin(next);
     // Auto-submit at 6 digits — most PINs are 4-6 digits
@@ -120,7 +149,7 @@ export default function LoginScreen({ onLogin }) {
           )}
         </div>
 
-        {/* Error message */}
+        {/* Error / success message */}
         {error && (
           <div style={{
             background: 'rgba(239,68,68,0.14)',
@@ -130,6 +159,17 @@ export default function LoginScreen({ onLogin }) {
             fontSize: 13, textAlign: 'center', marginBottom: 16, fontWeight: 500,
           }}>
             {error}
+          </div>
+        )}
+        {success && (
+          <div style={{
+            background: 'rgba(34,197,94,0.16)',
+            border: '1px solid rgba(34,197,94,0.4)',
+            color: '#86efac',
+            borderRadius: 8, padding: '9px 14px',
+            fontSize: 13, textAlign: 'center', marginBottom: 16, fontWeight: 600,
+          }}>
+            {success}
           </div>
         )}
 
@@ -179,6 +219,30 @@ export default function LoginScreen({ onLogin }) {
         >
           {loading ? 'Checking…' : 'Log In'}
         </button>
+
+        {/* SEPOS-022 — clock in/out (no app login, just records the event) */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <button
+            onClick={() => handleClock('in')}
+            disabled={loading || pin.length === 0}
+            style={{
+              flex: 1, height: 42, borderRadius: 10, border: '1px solid rgba(201,168,76,0.3)',
+              background: 'transparent', color: pin.length > 0 ? '#C9A84C' : 'rgba(201,168,76,0.35)',
+              fontSize: 13, fontWeight: 700, letterSpacing: '0.04em',
+              cursor: pin.length > 0 && !loading ? 'pointer' : 'default',
+            }}
+          >🕐 Clock In</button>
+          <button
+            onClick={() => handleClock('out')}
+            disabled={loading || pin.length === 0}
+            style={{
+              flex: 1, height: 42, borderRadius: 10, border: '1px solid rgba(201,168,76,0.3)',
+              background: 'transparent', color: pin.length > 0 ? '#C9A84C' : 'rgba(201,168,76,0.35)',
+              fontSize: 13, fontWeight: 700, letterSpacing: '0.04em',
+              cursor: pin.length > 0 && !loading ? 'pointer' : 'default',
+            }}
+          >Clock Out 🕔</button>
+        </div>
       </div>
 
       {/* Footer */}

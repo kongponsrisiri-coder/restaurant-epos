@@ -150,6 +150,15 @@ function initSchema() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- SEPOS-022: staff clock-in / clock-out events
+    CREATE TABLE IF NOT EXISTS clock_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      staff_id INTEGER REFERENCES staff(id) ON DELETE CASCADE,
+      event_type TEXT NOT NULL,
+      event_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_clock_events_staff_at ON clock_events(staff_id, event_at);
+
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT

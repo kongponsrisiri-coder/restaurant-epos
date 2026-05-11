@@ -6,6 +6,7 @@ import ReportsSection   from './admin/ReportsSection';
 import BillsSection     from './admin/BillsSection';
 import ZReportSection   from './admin/ZReportSection';
 import StaffSection     from './admin/StaffSection';
+import ClockRecordsSection from './admin/ClockRecordsSection';
 import AllergenSection  from './admin/AllergenSection';
 import SettingsSection  from './admin/SettingsSection';
 import InventorySection from './admin/inventory/InventorySection';
@@ -22,6 +23,7 @@ export default function AdminScreen() {
     { id: 'bills',        label: '🧾 Bills' },
     { id: 'zreport',      label: '🔐 Z Report' },
     { id: 'staff',        label: '👥 Staff' },
+    { id: 'clock',        label: '🕐 Clock Records' },
     { id: 'inventory',    label: '🥬 Inventory' },
     { id: 'allergens',    label: '🌿 Allergens' },
     { id: 'settings',     label: '⚙️ Settings' },
@@ -44,6 +46,7 @@ export default function AdminScreen() {
         {section === 'bills'        && <BillsSection />}
         {section === 'zreport'      && <ZReportSection />}
         {section === 'staff'        && <StaffSection />}
+        {section === 'clock'        && <ClockRecordsSection />}
         {section === 'inventory'    && <InventorySection />}
         {section === 'allergens'    && <AllergenSection />}
         {section === 'settings'     && <SettingsSection />}

@@ -163,6 +163,17 @@ async function initDB() {
       )
     `);
 
+    // SEPOS-022: staff clock-in / clock-out events
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS clock_events (
+        id SERIAL PRIMARY KEY,
+        staff_id INTEGER REFERENCES staff(id) ON DELETE CASCADE,
+        event_type VARCHAR(10) NOT NULL,
+        event_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_clock_events_staff_at ON clock_events(staff_id, event_at)`);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS settings (
         key VARCHAR(100) PRIMARY KEY,

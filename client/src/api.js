@@ -137,3 +137,9 @@ export const updateDiningDurationTiers = (tiers) => put('/api/dining-duration-ti
 
 // Network setup — LAN address the iPads should connect to.
 export const getNetworkInfo = () => get('/api/network-info');
+
+// SEPOS-022 — staff clock-in / clock-out
+export const clockIn        = (pin)        => post('/api/clock/in',  { pin });
+export const clockOut       = (pin)        => post('/api/clock/out', { pin });
+export const getClockStatus = ()           => get('/api/clock/status');
+export const getClockRecords = (from, to)  => get(`/api/clock/records?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);

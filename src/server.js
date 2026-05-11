@@ -1362,6 +1362,57 @@ app.get('/api/network-info', (req, res) => {
   res.json({ ip: '127.0.0.1', port, url: `http://127.0.0.1:${port}` });
 });
 
+// ─────────────────────────────────────────────────────────────────────
+// SEPOS-022 — staff clock-in / clock-out
+// ─────────────────────────────────────────────────────────────────────
+async function recordClockEvent(req, res, eventType) {
+  try {
+    const { pin } = req.body;
+    if (!pin) return res.status(400).json({ error: 'PIN required' });
+    const staffRes = await pool.query('SELECT id, name FROM staff WHERE pin=$1 AND is_active=1', [pin]);
+    const staff = staffRes.rows[0];
+    if (!staff) return res.status(401).json({ error: 'Invalid PIN' });
+    await pool.query('INSERT INTO clock_events (staff_id, event_type) VALUES ($1, $2)', [staff.id, eventType]);
+    res.json({ success: true, staff_id: staff.id, name: staff.name, event_type: eventType, event_at: new Date().toISOString() });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+}
+app.post('/api/clock/in',  (req, res) => recordClockEvent(req, res, 'in'));
+app.post('/api/clock/out', (req, res) => recordClockEvent(req, res, 'out'));
+
+// Returns staff who are currently clocked in (their latest event is 'in').
+app.get('/api/clock/status', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT s.id, s.name, s.role, ce.event_at AS clocked_in_at
+      FROM staff s
+      JOIN clock_events ce ON ce.id = (
+        SELECT id FROM clock_events WHERE staff_id = s.id ORDER BY event_at DESC, id DESC LIMIT 1
+      )
+      WHERE ce.event_type = 'in'
+      ORDER BY s.name
+    `);
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Raw clock events in a window — client pairs them into sessions.
+app.get('/api/clock/records', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const fromTs = from || '1970-01-01';
+    const toTs   = to   || '2999-12-31';
+    const result = await pool.query(`
+      SELECT ce.id, ce.staff_id, s.name AS staff_name, s.role AS staff_role,
+             ce.event_type, ce.event_at
+      FROM clock_events ce
+      LEFT JOIN staff s ON s.id = ce.staff_id
+      WHERE ce.event_at >= $1::timestamp AND ce.event_at <= $2::timestamp
+      ORDER BY ce.staff_id, ce.event_at, ce.id
+    `, [fromTs, toTs]);
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Force a cloud→local pull immediately (operator can hit this if the menu
 // looks stale without waiting for the next interval). No-op in cloud mode.
 app.post('/api/sync/pull', async (req, res) => {

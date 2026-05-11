@@ -10,6 +10,7 @@ function NetworkSetupCard({ cardStyle }) {
   const [info, setInfo] = useState(null);
   const [qr, setQr] = useState('');
   const [copied, setCopied] = useState(false);
+  const [testState, setTestState] = useState('idle'); // idle | testing | ok | fail
 
   useEffect(() => {
     let cancelled = false;
@@ -39,6 +40,33 @@ function NetworkSetupCard({ cardStyle }) {
     } catch {}
   };
 
+  // Probes the LAN URL — confirms the server answers on the same address
+  // that's printed in the QR. Doesn't guarantee an iPad on another segment
+  // can reach it (firewall / VLAN), but catches typos and stopped servers.
+  const testConnection = async () => {
+    setTestState('testing');
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 4000);
+      const r = await fetch(info.url + '/api/sync-status', { cache: 'no-store', signal: ctrl.signal });
+      clearTimeout(t);
+      setTestState(r.ok ? 'ok' : 'fail');
+    } catch {
+      setTestState('fail');
+    }
+    setTimeout(() => setTestState('idle'), 3000);
+  };
+
+  const testLabel = testState === 'testing' ? 'Testing…'
+                  : testState === 'ok'      ? '✓ Reachable'
+                  : testState === 'fail'    ? '✗ No response'
+                  : 'Test connection';
+  const testBg    = testState === 'ok'   ? '#22c55e'
+                  : testState === 'fail' ? '#ef4444'
+                  : 'rgba(255,255,255,0)';
+  const testColor = testState === 'ok' || testState === 'fail' ? 'white' : '#0D1B3E';
+  const testBorder = testState === 'ok' || testState === 'fail' ? 'none' : '1px solid #0D1B3E';
+
   return (
     <div style={cardStyle}>
       <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:6 }}>📱 Network Setup</h2>
@@ -55,14 +83,25 @@ function NetworkSetupCard({ cardStyle }) {
           }}>
             {info.url}
           </div>
-          <button onClick={copy} style={{
-            padding:'10px 20px', borderRadius:8, border:'none',
-            background: copied ? '#22c55e' : '#C9A84C',
-            color: copied ? 'white' : '#0D1B3E',
-            fontWeight:700, cursor:'pointer', fontSize:13
-          }}>
-            {copied ? '✓ Copied' : 'Copy URL'}
-          </button>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            <button onClick={copy} style={{
+              padding:'10px 20px', borderRadius:8, border:'none',
+              background: copied ? '#22c55e' : '#C9A84C',
+              color: copied ? 'white' : '#0D1B3E',
+              fontWeight:700, cursor:'pointer', fontSize:13
+            }}>
+              {copied ? '✓ Copied' : 'Copy URL'}
+            </button>
+            <button onClick={testConnection} disabled={testState==='testing'} style={{
+              padding:'10px 20px', borderRadius:8,
+              border: testBorder, background: testBg,
+              color: testColor, fontWeight:700,
+              cursor: testState==='testing' ? 'wait' : 'pointer',
+              fontSize:13, transition:'background 0.2s, color 0.2s',
+            }}>
+              {testLabel}
+            </button>
+          </div>
           <div style={{ fontSize:12, color:'#888', marginTop:12, lineHeight:1.5 }}>
             On each tablet: open Camera, scan the QR, tap the SiamEPOS link in Safari.
             Then Share → <strong>Add to Home Screen</strong> for one-tap access.

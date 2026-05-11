@@ -1,16 +1,158 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, shell, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const QRCode = require('qrcode');
 const { spawn } = require('child_process');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const DEV_URL = 'http://localhost:5173';
 
 let mainWindow = null;
+let setupWindow = null;
 let tray = null;
 let serverProcess = null;
 let statusPollHandle = null;
 let lastStatus = null;
+
+// ── Local network detection ─────────────────────────────────────────
+// Prefer private LAN ranges (RFC 1918) and skip VPN/tunnel interfaces so
+// a Tailscale or corporate VPN address doesn't get advertised by mistake.
+function getLocalIP() {
+  const ifaces = os.networkInterfaces();
+  for (const name of Object.keys(ifaces)) {
+    if (/^(tun|utun|tap|ipsec|vpn|wg|zt)/i.test(name)) continue;
+    for (const iface of (ifaces[name] || [])) {
+      if (iface.family !== 'IPv4' || iface.internal) continue;
+      if (/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(iface.address)) {
+        return iface.address;
+      }
+    }
+  }
+  return '127.0.0.1';
+}
+
+function getServerUrl() {
+  return `http://${getLocalIP()}:${process.env.PORT || 3001}`;
+}
+
+// Small branded window showing the LAN URL + a scannable QR code —
+// operators point kitchen / bar tablets here during setup.
+async function showSetupWindow() {
+  if (setupWindow) {
+    setupWindow.show();
+    setupWindow.focus();
+    return;
+  }
+  const url = getServerUrl();
+
+  // QR code rendered locally as a data URL — no network call, brand colours.
+  let qrDataUrl = '';
+  try {
+    qrDataUrl = await QRCode.toDataURL(url, {
+      width: 260,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#0D1B3E', light: '#FFFFFF' },
+    });
+  } catch (err) {
+    console.warn('[setup] QR generation failed:', err.message);
+  }
+
+  setupWindow = new BrowserWindow({
+    width: 760,
+    height: 520,
+    title: 'SiamEPOS — Network Setup',
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    backgroundColor: '#0D1B3E',
+    autoHideMenuBar: true,
+    webPreferences: { contextIsolation: true, nodeIntegration: false },
+  });
+  setupWindow.setMenuBarVisibility(false);
+
+  const safeUrl = url.replace(/"/g, '&quot;');
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>SiamEPOS — Network Setup</title>
+<style>
+  body { margin:0; padding:32px; background:#0D1B3E; color:white;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
+  h1 { margin:0 0 6px; font-size:22px; color:#C9A84C;
+    font-family: Georgia, 'Times New Roman', serif; }
+  .subtitle { color:rgba(201,168,76,0.65); font-size:13px; margin-bottom:22px;
+    letter-spacing:0.05em; text-transform:uppercase; }
+  .row { display:flex; gap:28px; align-items:stretch; }
+  .col-info { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .col-qr { flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+  .qr-frame { background:white; border-radius:14px; padding:14px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+  .qr-frame img { display:block; width:240px; height:240px; }
+  .qr-label { margin-top:10px; text-align:center; font-size:11px;
+    color:rgba(201,168,76,0.65); letter-spacing:0.08em; text-transform:uppercase; }
+  .url-box { background:rgba(255,255,255,0.05);
+    border:1px solid rgba(201,168,76,0.4); border-radius:14px;
+    padding:18px 20px; text-align:center; font-size:20px; font-weight:800;
+    font-family: 'SF Mono', Menlo, Consolas, monospace; letter-spacing:0.3px;
+    user-select:text; margin-bottom:14px; word-break:break-all; }
+  .help { font-size:13px; color:rgba(255,255,255,0.7); line-height:1.55;
+    margin-bottom:18px; flex:1; }
+  .help strong { color:#C9A84C; font-weight:700; }
+  .help ol { padding-left:20px; margin:6px 0 0; }
+  .help li { margin-bottom:4px; }
+  .buttons { display:flex; gap:10px; }
+  button { flex:1; padding:12px 16px; border-radius:10px; border:none;
+    cursor:pointer; font-weight:700; font-size:14px; transition: background 0.15s; }
+  .primary { background:#C9A84C; color:#0D1B3E; }
+  .primary:hover { background:#d5b85e; }
+  .secondary { background:rgba(255,255,255,0.08); color:white; }
+  .secondary:hover { background:rgba(255,255,255,0.14); }
+  .copied { background:#22c55e !important; color:white !important; }
+</style></head>
+<body>
+  <h1>Network setup</h1>
+  <div class="subtitle">Connect kitchen and bar tablets</div>
+  <div class="row">
+    <div class="col-info">
+      <div class="url-box" id="url">${safeUrl}</div>
+      <div class="help">
+        <strong>To connect a tablet:</strong>
+        <ol>
+          <li>Make sure it's on the same Wi-Fi as this machine.</li>
+          <li>Open the camera and point it at the QR code →</li>
+          <li>Tap the SiamEPOS notification to open in Safari.</li>
+          <li>Share → <strong>Add to Home Screen</strong> for one-tap access.</li>
+        </ol>
+      </div>
+      <div class="buttons">
+        <button class="primary" id="copy">Copy URL</button>
+        <button class="secondary" onclick="window.close()">Close</button>
+      </div>
+    </div>
+    <div class="col-qr">
+      <div>
+        <div class="qr-frame">${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR code linking to ${safeUrl}" />` : '<div style="width:240px;height:240px;display:flex;align-items:center;justify-content:center;color:#888;font-family:monospace;">QR unavailable</div>'}</div>
+        <div class="qr-label">Scan with iPad camera</div>
+      </div>
+    </div>
+  </div>
+<script>
+  const btn = document.getElementById('copy');
+  btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(${JSON.stringify(url)});
+      const t = btn.textContent;
+      btn.textContent = '✓ Copied';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = t; btn.classList.remove('copied'); }, 1500);
+    } catch (e) { console.error(e); }
+  });
+<\/script>
+</body></html>`;
+
+  setupWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+  setupWindow.on('closed', () => { setupWindow = null; });
+}
 
 const STATUS_POLL_MS = 5000;
 const STATUS_EMOJI = { cloud: '🟢', local: '🟡', syncing: '🔴', 'initial-sync': '🔄' };
@@ -110,6 +252,12 @@ function startLocalServer() {
   // DB_MODE=local + SQLITE_PATH route the server through src/db/dbAdapter to SQLite.
   const sqlitePath = path.join(app.getPath('userData'), 'siamepos-local.db');
 
+  // Where the React bundle lives — different in dev vs packaged builds.
+  // Passed to the spawned server so it can serve the bundle to LAN tablets.
+  const clientDist = app.isPackaged
+    ? path.join(process.resourcesPath, 'client-dist')
+    : path.join(PROJECT_ROOT, 'client', 'dist');
+
   serverProcess = spawn(process.execPath, [serverEntry], {
     cwd: PROJECT_ROOT,
     env: {
@@ -118,6 +266,7 @@ function startLocalServer() {
       PORT: process.env.PORT || '3001',
       DB_MODE: 'local',
       SQLITE_PATH: sqlitePath,
+      CLIENT_DIST_PATH: clientDist,
       // CLOUD_API_URL controls the Phase 3 sync target. Pass it through from
       // the launching shell if set; otherwise the queue accumulates with no push.
       ...(process.env.CLOUD_API_URL ? { CLOUD_API_URL: process.env.CLOUD_API_URL } : {}),
@@ -190,6 +339,12 @@ function createTray() {
 
   tray = new Tray(trayImage);
   tray.setToolTip('SiamEPOS');
+  refreshTrayMenu();
+}
+
+function refreshTrayMenu() {
+  if (!tray) return;
+  const url = getServerUrl();
   tray.setContextMenu(Menu.buildFromTemplate([
     {
       label: 'Show SiamEPOS',
@@ -202,6 +357,10 @@ function createTray() {
         }
       },
     },
+    { type: 'separator' },
+    { label: `Server: ${url}`, enabled: false },
+    { label: 'Copy server URL', click: () => clipboard.writeText(url) },
+    { label: 'Show network setup…', click: showSetupWindow },
     { type: 'separator' },
     { label: 'Quit SiamEPOS', click: () => app.quit() },
   ]));
@@ -233,6 +392,15 @@ app.whenReady().then(() => {
   createTray();
   startStatusPoll();
   if (app.isPackaged) setupAutoUpdater();
+
+  // First-launch hint — show the LAN URL once so operators can point
+  // kitchen/bar tablets at the machine. Marker file lives in userData.
+  const welcomedFile = path.join(app.getPath('userData'), '.welcomed');
+  if (!fs.existsSync(welcomedFile)) {
+    // Give the server a moment to bind so the URL we show is actually live.
+    setTimeout(showSetupWindow, 1500);
+    try { fs.writeFileSync(welcomedFile, new Date().toISOString()); } catch {}
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

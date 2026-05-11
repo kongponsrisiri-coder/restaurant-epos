@@ -25,6 +25,15 @@ app.options(/.*/, cors());
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
 
+// When the desktop shell sets CLIENT_DIST_PATH (Electron does — pointed at
+// client/dist), serve the React bundle from the local server too. Lets
+// kitchen / bar tablets on the same Wi-Fi load SiamEPOS from this host
+// (e.g. via the QR code in the Electron setup window).
+if (process.env.CLIENT_DIST_PATH) {
+  app.use(express.static(process.env.CLIENT_DIST_PATH));
+  console.log('Serving client bundle from', process.env.CLIENT_DIST_PATH);
+}
+
 let sendBookingConfirmation = async () => {};
 let sendBookingSms = async () => {};
 try {

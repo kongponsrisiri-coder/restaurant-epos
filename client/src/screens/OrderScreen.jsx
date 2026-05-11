@@ -15,6 +15,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const [modifierPopup, setModifierPopup] = useState(null);
   const [selectedModifiers, setSelectedModifiers] = useState({});
   const [notePopup, setNotePopup] = useState(null);
+  const [voidPopup, setVoidPopup] = useState(null);
   const [showBill, setShowBill] = useState(false);
   const [serviceChargeRemoved, setServiceChargeRemoved] = useState(false);
   const [activeCourse, setActiveCourse] = useState(1);
@@ -163,21 +164,19 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   };
 
   // ── Void with optional partial quantity ─────────────────────────────
-  const handleVoidItem = async (item) => {
-    let qty = item.quantity;
-    if (item.quantity > 1) {
-      const input = prompt(`How many to void? (1 to ${item.quantity})`, String(item.quantity));
-      if (input === null) return;
-      const n = parseInt(input, 10);
-      if (isNaN(n) || n < 1 || n > item.quantity) {
-        alert(`Please enter a number between 1 and ${item.quantity}.`);
-        return;
-      }
-      qty = n;
-    }
-    const reason = prompt('Void reason:', 'Customer changed mind');
-    if (!reason) return;
-    await voidItem(item.id, reason, qty);
+  // window.prompt() is disabled in Electron, so we route this through a
+  // React modal (voidPopup) instead of native prompts.
+  const handleVoidItem = (item) => {
+    setVoidPopup({ item, qty: item.quantity, reason: 'Customer changed mind' });
+  };
+
+  const confirmVoid = async () => {
+    if (!voidPopup) return;
+    const { item, qty, reason } = voidPopup;
+    if (!reason || !reason.trim()) return;
+    const n = Math.max(1, Math.min(item.quantity, Number(qty) || item.quantity));
+    setVoidPopup(null);
+    await voidItem(item.id, reason.trim(), n);
     await fetchOrder();
   };
 
@@ -1176,6 +1175,93 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   background: '#e94560', color: 'white', cursor: 'pointer',
                   fontWeight: 700, fontSize: 16
                 }}>Add to Order</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* VOID POPUP */}
+        {voidPopup && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          }}>
+            <div style={{
+              background: 'white', borderRadius: 16, padding: 24,
+              width: 380, maxWidth: '92vw'
+            }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>
+                Void item
+              </h2>
+              <div style={{ fontSize: 14, color: '#555', marginBottom: 16 }}>
+                {voidPopup.item.quantity}× {voidPopup.item.name}
+              </div>
+
+              {voidPopup.item.quantity > 1 && (
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>
+                    How many to void? (1 to {voidPopup.item.quantity})
+                  </label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button onClick={() => setVoidPopup({ ...voidPopup, qty: Math.max(1, Number(voidPopup.qty) - 1) })}
+                      style={{
+                        width: 38, height: 38, borderRadius: 8, border: '1px solid #ddd',
+                        background: '#f0f0f0', cursor: 'pointer', fontWeight: 800, fontSize: 18
+                      }}>−</button>
+                    <input
+                      type="number"
+                      min="1"
+                      max={voidPopup.item.quantity}
+                      value={voidPopup.qty}
+                      onChange={(e) => setVoidPopup({
+                        ...voidPopup,
+                        qty: Math.max(1, Math.min(voidPopup.item.quantity, parseInt(e.target.value, 10) || 1))
+                      })}
+                      style={{
+                        flex: 1, height: 38, padding: '0 12px', borderRadius: 8,
+                        border: '1px solid #ddd', fontSize: 16, textAlign: 'center', fontWeight: 700
+                      }}
+                    />
+                    <button onClick={() => setVoidPopup({ ...voidPopup, qty: Math.min(voidPopup.item.quantity, Number(voidPopup.qty) + 1) })}
+                      style={{
+                        width: 38, height: 38, borderRadius: 8, border: '1px solid #ddd',
+                        background: '#f0f0f0', cursor: 'pointer', fontWeight: 800, fontSize: 18
+                      }}>+</button>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ marginBottom: 18 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>
+                  Reason
+                </label>
+                <input
+                  type="text"
+                  value={voidPopup.reason}
+                  onChange={(e) => setVoidPopup({ ...voidPopup, reason: e.target.value })}
+                  placeholder="Customer changed mind"
+                  autoFocus
+                  style={{
+                    width: '100%', padding: '10px 12px', borderRadius: 8,
+                    border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setVoidPopup(null)} style={{
+                  flex: 1, padding: '12px', borderRadius: 10, border: 'none',
+                  background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15
+                }}>Cancel</button>
+                <button onClick={confirmVoid}
+                  disabled={!voidPopup.reason || !voidPopup.reason.trim()}
+                  style={{
+                    flex: 1, padding: '12px', borderRadius: 10, border: 'none',
+                    background: voidPopup.reason && voidPopup.reason.trim() ? '#ef4444' : '#fca5a5',
+                    color: 'white', cursor: voidPopup.reason && voidPopup.reason.trim() ? 'pointer' : 'not-allowed',
+                    fontWeight: 700, fontSize: 15
+                  }}>Void</button>
               </div>
             </div>
           </div>

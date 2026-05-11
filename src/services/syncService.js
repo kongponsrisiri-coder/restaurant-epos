@@ -6,6 +6,7 @@
 // mode permanently (queue grows but nothing pushes — safe default for tests).
 
 const offlineQueue = require('./offlineQueue');
+const pool = require('../db/dbAdapter');
 
 const CLOUD_API_URL = process.env.CLOUD_API_URL || '';
 const PING_INTERVAL_MS = parseInt(process.env.SYNC_PING_MS || '30000', 10);
@@ -13,7 +14,24 @@ const PING_TIMEOUT_MS = 5000;
 
 let status = 'local'; // 'cloud' | 'local' | 'syncing'
 let intervalHandle = null;
+let inProgress = false;
 const subscribers = new Set();
+
+// Tables pulled from cloud → applied locally. Conflict rule per spec:
+// menu / staff / settings / tables: cloud wins. orders: local wins (never pulled).
+// Upsert by primary key so existing FKs (order_items.menu_item_id, orders.table_id)
+// remain valid across syncs.
+const PULL_ENDPOINTS = [
+  { path: '/api/tables',                 table: 'tables',                 pk: 'id' },
+  { path: '/api/categories',             table: 'categories',             pk: 'id' },
+  { path: '/api/subcategories',          table: 'subcategories',          pk: 'id' },
+  { path: '/api/menu/all',               table: 'menu_items',             pk: 'id' },
+  { path: '/api/staff',                  table: 'staff',                  pk: 'id' },
+  { path: '/api/settings',               table: 'settings',               pk: 'key' },
+  { path: '/api/table-walls',            table: 'table_walls',            pk: 'id' },
+  { path: '/api/table-combinations',     table: 'table_combinations',     pk: 'id' },
+  { path: '/api/dining-duration-tiers',  table: 'dining_duration_tiers',  pk: 'id' },
+];
 
 // In-memory local→cloud id map. Rebuilt each sync run as we replay the queue
 // from create_order onwards, so a server restart mid-queue still resolves
@@ -109,6 +127,58 @@ async function applyToCloud(actionType, payload) {
   }
 }
 
+async function getLocalColumns(table) {
+  const r = await pool.query(`PRAGMA table_info(${table})`);
+  return r.rows.map((row) => row.name);
+}
+
+async function upsertRows(table, pk, rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return 0;
+  const localCols = await getLocalColumns(table);
+  if (localCols.length === 0) return 0;
+
+  const cloudCols = Object.keys(rows[0]);
+  const cols = cloudCols.filter((c) => localCols.includes(c));
+  if (!cols.includes(pk)) return 0;
+
+  const placeholders = cols.map((_, i) => `$${i + 1}`).join(',');
+  const updates = cols.filter((c) => c !== pk).map((c) => `${c}=excluded.${c}`).join(',');
+  const sql = `INSERT INTO ${table} (${cols.join(',')}) VALUES (${placeholders}) ON CONFLICT(${pk}) DO UPDATE SET ${updates}`;
+
+  let n = 0;
+  for (const row of rows) {
+    try {
+      await pool.query(sql, cols.map((c) => row[c] ?? null));
+      n++;
+    } catch (err) {
+      console.warn(`[sync] pull upsert ${table}#${row[pk]} failed:`, err.message);
+    }
+  }
+  return n;
+}
+
+async function pullFromCloud() {
+  if (!offlineQueue.isLocal || !CLOUD_API_URL) return;
+  for (const ep of PULL_ENDPOINTS) {
+    try {
+      const r = await fetch(CLOUD_API_URL + ep.path, {
+        signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+      });
+      if (!r.ok) {
+        console.warn(`[sync] pull ${ep.path} ${r.status}`);
+        continue;
+      }
+      const rows = await r.json();
+      // Endpoints may return an array directly or {data: [...]} — handle both.
+      const list = Array.isArray(rows) ? rows : (rows?.data || []);
+      const n = await upsertRows(ep.table, ep.pk, list);
+      if (n > 0) console.log(`[sync] pull ${ep.table}: ${n} rows`);
+    } catch (err) {
+      console.warn(`[sync] pull ${ep.path} failed:`, err.message);
+    }
+  }
+}
+
 async function syncOnce() {
   const queue = await offlineQueue.pending();
   if (queue.length === 0) return;
@@ -128,15 +198,21 @@ async function syncOnce() {
 
 async function tick() {
   if (!offlineQueue.isLocal) return;
-  const online = await ping();
-  if (!online) {
-    setStatus('local');
-    return;
+  if (inProgress) return;
+  inProgress = true;
+  try {
+    const online = await ping();
+    if (!online) {
+      setStatus('local');
+      return;
+    }
+    await syncOnce();
+    await pullFromCloud();
+    const remaining = await offlineQueue.pendingCount();
+    setStatus(remaining > 0 ? 'syncing' : 'cloud');
+  } finally {
+    inProgress = false;
   }
-  await syncOnce();
-  // After a successful drain, queue may be empty → cloud.
-  const remaining = await offlineQueue.pendingCount();
-  setStatus(remaining > 0 ? 'syncing' : 'cloud');
 }
 
 function start() {
@@ -163,4 +239,4 @@ function stop() {
   }
 }
 
-module.exports = { start, stop, getStatus, onStatusChange, syncOnce, tick };
+module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, tick };

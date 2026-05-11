@@ -1,0 +1,138 @@
+name: Release
+
+# Triggers:
+#   - git tag push (v*)        → builds both installers + creates a Release
+#   - manual workflow_dispatch → builds both installers, skips the Release job
+#                                (useful for dry runs / debugging)
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  # Some action versions still declare Node 20 in their metadata; this opts
+  # everything onto Node 24 per GitHub's own deprecation guidance.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  # ── Mac ────────────────────────────────────────────────────────────
+  build-mac:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20         # Electron 33 bundles Node 20
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Build React frontend
+        run: |
+          cd client
+          npm install
+          npm run build
+
+      - name: Install Electron + rebuild native modules
+        run: |
+          cd electron
+          npm install
+          npm run rebuild:native
+
+      - name: Build Mac DMG
+        run: |
+          cd electron
+          npm run build:mac
+
+      - name: Show build output (debug)
+        run: ls -la electron/dist-electron
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v5
+        with:
+          name: mac-installer
+          path: electron/dist-electron/*.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+  # ── Windows ────────────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Build React frontend
+        run: |
+          cd client
+          npm install
+          npm run build
+
+      - name: Install Electron + rebuild native modules
+        run: |
+          cd electron
+          npm install
+          npm run rebuild:native
+
+      - name: Build Windows installer
+        run: |
+          cd electron
+          npm run build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show build output (debug)
+        shell: cmd
+        run: dir electron\dist-electron /s
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v5
+        with:
+          name: windows-installer
+          path: electron/dist-electron/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  # ── Release (only on tag push) ─────────────────────────────────────
+  release:
+    needs: [build-mac, build-windows]
+    runs-on: ubuntu-latest
+    # Skip on workflow_dispatch runs — only fire when a v* tag is pushed.
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write  # required to create / update the Release
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: dist
+
+      - name: Show downloaded files
+        run: ls -laR dist
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: SiamEPOS ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/mac-installer/*.dmg
+            dist/windows-installer/*.exe

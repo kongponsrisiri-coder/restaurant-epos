@@ -5,3 +5,7 @@ restaurant-local.db-journal
 restaurant-local.db-wal
 restaurant-local.db-shm
 .env
+
+# macOS Finder metadata
+.DS_Store
+**/.DS_Store

@@ -1301,6 +1301,15 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => console.log('Screen disconnected:', socket.id));
 });
 
+// Force a cloud→local pull immediately (operator can hit this if the menu
+// looks stale without waiting for the next interval). No-op in cloud mode.
+app.post('/api/sync/pull', async (req, res) => {
+  try {
+    await syncService.pullFromCloud();
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Offline-mode sync status (consumed by Electron's title-bar indicator).
 app.get('/api/sync-status', async (req, res) => {
   try {

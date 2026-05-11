@@ -17,21 +17,22 @@ let intervalHandle = null;
 let inProgress = false;
 const subscribers = new Set();
 
-// Tables pulled from cloud → applied locally. Conflict rule per spec:
-// menu / staff / settings / tables: cloud wins. orders: local wins (never pulled).
-// Upsert by primary key so existing FKs (order_items.menu_item_id, orders.table_id)
-// remain valid across syncs.
-const PULL_ENDPOINTS = [
+// Flat-shape endpoints pulled directly into a single local table.
+// Conflict rule per spec: menu / staff / settings / tables: cloud wins;
+// orders: local wins (never pulled). Upsert by PK so existing FKs
+// (order_items.menu_item_id, orders.table_id) remain valid across syncs.
+// /api/menu/all is handled separately because it returns a nested tree
+// (categories → subcategories + items) — see pullMenuTree().
+const PULL_TABLES = [
   { path: '/api/tables',                 table: 'tables',                 pk: 'id' },
-  { path: '/api/categories',             table: 'categories',             pk: 'id' },
-  { path: '/api/subcategories',          table: 'subcategories',          pk: 'id' },
-  { path: '/api/menu/all',               table: 'menu_items',             pk: 'id' },
   { path: '/api/staff',                  table: 'staff',                  pk: 'id' },
   { path: '/api/settings',               table: 'settings',               pk: 'key' },
   { path: '/api/table-walls',            table: 'table_walls',            pk: 'id' },
   { path: '/api/table-combinations',     table: 'table_combinations',     pk: 'id' },
   { path: '/api/dining-duration-tiers',  table: 'dining_duration_tiers',  pk: 'id' },
 ];
+
+let initialSyncDone = false;
 
 // In-memory local→cloud id map. Rebuilt each sync run as we replay the queue
 // from create_order onwards, so a server restart mid-queue still resolves
@@ -166,9 +167,87 @@ async function upsertRows(table, pk, rows) {
   return n;
 }
 
+async function pullMenuTree() {
+  // /api/menu/all → categories with nested subcategories[] and items[].
+  // Flatten into three local tables.
+  try {
+    const r = await fetch(CLOUD_API_URL + '/api/menu/all', {
+      signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+    });
+    if (!r.ok) { console.warn(`[sync] pull /api/menu/all ${r.status}`); return []; }
+    const categories = await r.json();
+    if (!Array.isArray(categories)) return [];
+
+    const flatCategories = categories.map((c) => ({
+      id: c.id, name: c.name, sort_order: c.sort_order,
+      is_bar: c.is_bar, default_course: c.default_course,
+    }));
+    const flatSubcategories = categories.flatMap((c) =>
+      (c.subcategories || []).map((s) => ({
+        id: s.id, category_id: s.category_id, name: s.name, sort_order: s.sort_order,
+      }))
+    );
+    const flatItems = categories.flatMap((c) =>
+      (c.items || []).map((i) => ({
+        id: i.id, category_id: i.category_id, subcategory_id: i.subcategory_id,
+        name: i.name, name_alt: i.name_alt, description: i.description,
+        price: i.price, is_available: i.is_available,
+        allergens: i.allergens, sort_order: i.sort_order,
+      }))
+    );
+
+    const nCat   = await upsertRows('categories', 'id', flatCategories);
+    const nSub   = await upsertRows('subcategories', 'id', flatSubcategories);
+    const nItems = await upsertRows('menu_items', 'id', flatItems);
+    console.log(`[sync] pull menu tree: ${nCat} cats, ${nSub} subs, ${nItems} items`);
+
+    return flatItems.map((i) => i.id);
+  } catch (err) {
+    console.warn('[sync] pull menu tree failed:', err.message);
+    return [];
+  }
+}
+
+async function pullModifiersForMenuItems(itemIds) {
+  // No bulk endpoint on Railway — fetch per item. The endpoint returns
+  // [{ ...modifier_group, modifiers: [...modifier rows] }, ...]
+  let totalGroups = 0;
+  let totalMods = 0;
+  for (const id of itemIds) {
+    try {
+      const r = await fetch(CLOUD_API_URL + `/api/menu/items/${id}/modifiers`, {
+        signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+      });
+      if (!r.ok) continue;
+      const groups = await r.json();
+      if (!Array.isArray(groups) || groups.length === 0) continue;
+
+      const flatGroups = groups.map((g) => ({
+        id: g.id, menu_item_id: g.menu_item_id ?? id,
+        name: g.name, required: g.required, multi_select: g.multi_select,
+      }));
+      const flatMods = groups.flatMap((g) =>
+        (g.modifiers || []).map((m) => ({
+          id: m.id, group_id: m.group_id ?? g.id,
+          name: m.name, extra_price: m.extra_price, is_available: m.is_available,
+        }))
+      );
+      totalGroups += await upsertRows('modifier_groups', 'id', flatGroups);
+      totalMods   += await upsertRows('modifiers', 'id', flatMods);
+    } catch (err) {
+      console.warn(`[sync] modifiers item#${id} failed:`, err.message);
+    }
+  }
+  if (totalGroups || totalMods) {
+    console.log(`[sync] pull modifiers: ${totalGroups} groups, ${totalMods} options`);
+  }
+}
+
 async function pullFromCloud() {
   if (!offlineQueue.isLocal || !CLOUD_API_URL) return;
-  for (const ep of PULL_ENDPOINTS) {
+
+  // Flat-shape endpoints.
+  for (const ep of PULL_TABLES) {
     try {
       const r = await fetch(CLOUD_API_URL + ep.path, {
         signal: AbortSignal.timeout(PING_TIMEOUT_MS),
@@ -178,7 +257,6 @@ async function pullFromCloud() {
         continue;
       }
       const rows = await r.json();
-      // Endpoints may return an array directly or {data: [...]} — handle both.
       const list = Array.isArray(rows) ? rows : (rows?.data || []);
       const n = await upsertRows(ep.table, ep.pk, list);
       if (n > 0) console.log(`[sync] pull ${ep.table}: ${n} rows`);
@@ -186,6 +264,19 @@ async function pullFromCloud() {
       console.warn(`[sync] pull ${ep.path} failed:`, err.message);
     }
   }
+
+  // Nested menu tree + modifier subtree.
+  const itemIds = await pullMenuTree();
+  if (itemIds.length > 0) {
+    await pullModifiersForMenuItems(itemIds);
+  }
+}
+
+async function isMenuEmpty() {
+  try {
+    const r = await pool.query('SELECT COUNT(*) AS n FROM menu_items');
+    return Number(r.rows[0]?.n || 0) === 0;
+  } catch { return true; }
 }
 
 async function syncOnce() {
@@ -215,6 +306,22 @@ async function tick() {
       setStatus('local');
       return;
     }
+
+    // First-launch full sync — show the banner while it runs so the operator
+    // sees something is happening instead of an empty menu.
+    if (!initialSyncDone) {
+      const empty = await isMenuEmpty();
+      if (empty) {
+        setStatus('initial-sync');
+        await pullFromCloud();
+        initialSyncDone = true;
+        const remaining = await offlineQueue.pendingCount();
+        setStatus(remaining > 0 ? 'syncing' : 'cloud');
+        return;
+      }
+      initialSyncDone = true;
+    }
+
     await syncOnce();
     await pullFromCloud();
     const remaining = await offlineQueue.pendingCount();

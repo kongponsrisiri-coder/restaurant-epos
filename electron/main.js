@@ -13,7 +13,30 @@ let statusPollHandle = null;
 let lastStatus = null;
 
 const STATUS_POLL_MS = 5000;
-const STATUS_EMOJI = { cloud: '🟢', local: '🟡', syncing: '🔴' };
+const STATUS_EMOJI = { cloud: '🟢', local: '🟡', syncing: '🔴', 'initial-sync': '🔄' };
+
+function showInitialSyncOverlay() {
+  if (!mainWindow) return;
+  mainWindow.webContents.executeJavaScript(`(() => {
+    if (document.getElementById('siamepos-initial-sync')) return;
+    const o = document.createElement('div');
+    o.id = 'siamepos-initial-sync';
+    o.style.cssText = 'position:fixed;inset:0;background:#0D1B3E;color:white;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:2147483647;font-family:system-ui,-apple-system,sans-serif;animation:siameposFade .3s';
+    o.innerHTML = '<style>@keyframes siameposFade{from{opacity:0}to{opacity:1}}@keyframes siameposSpin{to{transform:rotate(360deg)}}</style>' +
+      '<div style="font-size:48px;margin-bottom:24px;display:inline-block;animation:siameposSpin 1.4s linear infinite">🔄</div>' +
+      '<div style="font-size:20px;font-weight:600;margin-bottom:8px">Syncing menu from cloud…</div>' +
+      '<div style="font-size:13px;color:rgba(201,168,76,0.7);letter-spacing:.05em">Setting up your offline data</div>';
+    document.body.appendChild(o);
+  })();`, true).catch(() => {});
+}
+
+function hideInitialSyncOverlay() {
+  if (!mainWindow) return;
+  mainWindow.webContents.executeJavaScript(
+    `document.getElementById('siamepos-initial-sync')?.remove();`,
+    true
+  ).catch(() => {});
+}
 
 async function pollSyncStatus() {
   if (!mainWindow) return;
@@ -24,7 +47,19 @@ async function pollSyncStatus() {
     if (!r.ok) throw new Error(r.statusText);
     const { status, queueSize } = await r.json();
     if (status === lastStatus) return;
+
+    const prev = lastStatus;
     lastStatus = status;
+
+    if (status === 'initial-sync') {
+      showInitialSyncOverlay();
+    } else if (prev === 'initial-sync') {
+      // Just finished the first-launch sync — reload so React refetches
+      // against the now-populated local server, then drop the overlay.
+      hideInitialSyncOverlay();
+      mainWindow.webContents.reload();
+    }
+
     const emoji = STATUS_EMOJI[status] || '⚪';
     const suffix = queueSize > 0 ? ` (${queueSize} queued)` : '';
     mainWindow.setTitle(`${emoji} SiamEPOS${suffix}`);

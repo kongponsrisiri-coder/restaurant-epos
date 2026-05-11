@@ -42,7 +42,7 @@ export const addMenuItem = (item) => post('/api/menu/items', item);
 export const updateMenuItem = (id, item) => put(`/api/menu/items/${id}`, item);
 export const getOrders = () => get('/api/orders');
 export const getOrder = (id) => get(`/api/orders/${id}`);
-export const createOrder = (table_id, covers) => post('/api/orders', { table_id, covers });
+export const createOrder = (table_id, covers, staff_id) => post('/api/orders', { table_id, covers, staff_id });
 export const addOrderItems = (orderId, items) => post(`/api/orders/${orderId}/items`, { items });
 export const payOrder = (orderId, amount, method) => post(`/api/orders/${orderId}/pay`, { amount, method });
 export const updateItemStatus = (itemId, status) => put(`/api/order-items/${itemId}/status`, { status });
@@ -143,3 +143,7 @@ export const clockIn        = (pin)        => post('/api/clock/in',  { pin });
 export const clockOut       = (pin)        => post('/api/clock/out', { pin });
 export const getClockStatus = ()           => get('/api/clock/status');
 export const getClockRecords = (from, to)  => get(`/api/clock/records?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+
+// SEPOS-030 — staff performance report
+export const getStaffPerformance = (from, to) =>
+  get(`/api/reports/staff-performance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);

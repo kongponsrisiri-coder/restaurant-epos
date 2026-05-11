@@ -375,11 +375,14 @@ app.get('/api/orders/:id', async (req, res) => {
 
 app.post('/api/orders', async (req, res) => {
   try {
-    const { table_id, covers } = req.body;
-    const result = await pool.query("INSERT INTO orders (table_id, status, covers, opened_at) VALUES ($1, 'open', $2, NOW()) RETURNING id", [table_id, covers || 1]);
+    const { table_id, covers, staff_id } = req.body;
+    const result = await pool.query(
+      "INSERT INTO orders (table_id, staff_id, status, covers, opened_at) VALUES ($1, $2, 'open', $3, NOW()) RETURNING id",
+      [table_id, staff_id || null, covers || 1]
+    );
     await pool.query("UPDATE tables SET status = 'occupied' WHERE id = $1", [table_id]);
     const localOrderId = result.rows[0].id;
-    await offlineQueue.enqueue('create_order', { localOrderId, table_id, covers: covers || 1 });
+    await offlineQueue.enqueue('create_order', { localOrderId, table_id, covers: covers || 1, staff_id: staff_id || null });
     res.json({ id: localOrderId, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1360,6 +1363,74 @@ app.get('/api/network-info', (req, res) => {
     }
   }
   res.json({ ip: '127.0.0.1', port, url: `http://127.0.0.1:${port}` });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// SEPOS-030 — staff performance
+// ─────────────────────────────────────────────────────────────────────
+app.get('/api/reports/staff-performance', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const fromTs = from || '1970-01-01';
+    const toTs   = to   || '2999-12-31';
+    const [ordersRes, itemsRes] = await Promise.all([
+      pool.query(`
+        SELECT o.id, o.staff_id, s.name AS staff_name, s.role AS staff_role,
+               o.total, o.covers, o.opened_at, o.closed_at
+        FROM orders o LEFT JOIN staff s ON s.id = o.staff_id
+        WHERE o.status='closed'
+          AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
+      `, [fromTs, toTs]),
+      pool.query(`
+        SELECT o.staff_id, oi.course, COUNT(*) AS cnt
+        FROM order_items oi LEFT JOIN orders o ON o.id = oi.order_id
+        WHERE o.status='closed' AND oi.voided=0
+          AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
+        GROUP BY o.staff_id, oi.course
+      `, [fromTs, toTs]),
+    ]);
+
+    const byStaff = {};
+    for (const o of ordersRes.rows) {
+      const key = o.staff_id ?? 'unassigned';
+      if (!byStaff[key]) byStaff[key] = {
+        staff_id: o.staff_id || null,
+        staff_name: o.staff_name || 'Unassigned',
+        staff_role: o.staff_role || null,
+        orders: 0, covers: 0, total_sales: 0,
+        total_turn_mins: 0, turn_count: 0,
+        starters: 0, mains: 0, desserts: 0, extras: 0,
+      };
+      const s = byStaff[key];
+      s.orders += 1;
+      s.covers += Number(o.covers || 0);
+      s.total_sales += Number(o.total || 0);
+      if (o.opened_at && o.closed_at) {
+        const ms = new Date(o.closed_at) - new Date(o.opened_at);
+        if (ms > 0 && ms < 24 * 3600 * 1000) {
+          s.total_turn_mins += ms / 60000;
+          s.turn_count += 1;
+        }
+      }
+    }
+    for (const r of itemsRes.rows) {
+      const key = r.staff_id ?? 'unassigned';
+      if (!byStaff[key]) continue;
+      const c = Number(r.cnt || 0);
+      const course = Number(r.course);
+      if      (course === 1) byStaff[key].starters += c;
+      else if (course === 2) byStaff[key].mains    += c;
+      else if (course === 3) byStaff[key].desserts += c;
+      else                   byStaff[key].extras   += c;
+    }
+    const summary = Object.values(byStaff).map(s => ({
+      ...s,
+      avg_turn_mins:  s.turn_count > 0 ? s.total_turn_mins / s.turn_count : 0,
+      avg_per_cover:  s.covers > 0 ? s.total_sales / s.covers : 0,
+      dessert_ratio:  s.starters > 0 ? s.desserts / s.starters : 0,
+    })).sort((a, b) => b.total_sales - a.total_sales);
+    res.json(summary);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ─────────────────────────────────────────────────────────────────────

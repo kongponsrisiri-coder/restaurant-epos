@@ -576,7 +576,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                     const num = parseInt(coversInput);
                     if (isNaN(num) || num < 1) return alert('Please enter number of covers!');
                     try {
-                      const data = await createOrder(showCoversPopup.id, num);
+                      const data = await createOrder(showCoversPopup.id, num, staff?.id);
                       setShowCoversPopup(null);
                       setCoversInput('');
                       onOpenOrder(data.id, showCoversPopup.id);

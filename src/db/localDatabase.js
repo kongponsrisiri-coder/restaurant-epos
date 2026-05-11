@@ -87,6 +87,7 @@ function initSchema() {
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       table_id INTEGER REFERENCES tables(id) ON DELETE SET NULL,
+      staff_id INTEGER REFERENCES staff(id) ON DELETE SET NULL,
       status TEXT DEFAULT 'open',
       covers INTEGER DEFAULT 1,
       total REAL DEFAULT 0,
@@ -296,6 +297,8 @@ function runMigrations() {
   addColumnIfMissing('order_items', 'resend_reason', 'TEXT');
   // SEPOS-023: void type on order_items
   addColumnIfMissing('order_items', 'void_type', 'TEXT');
+  // SEPOS-030: staff attribution on orders
+  addColumnIfMissing('orders', 'staff_id', 'INTEGER');
 }
 
 function seedDefaults() {

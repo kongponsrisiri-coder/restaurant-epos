@@ -1,6 +1,83 @@
 import { useState, useEffect, useRef } from 'react';
-import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse } from '../../api';
+import QRCode from 'qrcode';
+import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo } from '../../api';
 import DiningDurationSettings from './DiningDurationSettings';
+
+// Network setup panel — shows the desktop's LAN URL + a scannable QR so
+// kitchen / bar tablets can be pointed at this server without typing.
+// Replaces the old auto-popup that used to fire on first Electron launch.
+function NetworkSetupCard({ cardStyle }) {
+  const [info, setInfo] = useState(null);
+  const [qr, setQr] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getNetworkInfo()
+      .then(async (n) => {
+        if (cancelled || !n?.url) return;
+        setInfo(n);
+        try {
+          const dataUrl = await QRCode.toDataURL(n.url, {
+            width: 220, margin: 1, errorCorrectionLevel: 'M',
+            color: { dark: '#0D1B3E', light: '#FFFFFF' },
+          });
+          if (!cancelled) setQr(dataUrl);
+        } catch (err) { console.warn('[network-setup] QR failed:', err); }
+      })
+      .catch((err) => console.warn('[network-setup] info failed:', err));
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!info) return null;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(info.url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  };
+
+  return (
+    <div style={cardStyle}>
+      <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:6 }}>📱 Network Setup</h2>
+      <p style={{ fontSize:13, color:'#888', marginBottom:16 }}>
+        Connect kitchen and bar tablets on the same Wi-Fi.
+      </p>
+      <div style={{ display:'flex', gap:20, alignItems:'flex-start', flexWrap:'wrap' }}>
+        <div style={{ flex:1, minWidth:240 }}>
+          <div style={{
+            background:'#0D1B3E', color:'#C9A84C', padding:'14px 18px',
+            borderRadius:10, fontFamily:'Menlo, Consolas, monospace',
+            fontSize:16, fontWeight:800, textAlign:'center',
+            marginBottom:12, userSelect:'text', wordBreak:'break-all'
+          }}>
+            {info.url}
+          </div>
+          <button onClick={copy} style={{
+            padding:'10px 20px', borderRadius:8, border:'none',
+            background: copied ? '#22c55e' : '#C9A84C',
+            color: copied ? 'white' : '#0D1B3E',
+            fontWeight:700, cursor:'pointer', fontSize:13
+          }}>
+            {copied ? '✓ Copied' : 'Copy URL'}
+          </button>
+          <div style={{ fontSize:12, color:'#888', marginTop:12, lineHeight:1.5 }}>
+            On each tablet: open Camera, scan the QR, tap the SiamEPOS link in Safari.
+            Then Share → <strong>Add to Home Screen</strong> for one-tap access.
+          </div>
+        </div>
+        {qr && (
+          <div style={{ background:'white', padding:10, borderRadius:10, border:'1px solid #eee', flexShrink:0 }}>
+            <img src={qr} alt={`QR code for ${info.url}`}
+                 style={{ width:200, height:200, display:'block' }} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function BarCategoryManager() {
   const [categories, setCategories] = useState([]);
@@ -236,6 +313,9 @@ export default function SettingsSection() {
       <div style={{ marginTop:20 }}>
         <DiningDurationSettings />
       </div>
+
+      {/* ── Network Setup (QR for iPads) ── */}
+      <NetworkSetupCard cardStyle={cardStyle} />
     </div>
   );
 }

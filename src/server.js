@@ -1336,6 +1336,26 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => console.log('Screen disconnected:', socket.id));
 });
 
+// LAN address of this server — used by the React Settings page to render
+// a QR code that kitchen / bar tablets can scan. Prefers RFC1918 private
+// ranges and skips VPN/tunnel interface names so a Tailscale or corp-VPN
+// address isn't advertised by mistake.
+app.get('/api/network-info', (req, res) => {
+  const os = require('os');
+  const port = process.env.PORT || 3001;
+  const ifaces = os.networkInterfaces();
+  for (const name of Object.keys(ifaces)) {
+    if (/^(tun|utun|tap|ipsec|vpn|wg|zt)/i.test(name)) continue;
+    for (const iface of (ifaces[name] || [])) {
+      if (iface.family !== 'IPv4' || iface.internal) continue;
+      if (/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(iface.address)) {
+        return res.json({ ip: iface.address, port, url: `http://${iface.address}:${port}` });
+      }
+    }
+  }
+  res.json({ ip: '127.0.0.1', port, url: `http://127.0.0.1:${port}` });
+});
+
 // Force a cloud→local pull immediately (operator can hit this if the menu
 // looks stale without waiting for the next interval). No-op in cloud mode.
 app.post('/api/sync/pull', async (req, res) => {

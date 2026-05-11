@@ -129,3 +129,6 @@ export const deleteTableWall = (id) => del(`/api/table-walls/${id}`);
 // Dining Duration Tiers
 export const getDiningDurationTiers = () => get('/api/dining-duration-tiers');
 export const updateDiningDurationTiers = (tiers) => put('/api/dining-duration-tiers', { tiers });
+
+// Network setup — LAN address the iPads should connect to.
+export const getNetworkInfo = () => get('/api/network-info');

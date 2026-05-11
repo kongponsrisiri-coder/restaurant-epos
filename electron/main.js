@@ -8,6 +8,9 @@ const { spawn } = require('child_process');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const DEV_URL = 'http://localhost:5173';
 
+// Single source of truth for the app icon — same lotus the PWA uses.
+const APP_ICON_PATH = path.join(PROJECT_ROOT, 'client', 'public', 'icon-512.png');
+
 let mainWindow = null;
 let setupWindow = null;
 let tray = null;
@@ -297,6 +300,7 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: '#1a1a2e',
     title: 'SiamEPOS',
+    icon: APP_ICON_PATH,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -328,14 +332,13 @@ function createWindow() {
 }
 
 function createTray() {
-  const iconPath = path.join(__dirname, 'build', 'tray-icon.png');
-  const trayImage = fs.existsSync(iconPath)
-    ? nativeImage.createFromPath(iconPath)
+  // Use the same lotus icon as the dock, downscaled for the menu bar.
+  // (Note: this means the tray icon is a coloured image rather than a
+  // monochrome template — it won't tint with dark/light menu bar mode,
+  // but it matches the dock and is what the operator recognises.)
+  const trayImage = fs.existsSync(APP_ICON_PATH)
+    ? nativeImage.createFromPath(APP_ICON_PATH).resize({ width: 22, height: 22 })
     : nativeImage.createEmpty();
-
-  if (process.platform === 'darwin' && !trayImage.isEmpty()) {
-    trayImage.setTemplateImage(true);
-  }
 
   tray = new Tray(trayImage);
   tray.setToolTip('SiamEPOS');
@@ -387,20 +390,22 @@ function setupAutoUpdater() {
 }
 
 app.whenReady().then(() => {
+  // Dock icon (macOS only — Linux/Windows ignore this).
+  if (process.platform === 'darwin' && app.dock && fs.existsSync(APP_ICON_PATH)) {
+    try { app.dock.setIcon(APP_ICON_PATH); } catch (err) {
+      console.warn('[dock] setIcon failed:', err.message);
+    }
+  }
+
   startLocalServer();
   createWindow();
   createTray();
   startStatusPoll();
   if (app.isPackaged) setupAutoUpdater();
 
-  // First-launch hint — show the LAN URL once so operators can point
-  // kitchen/bar tablets at the machine. Marker file lives in userData.
-  const welcomedFile = path.join(app.getPath('userData'), '.welcomed');
-  if (!fs.existsSync(welcomedFile)) {
-    // Give the server a moment to bind so the URL we show is actually live.
-    setTimeout(showSetupWindow, 1500);
-    try { fs.writeFileSync(welcomedFile, new Date().toISOString()); } catch {}
-  }
+  // Network-setup window is no longer auto-shown — operators reach it from
+  // the Admin → Settings page (Network Setup card) or the tray's "Show
+  // network setup…" item. Keeps first launch focused on the login screen.
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

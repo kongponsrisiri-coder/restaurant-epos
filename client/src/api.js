@@ -155,3 +155,6 @@ export const getVatReport = (from, to) =>
 // SEPOS-031 — wastage cost report (date range)
 export const getWastageReport = (from, to) =>
   get(`/api/reports/wastage?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+
+// SEPOS-033 — customer CRM (Phase 1)
+export const getCustomers = () => get('/api/customers');

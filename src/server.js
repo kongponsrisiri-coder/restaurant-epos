@@ -1005,7 +1005,7 @@ app.get('/api/reservations', async (req, res) => {
 
 app.post('/api/reservations', widgetCors, async (req, res) => {
   try {
-    const { restaurant_id = 'siamepos', customer_name, customer_phone, customer_email, covers, reservation_date, reservation_time, notes, source = 'widget', table_id = null, status = 'pending' } = req.body;
+    const { restaurant_id = 'siamepos', customer_name, customer_phone, customer_email, covers, reservation_date, reservation_time, notes, source = 'widget', table_id = null, status = 'pending', marketing_consent = 0 } = req.body;
     if (!customer_name?.trim()) return res.status(400).json({ error: 'Guest name is required' });
     if (!customer_phone?.trim()) return res.status(400).json({ error: 'Phone number is required' });
     if (!reservation_date) return res.status(400).json({ error: 'Date is required' });
@@ -1019,8 +1019,8 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
     if (alreadyBooked + coversNum > maxCovers) return res.status(409).json({ error: 'This time slot is no longer available. Please choose another time.' });
     const insertStatus = source === 'widget' ? 'pending' : (status || 'pending');
     const result = await pool.query(
-      `INSERT INTO reservations (restaurant_id, table_id, customer_name, customer_phone, customer_email, covers, reservation_date, reservation_time, status, notes, source) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [restaurant_id, table_id, customer_name.trim(), customer_phone.trim(), customer_email?.trim() || null, coversNum, reservation_date, reservation_time, insertStatus, notes?.trim() || null, source]
+      `INSERT INTO reservations (restaurant_id, table_id, customer_name, customer_phone, customer_email, covers, reservation_date, reservation_time, status, notes, source, marketing_consent) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [restaurant_id, table_id, customer_name.trim(), customer_phone.trim(), customer_email?.trim() || null, coversNum, reservation_date, reservation_time, insertStatus, notes?.trim() || null, source, marketing_consent ? 1 : 0]
     );
     const reservation = result.rows[0];
     io.emit('new_reservation', { ...reservation, reservation_date: String(reservation.reservation_date).split('T')[0], reservation_time: String(reservation.reservation_time).slice(0, 5) });
@@ -1395,6 +1395,77 @@ app.get('/api/network-info', (req, res) => {
     }
   }
   res.json({ ip: '127.0.0.1', port, url: `http://127.0.0.1:${port}` });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// SEPOS-033 — customer CRM
+// Aggregates the reservations table by email (case-insensitive) to give
+// the owner a customer list with visit counts, first/last visit, status
+// (VIP / Regular / New / Lapsed) and an estimated total spend.
+//
+// Spend estimate uses a heuristic: orders on the reserved table on the
+// reservation date. Marked "estimated" in the UI — accuracy needs a
+// proper orders.reservation_id link (separate ticket).
+// ─────────────────────────────────────────────────────────────────────
+app.get('/api/customers', async (req, res) => {
+  try {
+    // Pull reservations + their estimated spend in one query. The spend
+    // join is intentionally loose (table + date) — multiple reservations
+    // at the same table on the same day will currently share the spend,
+    // which we accept for v1.
+    const r = await pool.query(`
+      SELECT
+        LOWER(TRIM(r.customer_email)) AS email_key,
+        MIN(r.customer_email) AS customer_email,
+        MIN(r.customer_name) AS customer_name,
+        MIN(r.customer_phone) AS customer_phone,
+        MAX(COALESCE(r.marketing_consent, 0)) AS marketing_consent,
+        MAX(CASE WHEN r.unsubscribed_at IS NOT NULL THEN 1 ELSE 0 END) AS unsubscribed,
+        COUNT(DISTINCT r.id) AS total_visits,
+        MIN(r.reservation_date) AS first_visit,
+        MAX(r.reservation_date) AS last_visit,
+        COALESCE(SUM(o.total), 0) AS total_spend
+      FROM reservations r
+      LEFT JOIN orders o
+        ON o.table_id = r.table_id
+       AND DATE(o.opened_at) = r.reservation_date
+       AND o.status = 'closed'
+      WHERE r.customer_email IS NOT NULL AND TRIM(r.customer_email) <> ''
+      GROUP BY LOWER(TRIM(r.customer_email))
+      ORDER BY MAX(r.reservation_date) DESC
+    `);
+
+    const today = new Date();
+    const customers = r.rows.map(c => {
+      const visits = Number(c.total_visits || 0);
+      const spend  = Number(c.total_spend  || 0);
+      const lastVisitDate = c.last_visit ? new Date(c.last_visit) : null;
+      const daysSinceLast = lastVisitDate
+        ? Math.floor((today - lastVisitDate) / 86400000)
+        : null;
+      let status;
+      if (daysSinceLast !== null && daysSinceLast > 60) status = 'Lapsed';
+      else if (visits >= 5 || spend >= 200)             status = 'VIP';
+      else if (visits >= 2)                             status = 'Regular';
+      else                                              status = 'New';
+
+      return {
+        customer_email: c.customer_email,
+        customer_name:  c.customer_name,
+        customer_phone: c.customer_phone,
+        total_visits:   visits,
+        first_visit:    c.first_visit,
+        last_visit:     c.last_visit,
+        days_since_last: daysSinceLast,
+        total_spend:    spend,
+        marketing_consent: !!c.marketing_consent,
+        unsubscribed:   !!c.unsubscribed,
+        status,
+      };
+    });
+
+    res.json(customers);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ─────────────────────────────────────────────────────────────────────

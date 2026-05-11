@@ -207,6 +207,8 @@ function initSchema() {
       status TEXT DEFAULT 'pending',
       notes TEXT,
       source TEXT DEFAULT 'epos',
+      marketing_consent INTEGER DEFAULT 0,
+      unsubscribed_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -302,6 +304,9 @@ function runMigrations() {
   addColumnIfMissing('orders', 'staff_id', 'INTEGER');
   // SEPOS-021: VAT rate per menu item
   addColumnIfMissing('menu_items', 'vat_rate', 'REAL DEFAULT 20.0');
+  // SEPOS-033: marketing consent + unsubscribe (GDPR)
+  addColumnIfMissing('reservations', 'marketing_consent', 'INTEGER DEFAULT 0');
+  addColumnIfMissing('reservations', 'unsubscribed_at', 'TIMESTAMP');
 }
 
 function seedDefaults() {

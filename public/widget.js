@@ -553,6 +553,10 @@
       <input class="sw-input" id="sw-email" type="email" placeholder="your@email.com" autocomplete="email" />
       <label class="sw-label">Special Requests (optional)</label>
       <input class="sw-input" id="sw-notes" type="text" placeholder="Allergies, highchair, anniversary…" />
+      <label style="display:flex;align-items:flex-start;gap:8px;margin:14px 0 6px;font-size:13px;color:#555;cursor:pointer;line-height:1.4;">
+        <input type="checkbox" id="sw-marketing" style="margin-top:3px;flex-shrink:0;" />
+        <span>I'd like to receive occasional offers and updates by email.<br><span style="font-size:11px;color:#888;">You can unsubscribe at any time.</span></span>
+      </label>
       <div id="sw-error"></div>
       <button class="sw-btn sw-btn-primary" id="sw-submit">Confirm Booking</button>
       <button class="sw-btn sw-btn-back" id="sw-back-3">← Back</button>
@@ -590,6 +594,7 @@
     const phone = el('sw-phone')?.value.trim() || '';
     const email = el('sw-email')?.value.trim() || '';
     const notes = el('sw-notes')?.value.trim() || '';
+    const marketing = !!el('sw-marketing')?.checked;  // SEPOS-033 GDPR consent
     if (!name)  { showError('Please enter your name'); return; }
     if (!phone) { showError('Please enter your phone number'); return; }
     const btn = el('sw-submit');
@@ -604,6 +609,7 @@
           customer_phone: fmtPhone(phone), customer_email: email || null,
           covers: selected.covers, reservation_date: selected.date,
           reservation_time: selected.time, notes: notes || null, source: 'widget',
+          marketing_consent: marketing ? 1 : 0,
         }),
       });
       const data = await r.json();

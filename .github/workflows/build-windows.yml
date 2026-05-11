@@ -3,6 +3,12 @@ name: Build Windows Installer
 on:
   workflow_dispatch:  # manual trigger from the Actions tab
 
+env:
+  # Some action versions (e.g. upload-artifact@v5) still declare Node 20.
+  # This opts every action in the job into Node 24 to clear the runtime
+  # deprecation warning per GitHub's own guidance.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   build-windows:
     runs-on: windows-latest

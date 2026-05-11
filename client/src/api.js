@@ -1,4 +1,11 @@
 const getServerURL = () => {
+  // Electron desktop: the bundled local server lives on :3001 regardless of
+  // how the renderer was loaded (file:// in prod, http://localhost:5173 in dev).
+  // window.siamepos is injected by electron/preload.js.
+  if (typeof window !== 'undefined' && window.siamepos && window.siamepos.isElectron) {
+    return 'http://localhost:3001';
+  }
+
   const host = window.location.hostname;
   // If running on localhost or local IP (192.168.x.x or 10.x.x.x)
   if (

@@ -117,7 +117,8 @@ function initSchema() {
       voided INTEGER DEFAULT 0,
       void_reason TEXT,
       discount_type TEXT,
-      discount_value REAL
+      discount_value REAL,
+      resend_reason TEXT
     );
 
     CREATE TABLE IF NOT EXISTS order_item_modifiers (
@@ -267,6 +268,24 @@ function initSchema() {
   `);
 }
 
+// SQLite's ADD COLUMN doesn't support IF NOT EXISTS, so we check first.
+// Used to bring already-deployed local DBs up to the latest schema.
+function addColumnIfMissing(table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (cols.some((c) => c.name === column)) return;
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    console.log(`[db:local] added column ${table}.${column}`);
+  } catch (err) {
+    console.warn(`[db:local] could not add ${table}.${column}:`, err.message);
+  }
+}
+
+function runMigrations() {
+  // SEPOS-024: resend reason on order_items
+  addColumnIfMissing('order_items', 'resend_reason', 'TEXT');
+}
+
 function seedDefaults() {
   // Settings — same defaults as PG initDB
   db.prepare(`
@@ -408,6 +427,7 @@ async function end() {
 // Init on require
 try {
   initSchema();
+  runMigrations();
   seedDefaults();
   console.log('[db:local] ✅ schema ready');
 } catch (err) {

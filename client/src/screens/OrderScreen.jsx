@@ -16,6 +16,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const [selectedModifiers, setSelectedModifiers] = useState({});
   const [notePopup, setNotePopup] = useState(null);
   const [voidPopup, setVoidPopup] = useState(null);
+  const [resendPopup, setResendPopup] = useState(null);
   const [showBill, setShowBill] = useState(false);
   const [serviceChargeRemoved, setServiceChargeRemoved] = useState(false);
   const [activeCourse, setActiveCourse] = useState(1);
@@ -177,6 +178,16 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     const n = Math.max(1, Math.min(item.quantity, Number(qty) || item.quantity));
     setVoidPopup(null);
     await voidItem(item.id, reason.trim(), n);
+    await fetchOrder();
+  };
+
+  // SEPOS-024 — resend with reason (Not Cooked / Wrong Item / Missing Item / Remake)
+  const RESEND_REASONS = ['Not Cooked', 'Wrong Item', 'Missing Item', 'Remake'];
+  const confirmResend = async (reason) => {
+    if (!resendPopup) return;
+    const { item } = resendPopup;
+    setResendPopup(null);
+    await resendToKitchen(orderId, [item.id], reason);
     await fetchOrder();
   };
 
@@ -775,12 +786,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                             padding: '2px 6px', cursor: 'pointer', color: '#ef4444',
                             fontSize: 10, fontWeight: 700
                           }}>VOID</button>
-                          <button onClick={async () => {
-                            if (!window.confirm('Resend this item to kitchen?')) return;
-                            await resendToKitchen(orderId, [item.id]);
-                            await fetchOrder();
-                            alert('🔄 Resent to kitchen!');
-                          }} style={{
+                          <button onClick={() => setResendPopup({ item })} style={{
                             background: '#dbeafe', border: 'none', borderRadius: 4,
                             padding: '2px 6px', cursor: 'pointer', color: '#1e40af',
                             fontSize: 10, fontWeight: 700
@@ -1176,6 +1182,40 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   fontWeight: 700, fontSize: 16
                 }}>Add to Order</button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* RESEND POPUP (SEPOS-024) */}
+        {resendPopup && (
+          <div style={{
+            position:'fixed', top:0, left:0, right:0, bottom:0,
+            background:'rgba(0,0,0,0.6)', display:'flex',
+            alignItems:'center', justifyContent:'center', zIndex:1000
+          }}>
+            <div style={{ background:'white', borderRadius:16, padding:24, width:400, maxWidth:'92vw' }}>
+              <h2 style={{ fontSize:18, fontWeight:700, color:'#1a1a2e', marginBottom:6 }}>
+                Resend to kitchen
+              </h2>
+              <div style={{ fontSize:14, color:'#555', marginBottom:18 }}>
+                {resendPopup.item.quantity}× {resendPopup.item.name} — why is this being resent?
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {RESEND_REASONS.map(r => (
+                  <button key={r} onClick={() => confirmResend(r)} style={{
+                    padding:'14px 16px', borderRadius:10, border:'2px solid #dbeafe',
+                    background:'white', color:'#1e40af', cursor:'pointer',
+                    fontWeight:700, fontSize:15, textAlign:'left',
+                  }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = '#dbeafe'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; }}
+                  >🔄 {r}</button>
+                ))}
+              </div>
+              <button onClick={() => setResendPopup(null)} style={{
+                width:'100%', marginTop:14, padding:'12px', borderRadius:10, border:'none',
+                background:'#f0f0f0', cursor:'pointer', fontWeight:700, fontSize:14
+              }}>Cancel</button>
             </div>
           </div>
         )}

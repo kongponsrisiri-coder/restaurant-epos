@@ -125,6 +125,7 @@ async function initDB() {
     `);
 
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS item_name VARCHAR(255)`);
+    await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS resend_reason TEXT`);  // SEPOS-024
     await pool.query(`ALTER TABLE order_items ALTER COLUMN menu_item_id DROP NOT NULL`).catch(() => {});
 
     await pool.query(`

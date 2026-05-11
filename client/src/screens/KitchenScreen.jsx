@@ -379,6 +379,13 @@ if (upcoming.length === 0 && cooking.length === 0) return null;
                     <ItemName item={item} showAlt={showAlt} altLang={altLang} />
                     {item.notes && <div style={{ color: '#93c5fd', fontSize: 13, marginTop: 3 }}>{item.notes}</div>}
                     {item.item_note && <div style={{ color: '#e94560', fontSize: 13, fontWeight: 700, marginTop: 3 }}>📝 {item.item_note}</div>}
+                    {item.resend_reason && (
+                      <div style={{
+                        display:'inline-block', marginTop:6, padding:'3px 10px',
+                        background:'#fbbf24', color:'#1a1a2e', borderRadius:6,
+                        fontSize:11, fontWeight:800, letterSpacing:0.5
+                      }}>🔄 RESEND · {item.resend_reason}</div>
+                    )}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
                     <Timer startedAt={item.fired_at || item.cooking_started_at} />

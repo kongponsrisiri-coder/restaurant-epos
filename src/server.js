@@ -786,9 +786,12 @@ app.get('/api/bills/:id/items', async (req, res) => {
 
 app.post('/api/orders/:id/resend', async (req, res) => {
   try {
-    const { item_ids } = req.body;
+    const { item_ids, reason } = req.body;
     const now = new Date().toISOString();
-    await pool.query(`UPDATE order_items SET status='cooking', fired_at=$1, cooking_started_at=$1 WHERE id = ANY($2::int[])`, [now, item_ids]);
+    await pool.query(
+      `UPDATE order_items SET status='cooking', fired_at=$1, cooking_started_at=$1, resend_reason=$2 WHERE id = ANY($3::int[])`,
+      [now, reason || null, item_ids]
+    );
     const orderRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [req.params.id]);
     const itemsRes = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.id = ANY($1::int[])`, [item_ids]);
     io.emit('course_fired', { order: orderRes.rows[0], course: 0, items: itemsRes.rows });

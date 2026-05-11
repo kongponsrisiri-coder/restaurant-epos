@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Menu — Baan Siam London</title>
+<meta name="description" content="Full bilingual menu at Baan Siam. Traditional Thai cuisine. All allergens listed.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='100' height='100' fill='%23FAF8F2'/%3E%3Crect x='36' y='20' width='28' height='60' fill='%23283C2F'/%3E%3Crect x='20' y='36' width='60' height='28' fill='%23283C2F'/%3E%3Ccircle cx='50' cy='50' r='10' fill='%23FAF8F2'/%3E%3Ccircle cx='50' cy='50' r='5' fill='%238B6244'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ivory:#FAF8F2; --linen:#F0E8DA; --forest:#283C2F; --teak:#8B6244;
+  --charcoal:#1A1710; --stone:#7A6E60; --sand:#D8CDB8; --white:#FFFFFF;
+  --font:'Raleway',system-ui,-apple-system,sans-serif;
+  --content-width:1100px; --pad-x:28px; --pad-x-mobile:20px;
+  --section-y:72px; --radius:0px;
+  --border:1px solid var(--sand); --divider:0.5px solid var(--sand);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{background:var(--ivory);color:var(--charcoal);font-family:var(--font);font-weight:300;font-size:15px;line-height:1.7;letter-spacing:0.02em;}
+a{color:inherit;text-decoration:none;}
+h1,.h1{font-size:42px;font-weight:500;letter-spacing:0.04em;line-height:1.2;color:var(--charcoal);}
+h2,.h2{font-size:28px;font-weight:500;letter-spacing:0.04em;line-height:1.2;color:var(--charcoal);}
+h3,.h3{font-size:18px;font-weight:500;letter-spacing:0.04em;line-height:1.2;color:var(--charcoal);}
+p{font-weight:300;line-height:1.7;color:var(--stone);}
+.label{font-size:11px;font-weight:400;letter-spacing:0.26em;text-transform:uppercase;color:var(--stone);}
+.label--accent{color:var(--teak);}
+.label--muted{color:var(--stone);opacity:0.5;}
+.container{max-width:var(--content-width);margin:0 auto;padding:0 var(--pad-x);}
+.section{padding:var(--section-y) var(--pad-x);}
+.section--linen{background:var(--linen);}
+.section--center{text-align:center;}
+.btn{display:inline-block;font-family:var(--font);font-size:12px;font-weight:400;letter-spacing:0.18em;text-transform:uppercase;cursor:pointer;border:none;transition:all 0.18s ease;text-decoration:none;}
+.btn:active{transform:scale(0.98);}
+.btn--solid{background:var(--forest);color:var(--ivory);padding:14px 40px;}
+.btn--solid:hover{background:var(--charcoal);}
+.btn--outline{background:transparent;color:var(--forest);border:1.5px solid var(--forest);padding:9px 22px;}
+.btn--outline:hover{background:var(--forest);color:var(--ivory);}
+.btn--outline-sm{background:transparent;color:var(--forest);border:1.5px solid var(--forest);padding:14px 36px;}
+.btn--outline-sm:hover{background:var(--forest);color:var(--ivory);}
+.nav{position:sticky;top:0;z-index:100;height:60px;background:var(--ivory);border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 28px;}
+.nav__brand{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.nav__dot{width:9px;height:9px;border-radius:50%;background:var(--teak);flex-shrink:0;}
+.nav__name{font-size:15px;font-weight:500;letter-spacing:0.22em;text-transform:uppercase;color:var(--forest);}
+.nav__links{display:flex;gap:28px;list-style:none;}
+.nav__links a{font-size:13px;font-weight:400;letter-spacing:0.07em;color:var(--stone);text-decoration:none;transition:color 0.15s;}
+.nav__links a:hover,.nav__links a.active{color:var(--charcoal);text-decoration:underline;text-underline-offset:3px;}
+.nav__right{display:flex;align-items:center;gap:16px;}
+.lang-btn{font-size:11px;font-weight:400;letter-spacing:0.18em;text-transform:uppercase;color:var(--stone);background:none;border:none;cursor:pointer;font-family:var(--font);transition:color 0.15s;padding:0;}
+.lang-btn:hover{color:var(--charcoal);}
+.hero{background:var(--linen);padding:80px 28px 72px;text-align:center;}
+.hero__eyebrow{margin-bottom:18px;}
+.hero__title{margin-bottom:16px;}
+.hero__body{max-width:360px;margin:0 auto 38px;}
+.features{display:grid;grid-template-columns:repeat(3,1fr);border-top:var(--border);border-bottom:var(--border);}
+.feature{padding:32px 24px;text-align:center;}
+.feature+.feature{border-left:var(--border);}
+.feature__eyebrow{margin-bottom:8px;}
+.feature__name{font-size:15px;font-weight:500;letter-spacing:0.04em;color:var(--charcoal);}
+.menu-preview{display:grid;grid-template-columns:1fr 1fr;border-bottom:var(--border);}
+.dish{padding:32px 28px;}
+.dish+.dish{border-left:var(--border);}
+.dish__category{margin-bottom:10px;}
+.dish__name{font-size:18px;font-weight:500;letter-spacing:0.04em;color:var(--charcoal);margin-bottom:6px;}
+.dish__description{font-size:13px;line-height:1.65;color:var(--stone);margin-bottom:16px;}
+.dish__price{font-size:14px;font-weight:400;letter-spacing:0.06em;color:var(--teak);}
+.booking-cta{background:var(--linen);padding:64px 28px;text-align:center;}
+.booking-cta__eyebrow{margin-bottom:14px;}
+.booking-cta__title{margin-bottom:32px;}
+.booking-widget-container{max-width:420px;margin:0 auto;}
+.footer{background:var(--linen);border-top:var(--border);padding:20px 28px;display:flex;justify-content:space-between;align-items:center;}
+.footer__text{font-size:11px;font-weight:400;letter-spacing:0.10em;color:var(--stone);opacity:0.6;}
+.footer__link{color:var(--stone);text-decoration:none;transition:opacity 0.15s;}
+.footer__link:hover{opacity:1;}
+
+/* ── Booking modal — Sandy's token adaptation ── */
+.sw-overlay{display:none;position:fixed;inset:0;z-index:9999;background:rgba(26,23,16,0.55);align-items:center;justify-content:center;padding:16px;}
+.sw-overlay.open{display:flex;}
+.sw-modal{background:var(--ivory);border:var(--border);padding:40px 36px;width:100%;max-width:440px;position:relative;max-height:94vh;overflow-y:auto;font-family:var(--font);}
+.sw-close{position:absolute;top:16px;right:16px;width:28px;height:28px;background:none;border:none;cursor:pointer;font-size:18px;color:var(--stone);font-family:var(--font);display:flex;align-items:center;justify-content:center;transition:color .15s;}
+.sw-close:hover{color:var(--charcoal);}
+.sw-modal-label{font-size:11px;font-weight:400;letter-spacing:0.26em;text-transform:uppercase;color:var(--teak);margin-bottom:6px;}
+.sw-modal-title{font-size:22px;font-weight:500;letter-spacing:0.04em;color:var(--charcoal);margin-bottom:4px;}
+.sw-modal-sub{font-size:13px;color:var(--stone);margin-bottom:28px;}
+.sw-steps{display:flex;border-bottom:var(--border);margin-bottom:28px;}
+.sw-step{flex:1;text-align:center;padding:10px 0;font-size:10px;font-weight:400;letter-spacing:0.2em;text-transform:uppercase;color:var(--stone);border-bottom:2px solid transparent;transition:all .15s;}
+.sw-step.active{color:var(--charcoal);border-bottom-color:var(--forest);}
+.sw-step.done{color:var(--teak);border-bottom-color:var(--teak);}
+.sw-panel{display:none;}.sw-panel.active{display:block;}
+.sw-field-label{font-size:10px;font-weight:400;letter-spacing:0.22em;text-transform:uppercase;color:var(--stone);display:block;margin-bottom:6px;}
+.sw-input,.sw-select,.sw-textarea{width:100%;padding:10px 14px;background:var(--white);border:var(--border);font-family:var(--font);font-size:14px;font-weight:300;color:var(--charcoal);outline:none;transition:border-color .15s;-webkit-appearance:none;}
+.sw-input:focus,.sw-select:focus{border-color:var(--forest);}
+.sw-input::placeholder{color:var(--sand);}
+.sw-select option{background:var(--ivory);}
+.sw-textarea{resize:none;height:72px;}
+.sw-row{margin-bottom:16px;}.sw-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+.sw-err{font-size:11px;color:#c0392b;margin-top:4px;display:none;letter-spacing:0.05em;}.sw-err.show{display:block;}
+.sw-times{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.sw-time{padding:10px 4px;text-align:center;background:var(--white);border:var(--border);font-size:11px;font-weight:400;letter-spacing:0.1em;color:var(--stone);cursor:pointer;transition:all .15s;font-family:var(--font);}
+.sw-time:hover{border-color:var(--forest);color:var(--forest);}
+.sw-time.selected{background:var(--forest);border-color:var(--forest);color:var(--ivory);}
+.sw-btn-row{display:flex;gap:10px;margin-top:24px;}
+.sw-back{padding:12px 18px;background:none;border:var(--border);font-size:11px;font-weight:400;letter-spacing:0.18em;text-transform:uppercase;color:var(--stone);cursor:pointer;font-family:var(--font);transition:all .15s;}
+.sw-back:hover{border-color:var(--forest);color:var(--forest);}
+.sw-next{flex:1;padding:13px;background:var(--forest);border:none;font-size:11px;font-weight:400;letter-spacing:0.18em;text-transform:uppercase;color:var(--ivory);cursor:pointer;font-family:var(--font);transition:background .15s;}
+.sw-next:hover{background:var(--charcoal);}
+.sw-next:disabled{opacity:.4;cursor:not-allowed;}
+.sw-success{display:none;text-align:center;padding:16px 0;}
+.sw-success-icon{font-size:40px;margin-bottom:16px;}
+.sw-success-ref{background:var(--linen);border:var(--border);padding:12px 16px;font-size:12px;color:var(--teak);letter-spacing:0.06em;margin:12px 0 20px;}
+.sw-powered{margin-top:20px;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--stone);opacity:.5;text-align:center;}
+.sw-powered a{color:var(--teak);opacity:1;}
+
+/* Allergen badges */
+.al{display:inline-block;padding:1px 5px;font-size:8px;font-weight:400;letter-spacing:0.1em;text-transform:uppercase;margin:1px;}
+.al-G{background:#f59e0b;color:#fff;}.al-C{background:#ef4444;color:#fff;}.al-E{background:#eab308;color:#fff;}
+.al-F{background:#3b82f6;color:#fff;}.al-P{background:#78350f;color:#fff;}.al-S{background:#15803d;color:#fff;}
+.al-M{background:#dbeafe;color:#1e3a5f;}.al-N{background:#92400e;color:#fff;}.al-Cel{background:#166534;color:#fff;}
+.al-Mus{background:#ca8a04;color:#fff;}.al-Ses{background:#a16207;color:#fff;}.al-Sul{background:#7c3aed;color:#fff;}
+.al-L{background:#db2777;color:#fff;}.al-Mo{background:#0e7490;color:#fff;}
+
+/* Reveal animation */
+.reveal{opacity:0;transform:translateY(12px);transition:opacity .6s,transform .6s;}
+.reveal.visible{opacity:1;transform:translateY(0);}
+
+@media(max-width:768px){
+  h1,.h1{font-size:30px;} h2,.h2{font-size:22px;}
+  .nav__links{display:none;}
+  .hero{padding:56px 20px 48px;}
+  .features{grid-template-columns:1fr;}
+  .feature+.feature{border-left:none;border-top:var(--border);}
+  .menu-preview{grid-template-columns:1fr;}
+  .dish+.dish{border-left:none;border-top:var(--border);}
+  .booking-cta{padding:48px 20px;}
+  .footer{flex-direction:column;gap:8px;text-align:center;}
+  .section{padding:48px 20px;}
+}
+</style>
+<style>
+.menu-hero{background:var(--linen);padding:72px 28px 56px;text-align:center;}
+.tabs-bar{position:sticky;top:60px;z-index:90;background:var(--ivory);border-bottom:var(--border);padding:0 28px;}
+.tabs-inner{display:flex;gap:0;max-width:var(--content-width);margin:0 auto;overflow-x:auto;}
+.mtab{padding:14px 18px;border:none;border-bottom:2px solid transparent;background:none;font-family:var(--font);font-size:11px;font-weight:400;letter-spacing:0.2em;text-transform:uppercase;color:var(--stone);cursor:pointer;white-space:nowrap;transition:all .15s;}
+.mtab:hover{color:var(--charcoal);}
+.mtab.active{color:var(--forest);border-bottom-color:var(--forest);}
+.menu-body{max-width:var(--content-width);margin:0 auto;border-left:var(--border);border-right:var(--border);}
+.al-key{padding:28px;border-top:var(--border);}
+@media(max-width:768px){.menu-hero{padding:56px 20px 40px;}.tabs-bar{padding:0 20px;}.menu-body{border:none;}}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a class="nav__brand" href="index.html"><span class="nav__dot"></span><span class="nav__name">Baan Siam</span></a>
+  <ul class="nav__links"><li><a href="menu.html" class="active">Menu</a></li><li><a href="book.html" >Book a Table</a></li><li><a href="order.html" >Order Online</a></li><li><a href="about.html" >About</a></li><li><a href="contact.html" >Contact</a></li></ul>
+  <div class="nav__right">
+    <a href="book.html" class="btn btn--outline nav__reserve">Reserve</a>
+  </div>
+</nav>
+
+<div class="menu-hero">
+  <p class="label label--accent" style="margin-bottom:12px;">Our Menu</p>
+  <h1 class="lang-en" style="margin-bottom:8px;">The menu</h1>
+  <p style="font-size:13px;color:var(--stone);max-width:360px;margin:0 auto 24px;" class="lang-en">Everything made fresh daily. Live menu, updated directly from our kitchen.</p>
+  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+    <button class="btn btn--solid lang-en" data-siamepos-takeaway>Order Takeaway</button>
+    <a href="book.html" class="btn btn--outline-sm lang-en">Reserve a Table</a>
+    </div>
+</div>
+
+<div class="tabs-bar"><div class="tabs-inner" id="menuTabs"></div></div>
+
+<div class="menu-body">
+  <div id="menuBody"><p style="padding:48px 28px;text-align:center;color:var(--stone);font-size:13px;letter-spacing:0.1em;">Loading menu…</p></div>
+  <div class="al-key">
+    <p class="label label--muted" style="margin-bottom:12px;">Allergen key</p>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
+      <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--stone);"><span style="display:inline-block;width:8px;height:8px;background:#f59e0b;"></span>Gluten</span><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--stone);"><span style="display:inline-block;width:8px;height:8px;background:#ef4444;"></span>Crustaceans</span><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--stone);"><span style="display:inline-block;width:8px;height:8px;background:#eab308;"></span>Eggs</span><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--stone);"><span style="display:inline-block;width:8px;height:8px;background:#3b82f6;"></span>Fish</span><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--stone);"><span style="display:inline-block;width:8px;height:8px;background:#78350f;"></span>Peanuts</span><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--stone);"><span style="display:inline-block;width:8px;height:8px;background:#15803d;"></span>Soybeans</span><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--stone);"><span style="display:inline-block;width:8px;height:8px;background:#dbeafe;"></span>Milk</span><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--stone);"><span style="display:inline-block;width:8px;height:8px;background:#92400e;"></span>Tree Nuts</span><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--stone);"><span style="display:inline-block;width:8px;height:8px;background:#166534;"></span>Celery</span><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--stone);"><span style="display:inline-block;width:8px;height:8px;background:#ca8a04;"></span>Mustard</span><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--stone);"><span style="display:inline-block;width:8px;height:8px;background:#a16207;"></span>Sesame</span><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--stone);"><span style="display:inline-block;width:8px;height:8px;background:#7c3aed;"></span>Sulphites</span><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--stone);"><span style="display:inline-block;width:8px;height:8px;background:#db2777;"></span>Lupin</span><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--stone);"><span style="display:inline-block;width:8px;height:8px;background:#0e7490;"></span>Molluscs</span>
+    </div>
+    <p style="font-size:12px;color:var(--stone);line-height:1.65;" class="lang-en">If you have a food allergy or intolerance, please speak to a member of staff before ordering. Full allergen matrix available on our <a href="allergens.html" style="color:var(--teak);text-decoration:underline;text-underline-offset:2px;">allergen information page</a>.</p>
+  </div>
+</div>
+
+<footer class="footer">
+  <p class="footer__text lang-en">© 2026 Baan Siam &nbsp;·&nbsp; 18 Marylebone High Street, London W1U 4LJ</p>
+  <p class="footer__text">
+    <a class="footer__link" href="https://siamepos.co.uk" target="_blank">Powered by SiamEPOS™</a>
+  </p>
+</footer>
+<script>const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:.08});document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));</script>
+<script>
+(async function(){
+  var SERVER='https://restaurant-epos-production.up.railway.app';
+  var tabs=document.getElementById('menuTabs');
+  var body=document.getElementById('menuBody');
+  function esc(s){return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function showCat(id){
+    var sections=body.querySelectorAll('.cat-section');
+    for(var i=0;i<sections.length;i++) sections[i].style.display='none';
+    var s=document.getElementById('cat-'+id); if(s) s.style.display='';
+    var btns=tabs.querySelectorAll('.mtab');
+    for(var j=0;j<btns.length;j++) btns[j].classList.toggle('active', btns[j].dataset.cat==String(id));
+  }
+  try{
+    var r=await fetch(SERVER+'/api/menu');
+    var cats=await r.json();
+    cats=(cats||[]).filter(function(c){return c.items && c.items.length>0;});
+    if(!cats.length){body.innerHTML='<p style="padding:48px 28px;text-align:center;color:var(--stone);font-size:13px;">Menu coming soon.</p>';return;}
+    tabs.innerHTML='';
+    body.innerHTML='';
+    cats.forEach(function(c,i){
+      var b=document.createElement('button');
+      b.className='mtab'+(i===0?' active':'');
+      b.dataset.cat=c.id;
+      b.textContent=c.name;
+      b.onclick=function(){showCat(c.id); body.scrollIntoView({behavior:'smooth',block:'start'});};
+      tabs.appendChild(b);
+      var available=c.items.filter(function(it){return it.is_available!==0 && it.is_available!=='0';});
+      var sec=document.createElement('div');
+      sec.className='cat-section';
+      sec.id='cat-'+c.id;
+      if(i!==0) sec.style.display='none';
+      var html='<div style="padding:28px 28px 20px;border-bottom:var(--border);display:flex;justify-content:space-between;align-items:baseline;"><div><p class="label label--accent" style="margin-bottom:4px;">'+esc(c.name)+'</p></div><p class="label label--muted">'+available.length+' dishes</p></div>';
+      available.forEach(function(it,idx){
+        var last=idx===available.length-1;
+        html+='<div style="padding:28px;'+(last?'':'border-bottom:var(--border);')+'display:grid;grid-template-columns:1fr auto;gap:24px;align-items:start;">'
+          +'<div>'
+          +'<h3 style="font-size:16px;font-weight:500;letter-spacing:0.04em;color:var(--charcoal);margin-bottom:6px;">'+esc(it.name)+'</h3>'
+          +(it.description?'<p style="font-size:13px;color:var(--stone);line-height:1.65;">'+esc(it.description)+'</p>':'')
+          +'</div>'
+          +'<div style="text-align:right;flex-shrink:0;"><p style="font-size:14px;font-weight:400;letter-spacing:0.06em;color:var(--teak);white-space:nowrap;">£'+Number(it.price||0).toFixed(2)+'</p></div>'
+          +'</div>';
+      });
+      sec.innerHTML=html;
+      body.appendChild(sec);
+    });
+  }catch(err){
+    body.innerHTML='<p style="padding:48px 28px;text-align:center;color:var(--stone);font-size:13px;">Could not load menu. Please refresh.</p>';
+  }
+})();
+</script>
+
+<!-- SiamEPOS Takeaway Widget — binds to [data-siamepos-takeaway] -->
+<script src="https://restaurant-epos-production.up.railway.app/takeaway-widget.js"></script>
+</body>
+</html>

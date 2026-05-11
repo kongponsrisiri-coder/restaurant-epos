@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Contact — Baan Siam London</title>
+<meta name="description" content="Find Baan Siam at 18 Marylebone High Street, London W1U 4LJ. Reserve a table or contact us.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='100' height='100' fill='%23FAF8F2'/%3E%3Crect x='36' y='20' width='28' height='60' fill='%23283C2F'/%3E%3Crect x='20' y='36' width='60' height='28' fill='%23283C2F'/%3E%3Ccircle cx='50' cy='50' r='10' fill='%23FAF8F2'/%3E%3Ccircle cx='50' cy='50' r='5' fill='%238B6244'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ivory:#FAF8F2; --linen:#F0E8DA; --forest:#283C2F; --teak:#8B6244;
+  --charcoal:#1A1710; --stone:#7A6E60; --sand:#D8CDB8; --white:#FFFFFF;
+  --font:'Raleway',system-ui,-apple-system,sans-serif;
+  --content-width:1100px; --pad-x:28px; --pad-x-mobile:20px;
+  --section-y:72px; --radius:0px;
+  --border:1px solid var(--sand); --divider:0.5px solid var(--sand);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{background:var(--ivory);color:var(--charcoal);font-family:var(--font);font-weight:300;font-size:15px;line-height:1.7;letter-spacing:0.02em;}
+a{color:inherit;text-decoration:none;}
+h1,.h1{font-size:42px;font-weight:500;letter-spacing:0.04em;line-height:1.2;color:var(--charcoal);}
+h2,.h2{font-size:28px;font-weight:500;letter-spacing:0.04em;line-height:1.2;color:var(--charcoal);}
+h3,.h3{font-size:18px;font-weight:500;letter-spacing:0.04em;line-height:1.2;color:var(--charcoal);}
+p{font-weight:300;line-height:1.7;color:var(--stone);}
+.label{font-size:11px;font-weight:400;letter-spacing:0.26em;text-transform:uppercase;color:var(--stone);}
+.label--accent{color:var(--teak);}
+.label--muted{color:var(--stone);opacity:0.5;}
+.container{max-width:var(--content-width);margin:0 auto;padding:0 var(--pad-x);}
+.section{padding:var(--section-y) var(--pad-x);}
+.section--linen{background:var(--linen);}
+.section--center{text-align:center;}
+.btn{display:inline-block;font-family:var(--font);font-size:12px;font-weight:400;letter-spacing:0.18em;text-transform:uppercase;cursor:pointer;border:none;transition:all 0.18s ease;text-decoration:none;}
+.btn:active{transform:scale(0.98);}
+.btn--solid{background:var(--forest);color:var(--ivory);padding:14px 40px;}
+.btn--solid:hover{background:var(--charcoal);}
+.btn--outline{background:transparent;color:var(--forest);border:1.5px solid var(--forest);padding:9px 22px;}
+.btn--outline:hover{background:var(--forest);color:var(--ivory);}
+.btn--outline-sm{background:transparent;color:var(--forest);border:1.5px solid var(--forest);padding:14px 36px;}
+.btn--outline-sm:hover{background:var(--forest);color:var(--ivory);}
+.nav{position:sticky;top:0;z-index:100;height:60px;background:var(--ivory);border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 28px;}
+.nav__brand{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.nav__dot{width:9px;height:9px;border-radius:50%;background:var(--teak);flex-shrink:0;}
+.nav__name{font-size:15px;font-weight:500;letter-spacing:0.22em;text-transform:uppercase;color:var(--forest);}
+.nav__links{display:flex;gap:28px;list-style:none;}
+.nav__links a{font-size:13px;font-weight:400;letter-spacing:0.07em;color:var(--stone);text-decoration:none;transition:color 0.15s;}
+.nav__links a:hover,.nav__links a.active{color:var(--charcoal);text-decoration:underline;text-underline-offset:3px;}
+.nav__right{display:flex;align-items:center;gap:16px;}
+.lang-btn{font-size:11px;font-weight:400;letter-spacing:0.18em;text-transform:uppercase;color:var(--stone);background:none;border:none;cursor:pointer;font-family:var(--font);transition:color 0.15s;padding:0;}
+.lang-btn:hover{color:var(--charcoal);}
+.hero{background:var(--linen);padding:80px 28px 72px;text-align:center;}
+.hero__eyebrow{margin-bottom:18px;}
+.hero__title{margin-bottom:16px;}
+.hero__body{max-width:360px;margin:0 auto 38px;}
+.features{display:grid;grid-template-columns:repeat(3,1fr);border-top:var(--border);border-bottom:var(--border);}
+.feature{padding:32px 24px;text-align:center;}
+.feature+.feature{border-left:var(--border);}
+.feature__eyebrow{margin-bottom:8px;}
+.feature__name{font-size:15px;font-weight:500;letter-spacing:0.04em;color:var(--charcoal);}
+.menu-preview{display:grid;grid-template-columns:1fr 1fr;border-bottom:var(--border);}
+.dish{padding:32px 28px;}
+.dish+.dish{border-left:var(--border);}
+.dish__category{margin-bottom:10px;}
+.dish__name{font-size:18px;font-weight:500;letter-spacing:0.04em;color:var(--charcoal);margin-bottom:6px;}
+.dish__description{font-size:13px;line-height:1.65;color:var(--stone);margin-bottom:16px;}
+.dish__price{font-size:14px;font-weight:400;letter-spacing:0.06em;color:var(--teak);}
+.booking-cta{background:var(--linen);padding:64px 28px;text-align:center;}
+.booking-cta__eyebrow{margin-bottom:14px;}
+.booking-cta__title{margin-bottom:32px;}
+.booking-widget-container{max-width:420px;margin:0 auto;}
+.footer{background:var(--linen);border-top:var(--border);padding:20px 28px;display:flex;justify-content:space-between;align-items:center;}
+.footer__text{font-size:11px;font-weight:400;letter-spacing:0.10em;color:var(--stone);opacity:0.6;}
+.footer__link{color:var(--stone);text-decoration:none;transition:opacity 0.15s;}
+.footer__link:hover{opacity:1;}
+
+/* ── Booking modal — Sandy's token adaptation ── */
+.sw-overlay{display:none;position:fixed;inset:0;z-index:9999;background:rgba(26,23,16,0.55);align-items:center;justify-content:center;padding:16px;}
+.sw-overlay.open{display:flex;}
+.sw-modal{background:var(--ivory);border:var(--border);padding:40px 36px;width:100%;max-width:440px;position:relative;max-height:94vh;overflow-y:auto;font-family:var(--font);}
+.sw-close{position:absolute;top:16px;right:16px;width:28px;height:28px;background:none;border:none;cursor:pointer;font-size:18px;color:var(--stone);font-family:var(--font);display:flex;align-items:center;justify-content:center;transition:color .15s;}
+.sw-close:hover{color:var(--charcoal);}
+.sw-modal-label{font-size:11px;font-weight:400;letter-spacing:0.26em;text-transform:uppercase;color:var(--teak);margin-bottom:6px;}
+.sw-modal-title{font-size:22px;font-weight:500;letter-spacing:0.04em;color:var(--charcoal);margin-bottom:4px;}
+.sw-modal-sub{font-size:13px;color:var(--stone);margin-bottom:28px;}
+.sw-steps{display:flex;border-bottom:var(--border);margin-bottom:28px;}
+.sw-step{flex:1;text-align:center;padding:10px 0;font-size:10px;font-weight:400;letter-spacing:0.2em;text-transform:uppercase;color:var(--stone);border-bottom:2px solid transparent;transition:all .15s;}
+.sw-step.active{color:var(--charcoal);border-bottom-color:var(--forest);}
+.sw-step.done{color:var(--teak);border-bottom-color:var(--teak);}
+.sw-panel{display:none;}.sw-panel.active{display:block;}
+.sw-field-label{font-size:10px;font-weight:400;letter-spacing:0.22em;text-transform:uppercase;color:var(--stone);display:block;margin-bottom:6px;}
+.sw-input,.sw-select,.sw-textarea{width:100%;padding:10px 14px;background:var(--white);border:var(--border);font-family:var(--font);font-size:14px;font-weight:300;color:var(--charcoal);outline:none;transition:border-color .15s;-webkit-appearance:none;}
+.sw-input:focus,.sw-select:focus{border-color:var(--forest);}
+.sw-input::placeholder{color:var(--sand);}
+.sw-select option{background:var(--ivory);}
+.sw-textarea{resize:none;height:72px;}
+.sw-row{margin-bottom:16px;}.sw-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+.sw-err{font-size:11px;color:#c0392b;margin-top:4px;display:none;letter-spacing:0.05em;}.sw-err.show{display:block;}
+.sw-times{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.sw-time{padding:10px 4px;text-align:center;background:var(--white);border:var(--border);font-size:11px;font-weight:400;letter-spacing:0.1em;color:var(--stone);cursor:pointer;transition:all .15s;font-family:var(--font);}
+.sw-time:hover{border-color:var(--forest);color:var(--forest);}
+.sw-time.selected{background:var(--forest);border-color:var(--forest);color:var(--ivory);}
+.sw-btn-row{display:flex;gap:10px;margin-top:24px;}
+.sw-back{padding:12px 18px;background:none;border:var(--border);font-size:11px;font-weight:400;letter-spacing:0.18em;text-transform:uppercase;color:var(--stone);cursor:pointer;font-family:var(--font);transition:all .15s;}
+.sw-back:hover{border-color:var(--forest);color:var(--forest);}
+.sw-next{flex:1;padding:13px;background:var(--forest);border:none;font-size:11px;font-weight:400;letter-spacing:0.18em;text-transform:uppercase;color:var(--ivory);cursor:pointer;font-family:var(--font);transition:background .15s;}
+.sw-next:hover{background:var(--charcoal);}
+.sw-next:disabled{opacity:.4;cursor:not-allowed;}
+.sw-success{display:none;text-align:center;padding:16px 0;}
+.sw-success-icon{font-size:40px;margin-bottom:16px;}
+.sw-success-ref{background:var(--linen);border:var(--border);padding:12px 16px;font-size:12px;color:var(--teak);letter-spacing:0.06em;margin:12px 0 20px;}
+.sw-powered{margin-top:20px;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--stone);opacity:.5;text-align:center;}
+.sw-powered a{color:var(--teak);opacity:1;}
+
+/* Allergen badges */
+.al{display:inline-block;padding:1px 5px;font-size:8px;font-weight:400;letter-spacing:0.1em;text-transform:uppercase;margin:1px;}
+.al-G{background:#f59e0b;color:#fff;}.al-C{background:#ef4444;color:#fff;}.al-E{background:#eab308;color:#fff;}
+.al-F{background:#3b82f6;color:#fff;}.al-P{background:#78350f;color:#fff;}.al-S{background:#15803d;color:#fff;}
+.al-M{background:#dbeafe;color:#1e3a5f;}.al-N{background:#92400e;color:#fff;}.al-Cel{background:#166534;color:#fff;}
+.al-Mus{background:#ca8a04;color:#fff;}.al-Ses{background:#a16207;color:#fff;}.al-Sul{background:#7c3aed;color:#fff;}
+.al-L{background:#db2777;color:#fff;}.al-Mo{background:#0e7490;color:#fff;}
+
+/* Reveal animation */
+.reveal{opacity:0;transform:translateY(12px);transition:opacity .6s,transform .6s;}
+.reveal.visible{opacity:1;transform:translateY(0);}
+
+@media(max-width:768px){
+  h1,.h1{font-size:30px;} h2,.h2{font-size:22px;}
+  .nav__links{display:none;}
+  .hero{padding:56px 20px 48px;}
+  .features{grid-template-columns:1fr;}
+  .feature+.feature{border-left:none;border-top:var(--border);}
+  .menu-preview{grid-template-columns:1fr;}
+  .dish+.dish{border-left:none;border-top:var(--border);}
+  .booking-cta{padding:48px 20px;}
+  .footer{flex-direction:column;gap:8px;text-align:center;}
+  .section{padding:48px 20px;}
+}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a class="nav__brand" href="index.html"><span class="nav__dot"></span><span class="nav__name">Baan Siam</span></a>
+  <ul class="nav__links"><li><a href="menu.html" >Menu</a></li><li><a href="book.html" >Book a Table</a></li><li><a href="order.html" >Order Online</a></li><li><a href="about.html" >About</a></li><li><a href="contact.html" class="active">Contact</a></li></ul>
+  <div class="nav__right">
+    <a href="book.html" class="btn btn--outline nav__reserve">Reserve</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <p class="label label--accent hero__eyebrow lang-en">Contact & Location</p>
+  <h1 class="hero__title lang-en">Find us</h1>
+  <p class="hero__body lang-en">We are on Marylebone High Street, a short walk from Baker Street station.</p>
+</section>
+
+<section class="section reveal">
+  <div class="container">
+    <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:64px;align-items:start;">
+      <div>
+        <p class="label label--accent" style="margin-bottom:16px;">Contact details</p>
+        <div style="border-top:var(--border);">
+          <div style="padding:16px 0;border-bottom:var(--border);">
+            <p class="label label--muted" style="margin-bottom:5px;" class="lang-en">Address</p>
+            <p style="font-size:14px;font-weight:400;color:var(--charcoal);line-height:1.7;">18 Marylebone High Street<br>London W1U 4LJ</p>
+          </div>
+          <div style="padding:16px 0;border-bottom:var(--border);">
+            <p class="label label--muted" style="margin-bottom:5px;">Phone</p>
+            <a href="tel:02079350000" style="font-size:14px;font-weight:400;color:var(--charcoal);">020 7935 0000</a>
+          </div>
+          <div style="padding:16px 0;border-bottom:var(--border);">
+            <p class="label label--muted" style="margin-bottom:5px;">Email</p>
+            <a href="mailto:hello@baansiam.co.uk" style="font-size:14px;font-weight:400;color:var(--charcoal);">hello@baansiam.co.uk</a>
+          </div>
+          <div style="padding:16px 0;border-bottom:var(--border);">
+            <p class="label label--muted" style="margin-bottom:5px;" class="lang-en">Nearest tube</p>
+            <p style="font-size:14px;font-weight:400;color:var(--charcoal);" class="lang-en">Baker Street · Northern &amp; Jubilee Lines · 5 min walk</p>
+          </div>
+          <div style="padding:16px 0;">
+            <p class="label label--muted" style="margin-bottom:10px;">Opening hours</p>
+            <div style="font-size:13px;color:var(--stone);line-height:2.3;">
+              <div style="display:flex;justify-content:space-between;"><span class="lang-en">Mon–Fri</span><span style="color:var(--charcoal);font-weight:400;">12–15:00 &amp; 17:30–22:30</span></div>
+              <div style="display:flex;justify-content:space-between;"><span class="lang-en">Saturday</span><span style="color:var(--charcoal);font-weight:400;">12:00–23:00</span></div>
+              <div style="display:flex;justify-content:space-between;"><span class="lang-en">Sunday</span><span style="color:var(--charcoal);font-weight:400;">12:00–22:00</span></div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:24px;display:flex;gap:10px;flex-wrap:wrap;">
+          <a href="book.html" class="btn btn--solid lang-en">Reserve a Table</a>
+          <a href="mailto:hello@baansiam.co.uk" class="btn btn--outline lang-en">Email Us</a>
+        </div>
+      </div>
+      <div>
+        <div style="border:var(--border);overflow:hidden;">
+          <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2482.419!2d-0.1556!3d51.5235!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0!2zMarylebone+High+Street!5e0!3m2!1sen!2suk!4v1620000000000" width="100%" height="420" style="border:0;display:block;" allowfullscreen loading="lazy" title="Baan Siam map"></iframe>
+        </div>
+        <div style="padding:16px 20px;background:var(--linen);border:var(--border);border-top:none;">
+          <p style="font-size:12px;color:var(--stone);" class="lang-en">5 min walk from Baker Street (Northern &amp; Jubilee Lines). NCP parking available at Marylebone Road. Bus routes 2, 13, 30, 74, 82 nearby.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <p class="footer__text lang-en">© 2026 Baan Siam &nbsp;·&nbsp; 18 Marylebone High Street, London W1U 4LJ</p>
+  <p class="footer__text">
+    <a class="footer__link" href="https://siamepos.co.uk" target="_blank">Powered by SiamEPOS™</a>
+  </p>
+</footer>
+<script>const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:.08});document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));</script>
+</body>
+</html>

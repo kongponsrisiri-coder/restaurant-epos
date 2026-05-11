@@ -491,9 +491,34 @@ function createWindow() {
     console.error('[siamepos] no client build found. Run `cd client && npm run build` first.');
   }
 
-  // Open external links in the OS browser, not inside the Electron window.
+  // Two kinds of window.open() calls need different treatment:
+  //   1. Receipt / Z-report popups — ReceiptPrinter does
+  //      `window.open('', '_blank', …)` then document.write() the HTML
+  //      and trigger window.print(). These have an empty URL (or
+  //      about:blank) and must open as a real child window inside the
+  //      app so the script keeps access to it.
+  //   2. External http(s) links — open in the OS browser instead of
+  //      a sandboxed Electron window.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (!url || url === 'about:blank' || url.startsWith('data:')) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 420,
+          height: 720,
+          backgroundColor: 'white',
+          autoHideMenuBar: true,
+          webPreferences: {
+            contextIsolation: true,
+            nodeIntegration: false,
+          },
+        },
+      };
+    }
+    if (/^https?:/i.test(url)) {
+      shell.openExternal(url);
+      return { action: 'deny' };
+    }
     return { action: 'deny' };
   });
 

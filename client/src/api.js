@@ -151,3 +151,7 @@ export const getStaffPerformance = (from, to) =>
 // SEPOS-021 — VAT report (date range)
 export const getVatReport = (from, to) =>
   get(`/api/reports/vat?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+
+// SEPOS-031 — wastage cost report (date range)
+export const getWastageReport = (from, to) =>
+  get(`/api/reports/wastage?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);

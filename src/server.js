@@ -1384,6 +1384,80 @@ app.get('/api/network-info', (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
+// SEPOS-031 — wastage cost report
+// Voided order_items × recipes.cost_per_portion. Groups by void_type
+// so reports separate true Wastage from Wrong Order / Comp / etc.
+// Items with no recipe yet show cost 0 (no data) rather than crashing.
+// ─────────────────────────────────────────────────────────────────────
+app.get('/api/reports/wastage', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const fromTs = from || '1970-01-01';
+    const toTs   = to   || '2999-12-31';
+    const r = await pool.query(`
+      SELECT oi.id, oi.item_name, oi.menu_item_id,
+             oi.quantity, oi.unit_price,
+             oi.void_type, oi.void_reason,
+             o.created_at AS voided_at, o.id AS order_id, o.table_id,
+             COALESCE(r.cost_per_portion, 0) AS cost_per_portion
+      FROM order_items oi
+      LEFT JOIN orders o ON o.id = oi.order_id
+      LEFT JOIN recipes r ON r.menu_item_id = oi.menu_item_id
+      WHERE oi.voided=1
+        AND o.created_at >= $1::timestamp AND o.created_at <= $2::timestamp
+      ORDER BY o.created_at DESC, oi.id DESC
+    `, [fromTs, toTs]);
+
+    const items = r.rows.map(row => {
+      const qty   = Number(row.quantity || 0);
+      const cpp   = Number(row.cost_per_portion || 0);
+      const price = Number(row.unit_price || 0);
+      return {
+        ...row,
+        quantity: qty,
+        cost_per_portion: cpp,
+        wastage_cost:   qty * cpp,
+        revenue_lost:   qty * price,
+      };
+    });
+
+    // Group by void_type
+    const byTypeMap = new Map();
+    for (const it of items) {
+      const t = it.void_type || 'Uncategorised';
+      const b = byTypeMap.get(t) || { void_type: t, item_count: 0, dish_count: 0, wastage_cost: 0, revenue_lost: 0 };
+      b.item_count   += 1;
+      b.dish_count   += it.quantity;
+      b.wastage_cost += it.wastage_cost;
+      b.revenue_lost += it.revenue_lost;
+      byTypeMap.set(t, b);
+    }
+    const by_type = [...byTypeMap.values()].sort((a, b) => b.wastage_cost - a.wastage_cost);
+
+    // Top wasted dishes
+    const dishMap = new Map();
+    for (const it of items) {
+      const k = it.menu_item_id || `n:${it.item_name}`;
+      const d = dishMap.get(k) || { menu_item_id: it.menu_item_id, item_name: it.item_name || 'Unknown',
+                                     dish_count: 0, wastage_cost: 0, revenue_lost: 0 };
+      d.dish_count   += it.quantity;
+      d.wastage_cost += it.wastage_cost;
+      d.revenue_lost += it.revenue_lost;
+      dishMap.set(k, d);
+    }
+    const top_dishes = [...dishMap.values()].sort((a, b) => b.wastage_cost - a.wastage_cost).slice(0, 10);
+
+    const total = items.reduce((a, b) => ({
+      dish_count:   a.dish_count   + b.quantity,
+      wastage_cost: a.wastage_cost + b.wastage_cost,
+      revenue_lost: a.revenue_lost + b.revenue_lost,
+    }), { dish_count: 0, wastage_cost: 0, revenue_lost: 0 });
+
+    res.json({ items, by_type, top_dishes, total });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─────────────────────────────────────────────────────────────────────
 // SEPOS-021 — VAT report (date range)
 // Treats prices as VAT-inclusive (UK hospitality convention). For each
 // closed order_item in the window, group by vat_rate and compute net /

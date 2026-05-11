@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getSummaryReport } from '../../../api';
+import { getSummaryReport, getWastageReport } from '../../../api';
 import { invAPI, today } from '../shared';
 
 export default function CostSalesTab() {
@@ -9,6 +9,7 @@ export default function CostSalesTab() {
   const [revenue, setRevenue]       = useState(null);
   const [movements, setMovements]   = useState([]);
   const [expenses, setExpenses]     = useState([]);
+  const [wastage, setWastage]       = useState(null);
   const [loading, setLoading]       = useState(true);
   const [expForm, setExpForm]       = useState({ category: 'overhead', description: '', amount: '', date: today });
   const [savingExp, setSavingExp]   = useState(false);
@@ -16,8 +17,16 @@ export default function CostSalesTab() {
 
   const loadData = async () => {
     setLoading(true);
-    const [rev, movs, exps] = await Promise.all([getSummaryReport(from, to), invAPI.getMovements(), invAPI.getExpenses()]);
-    setRevenue(rev); setMovements(Array.isArray(movs) ? movs : []); setExpenses(Array.isArray(exps) ? exps : []);
+    const [rev, movs, exps, waste] = await Promise.all([
+      getSummaryReport(from, to),
+      invAPI.getMovements(),
+      invAPI.getExpenses(),
+      getWastageReport(from + ' 00:00:00', to + ' 23:59:59').catch(() => null),
+    ]);
+    setRevenue(rev);
+    setMovements(Array.isArray(movs) ? movs : []);
+    setExpenses(Array.isArray(exps) ? exps : []);
+    setWastage(waste);
     setLoading(false);
   };
   useEffect(() => { loadData(); }, []);
@@ -79,6 +88,71 @@ export default function CostSalesTab() {
               </div>
             ))}
           </div>
+          {/* SEPOS-031 — wastage from voids × recipe cost_per_portion */}
+          {wastage && wastage.total && (wastage.total.dish_count > 0) && (
+            <div style={{ background:'white', borderRadius:12, padding:20, marginBottom:20, boxShadow:'0 1px 4px rgba(0,0,0,0.08)' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:14 }}>
+                <div style={{ fontWeight:700, fontSize:15, color:'#1a1a2e' }}>🗑 Wastage</div>
+                <div style={{ fontSize:13, color:'#888' }}>
+                  {wastage.total.dish_count} dishes voided · {' '}
+                  <span style={{ fontWeight:800, color:'#ef4444' }}>£{Number(wastage.total.wastage_cost).toFixed(2)} cost</span>
+                  {' '}· revenue lost £{Number(wastage.total.revenue_lost).toFixed(2)}
+                </div>
+              </div>
+
+              {/* By void type */}
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px, 1fr))', gap:8, marginBottom:14 }}>
+                {wastage.by_type.map(t => (
+                  <div key={t.void_type} style={{
+                    background: t.void_type === 'Wastage'      ? '#fee2e2'
+                              : t.void_type === 'Comp'         ? '#ede9fe'
+                              : t.void_type === 'Wrong Order'  ? '#fff7ed'
+                              : '#f5f5f5',
+                    border:'1px solid rgba(0,0,0,0.05)', borderRadius:10, padding:'10px 12px'
+                  }}>
+                    <div style={{ fontSize:11, color:'#666', fontWeight:700, marginBottom:4, textTransform:'uppercase' }}>
+                      {t.void_type === 'Comp' ? '🎁 ' : ''}{t.void_type}
+                    </div>
+                    <div style={{ fontSize:16, fontWeight:800, color:'#1a1a2e' }}>£{Number(t.wastage_cost).toFixed(2)}</div>
+                    <div style={{ fontSize:11, color:'#888', marginTop:2 }}>{t.dish_count} dishes</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Top wasted dishes */}
+              {wastage.top_dishes && wastage.top_dishes.length > 0 && (
+                <div>
+                  <div style={{ fontSize:12, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:0.5, marginBottom:6 }}>Top wasted dishes</div>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+                    <thead>
+                      <tr style={{ color:'#888', fontSize:11, textAlign:'left' }}>
+                        <th style={{ padding:'4px 4px' }}>Dish</th>
+                        <th style={{ padding:'4px 4px', textAlign:'right' }}>Qty</th>
+                        <th style={{ padding:'4px 4px', textAlign:'right' }}>Cost</th>
+                        <th style={{ padding:'4px 4px', textAlign:'right' }}>Revenue lost</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {wastage.top_dishes.map((d, i) => (
+                        <tr key={d.menu_item_id ?? i} style={{ borderTop:'1px solid #f5f5f5' }}>
+                          <td style={{ padding:'6px 4px', fontWeight:600 }}>{d.item_name}</td>
+                          <td style={{ padding:'6px 4px', textAlign:'right' }}>{d.dish_count}</td>
+                          <td style={{ padding:'6px 4px', textAlign:'right', color:'#ef4444', fontWeight:700 }}>£{Number(d.wastage_cost).toFixed(2)}</td>
+                          <td style={{ padding:'6px 4px', textAlign:'right', color:'#888' }}>£{Number(d.revenue_lost).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div style={{ fontSize:11, color:'#aaa', marginTop:12, lineHeight:1.5 }}>
+                Cost uses each dish's <strong>recipe.cost_per_portion</strong> × quantity voided. Items without
+                a recipe show £0 cost — fill in their recipes for accurate wastage tracking.
+              </div>
+            </div>
+          )}
+
           <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
             <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 14 }}>📊 Profit Breakdown</div>
             {[{ label: 'Revenue', value: totalRevenue, color: '#22c55e', sign: '' }, { label: '– Stock Purchasing Cost', value: cogs, color: '#ef4444', sign: '–' }, { label: '= Gross Profit', value: grossProfit, color: grossProfit >= 0 ? '#22c55e' : '#ef4444', sign: '', bold: true }, { label: '– Overheads', value: overheads, color: '#8b5cf6', sign: '–' }, { label: '– Labour', value: labour, color: '#3b82f6', sign: '–' }, { label: '– Other', value: other, color: '#f97316', sign: '–' }, { label: '= Net Profit', value: netProfit, color: netProfit >= 0 ? '#22c55e' : '#ef4444', sign: '', bold: true }].map(row => (

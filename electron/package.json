@@ -62,7 +62,12 @@
       "createDesktopShortcut": true,
       "shortcutName": "SiamEPOS"
     },
-    "publish": null
+    "publish": [{
+      "provider": "github",
+      "owner": "kongponsrisiri-coder",
+      "repo": "restaurant-epos",
+      "releaseType": "release"
+    }]
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.4",

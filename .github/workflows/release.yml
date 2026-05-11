@@ -53,11 +53,16 @@ jobs:
       - name: Show build output (debug)
         run: ls -la electron/dist-electron
 
-      - name: Upload DMG
+      - name: Upload DMG + update manifest
         uses: actions/upload-artifact@v5
         with:
           name: mac-installer
-          path: electron/dist-electron/*.dmg
+          # .dmg = installer, .blockmap = delta-update map,
+          # latest-mac.yml = manifest electron-updater fetches.
+          path: |
+            electron/dist-electron/*.dmg
+            electron/dist-electron/*.blockmap
+            electron/dist-electron/latest-mac.yml
           if-no-files-found: error
           retention-days: 14
 
@@ -101,11 +106,14 @@ jobs:
         shell: cmd
         run: dir electron\dist-electron /s
 
-      - name: Upload EXE
+      - name: Upload EXE + update manifest
         uses: actions/upload-artifact@v5
         with:
           name: windows-installer
-          path: electron/dist-electron/*.exe
+          path: |
+            electron/dist-electron/*.exe
+            electron/dist-electron/*.blockmap
+            electron/dist-electron/latest.yml
           if-no-files-found: error
           retention-days: 14
 
@@ -133,6 +141,12 @@ jobs:
           name: SiamEPOS ${{ github.ref_name }}
           generate_release_notes: true
           fail_on_unmatched_files: true
+          # Attach the installers AND the electron-updater manifest /
+          # blockmap files so existing installs can auto-update.
           files: |
             dist/mac-installer/*.dmg
+            dist/mac-installer/*.blockmap
+            dist/mac-installer/latest-mac.yml
             dist/windows-installer/*.exe
+            dist/windows-installer/*.blockmap
+            dist/windows-installer/latest.yml

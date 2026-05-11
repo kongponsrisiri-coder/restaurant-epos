@@ -41,14 +41,18 @@ function saveConfig(data) {
 // IPC handler registered once at module load — setup window invokes it.
 ipcMain.handle('save-config', async (event, data) => {
   if (!data || !data.restaurant_name || !data.cloud_api_url || !data.restaurant_id) {
-    return { success: false, error: 'All three fields are required.' };
+    return { success: false, error: 'Restaurant name, URL and ID are required.' };
   }
   try { new URL(data.cloud_api_url); }
   catch { return { success: false, error: 'Cloud API URL is not a valid URL.' }; }
   if (!/^[a-z0-9-]+$/i.test(data.restaurant_id)) {
     return { success: false, error: 'Restaurant ID can only contain letters, numbers and dashes.' };
   }
-  saveConfig({ ...data, configured_at: new Date().toISOString() });
+  // sync_secret is optional — without it the closed-orders pull stays
+  // disabled but everything else (menu / staff / settings) still syncs.
+  const payload = { ...data, configured_at: new Date().toISOString() };
+  if (!payload.sync_secret) delete payload.sync_secret;
+  saveConfig(payload);
   return { success: true };
 });
 
@@ -123,6 +127,10 @@ async function runSetupWizard() {
   <input id="rid" type="text" placeholder="siamepos-001" />
   <div class="hint">Lowercase letters, numbers and dashes. Identifies this restaurant in the cloud.</div>
 
+  <label for="secret">Sync secret <span style="color:rgba(255,255,255,0.4);text-transform:none;font-weight:400;letter-spacing:0;">(optional)</span></label>
+  <input id="secret" type="text" placeholder="from Railway → Variables → SYNC_SECRET" />
+  <div class="hint">Required to pull bill history from cloud. Match what's set on Railway.</div>
+
   <div id="error"></div>
 
   <button id="save">Save &amp; Launch SiamEPOS</button>
@@ -141,9 +149,10 @@ async function runSetupWizard() {
       restaurant_name: $('name').value.trim(),
       cloud_api_url:   $('url').value.trim(),
       restaurant_id:   $('rid').value.trim(),
+      sync_secret:     $('secret').value.trim(),
     };
     if (!data.restaurant_name || !data.cloud_api_url || !data.restaurant_id) {
-      return showError('Please fill in all three fields.');
+      return showError('Please fill in name, URL and ID.');
     }
     if (!/^https?:\\/\\//i.test(data.cloud_api_url)) {
       return showError('Cloud API URL must start with http:// or https://');
@@ -625,6 +634,11 @@ app.whenReady().then(async () => {
   }
   if (config.restaurant_id && !process.env.RESTAURANT_ID) {
     process.env.RESTAURANT_ID = config.restaurant_id;
+  }
+  // SYNC_SECRET enables the auth-gated /api/sync/closed-orders pull.
+  // Same env-wins-over-config precedence so devs can override.
+  if (config.sync_secret && !process.env.SYNC_SECRET) {
+    process.env.SYNC_SECRET = config.sync_secret;
   }
 
   startLocalServer();

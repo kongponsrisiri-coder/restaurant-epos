@@ -329,6 +329,27 @@ export default function KitchenScreen() {
               {orders.map(order => {
                 const allItems = order.items.filter(i => !i.voided && i.status !== 'served' && i.status !== 'cooked' && !i.is_bar);
 
+// SEPOS-034 — render order title differently for takeaway (no table)
+function OrderHeading({ order }) {
+  if (order && order.order_type === 'takeaway') {
+    const pickup = order.pickup_time
+      ? new Date(order.pickup_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+      : '';
+    return (
+      <span>
+        🥡 {order.customer_name || 'Takeaway'}
+        {pickup && <span style={{ fontSize: 14, fontWeight: 600, marginLeft: 8, opacity: 0.9 }}>· {pickup}</span>}
+      </span>
+    );
+  }
+  return (
+    <span>
+      Table {order?.table_number ?? '—'}
+      {order?.covers && <span style={{ fontSize: 14, fontWeight: 400, marginLeft: 8, opacity: 0.8 }}>{order.covers} cvr</span>}
+    </span>
+  );
+}
+
 // Apply course filter to BOTH pending and cooking
 const upcoming = allItems.filter(i => !i.is_fired && (filter === 'all' || String(i.course || 1) === filter));
 const cooking = allItems.filter(i => i.is_fired && (filter === 'all' || String(i.course || 1) === filter));
@@ -339,8 +360,7 @@ if (upcoming.length === 0 && cooking.length === 0) return null;
                   <div key={order.id} style={{ background: '#1a1a1a', borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' }}>
                     <div style={{ background: '#e94560', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ color: 'white', fontWeight: 800, fontSize: 24 }}>
-                        Table {order.table_number}
-                        {order.covers && <span style={{ fontSize: 14, fontWeight: 400, marginLeft: 8, opacity: 0.8 }}>{order.covers} cvr</span>}
+                        <OrderHeading order={order} />
                       </div>
                       <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>
                         #{order.id} · {getTimeAgo(order.created_at)}
@@ -477,8 +497,7 @@ if (upcoming.length === 0 && cooking.length === 0) return null;
                 <div key={order.id} style={{ background: '#1a1a1a', borderRadius: 16, overflow: 'hidden' }}>
                   <div style={{ background: '#8b5cf6', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ color: 'white', fontWeight: 800, fontSize: 22 }}>
-                      Table {order.table_number}
-                      {order.covers && <span style={{ fontSize: 14, fontWeight: 400, marginLeft: 8, opacity: 0.8 }}>{order.covers} cvr</span>}
+                      <OrderHeading order={order} />
                     </div>
                     <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>#{order.id}</div>
                   </div>
@@ -564,8 +583,7 @@ if (upcoming.length === 0 && cooking.length === 0) return null;
                 <div key={group.order_id} style={{ background: '#1a1a1a', borderRadius: 16, overflow: 'hidden' }}>
                   <div style={{ background: '#1f2937', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ color: 'white', fontWeight: 800, fontSize: 18 }}>
-                      Table {group.table_number}
-                      {group.covers && <span style={{ fontSize: 13, fontWeight: 400, marginLeft: 8, opacity: 0.7 }}>{group.covers} cvr</span>}
+                      <OrderHeading order={group} />
                     </div>
                     <div style={{ color: '#aaa', fontSize: 13 }}>#{group.order_id}</div>
                   </div>

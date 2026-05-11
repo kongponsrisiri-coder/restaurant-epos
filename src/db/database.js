@@ -132,6 +132,17 @@ async function initDB() {
     await pool.query(`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS marketing_consent INTEGER DEFAULT 0`); // SEPOS-033 (GDPR)
     await pool.query(`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS unsubscribed_at TIMESTAMP`); // SEPOS-033
 
+    // SEPOS-034: takeaway / delivery online ordering
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_type VARCHAR(20) DEFAULT 'dine_in'`);
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`);
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_phone VARCHAR(50)`);
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_email VARCHAR(255)`);
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_time TIMESTAMP`);
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS takeaway_status VARCHAR(20)`);
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20)`);
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR(255)`);
+    await pool.query(`ALTER TABLE orders ALTER COLUMN table_id DROP NOT NULL`).catch(() => {});
+
     // SEPOS-033 Phase 2 — campaign audit log
     await pool.query(`
       CREATE TABLE IF NOT EXISTS campaigns (

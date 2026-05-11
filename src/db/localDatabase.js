@@ -98,7 +98,15 @@ function initSchema() {
       bill_printed INTEGER DEFAULT 0,
       opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       closed_at TIMESTAMP,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      order_type TEXT DEFAULT 'dine_in',
+      customer_name TEXT,
+      customer_phone TEXT,
+      customer_email TEXT,
+      pickup_time TIMESTAMP,
+      takeaway_status TEXT,
+      payment_status TEXT,
+      payment_intent_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS order_items (
@@ -335,6 +343,15 @@ function runMigrations() {
   // SEPOS-033: marketing consent + unsubscribe (GDPR)
   addColumnIfMissing('reservations', 'marketing_consent', 'INTEGER DEFAULT 0');
   addColumnIfMissing('reservations', 'unsubscribed_at', 'TIMESTAMP');
+  // SEPOS-034: takeaway / delivery online ordering
+  addColumnIfMissing('orders', 'order_type', "TEXT DEFAULT 'dine_in'");
+  addColumnIfMissing('orders', 'customer_name', 'TEXT');
+  addColumnIfMissing('orders', 'customer_phone', 'TEXT');
+  addColumnIfMissing('orders', 'customer_email', 'TEXT');
+  addColumnIfMissing('orders', 'pickup_time', 'TIMESTAMP');
+  addColumnIfMissing('orders', 'takeaway_status', 'TEXT');
+  addColumnIfMissing('orders', 'payment_status', 'TEXT');
+  addColumnIfMissing('orders', 'payment_intent_id', 'TEXT');
 }
 
 function seedDefaults() {

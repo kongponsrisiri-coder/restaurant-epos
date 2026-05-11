@@ -660,7 +660,7 @@ app.get('/api/reports/items', async (req, res) => {
 
 app.get('/api/kitchen/completed', async (req, res) => {
   try {
-    const result = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt, orders.covers, orders.id as order_id, tables.table_number, order_items.fired_at, order_items.served_at FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON menu_items.category_id = categories.id LEFT JOIN orders ON order_items.order_id = orders.id LEFT JOIN tables ON orders.table_id = tables.id WHERE order_items.status='served' AND order_items.voided=0 AND (categories.is_bar=0 OR categories.is_bar IS NULL) AND order_items.served_at::date = CURRENT_DATE ORDER BY order_items.order_id ASC`);
+    const result = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt, orders.covers, orders.id as order_id, tables.table_number, order_items.fired_at, order_items.served_at, orders.order_type, orders.customer_name, orders.pickup_time FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON menu_items.category_id = categories.id LEFT JOIN orders ON order_items.order_id = orders.id LEFT JOIN tables ON orders.table_id = tables.id WHERE order_items.status='served' AND order_items.voided=0 AND (categories.is_bar=0 OR categories.is_bar IS NULL) AND order_items.served_at::date = CURRENT_DATE ORDER BY order_items.order_id ASC`);
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -704,7 +704,7 @@ app.get('/api/tables/status', async (req, res) => {
 
 app.get('/api/bar/completed', async (req, res) => {
   try {
-    const result = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt, orders.covers, orders.id as order_id, tables.table_number, order_items.fired_at, order_items.served_at FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON menu_items.category_id = categories.id LEFT JOIN orders ON order_items.order_id = orders.id LEFT JOIN tables ON orders.table_id = tables.id WHERE order_items.status='served' AND order_items.voided=0 AND categories.is_bar=1 AND order_items.served_at::date = CURRENT_DATE ORDER BY order_items.order_id ASC`);
+    const result = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt, orders.covers, orders.id as order_id, tables.table_number, order_items.fired_at, order_items.served_at, orders.order_type, orders.customer_name, orders.pickup_time FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON menu_items.category_id = categories.id LEFT JOIN orders ON order_items.order_id = orders.id LEFT JOIN tables ON orders.table_id = tables.id WHERE order_items.status='served' AND order_items.voided=0 AND categories.is_bar=1 AND order_items.served_at::date = CURRENT_DATE ORDER BY order_items.order_id ASC`);
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1397,6 +1397,219 @@ app.get('/api/network-info', (req, res) => {
   }
   res.json({ ip: '127.0.0.1', port, url: `http://127.0.0.1:${port}` });
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// SEPOS-034 — Online takeaway ordering
+// Public widget posts here. Mock payment for the sales demo;
+// Stripe wiring deferred to SEPOS-040.
+// ─────────────────────────────────────────────────────────────────────
+
+// Public settings the widget needs — opening hours + restaurant name —
+// without leaking the rest of restaurant_settings.
+app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT restaurant_name, opening_time, last_booking_time,
+             service_type, lunch_service_start, lunch_service_end,
+             dinner_service_start, dinner_service_end
+      FROM restaurant_settings WHERE restaurant_id = $1
+    `, [process.env.RESTAURANT_ID || 'siamepos']);
+    res.json(r.rows[0] || {});
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Submit a takeaway order from the public widget.
+app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const {
+      customer_name, customer_phone, customer_email,
+      pickup_time,    // ISO timestamp
+      items = [],     // [{ menu_item_id, quantity, unit_price, name, item_note }]
+      notes,
+      marketing_consent,
+    } = req.body;
+
+    if (!customer_name || !customer_name.trim()) return res.status(400).json({ error: 'Name is required' });
+    if (!customer_phone || !customer_phone.trim()) return res.status(400).json({ error: 'Phone is required' });
+    if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Cart is empty' });
+    if (!pickup_time) return res.status(400).json({ error: 'Pickup time is required' });
+
+    // Closed-hours check — pickup_time must fall within the restaurant's
+    // opening_time .. last_booking_time window. Soft validation: if
+    // restaurant_settings is missing we let it through.
+    const settingsRes = await client.query(
+      `SELECT opening_time, last_booking_time FROM restaurant_settings WHERE restaurant_id = $1`,
+      [process.env.RESTAURANT_ID || 'siamepos']
+    );
+    const settings = settingsRes.rows[0];
+    if (settings) {
+      const pickupDate = new Date(pickup_time);
+      if (isNaN(pickupDate.getTime())) return res.status(400).json({ error: 'Invalid pickup time' });
+      const mins = pickupDate.getHours() * 60 + pickupDate.getMinutes();
+      const openMins  = toMins(settings.opening_time      || '11:00');
+      const closeMins = toMins(settings.last_booking_time || '21:30');
+      if (mins < openMins || mins > closeMins) {
+        return res.status(400).json({ error: `Pickup time must be between ${String(settings.opening_time).slice(0,5)} and ${String(settings.last_booking_time).slice(0,5)}.` });
+      }
+    }
+
+    // Compute total from items × unit_price (server is the source of truth).
+    const total = items.reduce((s, i) => s + Number(i.unit_price || 0) * Number(i.quantity || 0), 0);
+
+    await client.query('BEGIN');
+    const orderRes = await client.query(
+      `INSERT INTO orders
+         (table_id, status, covers, total, opened_at,
+          order_type, customer_name, customer_phone, customer_email,
+          pickup_time, takeaway_status, payment_status, discount_reason)
+       VALUES (NULL, 'open', 1, $1, NOW(),
+               'takeaway', $2, $3, $4,
+               $5, 'pending', 'mock', $6)
+       RETURNING id`,
+      [total, customer_name.trim(), customer_phone.trim(), (customer_email || '').trim() || null,
+       pickup_time, notes || null]
+    );
+    const orderId = orderRes.rows[0].id;
+
+    // Each item goes in as fired (status='cooking') so the kitchen picks
+    // it up immediately — takeaway flows skip the dine-in fire-course step.
+    const now = new Date().toISOString();
+    const insertedItemIds = [];
+    for (const it of items) {
+      const ins = await client.query(
+        `INSERT INTO order_items
+           (order_id, menu_item_id, item_name, quantity, unit_price, notes, course,
+            item_note, is_fired, fired_at, cooking_started_at, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 1, $7, 1, $8, $8, 'cooking') RETURNING id`,
+        [orderId, it.menu_item_id || null, it.name || 'Item',
+         it.quantity || 1, it.unit_price || 0,
+         it.modifiers ? (Array.isArray(it.modifiers) ? it.modifiers.map(m => m.name).join(', ') : String(it.modifiers)) : '',
+         it.item_note || '', now]
+      );
+      insertedItemIds.push(ins.rows[0].id);
+    }
+    await client.query('COMMIT');
+
+    // Stock depletion (best effort) — done outside the transaction so a
+    // failure here doesn't roll back the order.
+    try { await depleteStockForItems(insertedItemIds, 'sale'); } catch {}
+
+    // Best-effort optional marketing consent capture (Phase 1 CRM).
+    if (customer_email && marketing_consent) {
+      // We don't have a "marketing_signups" table — the booking widget
+      // captures consent on reservations. For takeaway we'd want a CRM
+      // join too, but that's the next refinement. For now: log.
+      console.log('[takeaway] marketing consent captured for', customer_email);
+    }
+
+    // Kitchen iPad listens to this — pops up the ticket instantly.
+    io.emit('new_takeaway_order', {
+      id: orderId,
+      customer_name: customer_name.trim(),
+      customer_phone: customer_phone.trim(),
+      pickup_time,
+      total,
+      item_count: items.length,
+    });
+
+    // Fire-and-forget email confirmation via Brevo.
+    if (customer_email) {
+      sendTakeawayConfirmation({
+        order_id: orderId,
+        customer_name, customer_email,
+        pickup_time, items, total,
+      }).catch(err => console.error('[takeaway] email error:', err.message));
+    }
+
+    console.log(`🥡 New takeaway #${orderId} · ${customer_name} · £${total.toFixed(2)} · pickup ${pickup_time}`);
+    res.status(201).json({
+      success: true,
+      order_id: orderId,
+      // Reference number to show on the success page. Pads to 4 digits
+      // so the customer has something to quote when collecting.
+      order_number: 'T' + String(orderId).padStart(4, '0'),
+      total,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('POST /api/takeaway/orders error:', err);
+    res.status(500).json({ error: 'Could not place order. Please try again.' });
+  } finally {
+    client.release();
+  }
+});
+
+// Active takeaway orders — for kitchen view + Mac sync pull.
+app.get('/api/takeaway/orders/active', async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT o.id, o.customer_name, o.customer_phone, o.customer_email,
+             o.pickup_time, o.takeaway_status, o.total, o.opened_at
+      FROM orders o
+      WHERE o.order_type = 'takeaway'
+        AND COALESCE(o.takeaway_status, 'pending') <> 'collected'
+        AND o.status <> 'closed'
+      ORDER BY o.pickup_time ASC NULLS LAST, o.id ASC
+    `);
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Status transitions — kitchen / admin use.
+app.put('/api/orders/:id/takeaway-status', async (req, res) => {
+  try {
+    const { status } = req.body;
+    const allowed = ['pending', 'accepted', 'preparing', 'ready', 'collected'];
+    if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    await pool.query('UPDATE orders SET takeaway_status=$1 WHERE id=$2 AND order_type=\'takeaway\'', [status, req.params.id]);
+    if (status === 'collected') {
+      await pool.query("UPDATE orders SET status='closed', closed_at=NOW() WHERE id=$1", [req.params.id]);
+      await pool.query("UPDATE order_items SET status='served', served_at=NOW() WHERE order_id=$1 AND status<>'served'", [req.params.id]);
+    }
+    io.emit('takeaway_status', { order_id: Number(req.params.id), status });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Brevo confirmation email — same template flavour as booking confirmation.
+async function sendTakeawayConfirmation({ order_id, customer_name, customer_email, pickup_time, items, total }) {
+  const { sendBrevoEmail } = require('./services/emailService');
+  if (!process.env.BREVO_API_KEY) return;
+  const restaurantName = process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant';
+  const orderNumber = 'T' + String(order_id).padStart(4, '0');
+  const pickupDate = new Date(pickup_time);
+  const pickupStr = pickupDate.toLocaleDateString('en-GB', { weekday:'long', day:'2-digit', month:'short' }) +
+                    ' at ' + pickupDate.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+  const itemRows = items.map(i => `
+    <tr>
+      <td style="padding:6px 0;">${i.quantity}× ${String(i.name || 'Item').replace(/[<>]/g,'')}</td>
+      <td style="padding:6px 0;text-align:right;">£${(Number(i.unit_price || 0) * Number(i.quantity || 0)).toFixed(2)}</td>
+    </tr>`).join('');
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f5f5f5;font-family:system-ui,sans-serif;color:#1a1a2e;">
+  <table cellpadding="0" cellspacing="0" width="100%" style="background:#f5f5f5;padding:24px 0;"><tr><td align="center">
+    <table cellpadding="0" cellspacing="0" width="600" style="max-width:600px;background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+      <tr><td style="background:#0D1B3E;padding:24px 30px;color:#C9A84C;font-family:Georgia,serif;font-size:24px;font-weight:700;">${restaurantName}</td></tr>
+      <tr><td style="padding:30px;font-size:15px;line-height:1.6;color:#1a1a2e;">
+        <p>Hi ${String(customer_name).replace(/[<>]/g,'')},</p>
+        <p>Thanks for your takeaway order. We'll have it ready for collection at:</p>
+        <p style="background:#fef3c7;padding:14px 18px;border-radius:10px;font-weight:700;text-align:center;">🥡 ${pickupStr}</p>
+        <p>Your order number is <strong style="font-size:18px;color:#C9A84C;">${orderNumber}</strong> — please quote this when collecting.</p>
+        <table style="width:100%;border-collapse:collapse;margin:14px 0;font-size:14px;">
+          ${itemRows}
+          <tr><td style="padding:10px 0 6px;border-top:2px solid #eee;font-weight:800;">Total</td>
+              <td style="padding:10px 0 6px;border-top:2px solid #eee;text-align:right;font-weight:800;">£${Number(total).toFixed(2)}</td></tr>
+        </table>
+        <p style="color:#888;font-size:13px;">Payment on collection. Cash or card accepted.</p>
+      </td></tr>
+      <tr><td style="padding:20px 30px;background:#fafafa;border-top:1px solid #eee;font-size:11px;color:#888;">
+        ${restaurantName} — see you soon!
+      </td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
+  await sendBrevoEmail(customer_email, `Takeaway order ${orderNumber} confirmed`, html);
+}
 
 // ─────────────────────────────────────────────────────────────────────
 // SEPOS-033 Phase 2 — email campaigns + unsubscribe

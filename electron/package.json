@@ -1,0 +1,48 @@
+{
+  "name": "siamepos-electron",
+  "version": "1.0.0",
+  "description": "SiamEPOS Pro desktop shell — offline-capable EPOS for Thai restaurants",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "start:dev": "ELECTRON_DEV=1 electron .",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:all": "electron-builder -mwl"
+  },
+  "build": {
+    "appId": "uk.co.siamepos.pro",
+    "productName": "SiamEPOS",
+    "asar": true,
+    "directories": {
+      "output": "dist-electron",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "build/**"
+    ],
+    "extraResources": [
+      { "from": "../client/dist", "to": "client-dist" }
+    ],
+    "mac": {
+      "icon": "build/icon.png",
+      "target": ["dmg"],
+      "category": "public.app-category.business"
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": ["nsis"]
+    },
+    "publish": null
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  }
+}

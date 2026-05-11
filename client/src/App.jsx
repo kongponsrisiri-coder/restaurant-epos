@@ -40,18 +40,52 @@ const LogoBrand = () => (
   </span>
 );
 
+const INSTALL_DISMISSED_KEY = 'siamepos-install-dismissed';
+
 export default function App() {
   const [staff, setStaff]               = useState(null);
   const [screen, setScreen]             = useState('tables');
   const [activeOrder, setActiveOrder]   = useState(null);
   const [menuOpen, setMenuOpen]         = useState(false);
   const [serverStatus, setServerStatus] = useState(getServerStatus());
+  const [installPrompt, setInstallPrompt]   = useState(null);
+  const [installDismissed, setInstallDismissed] = useState(
+    () => typeof localStorage !== 'undefined' && localStorage.getItem(INSTALL_DISMISSED_KEY) === '1'
+  );
   const isMobile = window.innerWidth < 768;
 
   useEffect(() => {
     startMonitoring();
     return onStatusChange((status) => setServerStatus(status));
   }, []);
+
+  useEffect(() => {
+    const onBeforeInstall = (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    const onInstalled = () => {
+      setInstallPrompt(null);
+    };
+    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  const handleInstall = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
+  };
+
+  const handleDismissInstall = () => {
+    setInstallDismissed(true);
+    try { localStorage.setItem(INSTALL_DISMISSED_KEY, '1'); } catch {}
+  };
 
   // ── Status badge ──────────────────────────────────────────────
   const StatusBadge = () => (
@@ -65,13 +99,49 @@ export default function App() {
     </span>
   );
 
-  if (!staff) return <LoginScreen onLogin={setStaff} />;
-  if (staff.role === 'kitchen') return <KitchenScreen />;
-  if (staff.role === 'bar') return <BarScreen />;
-
-  // ── Order screen ──────────────────────────────────────────────
-  if (screen === 'order' && activeOrder) {
+  // ── Install banner ────────────────────────────────────────────
+  const InstallBanner = () => {
+    if (!installPrompt || installDismissed) return null;
     return (
+      <div style={{
+        position: 'fixed', bottom: 16, left: 16, right: 16,
+        maxWidth: 480, margin: '0 auto',
+        background: '#1a1a2e', color: 'white',
+        padding: '12px 16px', borderRadius: 12,
+        boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+        border: '1px solid rgba(201,168,76,0.4)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 12, zIndex: 9999,
+      }}>
+        <span style={{ fontSize: 14, fontWeight: 600 }}>
+          Install SiamEPOS for faster access?
+        </span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button onClick={handleInstall} style={{
+            background: '#C9A84C', color: '#0D1B3E', border: 'none',
+            padding: '6px 14px', borderRadius: 6,
+            fontWeight: 700, fontSize: 13, cursor: 'pointer',
+          }}>Install</button>
+          <button onClick={handleDismissInstall} aria-label="Dismiss" style={{
+            background: 'transparent', color: 'rgba(255,255,255,0.7)',
+            border: 'none', padding: '4px 8px', fontSize: 20, cursor: 'pointer', lineHeight: 1,
+          }}>×</button>
+        </div>
+      </div>
+    );
+  };
+
+  // ── Determine body ────────────────────────────────────────────
+  let body;
+
+  if (!staff) {
+    body = <LoginScreen onLogin={setStaff} />;
+  } else if (staff.role === 'kitchen') {
+    body = <KitchenScreen />;
+  } else if (staff.role === 'bar') {
+    body = <BarScreen />;
+  } else if (screen === 'order' && activeOrder) {
+    body = (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f5f5f5' }}>
         <nav className="navbar">
           <LogoBrand />
@@ -94,96 +164,103 @@ export default function App() {
         </div>
       </div>
     );
+  } else {
+    // ── Nav items ─────────────────────────────────────────────────
+    const navItems = [
+      { key: 'tables',       label: '🗺️ Tables' },
+      { key: 'reservations', label: '🗓️ Reservations' },
+      ...(staff.role === 'admin' || staff.role === 'manager' || staff.role === 'supervisor'
+        ? [{ key: 'admin', label: '⚙️ Admin' }]
+        : []),
+      { key: 'kitchen', label: '🍳 Kitchen' },
+      { key: 'bar',     label: '🍹 Bar' },
+    ];
+
+    // ── Main layout ───────────────────────────────────────────────
+    body = (
+      <div className="app">
+        <nav className="navbar">
+          <LogoBrand />
+
+          {/* Desktop nav */}
+          <div className="navbar-links" style={{ display: isMobile ? 'none' : 'flex' }}>
+            {navItems.map(item => (
+              <button
+                key={item.key}
+                className={screen === item.key ? 'active' : ''}
+                onClick={() => setScreen(item.key)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Mobile hamburger */}
+          {isMobile && (
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              style={{ background: 'none', border: 'none', color: 'white', fontSize: 24, cursor: 'pointer', padding: '0 8px' }}
+            >
+              ☰
+            </button>
+          )}
+
+          <div className="navbar-user">
+            <StatusBadge />
+            <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
+            <button className="logout-btn" onClick={() => setStaff(null)}>Log out</button>
+          </div>
+        </nav>
+
+        {/* Mobile dropdown */}
+        {isMobile && menuOpen && (
+          <div style={{
+            background: '#1a1a2e', padding: '8px 16px',
+            display: 'flex', flexDirection: 'column', gap: 4,
+            borderBottom: '2px solid rgba(201,168,76,0.3)',
+          }}>
+            {navItems.map(item => (
+              <button
+                key={item.key}
+                onClick={() => { setScreen(item.key); setMenuOpen(false); }}
+                style={{
+                  background: screen === item.key ? 'rgba(201,168,76,0.2)' : 'transparent',
+                  border: 'none',
+                  color: screen === item.key ? '#C9A84C' : 'rgba(255,255,255,0.8)',
+                  padding: '12px 16px', borderRadius: 8,
+                  textAlign: 'left', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Screen content */}
+        <main className="main-content">
+          {screen === 'tables' && (
+            <TableMapScreen
+              staff={staff}
+              onOpenOrder={(orderId, tableId) => {
+                setActiveOrder({ orderId, tableId });
+                setScreen('order');
+              }}
+            />
+          )}
+          {screen === 'reservations' && <ReservationsScreen />}
+          {screen === 'kitchen'      && <KitchenScreen />}
+          {screen === 'bar'          && <BarScreen />}
+          {screen === 'admin'        && <AdminScreen />}
+        </main>
+      </div>
+    );
   }
 
-  // ── Nav items ─────────────────────────────────────────────────
-  const navItems = [
-    { key: 'tables',       label: '🗺️ Tables' },
-    { key: 'reservations', label: '🗓️ Reservations' },
-    ...(staff.role === 'admin' || staff.role === 'manager' || staff.role === 'supervisor'
-      ? [{ key: 'admin', label: '⚙️ Admin' }]
-      : []),
-    { key: 'kitchen', label: '🍳 Kitchen' },
-    { key: 'bar',     label: '🍹 Bar' },
-  ];
-
-  // ── Main layout ───────────────────────────────────────────────
   return (
-    <div className="app">
-      <nav className="navbar">
-        <LogoBrand />
-
-        {/* Desktop nav */}
-        <div className="navbar-links" style={{ display: isMobile ? 'none' : 'flex' }}>
-          {navItems.map(item => (
-            <button
-              key={item.key}
-              className={screen === item.key ? 'active' : ''}
-              onClick={() => setScreen(item.key)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Mobile hamburger */}
-        {isMobile && (
-          <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            style={{ background: 'none', border: 'none', color: 'white', fontSize: 24, cursor: 'pointer', padding: '0 8px' }}
-          >
-            ☰
-          </button>
-        )}
-
-        <div className="navbar-user">
-          <StatusBadge />
-          <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
-          <button className="logout-btn" onClick={() => setStaff(null)}>Log out</button>
-        </div>
-      </nav>
-
-      {/* Mobile dropdown */}
-      {isMobile && menuOpen && (
-        <div style={{
-          background: '#1a1a2e', padding: '8px 16px',
-          display: 'flex', flexDirection: 'column', gap: 4,
-          borderBottom: '2px solid rgba(201,168,76,0.3)',
-        }}>
-          {navItems.map(item => (
-            <button
-              key={item.key}
-              onClick={() => { setScreen(item.key); setMenuOpen(false); }}
-              style={{
-                background: screen === item.key ? 'rgba(201,168,76,0.2)' : 'transparent',
-                border: 'none',
-                color: screen === item.key ? '#C9A84C' : 'rgba(255,255,255,0.8)',
-                padding: '12px 16px', borderRadius: 8,
-                textAlign: 'left', fontSize: 15, fontWeight: 600, cursor: 'pointer',
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Screen content */}
-      <main className="main-content">
-        {screen === 'tables' && (
-          <TableMapScreen
-            staff={staff}
-            onOpenOrder={(orderId, tableId) => {
-              setActiveOrder({ orderId, tableId });
-              setScreen('order');
-            }}
-          />
-        )}
-        {screen === 'reservations' && <ReservationsScreen />}
-        {screen === 'kitchen'      && <KitchenScreen />}
-        {screen === 'bar'          && <BarScreen />}
-        {screen === 'admin'        && <AdminScreen />}
-      </main>
-    </div>
+    <>
+      {body}
+      <InstallBanner />
+    </>
   );
 }

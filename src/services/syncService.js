@@ -35,10 +35,50 @@ const PULL_TABLES = [
 
 let initialSyncDone = false;
 
-// In-memory local→cloud id map. Rebuilt each sync run as we replay the queue
-// from create_order onwards, so a server restart mid-queue still resolves
-// correctly (queue itself is persisted in SQLite).
-const orderIdMap = new Map();
+// SEPOS-PRO-002: cloud_id mapping is now persisted on orders.cloud_id and
+// order_items.cloud_id. The in-memory orderIdMap that used to live here
+// got wiped on server restart, which was the root cause of sync_queue
+// orphans for items voided from earlier sessions.
+async function getOrderCloudId(localOrderId) {
+  if (localOrderId == null) return null;
+  try {
+    const r = await pool.query('SELECT cloud_id FROM orders WHERE id = $1', [localOrderId]);
+    return r.rows[0]?.cloud_id ?? null;
+  } catch { return null; }
+}
+async function setOrderCloudId(localOrderId, cloudId) {
+  if (!localOrderId || !cloudId) return;
+  try {
+    await pool.query('UPDATE orders SET cloud_id = $1 WHERE id = $2', [cloudId, localOrderId]);
+  } catch (err) { console.warn('[sync] setOrderCloudId failed:', err.message); }
+}
+async function getItemCloudId(localItemId) {
+  if (localItemId == null) return null;
+  try {
+    const r = await pool.query('SELECT cloud_id FROM order_items WHERE id = $1', [localItemId]);
+    return r.rows[0]?.cloud_id ?? null;
+  } catch { return null; }
+}
+async function setItemCloudId(localItemId, cloudId) {
+  if (!localItemId || !cloudId) return;
+  try {
+    await pool.query('UPDATE order_items SET cloud_id = $1 WHERE id = $2', [cloudId, localItemId]);
+  } catch (err) { console.warn('[sync] setItemCloudId failed:', err.message); }
+}
+async function findLocalOrderByCloudId(cloudId) {
+  if (cloudId == null) return null;
+  try {
+    const r = await pool.query('SELECT id FROM orders WHERE cloud_id = $1', [cloudId]);
+    return r.rows[0]?.id ?? null;
+  } catch { return null; }
+}
+async function findLocalItemByCloudId(cloudId) {
+  if (cloudId == null) return null;
+  try {
+    const r = await pool.query('SELECT id FROM order_items WHERE cloud_id = $1', [cloudId]);
+    return r.rows[0]?.id ?? null;
+  } catch { return null; }
+}
 
 function setStatus(next) {
   if (next === status) return;
@@ -67,10 +107,6 @@ async function ping() {
   }
 }
 
-function resolveOrderId(localId) {
-  return orderIdMap.get(localId) ?? localId;
-}
-
 async function applyToCloud(actionType, payload) {
   const url = (path) => CLOUD_API_URL + path;
   const json = (body) => ({
@@ -80,26 +116,41 @@ async function applyToCloud(actionType, payload) {
 
   switch (actionType) {
     case 'create_order': {
+      // If we've already pushed this local order before (cloud_id is set),
+      // don't re-create on the cloud — the queue replay is idempotent.
+      const existing = await getOrderCloudId(payload.localOrderId);
+      if (existing) return { id: existing };
       const r = await fetch(url('/api/orders'), {
         method: 'POST', ...json({ table_id: payload.table_id, covers: payload.covers }),
       });
       if (!r.ok) throw new Error(`create_order ${r.status}`);
       const j = await r.json();
       if (payload.localOrderId && j?.id) {
-        orderIdMap.set(payload.localOrderId, j.id);
+        await setOrderCloudId(payload.localOrderId, j.id);
       }
       return j;
     }
     case 'add_items': {
-      const cloudId = resolveOrderId(payload.localOrderId);
+      const cloudId = (await getOrderCloudId(payload.localOrderId)) || payload.localOrderId;
       const r = await fetch(url(`/api/orders/${cloudId}/items`), {
         method: 'POST', ...json({ items: payload.items }),
       });
       if (!r.ok) throw new Error(`add_items ${r.status}`);
-      return r.json();
+      const j = await r.json();
+      // If the cloud returned the created items with their ids, store the
+      // mapping so subsequent voids/edits know which cloud row to target.
+      // Pairing is positional: payload.items[i] ↔ j.items[i] in insert order.
+      if (Array.isArray(j?.items) && Array.isArray(payload.items)) {
+        for (let i = 0; i < Math.min(j.items.length, payload.items.length); i++) {
+          const localItemId = payload.items[i]?.localItemId;
+          const cloudItemId = j.items[i]?.id;
+          if (localItemId && cloudItemId) await setItemCloudId(localItemId, cloudItemId);
+        }
+      }
+      return j;
     }
     case 'pay_order': {
-      const cloudId = resolveOrderId(payload.localOrderId);
+      const cloudId = (await getOrderCloudId(payload.localOrderId)) || payload.localOrderId;
       const r = await fetch(url(`/api/orders/${cloudId}/pay`), {
         method: 'POST', ...json({ amount: payload.amount, method: payload.method }),
       });
@@ -107,7 +158,7 @@ async function applyToCloud(actionType, payload) {
       return r.json();
     }
     case 'fire_course': {
-      const cloudId = resolveOrderId(payload.localOrderId);
+      const cloudId = (await getOrderCloudId(payload.localOrderId)) || payload.localOrderId;
       const r = await fetch(url(`/api/orders/${cloudId}/fire-course/${payload.course}`), {
         method: 'PUT', ...json({}),
       });
@@ -115,10 +166,8 @@ async function applyToCloud(actionType, payload) {
       return r.json();
     }
     case 'void_item': {
-      // NOTE: order_item ids are not yet translated local→cloud. If the void
-      // targets an item that was created offline, the cloud-side id may differ.
-      // Phase 4 will add per-item id mapping (likely via UUIDs).
-      const r = await fetch(url(`/api/order-items/${payload.localItemId}/void`), {
+      const cloudItemId = (await getItemCloudId(payload.localItemId)) || payload.localItemId;
+      const r = await fetch(url(`/api/order-items/${cloudItemId}/void`), {
         method: 'PUT', ...json({ reason: payload.reason }),
       });
       if (!r.ok) throw new Error(`void_item ${r.status}`);
@@ -274,6 +323,147 @@ async function pullFromCloud() {
 
   // Closed orders + items + payments — gated by SYNC_SECRET.
   await pullClosedOrders();
+
+  // Active (open) orders + items + payments — also gated by SYNC_SECRET.
+  // Enables bidirectional sync: orders Chrome creates now show up on the Mac.
+  await pullActiveOrders();
+}
+
+// SEPOS-PRO-002 — pull open orders + items from the cloud and mirror locally.
+// Conflict rule: cloud-wins for matched rows. New cloud rows insert with a
+// fresh local id but carry their cloud_id so future pushes don't double up.
+// Items whose parent order isn't found locally are skipped — the order will
+// be inserted first on the next tick, then the items follow.
+async function pullActiveOrders() {
+  if (!offlineQueue.isLocal || !CLOUD_API_URL) return;
+  if (!process.env.SYNC_SECRET) return;
+
+  let payload;
+  try {
+    const r = await fetch(`${CLOUD_API_URL}/api/sync/active-orders`, {
+      headers: { 'x-sync-secret': process.env.SYNC_SECRET },
+      signal: AbortSignal.timeout(PING_TIMEOUT_MS * 2),
+    });
+    if (!r.ok) { console.warn(`[sync] active-orders pull ${r.status}`); return; }
+    payload = await r.json();
+  } catch (err) {
+    console.warn('[sync] active-orders pull failed:', err.message);
+    return;
+  }
+
+  const { orders = [], order_items = [], payments = [] } = payload;
+  if (orders.length === 0) return;
+
+  let inserted = 0, updated = 0;
+
+  // ─── Orders ───────────────────────────────────────────────────────
+  // For each cloud order, either UPDATE the local row that already has
+  // this cloud_id, or INSERT a new local row carrying the cloud_id.
+  const orderColsRow = await pool.query('PRAGMA table_info(orders)');
+  const orderCols = orderColsRow.rows.map(r => r.name);
+  for (const cloudOrder of orders) {
+    const cloudId = cloudOrder.id;
+    if (!cloudId) continue;
+    let localId = await findLocalOrderByCloudId(cloudId);
+
+    // Migration safety: this is the first run since cloud_id columns landed,
+    // so existing local orders won't be bound to their cloud rows yet. Try a
+    // (table_id, opened_at) reconciliation before deciding to INSERT, so we
+    // don't duplicate orders that were pushed under the old in-memory map.
+    if (!localId && cloudOrder.table_id != null && cloudOrder.opened_at) {
+      const probe = await pool.query(
+        `SELECT id FROM orders
+         WHERE cloud_id IS NULL
+           AND status = 'open'
+           AND table_id = $1
+           AND ABS((julianday(opened_at) - julianday($2)) * 86400) < 120
+         LIMIT 1`,
+        [cloudOrder.table_id, cloudOrder.opened_at]
+      );
+      if (probe.rows[0]?.id) {
+        localId = probe.rows[0].id;
+        await setOrderCloudId(localId, cloudId);
+      }
+    }
+
+    // Build a column→value map of fields that exist in the local schema,
+    // dropping the cloud's `id` (we use our own auto-id locally) and any
+    // null/undefined that would clobber a meaningful local value.
+    const fields = {};
+    for (const [k, v] of Object.entries(cloudOrder)) {
+      if (k === 'id') continue;
+      if (!orderCols.includes(k)) continue;
+      if (v === null || v === undefined) continue;
+      fields[k] = v;
+    }
+    fields.cloud_id = cloudId;
+
+    if (localId) {
+      const setCols = Object.keys(fields).filter(k => k !== 'cloud_id');
+      if (setCols.length > 0) {
+        const sets = setCols.map((c, i) => `${c} = $${i + 1}`).join(',');
+        await pool.query(
+          `UPDATE orders SET ${sets} WHERE id = $${setCols.length + 1}`,
+          [...setCols.map(c => fields[c]), localId]
+        );
+        updated++;
+      }
+    } else {
+      const cols = Object.keys(fields);
+      const placeholders = cols.map((_, i) => `$${i + 1}`).join(',');
+      await pool.query(
+        `INSERT INTO orders (${cols.join(',')}) VALUES (${placeholders})`,
+        cols.map(c => fields[c])
+      );
+      inserted++;
+    }
+  }
+
+  // ─── Order items ──────────────────────────────────────────────────
+  const itemColsRow = await pool.query('PRAGMA table_info(order_items)');
+  const itemCols = itemColsRow.rows.map(r => r.name);
+  let itemsInserted = 0, itemsUpdated = 0, itemsSkipped = 0;
+  for (const cloudItem of order_items) {
+    const cloudId = cloudItem.id;
+    if (!cloudId) continue;
+    // Translate cloud order_id → local order_id.
+    const localOrderId = await findLocalOrderByCloudId(cloudItem.order_id);
+    if (!localOrderId) { itemsSkipped++; continue; }
+
+    const localItemId = await findLocalItemByCloudId(cloudId);
+    const fields = { order_id: localOrderId };
+    for (const [k, v] of Object.entries(cloudItem)) {
+      if (k === 'id' || k === 'order_id') continue;
+      if (!itemCols.includes(k)) continue;
+      if (v === null || v === undefined) continue;
+      fields[k] = v;
+    }
+    fields.cloud_id = cloudId;
+
+    if (localItemId) {
+      const setCols = Object.keys(fields).filter(k => k !== 'cloud_id');
+      if (setCols.length > 0) {
+        const sets = setCols.map((c, i) => `${c} = $${i + 1}`).join(',');
+        await pool.query(
+          `UPDATE order_items SET ${sets} WHERE id = $${setCols.length + 1}`,
+          [...setCols.map(c => fields[c]), localItemId]
+        );
+        itemsUpdated++;
+      }
+    } else {
+      const cols = Object.keys(fields);
+      const placeholders = cols.map((_, i) => `$${i + 1}`).join(',');
+      await pool.query(
+        `INSERT INTO order_items (${cols.join(',')}) VALUES (${placeholders})`,
+        cols.map(c => fields[c])
+      );
+      itemsInserted++;
+    }
+  }
+
+  if (inserted || updated || itemsInserted || itemsUpdated) {
+    console.log(`[sync] active-orders: ${inserted}+${updated} orders, ${itemsInserted}+${itemsUpdated} items${itemsSkipped ? ` (${itemsSkipped} item-skips, parent not yet pulled)` : ''}`);
+  }
 }
 
 // SEPOS — pull closed orders + items + payments from the cloud.
@@ -420,4 +610,4 @@ function stop() {
   }
 }
 
-module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, tick };
+module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, pullActiveOrders, tick };

@@ -106,7 +106,8 @@ function initSchema() {
       pickup_time TIMESTAMP,
       takeaway_status TEXT,
       payment_status TEXT,
-      payment_intent_id TEXT
+      payment_intent_id TEXT,
+      cloud_id INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS order_items (
@@ -129,7 +130,8 @@ function initSchema() {
       void_type TEXT,
       discount_type TEXT,
       discount_value REAL,
-      resend_reason TEXT
+      resend_reason TEXT,
+      cloud_id INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS order_item_modifiers (
@@ -352,6 +354,16 @@ function runMigrations() {
   addColumnIfMissing('orders', 'takeaway_status', 'TEXT');
   addColumnIfMissing('orders', 'payment_status', 'TEXT');
   addColumnIfMissing('orders', 'payment_intent_id', 'TEXT');
+
+  // SEPOS-PRO-002: bidirectional active-order sync.
+  // cloud_id maps a local row to its mirror on the cloud Postgres backend.
+  //   - Mac creates an order → INSERT local, push to cloud, capture returned id → UPDATE local.cloud_id
+  //   - Chrome creates an order → cloud INSERT, sync pull → INSERT local with cloud_id set
+  // Lookups go cloud_id ↔ local id so the in-memory map can finally be retired.
+  addColumnIfMissing('orders',      'cloud_id', 'INTEGER');
+  addColumnIfMissing('order_items', 'cloud_id', 'INTEGER');
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_cloud_id      ON orders(cloud_id)      WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] orders.cloud_id index:', err.message); }
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_order_items_cloud_id ON order_items(cloud_id) WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] order_items.cloud_id index:', err.message); }
 }
 
 function seedDefaults() {

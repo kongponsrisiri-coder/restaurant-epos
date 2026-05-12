@@ -395,6 +395,7 @@ app.post('/api/orders/:id/items', async (req, res) => {
     const { items } = req.body;
     const orderId = req.params.id;
     const firedBarIds = []; // SEPOS-032: bar items deplete stock on add
+    const queuedItems = [];  // SEPOS-PRO-002: paired with local row id for cloud_id mapping
     for (const item of items) {
       const isBar = item.is_bar ? 1 : 0;
       const firedAt = isBar ? new Date().toISOString() : null;
@@ -404,7 +405,9 @@ app.post('/api/orders/:id/items', async (req, res) => {
         `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at, item_name) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
         [orderId, item.menu_item_id, item.quantity, item.unit_price, item.notes || '', item.course || 1, item.item_note || '', isBar, firedAt, firedAt, itemName]
       );
-      if (isBar) firedBarIds.push(ins.rows[0].id);
+      const newRowId = ins.rows[0].id;
+      if (isBar) firedBarIds.push(newRowId);
+      queuedItems.push({ ...item, localItemId: newRowId });
     }
     const totalRes = await client.query('SELECT SUM(quantity * unit_price) as total FROM order_items WHERE order_id = $1 AND voided = 0', [orderId]);
     const total = totalRes.rows[0].total || 0;
@@ -413,10 +416,17 @@ app.post('/api/orders/:id/items', async (req, res) => {
     const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
     const newItemsRes = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id = $1 AND order_items.is_fired = 1 AND order_items.status = 'cooking'`, [orderId]);
     io.emit('new_order_items', { order: orderRes.rows[0], items: newItemsRes.rows });
-    await offlineQueue.enqueue('add_items', { localOrderId: Number(orderId), items });
+    await offlineQueue.enqueue('add_items', { localOrderId: Number(orderId), items: queuedItems });
     // SEPOS-032: bar items go is_fired=1 immediately → deplete stock now
     if (firedBarIds.length > 0) await depleteStockForItems(firedBarIds, 'sale');
-    res.json({ success: true, total });
+    // SEPOS-PRO-002: return the inserted items so the Mac's sync engine can
+    // map local order_item ids → cloud order_item ids after a push.
+    // (queuedItems is positionally aligned with what was inserted.)
+    const insertedIds = queuedItems.map(qi => qi.localItemId).filter(Boolean);
+    const insertedRows = insertedIds.length > 0
+      ? (await pool.query(`SELECT id FROM order_items WHERE id = ANY($1::int[]) ORDER BY id ASC`, [insertedIds])).rows
+      : [];
+    res.json({ success: true, total, items: insertedRows });
   } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); }
   finally { client.release(); }
 });
@@ -2208,6 +2218,49 @@ app.get('/api/sync/closed-orders', async (req, res) => {
     });
   } catch (err) {
     console.error('GET /api/sync/closed-orders error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// SEPOS-PRO-002 — active-order sync feed.
+// Returns ALL currently-open orders with their items + payments in a single
+// payload so the desktop Mac app can mirror cloud state on its floor map.
+// Open orders aren't paginated by closed_at since they don't have a
+// closed_at yet; we just return the full set. Restaurants with more than
+// a few hundred concurrent open tabs would need pagination, which we'll
+// add when someone actually has that problem.
+app.get('/api/sync/active-orders', async (req, res) => {
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected) {
+    return res.status(503).json({ error: 'SYNC_SECRET not set on this server — active-orders sync is disabled' });
+  }
+  if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+
+  try {
+    const ordersRes = await pool.query(`
+      SELECT * FROM orders
+      WHERE status='open'
+      ORDER BY id ASC
+    `);
+    const orders = ordersRes.rows;
+    if (orders.length === 0) {
+      return res.json({ orders: [], order_items: [], payments: [] });
+    }
+
+    const ids = orders.map(o => o.id);
+    const [itemsRes, paymentsRes] = await Promise.all([
+      pool.query('SELECT * FROM order_items WHERE order_id = ANY($1::int[])', [ids]),
+      pool.query('SELECT * FROM payments    WHERE order_id = ANY($1::int[])', [ids]),
+    ]);
+
+    res.json({
+      orders,
+      order_items: itemsRes.rows,
+      payments:    paymentsRes.rows,
+    });
+  } catch (err) {
+    console.error('GET /api/sync/active-orders error:', err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import { C, card, btn, input, label, STATUS_STYLE } from '../theme.js';
+import Avatar from '../components/Avatar.jsx';
+
+const ROLE_BADGE = {
+  admin:   { bg: '#fef3c7', color: '#92400e', label: 'Admin' },
+  support: { bg: '#dbeafe', color: '#1e40af', label: 'Support' },
+  viewer:  { bg: '#f1f5f9', color: '#475569', label: 'Viewer' },
+};
 
 export default function TeamPage() {
   const [team, setTeam] = useState([]);
@@ -17,28 +25,44 @@ export default function TeamPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 22 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>Team</h1>
-        <button onClick={() => setShowAdd(true)} style={{ marginLeft: 'auto', padding: '10px 18px', background: '#0D1B3E', color: 'white', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>+ Add team member</button>
+      <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: 28 }}>
+        <div>
+          <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0, color: C.text, letterSpacing: -0.5 }}>Team</h1>
+          <p style={{ margin: '4px 0 0', color: C.textMuted, fontSize: 14 }}>
+            {team.length} {team.length === 1 ? 'member' : 'members'} with access to the back office
+          </p>
+        </div>
+        <button onClick={() => setShowAdd(true)} style={{ ...btn.gold, marginLeft: 'auto' }}>
+          + Add team member
+        </button>
       </div>
-      {err && <div style={{ background: '#fef2f2', color: '#b91c1c', padding: 10, borderRadius: 6, fontSize: 13, marginBottom: 12 }}>{err}</div>}
-      {loading ? <div>Loading…</div> : (
-        <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 100px 130px', padding: '12px 16px', background: '#f8fafc', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
-            <div>Name</div><div>Email</div><div>Role</div><div>Added</div>
-          </div>
-          {team.map(u => (
-            <div key={u.id} style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 100px 130px', padding: '12px 16px', borderTop: '1px solid #f1f5f9', alignItems: 'center' }}>
-              <div style={{ fontWeight: 600, color: '#0f172a' }}>{u.name}</div>
-              <div style={{ fontSize: 13, color: '#475569' }}>{u.email}</div>
-              <div>
-                <span style={{ background: u.role === 'admin' ? '#fef3c7' : '#dbeafe', color: u.role === 'admin' ? '#92400e' : '#1e40af', fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 10, textTransform: 'uppercase' }}>{u.role}</span>
+
+      {err && (
+        <div style={{ background: C.dangerBg, color: '#991b1b', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 16, border: `1px solid ${C.danger}33` }}>{err}</div>
+      )}
+
+      {loading ? (
+        <div style={{ color: C.textMuted, padding: 40, textAlign: 'center' }}>Loading…</div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+          {team.map(u => {
+            const r = ROLE_BADGE[u.role] || ROLE_BADGE.support;
+            return (
+              <div key={u.id} style={{ ...card, padding: 18, display: 'flex', gap: 14, alignItems: 'center' }}>
+                <Avatar name={u.name} size={44} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: C.text }}>{u.name}</div>
+                  <div style={{ fontSize: 12, color: C.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</div>
+                  <div style={{ marginTop: 6 }}>
+                    <span style={{ background: r.bg, color: r.color, fontSize: 10, fontWeight: 800, padding: '2px 9px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: 0.5 }}>{r.label}</span>
+                  </div>
+                </div>
               </div>
-              <div style={{ fontSize: 12, color: '#64748b' }}>{new Date(u.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
+
       {showAdd && <AddTeamModal onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); load(); }} />}
     </div>
   );
@@ -48,33 +72,50 @@ function AddTeamModal({ onClose, onSaved }) {
   const [f, setF] = useState({ name: '', email: '', password: '', role: 'support' });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
+
   const save = async () => {
-    if (!f.name || !f.email || !f.password) { setErr('All fields required'); return; }
+    if (!f.name || !f.email || !f.password) { setErr('All fields are required.'); return; }
     setSaving(true); setErr('');
     try { await api.addTeamMember(f); onSaved(); }
     catch (e) { setErr(e.message); } finally { setSaving(false); }
   };
+
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 100 }}>
-      <div style={{ background: 'white', borderRadius: 12, padding: 28, width: 440 }}>
-        <h2 style={{ margin: 0, marginBottom: 16, fontSize: 20 }}>Add team member</h2>
-        {err && <div style={{ background: '#fef2f2', color: '#b91c1c', padding: 8, borderRadius: 6, fontSize: 13, marginBottom: 12 }}>{err}</div>}
-        {[['name','Name'],['email','Email'],['password','Password']].map(([k,label]) => (
-          <label key={k} style={{ display: 'block', fontSize: 12, color: '#475569', marginBottom: 10 }}>
-            {label}
-            <input type={k === 'password' ? 'password' : k === 'email' ? 'email' : 'text'} value={f[k]} onChange={(e) => setF(p => ({ ...p, [k]: e.target.value }))}
-              style={{ width: '100%', padding: 9, border: '1px solid #cbd5e1', borderRadius: 6, marginTop: 4, fontSize: 14 }} />
-          </label>
-        ))}
-        <label style={{ display: 'block', fontSize: 12, color: '#475569' }}>Role
-          <select value={f.role} onChange={(e) => setF(p => ({ ...p, role: e.target.value }))}
-            style={{ width: '100%', padding: 9, border: '1px solid #cbd5e1', borderRadius: 6, marginTop: 4, fontSize: 14 }}>
-            <option value="support">Support</option><option value="admin">Admin</option><option value="viewer">Viewer</option>
-          </select>
-        </label>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-          <button onClick={onClose} style={{ padding: '9px 18px', background: '#f1f5f9', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
-          <button onClick={save} disabled={saving} style={{ padding: '9px 18px', background: '#0D1B3E', color: 'white', border: 'none', borderRadius: 6, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 100 }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: C.surface, borderRadius: 16, padding: 32, width: 460, boxShadow: '0 30px 80px rgba(0,0,0,0.3)' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: 22 }}>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: C.text }}>Add team member</h2>
+          <button onClick={onClose} style={{ marginLeft: 'auto', background: 'none', border: 'none', fontSize: 22, color: C.textFaint, cursor: 'pointer' }}>×</button>
+        </div>
+        {err && <div style={{ background: C.dangerBg, color: '#991b1b', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 14, border: `1px solid ${C.danger}33` }}>{err}</div>}
+        <div style={{ display: 'grid', gap: 14 }}>
+          <div>
+            <label style={label}>Name</label>
+            <input value={f.name} onChange={(e) => set('name', e.target.value)} style={input} />
+          </div>
+          <div>
+            <label style={label}>Email</label>
+            <input type="email" value={f.email} onChange={(e) => set('email', e.target.value)} style={input} />
+          </div>
+          <div>
+            <label style={label}>Password</label>
+            <input type="password" value={f.password} onChange={(e) => set('password', e.target.value)} style={input} />
+          </div>
+          <div>
+            <label style={label}>Role</label>
+            <select value={f.role} onChange={(e) => set('role', e.target.value)} style={input}>
+              <option value="support">Support</option>
+              <option value="admin">Admin</option>
+              <option value="viewer">Viewer</option>
+            </select>
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22 }}>
+          <button onClick={onClose} style={btn.ghost}>Cancel</button>
+          <button onClick={save} disabled={saving} style={{ ...btn.primary, opacity: saving ? 0.7 : 1 }}>
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>

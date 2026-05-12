@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
+import { C, btn, input, label } from '../theme.js';
 
 export default function LoginPage() {
   const nav = useNavigate();
@@ -23,26 +24,56 @@ export default function LoginPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0D1B3E', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <form onSubmit={submit} style={{ background: 'white', padding: 36, borderRadius: 16, width: 380, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-        <div style={{ textAlign: 'center', marginBottom: 26 }}>
-          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 1 }}>
-            <span style={{ color: '#0D1B3E' }}>Siam</span>
-            <span style={{ color: '#C9A84C' }}>EPOS</span>
+    <div style={{
+      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 24, position: 'relative', overflow: 'hidden',
+      background: `linear-gradient(135deg, ${C.navyDeep} 0%, ${C.navy} 100%)`,
+    }}>
+      {/* Soft gold glow */}
+      <div style={{
+        position: 'absolute', width: 600, height: 600, borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(201,168,76,0.20) 0%, transparent 60%)',
+        top: -200, right: -100, pointerEvents: 'none',
+      }} />
+
+      <form onSubmit={submit} style={{
+        background: 'white', padding: 40, borderRadius: 18, width: 400,
+        boxShadow: '0 25px 60px rgba(0,0,0,0.35)', position: 'relative', zIndex: 1,
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: 30 }}>
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: 28, fontWeight: 800, letterSpacing: 1 }}>
+            <span style={{ color: C.navy }}>Siam</span>
+            <span style={{ color: C.gold }}>EPOS</span>
           </div>
-          <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>Back Office</div>
+          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6, letterSpacing: 2.5, textTransform: 'uppercase' }}>
+            Back Office
+          </div>
         </div>
-        <label style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>Email</label>
-        <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email"
-          style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', marginTop: 4, marginBottom: 14, fontSize: 14 }} />
-        <label style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>Password</label>
+
+        <label style={label}>Email</label>
+        <input type="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email"
+          style={{ ...input, marginBottom: 16 }} />
+
+        <label style={label}>Password</label>
         <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password"
-          style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', marginTop: 4, marginBottom: 18, fontSize: 14 }} />
-        {err && <div style={{ background: '#fef2f2', color: '#b91c1c', padding: '8px 12px', borderRadius: 6, fontSize: 13, marginBottom: 14 }}>{err}</div>}
+          style={{ ...input, marginBottom: 20 }} />
+
+        {err && (
+          <div style={{
+            background: C.dangerBg, color: '#991b1b',
+            padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 16,
+            border: `1px solid ${C.danger}33`,
+          }}>{err}</div>
+        )}
+
         <button type="submit" disabled={loading} style={{
-          width: '100%', padding: 12, background: '#0D1B3E', color: 'white', border: 'none',
-          borderRadius: 8, fontWeight: 700, cursor: loading ? 'wait' : 'pointer', fontSize: 15
+          ...btn.primary, width: '100%', padding: 13, fontSize: 15,
+          cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.7 : 1,
         }}>{loading ? 'Signing in…' : 'Sign in'}</button>
+
+        <div style={{ marginTop: 22, textAlign: 'center', fontSize: 12, color: C.textFaint }}>
+          Internal access · SiamEPOS team only
+        </div>
       </form>
     </div>
   );

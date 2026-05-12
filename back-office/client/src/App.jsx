@@ -1,9 +1,12 @@
-import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import Sidebar from './components/Sidebar.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import ClientDetailPage from './pages/ClientDetailPage.jsx';
 import TeamPage from './pages/TeamPage.jsx';
+import { C } from './theme.js';
+import { api } from './api.js';
 
 function useAuth() {
   const [user, setUser] = useState(() => {
@@ -21,47 +24,20 @@ function useAuth() {
 
 function Shell({ children }) {
   const user = useAuth();
-  const nav = useNavigate();
-  const loc = useLocation();
-  const tab = (path, label) => (
-    <Link to={path} style={{
-      padding: '10px 16px', borderRadius: 8, color: 'white', textDecoration: 'none',
-      fontWeight: 600, fontSize: 14,
-      background: loc.pathname === path || (path !== '/' && loc.pathname.startsWith(path)) ? '#C9A84C' : 'transparent',
-    }}>{label}</Link>
-  );
+  const [clientCount, setClientCount] = useState(null);
+  useEffect(() => {
+    let stop = false;
+    const load = async () => {
+      try { const list = await api.listClients(); if (!stop) setClientCount(list.length); } catch {}
+    };
+    load();
+    const id = setInterval(load, 30000);
+    return () => { stop = true; clearInterval(id); };
+  }, []);
   return (
-    <div>
-      <nav style={{
-        background: '#0D1B3E', color: 'white', padding: '12px 24px',
-        display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-      }}>
-        <div style={{ fontWeight: 800, fontSize: 18, letterSpacing: 1 }}>
-          <span style={{ color: 'white' }}>Siam</span>
-          <span style={{ color: '#C9A84C' }}>EPOS</span>
-          <span style={{ fontWeight: 400, marginLeft: 10, opacity: 0.7, fontSize: 13 }}>Back Office</span>
-        </div>
-        <div style={{ display: 'flex', gap: 4, marginLeft: 18 }}>
-          {tab('/', 'Clients')}
-          {user?.role === 'admin' && tab('/team', 'Team')}
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
-          {user && (
-            <>
-              <span style={{ fontSize: 13, opacity: 0.85 }}>{user.name} <span style={{ opacity: 0.5 }}>· {user.role}</span></span>
-              <button onClick={() => {
-                localStorage.removeItem('ops_token');
-                localStorage.removeItem('ops_user');
-                nav('/login');
-              }} style={{
-                background: 'transparent', color: 'white', border: '1px solid rgba(255,255,255,0.3)',
-                padding: '6px 14px', borderRadius: 6, cursor: 'pointer', fontSize: 13
-              }}>Sign out</button>
-            </>
-          )}
-        </div>
-      </nav>
-      <main style={{ maxWidth: 1280, margin: '0 auto', padding: '24px' }}>{children}</main>
+    <div style={{ display: 'flex', minHeight: '100vh', background: C.bg }}>
+      <Sidebar user={user} clientCount={clientCount} />
+      <main style={{ flex: 1, padding: '32px 40px', overflowX: 'hidden' }}>{children}</main>
     </div>
   );
 }

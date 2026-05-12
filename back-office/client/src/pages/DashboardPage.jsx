@@ -1,28 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
-
-const STATUS_STYLE = {
-  setup:   { bg: '#fef3c7', color: '#92400e' },
-  active:  { bg: '#dcfce7', color: '#166534' },
-  trial:   { bg: '#dbeafe', color: '#1e40af' },
-  churned: { bg: '#fee2e2', color: '#991b1b' },
-  paused:  { bg: '#f3f4f6', color: '#475569' },
-};
-
-function fmtRelTime(ts) {
-  if (!ts) return '—';
-  const diff = (Date.now() - new Date(ts).getTime()) / 1000;
-  if (diff < 60)     return `${Math.floor(diff)}s ago`;
-  if (diff < 3600)   return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400)  return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
+import { C, card, btn, input, label, fmtRelTime, fmtMoney, PLAN_LABEL, STATUS_STYLE } from '../theme.js';
+import StatusPill from '../components/StatusPill.jsx';
+import HealthDot from '../components/HealthDot.jsx';
 
 export default function DashboardPage() {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('all');
   const nav = useNavigate();
 
   const load = async () => {
@@ -32,91 +20,130 @@ export default function DashboardPage() {
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
+  useEffect(() => { const t = setInterval(load, 30000); return () => clearInterval(t); }, []);
 
-  // Soft auto-refresh every 30s so the dashboard reflects fresh health pings.
-  useEffect(() => {
-    const t = setInterval(load, 30000);
-    return () => clearInterval(t);
-  }, []);
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return clients.filter(c => {
+      if (filter !== 'all' && c.status !== filter) return false;
+      if (!q) return true;
+      return (c.restaurant_name || '').toLowerCase().includes(q) ||
+             (c.owner_name || '').toLowerCase().includes(q) ||
+             (c.email || '').toLowerCase().includes(q);
+    });
+  }, [clients, search, filter]);
 
-  const sumByStatus = clients.reduce((a, c) => ({ ...a, [c.status]: (a[c.status] || 0) + 1 }), {});
-  const totalMRR = clients
-    .filter(c => c.status === 'active')
-    .reduce((s, c) => s + (Number(c.monthly_fee) || 0), 0);
+  const counts = clients.reduce((a, c) => ({ ...a, [c.status]: (a[c.status] || 0) + 1 }), {});
+  const onlineCount = clients.filter(c => c.last_is_online).length;
+  const totalMRR = clients.filter(c => c.status === 'active').reduce((s, c) => s + (Number(c.monthly_fee) || 0), 0);
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 22 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0, color: '#0f172a' }}>Clients</h1>
-        <button onClick={() => setShowAdd(true)} style={{
-          marginLeft: 'auto', padding: '10px 18px', background: '#0D1B3E', color: 'white',
-          border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer'
-        }}>+ Add client</button>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: 28 }}>
+        <div>
+          <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0, color: C.text, letterSpacing: -0.5 }}>Clients</h1>
+          <p style={{ margin: '4px 0 0', color: C.textMuted, fontSize: 14 }}>
+            {clients.length} {clients.length === 1 ? 'restaurant' : 'restaurants'} · {onlineCount} online now
+          </p>
+        </div>
+        <button onClick={() => setShowAdd(true)} style={{ ...btn.gold, marginLeft: 'auto' }}>
+          + Add client
+        </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 24 }}>
-        {[
-          { label: 'Total clients', value: clients.length, color: '#0D1B3E' },
-          { label: 'Active',        value: sumByStatus.active || 0, color: '#16a34a' },
-          { label: 'Trial',         value: sumByStatus.trial || 0,  color: '#2563eb' },
-          { label: 'Setup',         value: sumByStatus.setup || 0,  color: '#d97706' },
-          { label: 'MRR (active)',  value: `£${totalMRR.toFixed(2)}`, color: '#C9A84C' },
-        ].map(s => (
-          <div key={s.label} style={{ background: 'white', padding: 16, borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: s.color, marginTop: 4 }}>{s.value}</div>
-          </div>
-        ))}
+      {/* Stat tiles */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 28 }}>
+        <StatTile label="Active subs"  value={counts.active || 0} sub={`${fmtMoney(totalMRR)} MRR`}    accent={C.success} />
+        <StatTile label="On trial"     value={counts.trial  || 0}                                      accent={C.info} />
+        <StatTile label="In setup"     value={counts.setup  || 0}                                      accent={C.warning} />
+        <StatTile label="Online now"   value={onlineCount}        sub={`/ ${clients.length} total`}    accent={C.gold} />
+        <StatTile label="Churned"      value={counts.churned || 0}                                     accent={C.textMuted} />
       </div>
 
-      {loading ? <div style={{ color: '#64748b' }}>Loading…</div> : (
-        <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 100px 110px 110px', padding: '12px 16px', background: '#f8fafc', fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            <div>Restaurant</div><div>Owner</div><div>Plan / Status</div><div style={{ textAlign: 'center' }}>Health</div><div>Orders today</div><div>Last ping</div>
-          </div>
-          {clients.length === 0 && (
-            <div style={{ padding: 36, textAlign: 'center', color: '#94a3b8' }}>No clients yet — add your first one.</div>
-          )}
-          {clients.map(c => {
-            const st = STATUS_STYLE[c.status] || STATUS_STYLE.setup;
-            const online = c.last_is_online;
-            const lastChecked = c.last_checked_at;
-            return (
-              <div key={c.id} onClick={() => nav(`/clients/${c.id}`)} style={{
-                display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 100px 110px 110px',
-                padding: '14px 16px', borderTop: '1px solid #f1f5f9', cursor: 'pointer',
-                alignItems: 'center', transition: 'background 0.1s'
-              }} onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.background = 'white'}>
-                <div>
-                  <div style={{ fontWeight: 700, color: '#0f172a' }}>{c.restaurant_name}</div>
-                  {c.railway_url && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{c.railway_url}</div>}
-                </div>
-                <div style={{ fontSize: 13, color: '#475569' }}>
-                  {c.owner_name || '—'}
-                  {c.email && <div style={{ fontSize: 11, color: '#94a3b8' }}>{c.email}</div>}
-                </div>
-                <div>
-                  <span style={{ background: st.bg, color: st.color, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 10, textTransform: 'uppercase' }}>{c.status}</span>
-                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>{c.plan} {c.monthly_fee ? `· £${Number(c.monthly_fee).toFixed(2)}/mo` : ''}</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  {online === null || online === undefined ? (
-                    <span style={{ color: '#cbd5e1', fontSize: 22 }}>○</span>
-                  ) : online ? (
-                    <span title={`${c.last_response_ms}ms`} style={{ color: '#22c55e', fontSize: 22 }}>●</span>
-                  ) : (
-                    <span style={{ color: '#ef4444', fontSize: 22 }}>●</span>
-                  )}
-                </div>
-                <div style={{ fontSize: 13, color: '#0f172a', fontWeight: 600 }}>{c.last_orders_today ?? '—'}</div>
-                <div style={{ fontSize: 12, color: '#64748b' }}>{fmtRelTime(lastChecked)}</div>
-              </div>
-            );
-          })}
+      {/* Filter bar */}
+      <div style={{ ...card, padding: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 20 }}>
+        <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name, owner, or email…"
+          style={{ ...input, flex: 1, minWidth: 200 }} />
+        <select value={filter} onChange={(e) => setFilter(e.target.value)} style={{ ...input, width: 160 }}>
+          <option value="all">All statuses</option>
+          {Object.entries(STATUS_STYLE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+        </select>
+      </div>
+
+      {/* Client cards */}
+      {loading ? (
+        <div style={{ color: C.textMuted, padding: 40, textAlign: 'center' }}>Loading…</div>
+      ) : filtered.length === 0 ? (
+        <div style={{ ...card, padding: 48, textAlign: 'center', color: C.textFaint }}>
+          {clients.length === 0 ? 'No clients yet — add your first one above.' : 'No clients match the current filter.'}
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
+          {filtered.map(c => <ClientCard key={c.id} client={c} onClick={() => nav(`/clients/${c.id}`)} />)}
         </div>
       )}
 
       {showAdd && <AddClientModal onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); load(); }} />}
+    </div>
+  );
+}
+
+function StatTile({ label, value, sub, accent }) {
+  return (
+    <div style={{ ...card, padding: 18, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, height: 3, width: '100%', background: accent }} />
+      <div style={{ fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 28, fontWeight: 800, color: C.text, marginTop: 6, letterSpacing: -0.5 }}>{value}</div>
+      {sub && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function ClientCard({ client, onClick }) {
+  const online = client.last_is_online;
+  const lastChecked = client.last_checked_at;
+  return (
+    <div onClick={onClick} style={{
+      ...card, padding: 18, cursor: 'pointer', transition: 'transform 0.12s, box-shadow 0.12s',
+    }}
+      onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(15,23,42,0.10)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = card.boxShadow; }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <HealthDot online={online} size={9} pulsing={online} />
+            <span style={{ fontSize: 16, fontWeight: 800, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {client.restaurant_name}
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: C.textFaint, fontFamily: 'ui-monospace, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {client.railway_url || 'No URL set'}
+          </div>
+        </div>
+        <StatusPill status={client.status} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 12 }}>
+        <Metric label="Plan" value={PLAN_LABEL[client.plan] || client.plan || '—'} />
+        <Metric label="MRR" value={client.monthly_fee ? fmtMoney(client.monthly_fee) : '—'} />
+        <Metric label="Orders today" value={client.last_orders_today ?? '—'} accent={client.last_orders_today > 0 ? C.success : null} />
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.textFaint, paddingTop: 10, borderTop: `1px solid ${C.borderSoft}` }}>
+        <span>{client.owner_name || '—'}</span>
+        <span>Pinged {fmtRelTime(lastChecked)}</span>
+      </div>
+    </div>
+  );
+}
+
+function Metric({ label, value, accent }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, color: C.textFaint, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: accent || C.text, marginTop: 2 }}>{value}</div>
     </div>
   );
 }
@@ -131,7 +158,7 @@ function AddClientModal({ onClose, onSaved }) {
   const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
 
   const save = async () => {
-    if (!f.restaurant_name) { setErr('Restaurant name required'); return; }
+    if (!f.restaurant_name) { setErr('Restaurant name is required.'); return; }
     setSaving(true); setErr('');
     try {
       await api.createClient({ ...f, monthly_fee: f.monthly_fee || null });
@@ -140,54 +167,53 @@ function AddClientModal({ onClose, onSaved }) {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 100 }}>
-      <div style={{ background: 'white', borderRadius: 12, padding: 28, width: 560, maxHeight: '90vh', overflow: 'auto' }}>
-        <h2 style={{ margin: 0, marginBottom: 16, fontSize: 20 }}>Add client</h2>
-        {err && <div style={{ background: '#fef2f2', color: '#b91c1c', padding: 8, borderRadius: 6, fontSize: 13, marginBottom: 12 }}>{err}</div>}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          {[
-            ['restaurant_name', 'Restaurant name *'],
-            ['owner_name',      'Owner name'],
-            ['email',           'Email'],
-            ['phone',           'Phone'],
-            ['railway_url',     'Railway URL (e.g. xyz.up.railway.app)'],
-          ].map(([k, label]) => (
-            <label key={k} style={{ display: 'block', fontSize: 12, color: '#475569', gridColumn: k === 'railway_url' ? '1 / span 2' : 'auto' }}>
-              {label}
-              <input value={f[k]} onChange={(e) => set(k, e.target.value)}
-                style={{ width: '100%', padding: 9, border: '1px solid #cbd5e1', borderRadius: 6, marginTop: 4, fontSize: 14 }} />
-            </label>
-          ))}
-          <label style={{ fontSize: 12, color: '#475569' }}>Plan
-            <select value={f.plan} onChange={(e) => set('plan', e.target.value)}
-              style={{ width: '100%', padding: 9, border: '1px solid #cbd5e1', borderRadius: 6, marginTop: 4, fontSize: 14 }}>
-              <option value="trial">Trial</option>
-              <option value="cloud">Cloud</option>
-              <option value="pro">Pro</option>
-            </select>
-          </label>
-          <label style={{ fontSize: 12, color: '#475569' }}>Status
-            <select value={f.status} onChange={(e) => set('status', e.target.value)}
-              style={{ width: '100%', padding: 9, border: '1px solid #cbd5e1', borderRadius: 6, marginTop: 4, fontSize: 14 }}>
-              <option value="setup">Setup</option>
-              <option value="trial">Trial</option>
-              <option value="active">Active</option>
-              <option value="paused">Paused</option>
-              <option value="churned">Churned</option>
-            </select>
-          </label>
-          <label style={{ fontSize: 12, color: '#475569' }}>Monthly fee £
-            <input type="number" step="0.01" value={f.monthly_fee} onChange={(e) => set('monthly_fee', e.target.value)}
-              style={{ width: '100%', padding: 9, border: '1px solid #cbd5e1', borderRadius: 6, marginTop: 4, fontSize: 14 }} />
-          </label>
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 100,
+    }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: C.surface, borderRadius: 16, padding: 32, width: 600, maxHeight: '90vh', overflow: 'auto', boxShadow: '0 30px 80px rgba(0,0,0,0.3)' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: 22 }}>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: C.text }}>Add client</h2>
+          <button onClick={onClose} style={{ marginLeft: 'auto', background: 'none', border: 'none', fontSize: 22, color: C.textFaint, cursor: 'pointer' }}>×</button>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-          <button onClick={onClose} style={{ padding: '9px 18px', background: '#f1f5f9', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
-          <button onClick={save} disabled={saving} style={{ padding: '9px 18px', background: '#0D1B3E', color: 'white', border: 'none', borderRadius: 6, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>
-            {saving ? 'Saving…' : 'Save'}
+        {err && <div style={{ background: C.dangerBg, color: '#991b1b', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 16, border: `1px solid ${C.danger}33` }}>{err}</div>}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <Field label="Restaurant name *" gridColumn="1 / span 2" value={f.restaurant_name} onChange={(v) => set('restaurant_name', v)} />
+          <Field label="Owner name"  value={f.owner_name} onChange={(v) => set('owner_name', v)} />
+          <Field label="Phone"       value={f.phone}      onChange={(v) => set('phone', v)} />
+          <Field label="Email"       value={f.email}      onChange={(v) => set('email', v)} type="email" gridColumn="1 / span 2" />
+          <Field label="Railway URL" value={f.railway_url} onChange={(v) => set('railway_url', v)} placeholder="xyz.up.railway.app" gridColumn="1 / span 2" mono />
+          <div>
+            <label style={label}>Plan</label>
+            <select value={f.plan} onChange={(e) => set('plan', e.target.value)} style={input}>
+              <option value="trial">Trial</option><option value="cloud">Cloud</option><option value="pro">Pro</option>
+            </select>
+          </div>
+          <div>
+            <label style={label}>Status</label>
+            <select value={f.status} onChange={(e) => set('status', e.target.value)} style={input}>
+              {Object.entries(STATUS_STYLE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </div>
+          <Field label="Monthly fee (£)" value={f.monthly_fee} onChange={(v) => set('monthly_fee', v)} type="number" placeholder="89.00" />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
+          <button onClick={onClose} style={btn.ghost}>Cancel</button>
+          <button onClick={save} disabled={saving} style={{ ...btn.primary, opacity: saving ? 0.7 : 1 }}>
+            {saving ? 'Saving…' : 'Save client'}
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Field({ label: lbl, value, onChange, type = 'text', placeholder, gridColumn, mono }) {
+  return (
+    <div style={{ gridColumn }}>
+      <label style={label}>{lbl}</label>
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+        style={{ ...input, fontFamily: mono ? 'ui-monospace, monospace' : 'inherit' }} />
     </div>
   );
 }

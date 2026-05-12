@@ -458,6 +458,28 @@ function shouldReturnRows(sql) {
 // ─────────────────────────────────────────────────────────────
 // pg.Pool-compatible interface
 // ─────────────────────────────────────────────────────────────
+// SQLite stores CURRENT_TIMESTAMP as a naive UTC string like
+// "2026-05-12 10:00:00" — no Z, no offset. JavaScript's `new Date(...)` then
+// parses it as LOCAL time, which throws timers off by exactly the local TZ
+// offset (1 hour during UK BST, hence the "table timer is 1h ahead" bug).
+// Normalising rows on the way out converts every such string to ISO 8601 UTC
+// ("2026-05-12T10:00:00Z") so any consumer parsing with `new Date()` gets the
+// correct instant. The pattern only matches FULL date-time strings; pure
+// dates ("2026-05-12") and pure times ("18:30") are untouched.
+const NAIVE_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?$/;
+function normaliseTimestamps(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return rows;
+  for (const row of rows) {
+    for (const key of Object.keys(row)) {
+      const v = row[key];
+      if (typeof v === 'string' && NAIVE_TIMESTAMP_RE.test(v)) {
+        row[key] = v.replace(' ', 'T') + 'Z';
+      }
+    }
+  }
+  return rows;
+}
+
 async function query(text, params = []) {
   if (typeof text !== 'string') {
     // pg supports { text, values } config-object form; not exercised in server.js today.
@@ -468,7 +490,7 @@ async function query(text, params = []) {
 
   try {
     if (shouldReturnRows(sql)) {
-      const rows = db.prepare(sql).all(...flat);
+      const rows = normaliseTimestamps(db.prepare(sql).all(...flat));
       return { rows, rowCount: rows.length };
     }
     const info = db.prepare(sql).run(...flat);

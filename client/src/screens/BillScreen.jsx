@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getBill, markBillPrinted } from '../api';
 import { printReceipt } from './ReceiptPrinter';
+import { orderShortLabelPlain, orderSubLabel, isTakeaway } from '../utils/orderLabel';
 
 export default function BillScreen({ orderId, onClose, onPay }) {
 
@@ -169,7 +170,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
         {/* ═══════════════ BILL ═══════════════ */}
         {stage === 'bill' && (
           <div>
-            {mobileTopBar(`Table ${order.table_number}`, onClose, '✕ Close')}
+            {mobileTopBar(orderShortLabelPlain(order), onClose, '✕ Close')}
             <div style={{ padding:isMobile?'20px 16px':'28px 24px' }}>
               <div style={{ textAlign:'center', marginBottom:20 }}>
                 <div style={{ fontSize:22, fontWeight:800, color:'#1a1a2e' }}>{settings.company_name || settings.restaurant_name || 'My Restaurant'}</div>
@@ -178,7 +179,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 {settings.company_vat     && <div style={{ fontSize:12, color:'#555' }}>VAT: {settings.company_vat}</div>}
               </div>
               <div style={{ borderTop:'1px dashed #ccc', borderBottom:'1px dashed #ccc', padding:'8px 0', marginBottom:16, display:'flex', justifyContent:'space-between', fontSize:12, color:'#555' }}>
-                <span>Table {order.table_number} · {order.covers||1} covers</span>
+                <span>{orderShortLabelPlain(order)}{isTakeaway(order) ? (orderSubLabel(order) ? ` · ${orderSubLabel(order)}` : '') : ` · ${order.covers||1} covers`}</span>
                 <span>{dateStr} {timeStr}</span>
               </div>
               <div style={{ marginBottom:16, fontFamily:'monospace' }}>
@@ -239,7 +240,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
               <div style={{ fontSize:72, marginBottom:16 }}>✅</div>
               <div style={{ fontSize:24, fontWeight:800, color:'#22c55e', marginBottom:8 }}>Payment Confirmed!</div>
               <div style={{ fontSize:32, fontWeight:800, color:'#1a1a2e', marginBottom:4 }}>£{billTotal.toFixed(2)}</div>
-              <div style={{ fontSize:14, color:'#888', marginBottom:28 }}>{paymentDetails?.method} · Table {order.table_number}</div>
+              <div style={{ fontSize:14, color:'#888', marginBottom:28 }}>{paymentDetails?.method} · {orderShortLabelPlain(order)}</div>
               {paymentDetails?.change > 0 && (
                 <div style={{ background:'#f0fdf4', border:'2px solid #22c55e', borderRadius:14, padding:'16px 20px', marginBottom:24 }}>
                   <div style={{ fontSize:13, color:'#166534', marginBottom:4 }}>💚 Change to give customer</div>

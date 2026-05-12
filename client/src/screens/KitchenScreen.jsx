@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { getOrders, getOrder, updateItemStatus } from '../api';
 import { io } from 'socket.io-client';
 import { SERVER_URL } from '../api';
+import { orderShortLabel, orderSubLabel, orderShortLabelPlain, isTakeaway } from '../utils/orderLabel';
 
 const playSound = (type) => {
   try {
@@ -148,7 +149,7 @@ export default function KitchenScreen() {
         else if (courseNum === 2) playSound('mains');
         else if (courseNum === 3) playSound('desserts');
         else playSound('default');
-        setNotification(`🔥 Table ${data.order.table_number} — ${courseLabel} fired!`);
+        setNotification(`🔥 ${orderShortLabelPlain(data.order)} — ${courseLabel} fired!`);
         setTimeout(() => setNotification(null), 6000);
       }
     });
@@ -329,23 +330,14 @@ export default function KitchenScreen() {
               {orders.map(order => {
                 const allItems = order.items.filter(i => !i.voided && i.status !== 'served' && i.status !== 'cooked' && !i.is_bar);
 
-// SEPOS-034 — render order title differently for takeaway (no table)
+// Render the order title via the shared label helper so dine-in vs
+// takeaway is consistent across every screen.
 function OrderHeading({ order }) {
-  if (order && order.order_type === 'takeaway') {
-    const pickup = order.pickup_time
-      ? new Date(order.pickup_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-      : '';
-    return (
-      <span>
-        🥡 {order.customer_name || 'Takeaway'}
-        {pickup && <span style={{ fontSize: 14, fontWeight: 600, marginLeft: 8, opacity: 0.9 }}>· {pickup}</span>}
-      </span>
-    );
-  }
+  const sub = orderSubLabel(order);
   return (
     <span>
-      Table {order?.table_number ?? '—'}
-      {order?.covers && <span style={{ fontSize: 14, fontWeight: 400, marginLeft: 8, opacity: 0.8 }}>{order.covers} cvr</span>}
+      {orderShortLabel(order)}
+      {sub && <span style={{ fontSize: 14, fontWeight: 600, marginLeft: 8, opacity: 0.9 }}>· {sub}</span>}
     </span>
   );
 }

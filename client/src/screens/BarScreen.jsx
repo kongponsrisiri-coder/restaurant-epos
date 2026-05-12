@@ -2,6 +2,19 @@ import { useState, useEffect } from 'react';
 import { getBarOrders, updateItemStatus } from '../api';
 import { io } from 'socket.io-client';
 import { SERVER_URL } from '../api';
+import { orderShortLabel, orderSubLabel, orderShortLabelPlain } from '../utils/orderLabel';
+
+// Bar items come from the API with order_type/customer_name/pickup_time
+// flattened into each item row, so the helper sees the right shape when
+// passed an item OR the rebuilt group object below.
+const groupAsOrder = (g) => ({
+  id: g.order_id,
+  table_number: g.table_number,
+  covers: g.covers,
+  order_type: g.order_type,
+  customer_name: g.customer_name,
+  pickup_time: g.pickup_time,
+});
 
 function Timer({ startedAt }) {
   const [elapsed, setElapsed] = useState(0);
@@ -114,7 +127,7 @@ export default function BarScreen() {
   completedItems.forEach(item => {
     const key = item.order_id;
     if (!completedByOrder[key]) {
-      completedByOrder[key] = { order_id: item.order_id, table_number: item.table_number, covers: item.covers, items: [] };
+      completedByOrder[key] = { order_id: item.order_id, table_number: item.table_number, covers: item.covers, order_type: item.order_type, customer_name: item.customer_name, pickup_time: item.pickup_time, items: [] };
     }
     completedByOrder[key].items.push(item);
   });
@@ -217,8 +230,8 @@ export default function BarScreen() {
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                     }}>
                       <div style={{ color: 'white', fontWeight: 800, fontSize: 20 }}>
-                        Table {order.table_number}
-                        {order.covers && <span style={{ fontSize: 13, fontWeight: 400, marginLeft: 8, opacity: 0.8 }}>{order.covers} cvr</span>}
+                        {orderShortLabel(order)}
+                        {orderSubLabel(order) && <span style={{ fontSize: 13, fontWeight: 400, marginLeft: 8, opacity: 0.8 }}>{orderSubLabel(order)}</span>}
                       </div>
                       <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>
                         {orderReadyIds.length}/{order.items.length} ready
@@ -284,7 +297,7 @@ export default function BarScreen() {
                           color: 'white', fontSize: 18, fontWeight: 800, cursor: 'pointer',
                           boxShadow: '0 4px 16px rgba(34,197,94,0.4)'
                         }}>
-                          🍹 Serve Table {order.table_number}!
+                          🍹 Serve {orderShortLabelPlain(order)}!
                         </button>
                       </div>
                     )}
@@ -326,8 +339,8 @@ export default function BarScreen() {
                 <div key={group.order_id} style={{ background: '#1a1a2e', borderRadius: 16, overflow: 'hidden' }}>
                   <div style={{ background: '#1e293b', padding: '12px 16px', display: 'flex', justifyContent: 'space-between' }}>
                     <div style={{ color: 'white', fontWeight: 800, fontSize: 18 }}>
-                      Table {group.table_number}
-                      {group.covers && <span style={{ fontSize: 13, fontWeight: 400, marginLeft: 8, opacity: 0.7 }}>{group.covers} cvr</span>}
+                      {orderShortLabel(groupAsOrder(group))}
+                      {orderSubLabel(groupAsOrder(group)) && <span style={{ fontSize: 13, fontWeight: 400, marginLeft: 8, opacity: 0.7 }}>{orderSubLabel(groupAsOrder(group))}</span>}
                     </div>
                     <div style={{ color: '#aaa', fontSize: 13 }}>#{group.order_id}</div>
                   </div>

@@ -83,6 +83,49 @@ async function findLocalItemByCloudId(cloudId) {
   } catch { return null; }
 }
 
+// "Pending mutations" guard. While a local change is sitting in sync_queue
+// waiting to push, Mac is authoritative for that order. If we pull cloud
+// state and overwrite, the user sees the change appear and then snap back
+// (cloud hadn't yet received the push). Pull must skip these rows until
+// the push completes and clears the queue entry.
+async function ordersWithPendingPush() {
+  try {
+    const r = await pool.query(
+      `SELECT payload FROM sync_queue WHERE synced = 0
+       AND action_type IN ('create_order','add_items','fire_course','pay_order')`
+    );
+    const orderIds = new Set();
+    for (const row of r.rows) {
+      try {
+        const p = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+        if (p && p.localOrderId) orderIds.add(Number(p.localOrderId));
+      } catch {}
+    }
+    return orderIds;
+  } catch { return new Set(); }
+}
+async function itemsWithPendingPush() {
+  try {
+    const r = await pool.query(
+      `SELECT payload FROM sync_queue WHERE synced = 0
+       AND action_type IN ('add_items','void_item')`
+    );
+    const itemIds = new Set();
+    for (const row of r.rows) {
+      try {
+        const p = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+        if (p && p.localItemId) itemIds.add(Number(p.localItemId));
+        if (p && Array.isArray(p.items)) {
+          for (const it of p.items) {
+            if (it && it.localItemId) itemIds.add(Number(it.localItemId));
+          }
+        }
+      } catch {}
+    }
+    return itemIds;
+  } catch { return new Set(); }
+}
+
 function setStatus(next) {
   if (next === status) return;
   status = next;
@@ -357,7 +400,13 @@ async function pullActiveOrders() {
   const { orders = [], order_items = [], payments = [] } = payload;
   if (orders.length === 0) return;
 
-  let inserted = 0, updated = 0;
+  // Snapshot which local rows have Mac-side pending mutations — those
+  // are skipped below to avoid the "tap → appears → snaps back → reappears"
+  // rollback effect.
+  const pendingOrderIds = await ordersWithPendingPush();
+  const pendingItemIds  = await itemsWithPendingPush();
+
+  let inserted = 0, updated = 0, skippedPending = 0;
 
   // ─── Orders ───────────────────────────────────────────────────────
   // For each cloud order, either UPDATE the local row that already has
@@ -402,14 +451,22 @@ async function pullActiveOrders() {
     fields.cloud_id = cloudId;
 
     if (localId) {
-      const setCols = Object.keys(fields).filter(k => k !== 'cloud_id');
-      if (setCols.length > 0) {
-        const sets = setCols.map((c, i) => `${c} = $${i + 1}`).join(',');
-        await pool.query(
-          `UPDATE orders SET ${sets} WHERE id = $${setCols.length + 1}`,
-          [...setCols.map(c => fields[c]), localId]
-        );
-        updated++;
+      // If Mac has pending mutations for this order, the cloud's view is
+      // stale relative to ours. Skip the UPDATE — the next sync push will
+      // bring cloud level with us, and a subsequent pull then has the
+      // freshest data on both sides.
+      if (pendingOrderIds.has(localId)) {
+        skippedPending++;
+      } else {
+        const setCols = Object.keys(fields).filter(k => k !== 'cloud_id');
+        if (setCols.length > 0) {
+          const sets = setCols.map((c, i) => `${c} = $${i + 1}`).join(',');
+          await pool.query(
+            `UPDATE orders SET ${sets} WHERE id = $${setCols.length + 1}`,
+            [...setCols.map(c => fields[c]), localId]
+          );
+          updated++;
+        }
       }
     } else {
       const cols = Object.keys(fields);
@@ -444,14 +501,19 @@ async function pullActiveOrders() {
     fields.cloud_id = cloudId;
 
     if (localItemId) {
-      const setCols = Object.keys(fields).filter(k => k !== 'cloud_id');
-      if (setCols.length > 0) {
-        const sets = setCols.map((c, i) => `${c} = $${i + 1}`).join(',');
-        await pool.query(
-          `UPDATE order_items SET ${sets} WHERE id = $${setCols.length + 1}`,
-          [...setCols.map(c => fields[c]), localItemId]
-        );
-        itemsUpdated++;
+      if (pendingItemIds.has(localItemId)) {
+        // Mac has a pending void / status / add for this item.
+        // Skip — push will resolve, next pull will reconcile.
+      } else {
+        const setCols = Object.keys(fields).filter(k => k !== 'cloud_id');
+        if (setCols.length > 0) {
+          const sets = setCols.map((c, i) => `${c} = $${i + 1}`).join(',');
+          await pool.query(
+            `UPDATE order_items SET ${sets} WHERE id = $${setCols.length + 1}`,
+            [...setCols.map(c => fields[c]), localItemId]
+          );
+          itemsUpdated++;
+        }
       }
     } else {
       const cols = Object.keys(fields);
@@ -464,8 +526,8 @@ async function pullActiveOrders() {
     }
   }
 
-  if (inserted || updated || itemsInserted || itemsUpdated) {
-    console.log(`[sync] active-orders: ${inserted}+${updated} orders, ${itemsInserted}+${itemsUpdated} items${itemsSkipped ? ` (${itemsSkipped} item-skips, parent not yet pulled)` : ''}`);
+  if (inserted || updated || itemsInserted || itemsUpdated || skippedPending) {
+    console.log(`[sync] active-orders: ${inserted}+${updated} orders, ${itemsInserted}+${itemsUpdated} items${itemsSkipped ? ` (${itemsSkipped} item-skips, parent not yet pulled)` : ''}${skippedPending ? ` (${skippedPending} orders skipped — local pending)` : ''}`);
   }
 }
 

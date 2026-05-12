@@ -17,6 +17,7 @@
     "nodemailer": "^8.0.7",
     "pg": "^8.20.0",
     "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "sqlite3": "^6.0.1"
   }
 }

@@ -7,6 +7,7 @@ const path = require('path');
 const pool = require('./db/dbAdapter');
 const offlineQueue = require('./services/offlineQueue');
 const syncService = require('./services/syncService');
+const cloudRelay = require('./services/cloudRelay');
 const makeWebhooks = require('./services/makeWebhooks');
 
 const app = express();
@@ -2301,5 +2302,8 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('✅ EPOS server is running on port ' + PORT);
   console.log('');
   syncService.start();
+  // SEPOS-PRO-003 — Mac local server subscribes to cloud Socket.io so
+  // every cloud event lands on the Mac in real time. No-op in cloud mode.
+  cloudRelay.start(io, syncService);
   makeWebhooks.start();
 });

@@ -2333,6 +2333,78 @@ app.get('/api/sync/active-orders', async (req, res) => {
   }
 });
 
+// ─── ADMIN: reset sales data ───────────────────────────────────────────
+// One-shot wipe of orders + order_items + payments + sale-source
+// stock_movements. Gated by SYNC_SECRET so only the operator who set
+// up the EPOS can call it. Requires explicit scope in the body to
+// rule out accidental curl-typo wipes — the endpoint refuses if
+// scope isn't 'all' or 'today'.
+//
+// Returns a summary of what got deleted so the caller can verify.
+// Idempotent: a second call returns zeros across the board.
+//
+// Remove this endpoint once production data starts to matter — it's
+// here for the test-data clean-up phase. See SEPOS notes / chat.
+app.post('/api/admin/reset-sales', async (req, res) => {
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected) return res.status(503).json({ error: 'SYNC_SECRET not set on this server — admin endpoints disabled' });
+  if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+
+  const scope = req.body?.scope;
+  if (scope !== 'all' && scope !== 'today') {
+    return res.status(400).json({ error: 'body must include scope: "all" | "today"' });
+  }
+
+  const todayFilter = scope === 'today' ? `WHERE created_at::date = CURRENT_DATE` : '';
+  const todayInner  = scope === 'today' ? `(SELECT id FROM orders WHERE created_at::date = CURRENT_DATE)` : `(SELECT id FROM orders)`;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const pay  = await client.query(`DELETE FROM payments      WHERE order_id IN ${todayInner}`);
+    const oi   = await client.query(`DELETE FROM order_items   WHERE order_id IN ${todayInner}`);
+    let mv = { rowCount: 0 };
+    try {
+      mv = await client.query(`DELETE FROM stock_movements WHERE source = 'sale' ${scope === 'today' ? "AND created_at::date = CURRENT_DATE" : ''}`);
+    } catch (e) { /* stock_movements may not exist on older DBs — ignore */ }
+    const ord  = await client.query(`DELETE FROM orders ${todayFilter}`);
+
+    // For 'all' scope, also reset the id sequences so the next order is #1.
+    let sequencesReset = false;
+    if (scope === 'all') {
+      try {
+        await client.query(`ALTER SEQUENCE orders_id_seq      RESTART WITH 1`);
+        await client.query(`ALTER SEQUENCE order_items_id_seq RESTART WITH 1`);
+        await client.query(`ALTER SEQUENCE payments_id_seq    RESTART WITH 1`);
+        sequencesReset = true;
+      } catch (e) { /* sequence names differ on non-PG; ignore */ }
+    }
+
+    await client.query('COMMIT');
+    console.log(`[admin] reset-sales scope=${scope} → ${ord.rowCount} orders, ${oi.rowCount} items, ${pay.rowCount} payments, ${mv.rowCount} stock_movements${sequencesReset ? ' + sequences reset' : ''}`);
+
+    res.json({
+      success: true,
+      scope,
+      deleted: {
+        orders:          ord.rowCount,
+        order_items:     oi.rowCount,
+        payments:        pay.rowCount,
+        stock_movements: mv.rowCount,
+      },
+      sequences_reset: sequencesReset,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('POST /api/admin/reset-sales error:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // Force a cloud→local pull immediately (operator can hit this if the menu
 // looks stale without waiting for the next interval). No-op in cloud mode.
 app.post('/api/sync/pull', async (req, res) => {

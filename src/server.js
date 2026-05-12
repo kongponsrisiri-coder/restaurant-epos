@@ -489,6 +489,35 @@ app.put('/api/order-items/:id/status', async (req, res) => {
     const served_at = status === 'served' ? now : item.served_at;
     await pool.query('UPDATE order_items SET status=$1, cooking_started_at=$2, served_at=$3 WHERE id=$4', [status, cooking_started_at, served_at, req.params.id]);
     io.emit('item_status_changed', { item_id: req.params.id, status });
+
+    // SEPOS-034 — when the last non-voided item on a takeaway order goes
+    // to 'served', auto-flip takeaway_status='collected' so the order
+    // closes and counts in reports. Without this the Collected button
+    // is the only path, and it lives on the Pass tab card which has
+    // already disappeared by the time everything is served.
+    if (status === 'served' && item.order_id) {
+      const orderRes = await pool.query(
+        'SELECT id, order_type, status, takeaway_status FROM orders WHERE id = $1',
+        [item.order_id]
+      );
+      const order = orderRes.rows[0];
+      if (order && order.order_type === 'takeaway' && order.status === 'open' && order.takeaway_status !== 'collected') {
+        const remainingRes = await pool.query(
+          `SELECT COUNT(*) AS n FROM order_items
+           WHERE order_id = $1 AND voided = 0 AND status <> 'served'`,
+          [item.order_id]
+        );
+        if (parseInt(remainingRes.rows[0].n, 10) === 0) {
+          await pool.query(
+            `UPDATE orders SET takeaway_status='collected', status='closed', closed_at=NOW() WHERE id = $1`,
+            [item.order_id]
+          );
+          io.emit('takeaway_status', { order_id: Number(item.order_id), status: 'collected' });
+          console.log(`🥡 auto-collected takeaway order #${item.order_id} (all items served)`);
+        }
+      }
+    }
+
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1625,8 +1654,11 @@ async function sendTakeawayConfirmation({ order_id, customer_name, customer_emai
   const restaurantName = process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant';
   const orderNumber = 'T' + String(order_id).padStart(4, '0');
   const pickupDate = new Date(pickup_time);
-  const pickupStr = pickupDate.toLocaleDateString('en-GB', { weekday:'long', day:'2-digit', month:'short' }) +
-                    ' at ' + pickupDate.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+  // Pin to Europe/London — Railway runs in UTC so without timeZone the
+  // email would render the underlying UTC value (1h behind BST in summer).
+  const TZ = 'Europe/London';
+  const pickupStr = pickupDate.toLocaleDateString('en-GB', { weekday:'long', day:'2-digit', month:'short', timeZone: TZ }) +
+                    ' at ' + pickupDate.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', timeZone: TZ });
   const itemRows = items.map(i => `
     <tr>
       <td style="padding:6px 0;">${i.quantity}× ${String(i.name || 'Item').replace(/[<>]/g,'')}</td>

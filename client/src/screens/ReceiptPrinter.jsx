@@ -155,7 +155,7 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
     ${order.order_type === 'takeaway'
       ? `<tr><td>Type</td><td style="text-align:right;font-weight:700;">🥡 Online Order</td></tr>
          ${order.customer_name ? `<tr><td>Customer</td><td style="text-align:right;">${order.customer_name}</td></tr>` : ''}
-         ${order.pickup_time   ? `<tr><td>Pickup</td><td style="text-align:right;">${new Date(order.pickup_time).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</td></tr>` : ''}`
+         ${order.pickup_time   ? `<tr><td>Pickup</td><td style="text-align:right;">${new Date(order.pickup_time).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/London'})}</td></tr>` : ''}`
       : `<tr><td>Table</td>  <td style="text-align:right;font-weight:700;">${order.table_number||'—'}</td></tr>
          <tr><td>Covers</td> <td style="text-align:right;">${order.covers||'—'}</td></tr>`}
     <tr><td>Date</td>    <td style="text-align:right;">${date}</td></tr>

@@ -38,7 +38,12 @@ export function orderSubLabel(order) {
     const bits = [];
     if (order.customer_name) bits.push(order.customer_name);
     if (order.pickup_time) {
-      const pickup = new Date(order.pickup_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      // Pin display to UK time — server stores pickup_time as UTC ISO,
+      // and we want a UK-running kitchen to see UK hours regardless of
+      // the iPad's region setting.
+      const pickup = new Date(order.pickup_time).toLocaleTimeString('en-GB', {
+        hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London',
+      });
       bits.push(pickup);
     }
     return bits.join(' · ');

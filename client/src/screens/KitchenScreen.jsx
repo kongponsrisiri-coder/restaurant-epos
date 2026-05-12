@@ -699,12 +699,37 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
             <div style={{ textAlign: 'center', color: '#555', marginTop: 100, fontSize: 20 }}>No completed orders yet today</div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-              {Object.values(completedByOrder).map(group => (
+              {Object.values(completedByOrder).map(group => {
+                // The Done tab pulls FROM order_items (status='served'), so a
+                // takeaway order showing here either hasn't been collected
+                // yet (auto-collect failed) or the chef wants to close it
+                // explicitly. Either way, expose the Collected button.
+                const orderForLabel = { ...group, id: group.order_id };
+                return (
                 <div key={group.order_id} style={{ background: '#1a1a1a', borderRadius: 16, overflow: 'hidden' }}>
-                  <div style={{ background: '#1f2937', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ color: 'white', fontWeight: 800, fontSize: 18 }}>
-                      <OrderHeading order={group} />
+                  <div style={{ background: '#1f2937', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <div style={{ color: 'white', fontWeight: 800, fontSize: 18, flex: 1, minWidth: 0 }}>
+                      <OrderHeading order={orderForLabel} />
                     </div>
+                    {isTakeaway(group) && (
+                      <button
+                        onClick={async () => {
+                          if (!window.confirm(`Mark Online Order #${group.order_id} as collected? This closes the order and counts it as a sale.`)) return;
+                          try {
+                            await setTakeawayStatus(group.order_id, 'collected');
+                            await fetchOrders();
+                            await fetchCompleted();
+                          } catch (err) {
+                            window.alert('Could not mark collected: ' + (err?.message || 'unknown error'));
+                          }
+                        }}
+                        style={{
+                          background: '#22c55e', color: 'white', border: 'none', borderRadius: 8,
+                          padding: '6px 12px', fontWeight: 800, fontSize: 12, cursor: 'pointer',
+                          whiteSpace: 'nowrap', flexShrink: 0,
+                        }}
+                      >🥡 Collected</button>
+                    )}
                     <div style={{ color: '#aaa', fontSize: 13 }}>#{group.order_id}</div>
                   </div>
                   <div style={{ padding: 12 }}>
@@ -724,7 +749,8 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                     ))}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

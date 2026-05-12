@@ -322,7 +322,7 @@ export default function KitchenScreen() {
 
       {/* ─── KITCHEN TAB ─── */}
       {tab === 'kitchen' && (
-        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: 16 }}>
+        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: 16, background: '#111' }}>
           {orders.length === 0 ? (
             <div style={{ textAlign: 'center', color: '#555', marginTop: 100, fontSize: 20 }}>✅ Kitchen is clear!</div>
           ) : (
@@ -480,7 +480,7 @@ if (upcoming.length === 0 && cooking.length === 0) return null;
 
       {/* ─── PASS TAB ─── */}
       {tab === 'pass' && (
-        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: 16 }}>
+        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: 16, background: '#111' }}>
           {passOrders.length === 0 ? (
             <div style={{ textAlign: 'center', color: '#555', marginTop: 100, fontSize: 20 }}>✅ Pass is clear!</div>
           ) : (
@@ -560,7 +560,7 @@ if (upcoming.length === 0 && cooking.length === 0) return null;
 
       {/* ─── COMPLETED TAB ─── */}
       {tab === 'completed' && (
-        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: 16 }}>
+        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: 16, background: '#111' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div style={{ color: 'white', fontSize: 16, fontWeight: 700 }}>
               Today's completed — {completedItems.length} items

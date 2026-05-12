@@ -38,9 +38,21 @@ export default function ZReportSection() {
   };
 
   const handleConfirmSave = async () => {
-    if (reportData.open_orders?.length > 0) {
-      const ok = window.confirm(`⚠️ ${reportData.open_orders.length} tables still open:\n` + reportData.open_orders.map(o => `Table ${o.table_number}`).join(', ') + '\n\nAre you sure?');
-      if (!ok) return;
+    // Split open orders by type so warnings are accurate. Takeaway orders
+    // that never got "Collected" are NOT a "tables didn't close" problem.
+    const openOrders = reportData.open_orders || [];
+    const openTables    = openOrders.filter(o => o.order_type !== 'takeaway' && o.table_number);
+    const openTakeaway  = openOrders.filter(o => o.order_type === 'takeaway');
+    if (openTables.length > 0 || openTakeaway.length > 0) {
+      const msg = [
+        openTables.length > 0
+          ? `⚠️ ${openTables.length} table${openTables.length>1?'s':''} still open:\n` + openTables.map(o => `Table ${o.table_number}`).join(', ')
+          : '',
+        openTakeaway.length > 0
+          ? `\n\n🥡 ${openTakeaway.length} takeaway order${openTakeaway.length>1?'s':''} not collected:\n` + openTakeaway.map(o => `#${o.id}${o.customer_name ? ' · '+o.customer_name : ''}`).join(', ')
+          : '',
+      ].filter(Boolean).join('');
+      if (!window.confirm(msg + '\n\nAre you sure you want to close the report?')) return;
     }
     const floatNum = parseFloat(floatAmount) || 0;
     const pettyNum = parseFloat(pettyCash) || 0;
@@ -105,12 +117,28 @@ export default function ZReportSection() {
 
       {step === 2 && reportData && (
         <div>
-          {reportData.open_orders?.length > 0 && (
-            <div style={{ background: '#fef9c3', borderRadius: 12, padding: 16, marginBottom: 20, border: '2px solid #eab308' }}>
-              <div style={{ fontWeight: 700, color: '#713f12', marginBottom: 4 }}>⚠️ {reportData.open_orders.length} tables still open!</div>
-              <div style={{ fontSize: 13, color: '#92400e' }}>{reportData.open_orders.map(o => `Table ${o.table_number}`).join(' · ')}</div>
-            </div>
-          )}
+          {(() => {
+            const allOpen = reportData.open_orders || [];
+            const openTables   = allOpen.filter(o => o.order_type !== 'takeaway' && o.table_number);
+            const openTakeaway = allOpen.filter(o => o.order_type === 'takeaway');
+            if (openTables.length === 0 && openTakeaway.length === 0) return null;
+            return (
+              <div style={{ background: '#fef9c3', borderRadius: 12, padding: 16, marginBottom: 20, border: '2px solid #eab308' }}>
+                {openTables.length > 0 && (
+                  <>
+                    <div style={{ fontWeight: 700, color: '#713f12', marginBottom: 4 }}>⚠️ {openTables.length} table{openTables.length>1?'s':''} still open!</div>
+                    <div style={{ fontSize: 13, color: '#92400e', marginBottom: openTakeaway.length > 0 ? 10 : 0 }}>{openTables.map(o => `Table ${o.table_number}`).join(' · ')}</div>
+                  </>
+                )}
+                {openTakeaway.length > 0 && (
+                  <>
+                    <div style={{ fontWeight: 700, color: '#713f12', marginBottom: 4 }}>🥡 {openTakeaway.length} takeaway order{openTakeaway.length>1?'s':''} not yet marked collected</div>
+                    <div style={{ fontSize: 13, color: '#92400e' }}>{openTakeaway.map(o => `#${o.id}${o.customer_name ? ' · '+o.customer_name : ''}`).join(' · ')}</div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
           <div style={{ background: 'white', borderRadius: 16, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: 20 }}>
             <div style={{ textAlign: 'center', paddingBottom: 16, marginBottom: 16, borderBottom: '2px dashed #eee' }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: '#1a1a2e' }}>{reportType === 'day' ? '🌙 END OF DAY' : '⏰ SHIFT CLOSE'}</div>

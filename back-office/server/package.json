@@ -1,0 +1,19 @@
+{
+  "name": "siamepos-back-office-server",
+  "version": "0.1.0",
+  "description": "SEPOS-041 — internal ops dashboard backend for managing restaurant clients",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.6",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3",
+    "pg": "^8.20.0"
+  }
+}

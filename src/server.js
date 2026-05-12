@@ -348,6 +348,28 @@ app.get('/api/orders', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-041 — public health endpoint polled every 5 minutes by the
+// SiamEPOS Back Office cron. Intentionally unauthenticated so the ops
+// dashboard can ping any client URL without rotating per-client secrets.
+// Returns only aggregate counts — no PII, no menu, no order details.
+app.get('/api/health', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE DATE(created_at) = CURRENT_DATE) AS orders_today,
+        MAX(created_at) AS last_order_at
+      FROM orders
+    `);
+    res.json({
+      status: 'ok',
+      orders_today: parseInt(result.rows[0].orders_today, 10) || 0,
+      last_order_at: result.rows[0].last_order_at,
+    });
+  } catch (err) {
+    res.status(500).json({ status: 'error', error: err.message });
+  }
+});
+
 app.get('/api/orders/bar', async (req, res) => {
   try {
     const ordersRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status = 'open' ORDER BY orders.created_at DESC`);

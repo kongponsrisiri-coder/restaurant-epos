@@ -397,6 +397,12 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                             for (const it of ready) {
                               try { await updateItemStatus(it.id, 'served'); } catch {}
                             }
+                            // For takeaway orders, also collapse the lifecycle to
+                            // 'collected' so the order closes and lands in reports
+                            // even if the auto-collect path missed any items.
+                            if (isTakeaway(order)) {
+                              try { await setTakeawayStatus(order.id, 'collected'); } catch {}
+                            }
                             fetchOrders();
                           }}
                           style={{
@@ -405,6 +411,29 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                             whiteSpace: 'nowrap', flexShrink: 0,
                           }}
                         >✓ Off Kitchen ({ready.length})</button>
+                      )}
+                      {isTakeaway(order) && !allReadyForOff && (
+                        // Explicit Collected button for takeaway orders on the
+                        // Kitchen tab — always reachable in Pass mode AND Direct
+                        // mode, even before every item is served. Closes the
+                        // order, stamps closed_at, marks any unserved items
+                        // served, and the order drops off the kitchen.
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm(`Mark Online Order #${order.id} as collected? This closes the order and counts it as a sale.`)) return;
+                            try {
+                              await setTakeawayStatus(order.id, 'collected');
+                              await fetchOrders();
+                            } catch (err) {
+                              window.alert('Could not mark collected: ' + (err?.message || 'unknown error'));
+                            }
+                          }}
+                          style={{
+                            background: '#22c55e', color: 'white', border: 'none', borderRadius: 8,
+                            padding: '8px 14px', fontWeight: 800, fontSize: 13, cursor: 'pointer',
+                            whiteSpace: 'nowrap', flexShrink: 0,
+                          }}
+                        >🥡 Collected</button>
                       )}
                       <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>
                         #{order.id} · {getTimeAgo(order.created_at)}

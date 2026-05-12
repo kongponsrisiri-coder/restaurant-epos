@@ -3,6 +3,7 @@
 // other's data even if someone misconfigures Railway.
 
 const { Pool } = require('pg');
+const bcrypt = require('bcryptjs');
 const fs = require('fs');
 const path = require('path');
 

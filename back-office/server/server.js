@@ -15,6 +15,25 @@ const healthCron    = require('./services/healthCheck');
 const PORT = parseInt(process.env.PORT || '3002', 10);
 const app = express();
 
+// Startup diagnostics — log which expected env vars are present so a
+// missing JWT_SECRET / DATABASE_URL is obvious in the Railway log
+// instead of being inferred from downstream errors. We log presence,
+// not the values, so secrets never leak.
+const expectedEnv = [
+  'DATABASE_URL', 'JWT_SECRET', 'PORT',
+  'OPS_BOOTSTRAP_EMAIL', 'OPS_BOOTSTRAP_PASSWORD', 'OPS_BOOTSTRAP_NAME',
+];
+console.log('[ops-api] env check:');
+for (const k of expectedEnv) {
+  const v = process.env[k];
+  const presence = v == null || v === '' ? '✗ MISSING'
+                 : k === 'JWT_SECRET' ? `✓ set (${v.length} chars)`
+                 : k.includes('PASSWORD') ? '✓ set (hidden)'
+                 : k === 'DATABASE_URL' ? `✓ set (host=${(() => { try { return new URL(v).host; } catch { return '?'; } })()})`
+                 : `✓ ${v}`;
+  console.log(`  ${k.padEnd(24)} ${presence}`);
+}
+
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '1mb' }));
 

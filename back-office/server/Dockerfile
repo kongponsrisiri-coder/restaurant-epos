@@ -7,9 +7,9 @@
 
 FROM node:20-alpine
 
-# Build-time tools needed for bcrypt's native compile step (only matters
-# if Alpine's musl can't find a prebuilt — usually it can).
-RUN apk add --no-cache python3 make g++ libc6-compat
+# Pure-JS deps — bcryptjs replaces bcrypt so no native compile required.
+# Keeping libc6-compat just in case any future dep wants glibc-style libs.
+RUN apk add --no-cache libc6-compat
 
 WORKDIR /app
 

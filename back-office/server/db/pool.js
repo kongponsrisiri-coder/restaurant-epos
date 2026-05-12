@@ -32,11 +32,21 @@ async function ensureBootstrapAdmin() {
   if (!seedEmail || !seedPass) return;
   const existing = await pool.query('SELECT id FROM team_users LIMIT 1');
   if (existing.rows.length > 0) return;
-  const bcrypt = require('bcrypt');
+
   const hash = await bcrypt.hash(seedPass, 10);
+
+  // Defensive: a valid bcrypt hash always starts with $2 (variant) followed
+  // by $ + cost + $ + 53 base64 chars. If for any reason hashing silently
+  // returned the plain password (the bug Krit caught), refuse to insert
+  // rather than write plaintext to the column.
+  if (typeof hash !== 'string' || !hash.startsWith('$2') || hash.length < 50) {
+    throw new Error(`[ops-db] bootstrap hash failed sanity check (got "${typeof hash}", length ${(hash||'').length}). Aborting insert.`);
+  }
+  console.log(`[ops-db] bootstrap hash OK — prefix ${hash.slice(0, 7)}…`);
+
   await pool.query(
     'INSERT INTO team_users (name, email, password_hash, role) VALUES ($1,$2,$3,$4)',
-    [seedName, seedEmail, hash, 'admin']
+    [seedName, seedEmail.toLowerCase().trim(), hash, 'admin']
   );
   console.log(`[ops-db] bootstrap admin created: ${seedEmail}`);
 }

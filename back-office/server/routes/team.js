@@ -1,7 +1,7 @@
 // SEPOS-041 — team user management. Admin-only for everything.
 
 const express = require('express');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const { pool } = require('../db/pool');
 const { authRequired, adminOnly } = require('../middleware/auth');
 

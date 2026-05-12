@@ -1,9 +1,0 @@
-# Minimal Nixpacks config — let the Node provider handle install +
-# detection, we just need to make sure no source-scanning secret
-# auto-mount kicks in. The default node provider runs `npm install`
-# at build time and reads start from package.json's "start" script.
-
-providers = ['node']
-
-[variables]
-NPM_CONFIG_PRODUCTION = 'false'

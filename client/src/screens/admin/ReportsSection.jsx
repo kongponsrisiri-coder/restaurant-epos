@@ -42,15 +42,32 @@ export default function ReportsSection() {
               {data?.orders?.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: '#bbb' }}>No orders for this period</div>}
               {data?.orders?.map(order => (
                 <div key={order.id} style={{ padding: '10px 20px', display: 'grid', gridTemplateColumns: '80px 1fr 100px 80px 80px', borderBottom: '1px solid #f0f0f0', fontSize: 14 }}>
-                  <span style={{ color: '#888' }}>#{order.id}</span><span>Table {order.table_number}</span><span>{order.method || '-'}</span><span>{order.covers || '-'}</span>
+                  <span style={{ color: '#888' }}>#{order.id}</span>
+                  <span>{order.order_type === 'takeaway' ? `🥡 ${order.customer_name || 'Online'}` : `Table ${order.table_number}`}</span>
+                  <span>{order.method || (order.order_type === 'takeaway' ? 'Online' : '-')}</span>
+                  <span>{order.covers || '-'}</span>
                   <span style={{ textAlign: 'right', fontWeight: 700 }}>£{(order.total || 0).toFixed(2)}</span>
                 </div>
               ))}
               {data?.orders?.length > 0 && (
-                <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', background: '#f8f8f8', fontWeight: 700 }}>
-                  <span>Total ({data.order_count} orders · {data.total_covers} covers)</span>
-                  <span style={{ color: '#e94560' }}>£{(data.total_sales || 0).toFixed(2)}</span>
-                </div>
+                <>
+                  {(data.takeaway_count > 0 || data.dine_in_count > 0) && (
+                    <div style={{ background: '#fffbeb', borderTop: '1px solid #fde68a', display: 'grid', gridTemplateColumns: '1fr 1fr', fontSize: 13 }}>
+                      <div style={{ padding: '10px 20px', borderRight: '1px solid #fde68a' }}>
+                        <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>Dine-in</div>
+                        <div style={{ fontWeight: 800, color: '#1a1a2e' }}>£{(data.total_dine_in || 0).toFixed(2)} <span style={{ color: '#888', fontSize: 12, fontWeight: 400 }}>· {data.dine_in_count || 0} orders</span></div>
+                      </div>
+                      <div style={{ padding: '10px 20px' }}>
+                        <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>🥡 Online Takeaway</div>
+                        <div style={{ fontWeight: 800, color: '#C9A84C' }}>£{(data.total_takeaway || 0).toFixed(2)} <span style={{ color: '#888', fontSize: 12, fontWeight: 400 }}>· {data.takeaway_count || 0} orders</span></div>
+                      </div>
+                    </div>
+                  )}
+                  <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', background: '#f8f8f8', fontWeight: 700 }}>
+                    <span>Total ({data.order_count} orders · {data.total_covers} covers)</span>
+                    <span style={{ color: '#e94560' }}>£{(data.total_sales || 0).toFixed(2)}</span>
+                  </div>
+                </>
               )}
             </div>
           )}

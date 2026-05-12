@@ -639,25 +639,37 @@ app.delete('/api/discount-reasons/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Helper: split a list of closed-order rows into dine-in vs takeaway
+// totals so every reports endpoint exposes the same shape.
+function splitByOrderType(rows) {
+  let total_takeaway = 0, total_dine_in = 0, takeaway_count = 0, dine_in_count = 0;
+  for (const r of rows) {
+    const t = Number(r.total || 0);
+    if (r.order_type === 'takeaway') { total_takeaway += t; takeaway_count++; }
+    else { total_dine_in += t; dine_in_count++; }
+  }
+  return { total_takeaway, total_dine_in, takeaway_count, dine_in_count };
+}
+
 app.get('/api/reports/daily', async (req, res) => {
   try {
     const date = req.query.date || new Date().toISOString().split('T')[0];
-    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, payments.method, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date = $1::date ORDER BY orders.closed_at DESC`, [date]);
+    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.order_type, orders.customer_name, payments.method, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date = $1::date ORDER BY orders.closed_at DESC`, [date]);
     const total = result.rows.reduce((sum, r) => sum + (r.total || 0), 0);
-    res.json({ date, orders: result.rows, total_sales: total, order_count: result.rows.length });
+    res.json({ date, orders: result.rows, total_sales: total, order_count: result.rows.length, ...splitByOrderType(result.rows) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/reports/summary', async (req, res) => {
   try {
     const { from, to } = req.query;
-    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, payments.method, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date ORDER BY orders.closed_at DESC`, [from, to]);
+    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.customer_name, payments.method, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date ORDER BY orders.closed_at DESC`, [from, to]);
     const rows = result.rows;
     const total_sales = rows.reduce((sum, r) => sum + (r.total || 0), 0);
     const total_covers = rows.reduce((sum, r) => sum + (r.covers || 0), 0);
     const by_method = {};
     rows.forEach(r => { if (r.method) by_method[r.method] = (by_method[r.method] || 0) + (r.total || 0); });
-    res.json({ orders: rows, total_sales, order_count: rows.length, total_covers, by_method });
+    res.json({ orders: rows, total_sales, order_count: rows.length, total_covers, by_method, ...splitByOrderType(rows) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -788,7 +800,8 @@ app.get('/api/z-report/preview', async (req, res) => {
     const totalCard = orders.filter(o => o.method === 'Card').reduce((s, o) => s + (o.paid_amount || 0), 0);
     const totalOther = orders.filter(o => o.method !== 'Cash' && o.method !== 'Card').reduce((s, o) => s + (o.paid_amount || 0), 0);
     const totalDiscounts = orders.reduce((s, o) => { if (!o.discount_value) return s; return s + (o.discount_type === 'percent' ? (o.total || 0) * (o.discount_value / 100) : o.discount_value); }, 0);
-    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_covers: totalCovers, total_orders: orders.length, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: orders.length > 0 ? totalSales / orders.length : 0 });
+    const orderTypeSplit = splitByOrderType(orders);
+    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_covers: totalCovers, total_orders: orders.length, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: orders.length > 0 ? totalSales / orders.length : 0, ...orderTypeSplit });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

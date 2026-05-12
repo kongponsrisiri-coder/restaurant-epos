@@ -109,14 +109,25 @@ export default function KitchenScreen() {
   const [notification, setNotification] = useState(null);
   const [showAlt, setShowAlt] = useState(false);
   const [altLang, setAltLang] = useState('ภาษาไทย');
+  // SEPOS — Direct Mode: cooked items stay on the Kitchen tab with a tick
+  // instead of jumping to a separate Pass tab. Aimed at smaller restaurants
+  // where the chef hands food straight to the floor.
+  const [directMode, setDirectMode] = useState(false);
 
-  // Load language preference from localStorage
+  // Load language + mode preferences from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('kitchen_show_alt');
     const savedLang = localStorage.getItem('kitchen_alt_lang');
+    const savedDirect = localStorage.getItem('kitchen_direct_mode');
     if (saved === 'true') setShowAlt(true);
     if (savedLang) setAltLang(savedLang);
+    if (savedDirect === '1') setDirectMode(true);
   }, []);
+  useEffect(() => {
+    localStorage.setItem('kitchen_direct_mode', directMode ? '1' : '0');
+    // If user enables Direct Mode while looking at Pass, hop back to Kitchen
+    if (directMode && tab === 'pass') setTab('kitchen');
+  }, [directMode, tab]);
 
   const toggleAlt = () => {
     const next = !showAlt;
@@ -262,13 +273,15 @@ export default function KitchenScreen() {
               </span>
             )}
           </button>
-          <button onClick={() => setTab('pass')} style={{
-            padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer',
-            fontWeight: 700, fontSize: 15,
-            background: tab === 'pass' ? '#8b5cf6' : '#333', color: 'white'
-          }}>
-            🍽️ Pass
-          </button>
+          {!directMode && (
+            <button onClick={() => setTab('pass')} style={{
+              padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer',
+              fontWeight: 700, fontSize: 15,
+              background: tab === 'pass' ? '#8b5cf6' : '#333', color: 'white'
+            }}>
+              🍽️ Pass
+            </button>
+          )}
           <button onClick={() => { setTab('completed'); fetchCompleted(); }} style={{
             padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer',
             fontWeight: 700, fontSize: 15,
@@ -288,6 +301,17 @@ export default function KitchenScreen() {
             transition: 'all 0.2s'
           }}>
             {showAlt ? `🌐 EN + ภาษา` : `🌐 EN only`}
+          </button>
+
+          {/* Direct Mode toggle — cooked items stay on Kitchen tab when enabled */}
+          <button onClick={() => setDirectMode(d => !d)} title={directMode ? 'Cooked items stay on Kitchen until you tap "Off Kitchen"' : 'Cooked items move to the Pass tab'} style={{
+            padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
+            fontWeight: 800, fontSize: 14,
+            background: directMode ? '#22c55e' : '#333',
+            color: directMode ? 'white' : '#aaa',
+            transition: 'all 0.2s'
+          }}>
+            {directMode ? '✓ Direct mode' : '🍽️ Pass mode'}
           </button>
 
           {tab === 'kitchen' && (
@@ -344,20 +368,44 @@ export default function KitchenScreen() {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
               {orders.map(order => {
-                const allItems = order.items.filter(i => !i.voided && i.status !== 'served' && i.status !== 'cooked' && !i.is_bar);
+                // In Direct Mode, cooked items also live on the Kitchen tab
+                // (they stay ticked until the chef marks the whole order off).
+                const kitchenFiltered = order.items.filter(i => !i.voided && i.status !== 'served' && !i.is_bar && (directMode || i.status !== 'cooked'));
 
-// Apply course filter to BOTH pending and cooking
-const upcoming = allItems.filter(i => !i.is_fired && (filter === 'all' || String(i.course || 1) === filter));
-const cooking = allItems.filter(i => i.is_fired && (filter === 'all' || String(i.course || 1) === filter));
+// Apply course filter to all three lists
+const upcoming = kitchenFiltered.filter(i => !i.is_fired && (filter === 'all' || String(i.course || 1) === filter));
+const cooking  = kitchenFiltered.filter(i => i.is_fired && i.status !== 'cooked' && (filter === 'all' || String(i.course || 1) === filter));
+const ready    = directMode ? kitchenFiltered.filter(i => i.status === 'cooked' && (filter === 'all' || String(i.course || 1) === filter)) : [];
 
-if (upcoming.length === 0 && cooking.length === 0) return null;
+if (upcoming.length === 0 && cooking.length === 0 && ready.length === 0) return null;
+
+// Direct Mode: when everything in scope is "ready" (cooked) and nothing is
+// still cooking or pending, surface a big "Off Kitchen" button so the chef
+// can send the whole order out in one tap.
+const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 && upcoming.length === 0;
 
                 return (
                   <div key={order.id} style={{ background: '#1a1a1a', borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' }}>
-                    <div style={{ background: '#e94560', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ color: 'white', fontWeight: 800, fontSize: 24 }}>
+                    <div style={{ background: allReadyForOff ? '#22c55e' : '#e94560', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <div style={{ color: 'white', fontWeight: 800, fontSize: 24, flex: 1, minWidth: 0 }}>
                         <OrderHeading order={order} />
                       </div>
+                      {allReadyForOff && (
+                        <button
+                          onClick={async () => {
+                            // Mark every ready item as served — one shot.
+                            for (const it of ready) {
+                              try { await updateItemStatus(it.id, 'served'); } catch {}
+                            }
+                            fetchOrders();
+                          }}
+                          style={{
+                            background: 'white', color: '#22c55e', border: 'none', borderRadius: 8,
+                            padding: '8px 14px', fontWeight: 800, fontSize: 13, cursor: 'pointer',
+                            whiteSpace: 'nowrap', flexShrink: 0,
+                          }}
+                        >✓ Off Kitchen ({ready.length})</button>
+                      )}
                       <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>
                         #{order.id} · {getTimeAgo(order.created_at)}
                       </span>
@@ -366,6 +414,34 @@ if (upcoming.length === 0 && cooking.length === 0) return null;
                     <div style={{ padding: 12 }}>
 
                       <div style={{ padding: 12 }}>
+
+  {/* ── READY (Direct Mode only — cooked items waiting to go out) ── */}
+  {ready.length > 0 && (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ color: '#22c55e', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 8, letterSpacing: 1 }}>
+        ✓ Ready to go ({ready.length})
+      </div>
+      {ready.map(item => (
+        <div key={item.id} style={{
+          background: '#0f2922', borderRadius: 10, padding: '10px 12px', marginBottom: 8,
+          border: '2px solid #22c55e', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <ItemName item={item} showAlt={showAlt} altLang={altLang} />
+            {item.notes && <div style={{ color: '#86efac', fontSize: 12, marginTop: 2 }}>{item.notes}</div>}
+          </div>
+          <button
+            onClick={() => markServed(item.id)}
+            title="Mark this single item as out"
+            style={{
+              background: '#22c55e', color: 'white', border: 'none', borderRadius: 8,
+              padding: '6px 12px', fontWeight: 800, fontSize: 12, cursor: 'pointer', flexShrink: 0
+            }}
+          >Out ✓</button>
+        </div>
+      ))}
+    </div>
+  )}
 
   {/* ── COOKING FIRST ── */}
   {cooking.length > 0 && (

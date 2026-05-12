@@ -1,0 +1,23 @@
+# Forces Railway's Nixpacks builder to use an explicit, minimal pipeline
+# for the back-office API. Without this, recent Nixpacks versions scan the
+# source for `process.env.X` references and add them to the generated
+# Dockerfile as `RUN --mount=type=secret,id=X ...` — which then fails
+# because the secret isn't available at build time
+# ("failed to solve: secret JWT_SECRET not found").
+#
+# Everything this server needs is purely runtime — no env vars are
+# touched during install — so we just declare the install + start
+# phases by hand and skip the auto-detected secret plumbing.
+
+[phases.setup]
+nixPkgs = ['nodejs_20', 'npm-9_x']
+
+[phases.install]
+cmds = ['npm ci --omit=dev || npm install --omit=dev']
+
+# No build phase — this is a plain Node server, no transpile / no bundle.
+[phases.build]
+cmds = []
+
+[start]
+cmd = 'npm start'

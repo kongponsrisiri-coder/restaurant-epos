@@ -9,7 +9,10 @@ const offlineQueue = require('./offlineQueue');
 const pool = require('../db/dbAdapter');
 
 const CLOUD_API_URL = process.env.CLOUD_API_URL || '';
-const PING_INTERVAL_MS = parseInt(process.env.SYNC_PING_MS || '30000', 10);
+// Default 5s — feels real-time for Mac↔Chrome floor-map flows. Override
+// per install via SYNC_PING_MS env var if you need to dial back (e.g.
+// multi-tenant deployments approaching Railway's egress quota).
+const PING_INTERVAL_MS = parseInt(process.env.SYNC_PING_MS || '5000', 10);
 const PING_TIMEOUT_MS = 5000;
 
 let status = 'local'; // 'cloud' | 'local' | 'syncing'

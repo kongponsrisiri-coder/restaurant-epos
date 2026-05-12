@@ -4,6 +4,22 @@ import { io } from 'socket.io-client';
 import { SERVER_URL } from '../api';
 import { orderShortLabel, orderSubLabel, orderShortLabelPlain, isTakeaway } from '../utils/orderLabel';
 
+// Order title helper. MUST live at module scope so every tab (Kitchen,
+// Pass, Completed) can reference it. The earlier version was declared
+// inside the Kitchen tab's .map() callback, which Chromium block-scoped
+// (per strict-mode spec) while Safari/WebKit hoisted it under legacy
+// Web Compat rules — that's why the Pass tab rendered fine on iPad
+// but blew up to a blank/white surface on Mac (Electron) and Chrome.
+function OrderHeading({ order }) {
+  const sub = orderSubLabel(order);
+  return (
+    <span>
+      {orderShortLabel(order)}
+      {sub && <span style={{ fontSize: 14, fontWeight: 600, marginLeft: 8, opacity: 0.9 }}>· {sub}</span>}
+    </span>
+  );
+}
+
 const playSound = (type) => {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -329,18 +345,6 @@ export default function KitchenScreen() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
               {orders.map(order => {
                 const allItems = order.items.filter(i => !i.voided && i.status !== 'served' && i.status !== 'cooked' && !i.is_bar);
-
-// Render the order title via the shared label helper so dine-in vs
-// takeaway is consistent across every screen.
-function OrderHeading({ order }) {
-  const sub = orderSubLabel(order);
-  return (
-    <span>
-      {orderShortLabel(order)}
-      {sub && <span style={{ fontSize: 14, fontWeight: 600, marginLeft: 8, opacity: 0.9 }}>· {sub}</span>}
-    </span>
-  );
-}
 
 // Apply course filter to BOTH pending and cooking
 const upcoming = allItems.filter(i => !i.is_fired && (filter === 'all' || String(i.course || 1) === filter));

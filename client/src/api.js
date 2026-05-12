@@ -165,3 +165,9 @@ export const setCustomerConsent = (email, consent) =>
 export const getCampaigns      = ()                    => get('/api/campaigns');
 export const getRecipientCount = (segment)             => get(`/api/campaigns/recipient-count?segment=${encodeURIComponent(segment)}`);
 export const sendCampaign      = (subject, body, segment) => post('/api/campaigns/send', { subject, body, segment });
+
+// SEPOS-034 — takeaway lifecycle (pending → accepted → preparing → ready → collected).
+// Marking 'collected' on the cloud closes the order and stamps closed_at, which
+// is what flips it into the Daily report / Z report / Bills tab.
+export const setTakeawayStatus = (orderId, status) =>
+  put(`/api/orders/${orderId}/takeaway-status`, { status });

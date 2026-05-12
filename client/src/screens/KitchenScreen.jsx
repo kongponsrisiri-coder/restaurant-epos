@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getOrders, getOrder, updateItemStatus } from '../api';
+import { getOrders, getOrder, updateItemStatus, setTakeawayStatus } from '../api';
 import { io } from 'socket.io-client';
 import { SERVER_URL } from '../api';
 import { orderShortLabel, orderSubLabel, orderShortLabelPlain, isTakeaway } from '../utils/orderLabel';
@@ -491,11 +491,30 @@ if (upcoming.length === 0 && cooking.length === 0) return null;
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
               {passOrders.map(order => (
                 <div key={order.id} style={{ background: '#1a1a1a', borderRadius: 16, overflow: 'hidden' }}>
-                  <div style={{ background: '#8b5cf6', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ color: 'white', fontWeight: 800, fontSize: 22 }}>
+                  <div style={{ background: '#8b5cf6', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <div style={{ color: 'white', fontWeight: 800, fontSize: 22, flex: 1, minWidth: 0 }}>
                       <OrderHeading order={order} />
                     </div>
-                    <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>#{order.id}</div>
+                    {isTakeaway(order) ? (
+                      <button
+                        onClick={async () => {
+                          if (!window.confirm(`Mark Online Order #${order.id} as collected? This closes the order and counts it as a sale.`)) return;
+                          try {
+                            await setTakeawayStatus(order.id, 'collected');
+                            await fetchOrders();
+                          } catch (err) {
+                            window.alert('Could not mark collected: ' + (err?.message || 'unknown error'));
+                          }
+                        }}
+                        style={{
+                          background: '#22c55e', color: 'white', border: 'none', borderRadius: 8,
+                          padding: '8px 14px', fontWeight: 800, fontSize: 13, cursor: 'pointer',
+                          whiteSpace: 'nowrap', flexShrink: 0,
+                        }}
+                      >🥡 Collected</button>
+                    ) : (
+                      <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>#{order.id}</div>
+                    )}
                   </div>
                   <div style={{ padding: 12 }}>
                     {(() => {

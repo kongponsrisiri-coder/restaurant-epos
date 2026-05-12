@@ -2359,27 +2359,48 @@ app.post('/api/admin/reset-sales', async (req, res) => {
   const todayFilter = scope === 'today' ? `WHERE created_at::date = CURRENT_DATE` : '';
   const todayInner  = scope === 'today' ? `(SELECT id FROM orders WHERE created_at::date = CURRENT_DATE)` : `(SELECT id FROM orders)`;
 
+  // SAVEPOINTs wrap each "best-effort" step so an error on it doesn't
+  // abort the entire transaction. PostgreSQL marks a transaction as
+  // failed the moment any query errors, even if JS catches the
+  // exception — without a savepoint, the next required query would
+  // then return "current transaction is aborted".
+  async function trySave(client, label, fn) {
+    await client.query(`SAVEPOINT ${label}`);
+    try {
+      const r = await fn();
+      await client.query(`RELEASE SAVEPOINT ${label}`);
+      return r;
+    } catch (err) {
+      await client.query(`ROLLBACK TO SAVEPOINT ${label}`);
+      console.warn(`[admin] reset-sales: ${label} step skipped:`, err.message);
+      return null;
+    }
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const pay  = await client.query(`DELETE FROM payments      WHERE order_id IN ${todayInner}`);
     const oi   = await client.query(`DELETE FROM order_items   WHERE order_id IN ${todayInner}`);
-    let mv = { rowCount: 0 };
-    try {
-      mv = await client.query(`DELETE FROM stock_movements WHERE source = 'sale' ${scope === 'today' ? "AND created_at::date = CURRENT_DATE" : ''}`);
-    } catch (e) { /* stock_movements may not exist on older DBs — ignore */ }
+
+    // stock_movements is optional — table or column may not exist on
+    // older deploys. SAVEPOINT so a failure here doesn't kill the
+    // required DELETE FROM orders that follows.
+    const mv = (await trySave(client, 'sm', () =>
+      client.query(`DELETE FROM stock_movements WHERE source = 'sale' ${scope === 'today' ? "AND created_at::date = CURRENT_DATE" : ''}`)
+    )) || { rowCount: 0 };
+
     const ord  = await client.query(`DELETE FROM orders ${todayFilter}`);
 
-    // For 'all' scope, also reset the id sequences so the next order is #1.
+    // Reset id sequences (best-effort, savepoint per ALTER so one bad
+    // sequence name doesn't kill the rest).
     let sequencesReset = false;
     if (scope === 'all') {
-      try {
-        await client.query(`ALTER SEQUENCE orders_id_seq      RESTART WITH 1`);
-        await client.query(`ALTER SEQUENCE order_items_id_seq RESTART WITH 1`);
-        await client.query(`ALTER SEQUENCE payments_id_seq    RESTART WITH 1`);
-        sequencesReset = true;
-      } catch (e) { /* sequence names differ on non-PG; ignore */ }
+      const a = await trySave(client, 'seq_o',  () => client.query(`ALTER SEQUENCE orders_id_seq      RESTART WITH 1`));
+      const b = await trySave(client, 'seq_oi', () => client.query(`ALTER SEQUENCE order_items_id_seq RESTART WITH 1`));
+      const c = await trySave(client, 'seq_p',  () => client.query(`ALTER SEQUENCE payments_id_seq    RESTART WITH 1`));
+      sequencesReset = !!(a && b && c);
     }
 
     await client.query('COMMIT');

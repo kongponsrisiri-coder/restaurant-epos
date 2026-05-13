@@ -393,6 +393,14 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS dinne
       UPDATE menu_items SET sort_order = id WHERE sort_order = 0 OR sort_order IS NULL
     `);
 
+    // SEPOS-042 repair: an earlier PUT /api/staff/:id bug wrote
+    // is_active = NULL whenever the edit form didn't include the field
+    // (which it never did). That broke the manager-PIN check on the
+    // order-delete endpoint AND made the staff look inactive in the UI.
+    // The handler is now COALESCE-safe; this one-off restores any rows
+    // that got NULL'd by the old code path.
+    await pool.query(`UPDATE staff SET is_active = 1 WHERE is_active IS NULL`);
+
     console.log('✅ Database ready');
   } catch (err) {
     console.error('Database init error:', err);

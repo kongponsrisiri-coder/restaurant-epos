@@ -58,7 +58,7 @@ export default function StaffSection() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button onClick={e => { e.stopPropagation(); setEditStaff(s); setForm({ name: s.name, pin: '', role: s.role, start_date: s.start_date || '', notes: s.notes || '', employment_status: s.employment_status || 'active' }); setShowForm(true); }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#f0f0f0', fontWeight: 600, fontSize: 12 }}>✏️ Edit</button>
+                <button onClick={e => { e.stopPropagation(); setEditStaff(s); setForm({ name: s.name, pin: '', role: s.role, is_active: s.is_active == null ? 1 : (s.is_active ? 1 : 0), start_date: s.start_date || '', notes: s.notes || '', employment_status: s.employment_status || 'active' }); setShowForm(true); }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#f0f0f0', fontWeight: 600, fontSize: 12 }}>✏️ Edit</button>
                 <button onClick={e => { e.stopPropagation(); toggleActive(s); }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: s.is_active ? '#fff3cd' : '#dcfce7', color: s.is_active ? '#92400e' : '#14532d' }}>{s.is_active ? 'Deactivate' : 'Reactivate'}</button>
                 <span style={{ color: '#ccc' }}>▾</span>
               </div>

@@ -633,10 +633,39 @@ app.post('/api/staff', async (req, res) => {
 app.put('/api/staff/:id', async (req, res) => {
   try {
     const { name, pin, role, is_active, start_date, notes, employment_status } = req.body;
+    // Normalise: when the client doesn't send is_active (or sends an empty
+    // string), keep whatever's already in the DB — DON'T null it. The old
+    // version would clobber a manager's is_active flag to NULL on every
+    // edit, which then read as "inactive" everywhere AND broke the
+    // manager-PIN gate on the order-delete endpoint.
+    const activeParam = (is_active === undefined || is_active === null || is_active === '')
+      ? null
+      : (is_active ? 1 : 0);
     if (pin) {
-      await pool.query('UPDATE staff SET name=$1, pin=$2, role=$3, is_active=$4, start_date=$5, notes=$6, employment_status=$7 WHERE id=$8', [name, pin, role, is_active, start_date || null, notes || null, employment_status || 'active', req.params.id]);
+      await pool.query(
+        `UPDATE staff SET
+           name = $1,
+           pin = $2,
+           role = $3,
+           is_active = COALESCE($4::int, is_active),
+           start_date = $5,
+           notes = $6,
+           employment_status = $7
+         WHERE id = $8`,
+        [name, pin, role, activeParam, start_date || null, notes || null, employment_status || 'active', req.params.id]
+      );
     } else {
-      await pool.query('UPDATE staff SET name=$1, role=$2, is_active=$3, start_date=$4, notes=$5, employment_status=$6 WHERE id=$7', [name, role, is_active, start_date || null, notes || null, employment_status || 'active', req.params.id]);
+      await pool.query(
+        `UPDATE staff SET
+           name = $1,
+           role = $2,
+           is_active = COALESCE($3::int, is_active),
+           start_date = $4,
+           notes = $5,
+           employment_status = $6
+         WHERE id = $7`,
+        [name, role, activeParam, start_date || null, notes || null, employment_status || 'active', req.params.id]
+      );
     }
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }

@@ -438,6 +438,19 @@ function preTranslate(sql) {
   out = out.replace(/([\w.]+|\$\d+)\s*::\s*date\b/gi, 'date($1)');
   // `expr::timestamp` → `datetime(expr)`
   out = out.replace(/([\w.]+|\$\d+)\s*::\s*timestamp\b/gi, 'datetime($1)');
+  // PG `TO_CHAR(col, 'fmt')` → SQLite `strftime('fmt', col)`.
+  // Translate the format string (PG uses YYYY/MM/DD/HH24/MI/SS;
+  // strftime uses %Y/%m/%d/%H/%M/%S). Common patterns we hit:
+  // 'YYYY-MM-DD', 'HH24:MI', 'HH24:MI:SS'.
+  out = out.replace(
+    /\bTO_CHAR\s*\(\s*([^,]+?)\s*,\s*'([^']+)'\s*\)/gi,
+    (_, expr, fmt) => {
+      const sfmt = fmt
+        .replace(/YYYY/g, '%Y').replace(/MM/g, '%m').replace(/DD/g, '%d')
+        .replace(/HH24/g, '%H').replace(/MI/g, '%M').replace(/SS/g, '%S');
+      return `strftime('${sfmt}', ${expr.trim()})`;
+    }
+  );
   return out;
 }
 

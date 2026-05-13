@@ -176,7 +176,12 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
   }, []);
 
   const tableGroups    = buildTableGroups(combinations, tables);
-  const active         = reservations.filter(r => r.status !== 'cancelled' && r.status !== 'no-show');
+  // SEPOS-044 — completed bookings shouldn't keep claiming a table on the
+  // floor plan; once the bill closes the table should go free (unless
+  // another upcoming reservation is assigned to it).
+  const active         = reservations.filter(r =>
+    r.status !== 'cancelled' && r.status !== 'no-show' && r.status !== 'completed'
+  );
   const maxCoversPerSlot = settings?.max_covers_per_slot || 20;
 
   const assignTable = async (tableId) => {
@@ -467,7 +472,7 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
             const isPrimary    = booking && booking.table_id === table.id;
             const isGroupMember = booking && booking.table_id !== table.id;
             return (
-              <div key={table.id} onClick={() => booking ? onSelect(booking) : setSeatTable(table)}
+              <div key={table.id} onClick={() => setSeatTable(table)}
                 style={{ position: 'absolute', left: table.pos_x||0, top: table.pos_y||0, width: table.width||80, height: table.height||80,
                   borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,
                   background: isSel ? '#1a1a2e' : booking ? c.bg : 'white',
@@ -485,13 +490,18 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
         </div>
       </div>
 
-      {/* SEPOS-044 — tap an empty table → action sheet (seat booking / walk-in). */}
+      {/* SEPOS-044 — tap any table → action sheet.
+          Empty: seat upcoming booking / walk-in / pre-assign future booking.
+          Occupied: view current booking + pre-assign a future booking. */}
       {seatTable && (
         <SeatActionSheet
           table={seatTable}
           bookings={reservations}
+          tableGroups={tableGroups}
+          currentBooking={getBookingForTable(seatTable.id) || null}
           onClose={() => setSeatTable(null)}
           onSeated={() => { setSeatTable(null); onRefresh?.(); }}
+          onViewBooking={(b) => { setSeatTable(null); onSelect(b); }}
         />
       )}
     </div>

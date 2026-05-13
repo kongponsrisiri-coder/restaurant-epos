@@ -588,6 +588,20 @@ app.post('/api/orders/:id/pay', async (req, res) => {
     const tableId = orderRes.rows[0]?.table_id;
     if (tableId) {
       await pool.query("UPDATE tables SET status='available' WHERE id=$1", [tableId]);
+      // SEPOS-044 — also free any tables linked to this one so the whole
+      // group goes back to 'available' on the table map together.
+      try {
+        const linkedRes = await pool.query(
+          `SELECT table_id_b AS id FROM table_combinations WHERE table_id_a=$1
+           UNION SELECT table_id_a AS id FROM table_combinations WHERE table_id_b=$1`,
+          [tableId]
+        );
+        for (const row of linkedRes.rows) {
+          if (row.id && row.id !== tableId) {
+            await pool.query("UPDATE tables SET status='available' WHERE id=$1", [row.id]);
+          }
+        }
+      } catch {}
       // SEPOS-044 — auto-complete the seated booking on this table.
       // Orders don't carry reservation_id today (known limitation), so we
       // pick the most recently updated 'seated' reservation on the same
@@ -818,6 +832,45 @@ app.get('/api/tables/status', async (req, res) => {
       if (order.bill_printed && !hasFiredItems) colourStatus = 'bill_printed';
       return { ...order, colour_status: colourStatus };
     });
+
+    // SEPOS-044 — propagate occupied state across linked tables.
+    // If Table 5 is linked to Table 6 and there's an open order on
+    // Table 5, the floor map should colour Table 6 with the same
+    // course state so staff treat them as one party.
+    try {
+      const combosRes = await pool.query('SELECT table_id_a, table_id_b FROM table_combinations');
+      const adj = {};
+      for (const c of combosRes.rows) {
+        (adj[c.table_id_a] ||= new Set()).add(c.table_id_b);
+        (adj[c.table_id_b] ||= new Set()).add(c.table_id_a);
+      }
+      // Union-find to compute connected components.
+      const parent = {};
+      const find = (x) => parent[x] == null ? x : (parent[x] = find(parent[x]));
+      const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; };
+      for (const c of combosRes.rows) union(c.table_id_a, c.table_id_b);
+      // Group → component members.
+      const members = {};
+      const allIds = new Set();
+      for (const c of combosRes.rows) { allIds.add(c.table_id_a); allIds.add(c.table_id_b); }
+      for (const id of allIds) (members[find(id)] ||= []).push(id);
+      // Existing per-table colour map so we don't double-up.
+      const have = new Map(result.map(r => [r.table_id, r]));
+      for (const seedRow of result) {
+        const root = find(seedRow.table_id);
+        const groupMembers = members[root];
+        if (!groupMembers) continue;
+        for (const mId of groupMembers) {
+          if (have.has(mId)) continue;
+          // Synthetic linked-occupied row — same colour as the primary.
+          have.set(mId, { ...seedRow, id: null, table_id: mId, linked_from: seedRow.table_id });
+          result.push(have.get(mId));
+        }
+      }
+    } catch (err) {
+      console.warn('[tables/status] linked-table propagation skipped:', err.message);
+    }
+
     res.json(result);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

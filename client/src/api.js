@@ -171,3 +171,13 @@ export const sendCampaign      = (subject, body, segment) => post('/api/campaign
 // is what flips it into the Daily report / Z report / Bills tab.
 export const setTakeawayStatus = (orderId, status) =>
   put(`/api/orders/${orderId}/takeaway-status`, { status });
+
+// SEPOS-042 — manager-gated order deletion. Used by Admin → Bills → Delete.
+// Backend requires PIN to belong to a staff row with role manager/admin/supervisor,
+// writes an audit row to order_deletions, then cascade-deletes the order.
+export const deleteOrder = (orderId, pin, reason) =>
+  fetch(`${SERVER_URL}/api/orders/${orderId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin, reason }),
+  }).then(r => r.json());

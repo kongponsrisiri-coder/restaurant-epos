@@ -203,6 +203,24 @@ async function initDB() {
       )
     `);
 
+    // SEPOS-042: audit log for manager-authorised order deletions.
+    // The order itself disappears but this row is the paper trail —
+    // who deleted it, when, the total at deletion time, and why.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS order_deletions (
+        id              SERIAL PRIMARY KEY,
+        order_id        INTEGER NOT NULL,
+        staff_id        INTEGER,
+        staff_name      TEXT,
+        reason          TEXT,
+        deleted_total   NUMERIC(10,2),
+        order_type      TEXT,
+        opened_at       TIMESTAMP,
+        closed_at       TIMESTAMP,
+        deleted_at      TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     // SEPOS-022: staff clock-in / clock-out events
     await pool.query(`
       CREATE TABLE IF NOT EXISTS clock_events (

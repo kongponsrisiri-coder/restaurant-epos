@@ -814,6 +814,86 @@ app.put('/api/orders/:id/merge', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-042 — manager-gated order deletion.
+// Used by Admin → Bills → Delete to remove a fault transaction.
+// Validates the supplied PIN belongs to a manager / admin / supervisor,
+// writes an audit row to order_deletions BEFORE the destructive deletes,
+// then wipes order_items + payments + sale-source stock_movements, then
+// the order itself. Each delete is independent (no transaction) so the
+// per-step result tells us exactly what cleared.
+app.delete('/api/orders/:id', async (req, res) => {
+  try {
+    const orderId = parseInt(req.params.id, 10);
+    if (!orderId) return res.status(400).json({ error: 'invalid order id' });
+
+    const { pin, reason } = req.body || {};
+    if (!pin)    return res.status(400).json({ error: 'Manager PIN required' });
+    if (!reason || !reason.trim()) return res.status(400).json({ error: 'Reason required' });
+
+    // Manager check — role must be one of these AND the staff must be active.
+    const staffRes = await pool.query(
+      `SELECT id, name, role FROM staff
+       WHERE pin = $1 AND is_active = 1
+         AND LOWER(role) IN ('manager','admin','supervisor')
+       LIMIT 1`,
+      [String(pin).trim()]
+    );
+    if (staffRes.rows.length === 0) {
+      return res.status(403).json({ error: 'Invalid manager PIN' });
+    }
+    const staff = staffRes.rows[0];
+
+    // Snapshot the order for the audit row — last chance to read it.
+    const ordRes = await pool.query(
+      `SELECT id, total, order_type, opened_at, closed_at, status, table_id
+       FROM orders WHERE id = $1`,
+      [orderId]
+    );
+    if (ordRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    const order = ordRes.rows[0];
+
+    // Audit row goes in FIRST so we have the record even if a later
+    // step partially fails.
+    await pool.query(
+      `INSERT INTO order_deletions
+       (order_id, staff_id, staff_name, reason, deleted_total, order_type, opened_at, closed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [order.id, staff.id, staff.name, String(reason).trim(),
+       order.total, order.order_type, order.opened_at, order.closed_at]
+    );
+
+    // Step-by-step cleanup. Errors logged per step; the final response
+    // tells the UI what cleared.
+    const step = async (label, sql) => {
+      try { const r = await pool.query(sql, [orderId]); return { ok: true, deleted: r.rowCount }; }
+      catch (err) { console.warn(`[delete-order ${orderId}] ${label} failed:`, err.message); return { ok: false, error: err.message }; }
+    };
+    const steps = {
+      payments:        await step('payments',        `DELETE FROM payments WHERE order_id = $1`),
+      order_items:     await step('order_items',     `DELETE FROM order_items WHERE order_id = $1`),
+      stock_movements: await step('stock_movements', `DELETE FROM stock_movements WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = $1)`),
+      order:           await step('order',           `DELETE FROM orders WHERE id = $1`),
+    };
+
+    // If the table was occupied by this order, free it.
+    if (order.table_id) {
+      try {
+        await pool.query("UPDATE tables SET status='available' WHERE id = $1", [order.table_id]);
+      } catch {}
+    }
+
+    console.log(`[delete-order] order #${orderId} deleted by ${staff.name} (id ${staff.id}) — reason: "${reason.trim()}" — total £${order.total}`);
+    io.emit('order_deleted', { order_id: orderId, by: staff.name });
+
+    res.json({ success: steps.order.ok, order_id: orderId, deleted_by: staff.name, steps });
+  } catch (err) {
+    console.error('DELETE /api/orders/:id error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/z-report/preview', async (req, res) => {
   try {
     const { from, to } = req.query;

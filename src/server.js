@@ -615,17 +615,26 @@ app.post('/api/orders/:id/pay', async (req, res) => {
       // SEPOS-044 — auto-complete the seated booking on this table.
       // Orders don't carry reservation_id today (known limitation), so we
       // pick the most recently updated 'seated' reservation on the same
-      // table. Reports + the booking timeline both rely on this flip.
-      const completeRes = await pool.query(
-        `UPDATE reservations SET status='completed', updated_at=NOW()
-           WHERE id = (
-             SELECT id FROM reservations
-              WHERE table_id = $1 AND status='seated'
-              ORDER BY updated_at DESC LIMIT 1
-           ) RETURNING *`,
-        [tableId]
-      );
-      if (completeRes.rows[0]) io.emit('reservation_updated', completeRes.rows[0]);
+      // table. Two queries (instead of one subquery) so the path works
+      // identically on PG and SQLite. Reports + the booking timeline
+      // both rely on this flip — also covers walk-ins.
+      try {
+        const seated = await pool.query(
+          `SELECT id FROM reservations WHERE table_id=$1 AND status='seated'
+           ORDER BY updated_at DESC LIMIT 1`,
+          [tableId]
+        );
+        if (seated.rows[0]) {
+          const completeRes = await pool.query(
+            `UPDATE reservations SET status='completed', updated_at=NOW()
+             WHERE id=$1 RETURNING *`,
+            [seated.rows[0].id]
+          );
+          if (completeRes.rows[0]) io.emit('reservation_updated', completeRes.rows[0]);
+        }
+      } catch (err) {
+        console.warn('[pay] auto-complete reservation skipped:', err.message);
+      }
     }
     io.emit('order_closed', { order_id: orderId });
     await offlineQueue.enqueue('pay_order', { localOrderId: Number(orderId), amount, method });

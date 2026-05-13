@@ -13,11 +13,12 @@ const STATUS_CONFIG = {
   pending:   { label: 'Pending',   bg: '#fef9c3', color: '#92400e', dot: '#f59e0b' },
   confirmed: { label: 'Confirmed', bg: '#dbeafe', color: '#1e40af', dot: '#3b82f6' },
   seated:    { label: 'Seated',    bg: '#dcfce7', color: '#14532d', dot: '#22c55e' },
+  completed: { label: 'Completed', bg: '#e0e7ff', color: '#3730a3', dot: '#6366f1' },
   'no-show': { label: 'No Show',   bg: '#fee2e2', color: '#991b1b', dot: '#ef4444' },
   cancelled: { label: 'Cancelled', bg: '#f3f4f6', color: '#4b5563', dot: '#6b7280' },
 };
 
-const ALL_STATUSES = ['all', 'pending', 'confirmed', 'seated', 'no-show', 'cancelled'];
+const ALL_STATUSES = ['all', 'pending', 'confirmed', 'seated', 'completed', 'no-show', 'cancelled'];
 
 const TIME_SLOTS = [];
 for (let h = 11; h <= 22; h++) {
@@ -195,6 +196,26 @@ export default function ReservationsScreen() {
     if (!window.confirm(`Cancel ${r.customer_name}'s booking?`)) return;
     try { await apiFetch(`/api/reservations/${r.id}`, { method: 'DELETE' }); showToast('Booking cancelled'); loadData(); }
     catch { showToast('Cancel failed', 'error'); }
+  }
+
+  // SEPOS-044 — let staff close a seated booking by hand (walk-ins where
+  // payment happened off-system, parties that left without ordering, etc.).
+  // Auto-complete on bill-pay is still the normal path; this is the escape
+  // hatch and the only way to mark walk-ins complete from the List view.
+  async function handleComplete(r) {
+    try {
+      await apiFetch(`/api/reservations/${r.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          ...r,
+          reservation_date: (r.reservation_date || '').split('T')[0],
+          reservation_time: (r.reservation_time || '').slice(0, 5),
+          status: 'completed',
+        }),
+      });
+      showToast('Marked complete ✓');
+      loadData();
+    } catch { showToast('Update failed', 'error'); }
   }
 
   const filtered = reservations.filter(r => {
@@ -430,7 +451,7 @@ export default function ReservationsScreen() {
                 </div>
               </div>
             ) : (
-              filtered.map(r => <ReservationCard key={r.id} r={r} onEdit={openEdit} onSeat={handleSeat} onConfirm={handleConfirm} onNoShow={handleNoShow} onCancel={handleCancel} />)
+              filtered.map(r => <ReservationCard key={r.id} r={r} onEdit={openEdit} onSeat={handleSeat} onConfirm={handleConfirm} onNoShow={handleNoShow} onCancel={handleCancel} onComplete={handleComplete} />)
             )
           )}
         </div>
@@ -484,7 +505,7 @@ export default function ReservationsScreen() {
   );
 }
 
-function ReservationCard({ r, onEdit, onSeat, onConfirm, onNoShow, onCancel }) {
+function ReservationCard({ r, onEdit, onSeat, onConfirm, onNoShow, onCancel, onComplete }) {
   const sc   = STATUS_CONFIG[r.status] || STATUS_CONFIG.pending;
   const time = (r.reservation_time || '').slice(0, 5);
   const date = (() => {
@@ -506,6 +527,7 @@ function ReservationCard({ r, onEdit, onSeat, onConfirm, onNoShow, onCancel }) {
       <div style={{ display: 'flex', gap: 5, marginLeft: 'auto', flexWrap: 'wrap' }}>
         {r.status === 'pending' && <button onClick={() => onConfirm(r)} style={actionBtn('#3b82f6')}>✓ Confirm</button>}
         {(r.status === 'pending' || r.status === 'confirmed') && (<><button onClick={() => onSeat(r)} style={actionBtn('#22c55e')}>🪑 Seat</button><button onClick={() => onNoShow(r)} style={actionBtn('#ef4444')}>✗</button></>)}
+        {r.status === 'seated' && <button onClick={() => onComplete(r)} style={actionBtn('#6366f1')}>✓ Complete</button>}
         <button onClick={() => onEdit(r)} style={actionBtn('#555')}>✏️</button>
         {r.status !== 'cancelled' && <button onClick={() => onCancel(r)} style={actionBtn('#6b7280')}>🚫</button>}
       </div>

@@ -16,8 +16,11 @@ const put = (url, d) => fetch(`${SERVER_URL}${url}`, {
 const STATUS_COLORS = {
   pending:   { bg: '#fef9c3', border: '#f59e0b', text: '#92400e', dot: '#f59e0b' },
   confirmed: { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af', dot: '#3b82f6' },
-  seated:    { bg: '#dcfce7', border: '#22c55e', text: '#166534', dot: '#22c55e' },
-  completed: { bg: '#f3f4f6', border: '#9ca3af', text: '#4b5563', dot: '#9ca3af' },
+  // SEPOS-044 — seated needs to be IMMEDIATELY obvious on the floor plan
+  // so reception (separate from servers) can see at a glance which tables
+  // are taken. Punchier green + stronger border + dark text on light bg.
+  seated:    { bg: '#22c55e', border: '#15803d', text: 'white',   dot: '#22c55e' },
+  completed: { bg: '#e0e7ff', border: '#6366f1', text: '#3730a3', dot: '#6366f1' },
   cancelled: { bg: '#fee2e2', border: '#ef4444', text: '#991b1b', dot: '#ef4444' },
   'no-show': { bg: '#fee2e2', border: '#ef4444', text: '#991b1b', dot: '#ef4444' },
 };
@@ -491,9 +494,27 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                   cursor: booking ? 'pointer' : 'default', userSelect: 'none', zIndex: isSel ? 10 : 3,
                   boxShadow: isSel ? '0 4px 20px rgba(0,0,0,0.25)' : '0 2px 6px rgba(0,0,0,0.08)', transition: 'all 0.15s' }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: isSel ? 'white' : booking ? c.text : '#1a1a2e' }}>{table.table_number}</div>
-                {isPrimary ? <div style={{ fontSize: 9, color: isSel ? 'rgba(255,255,255,0.8)' : c.text, textAlign: 'center', maxWidth: '90%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{booking.customer_name.split(' ')[0]}</div>
-                : !booking ? <div style={{ fontSize: 9, color: '#9ca3af' }}>Tap to seat · {table.capacity}p</div> : null}
+                <div style={{ fontSize: 16, fontWeight: 800, color: isSel ? 'white' : booking ? c.text : '#1a1a2e', lineHeight: 1 }}>{table.table_number}</div>
+                {isPrimary ? (
+                  <>
+                    <div style={{
+                      fontSize: 11, fontWeight: 800, color: isSel ? 'white' : c.text,
+                      marginTop: 4, textAlign: 'center',
+                      maxWidth: '92%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {booking.customer_name.split(' ')[0]} · {booking.covers}p
+                    </div>
+                    {booking.status === 'seated' && (
+                      <div style={{
+                        fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                        background: 'rgba(255,255,255,0.25)', color: 'white',
+                        padding: '1px 6px', borderRadius: 4, marginTop: 3,
+                      }}>🪑 SEATED</div>
+                    )}
+                  </>
+                ) : !booking ? (
+                  <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 2 }}>Tap to seat · {table.capacity}p</div>
+                ) : null}
               </div>
             );
           })}

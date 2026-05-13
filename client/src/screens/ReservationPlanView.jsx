@@ -148,8 +148,12 @@ function getConflictingBooking(tableId, allReservations, currentRes, tiers) {
 // ═══════════════════════════════════════════════════════
 // MAIN
 // ═══════════════════════════════════════════════════════
-export default function ReservationPlanView({ reservations = [], selectedDate, onRefresh }) {
-  const [planView,     setPlanView]     = useState('timeline');
+export default function ReservationPlanView({ reservations = [], selectedDate, onRefresh, view }) {
+  // SEPOS-044 — `view` prop ('timeline' | 'floorplan') makes the sub-view
+  // externally controlled. ReservationsScreen now drives it from its top
+  // nav, so the internal toggle is hidden in that case.
+  const [planView,     setPlanView]     = useState(view || 'timeline');
+  useEffect(() => { if (view) setPlanView(view); }, [view]);
   const [tables,       setTables]       = useState([]);
   const [combinations, setCombinations] = useState([]);
   const [tiers,        setTiers]        = useState([]);
@@ -207,15 +211,17 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 185px)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 20px', background: '#f8f9fa', borderBottom: '1px solid #e5e7eb', flexShrink: 0 }}>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {[['timeline','⏱ Timeline'],['floorplan','🗺 Floor Plan']].map(([v, l]) => (
-            <button key={v} onClick={() => setPlanView(v)}
-              style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
-                background: planView === v ? '#1a1a2e' : '#e5e7eb', color: planView === v ? 'white' : '#555' }}>
-              {l}
-            </button>
-          ))}
-        </div>
+        {!view && (
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[['timeline','⏱ Timeline'],['floorplan','🗺 Floor Plan']].map(([v, l]) => (
+              <button key={v} onClick={() => setPlanView(v)}
+                style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
+                  background: planView === v ? '#1a1a2e' : '#e5e7eb', color: planView === v ? 'white' : '#555' }}>
+                {l}
+              </button>
+            ))}
+          </div>
+        )}
         <div style={{ marginLeft: 'auto', fontSize: 13, color: '#555' }}>
           <strong style={{ color: '#1a1a2e' }}>{active.length}</strong> bookings ·{' '}
           <strong style={{ color: '#e94560' }}>{active.reduce((s, r) => s + r.covers, 0)}</strong> covers ·{' '}
@@ -563,7 +569,7 @@ function BookingPanel({ res, allReservations, tables, tableGroups, tiers, onAssi
         <div>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', marginBottom: 8 }}>Status</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-            {['pending','confirmed','seated','no-show','cancelled'].map(s => (
+            {['pending','confirmed','seated','completed','no-show','cancelled'].map(s => (
               <button key={s} onClick={() => onStatusChange(s)}
                 style={{ padding: '5px 9px', borderRadius: 6, border: `1.5px solid ${STATUS_COLORS[s].border}`,
                   background: res.status === s ? STATUS_COLORS[s].bg : 'white', color: STATUS_COLORS[s].text,

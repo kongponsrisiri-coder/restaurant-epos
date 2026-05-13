@@ -585,7 +585,24 @@ app.post('/api/orders/:id/pay', async (req, res) => {
     await pool.query('INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3)', [orderId, amount, method]);
     await pool.query("UPDATE orders SET status='closed', closed_at=NOW() WHERE id=$1", [orderId]);
     const orderRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [orderId]);
-    if (orderRes.rows[0]) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [orderRes.rows[0].table_id]);
+    const tableId = orderRes.rows[0]?.table_id;
+    if (tableId) {
+      await pool.query("UPDATE tables SET status='available' WHERE id=$1", [tableId]);
+      // SEPOS-044 — auto-complete the seated booking on this table.
+      // Orders don't carry reservation_id today (known limitation), so we
+      // pick the most recently updated 'seated' reservation on the same
+      // table. Reports + the booking timeline both rely on this flip.
+      const completeRes = await pool.query(
+        `UPDATE reservations SET status='completed', updated_at=NOW()
+           WHERE id = (
+             SELECT id FROM reservations
+              WHERE table_id = $1 AND status='seated'
+              ORDER BY updated_at DESC LIMIT 1
+           ) RETURNING *`,
+        [tableId]
+      );
+      if (completeRes.rows[0]) io.emit('reservation_updated', completeRes.rows[0]);
+    }
     io.emit('order_closed', { order_id: orderId });
     await offlineQueue.enqueue('pay_order', { localOrderId: Number(orderId), amount, method });
     res.json({ success: true });

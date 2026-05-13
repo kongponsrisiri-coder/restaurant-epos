@@ -241,8 +241,13 @@ export default function ReservationsScreen() {
 
   const isToday = filterDate === todayStr();
 
+  // SEPOS-044 — Timeline + Floor Plan are now top-level tabs.
+  // Both share the date-bar header + full-width container that the
+  // old "plan" tab used.
+  const isPlanView = view === 'timeline' || view === 'floorplan';
+
   return (
-    <div style={{ ...(view === 'plan' ? { height: 'calc(100vh - 56px)', overflow: 'hidden' } : { minHeight: '100vh' }), background: '#f5f5f5', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div style={{ ...(isPlanView ? { height: 'calc(100vh - 56px)', overflow: 'hidden' } : { minHeight: '100vh' }), background: '#f5f5f5', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
 
       {/* Toast */}
       {toast && (
@@ -263,7 +268,7 @@ export default function ReservationsScreen() {
         <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, fontFamily: 'Georgia, serif' }}>🗓️ Reservations</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', background: 'rgba(255,255,255,0.12)', borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(201,168,76,0.3)' }}>
-            {[['list','📋 List'],['calendar','📅 Calendar'],['customers','👥 Guests'],['plan','📐 Plan']].map(([v, label]) => (
+            {[['list','📋 List'],['timeline','⏱ Timeline'],['floorplan','🗺 Floor Plan'],['calendar','📅 Calendar'],['customers','👥 Guests']].map(([v, label]) => (
               <button key={v} onClick={() => setView(v)} style={{ padding: '8px 14px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: view === v ? 700 : 400, background: view === v ? '#C9A84C' : 'transparent', color: view === v ? '#0D1B3E' : 'white' }}>{label}</button>
             ))}
           </div>
@@ -300,7 +305,7 @@ export default function ReservationsScreen() {
       )}
 
       {/* ── Date bar for Plan view ───────────────────────────────── */}
-      {view === 'plan' && (
+      {isPlanView && (
         <div style={{ background: 'white', padding: '10px 20px', display: 'flex', gap: 8, alignItems: 'center', borderBottom: '1px solid #eee', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
           <div style={{ display: 'flex', alignItems: 'center', background: '#f5f5f5', borderRadius: 10, border: '1px solid #e0e0e0', overflow: 'hidden' }}>
             <button onClick={() => setFilterDate(shiftDay(filterDate, -1))} style={{ padding: '0 14px', height: 40, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: '#0D1B3E', fontWeight: 700, display: 'flex', alignItems: 'center' }}>◀</button>
@@ -315,8 +320,8 @@ export default function ReservationsScreen() {
         </div>
       )}
 
-      {/* ── Plan View — full width, no maxWidth wrapper ──────────── */}
-      {view === 'plan' ? (
+      {/* ── Plan Views (timeline / floorplan) — full width ─────── */}
+      {isPlanView ? (
         loading ? (
           <div style={{ textAlign: 'center', padding: 80, color: '#888' }}><div style={{ fontSize: 48 }}>⏳</div><p>Loading…</p></div>
         ) : (
@@ -324,11 +329,12 @@ export default function ReservationsScreen() {
             reservations={planReservations}
             selectedDate={filterDate}
             onRefresh={loadData}
+            view={view}
           />
         )
       ) : (
         /* ── All other views inside padded container ── */
-        <div style={{ padding: view === 'list' ? 20 : 20, maxWidth: view === 'plan' ? '100%' : 1100, margin: '0 auto', overflowY: 'auto', maxHeight: 'calc(100vh - 200px)' }}>
+        <div style={{ padding: view === 'list' ? 20 : 20, maxWidth: isPlanView ? '100%' : 1100, margin: '0 auto', overflowY: 'auto', maxHeight: 'calc(100vh - 200px)' }}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: 80, color: '#888' }}><div style={{ fontSize: 48 }}>⏳</div><p>Loading…</p></div>
 

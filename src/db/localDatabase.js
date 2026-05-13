@@ -162,6 +162,22 @@ function initSchema() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- SEPOS-042: audit log for manager-authorised order deletions.
+    -- Mirrors the cloud schema (src/db/database.js). SQLite is loose
+    -- with column types so NUMERIC/REAL etc. are equivalent here.
+    CREATE TABLE IF NOT EXISTS order_deletions (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id        INTEGER NOT NULL,
+      staff_id        INTEGER,
+      staff_name      TEXT,
+      reason          TEXT,
+      deleted_total   REAL,
+      order_type      TEXT,
+      opened_at       TIMESTAMP,
+      closed_at       TIMESTAMP,
+      deleted_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- SEPOS-022: staff clock-in / clock-out events
     CREATE TABLE IF NOT EXISTS clock_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

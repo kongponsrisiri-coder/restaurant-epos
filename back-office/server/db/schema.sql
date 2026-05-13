@@ -50,3 +50,19 @@ CREATE TABLE IF NOT EXISTS team_users (
   role            TEXT DEFAULT 'support',
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- SEPOS-WEB-001 onwards: a place to keep long-form engineering specs +
+-- product roadmap items so they're not buried in chat history.
+-- body is markdown; rendered on the frontend with marked + DOMPurify.
+CREATE TABLE IF NOT EXISTS engineering_tickets (
+  id              SERIAL PRIMARY KEY,
+  code            TEXT UNIQUE NOT NULL,     -- e.g. "SEPOS-WEB-001"
+  title           TEXT NOT NULL,
+  status          TEXT DEFAULT 'open',      -- open / in_progress / shipped / parked
+  priority        TEXT DEFAULT 'normal',    -- low / normal / high / critical
+  author          TEXT,                     -- e.g. "Sandy + Korakot"
+  body_markdown   TEXT NOT NULL,            -- full ticket content (markdown)
+  created_at      TIMESTAMPTZ DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_tickets_status ON engineering_tickets (status, updated_at DESC);

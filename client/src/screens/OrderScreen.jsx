@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff } from '../api';
 import BillScreen from './BillScreen';
+import DeleteOrderModal from '../components/DeleteOrderModal';
 
 const COURSE_LABELS = { 1: 'Starters', 2: 'Mains', 3: 'Desserts', 4: 'Extra' };
 const COURSE_COLORS = { 1: '#3b82f6', 2: '#e94560', 3: '#8b5cf6', 4: '#22c55e' };
@@ -18,6 +19,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const [voidPopup, setVoidPopup] = useState(null);
   const [resendPopup, setResendPopup] = useState(null);
   const [showBill, setShowBill] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);   // SEPOS-042 — manager-gated order delete
   const [serviceChargeRemoved, setServiceChargeRemoved] = useState(false);
   const [activeCourse, setActiveCourse] = useState(1);
   const [firingCourse, setFiringCourse] = useState(null);
@@ -388,7 +390,26 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 Send Order
               </button>
             )}
+            {/* SEPOS-042 — manager-PIN-gated delete for open orders.
+                Useful for test rings, mis-keyed tables, etc. */}
+            <button
+              onClick={() => setShowDelete(true)}
+              title="Delete this order (manager PIN required)"
+              style={{
+                background: 'transparent', border: '1px solid #fecaca', color: '#dc2626',
+                borderRadius: 10, padding: '10px 14px', cursor: 'pointer',
+                fontWeight: 700, fontSize: 14,
+              }}
+            >🗑️ Delete</button>
           </div>
+
+          {showDelete && (
+            <DeleteOrderModal
+              order={order ? { ...order, id: orderId } : { id: orderId }}
+              onClose={() => setShowDelete(false)}
+              onDeleted={() => { setShowDelete(false); onClose(); }}
+            />
+          )}
 
           {/* Course selector */}
           {!activeCatIsBar && (

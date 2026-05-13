@@ -3,6 +3,7 @@ import { getOrders, getOrder, updateItemStatus, setTakeawayStatus } from '../api
 import { io } from 'socket.io-client';
 import { SERVER_URL } from '../api';
 import { orderShortLabel, orderSubLabel, orderShortLabelPlain, isTakeaway } from '../utils/orderLabel';
+import DeleteOrderModal from '../components/DeleteOrderModal';
 
 // Order title helper. MUST live at module scope so every tab (Kitchen,
 // Pass, Completed) can reference it. The earlier version was declared
@@ -103,6 +104,7 @@ function ItemName({ item, showAlt, altLang }) {
 export default function KitchenScreen() {
   const [orders, setOrders] = useState([]);
   const [completedItems, setCompletedItems] = useState([]);
+  const [deleteTarget, setDeleteTarget] = useState(null);   // SEPOS-042 — order awaiting manager-PIN delete
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('kitchen');
   const [filter, setFilter] = useState('all');
@@ -435,6 +437,15 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                           }}
                         >🥡 Collected</button>
                       )}
+                      {/* SEPOS-042 — manager-gated delete for open orders. */}
+                      <button
+                        onClick={() => setDeleteTarget(order)}
+                        title="Delete this order (manager PIN required)"
+                        style={{
+                          background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.85)',
+                          cursor: 'pointer', fontSize: 16, padding: '4px 6px', borderRadius: 6, flexShrink: 0,
+                        }}
+                      >🗑️</button>
                       <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>
                         #{order.id} · {getTimeAgo(order.created_at)}
                       </span>
@@ -730,6 +741,15 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                         }}
                       >🥡 Collected</button>
                     )}
+                    {/* SEPOS-042 — delete from Done tab too. */}
+                    <button
+                      onClick={() => setDeleteTarget({ id: group.order_id, table_number: group.table_number, order_type: group.order_type, customer_name: group.customer_name })}
+                      title="Delete this order (manager PIN required)"
+                      style={{
+                        background: 'transparent', border: 'none', color: '#aaa',
+                        cursor: 'pointer', fontSize: 14, padding: '4px 6px', borderRadius: 6, flexShrink: 0,
+                      }}
+                    >🗑️</button>
                     <div style={{ color: '#aaa', fontSize: 13 }}>#{group.order_id}</div>
                   </div>
                   <div style={{ padding: 12 }}>
@@ -754,6 +774,16 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
             </div>
           )}
         </div>
+      )}
+
+      {/* SEPOS-042 — manager-PIN-gated order delete, reachable from
+          the Kitchen card 🗑️ + the Done card 🗑️. */}
+      {deleteTarget && (
+        <DeleteOrderModal
+          order={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onDeleted={() => { setDeleteTarget(null); fetchOrders(); fetchCompleted(); }}
+        />
       )}
     </div>
   );

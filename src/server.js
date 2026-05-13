@@ -2655,6 +2655,25 @@ app.get('/api/sync/queue', async (req, res) => {
   }
 });
 
+// SEPOS-044 follow-up — manual sync trigger.
+// Lets the UI fire a tick on demand instead of waiting for the next
+// 5s interval. Useful right after the operator has configured
+// SYNC_SECRET or restored network — they want to see the queue drain
+// without waiting.
+app.post('/api/sync/run-now', async (req, res) => {
+  const dbMode = (process.env.DB_MODE || 'cloud').toLowerCase();
+  if (dbMode !== 'local') return res.status(400).json({ error: 'manual sync is local-mode only' });
+  try {
+    // tick() is idempotent and self-guarded against overlap — safe to
+    // fire even if the scheduled tick is mid-flight.
+    await syncService.tick();
+    res.json({ success: true, status: syncService.getStatus() });
+  } catch (err) {
+    console.error('POST /api/sync/run-now error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/sync/queue/:id/skip', async (req, res) => {
   const dbMode = (process.env.DB_MODE || 'cloud').toLowerCase();
   if (dbMode !== 'local') return res.status(400).json({ error: 'queue inspector is local-mode only' });

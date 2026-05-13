@@ -5,7 +5,7 @@
 // already gone on cloud).
 
 import { useEffect, useState } from 'react';
-import { getSyncQueue, skipSyncQueueEntry } from '../api';
+import { getSyncQueue, skipSyncQueueEntry, runSyncNow } from '../api';
 
 const ACTION_LABEL = {
   create_order:  'Create order',
@@ -70,6 +70,18 @@ export default function SyncQueueModal({ onClose }) {
     finally { setBusy(false); }
   };
 
+  const syncNow = async () => {
+    setBusy(true); setErr('');
+    try {
+      await runSyncNow();
+      // brief delay so the user sees the engine has actually run
+      // (otherwise the list re-renders instantly and looks like nothing happened).
+      await new Promise(r => setTimeout(r, 400));
+      await load();
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
   return (
     <div style={overlay} onClick={(e) => e.target === e.currentTarget && onClose?.()}>
       <div style={panel}>
@@ -82,6 +94,9 @@ export default function SyncQueueModal({ onClose }) {
                 : `${entries.length} action${entries.length === 1 ? '' : 's'} waiting to push to cloud`}
             </div>
           </div>
+          <button onClick={syncNow} disabled={busy} style={syncNowBtn} title="Trigger a sync tick now">
+            🔄 Sync now
+          </button>
           <button onClick={load} disabled={busy} style={refreshBtn} title="Refresh">↻</button>
           <button onClick={onClose} style={closeBtn}>×</button>
         </div>
@@ -146,6 +161,11 @@ const closeBtn = {
 const refreshBtn = {
   background: '#f1f5f9', color: '#475569', border: 'none',
   width: 32, height: 32, borderRadius: 8, fontSize: 16, cursor: 'pointer',
+};
+const syncNowBtn = {
+  background: '#0d1b3e', color: 'white', border: 'none',
+  padding: '7px 12px', borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: 'pointer',
+  whiteSpace: 'nowrap',
 };
 const body = { flex: 1, overflowY: 'auto', padding: '6px 0' };
 const row = {

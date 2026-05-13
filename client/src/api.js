@@ -195,6 +195,7 @@ export const getSyncHealth = () => get('/api/sync/health');
 // SEPOS-044 follow-up — sync queue inspector (local mode only).
 export const getSyncQueue = () => get('/api/sync/queue');
 export const skipSyncQueueEntry = (id) => post(`/api/sync/queue/${id}/skip`, {});
+export const runSyncNow = () => post('/api/sync/run-now', {});
 
 // SEPOS-042 — manager-gated order deletion. Used by Admin → Bills → Delete.
 // Backend requires PIN to belong to a staff row with role manager/admin/supervisor,

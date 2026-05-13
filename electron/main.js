@@ -336,7 +336,10 @@ async function showSetupWindow() {
 }
 
 const STATUS_POLL_MS = 5000;
-const STATUS_EMOJI = { cloud: '🟢', local: '🟡', syncing: '🔴', 'initial-sync': '🔄' };
+// 🔵 for active syncing (was 🔴 — read as "broken" even though it's just
+// "busy"). Red is now reserved for actual stuck/error states, surfaced
+// via the SyncHealthBanner inside the app rather than the title bar.
+const STATUS_EMOJI = { cloud: '🟢', local: '🟡', syncing: '🔵', 'initial-sync': '🔄' };
 
 function showInitialSyncOverlay() {
   if (!mainWindow) return;

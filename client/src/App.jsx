@@ -7,6 +7,7 @@ import KitchenScreen from './screens/KitchenScreen';
 import AdminScreen from './screens/AdminScreen';
 import BarScreen from './screens/BarScreen';
 import ReservationsScreen from './screens/ReservationsScreen';
+import CounterScreen from './screens/CounterScreen';
 import './App.css';
 
 // ── Sandy: Lotus badge logo mark — replaces SVG flags ─────────────
@@ -42,9 +43,17 @@ const LogoBrand = () => (
 
 const INSTALL_DISMISSED_KEY = 'siamepos-install-dismissed';
 
+// SEPOS-045 — per-device counter mode. Stored in localStorage so the till
+// iPad stays in counter mode across restarts while floor iPads stay normal.
+const COUNTER_MODE_KEY = 'siamepos-counter-mode';
+function readCounterMode() {
+  try { return localStorage.getItem(COUNTER_MODE_KEY) === '1'; } catch { return false; }
+}
+
 export default function App() {
   const [staff, setStaff]               = useState(null);
-  const [screen, setScreen]             = useState('tables');
+  const [counterMode, setCounterMode]   = useState(readCounterMode);
+  const [screen, setScreen]             = useState(() => readCounterMode() ? 'counter' : 'tables');
   const [activeOrder, setActiveOrder]   = useState(null);
   const [menuOpen, setMenuOpen]         = useState(false);
   const [serverStatus, setServerStatus] = useState(getServerStatus());
@@ -166,8 +175,14 @@ export default function App() {
     );
   } else {
     // ── Nav items ─────────────────────────────────────────────────
+    // SEPOS-045 — in counter mode the home tab is the till; in floor mode
+    // it's the table map. The other tabs (Kitchen / Bar / Reservations /
+    // Admin) are always available regardless of mode.
+    const homeItem = counterMode
+      ? { key: 'counter', label: '🛒 Counter' }
+      : { key: 'tables',  label: '🗺️ Tables'  };
     const navItems = [
-      { key: 'tables',       label: '🗺️ Tables' },
+      homeItem,
       { key: 'reservations', label: '🗓️ Reservations' },
       ...(staff.role === 'admin' || staff.role === 'manager' || staff.role === 'supervisor'
         ? [{ key: 'admin', label: '⚙️ Admin' }]
@@ -175,6 +190,13 @@ export default function App() {
       { key: 'kitchen', label: '🍳 Kitchen' },
       { key: 'bar',     label: '🍹 Bar' },
     ];
+
+    const toggleCounterMode = () => {
+      const next = !counterMode;
+      try { localStorage.setItem(COUNTER_MODE_KEY, next ? '1' : '0'); } catch {}
+      setCounterMode(next);
+      setScreen(next ? 'counter' : 'tables');
+    };
 
     // ── Main layout ───────────────────────────────────────────────
     body = (
@@ -207,6 +229,21 @@ export default function App() {
 
           <div className="navbar-user">
             <StatusBadge />
+            {/* SEPOS-045 — counter/floor mode toggle. Per-device flag. */}
+            <button
+              onClick={toggleCounterMode}
+              title={counterMode ? 'Switch to floor (dine-in) mode' : 'Switch to counter (till) mode'}
+              style={{
+                background: counterMode ? '#C9A84C' : 'rgba(255,255,255,0.12)',
+                color: counterMode ? '#0D1B3E' : 'white',
+                border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: 6, padding: isMobile ? '5px 9px' : '6px 12px',
+                fontSize: isMobile ? 11 : 12, fontWeight: 800, cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {counterMode ? '🛒 Counter' : '🏠 Floor'}
+            </button>
             <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
             <button className="logout-btn" onClick={() => setStaff(null)}>Log out</button>
           </div>
@@ -248,6 +285,7 @@ export default function App() {
               }}
             />
           )}
+          {screen === 'counter'      && <CounterScreen staff={staff} />}
           {screen === 'reservations' && <ReservationsScreen />}
           {screen === 'kitchen'      && <KitchenScreen />}
           {screen === 'bar'          && <BarScreen />}

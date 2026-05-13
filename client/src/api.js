@@ -43,6 +43,9 @@ export const updateMenuItem = (id, item) => put(`/api/menu/items/${id}`, item);
 export const getOrders = () => get('/api/orders');
 export const getOrder = (id) => get(`/api/orders/${id}`);
 export const createOrder = (table_id, covers, staff_id) => post('/api/orders', { table_id, covers, staff_id });
+// SEPOS-045 — counter mode: tableless order, paid at the till.
+export const createCounterOrder = (staff_id) =>
+  post('/api/orders', { table_id: null, covers: 1, staff_id, order_type: 'counter' });
 export const addOrderItems = (orderId, items) => post(`/api/orders/${orderId}/items`, { items });
 export const payOrder = (orderId, amount, method) => post(`/api/orders/${orderId}/pay`, { amount, method });
 export const updateItemStatus = (itemId, status) => put(`/api/order-items/${itemId}/status`, { status });

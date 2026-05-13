@@ -399,14 +399,25 @@ app.get('/api/orders/:id', async (req, res) => {
 
 app.post('/api/orders', async (req, res) => {
   try {
-    const { table_id, covers, staff_id } = req.body;
+    const { table_id, covers, staff_id, order_type } = req.body;
+    // SEPOS-045 — counter orders (and any tableless mode) skip the table
+    // status flip and don't enforce covers.
+    const type = order_type === 'counter' || order_type === 'takeaway'
+      ? order_type : 'dine_in';
     const result = await pool.query(
-      "INSERT INTO orders (table_id, staff_id, status, covers, opened_at) VALUES ($1, $2, 'open', $3, NOW()) RETURNING id",
-      [table_id, staff_id || null, covers || 1]
+      `INSERT INTO orders (table_id, staff_id, status, covers, order_type, opened_at)
+       VALUES ($1, $2, 'open', $3, $4, NOW()) RETURNING id`,
+      [table_id || null, staff_id || null, covers || 1, type]
     );
-    await pool.query("UPDATE tables SET status = 'occupied' WHERE id = $1", [table_id]);
+    if (table_id) {
+      await pool.query("UPDATE tables SET status = 'occupied' WHERE id = $1", [table_id]);
+    }
     const localOrderId = result.rows[0].id;
-    await offlineQueue.enqueue('create_order', { localOrderId, table_id, covers: covers || 1, staff_id: staff_id || null });
+    await offlineQueue.enqueue('create_order', {
+      localOrderId, table_id: table_id || null,
+      covers: covers || 1, staff_id: staff_id || null,
+      order_type: type,
+    });
     res.json({ id: localOrderId, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -772,13 +783,18 @@ app.delete('/api/discount-reasons/:id', async (req, res) => {
 // Helper: split a list of closed-order rows into dine-in vs takeaway
 // totals so every reports endpoint exposes the same shape.
 function splitByOrderType(rows) {
-  let total_takeaway = 0, total_dine_in = 0, takeaway_count = 0, dine_in_count = 0;
+  let total_takeaway = 0, total_dine_in = 0, total_counter = 0;
+  let takeaway_count = 0, dine_in_count = 0, counter_count = 0;
   for (const r of rows) {
     const t = Number(r.total || 0);
-    if (r.order_type === 'takeaway') { total_takeaway += t; takeaway_count++; }
-    else { total_dine_in += t; dine_in_count++; }
+    if (r.order_type === 'takeaway')      { total_takeaway += t; takeaway_count++; }
+    else if (r.order_type === 'counter')  { total_counter  += t; counter_count++;  }
+    else                                  { total_dine_in  += t; dine_in_count++;  }
   }
-  return { total_takeaway, total_dine_in, takeaway_count, dine_in_count };
+  return {
+    total_takeaway, total_dine_in, total_counter,
+    takeaway_count,  dine_in_count,  counter_count,
+  };
 }
 
 app.get('/api/reports/daily', async (req, res) => {

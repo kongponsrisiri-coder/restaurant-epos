@@ -92,7 +92,7 @@ async function ordersWithPendingPush() {
   try {
     const r = await pool.query(
       `SELECT payload FROM sync_queue WHERE synced = 0
-       AND action_type IN ('create_order','add_items','fire_course','pay_order')`
+       AND action_type IN ('create_order','add_items','fire_course','pay_order','delete_order')`
     );
     const orderIds = new Set();
     for (const row of r.rows) {
@@ -102,6 +102,24 @@ async function ordersWithPendingPush() {
       } catch {}
     }
     return orderIds;
+  } catch { return new Set(); }
+}
+// Cloud ids that are currently being deleted via the sync push queue.
+// Used by pullActiveOrders to avoid re-INSERTing an order locally between
+// the local delete and the cloud delete completing.
+async function cloudIdsWithPendingDelete() {
+  try {
+    const r = await pool.query(
+      `SELECT payload FROM sync_queue WHERE synced = 0 AND action_type = 'delete_order'`
+    );
+    const cloudIds = new Set();
+    for (const row of r.rows) {
+      try {
+        const p = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+        if (p && p.cloudOrderId) cloudIds.add(Number(p.cloudOrderId));
+      } catch {}
+    }
+    return cloudIds;
   } catch { return new Set(); }
 }
 async function itemsWithPendingPush() {
@@ -217,6 +235,31 @@ async function applyToCloud(actionType, payload) {
         method: 'PUT', ...json({ reason: payload.reason }),
       });
       if (!r.ok) throw new Error(`void_item ${r.status}`);
+      return r.json();
+    }
+    case 'delete_order': {
+      // The local row is already gone (delete happened before enqueue),
+      // so we use the cloudOrderId captured in the payload. Cloud-side
+      // endpoint is SYNC_SECRET-gated — the manager PIN was already
+      // validated on the Mac before this got queued.
+      const cloudId = payload.cloudOrderId || payload.localOrderId;
+      if (!cloudId) return { skipped: true, reason: 'no cloud_id' };
+      if (!process.env.SYNC_SECRET) {
+        // Without the secret the cloud refuses; log and treat as done
+        // so the queue entry clears (operator can re-delete from Chrome).
+        console.warn('[sync] delete_order: SYNC_SECRET not set — skipping cloud mirror');
+        return { skipped: true };
+      }
+      const r = await fetch(url('/api/sync/delete-order'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-sync-secret': process.env.SYNC_SECRET },
+        body: JSON.stringify({
+          order_id:   cloudId,
+          staff_name: payload.staff_name,
+          reason:     payload.reason,
+        }),
+      });
+      if (!r.ok) throw new Error(`delete_order ${r.status}`);
       return r.json();
     }
     default:
@@ -405,8 +448,11 @@ async function pullActiveOrders() {
   // rollback effect.
   const pendingOrderIds = await ordersWithPendingPush();
   const pendingItemIds  = await itemsWithPendingPush();
+  // Cloud ids the Mac is currently deleting (their local rows are already
+  // gone — pull must NOT re-INSERT them while the push is in flight).
+  const pendingDeleteCloudIds = await cloudIdsWithPendingDelete();
 
-  let inserted = 0, updated = 0, skippedPending = 0;
+  let inserted = 0, updated = 0, skippedPending = 0, skippedDelete = 0;
 
   // ─── Orders ───────────────────────────────────────────────────────
   // For each cloud order, either UPDATE the local row that already has
@@ -416,6 +462,10 @@ async function pullActiveOrders() {
   for (const cloudOrder of orders) {
     const cloudId = cloudOrder.id;
     if (!cloudId) continue;
+    // Mac just deleted this order and the cloud push hasn't gone out yet.
+    // Skipping prevents the rollback flash where the deleted order
+    // reappears for ~5s until the push completes.
+    if (pendingDeleteCloudIds.has(Number(cloudId))) { skippedDelete++; continue; }
     let localId = await findLocalOrderByCloudId(cloudId);
 
     // Migration safety: this is the first run since cloud_id columns landed,
@@ -526,8 +576,8 @@ async function pullActiveOrders() {
     }
   }
 
-  if (inserted || updated || itemsInserted || itemsUpdated || skippedPending) {
-    console.log(`[sync] active-orders: ${inserted}+${updated} orders, ${itemsInserted}+${itemsUpdated} items${itemsSkipped ? ` (${itemsSkipped} item-skips, parent not yet pulled)` : ''}${skippedPending ? ` (${skippedPending} orders skipped — local pending)` : ''}`);
+  if (inserted || updated || itemsInserted || itemsUpdated || skippedPending || skippedDelete) {
+    console.log(`[sync] active-orders: ${inserted}+${updated} orders, ${itemsInserted}+${itemsUpdated} items${itemsSkipped ? ` (${itemsSkipped} item-skips, parent not yet pulled)` : ''}${skippedPending ? ` (${skippedPending} skipped — local pending)` : ''}${skippedDelete ? ` (${skippedDelete} skipped — pending delete push)` : ''}`);
   }
 }
 

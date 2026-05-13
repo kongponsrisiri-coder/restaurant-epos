@@ -873,15 +873,28 @@ app.delete('/api/orders/:id', async (req, res) => {
     const staff = staffRes.rows[0];
 
     // Snapshot the order for the audit row — last chance to read it.
-    const ordRes = await pool.query(
-      `SELECT id, total, order_type, opened_at, closed_at, status, table_id
-       FROM orders WHERE id = $1`,
-      [orderId]
-    );
-    if (ordRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Order not found' });
+    // Also grab cloud_id so we can mirror the delete on the cloud after
+    // the local row is gone (column exists only on the SQLite mirror;
+    // safe to ask for via COALESCE — cloud Postgres just returns null).
+    let order;
+    try {
+      const ordRes = await pool.query(
+        `SELECT id, total, order_type, opened_at, closed_at, status, table_id, cloud_id
+         FROM orders WHERE id = $1`,
+        [orderId]
+      );
+      if (ordRes.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
+      order = ordRes.rows[0];
+    } catch (err) {
+      // Postgres errors on unknown column cloud_id — retry without it.
+      const ordRes = await pool.query(
+        `SELECT id, total, order_type, opened_at, closed_at, status, table_id
+         FROM orders WHERE id = $1`,
+        [orderId]
+      );
+      if (ordRes.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
+      order = ordRes.rows[0];
     }
-    const order = ordRes.rows[0];
 
     // Audit row goes in FIRST so we have the record even if a later
     // step partially fails.
@@ -913,12 +926,75 @@ app.delete('/api/orders/:id', async (req, res) => {
       } catch {}
     }
 
+    // Mirror the delete on the cloud. On Mac (DB_MODE=local) this enqueues
+    // a sync action so the next tick POSTs to the cloud-side
+    // /api/sync/delete-order endpoint. On cloud mode the offlineQueue
+    // helper is a no-op, so this line just falls through silently and
+    // the in-process delete above IS the cloud delete.
+    await offlineQueue.enqueue('delete_order', {
+      localOrderId: orderId,
+      cloudOrderId: order.cloud_id || orderId,  // cloud Mode: cloud_id == orderId
+      staff_name:   staff.name,
+      reason:       String(reason).trim(),
+    });
+
     console.log(`[delete-order] order #${orderId} deleted by ${staff.name} (id ${staff.id}) — reason: "${reason.trim()}" — total £${order.total}`);
     io.emit('order_deleted', { order_id: orderId, by: staff.name });
 
     res.json({ success: steps.order.ok, order_id: orderId, deleted_by: staff.name, steps });
   } catch (err) {
     console.error('DELETE /api/orders/:id error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// SEPOS-042 — cloud-side delete-order feed for sync push from the Mac.
+// Gated by SYNC_SECRET (the Mac already validated the manager PIN
+// locally; we don't replay PIN here, just trust the authenticated sync
+// channel). Mirrors the same cascade-delete + audit-row pattern as the
+// public DELETE /api/orders/:id endpoint.
+app.post('/api/sync/delete-order', async (req, res) => {
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected) return res.status(503).json({ error: 'SYNC_SECRET not set on this server — sync deletes disabled' });
+  if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+
+  try {
+    const orderId = parseInt(req.body?.order_id, 10);
+    if (!orderId) return res.status(400).json({ error: 'order_id required' });
+    const staffName = String(req.body?.staff_name || 'unknown').trim();
+    const reason    = String(req.body?.reason || '').trim() || '(synced from Mac)';
+
+    const ordRes = await pool.query(
+      `SELECT id, total, order_type, opened_at, closed_at, table_id FROM orders WHERE id = $1`,
+      [orderId]
+    );
+    if (ordRes.rows.length === 0) {
+      // Already gone — idempotent success.
+      return res.json({ success: true, already_deleted: true, order_id: orderId });
+    }
+    const order = ordRes.rows[0];
+
+    await pool.query(
+      `INSERT INTO order_deletions (order_id, staff_id, staff_name, reason, deleted_total, order_type, opened_at, closed_at)
+       VALUES ($1, NULL, $2, $3, $4, $5, $6, $7)`,
+      [order.id, `${staffName} (sync)`, reason, order.total, order.order_type, order.opened_at, order.closed_at]
+    );
+
+    await pool.query(`DELETE FROM payments      WHERE order_id = $1`, [orderId]);
+    await pool.query(`DELETE FROM stock_movements WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = $1)`, [orderId]);
+    await pool.query(`DELETE FROM order_items   WHERE order_id = $1`, [orderId]);
+    await pool.query(`DELETE FROM orders        WHERE id = $1`, [orderId]);
+
+    if (order.table_id) {
+      try { await pool.query("UPDATE tables SET status='available' WHERE id = $1", [order.table_id]); } catch {}
+    }
+
+    console.log(`[sync-delete-order] order #${orderId} deleted via sync from ${staffName} — reason: "${reason}"`);
+    io.emit('order_deleted', { order_id: orderId, by: `${staffName} (sync)` });
+    res.json({ success: true, order_id: orderId });
+  } catch (err) {
+    console.error('POST /api/sync/delete-order error:', err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -192,6 +192,10 @@ export const getReservations = () => get('/api/reservations');
 // risk) or when the queue is backing up.
 export const getSyncHealth = () => get('/api/sync/health');
 
+// SEPOS-044 follow-up — sync queue inspector (local mode only).
+export const getSyncQueue = () => get('/api/sync/queue');
+export const skipSyncQueueEntry = (id) => post(`/api/sync/queue/${id}/skip`, {});
+
 // SEPOS-042 — manager-gated order deletion. Used by Admin → Bills → Delete.
 // Backend requires PIN to belong to a staff row with role manager/admin/supervisor,
 // writes an audit row to order_deletions, then cascade-deletes the order.

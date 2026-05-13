@@ -2618,6 +2618,49 @@ app.get('/api/sync/health', async (req, res) => {
   });
 });
 
+// SEPOS-044 follow-up — sync queue inspector.
+// Local-mode only. Lets the UI list what's stuck in sync_queue and skip
+// individual entries (mark them synced without actually pushing) when
+// they're permanently failing — e.g. a delete_order for an order that
+// no longer exists on cloud anyway.
+app.get('/api/sync/queue', async (req, res) => {
+  const dbMode = (process.env.DB_MODE || 'cloud').toLowerCase();
+  if (dbMode !== 'local') return res.json({ db_mode: dbMode, entries: [] });
+  try {
+    const r = await pool.query(
+      `SELECT id, action_type, payload, created_at
+       FROM sync_queue WHERE synced = 0 ORDER BY id ASC`
+    );
+    const entries = r.rows.map(row => {
+      let parsed = null;
+      try { parsed = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload; }
+      catch {}
+      return {
+        id: row.id, action_type: row.action_type,
+        created_at: row.created_at, payload: parsed,
+      };
+    });
+    res.json({ db_mode: dbMode, entries });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/sync/queue/:id/skip', async (req, res) => {
+  const dbMode = (process.env.DB_MODE || 'cloud').toLowerCase();
+  if (dbMode !== 'local') return res.status(400).json({ error: 'queue inspector is local-mode only' });
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) return res.status(400).json({ error: 'invalid id' });
+    const r = await pool.query(
+      `UPDATE sync_queue SET synced = 1, synced_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND synced = 0`,
+      [id]
+    );
+    res.json({ success: true, affected: r.rowCount });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Closed-orders feed for the Electron pull. Gated by SYNC_SECRET header
 // so order data isn't world-readable on a public Railway URL. Returns
 // orders + order_items + payments in one round-trip, paginated by

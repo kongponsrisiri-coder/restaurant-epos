@@ -8,6 +8,7 @@ import AdminScreen from './screens/AdminScreen';
 import BarScreen from './screens/BarScreen';
 import ReservationsScreen from './screens/ReservationsScreen';
 import CounterScreen from './screens/CounterScreen';
+import SyncQueuePill from './components/SyncQueuePill';
 import './App.css';
 
 // ── Sandy: Lotus badge logo mark — replaces SVG flags ─────────────
@@ -229,6 +230,8 @@ export default function App() {
 
           <div className="navbar-user">
             <StatusBadge />
+            {/* SEPOS-044 — always-visible pill when anything is queued. */}
+            <SyncQueuePill compact={isMobile} />
             {/* SEPOS-045 — counter/floor mode toggle. Per-device flag. */}
             <button
               onClick={toggleCounterMode}

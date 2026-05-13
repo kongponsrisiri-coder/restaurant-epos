@@ -1310,17 +1310,96 @@ app.put('/api/reservations/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-044: seating a reservation can now also assign it to a table
+// AND open an order in one call. If table_id is supplied, it's saved on
+// the reservation. If open_order is true, a new dine-in order is opened
+// on that table and its id is returned alongside the reservation.
 app.post('/api/reservations/:id/seat', async (req, res) => {
   try {
-    const result = await pool.query(`UPDATE reservations SET status='seated', updated_at=NOW() WHERE id=$1 RETURNING *`, [req.params.id]);
+    const { table_id, staff_id, open_order } = req.body || {};
+    const params = [req.params.id];
+    let tableAssign = '';
+    if (table_id !== undefined) {
+      params.push(table_id || null);
+      tableAssign = `, table_id=$${params.length}`;
+    }
+    const result = await pool.query(
+      `UPDATE reservations SET status='seated'${tableAssign}, updated_at=NOW() WHERE id=$1 RETURNING *`,
+      params
+    );
     const reservation = result.rows[0];
+    if (!reservation) return res.status(404).json({ error: 'Reservation not found' });
+
+    let order = null;
     if (reservation.table_id) {
       await pool.query("UPDATE tables SET status='occupied' WHERE id=$1", [reservation.table_id]);
       io.emit('tableStatusChanged', { id: reservation.table_id, status: 'occupied' });
+      if (open_order) {
+        const orderRes = await pool.query(
+          "INSERT INTO orders (table_id, staff_id, status, covers, opened_at) VALUES ($1, $2, 'open', $3, NOW()) RETURNING *",
+          [reservation.table_id, staff_id || null, reservation.covers || 1]
+        );
+        order = orderRes.rows[0];
+        await offlineQueue.enqueue('create_order', {
+          localOrderId: order.id, table_id: reservation.table_id,
+          covers: reservation.covers || 1, staff_id: staff_id || null,
+        });
+      }
     }
     io.emit('reservation_updated', reservation);
-    res.json(reservation);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    res.json({ reservation, order });
+  } catch (err) {
+    console.error('POST /api/reservations/:id/seat error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// SEPOS-044: walk-in — create an instant reservation with source='walk_in'
+// + status='seated' on a chosen table, and open an order in one call.
+app.post('/api/reservations/walk-in', async (req, res) => {
+  try {
+    const {
+      restaurant_id = 'siamepos',
+      table_id, covers,
+      customer_name = 'Walk-in', customer_phone = null, customer_email = null,
+      staff_id = null, notes = null,
+    } = req.body || {};
+    if (!table_id) return res.status(400).json({ error: 'table_id required' });
+    const coversNum = parseInt(covers, 10);
+    if (!coversNum || coversNum < 1) return res.status(400).json({ error: 'covers must be at least 1' });
+
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const hhmm  = now.toTimeString().slice(0, 5);
+
+    const resvIns = await pool.query(
+      `INSERT INTO reservations
+         (restaurant_id, table_id, customer_name, customer_phone, customer_email,
+          covers, reservation_date, reservation_time, status, notes, source)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'seated',$9,'walk_in') RETURNING *`,
+      [restaurant_id, table_id, customer_name.trim() || 'Walk-in',
+       customer_phone, customer_email, coversNum, today, hhmm, notes]
+    );
+    const reservation = resvIns.rows[0];
+
+    const orderRes = await pool.query(
+      "INSERT INTO orders (table_id, staff_id, status, covers, opened_at) VALUES ($1, $2, 'open', $3, NOW()) RETURNING *",
+      [table_id, staff_id, coversNum]
+    );
+    const order = orderRes.rows[0];
+
+    await pool.query("UPDATE tables SET status='occupied' WHERE id=$1", [table_id]);
+    await offlineQueue.enqueue('create_order', {
+      localOrderId: order.id, table_id, covers: coversNum, staff_id,
+    });
+
+    io.emit('new_reservation', reservation);
+    io.emit('tableStatusChanged', { id: table_id, status: 'occupied' });
+    res.json({ reservation, order });
+  } catch (err) {
+    console.error('POST /api/reservations/walk-in error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.delete('/api/reservations/:id', async (req, res) => {

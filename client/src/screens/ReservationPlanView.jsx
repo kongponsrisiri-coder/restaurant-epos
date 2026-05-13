@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import SeatActionSheet from '../components/SeatActionSheet';
 
 const SERVER_URL = (() => {
   const host = window.location.hostname;
@@ -230,7 +231,8 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
             selectedRes={selectedRes} onSelect={setSelectedRes} />
         ) : (
           <FloorPlanView tables={tables} reservations={active} tiers={tiers}
-            tableGroups={tableGroups} selectedRes={selectedRes} onSelect={setSelectedRes} />
+            tableGroups={tableGroups} selectedRes={selectedRes} onSelect={setSelectedRes}
+            onRefresh={onRefresh} />
         )}
         {selectedRes && (
           <BookingPanel res={selectedRes} allReservations={active}
@@ -406,7 +408,8 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
 // ═══════════════════════════════════════════════════════
 // FLOOR PLAN VIEW
 // ═══════════════════════════════════════════════════════
-function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, onSelect }) {
+function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, onSelect, onRefresh }) {
+  const [seatTable, setSeatTable] = useState(null);  // SEPOS-044 — tap-to-seat target
   const canvasW = tables.length ? Math.max(900, ...tables.map(t => (t.pos_x||0) + (t.width||80) + 80)) : 900;
   const canvasH = tables.length ? Math.max(600, ...tables.map(t => (t.pos_y||0) + (t.height||80) + 80)) : 600;
 
@@ -458,7 +461,7 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
             const isPrimary    = booking && booking.table_id === table.id;
             const isGroupMember = booking && booking.table_id !== table.id;
             return (
-              <div key={table.id} onClick={() => booking ? onSelect(booking) : null}
+              <div key={table.id} onClick={() => booking ? onSelect(booking) : setSeatTable(table)}
                 style={{ position: 'absolute', left: table.pos_x||0, top: table.pos_y||0, width: table.width||80, height: table.height||80,
                   borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,
                   background: isSel ? '#1a1a2e' : booking ? c.bg : 'white',
@@ -468,13 +471,23 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
                   boxShadow: isSel ? '0 4px 20px rgba(0,0,0,0.25)' : '0 2px 6px rgba(0,0,0,0.08)', transition: 'all 0.15s' }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: isSel ? 'white' : booking ? c.text : '#1a1a2e' }}>{table.table_number}</div>
                 {isPrimary ? <div style={{ fontSize: 9, color: isSel ? 'rgba(255,255,255,0.8)' : c.text, textAlign: 'center', maxWidth: '90%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{booking.customer_name.split(' ')[0]}</div>
-                : !booking ? <div style={{ fontSize: 9, color: '#9ca3af' }}>{table.capacity}p</div> : null}
+                : !booking ? <div style={{ fontSize: 9, color: '#9ca3af' }}>Tap to seat · {table.capacity}p</div> : null}
               </div>
             );
           })}
           {tables.length === 0 && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: '#888' }}><div style={{ fontSize: 36 }}>🗺</div><div>Set up your floor plan in Admin → Table Plan first</div></div>}
         </div>
       </div>
+
+      {/* SEPOS-044 — tap an empty table → action sheet (seat booking / walk-in). */}
+      {seatTable && (
+        <SeatActionSheet
+          table={seatTable}
+          bookings={reservations}
+          onClose={() => setSeatTable(null)}
+          onSeated={() => { setSeatTable(null); onRefresh?.(); }}
+        />
+      )}
     </div>
   );
 }

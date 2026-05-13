@@ -172,6 +172,21 @@ export const sendCampaign      = (subject, body, segment) => post('/api/campaign
 export const setTakeawayStatus = (orderId, status) =>
   put(`/api/orders/${orderId}/takeaway-status`, { status });
 
+// SEPOS-034 — active takeaway list (drives the strip on the table-map screen).
+export const getActiveTakeaway = () => get('/api/takeaway/orders/active');
+
+// SEPOS-044 — Floor-Plan polish: seat a booking or a walk-in.
+// Both endpoints return { reservation, order } where order is the newly
+// opened dine-in order on the table (id used to navigate to OrderScreen).
+export const seatReservation = (id, body) =>
+  post(`/api/reservations/${id}/seat`, body || {});
+export const seatWalkIn = (body) => post('/api/reservations/walk-in', body);
+
+// SEPOS-044 — minimal reservations list helper. ReservationsScreen has its
+// own fetch path; this one is for the table-map pre-claim badges, where we
+// only need today's bookings.
+export const getReservations = () => get('/api/reservations');
+
 // SEPOS-042 — manager-gated order deletion. Used by Admin → Bills → Delete.
 // Backend requires PIN to belong to a staff row with role manager/admin/supervisor,
 // writes an audit row to order_deletions, then cascade-deletes the order.

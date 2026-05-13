@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { getTables, createOrder, getOrders, getTableStatus, moveTable, mergeTables } from '../api';
+import { getTables, createOrder, getOrders, getTableStatus, moveTable, mergeTables, getReservations } from '../api';
+import TakeawayStrip from '../components/TakeawayStrip';
+import BillPeek      from '../components/BillPeek';
 
 const COLOUR_MAP = {
   available:      { bg: '#22c55e', border: '#16a34a', text: 'white', label: 'Available' },
@@ -17,6 +19,8 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
   const [tables, setTables] = useState([]);
   const [tableStatuses, setTableStatuses] = useState([]);
   const [openOrders, setOpenOrders] = useState([]);
+  const [reservations, setReservations] = useState([]);
+  const [billPeekOrderId, setBillPeekOrderId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showCoversPopup, setShowCoversPopup] = useState(null);
   const [coversInput, setCoversInput] = useState('');
@@ -31,22 +35,52 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
   const [moveMode, setMoveMode] = useState(false);
   const [mergeMode, setMergeMode] = useState(false);
 
-  // ── Fetch data — unchanged ────────────────────────────
+  // ── Fetch data ────────────────────────────────────────
   const fetchData = async () => {
     try {
-      const [tablesData, ordersData, statusData] = await Promise.all([
+      const [tablesData, ordersData, statusData, reservationsData] = await Promise.all([
         getTables(),
         getOrders(),
-        getTableStatus()
+        getTableStatus(),
+        getReservations().catch(() => []),       // pre-claim badges (SEPOS-044)
       ]);
       setTables(tablesData);
       setOpenOrders(ordersData);
       setTableStatuses(statusData);
+      setReservations(Array.isArray(reservationsData) ? reservationsData : []);
     } catch (err) {
       console.error('Failed to load tables', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  // SEPOS-044 — find a reservation that "claims" this table right now.
+  // Shows on empty tables when a booking is due within ±30 min and the
+  // status hasn't moved past pending/confirmed yet.
+  const getUpcomingReservation = (tableId) => {
+    if (openOrders.some(o => o.table_id === tableId)) return null;
+    const now = new Date();
+    const todayIso = now.toISOString().slice(0, 10);
+    let best = null;
+    let bestDelta = Infinity;
+    for (const r of reservations) {
+      if (r.table_id !== tableId) continue;
+      if (r.status !== 'pending' && r.status !== 'confirmed') continue;
+      const dateStr = String(r.reservation_date || '').slice(0, 10);
+      if (dateStr !== todayIso) continue;
+      const timeStr = String(r.reservation_time || '').slice(0, 5);
+      if (!/^\d\d:\d\d$/.test(timeStr)) continue;
+      const [h, m] = timeStr.split(':').map(Number);
+      const t = new Date(now); t.setHours(h, m, 0, 0);
+      const deltaMin = (t.getTime() - now.getTime()) / 60000;
+      if (deltaMin < -30 || deltaMin > 30) continue;
+      if (Math.abs(deltaMin) < Math.abs(bestDelta)) {
+        best = { ...r, _delta: deltaMin, _time: timeStr };
+        bestDelta = deltaMin;
+      }
+    }
+    return best;
   };
 
   useEffect(() => {
@@ -247,6 +281,9 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
         </div>
       )}
 
+      {/* SEPOS-044 — Active takeaway strip (auto-hides if none). */}
+      <TakeawayStrip onPeek={(orderId) => setBillPeekOrderId(orderId)} />
+
       {/* ════════════════════════════════════════
           MOVE / MERGE MODE BANNER
 
@@ -320,6 +357,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
               const time = getTableTime(table.id);
               const timeColor = getTimeColor(table.id);
               const isSelected = tableActionPopup?.table.id === table.id;
+              const upcoming = getUpcomingReservation(table.id);
 
               return (
                 <div key={table.id} onClick={() => handleTableClick(table)} style={{
@@ -349,6 +387,19 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                       borderRadius: 6
                     }}>
                       ⏱ {time}
+                    </div>
+                  )}
+                  {/* SEPOS-044 — reservation pre-claim badge */}
+                  {upcoming && (
+                    <div title={`${upcoming.customer_name} · ${upcoming.covers} covers · ${upcoming._time}`} style={{
+                      position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)',
+                      background: upcoming._delta < 0 ? '#dc2626' : '#0d1b3e', color: 'white',
+                      fontSize: 10, fontWeight: 800,
+                      padding: '2px 8px', borderRadius: 999,
+                      whiteSpace: 'nowrap', boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+                      pointerEvents: 'none', maxWidth: w + 40, overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>
+                      📅 {upcoming._time} {upcoming.customer_name?.split(' ')[0]}·{upcoming.covers}
                     </div>
                   )}
                 </div>
@@ -382,6 +433,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                 const order = openOrders.find(o => o.table_id === table.id);
                 const time = getTableTime(table.id);
                 const isSelected = tableActionPopup?.table.id === table.id;
+                const upcoming = getUpcomingReservation(table.id);
 
                 return (
                   <div key={table.id} onClick={() => handleTableClick(table)} style={{
@@ -393,7 +445,8 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                     textAlign: 'center',
                     transition: 'transform 0.15s',
                     boxShadow: isSelected ? '0 0 20px rgba(0,0,0,0.3)' : 'none',
-                    minHeight: isMobile ? 110 : 'auto'
+                    minHeight: isMobile ? 110 : 'auto',
+                    position: 'relative',
                   }}
                     onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.04)'}
                     onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
@@ -459,6 +512,18 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                         {order.covers} cvr · £{(order.total || 0).toFixed(2)}
                       </div>
                     )}
+                    {/* SEPOS-044 — pre-claim badge on grid tile */}
+                    {upcoming && (
+                      <div style={{
+                        position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)',
+                        background: upcoming._delta < 0 ? '#dc2626' : '#0d1b3e', color: 'white',
+                        fontSize: 11, fontWeight: 800,
+                        padding: '3px 10px', borderRadius: 999,
+                        whiteSpace: 'nowrap', boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+                      }}>
+                        📅 {upcoming._time} {upcoming.customer_name?.split(' ')[0]}·{upcoming.covers}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -501,6 +566,20 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
               fontSize: 16, fontWeight: 700, cursor: 'pointer'
             }}>
               📋 Open Order
+            </button>
+
+            {/* SEPOS-044 — peek at the running bill without leaving the floor plan. */}
+            <button onClick={() => {
+              const oid = tableActionPopup.order.id;
+              setTableActionPopup(null);
+              setBillPeekOrderId(oid);
+            }} style={{
+              padding: isMobile ? '18px' : '16px',
+              borderRadius: 12, border: 'none',
+              background: '#0f766e', color: 'white',
+              fontSize: 16, fontWeight: 700, cursor: 'pointer'
+            }}>
+              👁 View Bill
             </button>
 
             <button onClick={() => {
@@ -607,6 +686,18 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
         </div>
       )}
 
+      {/* SEPOS-044 — BillPeek modal (shared by takeaway strip + tap menu). */}
+      {billPeekOrderId && (
+        <BillPeek
+          orderId={billPeekOrderId}
+          onClose={() => setBillPeekOrderId(null)}
+          onOpenFull={(oid) => {
+            const order = openOrders.find(o => o.id === oid);
+            setBillPeekOrderId(null);
+            if (order) onOpenOrder(order.id, order.table_id);
+          }}
+        />
+      )}
     </div>
   );
 }

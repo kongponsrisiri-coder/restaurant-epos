@@ -17,7 +17,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-# Now the rest of the server
+# Now the rest of the server (server.js + routes/ + db/ + seeds/ + services/)
 COPY . .
 
 # The port Railway maps to.

@@ -77,4 +77,28 @@ export const api = {
       headers: { 'Content-Type': 'application/json', ...tokenHeader() },
       body: JSON.stringify(body),
     }).then(handle),
+
+  listTickets: () => fetch(`${API}/api/tickets`, { headers: tokenHeader() }).then(handle),
+
+  getTicket: (id) => fetch(`${API}/api/tickets/${id}`, { headers: tokenHeader() }).then(handle),
+
+  createTicket: (body) =>
+    fetch(`${API}/api/tickets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify(body),
+    }).then(handle),
+
+  updateTicket: (id, body) =>
+    fetch(`${API}/api/tickets/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify(body),
+    }).then(handle),
+
+  deleteTicket: (id) =>
+    fetch(`${API}/api/tickets/${id}`, {
+      method: 'DELETE',
+      headers: tokenHeader(),
+    }).then(handle),
 };

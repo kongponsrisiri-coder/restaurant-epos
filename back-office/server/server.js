@@ -5,11 +5,13 @@ const express = require('express');
 const cors    = require('cors');
 
 const { ensureSchema, ensureBootstrapAdmin } = require('./db/pool');
+const { seedTickets } = require('./db/seeds');
 const authRoutes    = require('./routes/auth');
 const clientsRoutes = require('./routes/clients');
 const healthRoutes  = require('./routes/health');
 const notesRoutes   = require('./routes/notes');
 const teamRoutes    = require('./routes/team');
+const ticketsRoutes = require('./routes/tickets');
 const healthCron    = require('./services/healthCheck');
 
 const PORT = parseInt(process.env.PORT || '3002', 10);
@@ -57,6 +59,7 @@ app.use('/api/clients', clientsRoutes);
 app.use('/api/health',  healthRoutes);
 app.use('/api/notes',   notesRoutes);
 app.use('/api/team',    teamRoutes);
+app.use('/api/tickets', ticketsRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path }));
 
@@ -64,6 +67,7 @@ app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path 
   try {
     await ensureSchema();
     await ensureBootstrapAdmin();
+    await seedTickets();
   } catch (err) {
     console.error('[ops-api] startup error', err);
     process.exit(1);

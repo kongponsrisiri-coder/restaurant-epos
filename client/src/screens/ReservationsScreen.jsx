@@ -63,7 +63,10 @@ async function apiFetch(path, options = {}) {
 
 function deriveCustomers(reservations) {
   const map = {};
-  reservations.forEach(r => {
+  // SEPOS-044 — walk-ins aren't real "guests" (no name/phone captured),
+  // so they're excluded from the Guests history. They still appear in
+  // Today's bookings + reports.
+  reservations.filter(r => r.source !== 'walk_in').forEach(r => {
     const key = r.customer_phone?.trim() || r.customer_name?.trim() || r.id;
     if (!map[key]) map[key] = { key, name: r.customer_name || '', phone: r.customer_phone || '', email: r.customer_email || '', visits: [] };
     if (r.customer_name) map[key].name = r.customer_name;

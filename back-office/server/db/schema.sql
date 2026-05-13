@@ -66,3 +66,31 @@ CREATE TABLE IF NOT EXISTS engineering_tickets (
   updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_tickets_status ON engineering_tickets (status, updated_at DESC);
+
+-- SEPOS-WEB-001 — Website Builder. One config per client (FK), plus a
+-- "global" row with NULL client_id for SiamEPOS's own marketing demo.
+-- Photos are stored as base64 data URIs in TEXT columns so the generated
+-- HTML can be a single self-contained file (no CDN dependency).
+CREATE TABLE IF NOT EXISTS website_configs (
+  id               SERIAL PRIMARY KEY,
+  client_id        INT UNIQUE REFERENCES clients(id) ON DELETE CASCADE,
+  is_global        BOOLEAN DEFAULT FALSE,
+  restaurant_name  TEXT,
+  tagline          TEXT,
+  address          TEXT,
+  phone            TEXT,
+  email            TEXT,
+  about_text       TEXT,
+  primary_colour   VARCHAR(7) DEFAULT '#7B1C2D',
+  accent_colour    VARCHAR(7) DEFAULT '#C49030',
+  photo_hero       TEXT,
+  photo_story      TEXT,
+  photo_gallery_1  TEXT,
+  photo_gallery_2  TEXT,
+  photo_gallery_3  TEXT,
+  created_at       TIMESTAMPTZ DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ DEFAULT NOW()
+);
+-- Only one global config row at a time (partial unique index).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_website_one_global
+  ON website_configs (is_global) WHERE is_global = TRUE;

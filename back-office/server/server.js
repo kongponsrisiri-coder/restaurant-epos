@@ -12,6 +12,7 @@ const healthRoutes  = require('./routes/health');
 const notesRoutes   = require('./routes/notes');
 const teamRoutes    = require('./routes/team');
 const ticketsRoutes = require('./routes/tickets');
+const websiteRoutes = require('./routes/website');
 const healthCron    = require('./services/healthCheck');
 
 const PORT = parseInt(process.env.PORT || '3002', 10);
@@ -60,6 +61,7 @@ app.use('/api/health',  healthRoutes);
 app.use('/api/notes',   notesRoutes);
 app.use('/api/team',    teamRoutes);
 app.use('/api/tickets', ticketsRoutes);
+app.use('/api/website-configs', websiteRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path }));
 

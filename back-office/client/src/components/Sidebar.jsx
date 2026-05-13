@@ -56,6 +56,7 @@ export default function Sidebar({ user, clientCount }) {
       {/* Nav */}
       <nav style={{ padding: '14px 0', flex: 1 }}>
         <Item to="/" icon="🏠" label="Clients" badge={clientCount} active={isActive('/')} />
+        <Item to="/website" icon="🌐" label="Website" active={isActive('/website')} />
         <Item to="/tickets" icon="🎟" label="Tickets" active={isActive('/tickets')} />
         {user?.role === 'admin' && (
           <Item to="/team" icon="👥" label="Team" active={isActive('/team')} />

@@ -101,4 +101,32 @@ export const api = {
       method: 'DELETE',
       headers: tokenHeader(),
     }).then(handle),
+
+  // ── Website Builder ──────────────────────────────────────────
+  getGlobalWebsite: () =>
+    fetch(`${API}/api/website-configs/global`, { headers: tokenHeader() }).then(handle),
+
+  saveGlobalWebsite: (body) =>
+    fetch(`${API}/api/website-configs/global`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify(body),
+    }).then(handle),
+
+  getClientWebsite: (clientId) =>
+    fetch(`${API}/api/website-configs/client/${clientId}`, { headers: tokenHeader() }).then(handle),
+
+  saveClientWebsite: (clientId, body) =>
+    fetch(`${API}/api/website-configs/client/${clientId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify(body),
+    }).then(handle),
+
+  aiImportWebsite: (url) =>
+    fetch(`${API}/api/website-configs/ai-import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify({ url }),
+    }).then(handle),
 };

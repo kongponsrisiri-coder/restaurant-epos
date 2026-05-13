@@ -5,6 +5,7 @@ import { C, card, btn, input, label, fmtRelTime, fmtMoney, STATUS_STYLE, PLAN_LA
 import StatusPill from '../components/StatusPill.jsx';
 import HealthDot from '../components/HealthDot.jsx';
 import Avatar from '../components/Avatar.jsx';
+import WebsiteBuilderPanel from '../components/WebsiteBuilderPanel.jsx';
 
 export default function ClientDetailPage() {
   const { id } = useParams();
@@ -108,6 +109,7 @@ export default function ClientDetailPage() {
           ['overview', 'Overview'],
           ['health',   `Health (${health.length})`],
           ['notes',    `Notes (${notes.length})`],
+          ['website',  '🌐 Website'],
         ].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{
             padding: '10px 18px', background: 'transparent',
@@ -188,6 +190,20 @@ export default function ClientDetailPage() {
             </div>
           )}
         </SectionCard>
+      )}
+
+      {tab === 'website' && (
+        <WebsiteBuilderPanel
+          scope={{
+            kind: 'client',
+            clientId: parseInt(id, 10),
+            defaults: {
+              restaurant_name: client.restaurant_name,
+              email: client.email,
+              phone: client.phone,
+            },
+          }}
+        />
       )}
 
       {tab === 'notes' && (

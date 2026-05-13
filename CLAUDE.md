@@ -266,3 +266,26 @@ client/src/screens/admin/inventory/CostSalesTab.jsx
   inside the 5s window will still snap to whichever side pushed last.
   Restaurants typically run one primary terminal so this is rare in
   practice; locking would be the proper fix if it becomes a problem.
+
+- **SEPOS-043 — role-based access hierarchy** (next update)
+  Currently every staff PIN that reaches Admin can do everything,
+  and the manager-PIN gate on order delete (SEPOS-042) only
+  validates the role is one of `admin` / `manager` / `supervisor`.
+  Desired hierarchy:
+    - `admin` / `manager`: full access (status quo — no change needed)
+    - `supervisor`: full Admin access, BUT cannot delete a closed
+      bill (Admin → Bills 🗑️ button hidden + backend rejects).
+      Supervisor can still delete OPEN orders (Order screen, Kitchen
+      tab, Done tab).
+    - `waiter`: cannot reach the Admin tab at all (currently the
+      Admin section is reachable from the staff login UX with any
+      PIN — gate the route by role).
+    - `kitchen` / `bar`: same as waiter (no Admin access).
+  Implementation will touch:
+    - Frontend: AdminScreen route guard, BillsSection (hide 🗑️
+      for non-admin/manager), and possibly the staff login flow.
+    - Backend: tighten `DELETE /api/orders/:id` to reject
+      supervisor when the order is `status='closed'`. Open orders
+      stay allowed for supervisor.
+    - Add the same role check to `/api/sync/delete-order` so a
+      sync-pushed supervisor delete of a closed bill bounces too.

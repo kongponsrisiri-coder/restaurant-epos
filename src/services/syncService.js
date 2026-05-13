@@ -245,10 +245,16 @@ async function applyToCloud(actionType, payload) {
       const cloudId = payload.cloudOrderId || payload.localOrderId;
       if (!cloudId) return { skipped: true, reason: 'no cloud_id' };
       if (!process.env.SYNC_SECRET) {
-        // Without the secret the cloud refuses; log and treat as done
-        // so the queue entry clears (operator can re-delete from Chrome).
-        console.warn('[sync] delete_order: SYNC_SECRET not set — skipping cloud mirror');
-        return { skipped: true };
+        // Throw so the queue entry stays pending and retries — the moment
+        // SYNC_SECRET is configured (Mac config.json or env), the next
+        // tick will drain the backlog. Throttle the warning so we don't
+        // spam the log every 5s.
+        const now = Date.now();
+        if (!_lastWarnedSecret || now - _lastWarnedSecret > 60_000) {
+          console.warn('[sync] delete_order: SYNC_SECRET not configured — delete will retry once it is set');
+          _lastWarnedSecret = now;
+        }
+        throw new Error('SYNC_SECRET missing');
       }
       const r = await fetch(url('/api/sync/delete-order'), {
         method: 'POST',
@@ -648,6 +654,8 @@ async function isMenuEmpty() {
     return Number(r.rows[0]?.n || 0) === 0;
   } catch { return true; }
 }
+
+let _lastWarnedSecret = 0;
 
 async function syncOnce() {
   const queue = await offlineQueue.pending();

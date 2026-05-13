@@ -2526,6 +2526,29 @@ app.get('/api/clock/records', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-044 follow-up — sync health.
+// Lets the UI surface a banner when the Mac is in local mode but
+// SYNC_SECRET isn't configured (which silently blocks cloud writes
+// like order delete). Also reports pending queue depth so a stuck
+// install is visible.
+app.get('/api/sync/health', async (req, res) => {
+  const dbMode = (process.env.DB_MODE || 'cloud').toLowerCase();
+  const syncSecretSet = !!process.env.SYNC_SECRET;
+  let pending = 0;
+  try {
+    const r = await pool.query("SELECT COUNT(*) AS n FROM sync_queue WHERE synced = 0");
+    pending = Number(r.rows[0]?.n || 0);
+  } catch {}
+  res.json({
+    db_mode: dbMode,
+    sync_secret_set: syncSecretSet,
+    pending_actions: pending,
+    // Healthy when in cloud mode (no sync needed) OR in local mode
+    // with the secret set and no stuck items.
+    healthy: dbMode === 'cloud' || (syncSecretSet && pending < 20),
+  });
+});
+
 // Closed-orders feed for the Electron pull. Gated by SYNC_SECRET header
 // so order data isn't world-readable on a public Railway URL. Returns
 // orders + order_items + payments in one round-trip, paginated by

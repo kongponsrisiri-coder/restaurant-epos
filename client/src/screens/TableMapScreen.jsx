@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { getTables, createOrder, getOrders, getTableStatus, moveTable, mergeTables, getReservations } from '../api';
-import TakeawayStrip from '../components/TakeawayStrip';
-import BillPeek      from '../components/BillPeek';
+import TakeawayStrip    from '../components/TakeawayStrip';
+import BillPeek         from '../components/BillPeek';
+import SyncHealthBanner from '../components/SyncHealthBanner';
 
 const COLOUR_MAP = {
   available:      { bg: '#22c55e', border: '#16a34a', text: 'white', label: 'Available' },
@@ -280,6 +281,9 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           ))}
         </div>
       )}
+
+      {/* SEPOS-044 follow-up — surfaces SYNC_SECRET-missing or stuck-queue state. */}
+      <SyncHealthBanner />
 
       {/* SEPOS-044 — Active takeaway strip (auto-hides if none). */}
       <TakeawayStrip onPeek={(orderId) => setBillPeekOrderId(orderId)} />

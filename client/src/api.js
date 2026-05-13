@@ -187,6 +187,11 @@ export const seatWalkIn = (body) => post('/api/reservations/walk-in', body);
 // only need today's bookings.
 export const getReservations = () => get('/api/reservations');
 
+// SEPOS-044 — sync health probe. Used by TableMapScreen to show a banner
+// when the Mac is in local mode without SYNC_SECRET (silent delete-drop
+// risk) or when the queue is backing up.
+export const getSyncHealth = () => get('/api/sync/health');
+
 // SEPOS-042 — manager-gated order deletion. Used by Admin → Bills → Delete.
 // Backend requires PIN to belong to a staff row with role manager/admin/supervisor,
 // writes an audit row to order_deletions, then cascade-deletes the order.

@@ -588,17 +588,27 @@ app.post('/api/orders/:id/pay', async (req, res) => {
     const tableId = orderRes.rows[0]?.table_id;
     if (tableId) {
       await pool.query("UPDATE tables SET status='available' WHERE id=$1", [tableId]);
-      // SEPOS-044 — also free any tables linked to this one so the whole
-      // group goes back to 'available' on the table map together.
+      // SEPOS-044 — free linked partner tables ONLY if the order actually
+      // spanned the group (covers > primary table capacity). Small parties
+      // at a single linked table don't drag the rest of the group, so we
+      // don't need to free anything else for them either.
       try {
-        const linkedRes = await pool.query(
-          `SELECT table_id_b AS id FROM table_combinations WHERE table_id_a=$1
-           UNION SELECT table_id_a AS id FROM table_combinations WHERE table_id_b=$1`,
-          [tableId]
-        );
-        for (const row of linkedRes.rows) {
-          if (row.id && row.id !== tableId) {
-            await pool.query("UPDATE tables SET status='available' WHERE id=$1", [row.id]);
+        const [capRes, ordRes] = await Promise.all([
+          pool.query('SELECT capacity FROM tables WHERE id=$1', [tableId]),
+          pool.query('SELECT covers FROM orders WHERE id=$1', [orderId]),
+        ]);
+        const primaryCap = Number(capRes.rows[0]?.capacity) || 0;
+        const orderCovers = Number(ordRes.rows[0]?.covers) || 0;
+        if (orderCovers > primaryCap) {
+          const linkedRes = await pool.query(
+            `SELECT table_id_b AS id FROM table_combinations WHERE table_id_a=$1
+             UNION SELECT table_id_a AS id FROM table_combinations WHERE table_id_b=$1`,
+            [tableId]
+          );
+          for (const row of linkedRes.rows) {
+            if (row.id && row.id !== tableId) {
+              await pool.query("UPDATE tables SET status='available' WHERE id=$1", [row.id]);
+            }
           }
         }
       } catch {}
@@ -833,17 +843,20 @@ app.get('/api/tables/status', async (req, res) => {
       return { ...order, colour_status: colourStatus };
     });
 
-    // SEPOS-044 — propagate occupied state across linked tables.
-    // If Table 5 is linked to Table 6 and there's an open order on
-    // Table 5, the floor map should colour Table 6 with the same
-    // course state so staff treat them as one party.
+    // SEPOS-044 — propagate occupied state across linked tables ONLY when
+    // the party actually needs the linked group. Linked-table groups are
+    // primarily a booking-widget capacity hack (e.g. 26+27+28+29 linked so
+    // an online party of 8 sees availability) — most of the time staff
+    // seat smaller parties at a single table within the group and the
+    // other tables in the group should stay free for other walk-ins.
+    // Rule: propagate iff order.covers > primary table.capacity.
     try {
-      const combosRes = await pool.query('SELECT table_id_a, table_id_b FROM table_combinations');
-      const adj = {};
-      for (const c of combosRes.rows) {
-        (adj[c.table_id_a] ||= new Set()).add(c.table_id_b);
-        (adj[c.table_id_b] ||= new Set()).add(c.table_id_a);
-      }
+      const [combosRes, tablesRes] = await Promise.all([
+        pool.query('SELECT table_id_a, table_id_b FROM table_combinations'),
+        pool.query('SELECT id, capacity FROM tables'),
+      ]);
+      const capacityById = {};
+      for (const t of tablesRes.rows) capacityById[t.id] = Number(t.capacity) || 0;
       // Union-find to compute connected components.
       const parent = {};
       const find = (x) => parent[x] == null ? x : (parent[x] = find(parent[x]));
@@ -857,12 +870,15 @@ app.get('/api/tables/status', async (req, res) => {
       // Existing per-table colour map so we don't double-up.
       const have = new Map(result.map(r => [r.table_id, r]));
       for (const seedRow of result) {
+        const primaryCap = capacityById[seedRow.table_id] || 0;
+        const orderCovers = Number(seedRow.covers) || 0;
+        // Single-table sitting → don't drag the rest of the group along.
+        if (orderCovers <= primaryCap) continue;
         const root = find(seedRow.table_id);
         const groupMembers = members[root];
         if (!groupMembers) continue;
         for (const mId of groupMembers) {
           if (have.has(mId)) continue;
-          // Synthetic linked-occupied row — same colour as the primary.
           have.set(mId, { ...seedRow, id: null, table_id: mId, linked_from: seedRow.table_id });
           result.push(have.get(mId));
         }

@@ -427,8 +427,19 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
   function getBookingForTable(tableId) {
     const direct = reservations.find(r => r.table_id === tableId);
     if (direct) return direct;
+    // SEPOS-044 — only show a linked booking on this table when the booking
+    // actually needs the group (party doesn't fit the primary alone).
+    // Linked tables are primarily a booking-widget capacity tool — small
+    // parties take just one table even if it's part of a 4-table link.
     const group = tableGroups.find(g => g.ids.includes(tableId));
-    if (group) { for (const id of group.ids) { const f = reservations.find(r => r.table_id === id); if (f) return f; } }
+    if (!group) return null;
+    for (const id of group.ids) {
+      const f = reservations.find(r => r.table_id === id);
+      if (!f) continue;
+      const primaryTable = tables.find(t => t.id === id);
+      const primaryCap = primaryTable?.capacity || 0;
+      if ((f.covers || 0) > primaryCap) return f;
+    }
     return null;
   }
 

@@ -16,12 +16,6 @@ function toMins(t) {
 export default function SeatActionSheet({ table, bookings = [], onClose, onSeated, staff }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState('');
-  const [walkInOpen, setWalkInOpen] = useState(false);
-  const [walkIn, setWalkIn] = useState({
-    covers: '',
-    customer_name: '',
-    customer_phone: '',
-  });
 
   // Esc to close
   useEffect(() => {
@@ -67,19 +61,17 @@ export default function SeatActionSheet({ table, bookings = [], onClose, onSeate
     finally { setBusy(false); }
   };
 
+  // One-tap walk-in seating — uses the table's capacity for covers
+  // (staff can edit covers inside the order screen if it's wrong).
+  // Skipping the form keeps the front-of-house flow fast: tap an empty
+  // table, tap "Seat walk-in", you're in the order screen.
   const submitWalkIn = async () => {
-    const covers = parseInt(walkIn.covers, 10);
-    if (!covers || covers < 1) { setErr('Party size required (1+).'); return; }
-    if (covers > (table.capacity || 0)) {
-      if (!confirm(`Table ${table.table_number} seats ${table.capacity}. Seat a party of ${covers} anyway?`)) return;
-    }
     setBusy(true); setErr('');
     try {
       const r = await seatWalkIn({
         table_id: table.id,
-        covers,
-        customer_name: walkIn.customer_name.trim() || 'Walk-in',
-        customer_phone: walkIn.customer_phone.trim() || null,
+        covers: table.capacity || 1,
+        customer_name: 'Walk-in',
         staff_id: staff?.id || null,
       });
       onSeated?.(r);
@@ -101,83 +93,38 @@ export default function SeatActionSheet({ table, bookings = [], onClose, onSeate
 
         {err && <div style={errBox}>{err}</div>}
 
-        {!walkInOpen && (
-          <div style={body}>
-            <div style={sectionLabel}>Bookings due soon (±30 min)</div>
-            {candidates.length === 0 ? (
-              <div style={emptyHint}>No bookings due in the next 30 minutes.</div>
-            ) : (
-              <div>
-                {candidates.map(b => (
-                  <button key={b.id} onClick={() => seatBooking(b)} disabled={busy} style={candidateRow}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: '#0d1b3e' }}>
-                        {b.customer_name}
-                        <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: '#64748b' }}>· {b.covers} {b.covers === 1 ? 'guest' : 'guests'}</span>
-                      </div>
-                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                        {String(b.reservation_time).slice(0,5)} {b._delta < 0 ? `· ${-b._delta}m late` : b._delta === 0 ? '· now' : `· in ${b._delta}m`}
-                        {b.notes ? ` · ${b.notes}` : ''}
-                      </div>
+        <div style={body}>
+          <div style={sectionLabel}>Bookings due soon (±30 min)</div>
+          {candidates.length === 0 ? (
+            <div style={emptyHint}>No bookings due in the next 30 minutes.</div>
+          ) : (
+            <div>
+              {candidates.map(b => (
+                <button key={b.id} onClick={() => seatBooking(b)} disabled={busy} style={candidateRow}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#0d1b3e' }}>
+                      {b.customer_name}
+                      <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: '#64748b' }}>· {b.covers} {b.covers === 1 ? 'guest' : 'guests'}</span>
                     </div>
-                    <span style={seatBtn}>Seat →</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <button onClick={() => setWalkInOpen(true)} style={walkInBtn}>
-              + Seat a walk-in
-            </button>
-          </div>
-        )}
-
-        {walkInOpen && (
-          <div style={body}>
-            <div style={sectionLabel}>Walk-in</div>
-            <div style={{ display: 'grid', gap: 12 }}>
-              <div>
-                <label style={fieldLabel}>Party size *</label>
-                <input
-                  type="number" min="1" max="50" autoFocus
-                  value={walkIn.covers}
-                  onChange={(e) => setWalkIn(w => ({ ...w, covers: e.target.value }))}
-                  style={input}
-                />
-              </div>
-              <div>
-                <label style={fieldLabel}>Customer name (optional)</label>
-                <input
-                  value={walkIn.customer_name}
-                  onChange={(e) => setWalkIn(w => ({ ...w, customer_name: e.target.value }))}
-                  style={input}
-                  placeholder="Walk-in"
-                />
-              </div>
-              <div>
-                <label style={fieldLabel}>Phone (optional)</label>
-                <input
-                  type="tel"
-                  value={walkIn.customer_phone}
-                  onChange={(e) => setWalkIn(w => ({ ...w, customer_phone: e.target.value }))}
-                  style={input}
-                />
-              </div>
+                    <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                      {String(b.reservation_time).slice(0,5)} {b._delta < 0 ? `· ${-b._delta}m late` : b._delta === 0 ? '· now' : `· in ${b._delta}m`}
+                      {b.notes ? ` · ${b.notes}` : ''}
+                    </div>
+                  </div>
+                  <span style={seatBtn}>Seat →</span>
+                </button>
+              ))}
             </div>
-            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-              <button onClick={() => { setWalkInOpen(false); setErr(''); }} style={ghostBtn}>Back</button>
-              <button onClick={submitWalkIn} disabled={busy} style={{ ...primaryBtn, opacity: busy ? 0.6 : 1, flex: 1 }}>
-                {busy ? 'Seating…' : 'Seat walk-in'}
-              </button>
-            </div>
-          </div>
-        )}
+          )}
 
-        {!walkInOpen && (
-          <div style={footer}>
-            <button onClick={onClose} style={ghostBtn}>Cancel</button>
-          </div>
-        )}
+          <button onClick={submitWalkIn} disabled={busy} style={{ ...walkInBtn, opacity: busy ? 0.6 : 1 }}>
+            {busy ? 'Seating…' : `+ Seat walk-in at Table ${table.table_number}`}
+          </button>
+        </div>
+
+        <div style={footer}>
+          <button onClick={onClose} style={ghostBtn}>Cancel</button>
+        </div>
       </div>
     </div>
   );

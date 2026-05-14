@@ -224,9 +224,19 @@ export default function ReservationsScreen() {
     return dateOk && statusOk;
   });
 
-  // Reservations for plan view — filtered by date only
+  // Reservations for plan view — filtered by date only.
   const planReservations = reservations.filter(r =>
     filterDate ? (r.reservation_date || '').startsWith(filterDate) : true
+  );
+
+  // SEPOS-044 — floor plan is ALWAYS pinned to today. Walk-ins land on
+  // today's date by definition, so a floor plan showing any other date
+  // would silently drop the row staff just seated (the long-standing
+  // "tile didn't change colour" report). Matches how OpenTable behaves:
+  // their floor plan view has no date picker — only the timeline + list
+  // views do.
+  const floorPlanReservations = reservations.filter(r =>
+    (r.reservation_date || '').startsWith(todayStr())
   );
 
   const counts = {};
@@ -269,6 +279,7 @@ export default function ReservationsScreen() {
   // Both share the date-bar header + full-width container that the
   // old "plan" tab used.
   const isPlanView = view === 'timeline' || view === 'floorplan';
+  const isFloorPlan = view === 'floorplan';
 
   return (
     <div style={{ ...(isPlanView ? { height: 'calc(100vh - 56px)', overflow: 'hidden' } : { minHeight: '100vh' }), background: '#f5f5f5', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -328,8 +339,8 @@ export default function ReservationsScreen() {
         </div>
       )}
 
-      {/* ── Date bar for Plan view ───────────────────────────────── */}
-      {isPlanView && (
+      {/* ── Date bar — timeline only (floor plan is pinned to today). */}
+      {isPlanView && !isFloorPlan && (
         <div style={{ background: 'white', padding: '10px 20px', display: 'flex', gap: 8, alignItems: 'center', borderBottom: '1px solid #eee', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
           <div style={{ display: 'flex', alignItems: 'center', background: '#f5f5f5', borderRadius: 10, border: '1px solid #e0e0e0', overflow: 'hidden' }}>
             <button onClick={() => setFilterDate(shiftDay(filterDate, -1))} style={{ padding: '0 14px', height: 40, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: '#0D1B3E', fontWeight: 700, display: 'flex', alignItems: 'center' }}>◀</button>
@@ -344,14 +355,22 @@ export default function ReservationsScreen() {
         </div>
       )}
 
+      {/* ── Floor-plan "pinned to today" hint bar ──────────────── */}
+      {isFloorPlan && (
+        <div style={{ background: 'white', padding: '10px 20px', display: 'flex', gap: 10, alignItems: 'center', borderBottom: '1px solid #eee', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+          <span style={{ background: '#0D1B3E', color: '#C9A84C', fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 999, letterSpacing: 0.6 }}>📍 TODAY</span>
+          <span style={{ fontSize: 13, color: '#555' }}>{friendlyDate(todayStr())} — walk-ins always seat here. Use Timeline to view other dates.</span>
+        </div>
+      )}
+
       {/* ── Plan Views (timeline / floorplan) — full width ─────── */}
       {isPlanView ? (
         loading ? (
           <div style={{ textAlign: 'center', padding: 80, color: '#888' }}><div style={{ fontSize: 48 }}>⏳</div><p>Loading…</p></div>
         ) : (
           <ReservationPlanView
-            reservations={planReservations}
-            selectedDate={filterDate}
+            reservations={isFloorPlan ? floorPlanReservations : planReservations}
+            selectedDate={isFloorPlan ? todayStr() : filterDate}
             onRefresh={loadData}
             view={view}
           />

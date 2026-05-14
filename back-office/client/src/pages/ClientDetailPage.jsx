@@ -363,6 +363,52 @@ function OnboardingSection({ clientId, metadata, status, onReload }) {
     catch (e) { alert('Download failed: ' + e.message); }
   };
 
+  // SEPOS-029 Phase 2 — provision actions. Each returns a small
+  // success/failure card the operator can read; on success the
+  // checklist auto-updates.
+  const [seedingMsg, setSeedingMsg] = useState(null);
+  const [netlifyMsg, setNetlifyMsg] = useState(null);
+
+  const runSeed = async () => {
+    setBusy(true); setErr(''); setSeedingMsg(null);
+    try {
+      const r = await api.provisionSeedDb(clientId);
+      setChecklist(r.checklist);
+      setSeedingMsg({ ok: true, text: `✓ Seeded — ${r.details?.staff?.rowCount ?? 0} staff + ${r.details?.settings?.rowCount ?? 0} settings rows.` });
+      onReload?.();
+    } catch (e) {
+      setSeedingMsg({ ok: false, text: e.message });
+    } finally { setBusy(false); }
+  };
+
+  const openRailwayTemplate = async () => {
+    setBusy(true); setErr('');
+    try {
+      const r = await api.getRailwayTemplateUrl(clientId);
+      // Open in a new tab so the operator can keep the back office open.
+      window.open(r.url, '_blank', 'noopener');
+    } catch (e) {
+      // Surface the hint when the template URL isn't configured.
+      alert(e.message);
+    } finally { setBusy(false); }
+  };
+
+  const runNetlify = async () => {
+    setBusy(true); setErr(''); setNetlifyMsg(null);
+    try {
+      const r = await api.provisionNetlify(clientId);
+      setChecklist(r.checklist);
+      setNetlifyMsg({
+        ok: true,
+        text: `✓ Netlify provisioned — ${r.details?.url} (SSL: ${r.details?.ssl_state || 'pending'})`,
+        adminUrl: r.details?.admin_url,
+      });
+      onReload?.();
+    } catch (e) {
+      setNetlifyMsg({ ok: false, text: e.message });
+    } finally { setBusy(false); }
+  };
+
   const copySecret = async () => {
     try { await navigator.clipboard.writeText(syncSecret); setCopied(true); setTimeout(() => setCopied(false), 1500); }
     catch {}
@@ -435,22 +481,73 @@ function OnboardingSection({ clientId, metadata, status, onReload }) {
         </div>
       )}
 
-      {/* Seed SQL downloads */}
+      {/* Railway template deep-link */}
+      <div style={{ ...card, padding: 22 }}>
+        <h3 style={{ margin: 0, marginBottom: 14, fontSize: 13, fontWeight: 800, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+          Step 1 · Railway backend
+        </h3>
+        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 14 }}>
+          Opens the SiamEPOS Railway template with this client's <code style={{ background: C.surfaceAlt, padding: '1px 6px', borderRadius: 4, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>SYNC_SECRET</code>, <code style={{ background: C.surfaceAlt, padding: '1px 6px', borderRadius: 4, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>BREVO_API_KEY</code>, <code style={{ background: C.surfaceAlt, padding: '1px 6px', borderRadius: 4, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>ANTHROPIC_API_KEY</code> and restaurant identity already pre-filled. Click <strong>Deploy</strong> in Railway, wait ~2 min for the build, then paste the new service URL + DATABASE_URL into <strong>🔐 Setup → Tenant infrastructure</strong>.
+        </div>
+        <button onClick={openRailwayTemplate} disabled={busy} style={btn.gold}>
+          🚂 Open in Railway →
+        </button>
+      </div>
+
+      {/* Netlify auto-provision */}
+      <div style={{ ...card, padding: 22 }}>
+        <h3 style={{ margin: 0, marginBottom: 14, fontSize: 13, fontWeight: 800, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+          Netlify provisioning
+        </h3>
+        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 14 }}>
+          Creates the Netlify site, links it to the GitHub repo, sets <code style={{ background: C.surfaceAlt, padding: '1px 6px', borderRadius: 4, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>VITE_API_URL</code> to the tenant's Railway service, and attaches the <strong>{(metadata.subdomain_slug || 'slug')}.siamepos.co.uk</strong> subdomain. Tenant Railway URL must be set in <strong>🔐 Setup → Tenant infrastructure</strong>.
+        </div>
+        <button onClick={runNetlify} disabled={busy} style={{ ...btn.gold, opacity: busy ? 0.6 : 1 }}>
+          {busy ? 'Provisioning…' : '🚀 Provision Netlify now'}
+        </button>
+        {netlifyMsg && (
+          <div style={{
+            marginTop: 14, padding: '10px 14px', borderRadius: 8, fontSize: 13,
+            background: netlifyMsg.ok ? C.successBg : C.dangerBg,
+            color:      netlifyMsg.ok ? '#166534'  : '#991b1b',
+            border:     `1px solid ${netlifyMsg.ok ? C.success : C.danger}33`,
+          }}>
+            {netlifyMsg.text}
+            {netlifyMsg.adminUrl && <> · <a href={netlifyMsg.adminUrl} target="_blank" rel="noopener" style={{ color: 'inherit' }}>Netlify admin →</a></>}
+          </div>
+        )}
+      </div>
+
+      {/* Seed SQL — automated run + manual download fallback */}
       <div style={{ ...card, padding: 22 }}>
         <h3 style={{ margin: 0, marginBottom: 14, fontSize: 13, fontWeight: 800, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
           Database seeds
         </h3>
         <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 14 }}>
-          Run these against the new tenant's Railway Postgres once it's up. They're populated with the values from this client's wizard.
+          Runs the staff + settings SQL against the tenant's Postgres. Connection string must be set on the <strong>🔐 Setup</strong> tab under <em>"Tenant database URL"</em>.
         </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button onClick={() => downloadSeed('staff')} style={btn.ghost}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button onClick={runSeed} disabled={busy} style={{ ...btn.gold, opacity: busy ? 0.6 : 1 }}>
+            {busy ? 'Running…' : '🚀 Run seed SQL now'}
+          </button>
+          <span style={{ color: C.textFaint, fontSize: 12 }}>or download to run by hand:</span>
+          <button onClick={() => downloadSeed('staff')} style={btn.ghost} disabled={busy}>
             ⬇ staff_seed.sql
           </button>
-          <button onClick={() => downloadSeed('settings')} style={btn.ghost}>
+          <button onClick={() => downloadSeed('settings')} style={btn.ghost} disabled={busy}>
             ⬇ settings_seed.sql
           </button>
         </div>
+        {seedingMsg && (
+          <div style={{
+            marginTop: 14, padding: '10px 14px', borderRadius: 8, fontSize: 13,
+            background: seedingMsg.ok ? C.successBg : C.dangerBg,
+            color:      seedingMsg.ok ? '#166534'  : '#991b1b',
+            border:     `1px solid ${seedingMsg.ok ? C.success : C.danger}33`,
+          }}>
+            {seedingMsg.text}
+          </div>
+        )}
       </div>
 
       {/* Checklist */}
@@ -513,6 +610,13 @@ const SETUP_FIELDS = [
     { key: 'domain_registrar', label: 'Domain registrar',  placeholder: 'Namecheap, GoDaddy, etc.' },
     { key: 'hosting',          label: 'Hosting',           placeholder: 'Netlify, Vercel, self-hosted, etc.' },
     { key: 'website_admin_login', label: 'Website admin login (if managed by us)', secret: true, type: 'textarea' },
+  ]},
+  // SEPOS-029 Phase 2 — connection strings the back-office uses to
+  // automate seed SQL + future provisioning.
+  { group: 'Tenant infrastructure', fields: [
+    { key: 'tenant_railway_url',  label: 'Railway service URL',    placeholder: 'https://restaurant-epos-bangkok.up.railway.app' },
+    { key: 'tenant_database_url', label: 'Tenant database URL', secret: true, placeholder: 'postgresql://postgres:…@…railway.app:5432/railway' },
+    { key: 'tenant_netlify_url',  label: 'Netlify site URL',       placeholder: 'https://bangkok.siamepos.co.uk' },
   ]},
   { group: 'Online takeaway / payments', fields: [
     { key: 'stripe_account_id', label: 'Stripe Connect account ID', placeholder: 'acct_…' },

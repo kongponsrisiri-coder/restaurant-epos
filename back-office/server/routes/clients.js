@@ -9,6 +9,11 @@ const path    = require('path');
 const { pool } = require('../db/pool');
 const { authRequired, adminOnly } = require('../middleware/auth');
 const { sendWelcomeEmail }        = require('../services/welcomeEmail');
+const {
+  seedTenantDatabase,
+  provisionNetlifyTenant,
+  buildRailwayTemplateUrl,
+} = require('../services/provisioning');
 
 const router = express.Router();
 router.use(authRequired);
@@ -323,6 +328,121 @@ router.put('/:id/checklist', async (req, res) => {
     });
   } catch (err) {
     console.error('[ops-clients] checklist update error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// SEPOS-029 Phase 2 — automated DB seeding.
+// POST /:id/provision/seed-db connects to the tenant's Postgres via
+// the URL stored in clients.metadata.tenant_database_url and runs
+// the same staff + settings SQL the /seed.sql download produces.
+// On success it ticks staff_seeded + settings_seeded automatically.
+router.post('/:id/provision/seed-db', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const cur = await pool.query('SELECT * FROM clients WHERE id = $1', [id]);
+    if (cur.rows.length === 0) return res.status(404).json({ error: 'Client not found' });
+    const client = cur.rows[0];
+    const m = client.metadata || {};
+    const databaseUrl = m.tenant_database_url || req.body?.database_url || null;
+
+    const result = await seedTenantDatabase(databaseUrl, client);
+    if (!result.ok) {
+      return res.status(400).json({ error: result.error, hint: result.hint });
+    }
+
+    // Auto-tick the two seed checklist items.
+    const state = { ...defaultOnboardingState(), ...(m.onboarding || {}) };
+    state.staff_seeded    = true;
+    state.settings_seeded = true;
+    const allDone = ONBOARDING_STEPS.every(s => state[s.key]);
+    let nextStatus = client.status;
+    if (allDone && nextStatus === 'setup') {
+      nextStatus = 'live';
+      state.go_live_date = new Date().toISOString().slice(0, 10);
+    }
+    m.onboarding = state;
+    await pool.query(
+      `UPDATE clients SET metadata = $1, status = $2 WHERE id = $3`,
+      [JSON.stringify(m), nextStatus, id]
+    );
+
+    res.json({
+      success:  true,
+      details:  result.details,
+      checklist: buildChecklist(state),
+    });
+  } catch (err) {
+    console.error('[ops-clients] provision seed-db error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// SEPOS-029 Phase 2 — Railway template deep-link.
+// Operator clicks this on the Onboarding tab and Railway opens with
+// all template variables pre-filled (SYNC_SECRET / BREVO / Anthropic /
+// restaurant identity). They click Deploy once on Railway, come back,
+// paste the new service URL + DATABASE_URL into Setup → Tenant
+// infrastructure, then run the Netlify + Seed buttons.
+router.get('/:id/provision/railway-template', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const cur = await pool.query('SELECT * FROM clients WHERE id = $1', [id]);
+    if (cur.rows.length === 0) return res.status(404).json({ error: 'Client not found' });
+    const url = buildRailwayTemplateUrl(cur.rows[0]);
+    if (!url) {
+      return res.status(503).json({
+        error: 'RAILWAY_TEMPLATE_URL not configured on the back-office service',
+        hint:  'Create the template once at railway.com → New project → Template, then set RAILWAY_TEMPLATE_URL on the back-office Railway service.',
+      });
+    }
+    res.json({ url });
+  } catch (err) {
+    console.error('[ops-clients] railway-template error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// SEPOS-029 Phase 2 — Netlify automation.
+// POST /:id/provision/netlify creates the site, sets VITE_API_URL,
+// attaches the {slug}.siamepos.co.uk subdomain, and ticks
+// netlify_provisioned + dns_pointed on success. SSL is requested
+// best-effort and stamped on the response.
+router.post('/:id/provision/netlify', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const cur = await pool.query('SELECT * FROM clients WHERE id = $1', [id]);
+    if (cur.rows.length === 0) return res.status(404).json({ error: 'Client not found' });
+    const client = cur.rows[0];
+
+    const result = await provisionNetlifyTenant(client);
+    if (!result.ok) {
+      return res.status(400).json({ error: result.error, hint: result.hint });
+    }
+
+    // Persist the new Netlify URL + tick the two relevant checklist
+    // items. railway_provisioned + the rest are still manual.
+    const m = client.metadata || {};
+    m.tenant_netlify_url = m.tenant_netlify_url || result.details.url;
+    m.netlify_site_id    = result.details.site_id;
+    const state = { ...defaultOnboardingState(), ...(m.onboarding || {}) };
+    state.netlify_provisioned = true;
+    state.dns_pointed         = true;   // custom_domain on site-create handles the CNAME side
+    m.onboarding = state;
+    const allDone = ONBOARDING_STEPS.every(s => state[s.key]);
+    const nextStatus = allDone ? 'live' : client.status;
+    if (allDone && client.status === 'setup') state.go_live_date = new Date().toISOString().slice(0, 10);
+
+    await pool.query('UPDATE clients SET metadata = $1, status = $2 WHERE id = $3',
+      [JSON.stringify(m), nextStatus, id]);
+
+    res.json({
+      success: true,
+      details: result.details,
+      checklist: buildChecklist(state),
+    });
+  } catch (err) {
+    console.error('[ops-clients] provision netlify error', err);
     res.status(500).json({ error: err.message });
   }
 });

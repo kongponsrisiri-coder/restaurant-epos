@@ -69,6 +69,22 @@ export const api = {
   // Direct download URL — uses the auth token via query? No: this is an
   // attachment endpoint so we pass the header via fetch + create a blob
   // URL on the client. Helper does the dance.
+  // SEPOS-029 Phase 2 — automated provisioning.
+  provisionSeedDb: (id) =>
+    fetch(`${API}/api/clients/${id}/provision/seed-db`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+    }).then(handle),
+
+  provisionNetlify: (id) =>
+    fetch(`${API}/api/clients/${id}/provision/netlify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+    }).then(handle),
+
+  getRailwayTemplateUrl: (id) =>
+    fetch(`${API}/api/clients/${id}/provision/railway-template`, { headers: tokenHeader() }).then(handle),
+
   downloadSeedSql: async (id, kind) => {
     const r = await fetch(`${API}/api/clients/${id}/seed.sql?kind=${kind}`, { headers: tokenHeader() });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);

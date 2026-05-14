@@ -162,4 +162,28 @@ export const api = {
       headers: { 'Content-Type': 'application/json', ...tokenHeader() },
       body: JSON.stringify({ url }),
     }).then(handle),
+
+  // ── Finance (Starling) ───────────────────────────────────────
+  getFinanceSettings: () =>
+    fetch(`${API}/api/finance/settings`, { headers: tokenHeader() }).then(handle),
+
+  saveFinanceSettings: (body) =>
+    fetch(`${API}/api/finance/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify(body),
+    }).then(handle),
+
+  getFinanceBalance: () =>
+    fetch(`${API}/api/finance/balance`, { headers: tokenHeader() }).then(handle),
+
+  getFinanceTransactions: (days = 30) =>
+    fetch(`${API}/api/finance/transactions?days=${days}`, { headers: tokenHeader() }).then(handle),
+
+  generateFinanceSummary: (transactions) =>
+    fetch(`${API}/api/finance/summary`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify({ transactions }),
+    }).then(handle),
 };

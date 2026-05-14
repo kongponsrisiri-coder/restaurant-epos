@@ -12,8 +12,9 @@ const healthRoutes  = require('./routes/health');
 const notesRoutes   = require('./routes/notes');
 const teamRoutes    = require('./routes/team');
 const ticketsRoutes = require('./routes/tickets');
-const websiteRoutes = require('./routes/website');
-const healthCron    = require('./services/healthCheck');
+const websiteRoutes  = require('./routes/website');
+const financeRoutes  = require('./routes/finance');
+const healthCron     = require('./services/healthCheck');
 
 const PORT = parseInt(process.env.PORT || '3002', 10);
 const app = express();
@@ -22,6 +23,9 @@ const app = express();
 // missing JWT_SECRET / DATABASE_URL is obvious in the Railway log
 // instead of being inferred from downstream errors. We log presence,
 // not the values, so secrets never leak.
+// Note: STARLING_TOKEN and ANTHROPIC_API_KEY for the Finance section
+// (SEPOS-042) are stored in the finance_settings DB table, not env vars,
+// so they are not listed here.
 const expectedEnv = [
   'DATABASE_URL', 'JWT_SECRET', 'PORT',
   'OPS_BOOTSTRAP_EMAIL', 'OPS_BOOTSTRAP_PASSWORD', 'OPS_BOOTSTRAP_NAME',
@@ -62,6 +66,7 @@ app.use('/api/notes',   notesRoutes);
 app.use('/api/team',    teamRoutes);
 app.use('/api/tickets', ticketsRoutes);
 app.use('/api/website-configs', websiteRoutes);
+app.use('/api/finance', financeRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path }));
 

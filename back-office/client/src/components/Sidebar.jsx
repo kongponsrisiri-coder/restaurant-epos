@@ -61,6 +61,9 @@ export default function Sidebar({ user, clientCount }) {
         {user?.role === 'admin' && (
           <Item to="/team" icon="👥" label="Team" active={isActive('/team')} />
         )}
+        {user?.role === 'admin' && (
+          <Item to="/finance" icon="💰" label="Finance" active={isActive('/finance')} />
+        )}
       </nav>
 
       {/* User card at bottom */}

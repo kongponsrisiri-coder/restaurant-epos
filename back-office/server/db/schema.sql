@@ -113,3 +113,15 @@ ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS sections JSONB DEFAULT '{}'
 --  - logo_url: optional base64 (or external URL) for the nav wordmark.
 ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS template TEXT DEFAULT 'classic';
 ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS logo_url TEXT;
+
+-- SEPOS-042 — Finance / Starling Bank integration. Stores API tokens for
+-- the Starling Personal Access Token and Anthropic API key server-side so
+-- they are never exposed to the browser. One singleton row (id=1).
+CREATE TABLE IF NOT EXISTS finance_settings (
+  id               SERIAL PRIMARY KEY,
+  starling_token   TEXT,
+  anthropic_key    TEXT,
+  updated_at       TIMESTAMPTZ DEFAULT now()
+);
+-- Ensure exactly one row exists.
+INSERT INTO finance_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;

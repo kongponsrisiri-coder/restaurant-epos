@@ -8,6 +8,7 @@ import TeamPage from './pages/TeamPage.jsx';
 import TicketsPage from './pages/TicketsPage.jsx';
 import WebsitePage from './pages/WebsitePage.jsx';
 import NewClientWizard from './pages/NewClientWizard.jsx';
+import FinancePage from './pages/FinancePage.jsx';
 import { C } from './theme.js';
 import { api } from './api.js';
 
@@ -63,6 +64,7 @@ export default function App() {
       <Route path="/tickets" element={<RequireAuth><TicketsPage /></RequireAuth>} />
       <Route path="/tickets/:id" element={<RequireAuth><TicketsPage /></RequireAuth>} />
       <Route path="/website" element={<RequireAuth><WebsitePage /></RequireAuth>} />
+      <Route path="/finance" element={<RequireAuth><FinancePage /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

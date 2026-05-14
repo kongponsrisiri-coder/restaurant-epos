@@ -7,6 +7,7 @@ import ClientDetailPage from './pages/ClientDetailPage.jsx';
 import TeamPage from './pages/TeamPage.jsx';
 import TicketsPage from './pages/TicketsPage.jsx';
 import WebsitePage from './pages/WebsitePage.jsx';
+import NewClientWizard from './pages/NewClientWizard.jsx';
 import { C } from './theme.js';
 import { api } from './api.js';
 
@@ -56,6 +57,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+      <Route path="/clients/new" element={<RequireAuth><NewClientWizard /></RequireAuth>} />
       <Route path="/clients/:id" element={<RequireAuth><ClientDetailPage /></RequireAuth>} />
       <Route path="/team" element={<RequireAuth><TeamPage /></RequireAuth>} />
       <Route path="/tickets" element={<RequireAuth><TicketsPage /></RequireAuth>} />

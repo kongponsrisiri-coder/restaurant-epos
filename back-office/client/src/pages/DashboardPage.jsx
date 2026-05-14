@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { C, card, btn, input, label, fmtRelTime, fmtMoney, PLAN_LABEL, STATUS_STYLE } from '../theme.js';
 import StatusPill from '../components/StatusPill.jsx';
@@ -47,9 +47,15 @@ export default function DashboardPage() {
             {clients.length} {clients.length === 1 ? 'restaurant' : 'restaurants'} · {onlineCount} online now
           </p>
         </div>
-        <button onClick={() => setShowAdd(true)} style={{ ...btn.gold, marginLeft: 'auto' }}>
-          + Add client
-        </button>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
+          <button onClick={() => setShowAdd(true)} style={btn.ghost} title="Add a placeholder row only">
+            + Quick add
+          </button>
+          {/* SEPOS-029 — primary CTA → full onboarding wizard. */}
+          <Link to="/clients/new" style={{ ...btn.gold, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+            🚀 Onboard new client
+          </Link>
+        </div>
       </div>
 
       {/* Stat tiles */}

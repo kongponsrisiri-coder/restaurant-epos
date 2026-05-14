@@ -106,11 +106,12 @@ export default function ClientDetailPage() {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, marginBottom: 20 }}>
         {[
-          ['overview', 'Overview'],
-          ['setup',    '🔐 Setup'],
-          ['health',   `Health (${health.length})`],
-          ['notes',    `Notes (${notes.length})`],
-          ['website',  '🌐 Website'],
+          ['overview',   'Overview'],
+          ['onboarding', '📋 Onboarding'],
+          ['setup',      '🔐 Setup'],
+          ['health',     `Health (${health.length})`],
+          ['notes',      `Notes (${notes.length})`],
+          ['website',    '🌐 Website'],
         ].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{
             padding: '10px 18px', background: 'transparent',
@@ -191,6 +192,15 @@ export default function ClientDetailPage() {
             </div>
           )}
         </SectionCard>
+      )}
+
+      {tab === 'onboarding' && (
+        <OnboardingSection
+          clientId={client.id}
+          metadata={client.metadata || {}}
+          status={client.status}
+          onReload={load}
+        />
       )}
 
       {tab === 'setup' && (
@@ -311,6 +321,171 @@ function NoteItem({ note }) {
           <span style={{ fontSize: 11, color: C.textFaint, marginLeft: 'auto' }}>{fmtRelTime(note.created_at)}</span>
         </div>
         <div style={{ color: C.text, fontSize: 14, lineHeight: 1.5 }}>{note.note}</div>
+      </div>
+    </div>
+  );
+}
+
+// SEPOS-029 — Onboarding tab: the tickable checklist of manual steps
+// left after the wizard ran. SYNC_SECRET is always retrievable here
+// (in case the operator misses it on the wizard's success card).
+// Seed SQL downloads + status auto-flip live here too.
+function OnboardingSection({ clientId, metadata, status, onReload }) {
+  const [checklist, setChecklist] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [secretShown, setSecretShown] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const syncSecret = metadata?.sync_secret || '';
+  const goLiveDate = metadata?.onboarding?.go_live_date;
+
+  const load = async () => {
+    try {
+      const r = await api.getOnboardingChecklist(clientId);
+      setChecklist(r.checklist);
+    } catch (e) { setErr(e.message); }
+  };
+  useEffect(() => { load(); }, [clientId]);
+
+  const toggle = async (key, done) => {
+    setBusy(true); setErr('');
+    try {
+      const r = await api.updateChecklistItem(clientId, key, done);
+      setChecklist(r.checklist);
+      // Refresh the parent so the status pill in the hero updates if go_live triggered.
+      onReload?.();
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const downloadSeed = async (kind) => {
+    try { await api.downloadSeedSql(clientId, kind); }
+    catch (e) { alert('Download failed: ' + e.message); }
+  };
+
+  const copySecret = async () => {
+    try { await navigator.clipboard.writeText(syncSecret); setCopied(true); setTimeout(() => setCopied(false), 1500); }
+    catch {}
+  };
+
+  const doneCount  = (checklist || []).filter(c => c.done).length;
+  const totalCount = (checklist || []).length;
+  const pct = totalCount === 0 ? 0 : Math.round((doneCount / totalCount) * 100);
+
+  return (
+    <div style={{ display: 'grid', gap: 18 }}>
+      {/* Progress + go-live banner */}
+      <div style={{ ...card, padding: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+              Onboarding progress
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: C.text, marginTop: 4 }}>
+              {doneCount} / {totalCount} steps done
+            </div>
+          </div>
+          <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+            {status === 'live' ? (
+              <>
+                <div style={{ background: C.successBg, color: '#166534', padding: '6px 14px', borderRadius: 999, fontWeight: 800, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                  ✓ Live
+                </div>
+                {goLiveDate && <div style={{ fontSize: 11, color: C.textFaint, marginTop: 4 }}>Since {goLiveDate}</div>}
+              </>
+            ) : (
+              <div style={{ background: '#fef3c7', color: '#92400e', padding: '6px 14px', borderRadius: 999, fontWeight: 800, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                Setup
+              </div>
+            )}
+          </div>
+        </div>
+        <div style={{ background: C.border, borderRadius: 999, height: 8, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? C.success : C.gold, transition: 'width 0.3s' }} />
+        </div>
+      </div>
+
+      {err && <div style={{ background: C.dangerBg, color: '#991b1b', padding: '10px 14px', borderRadius: 8, fontSize: 13 }}>{err}</div>}
+
+      {/* SYNC_SECRET surface */}
+      {syncSecret && (
+        <div style={{ ...card, padding: 22, background: '#0D1B3E', color: 'white', border: 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#C9A84C', textTransform: 'uppercase', letterSpacing: 0.6, flex: 1 }}>
+              🔐 SYNC_SECRET — desktop sync key
+            </div>
+            <button onClick={() => setSecretShown(v => !v)} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', color: 'white', padding: '6px 12px', borderRadius: 6, fontWeight: 700, fontSize: 11, cursor: 'pointer' }}>
+              {secretShown ? 'Hide' : 'Show'}
+            </button>
+            <button onClick={copySecret} style={{ background: '#C9A84C', color: '#0D1B3E', border: 'none', padding: '6px 12px', borderRadius: 6, fontWeight: 800, fontSize: 11, cursor: 'pointer' }}>
+              {copied ? '✓ Copied' : 'Copy'}
+            </button>
+          </div>
+          <div style={{
+            fontFamily: 'ui-monospace, SFMono-Regular, monospace', fontSize: 13,
+            background: 'rgba(255,255,255,0.08)', padding: 12, borderRadius: 6,
+            wordBreak: 'break-all', lineHeight: 1.5,
+            letterSpacing: secretShown ? 0 : 0,
+          }}>
+            {secretShown ? syncSecret : '•'.repeat(48)}
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 10 }}>
+            Used by the SiamEPOS Pro desktop app. Paste into the owner's <code>config.json</code> on first launch — must match the SYNC_SECRET env var on their Railway service.
+          </div>
+        </div>
+      )}
+
+      {/* Seed SQL downloads */}
+      <div style={{ ...card, padding: 22 }}>
+        <h3 style={{ margin: 0, marginBottom: 14, fontSize: 13, fontWeight: 800, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+          Database seeds
+        </h3>
+        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 14 }}>
+          Run these against the new tenant's Railway Postgres once it's up. They're populated with the values from this client's wizard.
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={() => downloadSeed('staff')} style={btn.ghost}>
+            ⬇ staff_seed.sql
+          </button>
+          <button onClick={() => downloadSeed('settings')} style={btn.ghost}>
+            ⬇ settings_seed.sql
+          </button>
+        </div>
+      </div>
+
+      {/* Checklist */}
+      <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 22px', borderBottom: `1px solid ${C.border}` }}>
+          <h3 style={{ margin: 0, fontSize: 13, fontWeight: 800, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+            Manual steps to go live
+          </h3>
+        </div>
+        {checklist === null ? (
+          <div style={{ padding: 40, textAlign: 'center', color: C.textMuted }}>Loading…</div>
+        ) : (
+          <div>
+            {checklist.map((c, i) => (
+              <label key={c.key} style={{
+                display: 'flex', alignItems: 'center', gap: 14,
+                padding: '14px 22px', cursor: busy ? 'wait' : 'pointer',
+                borderTop: i === 0 ? 'none' : `1px solid ${C.borderSoft}`,
+                background: c.done ? C.successBg : 'transparent',
+                opacity: busy ? 0.6 : 1,
+              }}>
+                <input
+                  type="checkbox"
+                  checked={c.done}
+                  onChange={(e) => toggle(c.key, e.target.checked)}
+                  disabled={busy}
+                  style={{ width: 18, height: 18, cursor: busy ? 'wait' : 'pointer' }}
+                />
+                <div style={{ flex: 1, fontSize: 14, fontWeight: c.done ? 700 : 500, color: c.done ? '#166534' : C.text, textDecoration: c.done ? 'line-through' : 'none' }}>
+                  {c.label}
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

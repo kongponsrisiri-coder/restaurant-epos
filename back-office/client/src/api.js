@@ -48,6 +48,39 @@ export const api = {
       body: JSON.stringify(body),
     }).then(handle),
 
+  // SEPOS-029 — onboarding wizard. Returns { client, sync_secret, checklist }.
+  onboardClient: (body) =>
+    fetch(`${API}/api/clients/onboard`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify(body),
+    }).then(handle),
+
+  getOnboardingChecklist: (id) =>
+    fetch(`${API}/api/clients/${id}/onboarding-checklist`, { headers: tokenHeader() }).then(handle),
+
+  updateChecklistItem: (id, key, done) =>
+    fetch(`${API}/api/clients/${id}/checklist`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify({ key, done }),
+    }).then(handle),
+
+  // Direct download URL — uses the auth token via query? No: this is an
+  // attachment endpoint so we pass the header via fetch + create a blob
+  // URL on the client. Helper does the dance.
+  downloadSeedSql: async (id, kind) => {
+    const r = await fetch(`${API}/api/clients/${id}/seed.sql?kind=${kind}`, { headers: tokenHeader() });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const blob = await r.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `${kind}_seed.sql`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
   updateClient: (id, body) =>
     fetch(`${API}/api/clients/${id}`, {
       method: 'PUT',

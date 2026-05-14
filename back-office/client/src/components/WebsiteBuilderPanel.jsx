@@ -1,14 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { C, card, btn, input, label } from '../theme.js';
-import { generateWebsiteHtml, compressImage } from '../lib/websiteTemplate.js';
+import { generateWebsiteHtml, compressImage, TEMPLATES } from '../lib/websiteTemplate.js';
 import { api } from '../api.js';
 
-// Three preset palettes — picking one updates both colour inputs.
+// SEPOS-WEB-003 — eight preset palettes. Picking one updates both colour
+// inputs. Custom hex still possible via the inputs below.
 const PRESETS = [
-  { key: 'burgundy', label: 'Burgundy',  primary: '#7B1C2D', accent: '#C49030' },
-  { key: 'sage',     label: 'Sage',      primary: '#3F5B3C', accent: '#D9B36C' },
-  { key: 'midnight', label: 'Midnight',  primary: '#1B2A4E', accent: '#E0BE5A' },
+  { key: 'burgundy', label: 'Burgundy', primary: '#7B1C2D', accent: '#C49030' },
+  { key: 'sage',     label: 'Sage',     primary: '#3F5B3C', accent: '#D9B36C' },
+  { key: 'midnight', label: 'Midnight', primary: '#1B2A4E', accent: '#E0BE5A' },
+  { key: 'charcoal', label: 'Charcoal', primary: '#1F2937', accent: '#D4A574' },
+  { key: 'ivory',    label: 'Ivory',    primary: '#8B4513', accent: '#D4B896' },
+  { key: 'forest',   label: 'Forest',   primary: '#14532D', accent: '#D4A574' },
+  { key: 'plum',     label: 'Plum',     primary: '#4A0E4E', accent: '#D4A574' },
+  { key: 'sunset',   label: 'Sunset',   primary: '#B45309', accent: '#FCD34D' },
 ];
+
+// Default widget base URL — restaurant EPOS production. Per-client
+// builds should set scope.defaults.widget_base_url to the client's
+// railway_url so their own widget binds to their data.
+const DEFAULT_WIDGET_BASE = 'https://restaurant-epos-production.up.railway.app';
 
 const PHOTO_SLOTS = [
   { key: 'photo_hero',      label: 'Hero photo',       hint: 'Top-of-page banner. Wide landscape works best.' },
@@ -18,22 +29,24 @@ const PHOTO_SLOTS = [
   { key: 'photo_gallery_3', label: 'Gallery 3',        hint: '' },
 ];
 
-// SEPOS-WEB-002 — default section toggles. Story + Gallery default to ON
-// (preserves the original one-pager experience). Hours / Press / Catering
-// are opt-in.
+// SEPOS-WEB-002/003 — default section toggles + widget config.
 const EMPTY_SECTIONS = {
   story_enabled:    true,
   gallery_enabled:  true,
   hours_enabled:    false, hours_text: '',
   press_enabled:    false, press_items: [],
   catering_enabled: false, catering_text: '', catering_photo: '',
+  booking_widget_enabled:  false,
+  takeaway_widget_enabled: false,
+  widget_base_url: DEFAULT_WIDGET_BASE,
 };
 
 const EMPTY = {
   restaurant_name: '', tagline: '', address: '', phone: '', email: '',
   about_text: '', primary_colour: '#7B1C2D', accent_colour: '#C49030',
-  photo_hero: '', photo_story: '',
+  photo_hero: '', photo_story: '', logo_url: '',
   photo_gallery_1: '', photo_gallery_2: '', photo_gallery_3: '',
+  template: 'classic',
   sections: { ...EMPTY_SECTIONS },
 };
 
@@ -187,6 +200,25 @@ export default function WebsiteBuilderPanel({ scope }) {
       {/* Two-pane layout: form left, live preview right */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 1fr)', gap: 18 }}>
         <div style={{ display: 'grid', gap: 18 }}>
+          <Section title="Template">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+              {Object.entries(TEMPLATES).map(([key, t]) => {
+                const active = (cfg.template || 'classic') === key;
+                return (
+                  <button key={key} onClick={() => set('template', key)} style={{
+                    padding: 12, borderRadius: 10, textAlign: 'left',
+                    border: `2px solid ${active ? C.navy : C.border}`,
+                    background: active ? `${C.navy}08` : 'white',
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: C.text, marginBottom: 4 }}>{t.label}</div>
+                    <div style={{ fontSize: 11, color: C.textMuted, lineHeight: 1.4 }}>{t.description}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </Section>
+
           <Section title="Identity">
             <Field label="Restaurant name">
               <input value={cfg.restaurant_name} onChange={(e) => set('restaurant_name', e.target.value)} style={input} />
@@ -242,6 +274,42 @@ export default function WebsiteBuilderPanel({ scope }) {
               items={cfg.sections.press_items || []}
               onChange={(items) => setSection('press_items', items)}
             />
+          </Section>
+
+          <Section
+            title="Online ordering &amp; booking widgets"
+          >
+            <div style={{ display: 'grid', gap: 14 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: C.text, fontWeight: 600, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={!!cfg.sections.booking_widget_enabled}
+                  onChange={(e) => setSection('booking_widget_enabled', e.target.checked)}
+                  style={{ width: 16, height: 16 }}
+                />
+                Embed the SiamEPOS booking widget
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: C.text, fontWeight: 600, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={!!cfg.sections.takeaway_widget_enabled}
+                  onChange={(e) => setSection('takeaway_widget_enabled', e.target.checked)}
+                  style={{ width: 16, height: 16 }}
+                />
+                Embed the online takeaway widget
+              </label>
+              <Field label="Widget backend URL (the EPOS server that powers these widgets)">
+                <input
+                  value={cfg.sections.widget_base_url || ''}
+                  onChange={(e) => setSection('widget_base_url', e.target.value)}
+                  placeholder={DEFAULT_WIDGET_BASE}
+                  style={{ ...input, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
+                />
+              </Field>
+              <div style={{ fontSize: 11, color: C.textFaint }}>
+                For SiamEPOS's own demo, leave as the production URL. For a per-client site, paste that client's Railway URL so the widget reads their bookings + menu.
+              </div>
+            </div>
           </Section>
 
           <Section
@@ -302,6 +370,13 @@ export default function WebsiteBuilderPanel({ scope }) {
             }}
           >
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              {/* SEPOS-WEB-003 — Logo slot. Renders in the top nav if uploaded. */}
+              <PhotoSlot
+                slot={{ key: 'logo_url', label: 'Logo (optional)', hint: 'Shown in the top nav instead of plain text. Square or short-rectangle works best.' }}
+                value={cfg.logo_url || ''}
+                onChange={(v) => set('logo_url', v)}
+                onFile={(f) => handleFile('logo_url', f)}
+              />
               {PHOTO_SLOTS.map(slot => (
                 <PhotoSlot key={slot.key} slot={slot} value={cfg[slot.key]}
                   onChange={(v) => set(slot.key, v)} onFile={(f) => handleFile(slot.key, f)} />

@@ -9,6 +9,66 @@ function escapeHtml(s) {
   }[m]));
 }
 
+// SEPOS-WEB-003 — four built-in design templates. Each tweaks
+// typography + a small amount of CSS; layout and section behaviour
+// are shared so they remain familiar. Google Fonts are loaded via
+// <link> in <head>, with system fallbacks so the file still works
+// offline (just degrades to native serif/sans).
+export const TEMPLATES = {
+  classic: {
+    label: 'Classic Thai',
+    description: 'Warm Georgia serif, image-led — the original look.',
+    headFont:  `Georgia, 'Times New Roman', serif`,
+    bodyFont:  `-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif`,
+    googleFonts: '',
+    altBg:     '#faf7f2',
+    extraCss:  '',
+  },
+  modern: {
+    label: 'Modern Minimal',
+    description: 'Inter sans throughout, lots of whitespace, no fuss.',
+    headFont:  `Inter, -apple-system, BlinkMacSystemFont, sans-serif`,
+    bodyFont:  `Inter, -apple-system, BlinkMacSystemFont, sans-serif`,
+    googleFonts: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap',
+    altBg:     '#ffffff',
+    extraCss: `
+      .section { padding: 100px 0; border-bottom: 1px solid #f0f0f0; }
+      .section-alt { background: #ffffff; }
+      .section h2 { text-align: left; font-weight: 800; letter-spacing: -0.5px; }
+      .section h2::after { margin: 12px 0 0; width: 40px; }
+      .nav { background: white; border-bottom: 1px solid #eee; }
+      .hero h1 { font-weight: 800; letter-spacing: -1.5px; }
+    `,
+  },
+  editorial: {
+    label: 'Bold Editorial',
+    description: 'Big Playfair Display headlines, magazine-style.',
+    headFont:  `'Playfair Display', Georgia, serif`,
+    bodyFont:  `'Source Sans 3', -apple-system, sans-serif`,
+    googleFonts: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;800&family=Source+Sans+3:wght@400;600&display=swap',
+    altBg:     '#f9f5ee',
+    extraCss: `
+      .hero h1 { font-size: clamp(48px, 8vw, 88px); font-weight: 800; letter-spacing: -1px; line-height: 1; }
+      .section h2 { font-size: 44px; font-weight: 800; }
+      .section h2::after { width: 80px; height: 4px; }
+    `,
+  },
+  boutique: {
+    label: 'Boutique',
+    description: 'Refined Cormorant heads, warm Lora body — fine-dining.',
+    headFont:  `'Cormorant Garamond', Georgia, serif`,
+    bodyFont:  `'Lora', Georgia, serif`,
+    googleFonts: 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;700&family=Lora:wght@400;600&display=swap',
+    altBg:     '#f3ece1',
+    extraCss: `
+      .hero h1 { font-weight: 500; font-style: italic; }
+      .section h2 { font-weight: 500; font-style: italic; }
+      .nav-brand { font-style: italic; }
+      .about-text p { font-size: 17px; }
+    `,
+  },
+};
+
 // Darken / lighten a hex colour. Keeps the template self-contained.
 function shade(hex, pct) {
   const n = (parseInt((hex || '#000000').replace('#', ''), 16) || 0);
@@ -29,6 +89,8 @@ export function generateWebsiteHtml(cfg) {
   const address = escapeHtml(c.address || '');
   const phone = escapeHtml(c.phone || '');
   const email = escapeHtml(c.email || '');
+  const tpl = TEMPLATES[c.template] || TEMPLATES.classic;
+  const logoUrl = c.logo_url || '';
 
   const heroBg = c.photo_hero
     ? `background-image: linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)), url('${c.photo_hero}');`
@@ -45,6 +107,8 @@ export function generateWebsiteHtml(cfg) {
   const showPress    = !!s.press_enabled    && Array.isArray(s.press_items) && s.press_items.length > 0;
   const showCatering = !!s.catering_enabled && !!(s.catering_text || '').trim();
   const showVisit    = !!(address || phone || email);
+  const showBooking  = !!s.booking_widget_enabled  && !!s.widget_base_url;
+  const showOrder    = !!s.takeaway_widget_enabled && !!s.widget_base_url;
 
   const galleryPhotos = [c.photo_gallery_1, c.photo_gallery_2, c.photo_gallery_3].filter(Boolean);
   const galleryHtml = !showGallery ? '' : `
@@ -117,6 +181,27 @@ export function generateWebsiteHtml(cfg) {
       </div>
     </section>`;
 
+  // SEPOS-WEB-003 — booking + takeaway widget embeds. The widgets are
+  // hosted as standalone scripts on the restaurant's EPOS server; the
+  // generator just needs the base URL (set in sections.widget_base_url —
+  // typically the client's railway_url, or the SiamEPOS demo URL).
+  const bookingHtml = !showBooking ? '' : `
+    <section id="book" class="section">
+      <div class="container">
+        <h2>Book a table</h2>
+        <div id="siamepos-booking-widget"></div>
+        <script src="${escapeHtml(s.widget_base_url)}/widget.js" defer></script>
+      </div>
+    </section>`;
+  const orderHtml = !showOrder ? '' : `
+    <section id="order" class="section section-alt">
+      <div class="container">
+        <h2>Order online</h2>
+        <div id="siamepos-takeaway-widget"></div>
+        <script src="${escapeHtml(s.widget_base_url)}/takeaway-widget.js" defer></script>
+      </div>
+    </section>`;
+
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -124,11 +209,12 @@ export function generateWebsiteHtml(cfg) {
   <title>${name}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="${tagline}" />
+  ${tpl.googleFonts ? `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="${tpl.googleFonts}" rel="stylesheet">` : ''}
   <style>
     :root { --primary: ${primary}; --primary-dark: ${primaryDark}; --accent: ${accent}; }
     *, *::before, *::after { box-sizing: border-box; }
-    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1a1a1a; line-height: 1.6; }
-    h1, h2, h3 { font-family: Georgia, 'Times New Roman', serif; line-height: 1.2; margin: 0 0 0.5em; }
+    body { margin: 0; font-family: ${tpl.bodyFont}; color: #1a1a1a; line-height: 1.6; }
+    h1, h2, h3 { font-family: ${tpl.headFont}; line-height: 1.2; margin: 0 0 0.5em; }
     a { color: var(--primary); text-decoration: none; }
     a:hover { text-decoration: underline; }
     .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
@@ -136,7 +222,8 @@ export function generateWebsiteHtml(cfg) {
     /* Top nav */
     .nav { position: sticky; top: 0; z-index: 50; background: rgba(255,255,255,0.97); border-bottom: 1px solid #eee; backdrop-filter: blur(8px); }
     .nav-inner { display: flex; align-items: center; padding: 14px 24px; max-width: 1100px; margin: 0 auto; }
-    .nav-brand { font-family: Georgia, serif; font-weight: 700; font-size: 20px; color: var(--primary); letter-spacing: 0.5px; }
+    .nav-brand { font-family: ${tpl.headFont}; font-weight: 700; font-size: 20px; color: var(--primary); letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 10px; }
+    .nav-logo { height: 32px; width: auto; }
     .nav-links { margin-left: auto; display: flex; gap: 22px; }
     .nav-links a { color: #444; font-size: 14px; font-weight: 600; }
     .nav-links a:hover { color: var(--primary); text-decoration: none; }
@@ -151,7 +238,7 @@ export function generateWebsiteHtml(cfg) {
 
     /* Sections */
     .section { padding: 70px 0; }
-    .section-alt { background: #faf7f2; }
+    .section-alt { background: ${tpl.altBg}; }
     .section h2 { font-size: 32px; color: var(--primary); margin-bottom: 22px; text-align: center; }
     .section h2::after { content: ''; display: block; width: 56px; height: 3px; background: var(--accent); margin: 12px auto 0; }
 
@@ -195,19 +282,27 @@ export function generateWebsiteHtml(cfg) {
 
     /* Nav hide on small */
     @media (max-width: 600px) { .nav-links a:not(:last-child) { display: none; } }
+
+    /* Template-specific overrides */
+    ${tpl.extraCss || ''}
   </style>
 </head>
 <body>
   <nav class="nav">
     <div class="nav-inner">
-      <div class="nav-brand">${name}</div>
+      <div class="nav-brand">
+        ${logoUrl ? `<img class="nav-logo" src="${logoUrl}" alt="${name}" />` : ''}
+        <span>${name}</span>
+      </div>
       <div class="nav-links">
-        ${storyHtml    ? '<a href="#about">About</a>'       : ''}
-        ${galleryHtml  ? '<a href="#gallery">Gallery</a>'   : ''}
-        ${hoursHtml    ? '<a href="#hours">Hours</a>'       : ''}
-        ${pressHtml    ? '<a href="#press">Press</a>'       : ''}
-        ${cateringHtml ? '<a href="#catering">Catering</a>' : ''}
-        ${visitHtml    ? '<a href="#visit">Visit</a>'       : ''}
+        ${storyHtml    ? '<a href="#about">About</a>'        : ''}
+        ${galleryHtml  ? '<a href="#gallery">Gallery</a>'    : ''}
+        ${hoursHtml    ? '<a href="#hours">Hours</a>'        : ''}
+        ${pressHtml    ? '<a href="#press">Press</a>'        : ''}
+        ${cateringHtml ? '<a href="#catering">Catering</a>'  : ''}
+        ${orderHtml    ? '<a href="#order">Order online</a>' : ''}
+        ${bookingHtml  ? '<a href="#book">Book</a>'          : ''}
+        ${visitHtml    ? '<a href="#visit">Visit</a>'        : ''}
       </div>
     </div>
   </nav>
@@ -225,6 +320,8 @@ export function generateWebsiteHtml(cfg) {
   ${hoursHtml}
   ${pressHtml}
   ${cateringHtml}
+  ${orderHtml}
+  ${bookingHtml}
   ${visitHtml}
 
   <footer>

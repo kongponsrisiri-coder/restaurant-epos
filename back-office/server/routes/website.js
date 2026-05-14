@@ -18,6 +18,8 @@ const UPDATABLE = [
   'primary_colour', 'accent_colour',
   'photo_hero', 'photo_story', 'photo_gallery_1', 'photo_gallery_2', 'photo_gallery_3',
   'sections',  // SEPOS-WEB-002 — JSON blob of toggleable section content.
+  'template',  // SEPOS-WEB-003 — design template key.
+  'logo_url',  // SEPOS-WEB-003 — base64 or URL of logo for nav.
 ];
 
 function pickFields(body) {

@@ -106,3 +106,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_website_one_global
 -- true, so restaurants can ship a one-pager OR a richer multi-section
 -- site from the same builder.
 ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS sections JSONB DEFAULT '{}'::jsonb;
+
+-- SEPOS-WEB-003 — design layer:
+--  - template: which CSS layout the generator uses (classic / modern /
+--    editorial / boutique). Defaults to classic.
+--  - logo_url: optional base64 (or external URL) for the nav wordmark.
+ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS template TEXT DEFAULT 'classic';
+ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS logo_url TEXT;

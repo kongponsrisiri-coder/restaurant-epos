@@ -1,13 +1,18 @@
-import { useState, useEffect } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff } from '../api';
+import { useState, useEffect, useMemo } from 'react';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, SERVER_URL } from '../api';
 import BillScreen from './BillScreen';
 import DeleteOrderModal from '../components/DeleteOrderModal';
+import AllergenChips from '../components/AllergenChips';
+import { parseAllergens } from '../utils/allergens';
 
 const COURSE_LABELS = { 1: 'Starters', 2: 'Mains', 3: 'Desserts', 4: 'Extra' };
 const COURSE_COLORS = { 1: '#3b82f6', 2: '#e94560', 3: '#8b5cf6', 4: '#22c55e' };
 
 export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const [menu, setMenu] = useState([]);
+  // SEPOS allergens — dish_allergens overrides keyed by menu_item_id.
+  // Loaded once on mount; merged with menu_items.allergens at render time.
+  const [allergenOverrides, setAllergenOverrides] = useState({});
   const [order, setOrder] = useState(null);
   const [cart, setCart] = useState([]);
   const [activeCategory, setActiveCategory] = useState(null);
@@ -36,9 +41,21 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [menuData, orderData] = await Promise.all([getMenu(), getOrder(orderId)]);
+        const [menuData, orderData, dishAllergens] = await Promise.all([
+          getMenu(),
+          getOrder(orderId),
+          // Manual allergen overrides set on the admin Allergen screen.
+          // Soft-fail — if the endpoint isn't reachable we just fall back
+          // to menu_items.allergens (AI scanner output) on each item.
+          fetch(`${SERVER_URL}/api/dish-allergens`).then(r => r.ok ? r.json() : []).catch(() => []),
+        ]);
         setMenu(menuData);
         setOrder(orderData);
+        const map = {};
+        (Array.isArray(dishAllergens) ? dishAllergens : []).forEach(row => {
+          map[row.menu_item_id] = row.allergens;  // JSON string
+        });
+        setAllergenOverrides(map);
         if (menuData.length > 0) {
           setActiveCategory(menuData[0].id);
           setActiveCourse(menuData[0].default_course || 1);
@@ -51,6 +68,22 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     };
     fetchData();
   }, [orderId]);
+
+  // SEPOS — memoise per-item allergen lists so we don't reparse on
+  // every render. Priority: dish_allergens (manual) > menu_items.allergens
+  // (AI scanned). Recipe-derived path is handled in admin and would have
+  // already populated dish_allergens via the "Sync all" action there.
+  const allergensByItemId = useMemo(() => {
+    const out = {};
+    for (const cat of menu) {
+      for (const item of (cat.items || [])) {
+        const raw = allergenOverrides[item.id] ?? item.allergens;
+        const parsed = parseAllergens(raw);
+        if (parsed.length > 0) out[item.id] = parsed;
+      }
+    }
+    return out;
+  }, [menu, allergenOverrides]);
 
   // ── Sandy: Listen for screen resize so layout switches automatically ──
   useEffect(() => {
@@ -505,7 +538,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                           {item.description}
                         </div>
                       )}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      {/* SEPOS — UK14 allergen chips. Sits between
+                          description and price so it's easy to scan
+                          before the waiter taps "add to cart". */}
+                      <AllergenChips list={allergensByItemId[item.id]} />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: allergensByItemId[item.id] ? 8 : 0 }}>
                         <span style={{ fontSize: 17, fontWeight: 800, color: isBar ? '#1e40af' : '#e94560' }}>
                           £{item.price.toFixed(2)}
                         </span>

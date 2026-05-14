@@ -16,8 +16,14 @@ CREATE TABLE IF NOT EXISTS clients (
   sub_start       DATE,
   next_billing    DATE,
   notes_count     INT DEFAULT 0,
+  -- SEPOS-WEB-002 — flexible bag for setup credentials + extra details:
+  -- VAT number, companies house, address, hours, payment processor IDs,
+  -- domain/hosting info, API keys, internal onboarding notes, etc.
+  metadata        JSONB DEFAULT '{}'::jsonb,
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
+-- Idempotent migration for existing installs.
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS health_checks (
   id              SERIAL PRIMARY KEY,
@@ -94,3 +100,9 @@ CREATE TABLE IF NOT EXISTS website_configs (
 -- Only one global config row at a time (partial unique index).
 CREATE UNIQUE INDEX IF NOT EXISTS idx_website_one_global
   ON website_configs (is_global) WHERE is_global = TRUE;
+
+-- SEPOS-WEB-002 — toggleable sections (story / hours / press / catering)
+-- with their content. The generator renders each only if `*_enabled` is
+-- true, so restaurants can ship a one-pager OR a richer multi-section
+-- site from the same builder.
+ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS sections JSONB DEFAULT '{}'::jsonb;

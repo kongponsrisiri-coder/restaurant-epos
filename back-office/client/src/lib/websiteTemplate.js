@@ -34,8 +34,20 @@ export function generateWebsiteHtml(cfg) {
     ? `background-image: linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)), url('${c.photo_hero}');`
     : `background: linear-gradient(135deg, ${primary} 0%, ${primaryDark} 100%);`;
 
+  // SEPOS-WEB-002 — section toggles + content live in cfg.sections.
+  // Defaults preserve the previous one-pager behaviour: story + gallery
+  // + visit always shown if their data is present; hours / press /
+  // catering are opt-in.
+  const s = c.sections || {};
+  const showStory    = s.story_enabled !== false  && (about || c.photo_story);
+  const showGallery  = s.gallery_enabled !== false && (c.photo_gallery_1 || c.photo_gallery_2 || c.photo_gallery_3);
+  const showHours    = !!s.hours_enabled    && !!(s.hours_text || '').trim();
+  const showPress    = !!s.press_enabled    && Array.isArray(s.press_items) && s.press_items.length > 0;
+  const showCatering = !!s.catering_enabled && !!(s.catering_text || '').trim();
+  const showVisit    = !!(address || phone || email);
+
   const galleryPhotos = [c.photo_gallery_1, c.photo_gallery_2, c.photo_gallery_3].filter(Boolean);
-  const galleryHtml = galleryPhotos.length === 0 ? '' : `
+  const galleryHtml = !showGallery ? '' : `
     <section id="gallery" class="section">
       <div class="container">
         <h2>Gallery</h2>
@@ -45,7 +57,7 @@ export function generateWebsiteHtml(cfg) {
       </div>
     </section>`;
 
-  const storyHtml = !about && !c.photo_story ? '' : `
+  const storyHtml = !showStory ? '' : `
     <section id="about" class="section section-alt">
       <div class="container about-grid">
         <div class="about-text">
@@ -56,7 +68,44 @@ export function generateWebsiteHtml(cfg) {
       </div>
     </section>`;
 
-  const visitHtml = !(address || phone || email) ? '' : `
+  const hoursHtml = !showHours ? '' : `
+    <section id="hours" class="section section-alt">
+      <div class="container">
+        <h2>Hours</h2>
+        <div class="hours-card">${escapeHtml(s.hours_text).replace(/\n/g, '<br>')}</div>
+      </div>
+    </section>`;
+
+  const pressHtml = !showPress ? '' : `
+    <section id="press" class="section">
+      <div class="container">
+        <h2>In the press</h2>
+        <div class="press-grid">
+          ${(s.press_items || []).map(p => `
+            <div class="press-card">
+              ${p.source ? `<div class="press-source">${escapeHtml(p.source)}</div>` : ''}
+              ${p.quote  ? `<blockquote class="press-quote">${escapeHtml(p.quote)}</blockquote>` : ''}
+              ${p.link   ? `<a href="${escapeHtml(p.link)}" target="_blank" rel="noopener">Read more →</a>` : ''}
+            </div>`).join('')}
+        </div>
+      </div>
+    </section>`;
+
+  const cateringHtml = !showCatering ? '' : `
+    <section id="catering" class="section section-alt">
+      <div class="container about-grid">
+        <div class="about-text">
+          <h2>Catering &amp; events</h2>
+          <p>${escapeHtml(s.catering_text).replace(/\n+/g, '</p><p>')}</p>
+          ${phone || email
+            ? `<p><a class="cta-inline" href="${email ? `mailto:${email}` : `tel:${phone}`}">Enquire now</a></p>`
+            : ''}
+        </div>
+        ${s.catering_photo ? `<div class="about-photo" style="background-image: url('${s.catering_photo}')"></div>` : ''}
+      </div>
+    </section>`;
+
+  const visitHtml = !showVisit ? '' : `
     <section id="visit" class="section">
       <div class="container">
         <h2>Visit us</h2>
@@ -127,6 +176,19 @@ export function generateWebsiteHtml(cfg) {
     .visit-row:last-child { border-bottom: none; }
     .visit-label { font-weight: 700; color: var(--primary); min-width: 100px; text-transform: uppercase; letter-spacing: 0.5px; font-size: 12px; padding-top: 2px; }
 
+    /* Hours */
+    .hours-card { max-width: 480px; margin: 0 auto; background: white; border: 1px solid #eee; border-radius: 12px; padding: 24px 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); font-size: 16px; line-height: 2; text-align: center; }
+
+    /* Press */
+    .press-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 22px; }
+    .press-card { background: white; border: 1px solid #eee; border-radius: 12px; padding: 22px 24px; box-shadow: 0 4px 16px rgba(0,0,0,0.04); }
+    .press-source { font-weight: 700; color: var(--primary); font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px; }
+    .press-quote { font-family: Georgia, serif; font-style: italic; font-size: 17px; color: #333; margin: 0 0 12px; line-height: 1.55; border-left: 3px solid var(--accent); padding-left: 14px; }
+
+    /* Catering CTA */
+    .cta-inline { display: inline-block; margin-top: 8px; background: var(--accent); color: #1a1a1a; padding: 10px 22px; border-radius: 999px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; font-size: 12px; }
+    .cta-inline:hover { text-decoration: none; opacity: 0.9; }
+
     /* Footer */
     footer { background: var(--primary-dark); color: rgba(255,255,255,0.78); text-align: center; padding: 28px 24px; font-size: 13px; }
     footer a { color: var(--accent); }
@@ -140,9 +202,12 @@ export function generateWebsiteHtml(cfg) {
     <div class="nav-inner">
       <div class="nav-brand">${name}</div>
       <div class="nav-links">
-        ${storyHtml ? '<a href="#about">About</a>' : ''}
-        ${galleryHtml ? '<a href="#gallery">Gallery</a>' : ''}
-        ${visitHtml ? '<a href="#visit">Visit</a>' : ''}
+        ${storyHtml    ? '<a href="#about">About</a>'       : ''}
+        ${galleryHtml  ? '<a href="#gallery">Gallery</a>'   : ''}
+        ${hoursHtml    ? '<a href="#hours">Hours</a>'       : ''}
+        ${pressHtml    ? '<a href="#press">Press</a>'       : ''}
+        ${cateringHtml ? '<a href="#catering">Catering</a>' : ''}
+        ${visitHtml    ? '<a href="#visit">Visit</a>'       : ''}
       </div>
     </div>
   </nav>
@@ -157,6 +222,9 @@ export function generateWebsiteHtml(cfg) {
 
   ${storyHtml}
   ${galleryHtml}
+  ${hoursHtml}
+  ${pressHtml}
+  ${cateringHtml}
   ${visitHtml}
 
   <footer>

@@ -107,6 +107,7 @@ export default function ClientDetailPage() {
       <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${C.border}`, marginBottom: 20 }}>
         {[
           ['overview', 'Overview'],
+          ['setup',    '🔐 Setup'],
           ['health',   `Health (${health.length})`],
           ['notes',    `Notes (${notes.length})`],
           ['website',  '🌐 Website'],
@@ -190,6 +191,14 @@ export default function ClientDetailPage() {
             </div>
           )}
         </SectionCard>
+      )}
+
+      {tab === 'setup' && (
+        <SetupSection
+          metadata={client.metadata || {}}
+          onSave={(metadata) => saveField('metadata', metadata)}
+          saving={saving}
+        />
       )}
 
       {tab === 'website' && (
@@ -303,6 +312,121 @@ function NoteItem({ note }) {
         </div>
         <div style={{ color: C.text, fontSize: 14, lineHeight: 1.5 }}>{note.note}</div>
       </div>
+    </div>
+  );
+}
+
+// SEPOS-WEB-002 — Setup tab: captures every credential / detail the
+// ops team might need to manage this client (domain, payment, marketing,
+// tax info, bank, internal notes). Auto-saves each field on blur via the
+// metadata JSONB column on clients. Sensitive values are masked by
+// default with a "Show" toggle so screen-shoulder-surfing isn't a risk.
+const SETUP_FIELDS = [
+  { group: 'Restaurant profile', fields: [
+    { key: 'full_address',     label: 'Full address',     type: 'textarea' },
+    { key: 'capacity',         label: 'Seats / capacity', type: 'number' },
+    { key: 'cuisine',          label: 'Cuisine / tags',   placeholder: 'Thai, family-friendly, halal options' },
+    { key: 'hours_summary',    label: 'Hours summary',    type: 'textarea', placeholder: 'Mon-Fri 11-22, Sat-Sun 12-23' },
+  ]},
+  { group: 'Tax & legal', fields: [
+    { key: 'vat_number',       label: 'VAT number' },
+    { key: 'companies_house',  label: 'Companies House number' },
+    { key: 'legal_entity',     label: 'Legal entity / Ltd company name' },
+  ]},
+  { group: 'Website & hosting', fields: [
+    { key: 'domain_name',      label: 'Domain name',       placeholder: 'baansiam.co.uk' },
+    { key: 'domain_registrar', label: 'Domain registrar',  placeholder: 'Namecheap, GoDaddy, etc.' },
+    { key: 'hosting',          label: 'Hosting',           placeholder: 'Netlify, Vercel, self-hosted, etc.' },
+    { key: 'website_admin_login', label: 'Website admin login (if managed by us)', secret: true, type: 'textarea' },
+  ]},
+  { group: 'Online takeaway / payments', fields: [
+    { key: 'stripe_account_id', label: 'Stripe Connect account ID', placeholder: 'acct_…' },
+    { key: 'stripe_pk_live',    label: 'Stripe publishable key (live)', secret: true },
+    { key: 'stripe_sk_live',    label: 'Stripe secret key (live)', secret: true },
+    { key: 'payment_notes',     label: 'Payment notes', type: 'textarea' },
+  ]},
+  { group: 'Marketing / email', fields: [
+    { key: 'brevo_api_key',  label: 'Brevo API key',  secret: true },
+    { key: 'mail_from',      label: '"From" address for campaigns', placeholder: 'hello@baansiam.co.uk' },
+    { key: 'make_webhook',   label: 'Make.com webhook URL',         secret: true },
+  ]},
+  { group: 'Banking (for direct debit)', fields: [
+    { key: 'bank_account_name', label: 'Account name' },
+    { key: 'bank_sort_code',    label: 'Sort code', placeholder: '00-00-00' },
+    { key: 'bank_account_last4', label: 'Account number (last 4 only)', placeholder: '••••' },
+  ]},
+  { group: 'Internal notes', fields: [
+    { key: 'notes_internal', label: 'Onboarding / setup notes', type: 'textarea', placeholder: 'Anything the ops team needs to remember about this client.' },
+  ]},
+];
+
+function SetupSection({ metadata, onSave, saving }) {
+  const [draft, setDraft] = useState(metadata || {});
+  const [revealed, setRevealed] = useState({});
+
+  useEffect(() => { setDraft(metadata || {}); }, [metadata]);
+
+  const setField = (k, v) => setDraft(prev => ({ ...prev, [k]: v }));
+  const commit = () => {
+    if (JSON.stringify(draft) === JSON.stringify(metadata || {})) return;
+    onSave(draft);
+  };
+  const toggleReveal = (k) => setRevealed(prev => ({ ...prev, [k]: !prev[k] }));
+
+  return (
+    <div style={{ display: 'grid', gap: 18 }}>
+      <div style={{ background: C.infoBg, border: `1px solid ${C.info}33`, color: '#1e40af', padding: '10px 14px', borderRadius: 8, fontSize: 13 }}>
+        🔐 These values are stored on the back-office Postgres only. Sensitive fields are masked — click <strong>Show</strong> to reveal. Changes save when you tab out of a field.
+      </div>
+
+      {SETUP_FIELDS.map(group => (
+        <div key={group.group} style={{ ...card, padding: 22 }}>
+          <h3 style={{ margin: 0, marginBottom: 16, fontSize: 13, fontWeight: 800, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+            {group.group}
+          </h3>
+          <div style={{ display: 'grid', gap: 14 }}>
+            {group.fields.map(f => {
+              const val = draft[f.key] || '';
+              const isMasked = f.secret && !revealed[f.key];
+              return (
+                <div key={f.key}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      {f.label}
+                    </label>
+                    {f.secret && (
+                      <button onClick={() => toggleReveal(f.key)} style={{ background: 'none', border: 'none', color: C.textMuted, fontSize: 11, cursor: 'pointer', fontWeight: 700 }}>
+                        {revealed[f.key] ? 'Hide' : 'Show'}
+                      </button>
+                    )}
+                  </div>
+                  {f.type === 'textarea' ? (
+                    <textarea
+                      value={val}
+                      onChange={(e) => setField(f.key, e.target.value)}
+                      onBlur={commit}
+                      placeholder={f.placeholder}
+                      disabled={saving}
+                      style={{ ...input, minHeight: 70, resize: 'vertical', fontFamily: f.secret ? 'ui-monospace, monospace' : 'inherit' }}
+                    />
+                  ) : (
+                    <input
+                      type={isMasked ? 'password' : (f.type || 'text')}
+                      value={val}
+                      onChange={(e) => setField(f.key, e.target.value)}
+                      onBlur={commit}
+                      placeholder={f.placeholder}
+                      disabled={saving}
+                      autoComplete="off"
+                      style={{ ...input, fontFamily: f.secret ? 'ui-monospace, monospace' : 'inherit' }}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

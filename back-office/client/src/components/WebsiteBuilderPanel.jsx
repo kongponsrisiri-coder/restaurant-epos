@@ -18,11 +18,23 @@ const PHOTO_SLOTS = [
   { key: 'photo_gallery_3', label: 'Gallery 3',        hint: '' },
 ];
 
+// SEPOS-WEB-002 — default section toggles. Story + Gallery default to ON
+// (preserves the original one-pager experience). Hours / Press / Catering
+// are opt-in.
+const EMPTY_SECTIONS = {
+  story_enabled:    true,
+  gallery_enabled:  true,
+  hours_enabled:    false, hours_text: '',
+  press_enabled:    false, press_items: [],
+  catering_enabled: false, catering_text: '', catering_photo: '',
+};
+
 const EMPTY = {
   restaurant_name: '', tagline: '', address: '', phone: '', email: '',
   about_text: '', primary_colour: '#7B1C2D', accent_colour: '#C49030',
   photo_hero: '', photo_story: '',
   photo_gallery_1: '', photo_gallery_2: '', photo_gallery_3: '',
+  sections: { ...EMPTY_SECTIONS },
 };
 
 export default function WebsiteBuilderPanel({ scope }) {
@@ -49,8 +61,10 @@ export default function WebsiteBuilderPanel({ scope }) {
         // client's restaurant_name) for fields that are blank.
         const merged = { ...EMPTY };
         for (const k of Object.keys(EMPTY)) {
+          if (k === 'sections') continue;
           merged[k] = row[k] ?? scope.defaults?.[k] ?? EMPTY[k];
         }
+        merged.sections = { ...EMPTY_SECTIONS, ...(row.sections || {}) };
         setCfg(merged);
       } catch (e) {
         console.error('[website-builder] load error', e);
@@ -62,6 +76,7 @@ export default function WebsiteBuilderPanel({ scope }) {
   }, [scope.kind, scope.clientId]);
 
   const set = (k, v) => setCfg(prev => ({ ...prev, [k]: v }));
+  const setSection = (k, v) => setCfg(prev => ({ ...prev, sections: { ...prev.sections, [k]: v } }));
 
   // Debounced auto-save (1.2s after last change).
   const dirtyRef = useRef(false);
@@ -192,11 +207,65 @@ export default function WebsiteBuilderPanel({ scope }) {
             </Field>
           </Section>
 
-          <Section title="About">
+          <Section
+            title="About / Story"
+            toggle={{ enabled: cfg.sections.story_enabled !== false, onChange: (v) => setSection('story_enabled', v) }}
+          >
             <Field label="About text (2–3 sentences in the restaurant's voice)">
               <textarea value={cfg.about_text} onChange={(e) => set('about_text', e.target.value)}
                 style={{ ...input, minHeight: 120, resize: 'vertical' }} />
             </Field>
+            <div style={{ fontSize: 11, color: C.textFaint }}>
+              The story photo is the second photo slot under "Photos" below.
+            </div>
+          </Section>
+
+          <Section
+            title="Hours"
+            toggle={{ enabled: !!cfg.sections.hours_enabled, onChange: (v) => setSection('hours_enabled', v) }}
+          >
+            <Field label="Opening hours (one line per day)">
+              <textarea
+                value={cfg.sections.hours_text || ''}
+                onChange={(e) => setSection('hours_text', e.target.value)}
+                placeholder={'Mon – Fri  11:00 – 22:00\nSat – Sun  12:00 – 23:00'}
+                style={{ ...input, minHeight: 110, resize: 'vertical', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
+              />
+            </Field>
+          </Section>
+
+          <Section
+            title="In the press"
+            toggle={{ enabled: !!cfg.sections.press_enabled, onChange: (v) => setSection('press_enabled', v) }}
+          >
+            <PressEditor
+              items={cfg.sections.press_items || []}
+              onChange={(items) => setSection('press_items', items)}
+            />
+          </Section>
+
+          <Section
+            title="Catering &amp; events"
+            toggle={{ enabled: !!cfg.sections.catering_enabled, onChange: (v) => setSection('catering_enabled', v) }}
+          >
+            <Field label="Catering pitch">
+              <textarea
+                value={cfg.sections.catering_text || ''}
+                onChange={(e) => setSection('catering_text', e.target.value)}
+                placeholder="Authentic Thai canapés and family-style platters for private events…"
+                style={{ ...input, minHeight: 100, resize: 'vertical' }}
+              />
+            </Field>
+            <PhotoSlot
+              slot={{ key: 'catering_photo', label: 'Catering photo', hint: 'Shown alongside the catering pitch.' }}
+              value={cfg.sections.catering_photo || ''}
+              onChange={(v) => setSection('catering_photo', v)}
+              onFile={async (f) => {
+                if (!f || !f.type.startsWith('image/')) return;
+                try { setSection('catering_photo', await compressImage(f)); }
+                catch (e) { alert('Failed to read image: ' + e.message); }
+              }}
+            />
           </Section>
 
           <Section title="Theme colours">
@@ -224,7 +293,14 @@ export default function WebsiteBuilderPanel({ scope }) {
             </div>
           </Section>
 
-          <Section title="Photos">
+          <Section
+            title="Photos & Gallery"
+            toggle={{
+              label: 'Show gallery section',
+              enabled: cfg.sections.gallery_enabled !== false,
+              onChange: (v) => setSection('gallery_enabled', v),
+            }}
+          >
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               {PHOTO_SLOTS.map(slot => (
                 <PhotoSlot key={slot.key} slot={slot} value={cfg[slot.key]}
@@ -251,11 +327,77 @@ export default function WebsiteBuilderPanel({ scope }) {
   );
 }
 
-function Section({ title, children }) {
+function Section({ title, children, toggle }) {
+  const hidden = toggle && !toggle.enabled;
   return (
-    <div style={{ ...card, padding: 22 }}>
-      <h3 style={{ margin: 0, marginBottom: 16, fontSize: 13, fontWeight: 800, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>{title}</h3>
-      <div style={{ display: 'grid', gap: 14 }}>{children}</div>
+    <div style={{ ...card, padding: 22, opacity: hidden ? 0.7 : 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        <h3 style={{ margin: 0, fontSize: 13, fontWeight: 800, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, flex: 1 }}>
+          <span dangerouslySetInnerHTML={{ __html: title }} />
+        </h3>
+        {toggle && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: C.textMuted, fontWeight: 700 }}>
+            <input
+              type="checkbox"
+              checked={!!toggle.enabled}
+              onChange={(e) => toggle.onChange(e.target.checked)}
+              style={{ width: 16, height: 16, cursor: 'pointer' }}
+            />
+            {toggle.label || 'Include'}
+          </label>
+        )}
+      </div>
+      {!hidden && <div style={{ display: 'grid', gap: 14 }}>{children}</div>}
+    </div>
+  );
+}
+
+function PressEditor({ items, onChange }) {
+  const add = () => onChange([...items, { source: '', quote: '', link: '' }]);
+  const update = (i, field, value) => {
+    const next = items.slice();
+    next[i] = { ...next[i], [field]: value };
+    onChange(next);
+  };
+  const remove = (i) => onChange(items.filter((_, idx) => idx !== i));
+
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      {items.length === 0 && (
+        <div style={{ color: C.textFaint, fontSize: 12, padding: '10px 0' }}>
+          No press items yet. Click below to add one.
+        </div>
+      )}
+      {items.map((p, i) => (
+        <div key={i} style={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12 }}>
+          <div style={{ display: 'grid', gap: 10 }}>
+            <input
+              value={p.source || ''}
+              onChange={(e) => update(i, 'source', e.target.value)}
+              placeholder="Source (e.g. Time Out London)"
+              style={input}
+            />
+            <textarea
+              value={p.quote || ''}
+              onChange={(e) => update(i, 'quote', e.target.value)}
+              placeholder="Pull quote — keep it short."
+              style={{ ...input, minHeight: 60, resize: 'vertical' }}
+            />
+            <input
+              value={p.link || ''}
+              onChange={(e) => update(i, 'link', e.target.value)}
+              placeholder="Link to article (optional)"
+              style={input}
+            />
+            <button onClick={() => remove(i)} style={{ ...btn.ghost, color: C.danger, alignSelf: 'flex-end', fontSize: 12 }}>
+              Remove
+            </button>
+          </div>
+        </div>
+      ))}
+      <button onClick={add} style={{ ...btn.ghost, justifySelf: 'start' }}>
+        + Add press item
+      </button>
     </div>
   );
 }

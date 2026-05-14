@@ -85,12 +85,16 @@ router.put('/:id', async (req, res) => {
     const allowed = [
       'restaurant_name', 'owner_name', 'email', 'phone', 'railway_url',
       'plan', 'status', 'monthly_fee', 'trial_start', 'sub_start', 'next_billing',
+      'metadata',  // SEPOS-WEB-002 — flexible setup / credentials bag.
     ];
     const sets = [];
     const params = [];
     for (const k of allowed) {
       if (k in (req.body || {})) {
-        params.push(req.body[k] === '' ? null : req.body[k]);
+        let val = req.body[k];
+        if (k === 'metadata') val = JSON.stringify(val || {});
+        else if (val === '') val = null;
+        params.push(val);
         sets.push(`${k} = $${params.length}`);
       }
     }

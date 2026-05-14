@@ -17,11 +17,16 @@ const UPDATABLE = [
   'restaurant_name', 'tagline', 'address', 'phone', 'email', 'about_text',
   'primary_colour', 'accent_colour',
   'photo_hero', 'photo_story', 'photo_gallery_1', 'photo_gallery_2', 'photo_gallery_3',
+  'sections',  // SEPOS-WEB-002 — JSON blob of toggleable section content.
 ];
 
 function pickFields(body) {
   const out = {};
-  for (const k of UPDATABLE) if (k in (body || {})) out[k] = body[k];
+  for (const k of UPDATABLE) {
+    if (k in (body || {})) {
+      out[k] = k === 'sections' ? JSON.stringify(body[k] || {}) : body[k];
+    }
+  }
   return out;
 }
 

@@ -378,6 +378,52 @@ router.post('/:id/provision/seed-db', async (req, res) => {
   }
 });
 
+// SEPOS-WEB-004 — proxy the tenant's live menu for the Website
+// Builder. Browser can't fetch the tenant's railway URL directly
+// (CORS), so the back-office does the round-trip server-side. The
+// operator then picks 6–8 items to feature on the generated home page.
+//
+// Returns a flat list of { id, name, name_alt, description, price,
+// photo, category } — only what the website needs.
+router.get('/:id/menu-preview', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const r = await pool.query('SELECT metadata FROM clients WHERE id = $1', [id]);
+    if (r.rows.length === 0) return res.status(404).json({ error: 'Client not found' });
+    const url = r.rows[0].metadata?.tenant_railway_url;
+    if (!url) {
+      return res.status(400).json({
+        error: 'Tenant Railway URL not set on this client',
+        hint:  'Paste the URL into Setup → Tenant infrastructure → Railway service URL.',
+      });
+    }
+    const resp = await fetch(url.replace(/\/$/, '') + '/api/menu', {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return res.status(502).json({ error: `Tenant API ${resp.status}` });
+    const cats = await resp.json();
+    // Flatten + project — the builder only needs a small subset of fields.
+    const items = [];
+    for (const cat of (Array.isArray(cats) ? cats : [])) {
+      for (const item of (cat.items || [])) {
+        items.push({
+          id:          item.id,
+          name:        item.name,
+          name_alt:    item.name_alt || null,
+          description: item.description || null,
+          price:       Number(item.price) || 0,
+          photo:       item.photo_url || item.image_url || null,
+          category:    cat.name,
+        });
+      }
+    }
+    res.json({ items });
+  } catch (err) {
+    console.error('[ops-clients] menu-preview error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // SEPOS-029 Phase 2 — Railway template deep-link.
 // Operator clicks this on the Onboarding tab and Railway opens with
 // all template variables pre-filled (SYNC_SECRET / BREVO / Anthropic /

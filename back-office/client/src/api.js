@@ -85,6 +85,11 @@ export const api = {
   getRailwayTemplateUrl: (id) =>
     fetch(`${API}/api/clients/${id}/provision/railway-template`, { headers: tokenHeader() }).then(handle),
 
+  // SEPOS-WEB-004 — pull the tenant's live menu for the Featured Dishes
+  // section of the website builder. Server-side proxy avoids CORS.
+  getClientMenuPreview: (id) =>
+    fetch(`${API}/api/clients/${id}/menu-preview`, { headers: tokenHeader() }).then(handle),
+
   downloadSeedSql: async (id, kind) => {
     const r = await fetch(`${API}/api/clients/${id}/seed.sql?kind=${kind}`, { headers: tokenHeader() });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);

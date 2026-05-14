@@ -29,7 +29,7 @@ const PHOTO_SLOTS = [
   { key: 'photo_gallery_3', label: 'Gallery 3',        hint: '' },
 ];
 
-// SEPOS-WEB-002/003 — default section toggles + widget config.
+// SEPOS-WEB-002/003/004 — default section toggles + widget config.
 const EMPTY_SECTIONS = {
   story_enabled:    true,
   gallery_enabled:  true,
@@ -39,6 +39,11 @@ const EMPTY_SECTIONS = {
   booking_widget_enabled:  false,
   takeaway_widget_enabled: false,
   widget_base_url: DEFAULT_WIDGET_BASE,
+  // SEPOS-WEB-004 — featured menu + team + SEO + analytics.
+  menu_enabled:    false, menu_items:    [],
+  team_enabled:    false, team_members:  [],
+  seo_title:        '', seo_description: '', seo_og_image: '',
+  ga_id:            '', fb_pixel_id:     '',
 };
 
 const EMPTY = {
@@ -383,21 +388,307 @@ export default function WebsiteBuilderPanel({ scope }) {
               ))}
             </div>
           </Section>
+
+          {/* SEPOS-WEB-004 — Featured menu: pulls from the tenant's
+              live menu (per-client only) so the home page can showcase
+              actual dishes. Snapshot is stored so the generated HTML
+              stays self-contained. */}
+          <Section
+            title="Featured dishes"
+            toggle={{
+              enabled: !!cfg.sections.menu_enabled,
+              onChange: (v) => setSection('menu_enabled', v),
+            }}
+          >
+            <FeaturedMenuEditor
+              scope={scope}
+              items={cfg.sections.menu_items || []}
+              onChange={(items) => setSection('menu_items', items)}
+            />
+          </Section>
+
+          {/* SEPOS-WEB-004 — Team / chef profiles. Repeatable cards. */}
+          <Section
+            title="Meet the team"
+            toggle={{
+              enabled: !!cfg.sections.team_enabled,
+              onChange: (v) => setSection('team_enabled', v),
+            }}
+          >
+            <TeamEditor
+              members={cfg.sections.team_members || []}
+              onChange={(team) => setSection('team_members', team)}
+              onFile={async (i, file) => {
+                if (!file) return;
+                try {
+                  const url = await compressImage(file);
+                  const next = (cfg.sections.team_members || []).slice();
+                  next[i] = { ...next[i], photo: url };
+                  setSection('team_members', next);
+                } catch (e) { alert('Failed to read image: ' + e.message); }
+              }}
+            />
+          </Section>
+
+          {/* SEPOS-WEB-004 — SEO overrides. Defaults to the
+              restaurant name + tagline + hero photo if blank. */}
+          <Section title="SEO & social preview">
+            <Field label="Page title (browser tab + Google result)">
+              <input
+                value={cfg.sections.seo_title || ''}
+                onChange={(e) => setSection('seo_title', e.target.value)}
+                placeholder={cfg.restaurant_name || 'Restaurant'}
+                style={input}
+              />
+            </Field>
+            <Field label="Meta description (Google snippet, 150–160 chars)">
+              <textarea
+                value={cfg.sections.seo_description || ''}
+                onChange={(e) => setSection('seo_description', e.target.value)}
+                placeholder={cfg.tagline || 'A short description for search results.'}
+                maxLength={200}
+                style={{ ...input, minHeight: 60, resize: 'vertical' }}
+              />
+              <div style={{ fontSize: 11, color: C.textFaint, marginTop: 4 }}>
+                {(cfg.sections.seo_description || '').length} / 160 characters
+              </div>
+            </Field>
+            <PhotoSlot
+              slot={{ key: 'seo_og_image', label: 'Social share image (optional)', hint: 'Shown when someone shares the page link on Facebook / WhatsApp / Slack. 1200×630 works best. Defaults to the hero photo.' }}
+              value={cfg.sections.seo_og_image || ''}
+              onChange={(v) => setSection('seo_og_image', v)}
+              onFile={async (f) => {
+                if (!f) return;
+                try { setSection('seo_og_image', await compressImage(f)); }
+                catch (e) { alert(e.message); }
+              }}
+            />
+          </Section>
+
+          {/* SEPOS-WEB-004 — Analytics. Snippets inject only when an ID is set. */}
+          <Section title="Analytics">
+            <Field label="Google Analytics 4 measurement ID">
+              <input
+                value={cfg.sections.ga_id || ''}
+                onChange={(e) => setSection('ga_id', e.target.value.trim())}
+                placeholder="G-XXXXXXXXXX"
+                style={{ ...input, fontFamily: 'ui-monospace, monospace' }}
+              />
+            </Field>
+            <Field label="Facebook Pixel ID">
+              <input
+                value={cfg.sections.fb_pixel_id || ''}
+                onChange={(e) => setSection('fb_pixel_id', e.target.value.trim())}
+                placeholder="1234567890123456"
+                style={{ ...input, fontFamily: 'ui-monospace, monospace' }}
+              />
+            </Field>
+            <div style={{ fontSize: 11, color: C.textFaint }}>
+              Leave blank to skip. Snippets are injected into the generated HTML's &lt;head&gt; only when an ID is set.
+            </div>
+          </Section>
         </div>
 
-        {/* Live preview */}
-        <div style={{ ...card, padding: 0, overflow: 'hidden', position: 'sticky', top: 16, alignSelf: 'start', height: 'calc(100vh - 64px)' }}>
-          <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, background: C.surfaceAlt, fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 }}>
-            Live preview
-          </div>
-          <iframe
-            title="Website preview"
-            srcDoc={previewHtml}
-            sandbox="allow-same-origin"
-            style={{ width: '100%', height: 'calc(100% - 38px)', border: 'none', background: 'white' }}
-          />
+        {/* Live preview — desktop/mobile viewport toggle (SEPOS-WEB-004) */}
+        <PreviewPane previewHtml={previewHtml} />
+      </div>
+    </div>
+  );
+}
+
+// SEPOS-WEB-004 — preview pane with a viewport toggle. Mobile snaps the
+// iframe to 360px wide and centres it so the operator can sanity-check
+// the responsive behaviour without resizing the whole browser.
+function PreviewPane({ previewHtml }) {
+  const [viewport, setViewport] = useState('desktop');
+  const isMobile = viewport === 'mobile';
+  return (
+    <div style={{ ...card, padding: 0, overflow: 'hidden', position: 'sticky', top: 16, alignSelf: 'start', height: 'calc(100vh - 64px)' }}>
+      <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, background: C.surfaceAlt, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, flex: 1 }}>
+          Live preview
+        </span>
+        <div style={{ display: 'flex', background: 'white', border: `1px solid ${C.border}`, borderRadius: 6, overflow: 'hidden' }}>
+          <button onClick={() => setViewport('desktop')} style={vpBtn(!isMobile)}>🖥 Desktop</button>
+          <button onClick={() => setViewport('mobile')}  style={vpBtn(isMobile)}>📱 Mobile</button>
         </div>
       </div>
+      <div style={{ width: '100%', height: 'calc(100% - 38px)', overflow: 'auto', background: C.borderSoft, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: isMobile ? 16 : 0 }}>
+        <iframe
+          title="Website preview"
+          srcDoc={previewHtml}
+          sandbox="allow-same-origin"
+          style={{
+            width: isMobile ? 360 : '100%',
+            maxWidth: isMobile ? 360 : 'none',
+            height: isMobile ? 640 : '100%',
+            border: isMobile ? '1px solid ' + C.border : 'none',
+            borderRadius: isMobile ? 18 : 0,
+            background: 'white',
+            boxShadow: isMobile ? '0 6px 24px rgba(0,0,0,0.15)' : 'none',
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function vpBtn(active) {
+  return {
+    background: active ? '#0D1B3E' : 'white',
+    color:      active ? '#C9A84C' : '#475569',
+    border: 'none',
+    padding: '5px 10px',
+    fontSize: 11,
+    fontWeight: 800,
+    cursor: 'pointer',
+  };
+}
+
+// SEPOS-WEB-004 — Featured dishes editor. Per-client only: pulls from
+// the tenant's live menu via the back-office proxy. Operator ticks
+// items to feature (max 8). Stores a snapshot so the generated HTML
+// stays self-contained even after the tenant menu changes.
+function FeaturedMenuEditor({ scope, items, onChange }) {
+  const [menu, setMenu] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  if (scope.kind !== 'client') {
+    return (
+      <div style={{ color: C.textFaint, fontSize: 13 }}>
+        Featured dishes pull from a tenant's live EPOS menu. Open this builder from a client to enable it.
+      </div>
+    );
+  }
+
+  const load = async () => {
+    setLoading(true); setErr('');
+    try {
+      const r = await api.getClientMenuPreview(scope.clientId);
+      setMenu(r.items || []);
+    } catch (e) { setErr(e.message); setMenu([]); }
+    finally { setLoading(false); }
+  };
+
+  const isPicked = (id) => items.some(it => it.id === id);
+  const toggle = (it) => {
+    if (isPicked(it.id)) onChange(items.filter(x => x.id !== it.id));
+    else if (items.length >= 8) alert('Up to 8 featured dishes per home page. Remove one before adding another.');
+    else onChange([...items, { id: it.id, name: it.name, price: it.price, photo: it.photo, description: it.description }]);
+  };
+
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <button onClick={load} disabled={loading} style={btn.ghost}>
+          {loading ? 'Loading menu…' : menu === null ? '↓ Pull from EPOS' : '↻ Refresh menu'}
+        </button>
+        <span style={{ fontSize: 12, color: C.textMuted }}>
+          {items.length} / 8 selected
+        </span>
+      </div>
+      {err && <div style={{ background: C.dangerBg, color: '#991b1b', padding: '8px 12px', borderRadius: 8, fontSize: 13 }}>{err}</div>}
+
+      {menu !== null && menu.length === 0 && !err && (
+        <div style={{ color: C.textFaint, fontSize: 13 }}>
+          No menu items found on the tenant. Have they imported their menu yet?
+        </div>
+      )}
+
+      {menu && menu.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, maxHeight: 380, overflowY: 'auto', padding: 4 }}>
+          {menu.map(m => {
+            const picked = isPicked(m.id);
+            return (
+              <button key={m.id} onClick={() => toggle(m)} style={{
+                background: picked ? '#dcfce7' : 'white',
+                border: `2px solid ${picked ? '#22c55e' : C.border}`,
+                borderRadius: 10, padding: 10, textAlign: 'left', cursor: 'pointer',
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{m.name}</div>
+                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>
+                  {m.category} · £{m.price.toFixed(2)}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {items.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+            Will appear on home page
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {items.map(it => (
+              <span key={it.id} style={{ background: '#dcfce7', color: '#166534', padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700 }}>
+                {it.name} · £{Number(it.price).toFixed(2)}
+                <button onClick={() => toggle(it)} style={{ background: 'transparent', border: 'none', color: '#166534', marginLeft: 6, cursor: 'pointer', fontWeight: 800 }}>×</button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// SEPOS-WEB-004 — Team / chef profiles. Repeatable cards: name, role,
+// short bio, round portrait photo.
+function TeamEditor({ members, onChange, onFile }) {
+  const add = () => onChange([...members, { name: '', role: '', bio: '', photo: '' }]);
+  const update = (i, field, value) => {
+    const next = members.slice();
+    next[i] = { ...next[i], [field]: value };
+    onChange(next);
+  };
+  const remove = (i) => onChange(members.filter((_, idx) => idx !== i));
+
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      {members.length === 0 && (
+        <div style={{ color: C.textFaint, fontSize: 12, padding: '10px 0' }}>
+          No team members yet. Click below to add the first.
+        </div>
+      )}
+      {members.map((t, i) => (
+        <div key={i} style={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, display: 'grid', gap: 10, gridTemplateColumns: '120px 1fr' }}>
+          <PhotoSlot
+            slot={{ key: `team_${i}`, label: 'Portrait', hint: '' }}
+            value={t.photo || ''}
+            onChange={(v) => update(i, 'photo', v)}
+            onFile={(f) => onFile(i, f)}
+          />
+          <div style={{ display: 'grid', gap: 8 }}>
+            <input
+              value={t.name || ''}
+              onChange={(e) => update(i, 'name', e.target.value)}
+              placeholder="Name (e.g. Chef Somchai)"
+              style={input}
+            />
+            <input
+              value={t.role || ''}
+              onChange={(e) => update(i, 'role', e.target.value)}
+              placeholder="Role (e.g. Head Chef)"
+              style={input}
+            />
+            <textarea
+              value={t.bio || ''}
+              onChange={(e) => update(i, 'bio', e.target.value)}
+              placeholder="Short bio — one to two sentences."
+              style={{ ...input, minHeight: 60, resize: 'vertical', fontSize: 13 }}
+            />
+            <button onClick={() => remove(i)} style={{ ...btn.ghost, color: C.danger, alignSelf: 'flex-end', fontSize: 12 }}>
+              Remove
+            </button>
+          </div>
+        </div>
+      ))}
+      <button onClick={add} style={{ ...btn.ghost, justifySelf: 'start' }}>
+        + Add team member
+      </button>
     </div>
   );
 }

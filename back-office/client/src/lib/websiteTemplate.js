@@ -109,6 +109,8 @@ export function generateWebsiteHtml(cfg) {
   const showVisit    = !!(address || phone || email);
   const showBooking  = !!s.booking_widget_enabled  && !!s.widget_base_url;
   const showOrder    = !!s.takeaway_widget_enabled && !!s.widget_base_url;
+  const showMenu     = !!s.menu_enabled && Array.isArray(s.menu_items) && s.menu_items.length > 0;
+  const showTeam     = !!s.team_enabled && Array.isArray(s.team_members) && s.team_members.length > 0;
 
   const galleryPhotos = [c.photo_gallery_1, c.photo_gallery_2, c.photo_gallery_3].filter(Boolean);
   const galleryHtml = !showGallery ? '' : `
@@ -181,6 +183,47 @@ export function generateWebsiteHtml(cfg) {
       </div>
     </section>`;
 
+  // SEPOS-WEB-004 — featured dishes pulled from the EPOS menu. Each
+  // item is a snapshot { name, price, photo, description } so the
+  // generated HTML stays self-contained. Operator re-pulls + re-saves
+  // to refresh.
+  const menuHtml = !showMenu ? '' : `
+    <section id="menu" class="section">
+      <div class="container">
+        <h2>Featured dishes</h2>
+        <div class="menu-grid">
+          ${s.menu_items.map(m => `
+            <div class="menu-card">
+              ${m.photo ? `<div class="menu-photo" style="background-image: url('${m.photo}')"></div>` : '<div class="menu-photo menu-photo-empty"></div>'}
+              <div class="menu-body">
+                <div class="menu-name-row">
+                  <span class="menu-name">${escapeHtml(m.name)}</span>
+                  <span class="menu-price">£${Number(m.price || 0).toFixed(2)}</span>
+                </div>
+                ${m.description ? `<div class="menu-desc">${escapeHtml(m.description)}</div>` : ''}
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </section>`;
+
+  // SEPOS-WEB-004 — chef + team profiles.
+  const teamHtml = !showTeam ? '' : `
+    <section id="team" class="section section-alt">
+      <div class="container">
+        <h2>Meet the team</h2>
+        <div class="team-grid">
+          ${s.team_members.map(t => `
+            <div class="team-card">
+              ${t.photo ? `<div class="team-photo" style="background-image: url('${t.photo}')"></div>` : '<div class="team-photo team-photo-empty"></div>'}
+              <div class="team-name">${escapeHtml(t.name || '')}</div>
+              ${t.role ? `<div class="team-role">${escapeHtml(t.role)}</div>` : ''}
+              ${t.bio  ? `<div class="team-bio">${escapeHtml(t.bio)}</div>` : ''}
+            </div>`).join('')}
+        </div>
+      </div>
+    </section>`;
+
   // SEPOS-WEB-003 — booking + takeaway widget embeds. The widgets are
   // hosted as standalone scripts on the restaurant's EPOS server; the
   // generator just needs the base URL (set in sections.widget_base_url —
@@ -202,14 +245,36 @@ export function generateWebsiteHtml(cfg) {
       </div>
     </section>`;
 
+  // SEPOS-WEB-004 — SEO + social overrides. Falls back to identity
+  // fields so existing sites without explicit SEO still get sensible
+  // defaults.
+  const seoTitle       = escapeHtml(s.seo_title       || c.restaurant_name || 'Restaurant');
+  const seoDescription = escapeHtml(s.seo_description || c.tagline         || '');
+  const seoOgImage     = s.seo_og_image || c.photo_hero || '';
+
+  // SEPOS-WEB-004 — analytics injection. GA4 measurement ID + Facebook
+  // Pixel ID are pasted as-is into the snippet templates. Empty values
+  // skip the script tag entirely.
+  const gaSnippet = !s.ga_id ? '' : `
+  <script async src="https://www.googletagmanager.com/gtag/js?id=${escapeHtml(s.ga_id)}"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${escapeHtml(s.ga_id)}');</script>`;
+  const fbSnippet = !s.fb_pixel_id ? '' : `
+  <script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${escapeHtml(s.fb_pixel_id)}');fbq('track','PageView');</script>`;
+
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>${name}</title>
+  <title>${seoTitle}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="${tagline}" />
+  <meta name="description" content="${seoDescription}" />
+  <meta property="og:title"       content="${seoTitle}" />
+  <meta property="og:description" content="${seoDescription}" />
+  ${seoOgImage ? `<meta property="og:image" content="${seoOgImage}" />` : ''}
+  <meta property="og:type" content="restaurant.restaurant" />
   ${tpl.googleFonts ? `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="${tpl.googleFonts}" rel="stylesheet">` : ''}
+  ${gaSnippet}
+  ${fbSnippet}
   <style>
     :root { --primary: ${primary}; --primary-dark: ${primaryDark}; --accent: ${accent}; }
     *, *::before, *::after { box-sizing: border-box; }
@@ -276,6 +341,27 @@ export function generateWebsiteHtml(cfg) {
     .cta-inline { display: inline-block; margin-top: 8px; background: var(--accent); color: #1a1a1a; padding: 10px 22px; border-radius: 999px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; font-size: 12px; }
     .cta-inline:hover { text-decoration: none; opacity: 0.9; }
 
+    /* Featured menu */
+    .menu-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 22px; }
+    .menu-card { background: white; border: 1px solid #eee; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.05); transition: transform 0.2s; }
+    .menu-card:hover { transform: translateY(-3px); }
+    .menu-photo { aspect-ratio: 4 / 3; background-size: cover; background-position: center; background-color: #f5f5f5; }
+    .menu-photo-empty { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); opacity: 0.15; }
+    .menu-body { padding: 16px 18px; }
+    .menu-name-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .menu-name { font-family: Georgia, serif; font-weight: 700; font-size: 17px; color: #1a1a1a; }
+    .menu-price { font-weight: 800; color: var(--primary); white-space: nowrap; }
+    .menu-desc { font-size: 13px; color: #666; margin-top: 6px; line-height: 1.4; }
+
+    /* Team / chef profiles */
+    .team-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 26px; }
+    .team-card { text-align: center; }
+    .team-photo { width: 140px; height: 140px; margin: 0 auto 14px; border-radius: 50%; background-size: cover; background-position: center; box-shadow: 0 6px 20px rgba(0,0,0,0.12); }
+    .team-photo-empty { background: var(--primary); opacity: 0.15; }
+    .team-name { font-family: Georgia, serif; font-weight: 700; font-size: 17px; color: #1a1a1a; }
+    .team-role { font-size: 12px; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-top: 4px; }
+    .team-bio { font-size: 13px; color: #555; margin-top: 10px; line-height: 1.55; }
+
     /* Footer */
     footer { background: var(--primary-dark); color: rgba(255,255,255,0.78); text-align: center; padding: 28px 24px; font-size: 13px; }
     footer a { color: var(--accent); }
@@ -296,7 +382,9 @@ export function generateWebsiteHtml(cfg) {
       </div>
       <div class="nav-links">
         ${storyHtml    ? '<a href="#about">About</a>'        : ''}
+        ${menuHtml     ? '<a href="#menu">Menu</a>'          : ''}
         ${galleryHtml  ? '<a href="#gallery">Gallery</a>'    : ''}
+        ${teamHtml     ? '<a href="#team">Team</a>'          : ''}
         ${hoursHtml    ? '<a href="#hours">Hours</a>'        : ''}
         ${pressHtml    ? '<a href="#press">Press</a>'        : ''}
         ${cateringHtml ? '<a href="#catering">Catering</a>'  : ''}
@@ -316,7 +404,9 @@ export function generateWebsiteHtml(cfg) {
   </header>
 
   ${storyHtml}
+  ${menuHtml}
   ${galleryHtml}
+  ${teamHtml}
   ${hoursHtml}
   ${pressHtml}
   ${cateringHtml}

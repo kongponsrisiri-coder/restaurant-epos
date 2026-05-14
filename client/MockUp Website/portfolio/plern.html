@@ -975,6 +975,27 @@
       .field-row { grid-template-columns: 1fr; }
       .time-grid { grid-template-columns: repeat(3, 1fr); }
     }
+
+    /* Gallery -------------------------------------------------------- */
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 3px;
+    }
+    .gallery-item {
+      aspect-ratio: 4/3;
+      overflow: hidden;
+      background: var(--charcoal-2);
+    }
+    .gallery-item img {
+      width: 100%; height: 100%;
+      object-fit: cover; display: block;
+      transition: transform 0.7s ease;
+    }
+    .gallery-item:hover img { transform: scale(1.05); }
+    @media (max-width: 760px) {
+      .gallery-grid { grid-template-columns: 1fr 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -987,6 +1008,7 @@
       <button class="nav-toggle" id="navToggle" aria-label="Menu">☰</button>
       <div class="nav-links" id="navLinks">
         <a href="#philosophy">Philosophy</a>
+        <a href="#gallery">Gallery</a>
         <a href="#dishes">Menu</a>
         <a href="#story">The Method</a>
         <a href="#visit">Visit</a>
@@ -1168,13 +1190,26 @@
     </div>
   </section>
 
+
+  <!-- GALLERY -->
+  <section id="gallery" style="background:var(--charcoal);padding:4px 0 0;">
+    <div class="gallery-grid">
+      <div class="gallery-item"><img src="Plern/real-photo-1.jpg" alt="Plern cuisine" loading="lazy"></div>
+      <div class="gallery-item"><img src="Plern/real-photo-2.jpg" alt="Plern cuisine" loading="lazy"></div>
+      <div class="gallery-item"><img src="Plern/real-photo-3.jpg" alt="Plern cuisine" loading="lazy"></div>
+      <div class="gallery-item"><img src="Plern/real-photo-4.jpg" alt="Plern cuisine" loading="lazy"></div>
+      <div class="gallery-item"><img src="Plern/real-photo-5.jpg" alt="Plern cuisine" loading="lazy"></div>
+      <div class="gallery-item"><img src="Plern/real-photo-6.jpg" alt="Plern cuisine" loading="lazy"></div>
+    </div>
+  </section>
+
   <!-- RESERVATION CTA -->
   <section class="reserve-banner">
     <span class="eyebrow" style="color: var(--gold-soft);">Reservations</span>
     <h2>Pause. Sit. Stay a while.</h2>
     <p>Book directly with us. Instant confirmation. Zero commission, zero booking fee — every penny goes to the table, not the middleman.</p>
     <a href="#" class="btn btn-primary" onclick="openModal('reservation'); return false;">Reserve a Table</a>
-    <span class="reserve-phone">Or call us · <a href="tel:+442079350000">020 7935 0000</a></span>
+    <span class="reserve-phone">Or call us · <a href="tel:+442072782888">020 7278 2888</a></span>
   </section>
 
   <!-- MODERNIST KITCHEN STORY -->
@@ -1248,11 +1283,11 @@
         <div class="visit-block visit-info">
           <h3>The Address</h3>
           <p><strong>Plern Thai Bistro</strong></p>
-          <p>(Address to be confirmed)<br/>London</p>
-          <p style="margin-top: 18px;"><strong>Phone</strong> &nbsp; <a href="tel:+442079350000">020 7935 0000</a></p>
-          <p><strong>Email</strong> &nbsp; <a href="mailto:hello@plernbistro.co.uk">hello@plernbistro.co.uk</a></p>
+          <p>38 Caledonian Road, Kings Cross<br/>London N1 9DT</p><p style="margin-top:8px;font-size:14px;color:var(--muted);">Nearest tube: King's Cross St. Pancras · 3 min walk</p>
+          <p style="margin-top: 18px;"><strong>Phone</strong> &nbsp; <a href="tel:+442072782888">020 7278 2888</a></p>
+          <p><strong>Email</strong> &nbsp; <a href="mailto:hello@phakoonthai.com">hello@phakoonthai.com</a></p>
           <p style="margin-top: 18px;"><strong>Private Dining</strong></p>
-          <p>Birthdays, corporate lunches, celebrations. <a href="mailto:hello@plernbistro.co.uk">Enquire for bespoke packages</a>.</p>
+          <p>Birthdays, corporate lunches, celebrations. <a href="mailto:hello@phakoonthai.com">Enquire for bespoke packages</a>.</p>
         </div>
       </div>
     </div>
@@ -1265,7 +1300,8 @@
     <div class="foot-divider"></div>
     <div class="foot-meta">
       &copy; 2026 Plern Thai Bistro · London<br/>
-      <a href="#philosophy">Philosophy</a> · <a href="#dishes">Menu</a> · <a href="#visit">Visit</a>
+      <a href="#philosophy">Philosophy</a>
+        <a href="#gallery">Gallery</a> · <a href="#dishes">Menu</a> · <a href="#visit">Visit</a>
     </div>
     <div class="powered">Reservations &amp; Online Order · Powered by <a href="https://siamepos.co.uk">SiamEPOS™</a></div>
   </footer>

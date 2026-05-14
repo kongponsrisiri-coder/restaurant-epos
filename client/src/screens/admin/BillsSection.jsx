@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
-import { getBills, getBillItems } from '../../api';
+import { getBills, getBillItems, loginStaff } from '../../api';
 import DeleteOrderModal from '../../components/DeleteOrderModal';
+
+// Manager-unlock window. After this many ms with no fresh PIN entry the
+// delete buttons hide themselves again — same pattern OpenTable + Toast use
+// so destructive admin actions aren't visible to customers or junior staff
+// peeking at the till.
+const UNLOCK_DURATION_MS = 5 * 60 * 1000;
 
 export default function BillsSection() {
   const [bills, setBills] = useState([]);
@@ -12,6 +18,48 @@ export default function BillsSection() {
   const [billItems, setBillItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);  // SEPOS-042 — bill awaiting manager-PIN confirmation
+
+  // Manager unlock state. The entry point is a hidden gesture: 5 rapid
+  // taps on the "🧾 Bill Records" heading within 3 seconds. There is NO
+  // visible lock icon — junior staff and customers peeking at the till
+  // see just a normal heading. Managers who need to fix a mistaken bill
+  // know the gesture.
+  const [unlockedUntil, setUnlockedUntil]   = useState(null);
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [tapCount, setTapCount] = useState(0);
+  const [tick, setTick] = useState(0);
+  const isUnlocked = unlockedUntil != null && unlockedUntil > Date.now();
+  useEffect(() => {
+    if (!unlockedUntil) return;
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [unlockedUntil]);
+  useEffect(() => {
+    if (unlockedUntil && Date.now() > unlockedUntil) setUnlockedUntil(null);
+  }, [tick, unlockedUntil]);
+  // Auto-relock on tab change / unmount.
+  useEffect(() => () => setUnlockedUntil(null), []);
+  // Tap counter auto-resets after 3 s of no taps. Prevents random taps
+  // over a long period from accidentally triggering the unlock.
+  useEffect(() => {
+    if (tapCount === 0) return;
+    const id = setTimeout(() => setTapCount(0), 3000);
+    return () => clearTimeout(id);
+  }, [tapCount]);
+
+  const handleHeadingTap = () => {
+    if (isUnlocked) return;  // already open, no need
+    const next = tapCount + 1;
+    if (next >= 5) {
+      setTapCount(0);
+      setShowUnlockModal(true);
+    } else {
+      setTapCount(next);
+    }
+  };
+
+  const secondsRemaining = isUnlocked ? Math.max(0, Math.floor((unlockedUntil - Date.now()) / 1000)) : 0;
+  const fmtCountdown = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   const COURSE_LABELS = { 0: 'Bar', 1: 'Starters', 2: 'Mains', 3: 'Desserts', 4: 'Extra' };
 
   const fetchBills = async () => {
@@ -39,7 +87,36 @@ export default function BillsSection() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 20 }}>🧾 Bill Records</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        {/* The heading is the hidden gesture target. 5 taps within 3 s
+            opens the manager PIN prompt. Looks like a plain heading to
+            anyone who doesn't know — invisible to customers + junior
+            staff. userSelect off so multi-taps don't select text. */}
+        <h1
+          onClick={handleHeadingTap}
+          style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', margin: 0, cursor: 'default', userSelect: 'none' }}
+        >
+          🧾 Bill Records
+        </h1>
+
+        {/* Only shown WHEN unlocked — a green pill with countdown +
+            relock-now. Locked state shows nothing at all. */}
+        {isUnlocked && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#dcfce7', border: '1px solid #22c55e', borderRadius: 999, padding: '6px 14px' }}>
+            <span style={{ fontSize: 13 }}>🔓</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#166534' }}>
+              Manager mode · {fmtCountdown(secondsRemaining)}
+            </span>
+            <button
+              onClick={() => setUnlockedUntil(null)}
+              title="Lock now"
+              style={{ background: 'transparent', border: 'none', color: '#166534', cursor: 'pointer', fontWeight: 800, fontSize: 11, padding: 0 }}
+            >
+              Lock
+            </button>
+          </div>
+        )}
+      </div>
       <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div><label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>From Date</label><input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }} /></div>
@@ -76,11 +153,16 @@ export default function BillsSection() {
                 <span style={{ textAlign: 'right', color: bill.discount_value > 0 ? '#22c55e' : '#bbb', fontSize: 13 }}>{bill.discount_value > 0 ? bill.discount_type === 'percent' ? `-${bill.discount_value}%` : `-£${bill.discount_value}` : '—'}</span>
                 <span style={{ textAlign: 'right', fontWeight: 700, color: '#1a1a2e' }}>£{(bill.total || 0).toFixed(2)}</span>
                 <span style={{ textAlign: 'center' }}>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(bill); }}
-                    title="Delete this transaction (manager PIN required)"
-                    style={{ background: 'transparent', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 16, padding: '4px 6px', borderRadius: 6 }}
-                  >🗑️</button>
+                  {/* Delete buttons hidden until a manager unlocks the
+                      session (top-right 🔒). PIN re-validated at the
+                      modal too — defence in depth. */}
+                  {isUnlocked && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(bill); }}
+                      title="Delete this transaction (manager PIN required)"
+                      style={{ background: 'transparent', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 16, padding: '4px 6px', borderRadius: 6 }}
+                    >🗑️</button>
+                  )}
                 </span>
               </div>
               {selectedBill?.id === bill.id && (
@@ -134,6 +216,74 @@ export default function BillsSection() {
           onDeleted={() => { setDeleteTarget(null); setSelectedBill(null); fetchBills(); }}
         />
       )}
+
+      {showUnlockModal && (
+        <UnlockModal
+          onClose={() => setShowUnlockModal(false)}
+          onUnlocked={() => { setUnlockedUntil(Date.now() + UNLOCK_DURATION_MS); setShowUnlockModal(false); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// SEPOS-051 — manager unlock modal. Validates the PIN via loginStaff
+// (same backend gate the delete endpoint uses). Roles allowed match the
+// DELETE /api/orders endpoint: admin / manager / supervisor. SEPOS-043
+// will tighten supervisor out of delete-closed-bill later — when that
+// ships this should drop supervisor too.
+function UnlockModal({ onClose, onUnlocked }) {
+  const [pin, setPin] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const submit = async () => {
+    if (!pin.trim()) { setErr('PIN required.'); return; }
+    setBusy(true); setErr('');
+    try {
+      const staff = await loginStaff(pin.trim());
+      if (!staff || staff.error) { setErr('Invalid PIN.'); setBusy(false); return; }
+      const role = (staff.role || '').toLowerCase();
+      if (!['admin', 'manager', 'supervisor'].includes(role)) {
+        setErr('That PIN doesn\'t have permission to delete bills.');
+        setBusy(false); return;
+      }
+      onUnlocked();
+    } catch (e) {
+      setErr(e.message || 'PIN check failed.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9000, padding: 20 }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: 'white', borderRadius: 14, padding: 28, width: 'min(380px, 100%)', boxShadow: '0 30px 80px rgba(0,0,0,0.35)' }}>
+        <div style={{ fontSize: 30, marginBottom: 6 }}>🔒</div>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#1a1a2e' }}>Unlock manager actions</h2>
+        <p style={{ margin: '6px 0 18px', fontSize: 13, color: '#666' }}>
+          Enter a manager PIN to show delete buttons on closed bills for the next 5 minutes. PIN is re-checked when you actually hit delete — this just reveals the buttons.
+        </p>
+        <input
+          type="password"
+          autoFocus
+          value={pin}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+          placeholder="Manager PIN"
+          maxLength={6}
+          style={{ width: '100%', padding: '12px 14px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 18, fontFamily: 'ui-monospace, monospace', textAlign: 'center', letterSpacing: 6, boxSizing: 'border-box' }}
+        />
+        {err && (
+          <div style={{ background: '#fee2e2', color: '#991b1b', padding: '8px 12px', borderRadius: 8, fontSize: 13, marginTop: 10 }}>{err}</div>
+        )}
+        <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ background: 'transparent', color: '#475569', border: '1px solid #cbd5e1', padding: '10px 16px', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={submit} disabled={busy} style={{ background: '#0D1B3E', color: 'white', border: 'none', padding: '10px 18px', borderRadius: 8, fontWeight: 800, fontSize: 14, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+            {busy ? 'Checking…' : 'Unlock'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

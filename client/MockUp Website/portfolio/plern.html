@@ -1,0 +1,1703 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Plern Thai Bistro — Authentic Roots. Modern Methods.</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Modern luxury Thai bistro. Sous-vide precision, French-bistro craft, the soul of four Thai regions. Reserve a table or order takeaway direct." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --cream:      #F4EBDC;
+      --cream-soft: #FAF5EB;
+      --cream-warm: #EFE3CF;
+      --taupe:      #B5A285;
+      --taupe-dark: #8A7860;
+      --charcoal:   #25221E;
+      --charcoal-2: #34302B;
+      --ink:        #1A1916;
+      --gold:       #A88458;
+      --gold-soft:  #C9A57A;
+      --line:       #E0D6C4;
+      --muted:      #6B6358;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-weight: 400;
+      color: var(--ink);
+      background: var(--cream);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+    h1, h2, h3, h4 {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-weight: 500;
+      line-height: 1.15;
+      margin: 0 0 0.4em;
+      color: var(--charcoal);
+      letter-spacing: -0.5px;
+    }
+    a { color: var(--charcoal); text-decoration: none; transition: color .2s; }
+    a:hover { color: var(--gold); }
+    img { max-width: 100%; display: block; }
+    .container { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+    .eyebrow {
+      display: inline-block;
+      font-size: 11px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--gold);
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+
+    /* Nav --------------------------------------------------------- */
+    .nav {
+      position: fixed; top: 0; left: 0; right: 0;
+      z-index: 60;
+      padding: 18px 0;
+      transition: background .3s, padding .3s, box-shadow .3s;
+    }
+    .nav.scrolled {
+      background: rgba(37,34,30,0.97);
+      padding: 12px 0;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+    }
+    .nav-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      max-width: 1180px; margin: 0 auto; padding: 0 28px;
+    }
+    .brand {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 30px; font-weight: 600;
+      color: #fff;
+      letter-spacing: 2px;
+      line-height: 1;
+    }
+    .brand small {
+      display: block;
+      font-family: 'Inter', sans-serif;
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 4px;
+      color: var(--gold-soft);
+      margin-top: 4px;
+    }
+    .nav-links { display: flex; align-items: center; gap: 4px; }
+    .nav-links a {
+      color: rgba(255,255,255,0.85);
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 9px 14px;
+      border-radius: 2px;
+    }
+    .nav-links a:hover { color: var(--gold-soft); }
+    .nav-cta {
+      background: var(--gold);
+      color: var(--charcoal) !important;
+      padding: 10px 20px !important;
+      font-weight: 600 !important;
+      margin-left: 8px;
+      transition: background .2s;
+    }
+    .nav-cta:hover { background: var(--gold-soft); color: var(--charcoal) !important; }
+    .nav-toggle {
+      display: none;
+      background: none; border: none; color: #fff;
+      font-size: 22px; cursor: pointer; padding: 4px 8px;
+    }
+
+    /* Hero -------------------------------------------------------- */
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff;
+      text-align: center;
+      padding: 140px 28px 100px;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background:
+        linear-gradient(to bottom, rgba(26,25,22,0.55) 0%, rgba(26,25,22,0.62) 50%, rgba(26,25,22,0.88) 100%),
+        url('https://loremflickr.com/1800/1200/thai,food,restaurant,moody?lock=1') center/cover no-repeat;
+      z-index: 0;
+    }
+    .hero-inner {
+      position: relative; z-index: 1;
+      max-width: 860px;
+    }
+    .hero .eyebrow { color: var(--gold-soft); }
+    .hero h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(70px, 11vw, 140px);
+      font-weight: 400;
+      color: #fff;
+      margin: 0 0 0;
+      letter-spacing: -2px;
+      line-height: 0.95;
+    }
+    .hero .tagline {
+      font-family: 'Cormorant Garamond', serif;
+      font-style: italic;
+      font-size: clamp(18px, 2.2vw, 24px);
+      font-weight: 300;
+      color: rgba(255,255,255,0.9);
+      margin: 18px 0 30px;
+      letter-spacing: 1px;
+    }
+    .hero p {
+      font-size: 16px;
+      max-width: 580px;
+      margin: 0 auto 38px;
+      color: rgba(255,255,255,0.82);
+      line-height: 1.8;
+    }
+    .hero-divider {
+      width: 60px; height: 1px;
+      background: var(--gold-soft);
+      margin: 26px auto 30px;
+      position: relative;
+    }
+    .hero-divider::before, .hero-divider::after {
+      content: ''; position: absolute; top: 50%;
+      width: 6px; height: 6px;
+      background: var(--gold-soft);
+      border-radius: 50%;
+      transform: translateY(-50%);
+    }
+    .hero-divider::before { left: -14px; }
+    .hero-divider::after  { right: -14px; }
+
+    .hero-ctas { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 15px 32px;
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all .25s;
+      border-radius: 2px;
+    }
+    .btn-primary {
+      background: var(--gold);
+      color: var(--charcoal);
+      border-color: var(--gold);
+    }
+    .btn-primary:hover {
+      background: transparent; color: var(--gold-soft);
+      border-color: var(--gold-soft);
+    }
+    .btn-outline {
+      background: transparent;
+      color: #fff;
+      border-color: rgba(255,255,255,0.6);
+    }
+    .btn-outline:hover {
+      background: rgba(255,255,255,0.95);
+      color: var(--charcoal);
+      border-color: #fff;
+    }
+    .btn-charcoal {
+      background: var(--charcoal);
+      color: var(--gold-soft);
+      border-color: var(--charcoal);
+    }
+    .btn-charcoal:hover {
+      background: transparent;
+      color: var(--charcoal);
+      border-color: var(--charcoal);
+    }
+
+    .scroll-cue {
+      position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+      z-index: 1;
+      font-size: 10px; letter-spacing: 3px; text-transform: uppercase;
+      color: rgba(255,255,255,0.5);
+      writing-mode: vertical-rl;
+      animation: float 3s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50%       { transform: translateX(-50%) translateY(8px); }
+    }
+
+    /* Section base ----------------------------------------------- */
+    .section { padding: 110px 0; position: relative; }
+    .section-cream { background: var(--cream); }
+    .section-cream-soft { background: var(--cream-soft); }
+    .section-warm { background: var(--cream-warm); }
+    .section-charcoal { background: var(--charcoal); color: rgba(255,255,255,0.9); }
+    .section-charcoal h2, .section-charcoal h3 { color: #fff; }
+
+    .section-head { text-align: center; max-width: 720px; margin: 0 auto 60px; }
+    .section-head h2 {
+      font-size: clamp(36px, 4.6vw, 54px);
+      margin: 0 0 18px;
+    }
+    .section-head .ornament {
+      display: block;
+      width: 80px; height: 1px;
+      background: var(--gold);
+      margin: 24px auto 24px;
+      position: relative;
+    }
+    .section-head .ornament::after {
+      content: '✦';
+      position: absolute; left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      background: inherit;
+      color: var(--gold);
+      font-size: 14px;
+      padding: 0 10px;
+    }
+    .section-head p {
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.8;
+    }
+    .section-charcoal .section-head p { color: rgba(255,255,255,0.7); }
+
+    /* Philosophy -------------------------------------------------- */
+    .philosophy-quote {
+      font-family: 'Cormorant Garamond', serif;
+      font-style: italic;
+      font-size: clamp(26px, 3.4vw, 38px);
+      font-weight: 400;
+      color: var(--charcoal);
+      line-height: 1.4;
+      text-align: center;
+      max-width: 880px;
+      margin: 40px auto 0;
+      position: relative;
+      padding: 0 40px;
+    }
+    .philosophy-quote::before, .philosophy-quote::after {
+      font-size: 80px; color: var(--taupe);
+      font-family: serif;
+      line-height: 0;
+      position: absolute;
+      opacity: 0.5;
+    }
+    .philosophy-quote::before { content: '"'; top: 0; left: 0; }
+    .philosophy-quote::after  { content: '"'; bottom: -10px; right: 0; }
+    .quote-attrib {
+      display: block;
+      margin-top: 28px;
+      font-size: 11px;
+      font-style: normal;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--gold);
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+    }
+
+    /* Three Pillars ----------------------------------------------- */
+    .pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 20px; }
+    .pillar {
+      background: var(--cream-soft);
+      border: 1px solid var(--line);
+      padding: 44px 36px;
+      text-align: center;
+      transition: transform .3s, box-shadow .3s;
+    }
+    .pillar:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 18px 40px rgba(37,34,30,0.10);
+    }
+    .pillar-icon {
+      width: 56px; height: 56px;
+      margin: 0 auto 22px;
+      color: var(--gold);
+    }
+    .pillar-icon svg { width: 100%; height: 100%; }
+    .pillar h3 {
+      font-size: 26px;
+      margin-bottom: 12px;
+    }
+    .pillar p {
+      font-size: 15px;
+      color: var(--muted);
+      margin: 0;
+      line-height: 1.75;
+    }
+
+    /* Selected Dishes -------------------------------------------- */
+    .dishes-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 36px;
+    }
+    .dish {
+      background: var(--cream-soft);
+      overflow: hidden;
+      display: flex; flex-direction: column;
+      transition: transform .3s, box-shadow .3s;
+    }
+    .dish:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 44px rgba(37,34,30,0.12);
+    }
+    .dish-img {
+      aspect-ratio: 4 / 3;
+      background-size: cover;
+      background-position: center;
+      position: relative;
+    }
+    .dish-img::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.18));
+    }
+    .dish-body { padding: 26px 28px 30px; flex: 1; display: flex; flex-direction: column; }
+    .dish-cat {
+      font-size: 10px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--gold);
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .dish h3 {
+      font-size: 24px;
+      margin: 0 0 12px;
+      line-height: 1.2;
+    }
+    .dish p {
+      font-size: 14px;
+      color: var(--muted);
+      margin: 0 0 18px;
+      flex: 1;
+      line-height: 1.7;
+    }
+    .dish-foot {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+    .dish-price {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--charcoal);
+    }
+    .dish-price.comp {
+      font-style: italic;
+      font-size: 14px;
+      color: var(--gold);
+    }
+    .dish-tag {
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--taupe-dark);
+    }
+    .full-menu-link {
+      text-align: center;
+      margin-top: 60px;
+    }
+    .full-menu-link a {
+      font-size: 12px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--gold);
+      font-weight: 600;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--gold);
+    }
+
+    /* Reservation CTA banner ------------------------------------- */
+    .reserve-banner {
+      position: relative;
+      padding: 130px 28px;
+      text-align: center;
+      color: #fff;
+      overflow: hidden;
+    }
+    .reserve-banner::before {
+      content: '';
+      position: absolute; inset: 0;
+      background:
+        linear-gradient(rgba(26,25,22,0.66), rgba(26,25,22,0.78)),
+        url('https://loremflickr.com/1800/900/thai,restaurant,interior,candlelight?lock=2') center/cover no-repeat;
+      z-index: 0;
+    }
+    .reserve-banner > * { position: relative; z-index: 1; }
+    .reserve-banner h2 {
+      font-size: clamp(40px, 5vw, 56px);
+      color: #fff;
+      margin: 0 0 18px;
+    }
+    .reserve-banner p {
+      max-width: 540px; margin: 0 auto 32px;
+      color: rgba(255,255,255,0.82);
+      font-size: 16px;
+    }
+    .reserve-phone {
+      display: block;
+      margin-top: 22px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.6);
+      letter-spacing: 1.5px;
+    }
+    .reserve-phone a { color: var(--gold-soft); }
+
+    /* Modernist Kitchen story ------------------------------------ */
+    .story-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.05fr;
+      gap: 70px;
+      align-items: center;
+    }
+    .story-text h2 { font-size: clamp(34px, 4.2vw, 48px); margin-bottom: 22px; }
+    .story-text p { color: var(--muted); margin: 0 0 18px; font-size: 16px; line-height: 1.85; }
+    .story-img {
+      aspect-ratio: 4 / 5;
+      background-size: cover;
+      background-position: center;
+      background-image: url('https://loremflickr.com/900/1100/chef,thai,kitchen,plating?lock=3');
+    }
+    .zones {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-top: 38px;
+      padding-top: 32px;
+      border-top: 1px solid var(--line);
+    }
+    .zone-num {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 38px;
+      font-weight: 400;
+      color: var(--gold);
+      line-height: 1;
+    }
+    .zone-label {
+      font-size: 10px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 6px;
+      font-weight: 600;
+    }
+    .zone-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 18px;
+      color: var(--charcoal);
+      margin-top: 10px;
+      font-weight: 500;
+    }
+    @media (max-width: 860px) {
+      .story-grid { grid-template-columns: 1fr; gap: 40px; }
+      .story-img { aspect-ratio: 4 / 3; }
+    }
+
+    /* Takeaway CTA ----------------------------------------------- */
+    .takeaway-banner {
+      padding: 110px 28px;
+      text-align: center;
+      background: var(--cream-warm);
+      position: relative;
+      overflow: hidden;
+    }
+    .takeaway-banner::before {
+      content: '';
+      position: absolute;
+      top: -80px; right: -80px;
+      width: 320px; height: 320px;
+      border-radius: 50%;
+      background: rgba(168,132,88,0.10);
+    }
+    .takeaway-banner::after {
+      content: '';
+      position: absolute;
+      bottom: -100px; left: -60px;
+      width: 260px; height: 260px;
+      border-radius: 50%;
+      background: rgba(181,162,133,0.18);
+    }
+    .takeaway-banner > * { position: relative; z-index: 1; }
+    .takeaway-banner h2 { font-size: clamp(40px, 5vw, 56px); margin: 0 0 18px; }
+    .takeaway-banner p { max-width: 540px; margin: 0 auto 32px; color: var(--muted); font-size: 16px; }
+    .takeaway-stats { display: flex; gap: 50px; justify-content: center; margin-bottom: 36px; flex-wrap: wrap; }
+    .stat {
+      text-align: center;
+    }
+    .stat-num {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 44px;
+      color: var(--charcoal);
+      font-weight: 500;
+      line-height: 1;
+    }
+    .stat-lbl {
+      font-size: 10px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--gold);
+      font-weight: 600;
+      margin-top: 8px;
+    }
+
+    /* Visit ----------------------------------------------------- */
+    .visit-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 50px;
+    }
+    .visit-block h3 {
+      font-size: 26px;
+      margin-bottom: 22px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .hours-list { list-style: none; margin: 0; padding: 0; }
+    .hours-list li {
+      display: flex; justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 15px;
+    }
+    .hours-list li:last-child { border-bottom: none; }
+    .hours-day { color: var(--charcoal); font-weight: 500; }
+    .hours-time { color: var(--muted); font-family: 'Inter', sans-serif; }
+    .visit-info p { color: var(--muted); margin: 8px 0; font-size: 15px; }
+    .visit-info strong { color: var(--charcoal); font-weight: 600; }
+    .visit-info a { color: var(--gold); }
+    @media (max-width: 720px) {
+      .visit-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Footer ----------------------------------------------------- */
+    footer {
+      background: var(--ink);
+      color: rgba(255,255,255,0.55);
+      padding: 60px 28px 36px;
+      text-align: center;
+    }
+    .foot-brand {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 36px;
+      color: var(--gold-soft);
+      letter-spacing: 4px;
+      margin-bottom: 8px;
+    }
+    .foot-tag {
+      font-family: 'Cormorant Garamond', serif;
+      font-style: italic;
+      font-size: 14px;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 30px;
+    }
+    .foot-divider {
+      width: 60px; height: 1px;
+      background: rgba(168,132,88,0.4);
+      margin: 0 auto 30px;
+    }
+    .foot-meta {
+      font-size: 12px;
+      letter-spacing: 1.5px;
+      line-height: 1.9;
+    }
+    .powered {
+      margin-top: 22px;
+      font-size: 11px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+    }
+    .powered a { color: var(--gold-soft); font-weight: 600; }
+
+    /* Modal ------------------------------------------------------ */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(15,12,10,0.78);
+      backdrop-filter: blur(6px);
+      z-index: 200;
+      display: none;
+      align-items: center; justify-content: center;
+      padding: 24px;
+      animation: fadeIn .25s ease;
+    }
+    .modal-backdrop.show { display: flex; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .modal {
+      background: #fff;
+      width: 100%;
+      max-width: 560px;
+      max-height: calc(100vh - 48px);
+      overflow-y: auto;
+      border-radius: 4px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.4);
+      animation: rise .35s cubic-bezier(.2,.7,.3,1);
+    }
+    @keyframes rise { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .modal-head {
+      padding: 26px 32px 22px;
+      border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; background: #fff; z-index: 2;
+    }
+    .modal-title-block .modal-eyebrow {
+      font-size: 10px; letter-spacing: 3px; color: var(--gold);
+      text-transform: uppercase; font-weight: 600;
+    }
+    .modal-title-block h3 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px; font-weight: 500;
+      margin: 4px 0 0;
+      color: var(--charcoal);
+    }
+    .modal-close {
+      background: transparent; border: none;
+      font-size: 28px; line-height: 1;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 4px 10px;
+      transition: color .2s;
+    }
+    .modal-close:hover { color: var(--charcoal); }
+    .modal-body { padding: 28px 32px 32px; }
+    .modal-foot {
+      padding: 18px 32px 22px;
+      border-top: 1px solid var(--line);
+      display: flex; gap: 12px; justify-content: space-between; align-items: center;
+      flex-wrap: wrap;
+    }
+    .modal-powered {
+      font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--muted);
+    }
+    .modal-powered a { color: var(--gold); font-weight: 600; }
+
+    /* Steps ------------------------------------------------------ */
+    .steps {
+      display: flex; gap: 6px; margin-bottom: 26px;
+    }
+    .step-pill {
+      flex: 1;
+      height: 4px;
+      background: var(--line);
+      border-radius: 2px;
+      transition: background .25s;
+    }
+    .step-pill.active { background: var(--gold); }
+    .step-pill.done { background: var(--gold-soft); }
+
+    .field { margin-bottom: 18px; }
+    .field label {
+      display: block;
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--charcoal);
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .field input, .field select, .field textarea {
+      width: 100%;
+      padding: 13px 16px;
+      border: 1px solid var(--line);
+      border-radius: 2px;
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      color: var(--ink);
+      background: var(--cream-soft);
+      transition: border .15s, box-shadow .15s;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      outline: none;
+      border-color: var(--gold);
+      box-shadow: 0 0 0 3px rgba(168,132,88,0.15);
+      background: #fff;
+    }
+    .field textarea { min-height: 80px; resize: vertical; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .field-error {
+      color: #B7472A; font-size: 12px; margin-top: 4px; display: none;
+    }
+    .field.has-error input, .field.has-error select { border-color: #B7472A; }
+    .field.has-error .field-error { display: block; }
+
+    /* Time slots ------------------------------------------------- */
+    .time-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .time-slot {
+      padding: 12px 0;
+      text-align: center;
+      background: var(--cream-soft);
+      border: 1px solid var(--line);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--charcoal);
+      transition: all .15s;
+      border-radius: 2px;
+    }
+    .time-slot:hover { border-color: var(--gold); }
+    .time-slot.selected {
+      background: var(--charcoal);
+      color: var(--gold-soft);
+      border-color: var(--charcoal);
+    }
+    .time-slot.disabled {
+      opacity: 0.35; cursor: not-allowed;
+      background: transparent;
+    }
+
+    .consent {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 14px 16px;
+      background: var(--cream-soft);
+      border-radius: 4px;
+      margin: 18px 0 4px;
+    }
+    .consent input { margin-top: 4px; }
+    .consent label {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.55;
+      text-transform: none;
+      letter-spacing: 0.2px;
+      margin: 0;
+      font-weight: 400;
+    }
+
+    .summary-row {
+      display: flex; justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+    }
+    .summary-row:last-of-type { border-bottom: none; }
+    .summary-row .lbl { color: var(--muted); }
+    .summary-row .val { color: var(--charcoal); font-weight: 600; }
+
+    .confirm-icon {
+      width: 64px; height: 64px;
+      border: 2px solid var(--gold);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 22px;
+      color: var(--gold);
+      font-size: 28px;
+    }
+    .confirm-wrap { text-align: center; padding: 14px 0 4px; }
+    .confirm-wrap h4 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 26px; font-weight: 500; color: var(--charcoal);
+      margin: 0 0 8px;
+    }
+    .confirm-wrap p { color: var(--muted); margin: 0 0 14px; }
+
+    /* Takeaway menu in modal ------------------------------------- */
+    .modal-wide { max-width: 880px; }
+    .takeaway-layout {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    .menu-list {
+      max-height: 480px;
+      overflow-y: auto;
+      padding-right: 6px;
+    }
+    .menu-item {
+      display: flex; gap: 14px; padding: 14px 0;
+      border-bottom: 1px solid var(--line);
+      align-items: center;
+    }
+    .menu-item-info { flex: 1; }
+    .menu-item-info h5 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 17px;
+      font-weight: 500;
+      margin: 0 0 4px;
+      color: var(--charcoal);
+    }
+    .menu-item-info p { font-size: 12px; color: var(--muted); margin: 0; }
+    .menu-item-side { text-align: right; min-width: 90px; }
+    .menu-item-price {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 17px;
+      font-weight: 500;
+      color: var(--charcoal);
+      margin-bottom: 6px;
+    }
+    .menu-item-side button {
+      background: var(--charcoal);
+      color: var(--gold-soft);
+      border: none;
+      padding: 6px 12px;
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      border-radius: 2px;
+      transition: background .15s;
+    }
+    .menu-item-side button:hover { background: var(--gold); color: var(--charcoal); }
+
+    .takeaway-cart {
+      background: var(--cream-soft);
+      padding: 20px;
+      border-radius: 2px;
+      position: sticky; top: 0;
+    }
+    .takeaway-cart h4 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px;
+      margin: 0 0 16px;
+      color: var(--charcoal);
+    }
+    .cart-empty {
+      color: var(--muted);
+      font-size: 13px;
+      font-style: italic;
+      padding: 14px 0;
+    }
+    .cart-line {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px dashed var(--line);
+      font-size: 13px;
+    }
+    .cart-line:last-of-type { border-bottom: none; }
+    .cart-name { flex: 1; color: var(--charcoal); }
+    .cart-qty {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin: 0 10px;
+    }
+    .cart-qty button {
+      width: 22px; height: 22px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--charcoal);
+      font-size: 14px; line-height: 1;
+      cursor: pointer;
+      border-radius: 2px;
+    }
+    .cart-qty button:hover { border-color: var(--gold); color: var(--gold); }
+    .cart-price {
+      min-width: 50px; text-align: right;
+      color: var(--charcoal);
+      font-weight: 600;
+    }
+    .cart-total {
+      display: flex; justify-content: space-between;
+      padding: 14px 0 4px;
+      margin-top: 8px;
+      border-top: 2px solid var(--charcoal);
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--charcoal);
+    }
+    .pickup-block { margin-top: 16px; }
+    .pickup-block label {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--charcoal);
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .pickup-block select {
+      width: 100%; padding: 10px 12px;
+      border: 1px solid var(--line);
+      background: #fff;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      border-radius: 2px;
+    }
+    @media (max-width: 720px) {
+      .takeaway-layout { grid-template-columns: 1fr; }
+      .menu-list { max-height: 380px; }
+    }
+
+    /* Toast ------------------------------------------------------ */
+    .toast {
+      position: fixed; bottom: 30px; left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--charcoal);
+      color: var(--gold-soft);
+      padding: 12px 22px;
+      border-radius: 2px;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 1px;
+      opacity: 0;
+      transition: opacity .25s, transform .25s;
+      z-index: 300;
+      box-shadow: 0 14px 38px rgba(0,0,0,0.3);
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* Responsive ------------------------------------------------- */
+    @media (max-width: 980px) {
+      .pillars { grid-template-columns: 1fr; gap: 18px; }
+      .dishes-grid { grid-template-columns: repeat(2, 1fr); gap: 24px; }
+    }
+    @media (max-width: 760px) {
+      .nav-links { display: none; }
+      .nav-links.open {
+        display: flex;
+        position: absolute; top: 100%; left: 0; right: 0;
+        background: rgba(37,34,30,0.97);
+        flex-direction: column;
+        padding: 20px;
+        gap: 4px;
+      }
+      .nav-toggle { display: block; }
+      .nav-cta { margin-left: 0 !important; align-self: stretch; text-align: center; }
+      .dishes-grid { grid-template-columns: 1fr; }
+      .section { padding: 80px 0; }
+      .field-row { grid-template-columns: 1fr; }
+      .time-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="nav" id="nav">
+    <div class="nav-inner">
+      <a href="#top" class="brand">PLERN<small>THAI BISTRO</small></a>
+      <button class="nav-toggle" id="navToggle" aria-label="Menu">☰</button>
+      <div class="nav-links" id="navLinks">
+        <a href="#philosophy">Philosophy</a>
+        <a href="#dishes">Menu</a>
+        <a href="#story">The Method</a>
+        <a href="#visit">Visit</a>
+        <a href="#" class="nav-cta" onclick="openModal('reservation'); return false;">Reserve</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <header class="hero" id="top">
+    <div class="hero-inner">
+      <span class="eyebrow">Modern Luxury Thai Bistro · London</span>
+      <h1>Plern.</h1>
+      <p class="tagline">Authentic Roots. Modern Methods. The Art of Joyful Immersion.</p>
+      <div class="hero-divider"></div>
+      <p>A curated bistro where the bold flavours of four Thai regions meet the precision of a modernist French kitchen. A pause button — a space to disconnect, and be lost in the moment.</p>
+      <div class="hero-ctas">
+        <a href="#" class="btn btn-primary" onclick="openModal('reservation'); return false;">Reserve a Table</a>
+        <a href="#" class="btn btn-outline" onclick="openModal('takeaway'); return false;">Order Takeaway</a>
+      </div>
+    </div>
+    <span class="scroll-cue">SCROLL</span>
+  </header>
+
+  <!-- PHILOSOPHY -->
+  <section id="philosophy" class="section section-cream">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">The Philosophy</span>
+        <h2>The Plern State</h2>
+        <span class="ornament"></span>
+        <p>Plern (เพลิน) is the Thai word for being so absorbed by a moment that time itself slows. It is not happiness, but flow — the feeling of dining unhurried, in conversation, with food made for you. Every plate at Plern is built to deliver that state.</p>
+      </div>
+      <p class="philosophy-quote">
+        We are not just selling food — we are selling a pause button. A curated space for guests to disconnect, and immerse themselves in the moment.
+        <span class="quote-attrib">— Plern Founding Principle</span>
+      </p>
+    </div>
+  </section>
+
+  <!-- THREE PILLARS -->
+  <section class="section section-cream-soft">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Three Pillars</span>
+        <h2>What sets Plern apart</h2>
+        <span class="ornament"></span>
+      </div>
+      <div class="pillars">
+        <div class="pillar">
+          <div class="pillar-icon">
+            <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="32" cy="32" r="22"/>
+              <path d="M22 32a10 10 0 0 1 20 0"/>
+              <circle cx="32" cy="32" r="3" fill="currentColor"/>
+              <path d="M32 14v-4M32 54v-4M14 32h-4M54 32h-4"/>
+            </svg>
+          </div>
+          <h3>Modernist Kitchen</h3>
+          <p>Sous-vide precision, Thermomix craft, and a Cook-Chill-Finish workflow that delivers a 24-hour brisket Massaman in under five minutes of service time — every time, exactly.</p>
+        </div>
+        <div class="pillar">
+          <div class="pillar-icon">
+            <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 50V26a16 16 0 0 1 32 0v24"/>
+              <path d="M12 50h40"/>
+              <path d="M26 36h12M30 30c0-4 4-4 4 0"/>
+            </svg>
+          </div>
+          <h3>The Clean Kitchen</h3>
+          <p>No wok smoke. No grease. No noise. Induction and sealed-bag cooking create a quiet, odourless kitchen — a friendly tenant for mixed-use and residential developments, and a calmer dining room for guests.</p>
+        </div>
+        <div class="pillar">
+          <div class="pillar-icon">
+            <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 14h28l8 8v28a4 4 0 0 1-4 4H14a4 4 0 0 1-4-4V18a4 4 0 0 1 4-4z"/>
+              <path d="M42 14v8h8"/>
+              <path d="M20 32h22M20 40h22M20 24h12"/>
+            </svg>
+          </div>
+          <h3>Storytelling on a Plate</h3>
+          <p>The Siam Quartet — a tasting flight of Northern, Northeastern, Central, and Southern Thailand on a single passport. A menu that invites you to travel four regions without leaving the table.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SELECTED DISHES -->
+  <section id="dishes" class="section section-cream">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">From the Kitchen</span>
+        <h2>Selected dishes</h2>
+        <span class="ornament"></span>
+        <p>A concise menu of signature heroes — built on French bistro technique, plated in the spirit of Thailand. Not everything we serve, but everything that defines us.</p>
+      </div>
+
+      <div class="dishes-grid">
+        <article class="dish">
+          <div class="dish-img" style="background-image:url('https://loremflickr.com/700/520/thai,tasting,platter?lock=10');"></div>
+          <div class="dish-body">
+            <span class="dish-cat">Starter · Signature Flight</span>
+            <h3>The Siam Quartet</h3>
+            <p>Four regions on one passport — Northern Sai Oua, Northeast Larb Neua, Central Chor Muang, Southern Gai Golae. The hook of the menu.</p>
+            <div class="dish-foot">
+              <span class="dish-tag">Best to share</span>
+              <span class="dish-price">£12.00</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="dish">
+          <div class="dish-img" style="background-image:url('https://loremflickr.com/700/520/beef,carpaccio,truffle?lock=11');"></div>
+          <div class="dish-body">
+            <span class="dish-cat">Starter · The Bistro</span>
+            <h3>Yuzu-Truffle Beef Carpaccio</h3>
+            <p>Paper-thin raw beef, Nam Tok style. Yuzu, truffle oil, our umami "Liquid Gold" reduction. EHO-compliant 10-second blanch — pristine inside, sterile outside.</p>
+            <div class="dish-foot">
+              <span class="dish-tag">30-second plating</span>
+              <span class="dish-price">£16.50</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="dish">
+          <div class="dish-img" style="background-image:url('https://loremflickr.com/700/520/octopus,grilled,charred?lock=12');"></div>
+          <div class="dish-body">
+            <span class="dish-cat">Starter · Premium</span>
+            <h3>Giant Octopus Satay</h3>
+            <p>A whole tentacle, sous-vide at 77°C for five hours, finished over open flame. Show-stopping, perfectly tender, deeply smoky.</p>
+            <div class="dish-foot">
+              <span class="dish-tag">5-hour sous-vide</span>
+              <span class="dish-price">£14.00</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="dish">
+          <div class="dish-img" style="background-image:url('https://loremflickr.com/700/520/duck,breast,plated?lock=13');"></div>
+          <div class="dish-body">
+            <span class="dish-cat">Main · Innovation</span>
+            <h3>Duck Breast, Ruby Grape Gastrique</h3>
+            <p>Pan-seared, lacquer-crisp skin. A French sweet-and-sour reduction of ruby grape and star anise cuts through the rich fat — east meets west in a single bite.</p>
+            <div class="dish-foot">
+              <span class="dish-tag">Pre-rendered duck fat</span>
+              <span class="dish-price">£24.00</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="dish">
+          <div class="dish-img" style="background-image:url('https://loremflickr.com/700/520/massaman,curry,beef?lock=14');"></div>
+          <div class="dish-body">
+            <span class="dish-cat">Main · House Signature</span>
+            <h3>24-Hour Beef Brisket Massaman</h3>
+            <p>Brisket sous-vide for a full day, spoon-tender. Slow-bloomed massaman curry, roasted peanuts, hand-cut potato, whole spices. Mathematically perfect.</p>
+            <div class="dish-foot">
+              <span class="dish-tag">24-hour cook</span>
+              <span class="dish-price">£17.50</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="dish">
+          <div class="dish-img" style="background-image:url('https://loremflickr.com/700/520/dessert,coconut,rice,purple?lock=15');"></div>
+          <div class="dish-body">
+            <span class="dish-cat">Dessert · The Memory</span>
+            <h3>Purple Velvet Bavarian</h3>
+            <p>Roasted black sticky rice infused into an airy French Bavaroise. Salted coconut cream, crisp golden mung beans. A dessert that lingers.</p>
+            <div class="dish-foot">
+              <span class="dish-tag">French aeration</span>
+              <span class="dish-price">£8.50</span>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <p class="full-menu-link"><a href="#" onclick="openModal('takeaway'); return false;">View the full menu →</a></p>
+    </div>
+  </section>
+
+  <!-- RESERVATION CTA -->
+  <section class="reserve-banner">
+    <span class="eyebrow" style="color: var(--gold-soft);">Reservations</span>
+    <h2>Pause. Sit. Stay a while.</h2>
+    <p>Book directly with us. Instant confirmation. Zero commission, zero booking fee — every penny goes to the table, not the middleman.</p>
+    <a href="#" class="btn btn-primary" onclick="openModal('reservation'); return false;">Reserve a Table</a>
+    <span class="reserve-phone">Or call us · <a href="tel:+442079350000">020 7935 0000</a></span>
+  </section>
+
+  <!-- MODERNIST KITCHEN STORY -->
+  <section id="story" class="section section-warm">
+    <div class="container">
+      <div class="story-grid">
+        <div class="story-img"></div>
+        <div class="story-text">
+          <span class="eyebrow">The Method</span>
+          <h2>The science of slow, served fast.</h2>
+          <p>Traditional Thai kitchens are built on the wok — high heat, loud, smoky, fast. Beautiful, but inconsistent. We rebuilt the model.</p>
+          <p>Plern is a Zone Kitchen. Proteins are weighed, seasoned and vacuum-sealed in the Lab during prep. They cook in precision water baths in the Cook Bank. During service, we simply sear, glaze, and plate. The result is a quiet, clean kitchen and a dish that's perfect every single time.</p>
+          <p>A "Master Sauce" system — our proprietary Kombu &amp; Shiitake "Liquid Gold" — runs through curries and finishing sauces alike. Every plate carries the same umami signature.</p>
+
+          <div class="zones">
+            <div>
+              <div class="zone-num">01</div>
+              <div class="zone-label">Zone</div>
+              <div class="zone-name">The Lab</div>
+            </div>
+            <div>
+              <div class="zone-num">02</div>
+              <div class="zone-label">Zone</div>
+              <div class="zone-name">The Cook Bank</div>
+            </div>
+            <div>
+              <div class="zone-num">03</div>
+              <div class="zone-label">Zone</div>
+              <div class="zone-name">The Finish</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAKEAWAY CTA -->
+  <section class="takeaway-banner">
+    <span class="eyebrow">Online Order</span>
+    <h2>The Plern experience, to your door.</h2>
+    <p>Hand-finished bistro plates, ready for collection in twenty minutes. Order direct — no platform fees, no commission, no middleman touching your meal.</p>
+
+    <div class="takeaway-stats">
+      <div class="stat"><div class="stat-num">20</div><div class="stat-lbl">Minutes Ready</div></div>
+      <div class="stat"><div class="stat-num">0%</div><div class="stat-lbl">Platform Fee</div></div>
+      <div class="stat"><div class="stat-num">Direct</div><div class="stat-lbl">No Just Eat</div></div>
+    </div>
+
+    <a href="#" class="btn btn-charcoal" onclick="openModal('takeaway'); return false;">Order Takeaway</a>
+  </section>
+
+  <!-- VISIT -->
+  <section id="visit" class="section section-cream">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Find Us</span>
+        <h2>When &amp; where to come</h2>
+        <span class="ornament"></span>
+      </div>
+      <div class="visit-grid">
+        <div class="visit-block">
+          <h3>Opening Hours</h3>
+          <ul class="hours-list">
+            <li><span class="hours-day">Monday</span><span class="hours-time">Closed</span></li>
+            <li><span class="hours-day">Tuesday – Friday</span><span class="hours-time">12:00 – 15:00 · 18:00 – 22:30</span></li>
+            <li><span class="hours-day">Saturday</span><span class="hours-time">12:00 – 23:00</span></li>
+            <li><span class="hours-day">Sunday</span><span class="hours-time">12:00 – 22:00</span></li>
+            <li><span class="hours-day">Bank Holidays</span><span class="hours-time">12:00 – 21:00</span></li>
+          </ul>
+        </div>
+        <div class="visit-block visit-info">
+          <h3>The Address</h3>
+          <p><strong>Plern Thai Bistro</strong></p>
+          <p>(Address to be confirmed)<br/>London</p>
+          <p style="margin-top: 18px;"><strong>Phone</strong> &nbsp; <a href="tel:+442079350000">020 7935 0000</a></p>
+          <p><strong>Email</strong> &nbsp; <a href="mailto:hello@plernbistro.co.uk">hello@plernbistro.co.uk</a></p>
+          <p style="margin-top: 18px;"><strong>Private Dining</strong></p>
+          <p>Birthdays, corporate lunches, celebrations. <a href="mailto:hello@plernbistro.co.uk">Enquire for bespoke packages</a>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="foot-brand">PLERN</div>
+    <div class="foot-tag">Authentic Roots · Modern Methods · The Art of Joyful Immersion</div>
+    <div class="foot-divider"></div>
+    <div class="foot-meta">
+      &copy; 2026 Plern Thai Bistro · London<br/>
+      <a href="#philosophy">Philosophy</a> · <a href="#dishes">Menu</a> · <a href="#visit">Visit</a>
+    </div>
+    <div class="powered">Reservations &amp; Online Order · Powered by <a href="https://siamepos.co.uk">SiamEPOS™</a></div>
+  </footer>
+
+  <!-- ============= RESERVATION MODAL ============= -->
+  <div class="modal-backdrop" id="reservationModal" onclick="if(event.target===this) closeModal('reservation')">
+    <div class="modal" role="dialog" aria-labelledby="resTitle">
+      <div class="modal-head">
+        <div class="modal-title-block">
+          <div class="modal-eyebrow">Plern Thai Bistro</div>
+          <h3 id="resTitle">Reserve a Table</h3>
+        </div>
+        <button class="modal-close" onclick="closeModal('reservation')" aria-label="Close">×</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="steps">
+          <div class="step-pill active" data-step="1"></div>
+          <div class="step-pill" data-step="2"></div>
+          <div class="step-pill" data-step="3"></div>
+          <div class="step-pill" data-step="4"></div>
+        </div>
+
+        <!-- Step 1: Date & Guests -->
+        <div class="res-step" data-step="1">
+          <div class="field">
+            <label for="resDate">Date</label>
+            <input type="date" id="resDate" />
+            <div class="field-error">Please choose a date.</div>
+          </div>
+          <div class="field">
+            <label for="resGuests">Number of guests</label>
+            <select id="resGuests">
+              <option value="">Select party size</option>
+              <option>1 guest</option>
+              <option>2 guests</option>
+              <option>3 guests</option>
+              <option>4 guests</option>
+              <option>5 guests</option>
+              <option>6 guests</option>
+              <option>7 guests</option>
+              <option>8 guests</option>
+              <option disabled>9+ — please call us</option>
+            </select>
+            <div class="field-error">Please select your party size.</div>
+          </div>
+        </div>
+
+        <!-- Step 2: Time -->
+        <div class="res-step" data-step="2" style="display:none;">
+          <div class="field">
+            <label>Available times</label>
+            <div class="time-grid" id="timeGrid">
+              <div class="time-slot">12:00</div>
+              <div class="time-slot">12:30</div>
+              <div class="time-slot">13:00</div>
+              <div class="time-slot">13:30</div>
+              <div class="time-slot disabled">14:00</div>
+              <div class="time-slot">14:30</div>
+              <div class="time-slot">18:00</div>
+              <div class="time-slot">18:30</div>
+              <div class="time-slot">19:00</div>
+              <div class="time-slot">19:30</div>
+              <div class="time-slot disabled">20:00</div>
+              <div class="time-slot">20:30</div>
+            </div>
+            <div class="field-error" id="timeError">Please choose a time.</div>
+          </div>
+        </div>
+
+        <!-- Step 3: Details -->
+        <div class="res-step" data-step="3" style="display:none;">
+          <div class="field-row">
+            <div class="field">
+              <label for="resFirst">First name</label>
+              <input type="text" id="resFirst" placeholder="" />
+              <div class="field-error">Required.</div>
+            </div>
+            <div class="field">
+              <label for="resLast">Last name</label>
+              <input type="text" id="resLast" placeholder="" />
+              <div class="field-error">Required.</div>
+            </div>
+          </div>
+          <div class="field">
+            <label for="resPhone">Phone</label>
+            <input type="tel" id="resPhone" placeholder="+44 ..." />
+            <div class="field-error">Please enter a phone number.</div>
+          </div>
+          <div class="field">
+            <label for="resEmail">Email</label>
+            <input type="email" id="resEmail" placeholder="" />
+            <div class="field-error">Please enter a valid email.</div>
+          </div>
+          <div class="field">
+            <label for="resNotes">Notes (optional)</label>
+            <textarea id="resNotes" placeholder="Allergies, occasion, high chairs..."></textarea>
+          </div>
+          <div class="consent">
+            <input type="checkbox" id="resConsent" />
+            <label for="resConsent">I'd like to hear about seasonal menus, special events and offers from Plern by email. Unsubscribe any time.</label>
+          </div>
+        </div>
+
+        <!-- Step 4: Confirmation -->
+        <div class="res-step" data-step="4" style="display:none;">
+          <div class="confirm-wrap">
+            <div class="confirm-icon">✦</div>
+            <h4>Reservation Confirmed</h4>
+            <p>A confirmation has been sent to your email. We look forward to welcoming you to Plern.</p>
+          </div>
+          <div style="margin-top: 18px;">
+            <div class="summary-row"><span class="lbl">Date</span><span class="val" id="sumDate">—</span></div>
+            <div class="summary-row"><span class="lbl">Time</span><span class="val" id="sumTime">—</span></div>
+            <div class="summary-row"><span class="lbl">Guests</span><span class="val" id="sumGuests">—</span></div>
+            <div class="summary-row"><span class="lbl">Name</span><span class="val" id="sumName">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button class="btn btn-outline" id="resBack" style="color: var(--charcoal); border-color: var(--line);" onclick="resBack()">Back</button>
+        <button class="btn btn-primary" id="resNext" onclick="resNext()">Continue</button>
+        <span class="modal-powered" style="flex-basis: 100%; text-align: center; margin-top: 6px;">Powered by <a href="https://siamepos.co.uk">SiamEPOS™</a></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============= TAKEAWAY MODAL ============= -->
+  <div class="modal-backdrop" id="takeawayModal" onclick="if(event.target===this) closeModal('takeaway')">
+    <div class="modal modal-wide" role="dialog" aria-labelledby="takeTitle">
+      <div class="modal-head">
+        <div class="modal-title-block">
+          <div class="modal-eyebrow">Plern Thai Bistro</div>
+          <h3 id="takeTitle">Order Takeaway</h3>
+        </div>
+        <button class="modal-close" onclick="closeModal('takeaway')" aria-label="Close">×</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="takeaway-layout">
+          <div class="menu-list" id="menuList">
+            <!-- Filled by script -->
+          </div>
+
+          <aside class="takeaway-cart">
+            <h4>Your Order</h4>
+            <div id="cartItems">
+              <p class="cart-empty" id="cartEmpty">Your basket is empty.</p>
+            </div>
+            <div class="cart-total" id="cartTotalRow" style="display:none;">
+              <span>Total</span>
+              <span id="cartTotal">£0.00</span>
+            </div>
+            <div class="pickup-block">
+              <label for="pickupTime">Pickup time</label>
+              <select id="pickupTime">
+                <option>As soon as possible (≈25 min)</option>
+                <option>In 30 minutes</option>
+                <option>In 45 minutes</option>
+                <option>In 1 hour</option>
+                <option>In 1 hour 30 minutes</option>
+              </select>
+            </div>
+            <div class="pickup-block">
+              <label for="pickupPhone">Contact phone</label>
+              <input type="tel" id="pickupPhone" placeholder="+44 ..." style="width:100%; padding:10px 12px; border:1px solid var(--line); background:#fff; font-family:'Inter',sans-serif; font-size:13px; border-radius:2px;"/>
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <span class="modal-powered">Powered by <a href="https://siamepos.co.uk">SiamEPOS™</a></span>
+        <button class="btn btn-primary" id="placeOrder" disabled style="opacity:0.4; cursor:not-allowed;">Place Order</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    /* ----- Nav ----- */
+    const nav = document.getElementById('nav');
+    window.addEventListener('scroll', () => {
+      nav.classList.toggle('scrolled', window.scrollY > 60);
+    });
+    document.getElementById('navToggle').addEventListener('click', () => {
+      document.getElementById('navLinks').classList.toggle('open');
+    });
+
+    /* ----- Modal helpers ----- */
+    function openModal(name) {
+      const id = name === 'reservation' ? 'reservationModal' : 'takeawayModal';
+      document.getElementById(id).classList.add('show');
+      document.body.style.overflow = 'hidden';
+      if (name === 'reservation') resReset();
+    }
+    function closeModal(name) {
+      const id = name === 'reservation' ? 'reservationModal' : 'takeawayModal';
+      document.getElementById(id).classList.remove('show');
+      document.body.style.overflow = '';
+    }
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        closeModal('reservation'); closeModal('takeaway');
+      }
+    });
+
+    /* ----- Toast ----- */
+    const toast = document.getElementById('toast');
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => toast.classList.remove('show'), 1800);
+    }
+
+    /* ===== RESERVATION ===== */
+    let resStep = 1;
+    let resTimeSelected = null;
+    const resData = {};
+
+    // Min date = today
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('resDate').setAttribute('min', today);
+
+    function resReset() {
+      resStep = 1;
+      resTimeSelected = null;
+      document.querySelectorAll('.time-slot.selected').forEach(s => s.classList.remove('selected'));
+      document.querySelectorAll('.res-step').forEach(s => s.style.display = 'none');
+      document.querySelector('.res-step[data-step="1"]').style.display = 'block';
+      document.querySelectorAll('.step-pill').forEach(p => p.classList.remove('active', 'done'));
+      document.querySelector('.step-pill[data-step="1"]').classList.add('active');
+      document.getElementById('resBack').style.visibility = 'hidden';
+      document.getElementById('resNext').textContent = 'Continue';
+      document.querySelectorAll('.field.has-error').forEach(f => f.classList.remove('has-error'));
+    }
+    resReset();
+
+    document.getElementById('timeGrid').addEventListener('click', e => {
+      if (!e.target.classList.contains('time-slot') || e.target.classList.contains('disabled')) return;
+      document.querySelectorAll('.time-slot.selected').forEach(s => s.classList.remove('selected'));
+      e.target.classList.add('selected');
+      resTimeSelected = e.target.textContent;
+      document.querySelector('#timeError').parentElement.classList.remove('has-error');
+    });
+
+    function setError(id, on) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const field = el.closest('.field');
+      if (field) field.classList.toggle('has-error', on);
+    }
+
+    function validateRes(step) {
+      let ok = true;
+      if (step === 1) {
+        const d = document.getElementById('resDate').value;
+        const g = document.getElementById('resGuests').value;
+        setError('resDate', !d); if (!d) ok = false;
+        setError('resGuests', !g); if (!g) ok = false;
+        if (ok) { resData.date = d; resData.guests = g; }
+      } else if (step === 2) {
+        if (!resTimeSelected) {
+          document.querySelector('#timeError').parentElement.classList.add('has-error');
+          ok = false;
+        } else resData.time = resTimeSelected;
+      } else if (step === 3) {
+        const f = document.getElementById('resFirst').value.trim();
+        const l = document.getElementById('resLast').value.trim();
+        const p = document.getElementById('resPhone').value.trim();
+        const em = document.getElementById('resEmail').value.trim();
+        setError('resFirst', !f); if (!f) ok = false;
+        setError('resLast', !l); if (!l) ok = false;
+        setError('resPhone', !p); if (!p) ok = false;
+        const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em);
+        setError('resEmail', !emailOk); if (!emailOk) ok = false;
+        if (ok) { resData.first = f; resData.last = l; resData.phone = p; resData.email = em; }
+      }
+      return ok;
+    }
+
+    function resNext() {
+      if (resStep === 4) { closeModal('reservation'); return; }
+      if (!validateRes(resStep)) return;
+
+      document.querySelector(`.step-pill[data-step="${resStep}"]`).classList.remove('active');
+      document.querySelector(`.step-pill[data-step="${resStep}"]`).classList.add('done');
+      document.querySelector(`.res-step[data-step="${resStep}"]`).style.display = 'none';
+      resStep++;
+      document.querySelector(`.res-step[data-step="${resStep}"]`).style.display = 'block';
+      document.querySelector(`.step-pill[data-step="${resStep}"]`).classList.add('active');
+
+      document.getElementById('resBack').style.visibility = resStep > 1 ? 'visible' : 'hidden';
+
+      if (resStep === 4) {
+        document.getElementById('sumDate').textContent = formatDate(resData.date);
+        document.getElementById('sumTime').textContent = resData.time;
+        document.getElementById('sumGuests').textContent = resData.guests;
+        document.getElementById('sumName').textContent = `${resData.first} ${resData.last}`;
+        document.getElementById('resNext').textContent = 'Close';
+        document.getElementById('resBack').style.visibility = 'hidden';
+      } else {
+        document.getElementById('resNext').textContent = resStep === 3 ? 'Confirm Reservation' : 'Continue';
+      }
+    }
+    function resBack() {
+      if (resStep <= 1) return;
+      document.querySelector(`.step-pill[data-step="${resStep}"]`).classList.remove('active');
+      document.querySelector(`.res-step[data-step="${resStep}"]`).style.display = 'none';
+      resStep--;
+      document.querySelector(`.res-step[data-step="${resStep}"]`).style.display = 'block';
+      document.querySelector(`.step-pill[data-step="${resStep}"]`).classList.remove('done');
+      document.querySelector(`.step-pill[data-step="${resStep}"]`).classList.add('active');
+      document.getElementById('resBack').style.visibility = resStep > 1 ? 'visible' : 'hidden';
+      document.getElementById('resNext').textContent = 'Continue';
+    }
+    function formatDate(d) {
+      if (!d) return '—';
+      const dt = new Date(d);
+      return dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
+    }
+
+    /* ===== TAKEAWAY ===== */
+    const MENU = [
+      { cat: 'Starter',     name: 'The Siam Quartet',               desc: 'Four regions on one passport — tasting flight.',                       price: 12.00 },
+      { cat: 'Starter',     name: 'Yuzu-Truffle Beef Carpaccio',    desc: 'Nam Tok style. Yuzu, truffle oil, Liquid Gold.',                       price: 16.50 },
+      { cat: 'Starter',     name: 'Giant Octopus Satay',            desc: 'Whole tentacle, 5-hour sous-vide, flame-finished.',                    price: 14.00 },
+      { cat: 'Starter',     name: 'Tom Yum Popcorn Prawns',         desc: 'Elevated bistro snack with Bangkok mayo.',                              price:  9.50 },
+      { cat: 'Main',        name: 'Duck Breast, Ruby Grape',        desc: 'Crisp skin, star anise gastrique, jasmine rice.',                     price: 24.00 },
+      { cat: 'Main',        name: '24-Hour Brisket Massaman',       desc: 'Spoon-tender brisket, roasted peanut, hand-cut potato.',              price: 17.50 },
+      { cat: 'Main',        name: "Southern Gai Golae",             desc: 'BBQ chicken in southern coconut-turmeric marinade.',                  price: 16.00 },
+      { cat: 'Main',        name: 'Claypot Prawns & Glass Noodles', desc: 'Aromatic, rustic, served in the pot.',                                price: 18.00 },
+      { cat: 'Side',        name: "Wok Greens, 'Liquid Gold'",      desc: 'Seasonal greens, kombu-shiitake umami.',                              price:  6.00 },
+      { cat: 'Side',        name: 'Kombu-Infused Jasmine Rice',     desc: 'Steamed jasmine, kombu seasoning.',                                    price:  3.50 },
+      { cat: 'Dessert',     name: 'Purple Velvet Bavarian',         desc: 'Black sticky rice Bavaroise, salted coconut, mung crunch.',            price:  8.50 },
+      { cat: 'Dessert',     name: 'Thai Tea Bavarian',              desc: 'Thai tea extraction, toasted coconut, condensed-milk anglaise.',       price:  8.50 },
+    ];
+
+    const cart = new Map();
+    const menuList = document.getElementById('menuList');
+    const cartItems = document.getElementById('cartItems');
+    const cartEmpty = document.getElementById('cartEmpty');
+    const cartTotalRow = document.getElementById('cartTotalRow');
+    const cartTotal = document.getElementById('cartTotal');
+    const placeOrder = document.getElementById('placeOrder');
+
+    MENU.forEach((item, i) => {
+      const div = document.createElement('div');
+      div.className = 'menu-item';
+      div.innerHTML = `
+        <div class="menu-item-info">
+          <h5>${item.name}</h5>
+          <p>${item.cat} · ${item.desc}</p>
+        </div>
+        <div class="menu-item-side">
+          <div class="menu-item-price">£${item.price.toFixed(2)}</div>
+          <button data-i="${i}">Add</button>
+        </div>
+      `;
+      menuList.appendChild(div);
+    });
+
+    menuList.addEventListener('click', e => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const i = +btn.dataset.i;
+      const item = MENU[i];
+      const existing = cart.get(item.name);
+      if (existing) existing.qty++;
+      else cart.set(item.name, { price: item.price, qty: 1 });
+      renderCart();
+      showToast(`${item.name} added`);
+    });
+
+    function renderCart() {
+      cartItems.innerHTML = '';
+      if (cart.size === 0) {
+        cartItems.appendChild(cartEmpty);
+        cartEmpty.style.display = 'block';
+        cartTotalRow.style.display = 'none';
+        placeOrder.disabled = true;
+        placeOrder.style.opacity = 0.4;
+        placeOrder.style.cursor = 'not-allowed';
+        return;
+      }
+      cartEmpty.style.display = 'none';
+      let total = 0;
+      cart.forEach(({ price, qty }, name) => {
+        total += price * qty;
+        const line = document.createElement('div');
+        line.className = 'cart-line';
+        line.innerHTML = `
+          <span class="cart-name">${name}</span>
+          <span class="cart-qty">
+            <button data-act="dec" data-name="${name}">−</button>
+            <span>${qty}</span>
+            <button data-act="inc" data-name="${name}">+</button>
+          </span>
+          <span class="cart-price">£${(price * qty).toFixed(2)}</span>
+        `;
+        cartItems.appendChild(line);
+      });
+      cartTotalRow.style.display = 'flex';
+      cartTotal.textContent = '£' + total.toFixed(2);
+      placeOrder.disabled = false;
+      placeOrder.style.opacity = 1;
+      placeOrder.style.cursor = 'pointer';
+    }
+
+    cartItems.addEventListener('click', e => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const name = btn.dataset.name;
+      const item = cart.get(name);
+      if (!item) return;
+      if (btn.dataset.act === 'inc') item.qty++;
+      else {
+        item.qty--;
+        if (item.qty <= 0) cart.delete(name);
+      }
+      renderCart();
+    });
+
+    placeOrder.addEventListener('click', () => {
+      const phone = document.getElementById('pickupPhone').value.trim();
+      if (!phone) { showToast('Please add a contact phone'); return; }
+      showToast('Order received — we will call to confirm.');
+      cart.clear();
+      renderCart();
+      setTimeout(() => closeModal('takeaway'), 1200);
+    });
+  </script>
+</body>
+</html>

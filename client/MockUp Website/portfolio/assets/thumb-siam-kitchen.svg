@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sk-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#0D1B3E"/>
+      <stop offset="0.55" stop-color="#152659"/>
+      <stop offset="1"   stop-color="#0A1530"/>
+    </linearGradient>
+    <radialGradient id="sk-glow" cx="0.5" cy="0.45" r="0.55">
+      <stop offset="0" stop-color="#1B2C5C" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#0D1B3E" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1600" height="1000" fill="url(#sk-bg)"/>
+  <rect width="1600" height="1000" fill="url(#sk-glow)"/>
+
+  <!-- Gold frame -->
+  <rect x="40" y="40" width="1520" height="920" fill="none" stroke="#C9A84C" stroke-width="1" opacity="0.45"/>
+
+  <!-- SiamEPOS lotus badge (icon mark from Brand CI v1.3) -->
+  <g transform="translate(800,260) scale(1.4)">
+    <circle cx="0" cy="0" r="60" fill="none" stroke="#C9A84C" stroke-width="2.4"/>
+    <circle cx="0" cy="0" r="52" fill="none" stroke="#C9A84C" stroke-width="0.8" opacity="0.28"/>
+    <g>
+      <path d="M 0,7 C -13,-11 -10,-48 0,-56 C 10,-48 13,-11 0,7 Z" fill="#C9A84C"/>
+      <path d="M 0,7 C -13,-11 -10,-48 0,-56 C 10,-48 13,-11 0,7 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/>
+      <path d="M 0,7 C -13,-11 -10,-48 0,-56 C 10,-48 13,-11 0,7 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/>
+      <path d="M 0,7 C -13,-11 -10,-48 0,-56 C 10,-48 13,-11 0,7 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/>
+      <path d="M 0,7 C -13,-11 -10,-48 0,-56 C 10,-48 13,-11 0,7 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/>
+      <circle cx="0" cy="0" r="12" fill="#0D1B3E"/>
+      <circle cx="0" cy="0" r="6.5" fill="#C9A84C"/>
+    </g>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="800" y="600" text-anchor="middle"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="140" font-weight="700" letter-spacing="-2">
+    <tspan fill="#FFFFFF">Siam </tspan><tspan fill="#C9A84C">Kitchen</tspan>
+  </text>
+
+  <!-- Tagline -->
+  <text x="800" y="700" text-anchor="middle"
+        font-family="'Inter', system-ui, sans-serif"
+        font-size="32" font-weight="400"
+        fill="rgba(255,255,255,0.78)" letter-spacing="2">
+    Authentic Thai · Weybridge
+  </text>
+
+  <!-- Ornament -->
+  <g transform="translate(800,790)">
+    <line x1="-80" y1="0" x2="80" y2="0" stroke="#C9A84C" stroke-width="1.8"/>
+    <rect x="-6" y="-6" width="12" height="12" fill="#C9A84C" transform="rotate(45)"/>
+  </g>
+
+  <!-- Bottom tag -->
+  <text x="800" y="880" text-anchor="middle"
+        font-family="'Inter', system-ui, sans-serif"
+        font-size="18" font-weight="600"
+        letter-spacing="6" fill="rgba(201,168,76,0.7)">
+    SIAMEPOS BRAND IDENTITY · v1.3
+  </text>
+</svg>

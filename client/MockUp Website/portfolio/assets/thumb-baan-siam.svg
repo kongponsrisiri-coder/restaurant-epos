@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="baan-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"   stop-color="#1A1916"/>
+      <stop offset="0.55" stop-color="#25221E"/>
+      <stop offset="1"   stop-color="#0D0C0A"/>
+    </linearGradient>
+    <radialGradient id="baan-glow" cx="0.5" cy="0.4" r="0.6">
+      <stop offset="0" stop-color="#3a342b" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#3a342b" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1600" height="1000" fill="url(#baan-bg)"/>
+  <rect width="1600" height="1000" fill="url(#baan-glow)"/>
+
+  <!-- Gold dot accents -->
+  <circle cx="150" cy="180" r="2.5" fill="#C9A57A" opacity="0.6"/>
+  <circle cx="1430" cy="160" r="2.5" fill="#C9A57A" opacity="0.6"/>
+  <circle cx="180" cy="850" r="2.5" fill="#C9A57A" opacity="0.55"/>
+  <circle cx="1450" cy="830" r="2.5" fill="#C9A57A" opacity="0.55"/>
+
+  <!-- Thin gold frame -->
+  <rect x="40" y="40" width="1520" height="920" fill="none" stroke="#C9A57A" stroke-width="1" opacity="0.45"/>
+
+  <!-- Eyebrow -->
+  <text x="800" y="290" text-anchor="middle"
+        font-family="'Inter', system-ui, sans-serif"
+        font-size="22" font-weight="600"
+        letter-spacing="8" fill="#C9A57A">
+    TRADITIONAL THAI CUISINE · MARYLEBONE
+  </text>
+
+  <!-- Wordmark -->
+  <text x="800" y="540" text-anchor="middle"
+        font-family="'Cormorant Garamond', Georgia, serif"
+        font-size="200" font-weight="500" fill="#F4EBDC"
+        letter-spacing="2">Baan Siam</text>
+
+  <!-- Translation/tagline -->
+  <text x="800" y="640" text-anchor="middle"
+        font-family="'Cormorant Garamond', Georgia, serif"
+        font-style="italic" font-size="40" font-weight="400"
+        fill="rgba(244,235,220,0.7)" letter-spacing="2">
+    House of Siam · Est. 2019
+  </text>
+
+  <!-- Ornament -->
+  <g transform="translate(800,750)">
+    <circle cx="-110" cy="0" r="5" fill="#C9A57A"/>
+    <line x1="-90" y1="0" x2="-15" y2="0" stroke="#C9A57A" stroke-width="1.5"/>
+    <text x="0" y="6" text-anchor="middle"
+          font-family="serif" font-size="22" fill="#C9A57A">✦</text>
+    <line x1="15" y1="0" x2="90" y2="0" stroke="#C9A57A" stroke-width="1.5"/>
+    <circle cx="110" cy="0" r="5" fill="#C9A57A"/>
+  </g>
+
+  <!-- Bottom tag -->
+  <text x="800" y="860" text-anchor="middle"
+        font-family="'Inter', system-ui, sans-serif"
+        font-size="18" font-weight="600"
+        letter-spacing="6" fill="rgba(201,165,122,0.7)">
+    SIAMEPOS FLAGSHIP DEMO · LIVE BACKEND
+  </text>
+</svg>

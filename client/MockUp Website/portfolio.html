@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Portfolio — Baan Siam London</title>
+<meta name="description" content="A selection of independent Thai restaurants whose websites, reservations and online order run on SiamEPOS — the Thai Restaurant Management System.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='100' height='100' fill='%23FAF8F2'/%3E%3Crect x='36' y='20' width='28' height='60' fill='%23283C2F'/%3E%3Crect x='20' y='36' width='60' height='28' fill='%23283C2F'/%3E%3Ccircle cx='50' cy='50' r='10' fill='%23FAF8F2'/%3E%3Ccircle cx='50' cy='50' r='5' fill='%238B6244'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ivory:#FAF8F2; --linen:#F0E8DA; --forest:#283C2F; --teak:#8B6244;
+  --charcoal:#1A1710; --stone:#7A6E60; --sand:#D8CDB8; --white:#FFFFFF;
+  --font:'Raleway',system-ui,-apple-system,sans-serif;
+  --content-width:1100px; --pad-x:28px; --pad-x-mobile:20px;
+  --section-y:72px; --radius:0px;
+  --border:1px solid var(--sand); --divider:0.5px solid var(--sand);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{background:var(--ivory);color:var(--charcoal);font-family:var(--font);font-weight:300;font-size:15px;line-height:1.7;letter-spacing:0.02em;}
+a{color:inherit;text-decoration:none;}
+h1,.h1{font-size:42px;font-weight:500;letter-spacing:0.04em;line-height:1.2;color:var(--charcoal);}
+h2,.h2{font-size:28px;font-weight:500;letter-spacing:0.04em;line-height:1.2;color:var(--charcoal);}
+h3,.h3{font-size:18px;font-weight:500;letter-spacing:0.04em;line-height:1.2;color:var(--charcoal);}
+p{font-weight:300;line-height:1.7;color:var(--stone);}
+.label{font-size:11px;font-weight:400;letter-spacing:0.26em;text-transform:uppercase;color:var(--stone);}
+.label--accent{color:var(--teak);}
+.label--muted{color:var(--stone);opacity:0.5;}
+.container{max-width:var(--content-width);margin:0 auto;padding:0 var(--pad-x);}
+.section{padding:var(--section-y) var(--pad-x);}
+.section--linen{background:var(--linen);}
+.section--center{text-align:center;}
+.btn{display:inline-block;font-family:var(--font);font-size:12px;font-weight:400;letter-spacing:0.18em;text-transform:uppercase;cursor:pointer;border:none;transition:all 0.18s ease;text-decoration:none;}
+.btn:active{transform:scale(0.98);}
+.btn--solid{background:var(--forest);color:var(--ivory);padding:14px 40px;}
+.btn--solid:hover{background:var(--charcoal);}
+.btn--outline{background:transparent;color:var(--forest);border:1.5px solid var(--forest);padding:9px 22px;}
+.btn--outline:hover{background:var(--forest);color:var(--ivory);}
+.btn--outline-sm{background:transparent;color:var(--forest);border:1.5px solid var(--forest);padding:14px 36px;}
+.btn--outline-sm:hover{background:var(--forest);color:var(--ivory);}
+
+.nav{position:sticky;top:0;z-index:100;height:60px;background:var(--ivory);border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 28px;}
+.nav__brand{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.nav__dot{width:9px;height:9px;border-radius:50%;background:var(--teak);flex-shrink:0;}
+.nav__name{font-size:15px;font-weight:500;letter-spacing:0.22em;text-transform:uppercase;color:var(--forest);}
+.nav__links{display:flex;gap:28px;list-style:none;}
+.nav__links a{font-size:13px;font-weight:400;letter-spacing:0.07em;color:var(--stone);text-decoration:none;transition:color 0.15s;}
+.nav__links a:hover,.nav__links a.active{color:var(--charcoal);text-decoration:underline;text-underline-offset:3px;}
+.nav__right{display:flex;align-items:center;gap:16px;}
+.nav__burger{display:none;background:none;border:none;font-size:22px;line-height:1;color:var(--charcoal);cursor:pointer;padding:4px 6px;font-family:var(--font);}
+
+.hero{background:var(--linen);padding:80px 28px 72px;text-align:center;}
+.hero__eyebrow{margin-bottom:18px;}
+.hero__title{margin-bottom:16px;}
+.hero__body{max-width:560px;margin:0 auto 28px;font-style:italic;font-size:16px;color:var(--stone);}
+.hero__sub{max-width:520px;margin:0 auto;font-size:14px;color:var(--stone);}
+.hero__stats{display:grid;grid-template-columns:repeat(4,1fr);max-width:760px;margin:48px auto 0;border-top:var(--border);border-bottom:var(--border);}
+.hero__stat{padding:24px 12px;text-align:center;}
+.hero__stat+.hero__stat{border-left:var(--border);}
+.hero__stat-num{font-size:24px;font-weight:500;letter-spacing:0.04em;color:var(--charcoal);}
+.hero__stat-lbl{font-size:10px;font-weight:400;letter-spacing:0.22em;text-transform:uppercase;color:var(--teak);margin-top:6px;}
+
+/* Portfolio grid */
+.portfolio-head{text-align:center;max-width:560px;margin:0 auto 56px;}
+.portfolio-head__title{margin-bottom:14px;}
+
+.portfolio-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:var(--border);border-bottom:var(--border);}
+.pf-card{padding:0;border-bottom:var(--border);background:var(--ivory);transition:background .2s;}
+.pf-card:nth-child(2n){border-left:var(--border);}
+.pf-card:nth-last-child(-n+2){border-bottom:none;}
+.pf-card:hover{background:#FCFAF4;}
+.pf-card__thumb{position:relative;aspect-ratio:16/10;overflow:hidden;border-bottom:var(--border);}
+.pf-card__thumb object,.pf-card__thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+.pf-card__tag{position:absolute;top:14px;left:14px;background:rgba(40,60,47,0.92);color:var(--ivory);font-size:9px;font-weight:400;letter-spacing:0.22em;text-transform:uppercase;padding:5px 12px;}
+.pf-card__tag--mock{background:rgba(139,98,68,0.92);}
+.pf-card__body{padding:32px 32px 36px;}
+.pf-card__loc{margin-bottom:10px;}
+.pf-card__name{margin-bottom:10px;}
+.pf-card__desc{font-size:14px;line-height:1.7;color:var(--stone);margin-bottom:18px;}
+.pf-card__features{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;}
+.pf-card__features span{font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--stone);border:var(--border);padding:5px 10px;}
+.pf-card__link{display:inline-flex;align-items:center;gap:10px;font-size:11px;font-weight:400;letter-spacing:0.22em;text-transform:uppercase;color:var(--forest);padding-bottom:4px;border-bottom:1px solid var(--forest);transition:gap .15s,color .15s,border-color .15s;}
+.pf-card__link:hover{gap:14px;color:var(--teak);border-color:var(--teak);}
+.pf-card--upcoming{display:flex;align-items:center;justify-content:center;padding:60px 32px;text-align:center;background:transparent;}
+.pf-card--upcoming:hover{background:#FCFAF4;}
+.pf-card--upcoming .pf-card__name{margin-bottom:8px;}
+.pf-card--upcoming p{font-size:14px;color:var(--stone);margin-bottom:20px;}
+
+/* What's included — features grid */
+.features{display:grid;grid-template-columns:repeat(3,1fr);border-top:var(--border);border-bottom:var(--border);}
+.feature{padding:36px 24px;text-align:center;}
+.feature+.feature{border-left:var(--border);}
+.feature__num{font-size:11px;font-weight:400;letter-spacing:0.26em;color:var(--teak);margin-bottom:14px;}
+.feature__name{font-size:16px;font-weight:500;letter-spacing:0.04em;color:var(--charcoal);margin-bottom:8px;}
+.feature__desc{font-size:13px;color:var(--stone);line-height:1.65;}
+
+/* Footer (matches site) */
+.footer{background:var(--linen);border-top:var(--border);padding:20px 28px;display:flex;justify-content:space-between;align-items:center;}
+.footer__text{font-size:11px;font-weight:400;letter-spacing:0.10em;color:var(--stone);opacity:0.6;}
+.footer__link{color:var(--stone);text-decoration:none;transition:opacity 0.15s;}
+.footer__link:hover{opacity:1;}
+
+/* Reveal */
+.reveal{opacity:0;transform:translateY(12px);transition:opacity .6s,transform .6s;}
+.reveal.visible{opacity:1;transform:translateY(0);}
+
+@media(max-width:768px){
+  h1,.h1{font-size:30px;} h2,.h2{font-size:22px;}
+  .nav{padding:0 16px;}
+  .nav__name{letter-spacing:0.16em;}
+  .nav__burger{display:inline-block;}
+  .nav__reserve{display:none;}
+  .nav__links{display:none;position:fixed;top:60px;left:0;right:0;background:var(--ivory);border-bottom:var(--border);flex-direction:column;gap:0;padding:6px 0;box-shadow:0 6px 20px rgba(0,0,0,0.08);}
+  body.menu-open .nav__links{display:flex;}
+  body.menu-open{overflow:hidden;}
+  .nav__links li{width:100%;}
+  .nav__links a{display:block;padding:14px 24px;border-bottom:var(--divider);font-size:14px;letter-spacing:0.08em;}
+  .nav__links a:last-child,.nav__links li:last-child a{border-bottom:none;}
+  .hero{padding:56px 20px 48px;}
+  .hero__stats{grid-template-columns:repeat(2,1fr);}
+  .hero__stat+.hero__stat{border-left:none;}
+  .hero__stat:nth-child(2){border-left:var(--border);}
+  .hero__stat:nth-child(3),.hero__stat:nth-child(4){border-top:var(--border);}
+  .hero__stat:nth-child(4){border-left:var(--border);}
+  .portfolio-grid{grid-template-columns:1fr;}
+  .pf-card:nth-child(2n){border-left:none;}
+  .pf-card{border-bottom:var(--border);}
+  .pf-card:last-child{border-bottom:none;}
+  .features{grid-template-columns:1fr;}
+  .feature+.feature{border-left:none;border-top:var(--border);}
+  .footer{flex-direction:column;gap:8px;text-align:center;}
+  .section{padding:48px 20px;}
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav__brand" href="index.html"><span class="nav__dot"></span><span class="nav__name">Baan Siam</span></a>
+  <ul class="nav__links">
+    <li><a href="about.html">About</a></li>
+    <li><a href="menu.html">Menu</a></li>
+    <li><a href="portfolio.html" class="active">Portfolio</a></li>
+    <li><a href="book.html">Book a Table</a></li>
+    <li><a href="order.html">Order Online</a></li>
+    <li><a href="contact.html">Contact</a></li>
+  </ul>
+  <div class="nav__right">
+    <button class="nav__burger" aria-label="Open menu" aria-expanded="false">☰</button>
+    <a href="book.html" class="btn btn--outline nav__reserve">Reserve</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <p class="label label--accent hero__eyebrow">Behind Baan Siam</p>
+  <h1 class="hero__title">Restaurants on SiamEPOS</h1>
+  <p class="hero__body">Baan Siam is more than a restaurant — it is the working example of what SiamEPOS does for independent Thai kitchens across the UK.</p>
+  <p class="hero__sub">Every site is built to the restaurant's own brand. Reservations and online order run on the live SiamEPOS platform underneath — direct, zero commission, the customer relationship stays with the kitchen.</p>
+
+  <div class="hero__stats">
+    <div class="hero__stat"><div class="hero__stat-num">0%</div><div class="hero__stat-lbl">Platform Fee</div></div>
+    <div class="hero__stat"><div class="hero__stat-num">Direct</div><div class="hero__stat-lbl">No Just Eat</div></div>
+    <div class="hero__stat"><div class="hero__stat-num">EN+TH</div><div class="hero__stat-lbl">Bilingual</div></div>
+    <div class="hero__stat"><div class="hero__stat-num">Own</div><div class="hero__stat-lbl">Customer Data</div></div>
+  </div>
+</section>
+
+<section class="section section--center reveal">
+  <div class="container">
+    <div class="portfolio-head">
+      <p class="label label--accent" style="margin-bottom:14px;">Selected Work</p>
+      <h2 class="portfolio-head__title">The restaurants we power</h2>
+      <p>A small, growing portfolio of independent Thai kitchens. Each site is hand-designed to a brief and wired into the SiamEPOS reservation and online order widgets.</p>
+    </div>
+
+    <div class="portfolio-grid" style="text-align:left;">
+
+      <!-- Baan Siam -->
+      <article class="pf-card">
+        <a href="index.html" class="pf-card__thumb" aria-label="Baan Siam — view live site">
+          <span class="pf-card__tag">Flagship Demo</span>
+          <object data="portfolio/assets/thumb-baan-siam.svg" type="image/svg+xml" aria-label="Baan Siam preview"></object>
+        </a>
+        <div class="pf-card__body">
+          <p class="label label--accent pf-card__loc">Marylebone · London</p>
+          <h3 class="pf-card__name">Baan Siam</h3>
+          <p class="pf-card__desc">The site you are on right now. Our flagship demo — a complete Thai bistro on the live SiamEPOS backend. Reservations, online order, kitchen tickets and stock control all running in production.</p>
+          <div class="pf-card__features">
+            <span>Reservations</span><span>Online Order</span><span>Live Backend</span><span>Bilingual</span>
+          </div>
+          <a href="index.html" class="pf-card__link">View Live →</a>
+        </div>
+      </article>
+
+      <!-- Plern Thai Bistro -->
+      <article class="pf-card">
+        <a href="portfolio/plern.html" class="pf-card__thumb" aria-label="Plern Thai Bistro — view mock-up">
+          <span class="pf-card__tag pf-card__tag--mock">Concept Mock-up</span>
+          <object data="portfolio/assets/thumb-plern.svg" type="image/svg+xml" aria-label="Plern Thai Bistro preview"></object>
+        </a>
+        <div class="pf-card__body">
+          <p class="label label--accent pf-card__loc">London · Modern Luxury Bistro</p>
+          <h3 class="pf-card__name">Plern Thai Bistro</h3>
+          <p class="pf-card__desc">A high-end concept blending sous-vide French technique with the soul of four Thai regions. Cream-and-charcoal palette, "The Plern State" philosophy of joyful immersion. Built from a customer business plan.</p>
+          <div class="pf-card__features">
+            <span>Reservations</span><span>Online Order</span><span>Custom Brand</span>
+          </div>
+          <a href="portfolio/plern.html" class="pf-card__link">View Mock-up →</a>
+        </div>
+      </article>
+
+      <!-- Siam Kitchen -->
+      <article class="pf-card">
+        <a href="portfolio/siam-kitchen.html" class="pf-card__thumb" aria-label="Siam Kitchen — view mock-up">
+          <span class="pf-card__tag pf-card__tag--mock">Concept Mock-up</span>
+          <object data="portfolio/assets/thumb-siam-kitchen.svg" type="image/svg+xml" aria-label="Siam Kitchen preview"></object>
+        </a>
+        <div class="pf-card__body">
+          <p class="label label--accent pf-card__loc">Weybridge · Surrey</p>
+          <h3 class="pf-card__name">Siam Kitchen</h3>
+          <p class="pf-card__desc">Authentic Thai restaurant and takeaway in Weybridge. A SiamEPOS-styled rebuild demonstrating how our visual identity can extend into customer-facing restaurant websites with reservation and takeaway built in.</p>
+          <div class="pf-card__features">
+            <span>Reservations</span><span>Online Order</span><span>Brand-led</span>
+          </div>
+          <a href="portfolio/siam-kitchen.html" class="pf-card__link">View Mock-up →</a>
+        </div>
+      </article>
+
+      <!-- Your restaurant? -->
+      <article class="pf-card pf-card--upcoming">
+        <div>
+          <p class="label label--muted" style="margin-bottom:12px;">Available</p>
+          <h3 class="pf-card__name">Your restaurant?</h3>
+          <p>Send us a brief. We will design a site that looks like your kitchen and runs on the SiamEPOS platform underneath.</p>
+          <a href="mailto:info@siamepos.co.uk" class="pf-card__link" style="color:var(--teak);border-color:var(--teak);">Get in Touch →</a>
+        </div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<section class="section section--linen reveal">
+  <div class="container">
+    <div style="text-align:center;margin-bottom:48px;max-width:560px;margin-left:auto;margin-right:auto;">
+      <p class="label label--accent" style="margin-bottom:14px;">What's Included</p>
+      <h2 style="margin-bottom:14px;">Every site comes with</h2>
+      <p>One platform, one team — built by a Thai team for Thai restaurants in the UK.</p>
+    </div>
+    <div class="features">
+      <div class="feature">
+        <p class="feature__num">01</p>
+        <h3 class="feature__name">The Website</h3>
+        <p class="feature__desc">Hand-designed to your brand — your colours, your voice, your story. Hosted on Netlify, fast everywhere.</p>
+      </div>
+      <div class="feature">
+        <p class="feature__num">02</p>
+        <h3 class="feature__name">The Widgets</h3>
+        <p class="feature__desc">Reservation and online order widgets embedded direct. Zero commission, customer data stays with you.</p>
+      </div>
+      <div class="feature">
+        <p class="feature__num">03</p>
+        <h3 class="feature__name">The Platform</h3>
+        <p class="feature__desc">Kitchen display, table map, allergens, stock control, sales reports — all bilingual, all in one cloud platform.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section section--center reveal">
+  <div class="container" style="max-width:560px;">
+    <p class="label label--accent" style="margin-bottom:14px;">Get Started</p>
+    <h2 style="margin-bottom:14px;">Put your restaurant on SiamEPOS</h2>
+    <p style="margin-bottom:32px;">If you run an independent Thai kitchen in the UK and you are tired of platform fees eating your margin, we should talk.</p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+      <a href="https://siamepos.co.uk" target="_blank" class="btn btn--solid">Book a Demo</a>
+      <button class="btn btn--outline-sm" data-siamepos-takeaway>Try Our Takeaway Widget</button>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <p class="footer__text">© 2026 Baan Siam &nbsp;·&nbsp; 18 Marylebone High Street, London W1U 4LJ</p>
+  <p class="footer__text">
+    <a class="footer__link" href="https://siamepos.co.uk" target="_blank">Powered by SiamEPOS™</a>
+  </p>
+</footer>
+
+<script>
+const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:.08});
+document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
+document.querySelectorAll('.nav__burger').forEach(function(b){b.addEventListener('click',function(){document.body.classList.toggle('menu-open');});});
+document.querySelectorAll('.nav__links a').forEach(function(a){a.addEventListener('click',function(){document.body.classList.remove('menu-open');});});
+</script>
+
+<!-- SiamEPOS Takeaway Widget — binds to [data-siamepos-takeaway] -->
+<script src="https://restaurant-epos-production.up.railway.app/takeaway-widget.js"></script>
+
+</body>
+</html>

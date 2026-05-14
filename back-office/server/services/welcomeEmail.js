@@ -8,6 +8,7 @@
 // new BrevoApi.TransactionalEmailsApi().sendTransacEmail({...}) and
 // attach the Quick-Start PDF as a base64 attachment.
 
+const https = require('https');
 const { buildQuickStartPdf } = require('./quickStartPdf');
 
 const FROM = {
@@ -75,34 +76,78 @@ function escapeHtml(s) {
 
 /**
  * Send the welcome email + Quick Start PDF attachment to the
- * restaurant owner. Stubbed for Phase 1 chunk 1 — chunk 5 replaces this
- * with the real Brevo SDK call.
+ * restaurant owner via Brevo's transactional email API.
  *
- * Returns { sent, messageId?, attached, error? }.
+ * Uses raw HTTPS rather than the @getbrevo/brevo SDK — matches the
+ * pattern in src/services/emailService.js (the main EPOS server) so
+ * there's one less moving part to debug, and keeps the bundle small.
+ *
+ * Returns { sent, messageId?, error?, stubbed? }.
  */
 async function sendWelcomeEmail(client) {
+  if (!client?.email) {
+    return { sent: false, error: 'client has no email address' };
+  }
+
   const html = buildWelcomeHtml(client);
   let pdfBuffer;
   try { pdfBuffer = await buildQuickStartPdf(client); }
   catch (err) { console.warn('[welcomeEmail] PDF build skipped:', err.message); }
 
-  const stubbed = !process.env.BREVO_API_KEY;
-  if (stubbed) {
-    console.log(`[welcomeEmail] STUB — would send to ${client.email || '(no email)'} (${html.length} bytes HTML${pdfBuffer ? `, ${pdfBuffer.length} bytes PDF` : ''})`);
+  if (!process.env.BREVO_API_KEY) {
+    console.log(`[welcomeEmail] STUB — BREVO_API_KEY not set; would send to ${client.email} (${html.length} bytes HTML${pdfBuffer ? `, ${pdfBuffer.length} bytes PDF` : ''})`);
     return { sent: false, stubbed: true, reason: 'BREVO_API_KEY not configured on the back-office service' };
   }
 
-  // Real send lives in chunk 5. Leaving the implementation hook here so
-  // the wizard can call this function with no further code changes:
-  //
-  //   const Brevo = require('@getbrevo/brevo');
-  //   const client = new Brevo.TransactionalEmailsApi();
-  //   client.authentications.apiKey.apiKey = process.env.BREVO_API_KEY;
-  //   const res = await client.sendTransacEmail({ ... });
-  //   return { sent: true, messageId: res.messageId };
+  const payload = {
+    sender:      { name: FROM.name, email: FROM.email },
+    to:          [{ email: client.email, name: client.owner_name || client.restaurant_name }],
+    subject:     `Welcome to SiamEPOS — ${client.restaurant_name}`,
+    htmlContent: html,
+  };
+  if (pdfBuffer && pdfBuffer.length > 64) {
+    // Brevo expects attachments as { name, content: base64 }.
+    payload.attachment = [{
+      name:    'SiamEPOS-Quick-Start.pdf',
+      content: pdfBuffer.toString('base64'),
+    }];
+  }
 
-  console.log('[welcomeEmail] real-send path not yet implemented — falling through as stub');
-  return { sent: false, stubbed: true, reason: 'real Brevo send not wired yet (chunk 5)' };
+  const body = JSON.stringify(payload);
+
+  return new Promise((resolve) => {
+    const req = https.request({
+      hostname: 'api.brevo.com',
+      path:     '/v3/smtp/email',
+      method:   'POST',
+      headers: {
+        'api-key':        process.env.BREVO_API_KEY,
+        'Content-Type':   'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        'Accept':         'application/json',
+      },
+    }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          let parsed = {};
+          try { parsed = JSON.parse(data); } catch {}
+          console.log(`[welcomeEmail] ✅ sent to ${client.email} (messageId=${parsed.messageId || 'n/a'})`);
+          resolve({ sent: true, messageId: parsed.messageId });
+        } else {
+          console.error(`[welcomeEmail] ❌ Brevo ${res.statusCode}:`, data);
+          resolve({ sent: false, error: `Brevo ${res.statusCode}: ${data.slice(0, 200)}` });
+        }
+      });
+    });
+    req.on('error', (err) => {
+      console.error('[welcomeEmail] ❌ request error:', err.message);
+      resolve({ sent: false, error: err.message });
+    });
+    req.write(body);
+    req.end();
+  });
 }
 
 module.exports = { sendWelcomeEmail, buildWelcomeHtml };

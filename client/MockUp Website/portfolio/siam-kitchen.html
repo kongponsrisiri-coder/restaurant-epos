@@ -44,6 +44,14 @@
       background: rgba(13,27,62,0.96);
       border-bottom: 1px solid rgba(201,168,76,0.35);
       backdrop-filter: blur(10px);
+      position: relative;
+    }
+    .nav-toggle {
+      display: none;
+      background: none; border: none;
+      color: var(--gold); font-size: 24px;
+      cursor: pointer; padding: 4px 8px;
+      margin-left: auto; line-height: 1;
     }
     .nav-inner {
       display: flex; align-items: center;
@@ -469,8 +477,34 @@
     }
 
     @media (max-width: 720px) {
-      .nav-links { gap: 2px; }
-      .nav-links a { padding: 6px 10px; font-size: 12px; }
+      body { overflow-x: hidden; }
+      .nav-toggle { display: block; }
+      .nav-links { display: none; }
+      .nav-links.open {
+        display: flex;
+        position: absolute; top: 100%; left: 0; right: 0;
+        background: rgba(13,27,62,0.98);
+        flex-direction: column;
+        padding: 8px 0;
+        gap: 0;
+        border-bottom: 2px solid rgba(201,168,76,0.4);
+        z-index: 200;
+      }
+      .nav-links.open a {
+        padding: 14px 24px;
+        font-size: 14px;
+        letter-spacing: 0.8px;
+        border-bottom: 1px solid rgba(201,168,76,0.12);
+        border-radius: 0;
+      }
+      .nav-links.open a:last-child { border-bottom: none; }
+      .nav-links.open .nav-cta {
+        margin: 8px 24px 4px;
+        text-align: center;
+        border-radius: 999px;
+      }
+      .hero h1 { font-size: clamp(36px, 12vw, 56px); }
+      .form-row { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -478,12 +512,13 @@
   <nav class="nav">
     <div class="nav-inner">
       <div class="nav-brand">Siam <span>Kitchen</span></div>
-      <div class="nav-links">
-        <a href="#about">About</a>
-        <a href="#gallery">Gallery</a>
-        <a href="#reservation">Reservation</a>
-        <a href="#takeaway" class="nav-cta">Order Takeaway</a>
-        <a href="#visit">Visit</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Open menu">☰</button>
+      <div class="nav-links" id="navLinks">
+        <a href="#about" onclick="navClose()">About</a>
+        <a href="#gallery" onclick="navClose()">Gallery</a>
+        <a href="#reservation" onclick="navClose()">Reservation</a>
+        <a href="#takeaway" class="nav-cta" onclick="navClose()">Order Takeaway</a>
+        <a href="#visit" onclick="navClose()">Visit</a>
       </div>
     </div>
   </nav>
@@ -853,6 +888,12 @@
       showToast('Reservation request sent — see you soon!');
       resForm.reset();
     });
+
+    // Mobile nav toggle
+    const navToggle = document.getElementById('navToggle');
+    const navLinks = document.getElementById('navLinks');
+    navToggle.addEventListener('click', () => navLinks.classList.toggle('open'));
+    function navClose() { navLinks.classList.remove('open'); }
 
     // Min date = today
     const today = new Date().toISOString().split('T')[0];

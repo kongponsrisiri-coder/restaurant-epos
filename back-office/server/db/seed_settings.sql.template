@@ -1,0 +1,21 @@
+-- SEPOS-029 — Settings seed for a newly-provisioned tenant.
+-- Sensible UK defaults for a Thai restaurant: VAT 20%, service
+-- charge 12.5% (disabled by default — owner toggles on if they take
+-- dine-in service), GBP currency, common opening hours.
+--
+-- Settings table is a key/value store (settings.key UNIQUE), so
+-- ON CONFLICT just no-ops if the row already exists. Safe to re-run.
+
+INSERT INTO settings (key, value) VALUES
+  ('restaurant_name',        '{{restaurant_name}}'),
+  ('restaurant_email',       '{{owner_email}}'),
+  ('restaurant_address',     '{{address}}'),
+  ('vat_rate',               '20'),
+  ('service_charge_rate',    '12.5'),
+  ('service_charge_enabled', '0'),
+  ('currency',               '£'),
+  ('booking_lead_hours',     '2'),
+  ('booking_advance_days',   '30'),
+  ('slot_interval_mins',     '15'),
+  ('max_covers_per_slot',    '20')
+ON CONFLICT (key) DO NOTHING;

@@ -1,0 +1,14 @@
+-- SEPOS-029 — Staff seed for a newly-provisioned tenant.
+-- The wizard fills the {{placeholders}} and the operator runs the
+-- resulting file against the new Railway Postgres once it's up.
+--
+-- All PINs default to 4-digit numerics. Owner role is 'admin' so they
+-- can reach every screen. Chef + waiter are starter placeholders the
+-- owner can rename / remove once they log in.
+
+INSERT INTO staff (name, pin, role, is_active, employment_status)
+VALUES
+  ('{{owner_name}}',  '{{owner_pin}}',   'admin',   1, 'active'),
+  ('Chef',             '{{chef_pin}}',    'kitchen', 1, 'active'),
+  ('Waiter',           '{{waiter_pin}}',  'waiter',  1, 'active')
+ON CONFLICT (pin) DO NOTHING;

@@ -19,14 +19,14 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="SiamEPOS">
 <meta property="og:url" content="https://siamepos.co.uk/pricing.html">
-<meta property="og:title" content="SiamEPOS Pricing — From £89/month, Everything Included">
-<meta property="og:description" content="SiamEPOS starts from £89/month — all features included, no hidden fees. Replace OpenTable, Just Eat and your old EPOS for less than you’re paying now.">
+<meta property="og:title" content="SiamEPOS Pricing — £89/month, Everything Included">
+<meta property="og:description" content="SiamEPOS £89/month — all features included, no hidden fees. Replace OpenTable, Just Eat and your old EPOS for less than you're paying now.">
 <meta property="og:image" content="https://siamepos.co.uk/og-image.jpg">
 <meta property="og:locale" content="en_GB">
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="SiamEPOS Pricing — From £89/month, Everything Included">
-<meta name="twitter:description" content="All features included from £89/month. No hidden fees. Replace OpenTable, Just Eat and your EPOS for less than you’re paying now.">
+<meta name="twitter:title" content="SiamEPOS Pricing — £89/month, Everything Included">
+<meta name="twitter:description" content="All features included at £89/month. No hidden fees. Replace OpenTable, Just Eat and your EPOS for less than you're paying now.">
 <meta name="twitter:image" content="https://siamepos.co.uk/og-image.jpg">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
@@ -47,71 +47,96 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content
 .wa-btn{display:flex;align-items:center;gap:10px;background:#25D366;color:white;padding:13px 20px;border-radius:50px;font-size:14px;font-weight:700;text-decoration:none;box-shadow:0 8px 24px rgba(37,211,102,0.4);}
 
 /* PAGE HERO */
-.page-hero{background:linear-gradient(160deg,var(--navy) 0%,var(--navy-mid) 100%);padding:140px 60px 80px;text-align:center;position:relative;overflow:hidden;}
+.page-hero{background:linear-gradient(160deg,var(--navy) 0%,var(--navy-mid) 100%);padding:140px 60px 90px;text-align:center;position:relative;overflow:hidden;}
 .page-hero::before{content:'';position:absolute;inset:0;background-image:repeating-linear-gradient(45deg,rgba(201,168,76,0.03) 0px,rgba(201,168,76,0.03) 1px,transparent 1px,transparent 60px);}
 .page-tag{display:inline-flex;align-items:center;gap:8px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:var(--gold);padding:7px 16px;border-radius:30px;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:24px;}
-.page-hero h1{font-family:'Cormorant Garamond',serif;font-size:58px;font-weight:700;color:white;line-height:1.1;margin-bottom:16px;}
+.page-hero h1{font-family:'Cormorant Garamond',serif;font-size:62px;font-weight:700;color:white;line-height:1.1;margin-bottom:20px;}
 .page-hero h1 em{font-style:italic;color:var(--gold);}
-.page-hero p{font-size:17px;color:rgba(255,255,255,0.6);max-width:520px;margin:0 auto 12px;line-height:1.7;}
+.page-hero .hero-sub{font-size:18px;color:rgba(255,255,255,0.65);max-width:560px;margin:0 auto 28px;line-height:1.7;}
+.hero-proof-row{display:flex;justify-content:center;gap:40px;margin-top:12px;flex-wrap:wrap;}
+.hero-proof-item{color:rgba(255,255,255,0.55);font-size:13px;display:flex;align-items:center;gap:6px;}
+.hero-proof-item strong{color:var(--gold);}
 
-/* PRICING CARDS */
-.pricing-section{padding:80px 60px;background:var(--white);}
-.pricing-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;max-width:1200px;margin:0 auto;}
-.pcard{background:white;border:1px solid #E0DDD6;border-radius:24px;padding:36px 28px;position:relative;transition:transform 0.3s,box-shadow 0.3s;}
-.pcard:hover{transform:translateY(-6px);box-shadow:0 20px 50px rgba(13,27,62,0.1);}
-.pcard.featured{background:var(--navy);border-color:var(--gold);transform:scale(1.04);}
-.pcard.featured:hover{transform:scale(1.04) translateY(-6px);}
-.pcard-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);font-size:10px;font-weight:800;padding:5px 18px;border-radius:20px;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;}
-.pcard-tier{font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:12px;}
-.pcard-price{font-family:'Cormorant Garamond',serif;font-size:52px;font-weight:700;color:var(--navy);line-height:1;margin-bottom:4px;}
-.pcard.featured .pcard-price{color:white;}
-.pcard-period{font-size:12px;color:var(--text-muted);margin-bottom:20px;}
-.pcard.featured .pcard-period{color:rgba(255,255,255,0.45);}
-.pcard-features{list-style:none;display:flex;flex-direction:column;gap:11px;margin-bottom:28px;}
-.pcard-features li{display:flex;align-items:flex-start;gap:9px;font-size:13px;color:var(--text-muted);line-height:1.5;}
-.pcard.featured .pcard-features li{color:rgba(255,255,255,0.7);}
-.pcard-features li::before{content:'✓';color:var(--gold);font-weight:900;font-size:13px;flex-shrink:0;margin-top:1px;}
-.pcard-features li.divider{border-top:1px solid rgba(201,168,76,0.15);padding-top:10px;margin-top:2px;font-weight:700;color:var(--gold);font-size:11px;letter-spacing:1px;text-transform:uppercase;}
-.pcard-features li.divider::before{display:none;}
-.pcard.featured .pcard-features li.divider{border-color:rgba(201,168,76,0.2);}
-.btn-pcard{display:block;width:100%;padding:13px;border-radius:10px;border:none;font-size:14px;font-weight:700;cursor:pointer;text-decoration:none;text-align:center;transition:all 0.2s;font-family:'Sarabun',sans-serif;}
-.btn-outline{background:transparent;border:2px solid rgba(13,27,62,0.2);color:var(--navy);}
-.btn-outline:hover{border-color:var(--gold);color:var(--gold);}
-.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);}
-.btn-gold:hover{box-shadow:0 6px 20px rgba(201,168,76,0.4);transform:translateY(-1px);}
-.coming-dot{display:inline-block;width:6px;height:6px;background:var(--gold);border-radius:50%;margin-right:4px;opacity:0.6;}
+/* SINGLE PRICING CARD */
+.pricing-section{padding:90px 60px;background:var(--white);}
+.pricing-solo{max-width:960px;margin:0 auto;}
+.pricing-solo-inner{display:grid;grid-template-columns:1fr 1fr;gap:0;background:var(--navy);border:2px solid var(--gold);border-radius:28px;overflow:hidden;position:relative;}
+.pricing-badge{position:absolute;top:-16px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);font-size:11px;font-weight:800;padding:6px 22px;border-radius:20px;text-transform:uppercase;letter-spacing:1.5px;white-space:nowrap;}
+.price-left{padding:48px 40px;border-right:1px solid rgba(201,168,76,0.2);}
+.price-tier{font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:14px;}
+.price-big{font-family:'Cormorant Garamond',serif;font-size:80px;font-weight:700;color:white;line-height:1;}
+.price-period{font-size:14px;color:rgba(255,255,255,0.4);margin-top:4px;margin-bottom:8px;}
+.price-detail{font-size:13px;color:rgba(255,255,255,0.5);line-height:1.6;margin-bottom:24px;}
+.price-saves{background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.3);border-radius:12px;padding:14px 18px;margin-bottom:28px;}
+.price-saves p{font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:2px;}
+.price-saves strong{font-size:18px;color:var(--gold);font-family:'Cormorant Garamond',serif;}
+.btn-gold-big{display:block;width:100%;padding:15px;border-radius:12px;background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);font-size:15px;font-weight:800;text-decoration:none;text-align:center;transition:all 0.2s;font-family:'Sarabun',sans-serif;}
+.btn-gold-big:hover{box-shadow:0 8px 24px rgba(201,168,76,0.45);transform:translateY(-2px);}
+.btn-ghost{display:block;width:100%;padding:13px;border-radius:12px;border:1px solid rgba(201,168,76,0.35);color:rgba(255,255,255,0.7);font-size:14px;font-weight:600;text-decoration:none;text-align:center;margin-top:10px;transition:all 0.2s;font-family:'Sarabun',sans-serif;}
+.btn-ghost:hover{border-color:var(--gold);color:var(--gold);}
+.price-right{padding:48px 40px;}
+.feat-list{list-style:none;display:flex;flex-direction:column;gap:12px;}
+.feat-list li{display:flex;align-items:flex-start;gap:10px;font-size:14px;color:rgba(255,255,255,0.75);line-height:1.5;}
+.feat-list li::before{content:'✓';color:var(--gold);font-weight:900;font-size:14px;flex-shrink:0;margin-top:1px;}
+.feat-list li.divider{border-top:1px solid rgba(201,168,76,0.15);padding-top:10px;margin-top:4px;font-weight:700;color:var(--gold);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;}
+.feat-list li.divider::before{display:none;}
 
-/* CALLOUT BANNER */
-.callout-banner{background:linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.06));border:1px solid rgba(201,168,76,0.3);border-radius:16px;padding:28px 36px;max-width:800px;margin:40px auto 0;text-align:center;}
-.callout-banner p{font-size:17px;color:var(--navy);line-height:1.7;}
-.callout-banner strong{color:var(--gold);}
+/* SAVINGS CALLOUT */
+.savings-banner{background:linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.06));border:1px solid rgba(201,168,76,0.3);border-radius:16px;padding:28px 36px;max-width:860px;margin:48px auto 0;text-align:center;}
+.savings-banner p{font-size:17px;color:var(--navy);line-height:1.7;}
+.savings-banner strong{color:var(--gold);}
+
+/* COMPARISON TABLE */
+.comparison-section{background:#F7F5F0;padding:90px 60px;}
+.comparison-wrap{max-width:900px;margin:48px auto 0;overflow-x:auto;}
+table.compare{width:100%;border-collapse:collapse;font-size:14px;}
+table.compare thead th{padding:14px 20px;text-align:left;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;}
+table.compare thead th:nth-child(1){color:var(--text-muted);width:38%;}
+table.compare thead th:nth-child(2){background:rgba(13,27,62,0.06);color:var(--navy);border-radius:12px 12px 0 0;text-align:center;}
+table.compare thead th:nth-child(3){background:var(--navy);color:var(--gold);border-radius:12px 12px 0 0;text-align:center;}
+table.compare tbody tr{border-bottom:1px solid rgba(13,27,62,0.06);}
+table.compare tbody tr:last-child{border-bottom:none;}
+table.compare tbody td{padding:15px 20px;color:var(--navy);vertical-align:middle;line-height:1.5;}
+table.compare tbody td:nth-child(1){font-weight:600;font-size:14px;}
+table.compare tbody td:nth-child(2){background:rgba(13,27,62,0.04);color:var(--text-muted);text-align:center;}
+table.compare tbody td:nth-child(3){background:rgba(13,27,62,0.92);color:rgba(255,255,255,0.85);text-align:center;font-weight:600;}
+table.compare tfoot td{padding:18px 20px;font-weight:800;font-size:16px;}
+table.compare tfoot td:nth-child(1){color:var(--navy);}
+table.compare tfoot td:nth-child(2){background:rgba(13,27,62,0.07);color:#c0392b;text-align:center;border-radius:0 0 0 0;}
+table.compare tfoot td:nth-child(3){background:var(--navy);color:var(--gold);text-align:center;font-family:'Cormorant Garamond',serif;font-size:22px;border-radius:0 0 12px 12px;}
+.compare-note{text-align:center;font-size:13px;color:var(--text-muted);margin-top:18px;}
 
 /* WHATS INCLUDED */
-.included-section{background:#F7F5F0;padding:80px 60px;}
+.included-section{padding:90px 60px;background:var(--white);}
 .included-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:1100px;margin:48px auto 0;}
 .inc-card{background:white;border:1px solid #EEEDF0;border-radius:16px;padding:24px 22px;}
 .inc-icon{font-size:28px;margin-bottom:12px;}
 .inc-title{font-size:16px;font-weight:700;color:var(--navy);margin-bottom:6px;}
 .inc-desc{font-size:13px;color:var(--text-muted);line-height:1.6;}
 .inc-tag{display:inline-block;background:rgba(201,168,76,0.12);color:var(--gold);font-size:10px;font-weight:800;padding:3px 10px;border-radius:20px;margin-top:10px;text-transform:uppercase;letter-spacing:1px;}
-.inc-tag.soon{background:rgba(13,27,62,0.06);color:var(--text-muted);}
 
 /* FAQ */
-.faq-section{padding:80px 60px;background:var(--white);}
-.faq-grid{max-width:800px;margin:48px auto 0;display:flex;flex-direction:column;gap:16px;}
+.faq-section{padding:90px 60px;background:#F7F5F0;}
+.faq-grid{max-width:800px;margin:48px auto 0;display:flex;flex-direction:column;gap:14px;}
 .faq-item{background:white;border:1px solid #EEEDF0;border-radius:14px;padding:22px 24px;cursor:pointer;transition:border-color 0.2s;}
-.faq-item:hover{border-color:rgba(201,168,76,0.3);}
+.faq-item:hover{border-color:rgba(201,168,76,0.35);}
 .faq-q{font-size:15px;font-weight:700;color:var(--navy);display:flex;justify-content:space-between;align-items:center;gap:12px;}
 .faq-q::after{content:'＋';color:var(--gold);font-size:18px;flex-shrink:0;}
-.faq-a{font-size:14px;color:var(--text-muted);line-height:1.7;margin-top:14px;display:none;}
+.faq-a{font-size:14px;color:var(--text-muted);line-height:1.75;margin-top:14px;display:none;}
 .faq-item.open .faq-q::after{content:'−';}
 .faq-item.open .faq-a{display:block;}
 
 /* CTA */
-.final-strip{background:var(--navy);padding:70px 60px;text-align:center;}
-.final-strip h2{font-family:'Cormorant Garamond',serif;font-size:44px;font-weight:700;color:white;margin-bottom:12px;}
+.final-strip{background:var(--navy);padding:80px 60px;text-align:center;position:relative;overflow:hidden;}
+.final-strip::before{content:'';position:absolute;inset:0;background-image:repeating-linear-gradient(45deg,rgba(201,168,76,0.03) 0px,rgba(201,168,76,0.03) 1px,transparent 1px,transparent 60px);}
+.final-strip-inner{position:relative;z-index:1;}
+.final-strip h2{font-family:'Cormorant Garamond',serif;font-size:50px;font-weight:700;color:white;margin-bottom:12px;}
 .final-strip h2 em{font-style:italic;color:var(--gold);}
-.final-strip p{font-size:16px;color:rgba(255,255,255,0.55);margin-bottom:32px;}
+.final-strip .cta-sub{font-size:17px;color:rgba(255,255,255,0.6);margin-bottom:10px;line-height:1.6;}
+.final-strip .cta-reassure{font-size:13px;color:rgba(255,255,255,0.35);margin-bottom:32px;}
+.cta-pair{display:flex;justify-content:center;align-items:center;gap:16px;flex-wrap:wrap;}
+.btn-outline-white{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(201,168,76,0.4);color:rgba(255,255,255,0.7);padding:13px 24px;border-radius:10px;font-size:14px;font-weight:600;text-decoration:none;transition:all 0.2s;font-family:'Sarabun',sans-serif;}
+.btn-outline-white:hover{border-color:var(--gold);color:var(--gold);}
 
 footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2fr 1fr 1fr;gap:48px;}
 .footer-logo{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:700;color:var(--gold);margin-bottom:10px;}
@@ -128,9 +153,20 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
 .section-label{display:inline-block;color:var(--gold);font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin-bottom:14px;}
 .section-title{font-family:'Cormorant Garamond',serif;font-size:48px;font-weight:700;line-height:1.1;color:var(--navy);margin-bottom:12px;}
 
-@media(max-width:1100px){nav{padding:14px 24px;}.nav-links{gap:14px;}.pricing-grid{grid-template-columns:1fr 1fr;}.pcard.featured{transform:scale(1);}.included-grid{grid-template-columns:1fr 1fr;}.page-hero{padding:110px 28px 60px;}.page-hero h1{font-size:40px;}.pricing-section,.included-section,.faq-section,.final-strip{padding:60px 28px;}footer{grid-template-columns:1fr;gap:28px;padding:40px 24px;}.footer-bottom{padding:14px 24px;flex-direction:column;gap:4px;}}
-@media(max-width:640px){.pricing-grid{grid-template-columns:1fr;
+.nav-burger{display:none;background:none;border:none;color:white;font-size:24px;line-height:1;cursor:pointer;padding:4px 6px;margin-left:6px;}
+.nav-burger:hover{color:var(--gold);}
 
+@media(max-width:1100px){
+  nav{padding:14px 24px;}.nav-links{gap:14px;}
+  .pricing-solo-inner{grid-template-columns:1fr;}
+  .price-left{border-right:none;border-bottom:1px solid rgba(201,168,76,0.2);}
+  .included-grid{grid-template-columns:1fr 1fr;}
+  .page-hero{padding:110px 28px 70px;}.page-hero h1{font-size:44px;}
+  .pricing-section,.comparison-section,.included-section,.faq-section,.final-strip{padding:60px 28px;}
+  footer{grid-template-columns:1fr;gap:28px;padding:40px 24px;}
+  .footer-bottom{padding:14px 24px;flex-direction:column;gap:4px;}
+}
+@media(max-width:640px){
   .nav-burger{display:inline-block;}
   .lang-toggle{font-size:11px;padding:6px 10px;}
   nav{padding:14px 18px;}
@@ -141,28 +177,17 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
   .nav-links li{width:100%;}
   .nav-links li a{display:block;padding:14px 24px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:15px;}
   .nav-links li:last-child a{border-bottom:none;}
-  .hero h1{font-size:36px !important;line-height:1.15 !important;}
-  .hero p,.hero-sub{font-size:15px !important;}
-  .hero-actions{flex-direction:column;align-items:stretch;}
-  .hero-actions .book-btn,.hero-actions a{width:100%;text-align:center;}
-  .hero-stats{flex-direction:column;gap:16px !important;}
-  .features-grid,.fcards,.pcards,.feat-inner{grid-template-columns:1fr !important;gap:32px !important;}
-  .feat-inner.rev{direction:ltr;}
-  [style*="grid-template-columns:repeat(3"],[style*="grid-template-columns: repeat(3"],
-  [style*="grid-template-columns:repeat(4"],[style*="grid-template-columns: repeat(4"],
-  [style*="grid-template-columns:1fr 1fr"],[style*="grid-template-columns: 1fr 1fr"],
-  [style*="grid-template-columns:1fr 1.4fr"],[style*="grid-template-columns: 1fr 1.4fr"]{
-    grid-template-columns:1fr !important;gap:24px !important;
-  }
-  [style*="gap:80px"],[style*="gap:64px"],[style*="gap: 80px"],[style*="gap: 64px"]{gap:32px !important;}
-  iframe{height:280px !important;}
-  section,.feat-section{padding:56px 20px !important;}.included-grid{grid-template-columns:1fr;}.wa-float{bottom:16px;right:16px;}
+  .page-hero h1{font-size:36px !important;}
+  .price-big{font-size:64px;}
+  .included-grid{grid-template-columns:1fr;}
+  .hero-proof-row{gap:20px;}
+  .final-strip h2{font-size:36px;}
+  .wa-float{bottom:16px;right:16px;}
+  .cta-pair{flex-direction:column;align-items:stretch;}
+  table.compare thead th,table.compare tbody td,table.compare tfoot td{padding:10px 12px;font-size:12px;}
 }
 .reveal{opacity:0;transform:translateY(20px);transition:opacity 0.7s ease,transform 0.7s ease;}
 .reveal.visible{opacity:1;transform:translateY(0);}
-
-.nav-burger{display:none;background:none;border:none;color:white;font-size:24px;line-height:1;cursor:pointer;padding:4px 6px;margin-left:6px;}
-.nav-burger:hover{color:var(--gold);}
 </style>
 </head>
 <body>
@@ -183,129 +208,217 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
   <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" onclick="document.body.classList.toggle('thai');this.textContent=document.body.classList.contains('thai')?'EN':'ภาษาไทย'">ภาษาไทย</button>
 </nav>
 
+<!-- HERO -->
 <div class="page-hero">
   <div class="page-tag">💷 <span class="lang-en">Simple, honest pricing</span><span class="lang-th">ราคาง่าย โปร่งใส</span></div>
-  <h1 class="lang-en">One Price.<br><em>Everything Included.</em></h1>
-  <h1 class="lang-th">ราคาเดียว<br><em>รวมทุกอย่าง</em></h1>
-  <p class="lang-en">No hidden fees. No per-cover commissions. No surprise bills. Just one monthly price that covers your entire restaurant operation.</p>
-  <p class="lang-th">ไม่มีค่าใช้จ่ายซ่อน ไม่มีค่าคอมมิชชั่นต่อที่นั่ง ไม่มีบิลเซอร์ไพรส์ ราคารายเดือนเดียวที่ครอบคลุมการดำเนินงานร้านอาหารทั้งหมด</p>
+  <h1 class="lang-en">Everything included.<br><em>Nothing extra. £89 a month.</em></h1>
+  <h1 class="lang-th">ทุกอย่างรวมอยู่แล้ว<br><em>ไม่มีค่าใช้จ่ายเพิ่ม เพียง £89 ต่อเดือน</em></h1>
+  <p class="hero-sub lang-en">You're already paying more than £89 a month in platform fees. Just not getting this much back. One price. All six features. Cancel anytime.</p>
+  <p class="hero-sub lang-th">คุณจ่ายค่าแพลตฟอร์มมากกว่า £89 ต่อเดือนอยู่แล้ว แต่ไม่ได้รับกลับมามากขนาดนี้ ราคาเดียว ครบทุกฟีเจอร์ ยกเลิกได้ทุกเมื่อ</p>
+  <div class="hero-proof-row">
+    <div class="hero-proof-item lang-en">✓ No setup fee</div>
+    <div class="hero-proof-item lang-en">✓ No contract</div>
+    <div class="hero-proof-item lang-en">✓ No per-cover commission</div>
+    <div class="hero-proof-item lang-en">✓ Free demo in Thai or English</div>
+    <div class="hero-proof-item lang-th">✓ ไม่มีค่าตั้งค่า</div>
+    <div class="hero-proof-item lang-th">✓ ไม่มีสัญญา</div>
+    <div class="hero-proof-item lang-th">✓ ไม่มีค่าคอมต่อที่นั่ง</div>
+    <div class="hero-proof-item lang-th">✓ สาธิตฟรีทั้งภาษาไทยและอังกฤษ</div>
+  </div>
 </div>
 
-<!-- PRICING CARDS -->
+<!-- PRICING CARD -->
 <section class="pricing-section">
-  <div class="pricing-grid">
+  <div style="text-align:center;margin-bottom:56px;" class="reveal">
+    <div class="section-label lang-en">The plan</div>
+    <div class="section-label lang-th">แผนราคา</div>
+    <h2 class="section-title lang-en">One plan. Seriously.</h2>
+    <h2 class="section-title lang-th">แผนเดียว จริงๆ</h2>
+    <p style="font-size:16px;color:var(--text-muted);max-width:480px;margin:0 auto;line-height:1.7;" class="lang-en">We didn't want to build three plans and hide half the features. So we put everything in one.</p>
+    <p style="font-size:16px;color:var(--text-muted);max-width:480px;margin:0 auto;line-height:1.7;" class="lang-th">เราไม่อยากสร้างสามแผนแล้วซ่อนฟีเจอร์ไว้ครึ่งหนึ่ง จึงรวมทุกอย่างไว้ในแผนเดียว</p>
+  </div>
 
-    <!-- STARTER -->
-    <div class="pcard reveal">
-      <div class="pcard-tier lang-en">Starter</div>
-      <div class="pcard-tier lang-th">สตาร์เตอร์</div>
-      <div class="pcard-price">£49</div>
-      <div class="pcard-period lang-en">per month · cancel anytime</div>
-      <div class="pcard-period lang-th">ต่อเดือน · ยกเลิกได้ทุกเมื่อ</div>
-      <ul class="pcard-features">
-        <li class="divider lang-en">Core EPOS</li>
-        <li class="divider lang-th">EPOS หลัก</li>
-        <li class="lang-en">Full EPOS with table management</li><li class="lang-th">EPOS สมบูรณ์พร้อมจัดการโต๊ะ</li>
-        <li class="lang-en">Kitchen display screen</li><li class="lang-th">หน้าจอครัว</li>
-        <li class="lang-en">Bar screen</li><li class="lang-th">หน้าจอบาร์</li>
-        <li class="lang-en">Staff PIN logins & roles</li><li class="lang-th">PIN พนักงานและบทบาท</li>
-        <li class="lang-en">Daily Z reports & till reconciliation</li><li class="lang-th">Z Report รายวันและสรุปยอดเงิน</li>
-        <li class="lang-en">Bilingual EN + TH interface</li><li class="lang-th">อินเตอร์เฟซสองภาษา EN + TH</li>
-        <li class="lang-en">Email support</li><li class="lang-th">ซัพพอร์ตทางอีเมล</li>
-      </ul>
-      <a href="book-demo.html" class="btn-pcard btn-outline lang-en">Get Started</a>
-      <a href="book-demo.html" class="btn-pcard btn-outline lang-th">เริ่มใช้งาน</a>
-    </div>
+  <div class="pricing-solo reveal">
+    <div class="pricing-solo-inner">
+      <div class="pricing-badge lang-en">⭐ Recommended for most restaurants</div>
+      <div class="pricing-badge lang-th">⭐ แนะนำสำหรับร้านอาหารส่วนใหญ่</div>
 
-    <!-- PRO -->
-    <div class="pcard featured reveal">
-      <div class="pcard-badge lang-en">⭐ Most Popular</div>
-      <div class="pcard-badge lang-th">⭐ ยอดนิยม</div>
-      <div class="pcard-tier">Pro</div>
-      <div class="pcard-price">£89</div>
-      <div class="pcard-period lang-en">per month · cancel anytime</div>
-      <div class="pcard-period lang-th">ต่อเดือน · ยกเลิกได้ทุกเมื่อ</div>
-      <ul class="pcard-features">
-        <li class="divider lang-en">Everything in Starter, plus:</li>
-        <li class="divider lang-th">ทุกอย่างใน Starter บวก:</li>
-        <li class="lang-en">🤖 AI menu scanner (30-second setup)</li><li class="lang-th">🤖 AI สแกนเมนู (ตั้งค่าใน 30 วินาที)</li>
-        <li class="lang-en">💷 Zero-commission booking widget</li><li class="lang-th">💷 วิดเจ็ตจองโต๊ะค่าคอม 0%</li>
-        <li class="lang-en">⚠️ 14 UK allergen detection (automatic)</li><li class="lang-th">⚠️ ตรวจจับสารก่อภูมิแพ้ 14 รายการ (อัตโนมัติ)</li>
-        <li class="lang-en">Unlimited tables & staff accounts</li><li class="lang-th">โต๊ะและบัญชีพนักงานไม่จำกัด</li>
-        <li class="lang-en">Pass screen & course management</li><li class="lang-th">Pass screen และจัดการคอร์ส</li>
-        <li class="lang-en">Full reports & analytics</li><li class="lang-th">รายงานและวิเคราะห์ครบ</li>
-        <li class="lang-en">📞 Thai-speaking phone support</li><li class="lang-th">📞 ซัพพอร์ตโทรศัพท์ภาษาไทย</li>
-      </ul>
-      <a href="book-demo.html" class="btn-pcard btn-gold lang-en">Get Started Free</a>
-      <a href="book-demo.html" class="btn-pcard btn-gold lang-th">เริ่มใช้งานฟรี</a>
-    </div>
+      <!-- LEFT: price + savings -->
+      <div class="price-left">
+        <div class="price-tier lang-en">SiamEPOS Pro</div>
+        <div class="price-tier lang-th">SiamEPOS Pro</div>
+        <div class="price-big">£89</div>
+        <div class="price-period lang-en">per month &nbsp;·&nbsp; cancel anytime &nbsp;·&nbsp; no setup fee</div>
+        <div class="price-period lang-th">ต่อเดือน &nbsp;·&nbsp; ยกเลิกได้ทุกเมื่อ &nbsp;·&nbsp; ไม่มีค่าตั้งค่า</div>
+        <div class="price-detail lang-en">Monthly rolling subscription. No annual lock-in. Works in your browser on any device you already own — no hardware required.</div>
+        <div class="price-detail lang-th">สมัครรายเดือน ไม่ผูกสัญญารายปี ใช้งานในเบราว์เซอร์ได้ทุกอุปกรณ์ที่มีอยู่แล้ว ไม่ต้องซื้อฮาร์ดแวร์</div>
 
-    <!-- GROWTH -->
-    <div class="pcard reveal">
-      <div class="pcard-tier lang-en">Growth</div>
-      <div class="pcard-tier lang-th">โกรท</div>
-      <div class="pcard-price">£179</div>
-      <div class="pcard-period lang-en">per month · cancel anytime</div>
-      <div class="pcard-period lang-th">ต่อเดือน · ยกเลิกได้ทุกเมื่อ</div>
-      <ul class="pcard-features">
-        <li class="divider lang-en">Everything in Pro, plus:</li>
-        <li class="divider lang-th">ทุกอย่างใน Pro บวก:</li>
-        <li class="lang-en">📊 AI cost & profit management</li><li class="lang-th">📊 AI จัดการต้นทุนและกำไร</li>
-        <li class="lang-en">📦 AI stock management</li><li class="lang-th">📦 AI จัดการสต็อก</li>
-        <li class="lang-en">Supplier invoice scanning</li><li class="lang-th">สแกนใบแจ้งหนี้ซัพพลายเออร์</li>
-        <li class="lang-en">Weekly profit per dish reports</li><li class="lang-th">รายงานกำไรต่อเมนูรายสัปดาห์</li>
-        <li class="lang-en">Wastage & margin tracking</li><li class="lang-th">ติดตามของเสียและอัตรากำไร</li>
-        <li class="lang-en">Auto stock order suggestions</li><li class="lang-th">แนะนำการสั่งสต็อกอัตโนมัติ</li>
-        <li class="lang-en">Dedicated account manager</li><li class="lang-th">ผู้ดูแลบัญชีเฉพาะ</li>
-      </ul>
-      <a href="book-demo.html" class="btn-pcard btn-outline lang-en">Get Started</a>
-      <a href="book-demo.html" class="btn-pcard btn-outline lang-th">เริ่มใช้งาน</a>
-    </div>
+        <div class="price-saves">
+          <p class="lang-en">Compared to what you replace</p>
+          <p class="lang-th">เปรียบเทียบกับสิ่งที่แทนที่</p>
+          <strong class="lang-en">Save £411–£1,411 every month</strong>
+          <strong class="lang-th">ประหยัด £411–£1,411 ทุกเดือน</strong>
+        </div>
 
-    <!-- ENTERPRISE -->
-    <div class="pcard reveal">
-      <div class="pcard-tier lang-en">Enterprise</div>
-      <div class="pcard-tier lang-th">เอนเตอร์ไพรส์</div>
-      <div class="pcard-price" style="font-size:36px;padding-top:8px;" class="lang-en">Custom</div>
-      <div class="pcard-price" style="font-size:36px;padding-top:8px;" class="lang-th">ติดต่อเรา</div>
-      <div class="pcard-period lang-en">multiple locations</div>
-      <div class="pcard-period lang-th">หลายสาขา</div>
-      <ul class="pcard-features">
-        <li class="divider lang-en">Everything in Growth, plus:</li>
-        <li class="divider lang-th">ทุกอย่างใน Growth บวก:</li>
-        <li class="lang-en">Multiple restaurant locations</li><li class="lang-th">หลายสาขา</li>
-        <li class="lang-en">Centralised reporting dashboard</li><li class="lang-th">แดชบอร์ดรายงานรวมศูนย์</li>
-        <li class="lang-en">Custom integrations</li><li class="lang-th">การเชื่อมต่อแบบกำหนดเอง</li>
-        <li class="lang-en">On-site setup & training</li><li class="lang-th">ตั้งค่าและฝึกอบรมถึงที่</li>
-        <li class="lang-en">Priority Thai-speaking support</li><li class="lang-th">ซัพพอร์ตภาษาไทยเร่งด่วน</li>
-        <li class="lang-en">Custom SLA agreement</li><li class="lang-th">ข้อตกลง SLA แบบกำหนดเอง</li>
-      </ul>
-      <a href="book-demo.html" class="btn-pcard btn-outline lang-en">Contact Us</a>
-      <a href="book-demo.html" class="btn-pcard btn-outline lang-th">ติดต่อเรา</a>
+        <a href="book-demo.html" class="btn-gold-big lang-en">Book a Free 20-Minute Demo</a>
+        <a href="book-demo.html" class="btn-gold-big lang-th">จองสาธิตฟรี 20 นาที</a>
+        <a href="https://wa.me/447700000000" class="btn-ghost lang-en">💬 Ask us anything on WhatsApp</a>
+        <a href="https://wa.me/447700000000" class="btn-ghost lang-th">💬 ถามเราบน WhatsApp</a>
+      </div>
+
+      <!-- RIGHT: feature list -->
+      <div class="price-right">
+        <ul class="feat-list">
+          <li class="divider lang-en">Reservations &amp; Takeaway</li>
+          <li class="divider lang-th">จองโต๊ะและสั่งอาหารออนไลน์</li>
+          <li class="lang-en">Zero-fee online reservation widget — no per-cover charge, ever</li>
+          <li class="lang-th">วิดเจ็ตจองโต๊ะออนไลน์ ค่าธรรมเนียม 0% ไม่มีค่าต่อที่นั่ง</li>
+          <li class="lang-en">Online takeaway ordering — 0% commission, full menu, pickup-time selection</li>
+          <li class="lang-th">สั่งอาหารออนไลน์ ค่าคอม 0% เมนูครบ เลือกเวลารับได้</li>
+
+          <li class="divider lang-en">Front of House</li>
+          <li class="divider lang-th">หน้าร้าน</li>
+          <li class="lang-en">Full EPOS with live table map + floor plan builder</li>
+          <li class="lang-th">EPOS สมบูรณ์พร้อมแผนผังโต๊ะสดและสร้างแผนผังพื้นที่</li>
+          <li class="lang-en">Kitchen display screen (KDS) + bar screen + pass screen</li>
+          <li class="lang-th">หน้าจอครัว (KDS) + บาร์ + pass screen</li>
+          <li class="lang-en">Staff PIN logins, roles &amp; clock in/out</li>
+          <li class="lang-th">PIN พนักงาน บทบาท และเข้า-ออกงาน</li>
+
+          <li class="divider lang-en">Compliance &amp; Inventory</li>
+          <li class="divider lang-th">กฎหมายและสต็อก</li>
+          <li class="lang-en">Allergen management — Natasha's Law compliant, automatic detection</li>
+          <li class="lang-th">จัดการสารก่อภูมิแพ้ตาม Natasha's Law ตรวจจับอัตโนมัติ</li>
+          <li class="lang-en">AI inventory &amp; cost vs sales analysis — photo-scan supplier invoices</li>
+          <li class="lang-th">AI สต็อกและวิเคราะห์ต้นทุน vs ยอดขาย สแกนใบแจ้งหนี้ได้</li>
+          <li class="lang-en">Auto stock depletion on sale, wastage tracking</li>
+          <li class="lang-th">หักสต็อกอัตโนมัติเมื่อขาย ติดตามของเสีย</li>
+
+          <li class="divider lang-en">Reporting &amp; CRM</li>
+          <li class="divider lang-th">รายงานและ CRM</li>
+          <li class="lang-en">Customer CRM — visit history, spend, birthday, marketing consent</li>
+          <li class="lang-th">CRM ลูกค้า ประวัติการมา ยอดใช้จ่าย วันเกิด ความยินยอมการตลาด</li>
+          <li class="lang-en">Full trading reports, Z reports, VAT breakdown, staff performance</li>
+          <li class="lang-th">รายงานการค้าสมบูรณ์ Z Report สรุป VAT ผลงานพนักงาน</li>
+          <li class="lang-en">Bilingual EN + TH interface throughout</li>
+          <li class="lang-th">อินเตอร์เฟซสองภาษา EN + TH ตลอดระบบ</li>
+          <li class="lang-en">Works offline — local SQLite sync, cloud backup always running</li>
+          <li class="lang-th">ใช้งานออฟไลน์ได้ SQLite ในเครื่อง สำรองคลาวด์อัตโนมัติ</li>
+        </ul>
+      </div>
     </div>
   </div>
 
-  <div class="callout-banner reveal">
-    <p class="lang-en">💡 <strong>Pro plan at £89/month costs less than one week of OpenTable fees</strong> for a typical Thai restaurant. A restaurant doing 50 covers a night saves <strong>over £23,000 in year one.</strong></p>
-    <p class="lang-th">💡 <strong>แผน Pro £89/เดือน ถูกกว่าค่า OpenTable หนึ่งสัปดาห์</strong>สำหรับร้านอาหารไทยทั่วไป ร้านที่รับ 50 ที่นั่งต่อคืนประหยัด <strong>กว่า £23,000 ในปีแรก</strong></p>
+  <div class="savings-banner reveal">
+    <p class="lang-en">💡 A restaurant turning 50 covers a night at an average spend of £35 pays <strong>over £1,500/month</strong> to OpenTable alone at £30/cover — before Deliveroo, before stock software, before your EPOS. SiamEPOS replaces all of it for <strong>£89.</strong></p>
+    <p class="lang-th">💡 ร้านที่รับ 50 ที่นั่งต่อคืน ค่าใช้จ่ายเฉลี่ย £35 ต่อที่นั่ง จ่าย OpenTable <strong>กว่า £1,500 ต่อเดือน</strong>เพียงอย่างเดียว ยังไม่นับ Deliveroo สต็อกซอฟต์แวร์ และ EPOS SiamEPOS แทนที่ทั้งหมดนั้นด้วย <strong>£89 เท่านั้น</strong></p>
+  </div>
+</section>
+
+<!-- WHAT YOU'RE REPLACING -->
+<section class="comparison-section">
+  <div style="text-align:center;" class="reveal">
+    <div class="section-label lang-en">The real cost of the old way</div>
+    <div class="section-label lang-th">ต้นทุนแท้จริงของวิธีเดิม</div>
+    <h2 class="section-title lang-en">What you're replacing</h2>
+    <h2 class="section-title lang-th">สิ่งที่คุณกำลังแทนที่</h2>
+    <p style="font-size:16px;color:var(--text-muted);max-width:520px;margin:12px auto 0;line-height:1.7;" class="lang-en">Most Thai restaurants are already paying £500–£1,500 a month across these platforms. They just don't see it as one number.</p>
+    <p style="font-size:16px;color:var(--text-muted);max-width:520px;margin:12px auto 0;line-height:1.7;" class="lang-th">ร้านอาหารไทยส่วนใหญ่จ่ายเงิน £500–£1,500 ต่อเดือนให้กับแพลตฟอร์มเหล่านี้อยู่แล้ว แค่ไม่เคยเห็นเป็นตัวเลขเดียว</p>
+  </div>
+
+  <div class="comparison-wrap reveal">
+    <table class="compare">
+      <thead>
+        <tr>
+          <th class="lang-en">What you need</th>
+          <th class="lang-en">The Old Way</th>
+          <th class="lang-en">SiamEPOS</th>
+          <th class="lang-th" style="display:none;">สิ่งที่คุณต้องการ</th>
+          <th class="lang-th" style="display:none;">วิธีเดิม</th>
+          <th class="lang-th" style="display:none;">SiamEPOS</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="lang-en">Online reservations</td>
+          <td class="lang-en">OpenTable / ResDiary: £2–30 per cover</td>
+          <td class="lang-en">£0 per cover — forever</td>
+          <td class="lang-th" style="display:none;">จองโต๊ะออนไลน์</td>
+          <td class="lang-th" style="display:none;">OpenTable / ResDiary: £2–30 ต่อที่นั่ง</td>
+          <td class="lang-th" style="display:none;">£0 ต่อที่นั่ง ตลอดไป</td>
+        </tr>
+        <tr>
+          <td class="lang-en">Online takeaway</td>
+          <td class="lang-en">Deliveroo / Just Eat: 25–35% commission</td>
+          <td class="lang-en">0% commission</td>
+          <td class="lang-th" style="display:none;">สั่งอาหารออนไลน์</td>
+          <td class="lang-th" style="display:none;">Deliveroo / Just Eat: ค่าคอม 25–35%</td>
+          <td class="lang-th" style="display:none;">ค่าคอม 0%</td>
+        </tr>
+        <tr>
+          <td class="lang-en">EPOS system</td>
+          <td class="lang-en">Generic EPOS: £100–200/month (English only)</td>
+          <td class="lang-en">Included + Thai language</td>
+          <td class="lang-th" style="display:none;">ระบบ EPOS</td>
+          <td class="lang-th" style="display:none;">EPOS ทั่วไป: £100–200/เดือน (ภาษาอังกฤษเท่านั้น)</td>
+          <td class="lang-th" style="display:none;">รวมอยู่แล้ว + ภาษาไทย</td>
+        </tr>
+        <tr>
+          <td class="lang-en">Stock &amp; inventory software</td>
+          <td class="lang-en">Separate app: £50–100/month</td>
+          <td class="lang-en">Included + AI-powered</td>
+          <td class="lang-th" style="display:none;">ซอฟต์แวร์สต็อกและคลังสินค้า</td>
+          <td class="lang-th" style="display:none;">แอปแยก: £50–100/เดือน</td>
+          <td class="lang-th" style="display:none;">รวมอยู่แล้ว + ขับเคลื่อนด้วย AI</td>
+        </tr>
+        <tr>
+          <td class="lang-en">Allergen management</td>
+          <td class="lang-en">Manual spreadsheets + risk</td>
+          <td class="lang-en">Automatic — Natasha's Law compliant</td>
+          <td class="lang-th" style="display:none;">จัดการสารก่อภูมิแพ้</td>
+          <td class="lang-th" style="display:none;">สเปรดชีตมือ + ความเสี่ยง</td>
+          <td class="lang-th" style="display:none;">อัตโนมัติ ตาม Natasha's Law</td>
+        </tr>
+        <tr>
+          <td class="lang-en">Customer CRM &amp; email</td>
+          <td class="lang-en">Mailchimp / Klaviyo: £50+/month</td>
+          <td class="lang-en">Included with campaign tools</td>
+          <td class="lang-th" style="display:none;">CRM ลูกค้าและอีเมล</td>
+          <td class="lang-th" style="display:none;">Mailchimp / Klaviyo: £50+/เดือน</td>
+          <td class="lang-th" style="display:none;">รวมอยู่แล้วพร้อมเครื่องมือแคมเปญ</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td class="lang-en"><strong>Typical monthly total</strong></td>
+          <td class="lang-en"><strong>£500–1,500+/month</strong></td>
+          <td class="lang-en"><strong>£89/month</strong></td>
+          <td class="lang-th" style="display:none;"><strong>รวมรายเดือนทั่วไป</strong></td>
+          <td class="lang-th" style="display:none;"><strong>£500–1,500+/เดือน</strong></td>
+          <td class="lang-th" style="display:none;"><strong>£89/เดือน</strong></td>
+        </tr>
+      </tfoot>
+    </table>
+    <p class="compare-note lang-en">OpenTable figures based on £2–30/cover; takeaway commission based on publicly stated Deliveroo/Just Eat rates. Your actual saving will vary with volume.</p>
+    <p class="compare-note lang-th">ตัวเลข OpenTable อ้างอิงจาก £2–30 ต่อที่นั่ง ค่าคอมมิชชั่นเดลิเวอรี่อ้างอิงจากอัตราที่ประกาศสาธารณะ การประหยัดจริงขึ้นอยู่กับปริมาณ</p>
   </div>
 </section>
 
 <!-- WHAT'S ALWAYS INCLUDED -->
 <section class="included-section">
   <div style="text-align:center;" class="reveal">
-    <div class="section-label lang-en">In every plan</div>
-    <div class="section-label lang-th">รวมในทุกแผน</div>
+    <div class="section-label lang-en">In every subscription</div>
+    <div class="section-label lang-th">รวมในทุกการสมัคร</div>
     <h2 class="section-title lang-en">Always included.<br>No extras.</h2>
     <h2 class="section-title lang-th">รวมเสมอ<br>ไม่มีค่าใช้จ่ายเพิ่ม</h2>
   </div>
   <div class="included-grid">
-    <div class="inc-card reveal"><div class="inc-icon">🚀</div><div class="inc-title lang-en">Free Setup & Onboarding</div><div class="inc-title lang-th">ตั้งค่าฟรีและ Onboarding</div><p class="inc-desc lang-en">We set everything up for you. Menu, table plan, staff accounts. You're ready in one afternoon.</p><p class="inc-desc lang-th">เราตั้งค่าทุกอย่างให้คุณ เมนู แผนโต๊ะ บัญชีพนักงาน พร้อมใช้ใน 1 บ่าย</p><div class="inc-tag lang-en">Free always</div><div class="inc-tag lang-th">ฟรีเสมอ</div></div>
-    <div class="inc-card reveal"><div class="inc-icon">🇹🇭</div><div class="inc-title lang-en">Thai-Speaking Support</div><div class="inc-title lang-th">ซัพพอร์ตภาษาไทย</div><p class="inc-desc lang-en">Call or WhatsApp us in Thai. We understand your restaurant because we've worked in them.</p><p class="inc-desc lang-th">โทรหรือ WhatsApp หาเราเป็นภาษาไทย เราเข้าใจร้านอาหารของคุณเพราะเราเคยทำงานในนั้น</p><div class="inc-tag lang-en">Free always</div><div class="inc-tag lang-th">ฟรีเสมอ</div></div>
-    <div class="inc-card reveal"><div class="inc-icon">☁️</div><div class="inc-title lang-en">Cloud Hosting & Backups</div><div class="inc-title lang-th">Hosting บนคลาวด์และสำรองข้อมูล</div><p class="inc-desc lang-en">Your data is backed up automatically. No servers to manage, no IT required.</p><p class="inc-desc lang-th">ข้อมูลของคุณสำรองอัตโนมัติ ไม่ต้องจัดการเซิร์ฟเวอร์ ไม่ต้องใช้ IT</p><div class="inc-tag lang-en">Free always</div><div class="inc-tag lang-th">ฟรีเสมอ</div></div>
-    <div class="inc-card reveal"><div class="inc-icon">📱</div><div class="inc-title lang-en">Works on Any Device</div><div class="inc-title lang-th">ใช้งานได้ทุกอุปกรณ์</div><p class="inc-desc lang-en">iPad, Android tablet, phone or laptop — no hardware to buy, no apps to install.</p><p class="inc-desc lang-th">iPad แท็บเล็ต Android โทรศัพท์ หรือแล็ปท็อป ไม่ต้องซื้อฮาร์ดแวร์ ไม่ต้องติดตั้งแอป</p><div class="inc-tag lang-en">Free always</div><div class="inc-tag lang-th">ฟรีเสมอ</div></div>
-    <div class="inc-card reveal"><div class="inc-icon">🔒</div><div class="inc-title lang-en">UK GDPR Compliance</div><div class="inc-title lang-th">ปฏิบัติตาม GDPR ของ UK</div><p class="inc-desc lang-en">Fully compliant with UK data protection law. Customer data stays safe and private.</p><p class="inc-desc lang-th">ปฏิบัติตามกฎหมายคุ้มครองข้อมูล UK อย่างครบถ้วน ข้อมูลลูกค้าปลอดภัยและเป็นส่วนตัว</p><div class="inc-tag lang-en">Free always</div><div class="inc-tag lang-th">ฟรีเสมอ</div></div>
-    <div class="inc-card reveal"><div class="inc-icon">🔄</div><div class="inc-title lang-en">Free Updates Forever</div><div class="inc-title lang-th">อัพเดตฟรีตลอดไป</div><p class="inc-desc lang-en">New features land automatically. No upgrade fees, no version juggling.</p><p class="inc-desc lang-th">ฟีเจอร์ใหม่มาอัตโนมัติ ไม่มีค่าอัพเกรด ไม่ต้องจัดการเวอร์ชัน</p><div class="inc-tag lang-en">Free always</div><div class="inc-tag lang-th">ฟรีเสมอ</div></div>
+    <div class="inc-card reveal"><div class="inc-icon">🚀</div><div class="inc-title lang-en">Free Setup &amp; Onboarding</div><div class="inc-title lang-th">ตั้งค่าฟรีและ Onboarding</div><p class="inc-desc lang-en">We set everything up for you. Menu, table plan, staff accounts. Most restaurants are live within a day.</p><p class="inc-desc lang-th">เราตั้งค่าทุกอย่างให้คุณ เมนู แผนโต๊ะ บัญชีพนักงาน ร้านส่วนใหญ่พร้อมใช้ภายในหนึ่งวัน</p><div class="inc-tag lang-en">Free always</div><div class="inc-tag lang-th">ฟรีเสมอ</div></div>
+    <div class="inc-card reveal"><div class="inc-icon">🇹🇭</div><div class="inc-title lang-en">Thai-Speaking WhatsApp Support</div><div class="inc-title lang-th">ซัพพอร์ต WhatsApp ภาษาไทย</div><p class="inc-desc lang-en">Message us in Thai anytime. We understand your restaurant because we've worked in them.</p><p class="inc-desc lang-th">ส่งข้อความหาเราเป็นภาษาไทยได้ตลอดเวลา เราเข้าใจร้านอาหารของคุณเพราะเราเคยทำงานในนั้น</p><div class="inc-tag lang-en">Free always</div><div class="inc-tag lang-th">ฟรีเสมอ</div></div>
+    <div class="inc-card reveal"><div class="inc-icon">☁️</div><div class="inc-title lang-en">Cloud Hosting &amp; Backups</div><div class="inc-title lang-th">Hosting บนคลาวด์และสำรองข้อมูล</div><p class="inc-desc lang-en">Your data is backed up automatically. No servers to manage, no IT person required.</p><p class="inc-desc lang-th">ข้อมูลของคุณสำรองอัตโนมัติ ไม่ต้องจัดการเซิร์ฟเวอร์ ไม่ต้องมีทีม IT</p><div class="inc-tag lang-en">Free always</div><div class="inc-tag lang-th">ฟรีเสมอ</div></div>
+    <div class="inc-card reveal"><div class="inc-icon">📱</div><div class="inc-title lang-en">Works on Any Device You Own</div><div class="inc-title lang-th">ใช้งานได้ทุกอุปกรณ์ที่มี</div><p class="inc-desc lang-en">iPad, Android tablet, phone or laptop — no hardware to buy, no apps to install.</p><p class="inc-desc lang-th">iPad แท็บเล็ต Android โทรศัพท์ หรือแล็ปท็อป ไม่ต้องซื้อฮาร์ดแวร์ ไม่ต้องติดตั้งแอป</p><div class="inc-tag lang-en">Free always</div><div class="inc-tag lang-th">ฟรีเสมอ</div></div>
+    <div class="inc-card reveal"><div class="inc-icon">🔒</div><div class="inc-title lang-en">UK GDPR Compliance</div><div class="inc-title lang-th">ปฏิบัติตาม GDPR ของ UK</div><p class="inc-desc lang-en">Fully compliant with UK data protection law. Customer data stays safe, private, and under your control.</p><p class="inc-desc lang-th">ปฏิบัติตามกฎหมายคุ้มครองข้อมูล UK ครบถ้วน ข้อมูลลูกค้าปลอดภัย เป็นส่วนตัว อยู่ในมือคุณ</p><div class="inc-tag lang-en">Free always</div><div class="inc-tag lang-th">ฟรีเสมอ</div></div>
+    <div class="inc-card reveal"><div class="inc-icon">🔄</div><div class="inc-title lang-en">Free Updates Forever</div><div class="inc-title lang-th">อัพเดตฟรีตลอดไป</div><p class="inc-desc lang-en">New features land automatically. No upgrade fees, no version juggling, no surprise invoices.</p><p class="inc-desc lang-th">ฟีเจอร์ใหม่มาอัตโนมัติ ไม่มีค่าอัพเกรด ไม่ต้องจัดการเวอร์ชัน ไม่มีใบแจ้งหนี้เซอร์ไพรส์</p><div class="inc-tag lang-en">Free always</div><div class="inc-tag lang-th">ฟรีเสมอ</div></div>
   </div>
 </section>
 
@@ -314,52 +427,78 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
   <div style="text-align:center;" class="reveal">
     <div class="section-label lang-en">Common questions</div>
     <div class="section-label lang-th">คำถามที่พบบ่อย</div>
-    <h2 class="section-title lang-en">Pricing FAQ</h2>
-    <h2 class="section-title lang-th">คำถามเรื่องราคา</h2>
+    <h2 class="section-title lang-en">You probably want to know…</h2>
+    <h2 class="section-title lang-th">คุณอาจอยากรู้ว่า…</h2>
   </div>
   <div class="faq-grid">
+
     <div class="faq-item" onclick="this.classList.toggle('open')">
       <div class="faq-q lang-en">Is there a contract or minimum term?</div>
       <div class="faq-q lang-th">มีสัญญาหรือระยะเวลาขั้นต่ำไหม?</div>
-      <div class="faq-a lang-en">No contract, no minimum term. Pay monthly and cancel anytime. We're confident you won't want to.</div>
-      <div class="faq-a lang-th">ไม่มีสัญญา ไม่มีระยะเวลาขั้นต่ำ จ่ายรายเดือนและยกเลิกได้ทุกเมื่อ เราเชื่อมั่นว่าคุณจะไม่อยากเลิก</div>
+      <div class="faq-a lang-en">No contract, no minimum term. SiamEPOS is a monthly rolling subscription — pay month to month and cancel anytime with no penalties. We're confident you won't want to, but we'll never lock you in.</div>
+      <div class="faq-a lang-th">ไม่มีสัญญา ไม่มีระยะเวลาขั้นต่ำ SiamEPOS เป็นสมัครสมาชิกรายเดือน จ่ายทีละเดือนและยกเลิกได้ทุกเมื่อโดยไม่มีค่าปรับ เราเชื่อมั่นว่าคุณจะไม่อยากเลิก แต่เราจะไม่บังคับคุณ</div>
     </div>
+
     <div class="faq-item" onclick="this.classList.toggle('open')">
-      <div class="faq-q lang-en">Are there any per-booking or per-cover fees?</div>
-      <div class="faq-q lang-th">มีค่าธรรมเนียมต่อการจองหรือต่อที่นั่งไหม?</div>
-      <div class="faq-a lang-en">Absolutely not. Zero commission, zero per-cover fees, zero transaction fees — ever. You pay the monthly subscription and nothing else.</div>
-      <div class="faq-a lang-th">ไม่มีเลย ค่าคอมมิชชั่น 0% ค่าธรรมเนียมต่อที่นั่ง 0% ค่าธรรมเนียมธุรกรรม 0% — ตลอดไป คุณจ่ายเพียงสมาชิกรายเดือนและไม่มีอื่นอีก</div>
+      <div class="faq-q lang-en">What hardware do I need?</div>
+      <div class="faq-q lang-th">ต้องใช้ฮาร์ดแวร์อะไรบ้าง?</div>
+      <div class="faq-a lang-en">Any device you already own — an iPad, Android tablet, phone, or laptop. SiamEPOS runs in the browser, so there's nothing to install and no new hardware to buy. If you want hardware recommendations (iPad stands, routers), we're happy to advise. Receipt and kitchen printers are coming soon — contact us for the latest.</div>
+      <div class="faq-a lang-th">อุปกรณ์ใดก็ได้ที่มีอยู่แล้ว iPad แท็บเล็ต Android โทรศัพท์ หรือแล็ปท็อป SiamEPOS ทำงานในเบราว์เซอร์ ไม่ต้องติดตั้งอะไรและไม่ต้องซื้อฮาร์ดแวร์ใหม่ ถ้าต้องการคำแนะนำ (ขาตั้ง iPad เราเตอร์) เราพร้อมช่วย เครื่องพิมพ์ใบเสร็จและเครื่องพิมพ์ครัวจะมาเร็วๆ นี้ ติดต่อเราสำหรับข้อมูลล่าสุด</div>
     </div>
+
+    <div class="faq-item" onclick="this.classList.toggle('open')">
+      <div class="faq-q lang-en">Does it work if the internet goes down?</div>
+      <div class="faq-q lang-th">ใช้งานได้ไหมถ้าอินเทอร์เน็ตล่ม?</div>
+      <div class="faq-a lang-en">Yes. SiamEPOS Pro includes a fully offline-capable desktop app for Mac and Windows. Orders, payments and table management keep working on your local network. Everything syncs back to the cloud the moment your connection returns — automatically, with no data loss.</div>
+      <div class="faq-a lang-th">ได้ SiamEPOS Pro รวมแอปเดสก์ท็อปสำหรับ Mac และ Windows ที่ทำงานออฟไลน์ได้อย่างสมบูรณ์ คำสั่ง การชำระเงิน และการจัดการโต๊ะทำงานต่อเนื่องบนเครือข่ายภายในร้าน ทุกอย่างซิงค์กลับคลาวด์ทันทีที่มีการเชื่อมต่อ อัตโนมัติ ไม่มีข้อมูลหาย</div>
+    </div>
+
+    <div class="faq-item" onclick="this.classList.toggle('open')">
+      <div class="faq-q lang-en">Is support available in Thai?</div>
+      <div class="faq-q lang-th">มีซัพพอร์ตภาษาไทยไหม?</div>
+      <div class="faq-a lang-en">Yes — WhatsApp support in Thai and English, included in every plan. We built SiamEPOS specifically for Thai restaurant owners in the UK, so we understand the questions you're actually going to ask.</div>
+      <div class="faq-a lang-th">มี — ซัพพอร์ต WhatsApp ทั้งภาษาไทยและอังกฤษ รวมในทุกแผน เราสร้าง SiamEPOS เพื่อเจ้าของร้านอาหารไทยใน UK โดยเฉพาะ ดังนั้นเราเข้าใจคำถามที่คุณจะถามจริงๆ</div>
+    </div>
+
     <div class="faq-item" onclick="this.classList.toggle('open')">
       <div class="faq-q lang-en">How long does setup take?</div>
       <div class="faq-q lang-th">การตั้งค่าใช้เวลานานเท่าไหร่?</div>
-      <div class="faq-a lang-en">Most restaurants are live in one afternoon. We set up your menu, table plan, and staff accounts for you. If you use the AI scanner, your menu can be live in under 60 seconds from a photo.</div>
-      <div class="faq-a lang-th">ร้านส่วนใหญ่พร้อมใช้งานใน 1 บ่าย เราตั้งค่าเมนู แผนโต๊ะ และบัญชีพนักงานให้คุณ ถ้าใช้ AI scanner เมนูของคุณพร้อมใช้ได้ในไม่ถึง 60 วินาทีจากรูปถ่าย</div>
+      <div class="faq-a lang-en">Most restaurants are live within a day. We handle the setup for you — menu, table plan, staff accounts. If you use the AI menu scanner, your full menu can be imported from a photo in under 60 seconds. Book a demo and we'll show you exactly what it looks like for your restaurant.</div>
+      <div class="faq-a lang-th">ร้านส่วนใหญ่พร้อมใช้ภายในหนึ่งวัน เราจัดการการตั้งค่าให้คุณ เมนู แผนโต๊ะ บัญชีพนักงาน ถ้าใช้ AI scanner สแกนเมนู เมนูทั้งหมดของคุณนำเข้าได้จากรูปถ่ายในไม่ถึง 60 วินาที จองสาธิตและเราจะแสดงให้เห็นว่าเป็นอย่างไรสำหรับร้านของคุณโดยเฉพาะ</div>
     </div>
+
     <div class="faq-item" onclick="this.classList.toggle('open')">
-      <div class="faq-q lang-en">Can I upgrade or downgrade my plan?</div>
-      <div class="faq-q lang-th">ฉันสามารถอัพเกรดหรือดาวน์เกรดแผนได้ไหม?</div>
-      <div class="faq-a lang-en">Yes, anytime. Upgrade instantly if your restaurant grows. Downgrade with one month's notice. No penalties.</div>
-      <div class="faq-a lang-th">ได้ ทุกเมื่อ อัพเกรดทันทีหากร้านคุณเติบโต ดาวน์เกรดด้วยการแจ้งล่วงหน้า 1 เดือน ไม่มีค่าปรับ</div>
+      <div class="faq-q lang-en">What about receipt printers and kitchen printers?</div>
+      <div class="faq-q lang-th">แล้วเครื่องพิมพ์ใบเสร็จและเครื่องพิมพ์ครัวล่ะ?</div>
+      <div class="faq-a lang-en">Hardware printing (ESC/POS) is coming soon and will be included in the subscription at no extra cost. In the meantime, bills and Z reports can be printed from any browser to any printer. Contact us for the latest on hardware compatibility — we can advise on the best models to buy now so you're ready the moment it launches.</div>
+      <div class="faq-a lang-th">การพิมพ์ฮาร์ดแวร์ (ESC/POS) จะมาเร็วๆ นี้ และจะรวมอยู่ในสมัครสมาชิกโดยไม่มีค่าใช้จ่ายเพิ่ม ระหว่างนี้ ใบเสร็จและ Z Report สามารถพิมพ์จากเบราว์เซอร์ใดก็ได้ไปยังเครื่องพิมพ์ใดก็ได้ ติดต่อเราสำหรับข้อมูลล่าสุดด้านความเข้ากันได้กับฮาร์ดแวร์</div>
     </div>
+
     <div class="faq-item" onclick="this.classList.toggle('open')">
-      <div class="faq-q lang-en">Is hardware included?</div>
-      <div class="faq-q lang-th">รวมฮาร์ดแวร์ไหม?</div>
-      <div class="faq-a lang-en">SiamEPOS works on any device you already own — iPad, Android tablet, phone, or laptop. No hardware purchase required. If you need hardware recommendations, we'll advise you on the best affordable options.</div>
-      <div class="faq-a lang-th">SiamEPOS ทำงานบนอุปกรณ์ใดก็ได้ที่คุณมีอยู่แล้ว iPad แท็บเล็ต Android โทรศัพท์ หรือแล็ปท็อป ไม่ต้องซื้อฮาร์ดแวร์ ถ้าต้องการคำแนะนำด้านฮาร์ดแวร์ เราจะแนะนำตัวเลือกที่ดีที่สุดในราคาเหมาะสม</div>
+      <div class="faq-q lang-en">Are there any per-booking or per-cover fees?</div>
+      <div class="faq-q lang-th">มีค่าธรรมเนียมต่อการจองหรือต่อที่นั่งไหม?</div>
+      <div class="faq-a lang-en">Absolutely not. Zero commission, zero per-cover fees, zero transaction fees — ever. You pay £89 a month and nothing else. No volume-based charges, no surprises at the end of the month.</div>
+      <div class="faq-a lang-th">ไม่มีเลย ค่าคอมมิชชั่น 0% ค่าธรรมเนียมต่อที่นั่ง 0% ค่าธรรมเนียมธุรกรรม 0% ตลอดไป คุณจ่าย £89 ต่อเดือนและไม่มีอื่นอีก ไม่มีค่าใช้จ่ายตามปริมาณ ไม่มีเซอร์ไพรส์ปลายเดือน</div>
     </div>
+
   </div>
 </section>
 
 <!-- FINAL CTA -->
 <div class="final-strip">
-  <h2 class="lang-en">Start your <em>free demo</em> today</h2>
-  <h2 class="lang-th">เริ่ม<em>สาธิตฟรี</em>วันนี้</h2>
-  <p class="lang-en">20 minutes. In Thai or English. No commitment required.</p>
-  <p class="lang-th">20 นาที ภาษาไทยหรืออังกฤษก็ได้ ไม่ต้องผูกพัน</p>
-  <a href="book-demo.html" class="book-btn">🚀 <span class="lang-en">Book Your Free Demo</span><span class="lang-th">จองสาธิตฟรีของคุณ</span></a>
+  <div class="final-strip-inner">
+    <h2 class="lang-en">Start with a <em>free 20-minute demo.</em></h2>
+    <h2 class="lang-th">เริ่มด้วย<em>สาธิตฟรี 20 นาที</em></h2>
+    <p class="cta-sub lang-en">See it working in your browser — with your menu, your table layout, your language. No card needed, no commitment.</p>
+    <p class="cta-sub lang-th">ดูการทำงานจริงในเบราว์เซอร์ของคุณ พร้อมเมนู ผังโต๊ะ และภาษาของคุณ ไม่ต้องใช้บัตร ไม่มีข้อผูกมัด</p>
+    <p class="cta-reassure lang-en">Thai or English. WhatsApp or video call. Whatever works for you.</p>
+    <p class="cta-reassure lang-th">ภาษาไทยหรืออังกฤษ WhatsApp หรือ video call อะไรที่สะดวกสำหรับคุณ</p>
+    <div class="cta-pair">
+      <a href="book-demo.html" class="book-btn">🚀 <span class="lang-en">Book Your Free Demo</span><span class="lang-th">จองสาธิตฟรีของคุณ</span></a>
+      <a href="https://wa.me/447700000000" class="btn-outline-white">💬 <span class="lang-en">Message us on WhatsApp</span><span class="lang-th">ส่งข้อความ WhatsApp</span></a>
+    </div>
+  </div>
 </div>
-
 
 <!-- WEBSITE SERVICES -->
 <section style="background:#F7F5F0;padding:80px 60px;">
@@ -367,9 +506,9 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <div style="text-align:center;margin-bottom:48px;">
       <div style="display:inline-block;color:var(--gold);font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px;">Add-on service</div>
       <h2 style="font-family:'Cormorant Garamond',serif;font-size:44px;font-weight:700;color:var(--navy);margin-bottom:10px;" class="lang-en">Need a website too?</h2>
-      <h2 style="font-family:'Cormorant Garamond',serif;font-size:44px;font-weight:700;color:var(--navy);margin-bottom:10px;" class="lang-th">&#x0E15;&#x0E49;&#x0E2d;&#x0E07;&#x0E01;&#x0E32;&#x0E23;&#x0E40;&#x0E27;&#x0E47;&#x0E1a;&#x0E44;&#x0E0b;&#x0E15;&#x0E4c;&#x0E14;&#x0E49;&#x0E27;&#x0E22;&#x0E44;&#x0E2b;&#x0E21;?</h2>
+      <h2 style="font-family:'Cormorant Garamond',serif;font-size:44px;font-weight:700;color:var(--navy);margin-bottom:10px;" class="lang-th">&#x0E15;&#x0E49;&#x0E2d;&#x0E07;&#x0E01;&#x0E32;&#x0E23;&#x0E40;&#x0E27;&#x0E47;&#x0E1a;&#x0E44;&#x0E0B;&#x0E15;&#x0E4C;&#x0E14;&#x0E49;&#x0E27;&#x0E22;&#x0E44;&#x0E2B;&#x0E21;?</h2>
       <p style="font-size:16px;color:var(--text-muted);" class="lang-en">We build it for you. Menu, bookings, online ordering, photos, Google Maps &mdash; in Thai and English, ready in 48 hours.</p>
-      <p style="font-size:16px;color:var(--text-muted);" class="lang-th">&#x0E40;&#x0E23;&#x0E32;&#x0E2a;&#x0E23;&#x0E49;&#x0E32;&#x0E07;&#x0E43;&#x0E2b;&#x0E49; &#x0E40;&#x0E21;&#x0E19;&#x0E39; &#x0E08;&#x0E2d;&#x0E07;&#x0E42;&#x0E15;&#x0E4a;&#x0E30; &#x0E2a;&#x0E31;&#x0E48;&#x0E07;&#x0E2d;&#x0E2d;&#x0E19;&#x0E44;&#x0E25;&#x0E19;&#x0E4c; &#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;+&#x0E2d;&#x0E31;&#x0E07;&#x0E01;&#x0E24;&#x0E29; &#x0E40;&#x0E2a;&#x0E23;&#x0E47;&#x0E08;&#x0E20;&#x0E32;&#x0E22;&#x0E43;&#x0E19; 48 &#x0E0a;&#x0E31;&#x0E48;&#x0E27;&#x0E42;&#x0E21;&#x0E07;</p>
+      <p style="font-size:16px;color:var(--text-muted);" class="lang-th">&#x0E40;&#x0E23;&#x0E32;&#x0E2A;&#x0E23;&#x0E49;&#x0E32;&#x0E07;&#x0E43;&#x0E2B;&#x0E49; &#x0E40;&#x0E21;&#x0E19;&#x0E39; &#x0E08;&#x0E2D;&#x0E07;&#x0E42;&#x0E15;&#x0E4A;&#x0E30; &#x0E2A;&#x0E31;&#x0E48;&#x0E07;&#x0E2D;&#x0E2D;&#x0E19;&#x0E44;&#x0E25;&#x0E19;&#x0E4C; &#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;+&#x0E2D;&#x0E31;&#x0E07;&#x0E01;&#x0E24;&#x0E29; &#x0E40;&#x0E2A;&#x0E23;&#x0E47;&#x0E08;&#x0E20;&#x0E32;&#x0E22;&#x0E43;&#x0E19; 48 &#x0E0A;&#x0E31;&#x0E48;&#x0E27;&#x0E42;&#x0E21;&#x0E07;</p>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:900px;margin:0 auto 32px;">
       <div style="background:white;border:1px solid #E0DDD6;border-radius:16px;padding:28px 24px;">
@@ -384,7 +523,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
           <li>&#x2713; Ready in 48 hours</li>
         </ul>
         <a href="website-design.html" style="display:block;width:100%;padding:11px;border-radius:10px;border:2px solid rgba(13,27,62,0.2);color:var(--navy);font-size:14px;font-weight:700;text-decoration:none;text-align:center;margin-top:16px;transition:all 0.2s;" class="lang-en">Learn More</a>
-        <a href="website-design.html" style="display:block;width:100%;padding:11px;border-radius:10px;border:2px solid rgba(13,27,62,0.2);color:var(--navy);font-size:14px;font-weight:700;text-decoration:none;text-align:center;margin-top:16px;" class="lang-th">&#x0E14;&#x0E39;&#x0E40;&#x0E1e;&#x0E34;&#x0E48;&#x0E21;&#x0E40;&#x0E15;&#x0E34;&#x0E21;</a>
+        <a href="website-design.html" style="display:block;width:100%;padding:11px;border-radius:10px;border:2px solid rgba(13,27,62,0.2);color:var(--navy);font-size:14px;font-weight:700;text-decoration:none;text-align:center;margin-top:16px;" class="lang-th">&#x0E14;&#x0E39;&#x0E40;&#x0E1E;&#x0E34;&#x0E48;&#x0E21;&#x0E40;&#x0E15;&#x0E34;&#x0E21;</a>
       </div>
       <div style="background:var(--navy);border:1px solid var(--gold);border-radius:16px;padding:28px 24px;position:relative;">
         <div style="position:absolute;top:-10px;left:20px;background:linear-gradient(135deg,var(--gold),#E8C96A);color:var(--navy);font-size:9px;font-weight:800;padding:3px 12px;border-radius:10px;text-transform:uppercase;letter-spacing:1px;">Most Popular</div>
@@ -400,7 +539,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
           <li>&#x2713; Ready in 48 hours</li>
         </ul>
         <a href="website-design.html" style="display:block;width:100%;padding:11px;border-radius:10px;background:linear-gradient(135deg,var(--gold),#E8C96A);border:none;color:var(--navy);font-size:14px;font-weight:800;text-decoration:none;text-align:center;margin-top:16px;" class="lang-en">Learn More</a>
-        <a href="website-design.html" style="display:block;width:100%;padding:11px;border-radius:10px;background:linear-gradient(135deg,var(--gold),#E8C96A);border:none;color:var(--navy);font-size:14px;font-weight:800;text-decoration:none;text-align:center;margin-top:16px;" class="lang-th">&#x0E14;&#x0E39;&#x0E40;&#x0E1e;&#x0E34;&#x0E48;&#x0E21;&#x0E40;&#x0E15;&#x0E34;&#x0E21;</a>
+        <a href="website-design.html" style="display:block;width:100%;padding:11px;border-radius:10px;background:linear-gradient(135deg,var(--gold),#E8C96A);border:none;color:var(--navy);font-size:14px;font-weight:800;text-decoration:none;text-align:center;margin-top:16px;" class="lang-th">&#x0E14;&#x0E39;&#x0E40;&#x0E1E;&#x0E34;&#x0E48;&#x0E21;&#x0E40;&#x0E15;&#x0E34;&#x0E21;</a>
       </div>
       <div style="background:white;border:1px solid #E0DDD6;border-radius:16px;padding:28px 24px;">
         <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Premium Site</div>
@@ -415,13 +554,14 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
           <li>&#x2713; Priority support</li>
         </ul>
         <a href="website-design.html" style="display:block;width:100%;padding:11px;border-radius:10px;border:2px solid rgba(13,27,62,0.2);color:var(--navy);font-size:14px;font-weight:700;text-decoration:none;text-align:center;margin-top:16px;" class="lang-en">Learn More</a>
-        <a href="website-design.html" style="display:block;width:100%;padding:11px;border-radius:10px;border:2px solid rgba(13,27,62,0.2);color:var(--navy);font-size:14px;font-weight:700;text-decoration:none;text-align:center;margin-top:16px;" class="lang-th">&#x0E14;&#x0E39;&#x0E40;&#x0E1e;&#x0E34;&#x0E48;&#x0E21;&#x0E40;&#x0E15;&#x0E34;&#x0E21;</a>
+        <a href="website-design.html" style="display:block;width:100%;padding:11px;border-radius:10px;border:2px solid rgba(13,27,62,0.2);color:var(--navy);font-size:14px;font-weight:700;text-decoration:none;text-align:center;margin-top:16px;" class="lang-th">&#x0E14;&#x0E39;&#x0E40;&#x0E1E;&#x0E34;&#x0E48;&#x0E21;&#x0E40;&#x0E15;&#x0E34;&#x0E21;</a>
       </div>
     </div>
     <p style="text-align:center;font-size:14px;color:var(--text-muted);" class="lang-en">&#x1F4E6; Bundle with any SiamEPOS plan &mdash; one invoice, one system, one call to make.</p>
-    <p style="text-align:center;font-size:14px;color:var(--text-muted);" class="lang-th">&#x1F4E6; &#x0E23;&#x0E27;&#x0E21;&#x0E01;&#x0E31;&#x0E1a;&#x0E41;&#x0E1c;&#x0E19; SiamEPOS &#x0E43;&#x0E14;&#x0E01;&#x0E47;&#x0E44;&#x0E14;&#x0E49; &#x2014; &#x0E43;&#x0E1a;&#x0E41;&#x0E08;&#x0E49;&#x0E07;&#x0E2b;&#x0E19;&#x0E35;&#x0E49;&#x0E40;&#x0E14;&#x0E35;&#x0E22;&#x0E27; &#x0E23;&#x0E30;&#x0E1a;&#x0E1a;&#x0E40;&#x0E14;&#x0E35;&#x0E22;&#x0E27;</p>
+    <p style="text-align:center;font-size:14px;color:var(--text-muted);" class="lang-th">&#x1F4E6; &#x0E23;&#x0E27;&#x0E21;&#x0E01;&#x0E31;&#x0E1A;&#x0E41;&#x0E1C;&#x0E19; SiamEPOS &#x0E43;&#x0E14;&#x0E01;&#x0E47;&#x0E44;&#x0E14;&#x0E49; &mdash; &#x0E43;&#x0E1A;&#x0E41;&#x0E08;&#x0E49;&#x0E07;&#x0E2B;&#x0E19;&#x0E35;&#x0E49;&#x0E40;&#x0E14;&#x0E35;&#x0E22;&#x0E27; &#x0E23;&#x0E30;&#x0E1A;&#x0E1A;&#x0E40;&#x0E14;&#x0E35;&#x0E22;&#x0E27;</p>
   </div>
 </section>
+
 <footer>
   <div><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><svg width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="none" stroke="#C9A84C" stroke-width="1.8"/><circle cx="50" cy="50" r="39" fill="none" stroke="#C9A84C" stroke-width="0.6" opacity="0.28"/><g transform="translate(50,50)"><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/><circle cx="0" cy="0" r="9" fill="#0D1B3E"/><circle cx="0" cy="0" r="5" fill="#C9A84C"/></g></svg><span style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:#C9A84C;">Siam<span style="color:white;">EPOS</span></span></div><p class="footer-tagline lang-en">The complete business system for Thai restaurants in the UK.</p><p class="footer-tagline lang-th">ระบบธุรกิจสมบูรณ์สำหรับร้านอาหารไทยใน UK</p></div>
   <div class="footer-col"><h4 class="lang-en">Pages</h4><h4 class="lang-th">หน้า</h4><ul><li><a href="index.html" class="lang-en">Home</a><a href="index.html" class="lang-th">หน้าแรก</a></li><li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li><li><a href="why-siamepos.html" class="lang-en">Why Us</a><a href="why-siamepos.html" class="lang-th">ทำไมเรา</a></li><li><a href="book-demo.html" class="lang-en">Book Demo</a><a href="book-demo.html" class="lang-th">จองสาธิต</a></li></ul></div>
@@ -430,9 +570,37 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
 <div class="footer-bottom"><p>© 2026 SiamEPOS</p><p><a href="index.html" class="lang-en">← Homepage</a><a href="index.html" class="lang-th">← หน้าแรก</a></p></div>
 
 <script>
+// Reveal on scroll
 const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:0.1});
 document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
+
+// Mobile nav burger
+document.querySelectorAll('.nav-burger').forEach(function(b){b.addEventListener('click',function(){document.body.classList.toggle('menu-open');});});
+document.querySelectorAll('.nav-links a').forEach(function(a){a.addEventListener('click',function(){document.body.classList.remove('menu-open');});});
+
+// Bilingual comparison table — keep all three columns visible but swap text via lang classes
+// The table uses a simpler approach: show/hide rows by the body.thai class
+(function(){
+  function syncTable(){
+    var isThai = document.body.classList.contains('thai');
+    document.querySelectorAll('table.compare thead th').forEach(function(th,i){
+      // col 0,1,2 = EN; col 3,4,5 = TH (hidden in markup)
+      // We simply rebuild the header text based on mode
+    });
+    // Show the right set of td / th in each row
+    document.querySelectorAll('table.compare th, table.compare td').forEach(function(cell){
+      var isTh = cell.classList.contains('lang-th');
+      var isEn = cell.classList.contains('lang-en');
+      if(isTh) cell.style.display = isThai ? '' : 'none';
+      if(isEn) cell.style.display = isThai ? 'none' : '';
+    });
+  }
+  // Run on toggle
+  document.querySelector('.lang-toggle').addEventListener('click', function(){
+    setTimeout(syncTable, 10);
+  });
+  syncTable();
+})();
 </script>
-<script>document.querySelectorAll('.nav-burger').forEach(function(b){b.addEventListener('click',function(){document.body.classList.toggle('menu-open');});});document.querySelectorAll('.nav-links a').forEach(function(a){a.addEventListener('click',function(){document.body.classList.remove('menu-open');});});</script>
 </body>
 </html>

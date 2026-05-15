@@ -13,14 +13,14 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='50' fill='%230D1B3E'/%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%23C9A84C' stroke-width='1.8'/%3E%3Cg transform='translate(50,50)'%3E%3Cpath d='M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z' fill='%23C9A84C'/%3E%3Cpath d='M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z' fill='%23C9A84C' opacity='0.82' transform='rotate(72)'/%3E%3Ccircle cx='0' cy='0' r='5' fill='%23C9A84C'/%3E%3C/g%3E%3C/svg%3E">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SiamEPOS — The Thai Restaurant Management System</title>
-<meta name="description" content="SiamEPOS replaces OpenTable, Just Eat and your old EPOS in one system. Thai restaurant management built for the UK — from £89/month. Zero commission. Thai-speaking support.">
+<meta name="description" content="SiamEPOS replaces OpenTable, Just Eat and your old EPOS in one system. Thai restaurant management built for the UK — £89/month. Zero commission. Thai-speaking support.">
 <link rel="canonical" href="https://siamepos.co.uk/">
 <!-- Open Graph -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="SiamEPOS">
 <meta property="og:url" content="https://siamepos.co.uk/">
 <meta property="og:title" content="SiamEPOS — The Thai Restaurant Management System">
-<meta property="og:description" content="SiamEPOS replaces OpenTable, Just Eat and your old EPOS in one system. Thai restaurant management built for the UK — from £89/month. Zero commission. Thai-speaking support.">
+<meta property="og:description" content="SiamEPOS replaces OpenTable, Just Eat and your old EPOS in one system. Thai restaurant management built for the UK — £89/month. Zero commission. Thai-speaking support.">
 <meta property="og:image" content="https://siamepos.co.uk/og-image.jpg">
 <meta property="og:locale" content="en_GB">
 <!-- Twitter Card -->
@@ -64,13 +64,13 @@
     }
   },
   "featureList": [
-    "Table management and live floor map",
-    "Kitchen Display System (KDS)",
     "Zero-commission online reservations",
     "Zero-commission online takeaway ordering",
-    "AI invoice scanner and menu builder",
     "UK 14-allergen management (Natasha's Law)",
-    "Inventory and recipe costing",
+    "AI invoice scanner and inventory costing",
+    "Table management and live floor map",
+    "Kitchen Display System (KDS)",
+    "Customer CRM with email campaigns",
     "Staff management and clock in/out",
     "Bilingual English and Thai interface",
     "Offline mode with cloud sync"
@@ -174,6 +174,13 @@ nav { position:fixed; top:0; left:0; right:0; z-index:100; display:flex; justify
 .hstat-num { font-family:'Cormorant Garamond',serif; font-size:38px; font-weight:700; color:var(--gold); line-height:1; }
 .hstat-label { font-size:11px; color:rgba(255,255,255,0.45); text-transform:uppercase; letter-spacing:1px; margin-top:3px; }
 
+/* STATS BAR */
+.stats-bar { background:var(--navy); border-top:1px solid rgba(201,168,76,0.15); border-bottom:1px solid rgba(201,168,76,0.15); padding:28px 60px; display:flex; justify-content:center; align-items:stretch; gap:0; flex-wrap:wrap; }
+.stats-bar-item { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 48px; border-right:1px solid rgba(201,168,76,0.15); text-align:center; }
+.stats-bar-item:last-child { border-right:none; }
+.stats-bar-num { font-family:'Cormorant Garamond',serif; font-size:42px; font-weight:700; color:var(--gold); line-height:1; margin-bottom:4px; }
+.stats-bar-label { font-size:12px; color:rgba(255,255,255,0.5); font-weight:600; letter-spacing:0.5px; text-transform:uppercase; }
+
 /* PROOF BAR */
 .proof-bar { background:linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.06)); border-top:1px solid rgba(201,168,76,0.25); border-bottom:1px solid rgba(201,168,76,0.25); padding:20px 60px; display:flex; justify-content:center; align-items:center; gap:60px; flex-wrap:wrap; }
 .proof-item { display:flex; align-items:center; gap:10px; font-size:14px; font-weight:700; color:white; }
@@ -197,9 +204,34 @@ section { padding:100px 60px; }
 .fcard.highlight { border-color:rgba(201,168,76,0.3); background:linear-gradient(160deg,#FDFAF4,#FBF5E6); }
 .fcard-icon { font-size:32px; margin-bottom:14px; }
 .fcard-badge { display:inline-block; background:rgba(201,168,76,0.15); border:1px solid rgba(201,168,76,0.3); color:var(--gold); font-size:9px; font-weight:800; letter-spacing:1px; text-transform:uppercase; padding:3px 10px; border-radius:20px; margin-bottom:10px; }
+.fcard-villain { font-size:11px; color:#c0392b; font-weight:700; margin-bottom:6px; letter-spacing:0.3px; }
 .fcard-title { font-size:18px; font-weight:700; color:var(--navy); margin-bottom:8px; }
 .fcard-desc { font-size:13px; color:var(--text-muted); line-height:1.65; }
 .fcard-coming { font-size:11px; color:var(--gold); font-weight:700; margin-top:10px; opacity:0.7; }
+
+/* COST REALITY SECTION */
+.cost-reality { background:var(--navy); }
+.cost-table-wrap { max-width:900px; margin:60px auto 0; }
+.cost-versus { display:grid; grid-template-columns:1fr auto 1fr; gap:0; align-items:stretch; }
+.cost-col { border-radius:20px; overflow:hidden; }
+.cost-col-header { padding:22px 28px; font-size:13px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase; }
+.cost-col.old .cost-col-header { background:#1a0a0a; color:#ff6b6b; border-radius:16px 16px 0 0; }
+.cost-col.new .cost-col-header { background:rgba(201,168,76,0.2); color:var(--gold); border-radius:16px 16px 0 0; }
+.cost-row { display:flex; justify-content:space-between; align-items:center; padding:16px 28px; border-bottom:1px solid rgba(255,255,255,0.06); }
+.cost-col.old .cost-row { background:rgba(255,255,255,0.03); }
+.cost-col.new .cost-row { background:rgba(201,168,76,0.04); }
+.cost-col.old .cost-row:last-child { background:rgba(200,0,0,0.12); border-bottom:none; font-weight:800; }
+.cost-col.new .cost-row:last-child { background:rgba(201,168,76,0.15); border-bottom:none; font-weight:800; }
+.cost-label { font-size:13px; color:rgba(255,255,255,0.65); }
+.cost-amount { font-size:14px; font-weight:800; }
+.cost-col.old .cost-amount { color:#ff6b6b; }
+.cost-col.new .cost-amount { color:var(--gold); }
+.cost-divider { display:flex; align-items:center; justify-content:center; padding:0 28px; }
+.cost-vs-badge { width:52px; height:52px; border-radius:50%; background:rgba(201,168,76,0.15); border:2px solid rgba(201,168,76,0.35); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; color:var(--gold); }
+.cost-saving-banner { margin-top:24px; background:linear-gradient(135deg,rgba(201,168,76,0.15),rgba(201,168,76,0.08)); border:1px solid rgba(201,168,76,0.3); border-radius:16px; padding:24px 32px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:20px; }
+.cost-saving-text { font-size:17px; color:white; font-weight:300; line-height:1.6; }
+.cost-saving-text strong { color:var(--gold); font-weight:800; }
+.cost-saving-pill { background:linear-gradient(135deg,var(--gold),var(--gold-light)); color:var(--navy); padding:10px 24px; border-radius:50px; font-size:14px; font-weight:800; white-space:nowrap; flex-shrink:0; }
 
 /* PRICING PREVIEW */
 .pricing-section { background:#F7F5F0; }
@@ -234,11 +266,19 @@ section { padding:100px 60px; }
 .compare-table tr:hover td { background:#F9F8FF; }
 .compare-highlight { background:rgba(201,168,76,0.06)!important; }
 
+/* TRUST BAR */
+.trust-bar { background:#F7F5F0; border-top:1px solid #E8E5DC; border-bottom:1px solid #E8E5DC; padding:24px 60px; display:flex; justify-content:center; align-items:center; gap:48px; flex-wrap:wrap; }
+.trust-item { display:flex; align-items:center; gap:9px; font-size:13px; font-weight:600; color:var(--navy); }
+.trust-item .t-icon { font-size:18px; }
+
 /* FINAL CTA */
 .final-cta { background:linear-gradient(135deg,var(--navy) 0%,#0A2456 100%); text-align:center; position:relative; overflow:hidden; }
 .final-cta::before { content:''; position:absolute; width:700px; height:700px; background:radial-gradient(circle,rgba(201,168,76,0.07) 0%,transparent 70%); top:50%; left:50%; transform:translate(-50%,-50%); }
 .final-cta .section-title { color:white; }
 .final-cta .section-sub { color:rgba(255,255,255,0.6); margin:0 auto 40px; }
+.cta-personal { max-width:560px; margin:0 auto 32px; font-size:16px; color:rgba(255,255,255,0.55); line-height:1.8; font-weight:300; font-style:italic; }
+.cta-trust-row { display:flex; justify-content:center; align-items:center; gap:28px; flex-wrap:wrap; margin-top:28px; }
+.cta-trust-chip { display:flex; align-items:center; gap:6px; font-size:12px; color:rgba(255,255,255,0.45); font-weight:600; }
 
 /* FOOTER */
 footer { background:#070F24; padding:56px 60px; display:grid; grid-template-columns:2fr 1fr 1fr 1fr; gap:48px; }
@@ -260,17 +300,22 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
   .nav-links { gap:14px; }
   section { padding:80px 28px; }
   .proof-bar { padding:18px 24px; gap:24px; }
+  .stats-bar { padding:20px 24px; gap:20px; }
+  .stats-bar-item { padding:0 24px; }
   .features-grid { grid-template-columns:repeat(2,1fr); }
   .pricing-grid { grid-template-columns:1fr; max-width:340px; }
   .pcard.featured { transform:scale(1); }
+  .cost-versus { grid-template-columns:1fr; }
+  .cost-divider { padding:20px 0; }
   footer { grid-template-columns:1fr 1fr; gap:32px; padding:44px 24px; }
   .footer-bottom { padding:16px 24px; flex-direction:column; gap:6px; text-align:center; }
   .hero { padding:100px 24px 70px; }
   .hero h1 { font-size:48px; }
   .hero-stats { gap:28px; }
+  .trust-bar { padding:20px 24px; gap:24px; }
 }
 @media(max-width:640px) {
-  .features-grid { grid-template-columns:1fr;
+  .features-grid { grid-template-columns:1fr; }
 
   .nav-burger{display:inline-block;}
   .lang-toggle{font-size:11px;padding:6px 10px;}
@@ -300,6 +345,11 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
   section,.feat-section{padding:56px 20px !important;}
   footer{grid-template-columns:1fr;}
   .wa-float{bottom:16px;right:16px;}
+  .stats-bar{padding:20px 16px;gap:0;}
+  .stats-bar-item{padding:16px 20px;border-right:none;border-bottom:1px solid rgba(201,168,76,0.15);width:100%;}
+  .stats-bar-item:last-child{border-bottom:none;}
+  .cost-saving-banner{flex-direction:column;align-items:flex-start;}
+  .cta-trust-row{flex-direction:column;gap:14px;}
 }
 .reveal { opacity:0; transform:translateY(20px); transition:opacity 0.7s ease,transform 0.7s ease; }
 .reveal.visible { opacity:1; transform:translateY(0); }
@@ -341,96 +391,244 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
 <section class="hero">
   <div class="hero-content">
     <div class="hero-tag">🇹🇭 <span class="lang-en">Built for Thai restaurants in the UK</span><span class="lang-th">สร้างมาเพื่อร้านอาหารไทยในสหราชอาณาจักร</span></div>
-    <h1 class="lang-en">The Thai restaurant system<br>that <em>pays for itself</em></h1>
-    <h1 class="lang-th">ระบบจัดการร้านอาหารไทย<br><em>ที่คุ้มค่าทุกบาท</em></h1>
-    <p class="hero-sub lang-en">Five features that replace OpenTable, Just Eat and &pound;800 terminals.<br>One system. &pound;89 a month. Thai-speaking support.</p>
-    <p class="hero-sub lang-th">5 ฟีเจอร์ที่แทน OpenTable, Just Eat และเครื่อง POS ราคาแพง<br>ระบบเดียว &pound;89/เดือน รองรับภาษาไทย</p>
+    <h1 class="lang-en">Stop paying commission<br>to people who don't care<br>about <em>your restaurant</em></h1>
+    <h1 class="lang-th">หยุดจ่ายค่าคอมมิชชั่น<br>ให้คนที่ไม่ได้ดูแล<br><em>ร้านของคุณ</em></h1>
+    <p class="hero-sub lang-en">OpenTable takes your bookings. Just Eat takes 35% of your takeaway. Your EPOS doesn't even speak Thai. SiamEPOS replaces all three — for <strong style="color:white;">£89 a month</strong>. With Thai-speaking support, built-in allergen compliance, and AI that photographs your invoices and updates your stock automatically.</p>
+    <p class="hero-sub lang-th">OpenTable เก็บค่าต่อหัวลูกค้า Just Eat กิน 35% ของยอดสั่งกลับบ้าน และระบบ POS ของคุณไม่รองรับภาษาไทยด้วยซ้ำ SiamEPOS แทนที่ทั้งสามระบบ — เพียง <strong style="color:white;">£89 ต่อเดือน</strong> พร้อมซัพพอร์ตภาษาไทย ระบบสารก่อภูมิแพ้ครบ และ AI ที่ถ่ายรูปใบแจ้งหนี้แล้วอัพเดตสต็อกให้อัตโนมัติ</p>
     <div class="hero-actions">
-      <a href="book-demo.html" class="book-btn lang-en">🚀 Book a Free Demo</a>
-      <a href="book-demo.html" class="book-btn lang-th">🚀 ทดลองใช้ฟรี</a>
-      
-      <a href="features.html" style="color:rgba(255,255,255,0.6);font-size:15px;font-weight:600;text-decoration:none;" class="lang-en">See All Features →</a>
+      <a href="book-demo.html" class="book-btn lang-en">Book a Free Demo</a>
+      <a href="book-demo.html" class="book-btn lang-th">ทดลองใช้ฟรี</a>
+      <a href="features.html" style="color:rgba(255,255,255,0.6);font-size:15px;font-weight:600;text-decoration:none;" class="lang-en">See all features →</a>
       <a href="features.html" style="color:rgba(255,255,255,0.6);font-size:15px;font-weight:600;text-decoration:none;" class="lang-th">ดูฟีเจอร์ทั้งหมด →</a>
     </div>
     <div class="hero-stats">
-      <div><div class="hstat-num">£920</div><div class="hstat-label lang-en">Saved per month</div><div class="hstat-label lang-th">ประหยัดต่อเดือน</div></div>
-      <div><div class="hstat-num">30s</div><div class="hstat-label lang-en">AI menu scan</div><div class="hstat-label lang-th">สแกนเมนูด้วย AI</div></div>
-      <div><div class="hstat-num">£0</div><div class="hstat-label lang-en">Booking commission</div><div class="hstat-label lang-th">ค่าคอมมิชชั่น</div></div>
+      <div><div class="hstat-num">£0</div><div class="hstat-label lang-en">Booking commission, ever</div><div class="hstat-label lang-th">ค่าคอมมิชชั่นการจอง</div></div>
+      <div><div class="hstat-num">0%</div><div class="hstat-label lang-en">Takeaway commission</div><div class="hstat-label lang-th">ค่าคอมสั่งกลับบ้าน</div></div>
+      <div><div class="hstat-num">14</div><div class="hstat-label lang-en">UK allergens — automatic</div><div class="hstat-label lang-th">สารก่อภูมิแพ้ UK อัตโนมัติ</div></div>
     </div>
   </div>
 </section>
 
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="stats-bar-item">
+    <div class="stats-bar-num lang-en">£0</div>
+    <div class="stats-bar-num lang-th">£0</div>
+    <div class="stats-bar-label lang-en">commission on every booking</div>
+    <div class="stats-bar-label lang-th">ค่าคอมมิชชั่นต่อการจอง</div>
+  </div>
+  <div class="stats-bar-item">
+    <div class="stats-bar-num lang-en">£0</div>
+    <div class="stats-bar-num lang-th">£0</div>
+    <div class="stats-bar-label lang-en">commission on every takeaway</div>
+    <div class="stats-bar-label lang-th">ค่าคอมมิชชั่นต่อการสั่งกลับบ้าน</div>
+  </div>
+  <div class="stats-bar-item">
+    <div class="stats-bar-num">14</div>
+    <div class="stats-bar-label lang-en">UK allergens — automatic</div>
+    <div class="stats-bar-label lang-th">สารก่อภูมิแพ้ UK — อัตโนมัติ</div>
+  </div>
+  <div class="stats-bar-item">
+    <div class="stats-bar-num">EN / ไทย</div>
+    <div class="stats-bar-label lang-en">one tap to switch language</div>
+    <div class="stats-bar-label lang-th">สลับภาษาได้ในคลิกเดียว</div>
+  </div>
+</div>
+
 <!-- PROOF BAR -->
 <div class="proof-bar">
-  <div class="proof-item"><span class="pi-icon">💷</span> <span class="lang-en"><span>0% commission</span> on bookings and takeaway</span><span class="lang-th"><span>ค่าคอมมิชชั่น 0%</span> ทั้งจองโต๊ะและซื้อกลับบ้าน</span></div>
-  <div class="proof-item"><span class="pi-icon">🧠</span> <span class="lang-en">AI shows <span>margin per dish</span>, every day</span><span class="lang-th">AI แสดง <span>กำไรต่อจาน</span> ทุกวัน</span></div>
+  <div class="proof-item"><span class="pi-icon">🌐</span> <span class="lang-en">Works <span>offline</span> — keeps running if internet drops</span><span class="lang-th"><span>ออฟไลน์ได้</span> ระบบยังทำงานต่อแม้ไม่มีอินเตอร์เน็ต</span></div>
   <div class="proof-item"><span class="pi-icon">📱</span> <span class="lang-en">Any phone is a <span>full terminal</span></span><span class="lang-th">มือถือทุกเครื่อง <span>เป็น POS</span> ได้ทันที</span></div>
+  <div class="proof-item"><span class="pi-icon">🌐</span> <span class="lang-en"><span>Offline mode</span> — works without internet</span><span class="lang-th"><span>ออฟไลน์ได้</span> ไม่ต้องพึ่งอินเตอร์เน็ต</span></div>
 </div>
 
 <!-- THE ONE PARAGRAPH -->
 <section style="background:var(--navy); padding:60px 60px; text-align:center;">
-  <p style="max-width:780px; margin:0 auto; font-size:19px; color:rgba(255,255,255,0.8); line-height:1.85; font-weight:300;" class="lang-en">"Thai restaurants in the UK are paying for four separate systems that don't talk to each other — none of which were built with Thai restaurants in mind. SiamEPOS replaces all of them for <strong style="color:var(--gold)">£89 a month</strong>. With AI that scans your menu from a photo in 30 seconds, a booking widget that saves you thousands in OpenTable fees, and cost management that tells you exactly which dishes make you money. <strong style="color:var(--gold)">In Thai and English. From day one.</strong>"</p>
-  <p style="max-width:780px; margin:0 auto; font-size:19px; color:rgba(255,255,255,0.8); line-height:1.85; font-weight:300;" class="lang-th">"ร้านอาหารไทยในสหราชอาณาจักรกำลังจ่ายเงินสำหรับระบบแยกสี่ระบบที่ไม่ทำงานร่วมกัน — ไม่มีระบบใดที่สร้างมาสำหรับร้านอาหารไทย SiamEPOS แทนที่ทุกอย่างในราคา <strong style="color:var(--gold)">£89 ต่อเดือน</strong> ด้วย AI ที่สแกนเมนูจากรูปถ่ายใน 30 วินาที วิดเจ็ตจองโต๊ะที่ประหยัดค่า OpenTable หลักพัน และการจัดการต้นทุนที่บอกว่าเมนูไหนทำเงินให้คุณ <strong style="color:var(--gold)">ทั้งภาษาไทยและอังกฤษ ตั้งแต่วันแรก</strong>"</p>
+  <p style="max-width:780px; margin:0 auto; font-size:19px; color:rgba(255,255,255,0.8); line-height:1.85; font-weight:300;" class="lang-en">"Thai restaurants in the UK are paying OpenTable per head, giving Just Eat 35% of every takeaway order, and running on an EPOS that doesn't understand their menu or their language. SiamEPOS was built to fix all three — for <strong style="color:var(--gold)">£89 a month</strong>. AI that photographs your supplier invoices and updates stock automatically. A booking widget that replaces OpenTable for zero commission. Cost vs sales analysis that tells you exactly which dishes make you money. <strong style="color:var(--gold)">In Thai and English. From day one.</strong>"</p>
+  <p style="max-width:780px; margin:0 auto; font-size:19px; color:rgba(255,255,255,0.8); line-height:1.85; font-weight:300;" class="lang-th">"ร้านอาหารไทยในสหราชอาณาจักรกำลังจ่ายค่าต่อหัวให้ OpenTable ให้ Just Eat กิน 35% ของยอดสั่งกลับบ้าน และใช้ระบบ POS ที่ไม่รู้จักเมนูหรือภาษาของพวกเขา SiamEPOS ถูกสร้างมาเพื่อแก้ปัญหาทั้งสามอย่าง — เพียง <strong style="color:var(--gold)">£89 ต่อเดือน</strong> AI ที่ถ่ายรูปใบแจ้งหนี้จากซัพพลายเออร์และอัพเดตสต็อกอัตโนมัติ วิดเจ็ตจองโต๊ะที่แทนที่ OpenTable โดยไม่มีค่าคอมมิชชั่น และการวิเคราะห์ต้นทุนกับยอดขายที่บอกว่าเมนูไหนทำเงินให้คุณ <strong style="color:var(--gold)">ทั้งภาษาไทยและอังกฤษ ตั้งแต่วันแรก</strong>"</p>
 </section>
 
-<!-- FEATURES SUMMARY -->
+<!-- 6 FEATURES GRID -->
 <section class="features-section reveal">
   <div style="text-align:center;">
-    <div class="section-label lang-en">Everything you need</div>
-    <div class="section-label lang-th">ครบทุกอย่างที่คุณต้องการ</div>
-    <h2 class="section-title lang-en">5 Reasons Thai Restaurants<br>Switch to SiamEPOS</h2>
-    <h2 class="section-title lang-th">5 เหตุผลที่ร้านอาหารไทย<br>เปลี่ยนมาใช้ SiamEPOS</h2>
+    <div class="section-label lang-en">Six reasons Thai restaurants switch</div>
+    <div class="section-label lang-th">หกเหตุผลที่ร้านอาหารไทยเปลี่ยนมาใช้</div>
+    <h2 class="section-title lang-en">Everything you're paying for separately —<br>now in one system</h2>
+    <h2 class="section-title lang-th">ทุกอย่างที่คุณจ่ายแยก —<br>รวมในระบบเดียว</h2>
   </div>
   <div class="features-grid">
-    <a href="features.html#new" class="fcard highlight reveal rd1">
+
+    <!-- 1. Reservations -->
+    <a href="features.html#reservations" class="fcard highlight reveal rd1">
       <div class="fcard-icon">📅</div>
-      <div class="fcard-badge lang-en">£0 commission</div>
-      <div class="fcard-badge lang-th">ค่าคอม £0</div>
-      <div class="fcard-title lang-en">Online Reservation</div>
-      <div class="fcard-title lang-th">จองโต๊ะออนไลน์</div>
-      <p class="fcard-desc lang-en">Drop-in widget, instant confirmation. Replace OpenTable, keep every penny.</p>
-      <p class="fcard-desc lang-th">วิดเจ็ตติดตั้งง่าย ยืนยันทันที แทนที่ OpenTable เก็บเงินทุกบาทไว้เอง</p>
+      <div class="fcard-badge lang-en">£0 commission — always</div>
+      <div class="fcard-badge lang-th">ค่าคอม £0 — ตลอดไป</div>
+      <div class="fcard-villain lang-en">OpenTable charges £4,500/year</div>
+      <div class="fcard-villain lang-th">OpenTable เก็บ £4,500 ต่อปี</div>
+      <div class="fcard-title lang-en">Zero-Fee Online Reservations</div>
+      <div class="fcard-title lang-th">จองโต๊ะออนไลน์ ค่าคอม 0%</div>
+      <p class="fcard-desc lang-en">Drop-in booking widget on your own website. Instant confirmation, automated reminders, full guest history. Every booking belongs to you — not OpenTable. Not ResDiary. You.</p>
+      <p class="fcard-desc lang-th">วิดเจ็ตจองโต๊ะบนเว็บของคุณเอง ยืนยันทันที แจ้งเตือนอัตโนมัติ ประวัติลูกค้าครบ ลูกค้าทุกคนเป็นของคุณ ไม่ใช่ของ OpenTable</p>
     </a>
+
+    <!-- 2. Takeaway -->
+    <a href="features.html#takeaway" class="fcard highlight reveal rd2">
+      <div class="fcard-icon">🥡</div>
+      <div class="fcard-badge lang-en">0% vs Just Eat's 35%</div>
+      <div class="fcard-badge lang-th">0% เทียบกับ Just Eat 35%</div>
+      <div class="fcard-villain lang-en">Just Eat / Deliveroo take 35%+ per order</div>
+      <div class="fcard-villain lang-th">Just Eat / Deliveroo กิน 35%+ ต่อออเดอร์</div>
+      <div class="fcard-title lang-en">Online Takeaway — Zero Commission</div>
+      <div class="fcard-title lang-th">สั่งกลับบ้านออนไลน์ — 0% คอมมิชชั่น</div>
+      <p class="fcard-desc lang-en">Your website. Your widget. Your customer. Orders go straight to your kitchen screen. You keep every penny. If a dish runs out, stock updates automatically so you never oversell.</p>
+      <p class="fcard-desc lang-th">เว็บของคุณ วิดเจ็ตของคุณ ลูกค้าของคุณ ออเดอร์ส่งตรงเข้าหน้าจอครัว คุณได้เงินเต็มๆ ถ้าของหมด สต็อกอัพเดตอัตโนมัติ ไม่มีวันขายเกิน</p>
+    </a>
+
+    <!-- 3. Allergens -->
+    <a href="features.html#allergens" class="fcard reveal rd3">
+      <div class="fcard-icon">🛡️</div>
+      <div class="fcard-badge lang-en">Natasha's Law compliant</div>
+      <div class="fcard-badge lang-th">สอดคล้อง Natasha's Law</div>
+      <div class="fcard-villain lang-en">Manual allergen spreadsheets — one mistake = legal liability</div>
+      <div class="fcard-villain lang-th">ตาราง Excel ทำมือ — ผิดครั้งเดียวมีผลทางกฎหมาย</div>
+      <div class="fcard-title lang-en">Allergen Management — Automatic</div>
+      <div class="fcard-title lang-th">จัดการสารก่อภูมิแพ้ — อัตโนมัติ</div>
+      <p class="fcard-desc lang-en">All 14 UK allergens tracked at recipe level. Build your recipes once — allergen chips appear on menus, the takeaway widget, and every printed label. Compliant from the moment you go live.</p>
+      <p class="fcard-desc lang-th">สารก่อภูมิแพ้ 14 ชนิดตามกฎหมาย UK ติดตามตั้งแต่ระดับสูตรอาหาร ตั้งสูตรครั้งเดียว — ข้อมูลสารก่อภูมิแพ้ปรากฏบนเมนู วิดเจ็ต และฉลากที่พิมพ์ออกมาทุกชิ้น</p>
+    </a>
+
+    <!-- 4. AI Inventory -->
+    <a href="features.html#inventory" class="fcard highlight reveal rd1">
+      <div class="fcard-icon">🧠</div>
+      <div class="fcard-badge lang-en">AI-powered — 30 seconds</div>
+      <div class="fcard-badge lang-th">ขับเคลื่อนด้วย AI — 30 วินาที</div>
+      <div class="fcard-villain lang-en">Typing out supplier invoices by hand — every week</div>
+      <div class="fcard-villain lang-th">พิมพ์ใบแจ้งหนี้ซัพพลายเออร์ด้วยมือ — ทุกสัปดาห์</div>
+      <div class="fcard-title lang-en">AI Inventory + Cost vs Sales</div>
+      <div class="fcard-title lang-th">AI คลังสินค้า + วิเคราะห์ต้นทุน vs ยอดขาย</div>
+      <p class="fcard-desc lang-en">Stop typing out supplier invoices by hand. Photograph it — AI does the rest. Stock updates, costs update, and you see live gross margin on every dish. The most painful job in a restaurant, eliminated.</p>
+      <p class="fcard-desc lang-th">หยุดพิมพ์ใบแจ้งหนี้จากซัพพลายเออร์ด้วยมือ ถ่ายรูปแล้วให้ AI จัดการทุกอย่าง สต็อกอัพเดต ต้นทุนอัพเดต และคุณเห็นกำไรขั้นต้นต่อจานแบบเรียลไทม์ งานที่เจ็บปวดที่สุดในร้านอาหาร — หมดไปแล้ว</p>
+    </a>
+
+    <!-- 5. Table Map + KDS -->
     <a href="features.html#epos" class="fcard reveal rd2">
       <div class="fcard-icon">🗺️</div>
       <div class="fcard-title lang-en">Live Table Map + Kitchen Display</div>
       <div class="fcard-title lang-th">แผนผังโต๊ะสด + จอครัว</div>
-      <p class="fcard-desc lang-en">Colour-coded tables, per-course timers, KDS routing — no more paper dockets.</p>
-      <p class="fcard-desc lang-th">โต๊ะสีตามสถานะ ตัวจับเวลาทุกคอร์ส ส่งจอครัวอัตโนมัติ ไม่ต้องใช้กระดาษ</p>
+      <p class="fcard-desc lang-en">Colour-coded floor plan. Per-course timers so starters don't arrive with mains. Kitchen screen replaces paper dockets — chefs tick items off, the Pass knows what's ready. Any screen, any device.</p>
+      <p class="fcard-desc lang-th">แผนผังพื้นที่แสดงสีตามสถานะ ตัวจับเวลาทุกคอร์สเพื่อไม่ให้สตาร์ทเตอร์มาพร้อมเมนหลัก หน้าจอครัวแทนกระดาษ — เชฟติ๊กรายการ พาสรู้ว่าอะไรพร้อมเสิร์ฟ</p>
     </a>
-    <a href="features.html#new" class="fcard highlight reveal rd3">
-      <div class="fcard-icon">🥡</div>
-      <div class="fcard-badge lang-en">0% vs Just Eat 35%</div>
-      <div class="fcard-badge lang-th">0% เทียบกับ Just Eat 35%</div>
-      <div class="fcard-title lang-en">Online Takeaway — Zero Fee</div>
-      <div class="fcard-title lang-th">สั่งกลับบ้าน 0%</div>
-      <p class="fcard-desc lang-en">Your website, your widget, your customer — straight to your kitchen.</p>
-      <p class="fcard-desc lang-th">เว็บคุณ วิดเจ็ตคุณ ลูกค้าคุณ ส่งตรงเข้าครัว</p>
+
+    <!-- 6. Customer CRM -->
+    <a href="features.html#crm" class="fcard highlight reveal rd3">
+      <div class="fcard-icon">👥</div>
+      <div class="fcard-badge lang-en">Own your customers</div>
+      <div class="fcard-badge lang-th">เป็นเจ้าของลูกค้าของคุณ</div>
+      <div class="fcard-villain lang-en">OpenTable and Deliveroo own your customer data — you don't</div>
+      <div class="fcard-villain lang-th">OpenTable และ Deliveroo เป็นเจ้าของข้อมูลลูกค้า — ไม่ใช่คุณ</div>
+      <div class="fcard-title lang-en">Customer CRM + Email Campaigns</div>
+      <div class="fcard-title lang-th">CRM ลูกค้า + แคมเปญอีเมล</div>
+      <p class="fcard-desc lang-en">Every diner, every order, all yours. See who hasn't visited in 60 days and win them back automatically. Run birthday campaigns. Send offers. GDPR compliant. Your list, your revenue — forever.</p>
+      <p class="fcard-desc lang-th">ลูกค้าทุกคน ออเดอร์ทุกรายการ เป็นของคุณ เห็นว่าใครไม่มา 60 วันแล้วดึงกลับอัตโนมัติ ส่งแคมเปญวันเกิด ส่งโปรโมชั่น สอดคล้อง GDPR รายชื่อของคุณ รายได้ของคุณ — ตลอดไป</p>
     </a>
-    <a href="features.html#inventory" class="fcard highlight reveal rd1">
-      <div class="fcard-icon">🧠</div>
-      <div class="fcard-badge lang-en">AI-powered</div>
-      <div class="fcard-badge lang-th">ขับเคลื่อนด้วย AI</div>
-      <div class="fcard-title lang-en">AI Sales-vs-Cost Analysis</div>
-      <div class="fcard-title lang-th">AI วิเคราะห์ยอดขาย vs ต้นทุน</div>
-      <p class="fcard-desc lang-en">Invoice-scanned costs × recipes = live gross margin on every dish.</p>
-      <p class="fcard-desc lang-th">ราคาวัตถุดิบจากใบแจ้งหนี้ × สูตรอาหาร = กำไรขั้นต้นรายจานทุกวัน</p>
-    </a>
-    <a href="features.html#new" class="fcard reveal rd2">
-      <div class="fcard-icon">📱</div>
-      <div class="fcard-badge lang-en">BYO hardware</div>
-      <div class="fcard-badge lang-th">ใช้อุปกรณ์ที่มี</div>
-      <div class="fcard-title lang-en">Mobile as a Terminal</div>
-      <div class="fcard-title lang-th">มือถือกลายเป็น POS</div>
-      <p class="fcard-desc lang-en">Any phone, any tablet — staff own devices become a full POS. No £800 hardware.</p>
-      <p class="fcard-desc lang-th">มือถือหรือแท็บเล็ตเครื่องไหนก็ใช้ได้ ไม่ต้องลงทุนเครื่อง POS ราคาแพง</p>
-    </a>
+
   </div>
   <div style="text-align:center; margin-top:40px;">
     <a href="features.html" class="book-btn ghost" style="display:inline-flex; text-decoration:none;">
-      <span class="lang-en">See All Features →</span>
+      <span class="lang-en">See all features in detail →</span>
       <span class="lang-th">ดูฟีเจอร์ทั้งหมด →</span>
     </a>
+  </div>
+</section>
+
+<!-- WHAT YOU'RE PAYING NOW -->
+<section class="cost-reality reveal">
+  <div style="text-align:center;">
+    <div class="section-label lang-en" style="color:var(--gold);">The maths don't lie</div>
+    <div class="section-label lang-th" style="color:var(--gold);">ตัวเลขไม่โกหก</div>
+    <h2 class="section-title white lang-en">What you're paying now<br>vs what you'd pay with SiamEPOS</h2>
+    <h2 class="section-title white lang-th">คุณจ่ายเงินเท่าไหร่อยู่ตอนนี้<br>เทียบกับ SiamEPOS</h2>
+    <p class="section-sub lang-en" style="color:rgba(255,255,255,0.5); margin:0 auto 0; max-width:520px;">Based on a typical Thai restaurant doing 200 covers/week and £2,000/week in takeaway orders.</p>
+    <p class="section-sub lang-th" style="color:rgba(255,255,255,0.5); margin:0 auto 0; max-width:520px;">อ้างอิงจากร้านอาหารไทยทั่วไปที่รับลูกค้า 200 คน/สัปดาห์ และยอดสั่งกลับบ้าน £2,000/สัปดาห์</p>
+  </div>
+  <div class="cost-table-wrap">
+    <div class="cost-versus">
+      <div class="cost-col old">
+        <div class="cost-col-header lang-en">What you pay now</div>
+        <div class="cost-col-header lang-th">ที่คุณจ่ายอยู่ตอนนี้</div>
+        <div class="cost-row">
+          <span class="cost-label lang-en">OpenTable / ResDiary</span>
+          <span class="cost-label lang-th">OpenTable / ResDiary</span>
+          <span class="cost-amount lang-en">~£375/month</span>
+          <span class="cost-amount lang-th">~£375/เดือน</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label lang-en">Just Eat / Deliveroo (35%)</span>
+          <span class="cost-label lang-th">Just Eat / Deliveroo (35%)</span>
+          <span class="cost-amount lang-en">~£2,800/month</span>
+          <span class="cost-amount lang-th">~£2,800/เดือน</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label lang-en">Generic EPOS + hardware</span>
+          <span class="cost-label lang-th">EPOS ทั่วไป + เครื่อง</span>
+          <span class="cost-amount lang-en">£100–200/month</span>
+          <span class="cost-amount lang-th">£100–200/เดือน</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label lang-en">Stock management (manual or accountant)</span>
+          <span class="cost-label lang-th">จัดการสต็อก (มือหรือนักบัญชี)</span>
+          <span class="cost-amount lang-en">£100–300/month</span>
+          <span class="cost-amount lang-th">£100–300/เดือน</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label lang-en" style="font-size:15px; font-weight:800; color:white;">Total</span>
+          <span class="cost-label lang-th" style="font-size:15px; font-weight:800; color:white;">รวม</span>
+          <span class="cost-amount" style="font-size:18px;">£3,375–3,675/mo</span>
+        </div>
+      </div>
+      <div class="cost-divider">
+        <div class="cost-vs-badge">VS</div>
+      </div>
+      <div class="cost-col new">
+        <div class="cost-col-header lang-en">SiamEPOS</div>
+        <div class="cost-col-header lang-th">SiamEPOS</div>
+        <div class="cost-row">
+          <span class="cost-label lang-en">Reservations — zero commission</span>
+          <span class="cost-label lang-th">จองโต๊ะ — ค่าคอม 0%</span>
+          <span class="cost-amount lang-en">£0</span>
+          <span class="cost-amount lang-th">£0</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label lang-en">Takeaway — zero commission</span>
+          <span class="cost-label lang-th">สั่งกลับบ้าน — ค่าคอม 0%</span>
+          <span class="cost-amount lang-en">£0</span>
+          <span class="cost-amount lang-th">£0</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label lang-en">EPOS + table map + KDS</span>
+          <span class="cost-label lang-th">EPOS + แผนผังโต๊ะ + จอครัว</span>
+          <span class="cost-amount lang-en">Included</span>
+          <span class="cost-amount lang-th">รวมแล้ว</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label lang-en">AI inventory + cost vs sales</span>
+          <span class="cost-label lang-th">AI สต็อก + ต้นทุน vs ยอดขาย</span>
+          <span class="cost-amount lang-en">Included</span>
+          <span class="cost-amount lang-th">รวมแล้ว</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label lang-en" style="font-size:15px; font-weight:800; color:white;">Total</span>
+          <span class="cost-label lang-th" style="font-size:15px; font-weight:800; color:white;">รวม</span>
+          <span class="cost-amount" style="font-size:22px;">£89/month</span>
+        </div>
+      </div>
+    </div>
+    <div class="cost-saving-banner">
+      <div class="cost-saving-text lang-en">That's a saving of <strong>over £3,200 every month</strong> — more than <strong>£38,400 a year</strong> — going back into your restaurant instead of into OpenTable's and Deliveroo's pockets.</div>
+      <div class="cost-saving-text lang-th">ประหยัดได้ <strong>กว่า £3,200 ทุกเดือน</strong> — มากกว่า <strong>£38,400 ต่อปี</strong> — กลับเข้ากระเป๋าคุณแทนที่จะไปให้ OpenTable และ Deliveroo</div>
+      <a href="book-demo.html" class="cost-saving-pill lang-en">See it in a demo</a>
+      <a href="book-demo.html" class="cost-saving-pill lang-th">ดูในการสาธิต</a>
+    </div>
   </div>
 </section>
 
@@ -441,6 +639,8 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
     <div class="section-label lang-th">ราคาง่ายๆ ไม่มีซ่อน</div>
     <h2 class="section-title lang-en">One price.<br>Everything included.</h2>
     <h2 class="section-title lang-th">ราคาเดียว<br>รวมทุกอย่าง</h2>
+    <p class="section-sub lang-en" style="margin:0 auto;">No setup fee. No contract. No "add-on" trap. Cancel anytime.</p>
+    <p class="section-sub lang-th" style="margin:0 auto;">ไม่มีค่าติดตั้ง ไม่มีสัญญา ไม่มีค่าใช้จ่ายซ่อน ยกเลิกได้ตลอดเวลา</p>
   </div>
   <div class="pricing-grid">
     <div class="pcard reveal rd1">
@@ -458,8 +658,8 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
       <div class="pcard-tier">Pro</div>
       <div class="pcard-price">£89</div>
       <div class="pcard-period lang-en">per month</div><div class="pcard-period lang-th">ต่อเดือน</div>
-      <p class="pcard-key lang-en">Everything + AI menu scanner + zero-commission bookings</p>
-      <p class="pcard-key lang-th">ทุกอย่าง + AI สแกนเมนู + จองโต๊ะค่าคอม 0%</p>
+      <p class="pcard-key lang-en">Everything + AI invoice scanner + zero-commission bookings + takeaway widget + customer CRM + allergen management</p>
+      <p class="pcard-key lang-th">ทุกอย่าง + AI สแกนใบแจ้งหนี้ + จองโต๊ะค่าคอม 0% + วิดเจ็ตสั่งกลับบ้าน + CRM ลูกค้า + จัดการสารก่อภูมิแพ้</p>
       <a href="book-demo.html" class="btn-pcard btn-gold lang-en">Get Started</a>
       <a href="book-demo.html" class="btn-pcard btn-gold lang-th">เริ่มใช้งาน</a>
     </div>
@@ -467,56 +667,45 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
       <div class="pcard-tier lang-en">Growth</div><div class="pcard-tier lang-th">โกรท</div>
       <div class="pcard-price">£179</div>
       <div class="pcard-period lang-en">per month</div><div class="pcard-period lang-th">ต่อเดือน</div>
-      <p class="pcard-key lang-en">Everything + AI cost & stock management</p>
-      <p class="pcard-key lang-th">ทุกอย่าง + AI ต้นทุนและสต็อก</p>
+      <p class="pcard-key lang-en">Everything + multi-location + dedicated onboarding + priority Thai support</p>
+      <p class="pcard-key lang-th">ทุกอย่าง + หลายสาขา + ทีมช่วยติดตั้ง + ซัพพอร์ตภาษาไทยด่วน</p>
       <a href="pricing.html" class="btn-pcard btn-outline-navy lang-en">See plan</a>
       <a href="pricing.html" class="btn-pcard btn-outline-navy lang-th">ดูแผน</a>
     </div>
   </div>
-  <p style="text-align:center; margin-top:32px; color:var(--text-muted); font-size:14px;" class="lang-en">Pro plan at £89/month costs less than <strong>one week of OpenTable fees</strong> for a typical Thai restaurant.</p>
-  <p style="text-align:center; margin-top:32px; color:var(--text-muted); font-size:14px;" class="lang-th">แผน Pro £89/เดือน ถูกกว่า<strong>ค่า OpenTable หนึ่งสัปดาห์</strong>สำหรับร้านอาหารไทยทั่วไป</p>
+  <p style="text-align:center; margin-top:32px; color:var(--text-muted); font-size:14px;" class="lang-en">The Pro plan at £89/month costs less than <strong>two days of Just Eat commission</strong> for a busy Thai restaurant.</p>
+  <p style="text-align:center; margin-top:32px; color:var(--text-muted); font-size:14px;" class="lang-th">แผน Pro £89/เดือน ถูกกว่า <strong>ค่าคอม Just Eat สองวัน</strong> สำหรับร้านอาหารที่คึกคัก</p>
 </section>
 
-<!-- COMPETITOR COST TABLE -->
-<section class="compare-section reveal">
-  <div style="text-align:center;">
-    <div class="section-label lang-en">The real cost of doing nothing</div>
-    <div class="section-label lang-th">ต้นทุนจริงของการไม่เปลี่ยนแปลง</div>
-    <h2 class="section-title lang-en">What are you<br>currently paying?</h2>
-    <h2 class="section-title lang-th">คุณกำลังจ่าย<br>เท่าไหร่อยู่ตอนนี้?</h2>
-  </div>
-  <table class="compare-table">
-    <thead>
-      <tr>
-        <th class="lang-en">System</th><th class="lang-th">ระบบ</th>
-        <th class="lang-en">Current Tool</th><th class="lang-th">เครื่องมือปัจจุบัน</th>
-        <th class="lang-en">Monthly Cost</th><th class="lang-th">ค่าใช้จ่าย/เดือน</th>
-        <th class="lang-en">SiamEPOS</th><th class="lang-th">SiamEPOS</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr><td class="lang-en">EPOS</td><td class="lang-th">ระบบ POS</td><td class="lang-en">Square / old system</td><td class="lang-th">Square / ระบบเก่า</td><td style="color:#e53e3e;font-weight:700">£69–120</td><td class="lang-en" style="color:#38a169;font-weight:700">✅ Included</td><td class="lang-th" style="color:#38a169;font-weight:700">✅ รวมแล้ว</td></tr>
-      <tr><td class="lang-en">Reservations</td><td class="lang-th">ระบบจอง</td><td class="lang-en">OpenTable / ResDiary</td><td class="lang-th">OpenTable / ResDiary</td><td style="color:#e53e3e;font-weight:700">£150–500</td><td class="lang-en" style="color:#38a169;font-weight:700">✅ Included</td><td class="lang-th" style="color:#38a169;font-weight:700">✅ รวมแล้ว</td></tr>
-      <tr><td class="lang-en">Stock management</td><td class="lang-th">จัดการสต็อก</td><td class="lang-en">Spreadsheet</td><td class="lang-th">สเปรดชีต</td><td style="color:#e53e3e;font-weight:700">£0 (but costly)</td><td class="lang-en" style="color:#38a169;font-weight:700">✅ Included</td><td class="lang-th" style="color:#38a169;font-weight:700">✅ รวมแล้ว</td></tr>
-      <tr><td class="lang-en">Cost management</td><td class="lang-th">จัดการต้นทุน</td><td class="lang-en">Accountant</td><td class="lang-th">นักบัญชี</td><td style="color:#e53e3e;font-weight:700">£100–300</td><td class="lang-en" style="color:#38a169;font-weight:700">✅ Included</td><td class="lang-th" style="color:#38a169;font-weight:700">✅ รวมแล้ว</td></tr>
-      <tr class="compare-highlight"><td colspan="2" style="font-size:15px;font-weight:800" class="lang-en">💸 Total (4 systems)</td><td colspan="2" style="font-size:15px;font-weight:800" class="lang-th">💸 รวม (4 ระบบ)</td><td style="color:#e53e3e;font-size:18px;font-weight:800">£319–920</td><td colspan="2" style="color:var(--gold);font-size:18px;font-weight:800">✅ £89/month</td></tr>
-    </tbody>
-  </table>
-</section>
+<!-- TRUST BAR -->
+<div class="trust-bar reveal">
+  <div class="trust-item"><span class="t-icon">🇹🇭</span> <span class="lang-en">Thai-speaking WhatsApp support</span><span class="lang-th">ซัพพอร์ตภาษาไทยทาง WhatsApp</span></div>
+  <div class="trust-item"><span class="t-icon">🌐</span> <span class="lang-en">Works offline — no internet required</span><span class="lang-th">ทำงานออฟไลน์ได้ ไม่ต้องมีอินเตอร์เน็ต</span></div>
+  <div class="trust-item"><span class="t-icon">📱</span> <span class="lang-en">Any device — phone, tablet, Mac, PC</span><span class="lang-th">อุปกรณ์ใดก็ได้ มือถือ แท็บเล็ต Mac PC</span></div>
+  <div class="trust-item"><span class="t-icon">🛡️</span> <span class="lang-en">UK GDPR + Natasha's Law compliant</span><span class="lang-th">สอดคล้อง UK GDPR และ Natasha's Law</span></div>
+  <div class="trust-item"><span class="t-icon">✅</span> <span class="lang-en">Cancel anytime — no long-term contract</span><span class="lang-th">ยกเลิกได้ทุกเมื่อ ไม่ผูกสัญญา</span></div>
+</div>
 
 <!-- FINAL CTA -->
 <section class="final-cta">
-  <div style="position:relative;z-index:1;max-width:600px;margin:0 auto;" class="reveal">
-    <div class="section-label lang-en">Ready to switch?</div>
-    <div class="section-label lang-th">พร้อมเปลี่ยนแล้วหรือยัง?</div>
-    <h2 class="section-title white lang-en">Ready to stop<br>overpaying?</h2>
-    <h2 class="section-title white lang-th">พร้อมที่จะประหยัยเงิน<br>หลักพันปอนด์ต่อเดือนแล้วหรือยัง?</h2>
-    <p class="section-sub lang-en" style="color:rgba(255,255,255,0.6);margin:0 auto 36px;">Book a free 20-minute demo — in English or Thai. No pressure, no jargon, no contract.</p>
-    <p class="section-sub lang-th" style="color:rgba(255,255,255,0.6);margin:0 auto 36px;">จองการสาธิตฟรี 20 นาที ภาษาไทยหรืออังกฤษก็ได้ ไม่มีแรงกดดัน ไม่มีสัญญา</p>
+  <div style="position:relative;z-index:1;max-width:640px;margin:0 auto;" class="reveal">
+    <div class="section-label lang-en">Let's talk</div>
+    <div class="section-label lang-th">คุยกันได้เลย</div>
+    <h2 class="section-title white lang-en">Book a free 20-minute demo.<br>In English or Thai.</h2>
+    <h2 class="section-title white lang-th">จองสาธิตฟรี 20 นาที<br>ภาษาไทยหรืออังกฤษก็ได้</h2>
+    <p class="cta-personal lang-en">"No contract. No pressure. No jargon. Just a Thai-speaking person who actually understands your restaurant — showing you exactly how SiamEPOS would work for yours."</p>
+    <p class="cta-personal lang-th">"ไม่มีสัญญา ไม่มีแรงกดดัน ไม่มีศัพท์เทคนิค เพียงแค่คนที่พูดภาษาไทยและเข้าใจร้านอาหารของคุณจริงๆ — แสดงให้เห็นว่า SiamEPOS จะทำงานอย่างไรกับร้านของคุณ"</p>
     <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
-      <a href="book-demo.html" class="book-btn lang-en">🚀 Book Your Free Demo</a>
-      <a href="book-demo.html" class="book-btn lang-th">🚀 จองสาธิตฟรีของคุณ</a>
-      
+      <a href="book-demo.html" class="book-btn lang-en">Book Your Free Demo</a>
+      <a href="book-demo.html" class="book-btn lang-th">จองสาธิตฟรีของคุณ</a>
+      <a href="https://wa.me/447700000000?text=Hello%2C%20I%27d%20like%20to%20know%20more%20about%20SiamEPOS" target="_blank" class="book-btn ghost lang-en" style="text-decoration:none;">💬 WhatsApp us instead</a>
+      <a href="https://wa.me/447700000000?text=สวัสดีครับ%20สนใจ%20SiamEPOS" target="_blank" class="book-btn ghost lang-th" style="text-decoration:none;">💬 WhatsApp เราได้เลย</a>
+    </div>
+    <div class="cta-trust-row">
+      <span class="cta-trust-chip">✅ <span class="lang-en">No contract</span><span class="lang-th">ไม่มีสัญญา</span></span>
+      <span class="cta-trust-chip">✅ <span class="lang-en">No setup fee</span><span class="lang-th">ไม่มีค่าติดตั้ง</span></span>
+      <span class="cta-trust-chip">✅ <span class="lang-en">Cancel anytime</span><span class="lang-th">ยกเลิกได้ตลอดเวลา</span></span>
+      <span class="cta-trust-chip">✅ <span class="lang-en">Thai support via WhatsApp</span><span class="lang-th">ซัพพอร์ตภาษาไทยทาง WhatsApp</span></span>
     </div>
   </div>
 </section>

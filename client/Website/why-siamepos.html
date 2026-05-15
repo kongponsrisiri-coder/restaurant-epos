@@ -12,20 +12,20 @@
 <meta charset="UTF-8">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='50' fill='%230D1B3E'/%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%23C9A84C' stroke-width='1.8'/%3E%3Cg transform='translate(50,50)'%3E%3Cpath d='M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z' fill='%23C9A84C'/%3E%3Cpath d='M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z' fill='%23C9A84C' opacity='0.82' transform='rotate(72)'/%3E%3Ccircle cx='0' cy='0' r='5' fill='%23C9A84C'/%3E%3C/g%3E%3C/svg%3E">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Why SiamEPOS — The UK’s Only Thai Restaurant Management System</title>
-<meta name="description" content="SiamEPOS is the only EPOS built specifically for Thai restaurants in the UK. Bilingual EN/TH interface, Natasha’s Law allergens, Thai-speaking support. See why Thai restaurants switch.">
+<title>Why SiamEPOS — The UK's Only Thai Restaurant Management System</title>
+<meta name="description" content="SiamEPOS is the only EPOS built specifically for Thai restaurants in the UK. Bilingual EN/TH interface, Natasha's Law allergens, Thai-speaking support. See why Thai restaurants switch.">
 <link rel="canonical" href="https://siamepos.co.uk/why-siamepos.html">
 <!-- Open Graph -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="SiamEPOS">
 <meta property="og:url" content="https://siamepos.co.uk/why-siamepos.html">
-<meta property="og:title" content="Why SiamEPOS — The UK’s Only Thai Restaurant Management System">
-<meta property="og:description" content="SiamEPOS is the only EPOS built specifically for Thai restaurants in the UK. Bilingual EN/TH, Natasha’s Law allergens, Thai-speaking support. See how it compares.">
+<meta property="og:title" content="Why SiamEPOS — The UK's Only Thai Restaurant Management System">
+<meta property="og:description" content="SiamEPOS is the only EPOS built specifically for Thai restaurants in the UK. Bilingual EN/TH, Natasha's Law allergens, Thai-speaking support. See how it compares.">
 <meta property="og:image" content="https://siamepos.co.uk/og-image.jpg">
 <meta property="og:locale" content="en_GB">
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Why SiamEPOS — The UK’s Only Thai Restaurant Management System">
+<meta name="twitter:title" content="Why SiamEPOS — The UK's Only Thai Restaurant Management System">
 <meta name="twitter:description" content="The only EPOS built specifically for Thai restaurants in the UK. Bilingual, allergen-compliant, Thai-speaking support.">
 <meta name="twitter:image" content="https://siamepos.co.uk/og-image.jpg">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -46,20 +46,31 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content
 .wa-float{position:fixed;bottom:28px;right:28px;z-index:98;}
 .wa-btn{display:flex;align-items:center;gap:10px;background:#25D366;color:white;padding:13px 20px;border-radius:50px;font-size:14px;font-weight:700;text-decoration:none;box-shadow:0 8px 24px rgba(37,211,102,0.4);}
 
+/* HERO */
 .page-hero{background:linear-gradient(160deg,var(--navy) 0%,var(--navy-mid) 100%);padding:140px 60px 80px;text-align:center;position:relative;overflow:hidden;}
 .page-hero::before{content:'';position:absolute;inset:0;background-image:repeating-linear-gradient(45deg,rgba(201,168,76,0.03) 0px,rgba(201,168,76,0.03) 1px,transparent 1px,transparent 60px);}
 .page-tag{display:inline-flex;align-items:center;gap:8px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:var(--gold);padding:7px 16px;border-radius:30px;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:24px;}
-.page-hero h1{font-family:'Cormorant Garamond',serif;font-size:58px;font-weight:700;color:white;line-height:1.1;margin-bottom:16px;}
+.page-hero h1{font-family:'Cormorant Garamond',serif;font-size:58px;font-weight:700;color:white;line-height:1.1;margin-bottom:20px;}
 .page-hero h1 em{font-style:italic;color:var(--gold);}
-.page-hero p{font-size:17px;color:rgba(255,255,255,0.6);max-width:520px;margin:0 auto;line-height:1.7;}
+.page-hero p{font-size:18px;color:rgba(255,255,255,0.65);max-width:580px;margin:0 auto;line-height:1.7;}
 .section-label{display:inline-block;color:var(--gold);font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin-bottom:14px;}
 .section-title{font-family:'Cormorant Garamond',serif;font-size:48px;font-weight:700;line-height:1.1;color:var(--navy);margin-bottom:12px;}
 .section-title.white{color:white;}
 
+/* PAIN SECTION */
+.pain-section{padding:80px 60px;background:#F7F5F0;}
+.pain-inner{max-width:960px;margin:0 auto;}
+.pain-intro{font-size:18px;color:var(--text-muted);line-height:1.8;margin-bottom:48px;max-width:720px;}
+.pain-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:0;}
+.pain-card{background:white;border:1px solid #E8E5DE;border-left:4px solid #E53E3E;border-radius:12px;padding:24px 28px;}
+.pain-card-icon{font-size:22px;margin-bottom:10px;}
+.pain-card-title{font-size:16px;font-weight:700;color:var(--navy);margin-bottom:6px;}
+.pain-card-desc{font-size:13px;color:var(--text-muted);line-height:1.7;}
+
 /* COMPARISON TABLE */
 .compare-section{padding:80px 60px;background:var(--white);}
-.table-wrap{max-width:1100px;margin:48px auto 0;overflow-x:auto;}
-table{width:100%;border-collapse:collapse;min-width:700px;}
+.table-wrap{max-width:900px;margin:48px auto 0;overflow-x:auto;}
+table{width:100%;border-collapse:collapse;min-width:640px;}
 thead tr{background:var(--navy);}
 th{padding:16px 18px;font-size:13px;font-weight:700;color:rgba(255,255,255,0.6);text-align:center;}
 th:first-child{text-align:left;color:rgba(255,255,255,0.4);}
@@ -74,6 +85,7 @@ tr.price-row td.us-col{color:var(--gold);}
 .us-col{background:rgba(201,168,76,0.06);}
 .cat-row td{background:#F7F5F0;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text-muted);padding:10px 18px;}
 .cat-row td:first-child{color:var(--gold);}
+.compare-note{font-size:13px;color:var(--text-muted);margin-top:8px;}
 
 /* STORY SECTION */
 .story-section{background:var(--navy);padding:80px 60px;}
@@ -114,8 +126,8 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
 .footer-bottom p{color:rgba(255,255,255,0.22);font-size:12px;}
 .footer-bottom a{color:var(--gold);text-decoration:none;}
 
-@media(max-width:1100px){nav{padding:14px 24px;}.nav-links{gap:14px;}.compare-section,.story-section,.reasons-section,.final-strip{padding:60px 28px;}.page-hero{padding:110px 28px 60px;}.page-hero h1{font-size:40px;}.reasons-grid{grid-template-columns:1fr 1fr;}.story-points{grid-template-columns:1fr;}footer{grid-template-columns:1fr;gap:28px;padding:40px 24px;}.footer-bottom{padding:14px 24px;flex-direction:column;gap:4px;}}
-@media(max-width:640px){.reasons-grid{grid-template-columns:1fr;
+@media(max-width:1100px){nav{padding:14px 24px;}.nav-links{gap:14px;}.compare-section,.story-section,.reasons-section,.final-strip,.pain-section{padding:60px 28px;}.page-hero{padding:110px 28px 60px;}.page-hero h1{font-size:40px;}.reasons-grid{grid-template-columns:1fr 1fr;}.story-points{grid-template-columns:1fr;}.pain-grid{grid-template-columns:1fr;}footer{grid-template-columns:1fr;gap:28px;padding:40px 24px;}.footer-bottom{padding:14px 24px;flex-direction:column;gap:4px;}}
+@media(max-width:640px){.reasons-grid{grid-template-columns:1fr;}
 
   .nav-burger{display:inline-block;}
   .lang-toggle{font-size:11px;padding:6px 10px;}
@@ -168,89 +180,154 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
   <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" onclick="document.body.classList.toggle('thai');this.textContent=document.body.classList.contains('thai')?'EN':'ภาษาไทย'">ภาษาไทย</button>
 </nav>
 
+<!-- HERO -->
 <div class="page-hero">
-  <div class="page-tag">⚔️ <span class="lang-en">Honest comparison</span><span class="lang-th">การเปรียบเทียบที่ซื่อสัตย์</span></div>
-  <h1 class="lang-en">We Built What<br><em>No One Else Would.</em></h1>
-  <h1 class="lang-th">เราสร้างสิ่งที่<br><em>ไม่มีใครกล้าทำ</em></h1>
-  <p class="lang-en" style="margin-top:16px;">เราสร้างสิ่งที่ไม่มีใครกล้าทำ</p>
+  <div class="page-tag">🇹🇭 <span class="lang-en">Built for Thai restaurants</span><span class="lang-th">สร้างมาเพื่อร้านอาหารไทย</span></div>
+  <h1 class="lang-en">Your EPOS should understand<br><em>Thai restaurants. Most don't.</em></h1>
+  <h1 class="lang-th">ระบบ EPOS ของคุณควรเข้าใจ<br><em>ร้านอาหารไทย แต่ส่วนใหญ่ไม่เข้าใจ</em></h1>
+  <p class="lang-en" style="margin-top:16px;">Every EPOS works for an Italian restaurant. Only SiamEPOS works for yours — with a bilingual kitchen, automatic allergens, zero-commission bookings, and support in Thai.</p>
+  <p class="lang-th" style="margin-top:16px;">ทุก EPOS ทำงานได้กับร้านอิตาเลียน มีเพียง SiamEPOS เท่านั้นที่ทำงานได้กับร้านของคุณ — พร้อมครัวสองภาษา สารก่อภูมิแพ้อัตโนมัติ การจองค่าคอม 0% และซัพพอร์ตภาษาไทย</p>
 </div>
+
+<!-- THE PAIN SECTION -->
+<section class="pain-section reveal">
+  <div class="pain-inner">
+    <div style="text-align:center;margin-bottom:40px;">
+      <div class="section-label lang-en">The problem with generic EPOS</div>
+      <div class="section-label lang-th">ปัญหาของ EPOS ทั่วไป</div>
+      <h2 class="section-title lang-en">What it's like running a Thai restaurant<br>on a system that wasn't built for you</h2>
+      <h2 class="section-title lang-th">ความรู้สึกของการใช้ระบบที่ไม่ได้สร้างมาเพื่อคุณ</h2>
+    </div>
+    <div class="pain-grid">
+      <div class="pain-card">
+        <div class="pain-card-icon">🇬🇧</div>
+        <div class="pain-card-title lang-en">Everything is in English — including the kitchen screen</div>
+        <div class="pain-card-title lang-th">ทุกอย่างเป็นภาษาอังกฤษ รวมถึงหน้าจอครัว</div>
+        <p class="pain-card-desc lang-en">Your kitchen team speaks Thai. The tickets come in English. Every order is a translation exercise — and mistaken orders cost you money.</p>
+        <p class="pain-card-desc lang-th">ทีมครัวของคุณพูดภาษาไทย แต่ใบสั่งอาหารเป็นภาษาอังกฤษ ทุกออเดอร์คือการแปลภาษา และคำสั่งผิดๆ ทำให้คุณเสียเงิน</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-card-icon">🌶️</div>
+        <div class="pain-card-title lang-en">No understanding of Thai modifiers</div>
+        <div class="pain-card-title lang-th">ไม่เข้าใจตัวเลือกเมนูไทย</div>
+        <p class="pain-card-desc lang-en">No chilli. Extra chilli. No fish sauce. These are standard requests in any Thai kitchen. Generic EPOS systems handle pizza toppings — not pad thai customisation.</p>
+        <p class="pain-card-desc lang-th">ไม่เผ็ด เผ็ดพิเศษ ไม่ใส่น้ำปลา นี่คือคำขอทั่วไปในครัวไทย ระบบ EPOS ทั่วไปรองรับท็อปปิ้งพิซซ่า ไม่ใช่การปรับแต่งผัดไทย</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-card-icon">⚖️</div>
+        <div class="pain-card-title lang-en">No Natasha's Law compliance — you're doing it manually</div>
+        <div class="pain-card-title lang-th">ไม่รองรับ Natasha's Law — คุณต้องทำเอง</div>
+        <p class="pain-card-desc lang-en">UK law requires allergen information on every dish. Most EPOS systems leave you to manage this yourself, in a spreadsheet, hoping nothing gets missed.</p>
+        <p class="pain-card-desc lang-th">กฎหมาย UK กำหนดให้ต้องระบุข้อมูลสารก่อภูมิแพ้ในทุกเมนู EPOS ส่วนใหญ่ให้คุณจัดการเองใน Excel โดยหวังว่าจะไม่มีอะไรพลาด</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-card-icon">📞</div>
+        <div class="pain-card-title lang-en">No Thai-speaking support when things break</div>
+        <div class="pain-card-title lang-th">ไม่มีซัพพอร์ตภาษาไทยเมื่อระบบมีปัญหา</div>
+        <p class="pain-card-desc lang-en">Friday night. Full restaurant. Something stops working. You call support, wait on hold, and explain your problem in a second language to someone who has never worked in a Thai kitchen.</p>
+        <p class="pain-card-desc lang-th">คืนวันศุกร์ ร้านเต็ม มีปัญหาขึ้นมา คุณโทรซัพพอร์ต รอสาย แล้วต้องอธิบายปัญหาเป็นภาษาที่สองให้คนที่ไม่เคยทำงานในครัวไทย</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-card-icon">💸</div>
+        <div class="pain-card-title lang-en">OpenTable and Deliveroo own your customers — and charge you for it</div>
+        <div class="pain-card-title lang-th">OpenTable และ Deliveroo เป็นเจ้าของลูกค้าของคุณ และคิดเงินคุณด้วย</div>
+        <p class="pain-card-desc lang-en">Every reservation through OpenTable costs £1–3. Every takeaway through Deliveroo costs 35% commission. And neither of them ever tells you who your customers are.</p>
+        <p class="pain-card-desc lang-th">ทุกการจองผ่าน OpenTable คิด £1–3 ทุกออเดอร์ takeaway ผ่าน Deliveroo คิด 35% และทั้งคู่ไม่เคยบอกคุณว่าลูกค้าของคุณคือใคร</p>
+      </div>
+      <div class="pain-card">
+        <div class="pain-card-icon">📋</div>
+        <div class="pain-card-title lang-en">Invoice scanning? You type it in by hand</div>
+        <div class="pain-card-title lang-th">สแกนใบกำกับสินค้า? คุณต้องพิมพ์เองทั้งหมด</div>
+        <p class="pain-card-desc lang-en">Every supplier delivery means manually keying line items into your stock system. With Thai ingredient names, that's slow, error-prone, and nobody has time for it.</p>
+        <p class="pain-card-desc lang-th">ทุกการส่งสินค้าจากซัพพลายเออร์หมายถึงการพิมพ์รายการเข้าระบบสต็อกเอง กับชื่อวัตถุดิบไทย นั่นช้า ผิดพลาดง่าย และไม่มีใครมีเวลาทำ</p>
+      </div>
+    </div>
+  </div>
+</section>
 
 <!-- COMPARISON TABLE -->
 <section class="compare-section">
   <div style="text-align:center;" class="reveal">
-    <div class="section-label lang-en">Feature by feature</div>
-    <div class="section-label lang-th">ฟีเจอร์ต่อฟีเจอร์</div>
-    <h2 class="section-title lang-en">SiamEPOS vs Everyone Else</h2>
-    <h2 class="section-title lang-th">SiamEPOS เทียบกับทุกคน</h2>
+    <div class="section-label lang-en">Side by side</div>
+    <div class="section-label lang-th">เปรียบเทียบแบบตรงๆ</div>
+    <h2 class="section-title lang-en">Generic EPOS vs SiamEPOS</h2>
+    <h2 class="section-title lang-th">EPOS ทั่วไป เทียบกับ SiamEPOS</h2>
+    <p style="font-size:16px;color:var(--text-muted);margin-top:8px;" class="lang-en">The features that matter most to a Thai restaurant in the UK</p>
+    <p style="font-size:16px;color:var(--text-muted);margin-top:8px;" class="lang-th">ฟีเจอร์ที่สำคัญที่สุดสำหรับร้านอาหารไทยใน UK</p>
   </div>
   <div class="table-wrap reveal">
     <table>
       <thead>
         <tr>
           <th class="lang-en">Feature</th><th class="lang-th">ฟีเจอร์</th>
+          <th style="color:rgba(255,255,255,0.5);" class="lang-en">Generic EPOS</th><th style="color:rgba(255,255,255,0.5);" class="lang-th">EPOS ทั่วไป</th>
           <th class="us lang-en">SiamEPOS</th><th class="us lang-th">SiamEPOS</th>
-          <th>Square</th>
-          <th>Lightspeed</th>
-          <th>OpenTable</th>
-          <th>ResDiary</th>
         </tr>
       </thead>
       <tbody>
-        <tr class="cat-row"><td colspan="8" class="lang-en">Core System</td><td colspan="8" class="lang-th">ระบบหลัก</td></tr>
-        <tr><td class="lang-en">Full EPOS</td><td class="lang-th">EPOS ครบ</td><td class="us-col"><span class="tick">✅</span></td><td><span class="tick">✅</span></td><td><span class="tick">✅</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td></tr>
-        <tr><td class="lang-en">Table management</td><td class="lang-th">จัดการโต๊ะ</td><td class="us-col"><span class="tick">✅</span></td><td><span class="tick">✅</span></td><td><span class="tick">✅</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td></tr>
-        <tr><td class="lang-en">Kitchen display</td><td class="lang-th">หน้าจอครัว</td><td class="us-col"><span class="tick">✅</span></td><td><span class="tick">✅</span></td><td><span class="tick">✅</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td></tr>
-
-        <tr class="cat-row"><td colspan="8" class="lang-en">Bookings</td><td colspan="8" class="lang-th">การจอง</td></tr>
-        <tr><td class="lang-en">Reservation system</td><td class="lang-th">ระบบจอง</td><td class="us-col"><span class="tick">✅</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="tick">✅</span></td><td><span class="tick">✅</span></td></tr>
-        <tr><td class="lang-en">Zero commission per cover</td><td class="lang-th">ค่าคอม 0% ต่อที่นั่ง</td><td class="us-col"><span class="tick">✅</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td></tr>
-        <tr><td class="lang-en">Bookings feed into EPOS</td><td class="lang-th">การจองส่งเข้า EPOS</td><td class="us-col"><span class="tick">✅</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td></tr>
-
-        <tr class="cat-row"><td colspan="8" class="lang-en">AI Features</td><td colspan="8" class="lang-th">ฟีเจอร์ AI</td></tr>
-        <tr><td class="lang-en">AI menu scanner</td><td class="lang-th">AI สแกนเมนู</td><td class="us-col"><span class="tick">✅</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td></tr>
-        <tr><td class="lang-en">AI cost management</td><td class="lang-th">AI จัดการต้นทุน</td><td class="us-col"><span class="tick">✅</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td></tr>
-        <tr><td class="lang-en">AI stock management</td><td class="lang-th">AI จัดการสต็อก</td><td class="us-col"><span class="tick">✅</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td></tr>
-
-        <tr class="cat-row"><td colspan="8" class="lang-en">Thai Restaurant Specific</td><td colspan="8" class="lang-th">เฉพาะร้านอาหารไทย</td></tr>
-        <tr><td class="lang-en">Thai language interface</td><td class="lang-th">อินเตอร์เฟซภาษาไทย</td><td class="us-col"><span class="tick">✅</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td></tr>
-        <tr><td class="lang-en">Thai-speaking support</td><td class="lang-th">ซัพพอร์ตภาษาไทย</td><td class="us-col"><span class="tick">✅</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td></tr>
-        <tr><td class="lang-en">14 UK allergen detection</td><td class="lang-th">ตรวจจับสารก่อภูมิแพ้ 14 รายการ</td><td class="us-col"><span class="tick">✅</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td></tr>
-        <tr><td class="lang-en">Course-based ordering</td><td class="lang-th">การสั่งอาหารแบบคอร์ส</td><td class="us-col"><span class="tick">✅</span></td><td><span class="cross">❌</span></td><td>Partial</td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td></tr>
-
-        <tr class="cat-row"><td colspan="8" class="lang-en">Setup & Support</td><td colspan="8" class="lang-th">การตั้งค่าและซัพพอร์ต</td></tr>
-        <tr><td class="lang-en">Free setup & training</td><td class="lang-th">ตั้งค่าและฝึกอบรมฟรี</td><td class="us-col"><span class="tick">✅</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td></tr>
-        <tr><td class="lang-en">Offline mode</td><td class="lang-th">โหมดออฟไลน์</td><td class="us-col"><span class="tick">✅</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td></tr>
-        <tr><td class="lang-en">No hardware required</td><td class="lang-th">ไม่ต้องซื้อฮาร์ดแวร์</td><td class="us-col"><span class="tick">✅</span></td><td>Partial</td><td>Partial</td><td><span class="cross">❌</span></td><td><span class="cross">❌</span></td></tr>
-
+        <tr>
+          <td class="lang-en">Interface language</td><td class="lang-th">ภาษาของอินเตอร์เฟซ</td>
+          <td><span style="color:#6B7A9F;font-size:13px;" class="lang-en">English only</span><span style="color:#6B7A9F;font-size:13px;" class="lang-th">อังกฤษเท่านั้น</span></td>
+          <td class="us-col"><span class="tick">✅</span> <span style="font-size:12px;font-weight:700;" class="lang-en">EN + Thai, one tap</span><span style="font-size:12px;font-weight:700;" class="lang-th">EN + ไทย กดครั้งเดียว</span></td>
+        </tr>
+        <tr>
+          <td class="lang-en">Allergen management</td><td class="lang-th">จัดการสารก่อภูมิแพ้</td>
+          <td><span style="color:#6B7A9F;font-size:13px;" class="lang-en">Manual — your problem</span><span style="color:#6B7A9F;font-size:13px;" class="lang-th">ทำเอง — ปัญหาของคุณ</span></td>
+          <td class="us-col"><span class="tick">✅</span> <span style="font-size:12px;font-weight:700;" class="lang-en">Automatic from recipes</span><span style="font-size:12px;font-weight:700;" class="lang-th">อัตโนมัติจากสูตรอาหาร</span></td>
+        </tr>
+        <tr>
+          <td class="lang-en">Reservations</td><td class="lang-th">การจองโต๊ะ</td>
+          <td><span style="color:#6B7A9F;font-size:13px;" class="lang-en">OpenTable (£1–3/cover)</span><span style="color:#6B7A9F;font-size:13px;" class="lang-th">OpenTable (£1–3 ต่อที่นั่ง)</span></td>
+          <td class="us-col"><span class="tick">✅</span> <span style="font-size:12px;font-weight:700;" class="lang-en">Built-in, 0% commission</span><span style="font-size:12px;font-weight:700;" class="lang-th">ในตัว ค่าคอม 0%</span></td>
+        </tr>
+        <tr>
+          <td class="lang-en">Online takeaway</td><td class="lang-th">ออเดอร์ takeaway</td>
+          <td><span style="color:#6B7A9F;font-size:13px;" class="lang-en">Deliveroo (35% commission)</span><span style="color:#6B7A9F;font-size:13px;" class="lang-th">Deliveroo (35% ค่าคอม)</span></td>
+          <td class="us-col"><span class="tick">✅</span> <span style="font-size:12px;font-weight:700;" class="lang-en">Built-in, 0% commission</span><span style="font-size:12px;font-weight:700;" class="lang-th">ในตัว ค่าคอม 0%</span></td>
+        </tr>
+        <tr>
+          <td class="lang-en">Support</td><td class="lang-th">ซัพพอร์ต</td>
+          <td><span style="color:#6B7A9F;font-size:13px;" class="lang-en">Call centre, English only</span><span style="color:#6B7A9F;font-size:13px;" class="lang-th">Call centre ภาษาอังกฤษเท่านั้น</span></td>
+          <td class="us-col"><span class="tick">✅</span> <span style="font-size:12px;font-weight:700;" class="lang-en">Thai-speaking WhatsApp</span><span style="font-size:12px;font-weight:700;" class="lang-th">WhatsApp ภาษาไทย</span></td>
+        </tr>
+        <tr>
+          <td class="lang-en">Invoice scanning</td><td class="lang-th">สแกนใบกำกับสินค้า</td>
+          <td><span style="color:#6B7A9F;font-size:13px;" class="lang-en">Type it in by hand</span><span style="color:#6B7A9F;font-size:13px;" class="lang-th">พิมพ์เองทุกอย่าง</span></td>
+          <td class="us-col"><span class="tick">✅</span> <span style="font-size:12px;font-weight:700;" class="lang-en">AI reads the photo</span><span style="font-size:12px;font-weight:700;" class="lang-th">AI อ่านจากรูปถ่าย</span></td>
+        </tr>
+        <tr>
+          <td class="lang-en">Customer data</td><td class="lang-th">ข้อมูลลูกค้า</td>
+          <td><span style="color:#6B7A9F;font-size:13px;" class="lang-en">Platform owns it</span><span style="color:#6B7A9F;font-size:13px;" class="lang-th">แพลตฟอร์มเป็นเจ้าของ</span></td>
+          <td class="us-col"><span class="tick">✅</span> <span style="font-size:12px;font-weight:700;" class="lang-en">You own your customers</span><span style="font-size:12px;font-weight:700;" class="lang-th">คุณเป็นเจ้าของลูกค้าของคุณ</span></td>
+        </tr>
         <tr class="price-row">
-          <td class="lang-en">📊 Monthly price</td><td class="lang-th">📊 ราคา/เดือน</td>
-          <td class="us-col us-col" style="color:var(--gold);font-weight:800;">£89</td>
-          <td>£60+</td>
-          <td>£200+</td>
-          <td>£150–500+</td>
-          <td>£200+</td>
+          <td class="lang-en">Monthly price</td><td class="lang-th">ราคา/เดือน</td>
+          <td style="font-weight:800;color:var(--text-muted);" class="lang-en">£150–500+ (+ per-cover fees)</td>
+          <td style="font-weight:800;color:var(--text-muted);" class="lang-th">£150–500+ (+ ค่าต่อที่นั่ง)</td>
+          <td class="us-col" style="color:var(--gold);font-weight:800;">£89 <span style="font-size:12px;font-weight:600;">all-in</span></td>
+          <td class="us-col" style="color:var(--gold);font-weight:800;">£89 <span style="font-size:12px;font-weight:600;">ครบทุกฟีเจอร์</span></td>
         </tr>
       </tbody>
     </table>
   </div>
-  <p style="text-align:center;margin-top:24px;font-size:13px;color:var(--text-muted);" class="lang-en">* Coming soon features marked where applicable. Competitor pricing based on published rates at time of writing.</p>
-  <p style="text-align:center;margin-top:24px;font-size:13px;color:var(--text-muted);" class="lang-th">* ฟีเจอร์ที่กำลังจะมาถูกทำเครื่องหมายไว้ ราคาคู่แข่งอ้างอิงจากราคาที่เผยแพร่ในเวลาที่เขียน</p>
+  <p style="text-align:center;margin-top:20px;font-size:13px;" class="compare-note lang-en">Competitor pricing based on published rates. OpenTable per-cover fee estimate based on standard plan.</p>
+  <p style="text-align:center;margin-top:20px;font-size:13px;" class="compare-note lang-th">ราคาคู่แข่งอ้างอิงจากราคาที่เผยแพร่ ค่าต่อที่นั่งของ OpenTable อ้างอิงจากแผนมาตรฐาน</p>
 </section>
 
-<!-- STORY -->
+<!-- BUILT BY THAI PEOPLE -->
 <section class="story-section reveal">
   <div class="story-inner">
-    <h2 class="lang-en">The reason we exist:<br><em>Nobody built this for us.</em></h2>
-    <h2 class="lang-th">เหตุผลที่เราสร้าง SiamEPOS:<br><em>ไม่มีใครสร้างสิ่งนี้ให้เรา</em></h2>
-    <p class="lang-en">Thai restaurants in the UK have always made do with systems built for pizza restaurants, pub chains, and fast food. Systems in English only. Systems that don't understand course-by-course Thai service. Systems that charge you £3 every time a customer makes a reservation.</p>
-    <p class="lang-th">ร้านอาหารไทยในสหราชอาณาจักรมักใช้ระบบที่สร้างมาสำหรับร้านพิซซ่า เชนผับ และอาหารจานด่วน ระบบที่มีแต่ภาษาอังกฤษ ระบบที่ไม่เข้าใจการบริการอาหารไทยแบบคอร์ส ระบบที่คิดเงิน £3 ทุกครั้งที่ลูกค้าจอง</p>
-    <p class="lang-en"><strong>SiamEPOS was built by someone who has worked in Thai restaurants in the UK.</strong> Every feature exists because it was needed. The bilingual kitchen screen. The allergen scanner. The zero-commission booking widget. None of this was built to look impressive in a pitch deck — it was built to make Friday service run smoother.</p>
-    <p class="lang-th"><strong>SiamEPOS ถูกสร้างโดยคนที่เคยทำงานในร้านอาหารไทยใน UK</strong> ทุกฟีเจอร์มีอยู่เพราะจำเป็น หน้าจอครัวสองภาษา เครื่องสแกนสารก่อภูมิแพ้ วิดเจ็ตจองโต๊ะค่าคอม 0% ไม่มีสิ่งเหล่านี้ถูกสร้างเพื่อดูน่าประทับใจในการนำเสนอ แต่สร้างเพื่อให้บริการวันศุกร์ราบรื่นขึ้น</p>
+    <h2 class="lang-en">Built by a Thai founder<br><em>who lived the problem.</em></h2>
+    <h2 class="lang-th">สร้างโดยผู้ก่อตั้งชาวไทย<br><em>ที่เคยเผชิญปัญหาเหล่านี้</em></h2>
+    <p class="lang-en">SiamEPOS was built by <strong>Korakot Kongponsrisiri</strong>, a Thai founder who has worked in Thai restaurants in the UK and understood exactly what was broken. Not just the software — but the whole experience of running a Thai restaurant on tools designed for someone else.</p>
+    <p class="lang-th">SiamEPOS ถูกสร้างโดย <strong>Korakot Kongponsrisiri</strong> ผู้ก่อตั้งชาวไทยที่เคยทำงานในร้านอาหารไทยใน UK และเข้าใจอย่างแท้จริงว่าอะไรที่ผิดพลาด ไม่ใช่แค่ซอฟต์แวร์ แต่คือประสบการณ์ทั้งหมดของการดูแลร้านอาหารไทยด้วยเครื่องมือที่ออกแบบมาสำหรับคนอื่น</p>
+    <p class="lang-en">The support team speaks Thai. The interface was designed with Thai kitchen workflows in mind — course-by-course service, fish sauce in everything, bar drinks going straight to the pass without touching the kitchen. <strong>None of this needed to be explained to us. We already knew.</strong></p>
+    <p class="lang-th">ทีมซัพพอร์ตพูดภาษาไทย อินเตอร์เฟซออกแบบโดยคำนึงถึงการทำงานของครัวไทย — บริการแบบคอร์ส น้ำปลาในทุกอย่าง เครื่องดื่มบาร์ที่ส่งตรงไปที่ Pass โดยไม่ผ่านครัว <strong>ไม่มีสิ่งเหล่านี้ที่เราต้องให้ใครอธิบาย เราเข้าใจมาตั้งแต่แรกแล้ว</strong></p>
     <div class="story-points">
-      <div class="sp-card"><div class="sp-icon">🇹🇭</div><div class="sp-title lang-en">Built from inside Thai restaurants</div><div class="sp-title lang-th">สร้างจากภายในร้านอาหารไทย</div><p class="sp-desc lang-en">Not adapted from a Western EPOS. Built from scratch for how Thai restaurants actually operate.</p><p class="sp-desc lang-th">ไม่ได้ดัดแปลงจาก EPOS ตะวันตก สร้างใหม่ทั้งหมดสำหรับวิธีที่ร้านอาหารไทยดำเนินงานจริงๆ</p></div>
-      <div class="sp-card"><div class="sp-icon">💷</div><div class="sp-title lang-en">Priced for Thai restaurant margins</div><div class="sp-title lang-th">ราคาที่เหมาะกับกำไรร้านอาหารไทย</div><p class="sp-desc lang-en">£89/month. Not £300+. We know what margins look like in a Thai restaurant in the UK.</p><p class="sp-desc lang-th">£89/เดือน ไม่ใช่ £300+ เราเข้าใจว่ากำไรในร้านอาหารไทยใน UK เป็นอย่างไร</p></div>
-      <div class="sp-card"><div class="sp-icon">📞</div><div class="sp-title lang-en">Support in Thai, always</div><div class="sp-title lang-th">ซัพพอร์ตภาษาไทยเสมอ</div><p class="sp-desc lang-en">When something goes wrong during service, you shouldn't have to explain your problem in a second language.</p><p class="sp-desc lang-th">เมื่อมีปัญหาระหว่างบริการ คุณไม่ควรต้องอธิบายปัญหาเป็นภาษาที่สอง</p></div>
-      <div class="sp-card"><div class="sp-icon">🚀</div><div class="sp-title lang-en">Moving fast, always improving</div><div class="sp-title lang-th">พัฒนาอย่างต่อเนื่อง</div><p class="sp-desc lang-en">AI cost management, offline mode, stock scanning — all coming in 2026. This product is accelerating.</p><p class="sp-desc lang-th">AI จัดการต้นทุน โหมดออฟไลน์ สแกนสต็อก ทั้งหมดกำลังมาในปี 2026 ผลิตภัณฑ์นี้กำลังเติบโต</p></div>
+      <div class="sp-card"><div class="sp-icon">🇹🇭</div><div class="sp-title lang-en">Built from inside Thai restaurants</div><div class="sp-title lang-th">สร้างจากภายในร้านอาหารไทย</div><p class="sp-desc lang-en">Not adapted from a Western EPOS. Built from scratch for how Thai restaurants actually operate — including the parts that Western systems never thought of.</p><p class="sp-desc lang-th">ไม่ได้ดัดแปลงจาก EPOS ตะวันตก สร้างใหม่ทั้งหมดสำหรับวิธีที่ร้านอาหารไทยดำเนินงานจริงๆ รวมถึงส่วนที่ระบบตะวันตกไม่เคยนึกถึง</p></div>
+      <div class="sp-card"><div class="sp-icon">💷</div><div class="sp-title lang-en">Priced for Thai restaurant margins</div><div class="sp-title lang-th">ราคาที่เหมาะกับกำไรร้านอาหารไทย</div><p class="sp-desc lang-en">£89/month. All features included. Cancel anytime. We know what margins look like in a Thai restaurant in the UK — and we priced accordingly.</p><p class="sp-desc lang-th">£89/เดือน ครบทุกฟีเจอร์ ยกเลิกได้ทุกเมื่อ เราเข้าใจว่ากำไรในร้านอาหารไทยใน UK เป็นอย่างไร</p></div>
+      <div class="sp-card"><div class="sp-icon">📞</div><div class="sp-title lang-en">Support in Thai, on WhatsApp</div><div class="sp-title lang-th">ซัพพอร์ตภาษาไทย ผ่าน WhatsApp</div><p class="sp-desc lang-en">When something goes wrong during service, you shouldn't have to explain your problem in a second language. We answer in Thai. We understand your kitchen.</p><p class="sp-desc lang-th">เมื่อมีปัญหาระหว่างบริการ คุณไม่ควรต้องอธิบายปัญหาเป็นภาษาที่สอง เราตอบเป็นภาษาไทย เราเข้าใจครัวของคุณ</p></div>
+      <div class="sp-card"><div class="sp-icon">💬</div><div class="sp-title lang-en">No long-term contracts</div><div class="sp-title lang-th">ไม่ผูกสัญญาระยะยาว</div><p class="sp-desc lang-en">Monthly rolling. Cancel anytime. We keep you because SiamEPOS genuinely helps your restaurant — not because we've locked you in.</p><p class="sp-desc lang-th">รายเดือน ยกเลิกได้ทุกเมื่อ เราอยากให้คุณอยู่กับเราเพราะ SiamEPOS ช่วยร้านคุณได้จริง ไม่ใช่เพราะผูกสัญญา</p></div>
     </div>
   </div>
 </section>
@@ -264,26 +341,26 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <h2 class="section-title lang-th">6 สิ่งที่มีเพียง SiamEPOS เท่านั้น</h2>
   </div>
   <div class="reasons-grid">
-    <div class="rcard"><div class="rcard-num">01</div><div class="rcard-title lang-en">Scans your menu from a photo in 30 seconds</div><div class="rcard-title lang-th">สแกนเมนูจากรูปถ่ายใน 30 วินาที</div><p class="rcard-desc lang-en">No other UK EPOS has AI that reads a paper menu, detects allergens, writes Thai dish names, and imports everything — instantly.</p><p class="rcard-desc lang-th">ไม่มี EPOS UK ใดที่มี AI อ่านเมนูกระดาษ ตรวจจับสารก่อภูมิแพ้ เขียนชื่อเมนูไทย และนำเข้าทุกอย่างทันที</p></div>
-    <div class="rcard"><div class="rcard-num">02</div><div class="rcard-title lang-en">Zero per-cover booking fees — forever</div><div class="rcard-title lang-th">ค่าจองต่อที่นั่ง 0% — ตลอดไป</div><p class="rcard-desc lang-en">OpenTable charges £1–3 per cover. For a 50-cover restaurant, that's up to £4,500/month. SiamEPOS charges £0. Always.</p><p class="rcard-desc lang-th">OpenTable คิด £1–3 ต่อที่นั่ง สำหรับร้าน 50 ที่นั่ง นั่นคือสูงถึง £4,500/เดือน SiamEPOS คิด £0 เสมอ</p></div>
-    <div class="rcard"><div class="rcard-num">03</div><div class="rcard-title lang-en">Every screen in Thai AND English</div><div class="rcard-title lang-th">ทุกหน้าจอเป็นภาษาไทยและอังกฤษ</div><p class="rcard-desc lang-en">Kitchen screen. Bar screen. Table map. All bilingual as standard. No configuration needed.</p><p class="rcard-desc lang-th">หน้าจอครัว หน้าจอบาร์ แผนโต๊ะ ทั้งหมดสองภาษาเป็นมาตรฐาน ไม่ต้องตั้งค่า</p></div>
-    <div class="rcard"><div class="rcard-num">04</div><div class="rcard-title lang-en">14 UK allergens detected automatically</div><div class="rcard-title lang-th">ตรวจจับสารก่อภูมิแพ้ UK 14 รายการอัตโนมัติ</div><p class="rcard-desc lang-en">UK law requires allergen info. SiamEPOS makes compliance automatic — no extra work, no risk, no spreadsheets.</p><p class="rcard-desc lang-th">กฎหมาย UK กำหนดให้ต้องระบุสารก่อภูมิแพ้ SiamEPOS ทำให้การปฏิบัติตามกฎหมายเป็นอัตโนมัติ</p></div>
-    <div class="rcard"><div class="rcard-num">05</div><div class="rcard-title lang-en">Support you can call in Thai</div><div class="rcard-title lang-th">ซัพพอร์ตที่คุณโทรหาเป็นภาษาไทยได้</div><p class="rcard-desc lang-en">Friday night. Busy service. Something's not right. You call us — and someone answers in Thai, who understands your restaurant.</p><p class="rcard-desc lang-th">คืนวันศุกร์ บริการยุ่ง มีปัญหา คุณโทรหาเรา และมีคนรับสายเป็นภาษาไทยที่เข้าใจร้านของคุณ</p></div>
-    <div class="rcard"><div class="rcard-num">06</div><div class="rcard-title lang-en">Built for how Thai restaurants actually work</div><div class="rcard-title lang-th">สร้างตามวิธีที่ร้านอาหารไทยทำงานจริงๆ</div><p class="rcard-desc lang-en">Course-by-course service. Fish sauce in everything. Bar drinks bypassing the kitchen. None of this needed to be explained to us.</p><p class="rcard-desc lang-th">บริการแบบคอร์ส น้ำปลาในทุกอย่าง เครื่องดื่มบาร์ที่ไม่ต้องผ่านครัว ไม่มีสิ่งเหล่านี้ที่เราต้องอธิบาย</p></div>
+    <div class="rcard"><div class="rcard-num">01</div><div class="rcard-title lang-en">Bilingual kitchen — one tap to switch</div><div class="rcard-title lang-th">ครัวสองภาษา กดครั้งเดียวเพื่อสลับ</div><p class="rcard-desc lang-en">Kitchen screen, bar screen, table map — all bilingual as standard. Your team uses the language they think in. No translation. No mistakes.</p><p class="rcard-desc lang-th">หน้าจอครัว หน้าจอบาร์ แผนโต๊ะ ทั้งหมดสองภาษาเป็นมาตรฐาน ทีมของคุณใช้ภาษาที่ตัวเองคิด ไม่ต้องแปล ไม่มีข้อผิดพลาด</p></div>
+    <div class="rcard"><div class="rcard-num">02</div><div class="rcard-title lang-en">Zero per-cover booking fees — forever</div><div class="rcard-title lang-th">ค่าจองต่อที่นั่ง 0% — ตลอดไป</div><p class="rcard-desc lang-en">OpenTable charges £1–3 per cover. For a 50-cover restaurant doing 3 turns a week, that's up to £2,300/month. SiamEPOS charges £0. Always.</p><p class="rcard-desc lang-th">OpenTable คิด £1–3 ต่อที่นั่ง สำหรับร้าน 50 ที่นั่งที่หมุน 3 รอบต่อสัปดาห์ นั่นคือสูงถึง £2,300/เดือน SiamEPOS คิด £0 เสมอ</p></div>
+    <div class="rcard"><div class="rcard-num">03</div><div class="rcard-title lang-en">AI scans your supplier invoice in seconds</div><div class="rcard-title lang-th">AI สแกนใบกำกับซัพพลายเออร์ในไม่กี่วินาที</div><p class="rcard-desc lang-en">Photograph the invoice. AI reads the Thai ingredient names, updates your stock levels, detects price changes, and flags anything that needs attention.</p><p class="rcard-desc lang-th">ถ่ายรูปใบกำกับ AI อ่านชื่อวัตถุดิบไทย อัพเดตระดับสต็อก ตรวจจับการเปลี่ยนแปลงราคา และแจ้งเตือนทุกอย่างที่ต้องใส่ใจ</p></div>
+    <div class="rcard"><div class="rcard-num">04</div><div class="rcard-title lang-en">14 UK allergens — automatic from your recipes</div><div class="rcard-title lang-th">สารก่อภูมิแพ้ UK 14 รายการ อัตโนมัติจากสูตรของคุณ</div><p class="rcard-desc lang-en">UK law requires allergen disclosure on every dish. SiamEPOS reads your recipes, identifies the allergens, and keeps your menu legally compliant — automatically.</p><p class="rcard-desc lang-th">กฎหมาย UK กำหนดให้ต้องเปิดเผยสารก่อภูมิแพ้ในทุกเมนู SiamEPOS อ่านสูตรของคุณ ระบุสารก่อภูมิแพ้ และทำให้เมนูของคุณถูกกฎหมายโดยอัตโนมัติ</p></div>
+    <div class="rcard"><div class="rcard-num">05</div><div class="rcard-title lang-en">Your customers — not OpenTable's</div><div class="rcard-title lang-th">ลูกค้าของคุณ ไม่ใช่ของ OpenTable</div><p class="rcard-desc lang-en">Built-in CRM stores every customer visit, spend, and preference. Send campaigns, recover lapsed guests, celebrate birthdays — without paying a third party for the privilege.</p><p class="rcard-desc lang-th">CRM ในตัวเก็บทุกการมาเยือน ยอดใช้จ่าย และความชอบของลูกค้า ส่งแคมเปญ ดึงลูกค้าที่หายไปกลับมา และอวยพรวันเกิด โดยไม่ต้องจ่ายเงินบุคคลที่สาม</p></div>
+    <div class="rcard"><div class="rcard-num">06</div><div class="rcard-title lang-en">Support in Thai — by people who know your kitchen</div><div class="rcard-title lang-th">ซัพพอร์ตภาษาไทย — โดยคนที่รู้จักครัวของคุณ</div><p class="rcard-desc lang-en">Friday night. Busy service. Something's not right. You message us in Thai — and someone who understands your restaurant answers, usually within the hour.</p><p class="rcard-desc lang-th">คืนวันศุกร์ บริการยุ่ง มีปัญหา คุณส่งข้อความหาเราเป็นภาษาไทย และคนที่เข้าใจร้านของคุณจะตอบ โดยปกติภายในชั่วโมง</p></div>
   </div>
 </section>
 
 <!-- FINAL CTA -->
 <div class="final-strip">
-  <h2 class="lang-en">See the difference<br><em>for yourself.</em></h2>
-  <h2 class="lang-th">เห็นความแตกต่าง<br><em>ด้วยตัวเอง</em></h2>
-  <p class="lang-en">20 minutes. Free. In Thai or English. No pressure, no contract.</p>
-  <p class="lang-th">20 นาที ฟรี ภาษาไทยหรืออังกฤษก็ได้ ไม่มีแรงกดดัน ไม่มีสัญญา</p>
-  <a href="book-demo.html" class="book-btn">🚀 <span class="lang-en">Book Your Free Demo</span><span class="lang-th">จองสาธิตฟรีของคุณ</span></a>
+  <h2 class="lang-en">See the difference in<br><em>20 minutes. Free.</em></h2>
+  <h2 class="lang-th">เห็นความแตกต่างใน<br><em>20 นาที ฟรี</em></h2>
+  <p class="lang-en">Free demo. In Thai or English. No pressure, no contract, no sales script. Just an honest look at whether SiamEPOS is right for you.</p>
+  <p class="lang-th">สาธิตฟรี ภาษาไทยหรืออังกฤษก็ได้ ไม่มีแรงกดดัน ไม่มีสัญญา ไม่มีสคริปต์ขาย แค่ดูอย่างตรงไปตรงมาว่า SiamEPOS เหมาะกับคุณไหม</p>
+  <a href="book-demo.html" class="book-btn">🚀 <span class="lang-en">Book My Free Demo</span><span class="lang-th">จองสาธิตฟรีของฉัน</span></a>
 </div>
 
 <footer>
-  <div><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><svg width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="none" stroke="#C9A84C" stroke-width="1.8"/><circle cx="50" cy="50" r="39" fill="none" stroke="#C9A84C" stroke-width="0.6" opacity="0.28"/><g transform="translate(50,50)"><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/><circle cx="0" cy="0" r="9" fill="#0D1B3E"/><circle cx="0" cy="0" r="5" fill="#C9A84C"/></g></svg><span style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:#C9A84C;">Siam<span style="color:white;">EPOS</span></span></div><p class="footer-tagline lang-en">Built by a Thai restaurant professional. For Thai restaurants.</p><p class="footer-tagline lang-th">สร้างโดยผู้เชี่ยวชาญร้านอาหารไทย เพื่อร้านอาหารไทย</p></div>
+  <div><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><svg width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="none" stroke="#C9A84C" stroke-width="1.8"/><circle cx="50" cy="50" r="39" fill="none" stroke="#C9A84C" stroke-width="0.6" opacity="0.28"/><g transform="translate(50,50)"><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/><circle cx="0" cy="0" r="9" fill="#0D1B3E"/><circle cx="0" cy="0" r="5" fill="#C9A84C"/></g></svg><span style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:#C9A84C;">Siam<span style="color:white;">EPOS</span></span></div><p class="footer-tagline lang-en">Built by a Thai founder, for Thai restaurants in the UK.</p><p class="footer-tagline lang-th">สร้างโดยผู้ก่อตั้งชาวไทย เพื่อร้านอาหารไทยใน UK</p></div>
   <div class="footer-col"><h4 class="lang-en">Pages</h4><h4 class="lang-th">หน้า</h4><ul><li><a href="index.html" class="lang-en">Home</a><a href="index.html" class="lang-th">หน้าแรก</a></li><li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li><li><a href="pricing.html" class="lang-en">Pricing</a><a href="pricing.html" class="lang-th">ราคา</a></li><li><a href="book-demo.html" class="lang-en">Book Demo</a><a href="book-demo.html" class="lang-th">จองสาธิต</a></li></ul></div>
   <div class="footer-col"><h4 class="lang-en">Contact</h4><h4 class="lang-th">ติดต่อ</h4><ul><li><a href="https://wa.me/447700000000">💬 WhatsApp</a></li><li><a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></li></ul></div>
 </footer>

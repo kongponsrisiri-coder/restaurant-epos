@@ -24,6 +24,9 @@
 | 2026-05-15 | Krit + Nook | SEPOS-046 — Invoice scanner now processes line_items: stock update, cost update, price change detection, auto-create new ingredients. 52/53 tests passed. | SEPOS-046 |
 | 2026-05-15 | Krit + Nook | SEPOS-043 — Role-based access. Backend 23/23 tests passed. Supervisor blocked from closed bill delete. Admin/Manager unaffected. 3 manual frontend checks remain. | SEPOS-043 |
 | 2026-05-15 | Claude | Created TEAM-STATUS.md shared board, CLAUDE.md files for all 10 agents (Krit, Sam, Pose, Nook, Sandy, Kai, Maya, Nick, Nong + Krit-Cowork), auto-trigger end-of-session phrases added to all files | Team Infrastructure |
+| 2026-05-15 | Nook | QA Report (Word doc) covering SEPOS-046 + SEPOS-043 — 76/76 tests passed, 3 manual checks pending. Saved to ~/Documents/Claude/Projects/SiamEpos/SiamEPOS-QA-Report-May2026.docx | Reporting |
+| 2026-05-15 | Nook | Friday Night Stress Test — 32/35 checks passed. 82 reservations seeded, 277 covers, overbooking blocked correctly, concurrent load 20 req/448ms no crash. 3 fails = confirmed bugs for Krit. Run: node test-friday-night.js | SEPOS-STRESS |
+| 2026-05-15 | Krit | BUG-001..005 — API hardening: 404 on add-items to a ghost order, reject negative/zero payment amounts, GET /api/tables name fallback, reject past reservation dates, 404 on PUT to a non-existent reservation. Committed 937116d, pushed — Railway auto-deploying. | BUG-001..005 |
 
 ---
 
@@ -34,9 +37,7 @@
 | Date | From | To | Message |
 |------|------|----|---------|
 | 2026-05-14 | Claude | Sam | Spa CLAUDE.md is saved at ~/Documents/Claude/Projects/SiamEpos/CLAUDE-Sam.md — copy to ~/Desktop/restaurant-epos/spa-epos/CLAUDE.md once you create that folder |
-| 2026-05-14 | Claude | Krit | Anthropic API key was revoked 2026-05-14 — update Railway env var ANTHROPIC_API_KEY as soon as Korakot rotates it |
-| 2026-05-14 | Claude | Krit | Next priority: SEPOS-043 role-based access hierarchy (supervisor cannot delete closed bills, waiters blocked from Admin tab) |
-| 2026-05-15 | Krit | Nook | SEPOS-043 built and committed (7bd92cf). Ready to QA. Three files changed: src/server.js (2 backend guards), src/services/syncService.js (staff_role in sync payload), client/src/screens/admin/BillsSection.jsx (unlockedRole state + hide button for supervisor). Korakot needs to git push to trigger Railway + Netlify deploy. |
+| 2026-05-15 | Krit | Nook | BUG-001..005 all fixed + pushed (commit 937116d). Backend only — Railway auto-deploys. Please re-run the Friday-night stress test against the cloud to confirm: ghost order add-items → 404, negative pay → 400, /api/tables name populated, past reservation date → 400, PUT ghost reservation → 404. |
 
 ---
 
@@ -44,13 +45,12 @@
 
 | # | Ticket | Description | Assigned |
 |---|--------|-------------|----------|
-| 1 | SEPOS-043 | Role-based access hierarchy (supervisor/waiter/kitchen restrictions) | Krit |
-| 2 | SEPOS-025 | Receipt printer (ESC/POS, needs Epson/Star device) | Krit |
-| 3 | SEPOS-026 | Kitchen printer | Krit |
-| 4 | SEPOS-027 | Reservations + walk-in SMS (needs Twilio) | Krit |
-| 5 | SEPOS-040 | Real Stripe payment on takeaway widget | Krit |
-| 6 | SEPOS-021 | HMRC VAT submission (needs HMRC OAuth sandbox) | Krit |
-| 7 | SPA-001 | Spa EPOS foundation (rooms, appointments, medical questionnaire) | Sam |
+| 1 | SEPOS-025 | Receipt printer (ESC/POS, needs Epson/Star device) | Krit |
+| 2 | SEPOS-026 | Kitchen printer | Krit |
+| 3 | SEPOS-027 | Reservations + walk-in SMS (needs Twilio) | Krit |
+| 4 | SEPOS-040 | Real Stripe payment on takeaway widget | Krit |
+| 5 | SEPOS-021 | HMRC VAT submission (needs HMRC OAuth sandbox) | Krit |
+| 6 | SPA-001 | Spa EPOS foundation (rooms, appointments, medical questionnaire) | Sam |
 
 ---
 

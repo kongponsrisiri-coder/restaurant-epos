@@ -607,6 +607,89 @@ async function writeSyncState(key, value) {
   } catch (err) { console.warn('[sync] writeSyncState failed:', err.message); }
 }
 
+// SEPOS — mirror a batch of closed orders into local SQLite, keyed by
+// cloud_id (consistent with pullActiveOrders). For each closed cloud
+// order: UPDATE the local row already bound to that cloud_id, or INSERT
+// a fresh local row carrying the cloud_id. Children (items + payments)
+// are delete-and-replaced — a closed order is terminal so there are no
+// local edits to preserve, and a clean replace is naturally idempotent
+// (re-pulling the same closed order can't accumulate duplicate items).
+async function upsertClosedOrders(orders, order_items, payments) {
+  const orderCols = (await pool.query('PRAGMA table_info(orders)')).rows.map(r => r.name);
+  const itemCols  = (await pool.query('PRAGMA table_info(order_items)')).rows.map(r => r.name);
+  const payCols   = (await pool.query('PRAGMA table_info(payments)')).rows.map(r => r.name);
+
+  // Group children by their cloud order_id.
+  const itemsByCloudOrder = {};
+  for (const it of order_items) (itemsByCloudOrder[it.order_id] ||= []).push(it);
+  const paysByCloudOrder = {};
+  for (const p of payments) (paysByCloudOrder[p.order_id] ||= []).push(p);
+
+  // Build an INSERT/UPDATE-safe field map: known columns only, drop the
+  // cloud `id` and `order_id` (we map those ourselves), drop nulls so a
+  // cloud null can't clobber a local default.
+  const pickFields = (row, cols, extra) => {
+    const f = { ...extra };
+    for (const [k, v] of Object.entries(row)) {
+      if (k === 'id' || k === 'order_id') continue;
+      if (!cols.includes(k)) continue;
+      if (v === null || v === undefined) continue;
+      f[k] = v;
+    }
+    return f;
+  };
+
+  for (const cloudOrder of orders) {
+    const cloudId = cloudOrder.id;
+    if (!cloudId) continue;
+
+    let localId = await findLocalOrderByCloudId(cloudId);
+    const fields = pickFields(cloudOrder, orderCols, { cloud_id: cloudId });
+
+    if (localId) {
+      const setCols = Object.keys(fields).filter(k => k !== 'cloud_id');
+      if (setCols.length > 0) {
+        const sets = setCols.map((c, i) => `${c} = $${i + 1}`).join(',');
+        await pool.query(
+          `UPDATE orders SET ${sets} WHERE id = $${setCols.length + 1}`,
+          [...setCols.map(c => fields[c]), localId]
+        );
+      }
+    } else {
+      const cols = Object.keys(fields);
+      const ph = cols.map((_, i) => `$${i + 1}`).join(',');
+      const ins = await pool.query(
+        `INSERT INTO orders (${cols.join(',')}) VALUES (${ph}) RETURNING id`,
+        cols.map(c => fields[c])
+      );
+      localId = ins.rows[0]?.id;
+    }
+    if (!localId) continue;
+
+    // Children — clean replace under the resolved local id.
+    await pool.query('DELETE FROM order_items WHERE order_id = $1', [localId]);
+    for (const it of (itemsByCloudOrder[cloudId] || [])) {
+      const f = pickFields(it, itemCols, { order_id: localId });
+      if (itemCols.includes('cloud_id') && it.id) f.cloud_id = it.id;
+      const cols = Object.keys(f);
+      const ph = cols.map((_, i) => `$${i + 1}`).join(',');
+      try {
+        await pool.query(`INSERT INTO order_items (${cols.join(',')}) VALUES (${ph})`, cols.map(c => f[c]));
+      } catch (err) { console.warn('[sync] closed-order item insert failed:', err.message); }
+    }
+
+    await pool.query('DELETE FROM payments WHERE order_id = $1', [localId]);
+    for (const p of (paysByCloudOrder[cloudId] || [])) {
+      const f = pickFields(p, payCols, { order_id: localId });
+      const cols = Object.keys(f);
+      const ph = cols.map((_, i) => `$${i + 1}`).join(',');
+      try {
+        await pool.query(`INSERT INTO payments (${cols.join(',')}) VALUES (${ph})`, cols.map(c => f[c]));
+      } catch (err) { console.warn('[sync] closed-order payment insert failed:', err.message); }
+    }
+  }
+}
+
 async function pullClosedOrders() {
   if (!offlineQueue.isLocal || !CLOUD_API_URL) return;
   if (!process.env.SYNC_SECRET) {
@@ -635,10 +718,13 @@ async function pullClosedOrders() {
     const { orders = [], order_items = [], payments = [], max_closed_at, has_more } = payload;
     if (orders.length === 0) break;
 
-    // Upsert in FK-friendly order: orders first (parents), then items + payments.
-    await upsertRows('orders',      'id', orders);
-    await upsertRows('order_items', 'id', order_items);
-    await upsertRows('payments',    'id', payments);
+    // SEPOS — match closed orders by cloud_id, NOT by primary-key id.
+    // The old `upsertRows('orders','id',…)` treated the cloud's id as
+    // the local id, but pullActiveOrders keys orders by cloud_id with a
+    // separate local id. An order pulled while open (by cloud_id) and
+    // then again once closed (by id) produced TWO local rows — the
+    // duplicate-bill bug. upsertClosedOrders uses cloud_id throughout.
+    await upsertClosedOrders(orders, order_items, payments);
     pulled += orders.length;
 
     since = max_closed_at;

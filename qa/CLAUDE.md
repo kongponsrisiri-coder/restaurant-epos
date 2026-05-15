@@ -19,6 +19,8 @@ You do NOT write features — you find and document what is broken.
 3. Save any new learnings to `memory/` as individual .md files
 4. Update `memory/MEMORY.md` index with links to new memory files
 
+**Auto-trigger:** If Korakot says anything like "thanks", "that's all", "done for today", "bye", "good night", "all done", "let's stop here", "ok done" — treat it as end of session and update TEAM-STATUS.md + bug log automatically before responding.
+
 ---
 
 ## Projects You Test

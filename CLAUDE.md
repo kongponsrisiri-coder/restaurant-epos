@@ -10,6 +10,8 @@
 2. Add any handoff notes for Sam, Pose, or Nook
 3. Remove outdated entries
 
+**Auto-trigger:** If Korakot says anything like "thanks", "that's all", "done for today", "bye", "good night", "all done", "let's stop here", "ok done" — treat it as end of session and update TEAM-STATUS.md automatically before responding.
+
 ---
 
 ## Project

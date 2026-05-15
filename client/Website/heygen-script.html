@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SiamEPOS — HeyGen AI Video Script</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root { --gold: #C9A84C; --navy: #0D1B3E; --white: #FDFAF4; --light: #f4f0e8; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Sarabun', sans-serif; background: var(--white); color: #2a2a2a; line-height: 1.7; }
+
+.cover { background: var(--navy); padding: 50px 40px; text-align: center; color: white; }
+.cover h1 { font-family: 'Cormorant Garamond', serif; font-size: 42px; color: var(--gold); margin-bottom: 6px; }
+.cover .sub { font-size: 13px; color: rgba(255,255,255,0.5); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 28px; }
+.cover .badges { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+.badge { background: rgba(255,255,255,0.08); border: 1px solid rgba(201,168,76,0.3); border-radius: 20px; padding: 6px 16px; font-size: 12px; color: rgba(255,255,255,0.7); }
+.badge strong { color: var(--gold); }
+
+.container { max-width: 900px; margin: 0 auto; padding: 50px 24px 80px; }
+
+h2 { font-family: 'Cormorant Garamond', serif; font-size: 26px; color: var(--navy); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--gold); }
+
+/* HOW TO USE */
+.how-to { background: var(--light); border-radius: 14px; padding: 24px 28px; margin-bottom: 48px; }
+.how-to h3 { font-family: 'Cormorant Garamond', serif; font-size: 20px; color: var(--navy); margin-bottom: 14px; }
+.steps { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+.step { display: flex; gap: 10px; align-items: flex-start; }
+.step-num { background: var(--navy); color: var(--gold); width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
+.step p { font-size: 13px; color: #444; }
+
+/* SCENE CARD */
+.scene { border: 1.5px solid #e0dcd2; border-radius: 14px; overflow: hidden; background: white; margin-bottom: 20px; }
+.scene-header { background: var(--navy); padding: 12px 20px; display: flex; align-items: center; gap: 12px; }
+.scene-num { background: var(--gold); color: var(--navy); font-weight: 900; font-size: 12px; padding: 3px 10px; border-radius: 20px; }
+.scene-title { color: white; font-weight: 700; font-size: 15px; flex: 1; }
+.scene-dur { color: rgba(255,255,255,0.5); font-size: 12px; }
+.scene-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.scene-col { padding: 18px 20px; }
+.scene-col:first-child { border-right: 1px solid #f0ece4; }
+.col-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #aaa; font-weight: 700; margin-bottom: 8px; }
+
+/* Script text */
+.script-text { font-size: 16px; color: #1a1a1a; line-height: 1.7; font-style: italic; }
+.script-text::before { content: '"'; }
+.script-text::after { content: '"'; }
+
+/* HeyGen fields */
+.hg-field { margin-bottom: 12px; }
+.hg-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #bbb; font-weight: 700; margin-bottom: 3px; }
+.hg-value { font-size: 13px; color: #333; background: #faf9f6; border: 1px solid #ece8df; border-radius: 6px; padding: 6px 10px; }
+.hg-value.highlight { background: rgba(201,168,76,0.1); border-color: rgba(201,168,76,0.3); color: var(--navy); font-weight: 600; }
+
+/* Tip box */
+.tip { background: rgba(201,168,76,0.08); border: 1px solid rgba(201,168,76,0.25); border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #555; }
+.tip strong { color: #b8860b; }
+
+/* Full script block */
+.full-script { background: var(--navy); border-radius: 14px; padding: 30px 36px; color: white; margin-top: 16px; }
+.full-script h3 { font-family: 'Cormorant Garamond', serif; font-size: 22px; color: var(--gold); margin-bottom: 20px; }
+.full-script p { font-size: 16px; line-height: 2; color: rgba(255,255,255,0.85); }
+.full-script .pause { color: rgba(201,168,76,0.5); font-size: 12px; font-weight: 700; letter-spacing: 1px; display: block; margin: 4px 0; }
+
+/* Avatar rec */
+.avatar-box { background: var(--light); border-radius: 14px; padding: 24px 28px; margin-bottom: 24px; }
+.avatar-box h3 { font-family: 'Cormorant Garamond', serif; font-size: 20px; color: var(--navy); margin-bottom: 14px; }
+.avatar-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.avatar-opt { border: 1.5px solid #e0dcd2; border-radius: 10px; padding: 14px 16px; background: white; }
+.avatar-opt.rec { border-color: var(--gold); background: rgba(201,168,76,0.05); }
+.avatar-opt h4 { font-size: 13px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+.avatar-opt p { font-size: 12px; color: #666; }
+.rec-tag { font-size: 10px; background: var(--gold); color: var(--navy); font-weight: 700; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
+
+footer { background: var(--navy); text-align: center; padding: 24px; font-size: 12px; color: rgba(255,255,255,0.35); margin-top: 40px; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>SiamEPOS HeyGen Script</h1>
+  <p class="sub">AI Video Production Guide</p>
+  <div class="badges">
+    <span class="badge"><strong>Platform:</strong> HeyGen</span>
+    <span class="badge"><strong>Duration:</strong> ~90 seconds</span>
+    <span class="badge"><strong>Scenes:</strong> 8</span>
+    <span class="badge"><strong>Language:</strong> English (TH version too)</span>
+    <span class="badge"><strong>Format:</strong> 16:9 landscape + 9:16 portrait</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- HOW TO USE -->
+  <div class="how-to">
+    <h3>🎬 How to Use This in HeyGen</h3>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><p><strong>Create a new video</strong> in HeyGen → choose "AI Avatar" → pick your avatar (recommendations below)</p></div>
+      <div class="step"><div class="step-num">2</div><p><strong>Add 8 scenes</strong> (one per row below). Paste the script text into each scene's script box.</p></div>
+      <div class="step"><div class="step-num">3</div><p><strong>Set the background</strong> for each scene using the instructions in the "HeyGen Setup" column.</p></div>
+      <div class="step"><div class="step-num">4</div><p><strong>Add text overlays</strong> as specified. Use HeyGen's text element tool — position top or bottom.</p></div>
+      <div class="step"><div class="step-num">5</div><p><strong>Preview → Generate</strong>. Download in 1080p. Done!</p></div>
+      <div class="step"><div class="step-num">6</div><p><strong>For Thai version:</strong> Duplicate the project, swap script to Thai text, choose a Thai-voice avatar.</p></div>
+    </div>
+  </div>
+
+  <!-- AVATAR RECOMMENDATIONS -->
+  <h2>Avatar Recommendations</h2>
+  <div class="avatar-box">
+    <div class="avatar-grid">
+      <div class="avatar-opt rec">
+        <h4>Aria (Professional) <span class="rec-tag">RECOMMENDED</span></h4>
+        <p>Smart, warm, Southeast Asian appearance. Perfect professional tone for a UK business audience. HeyGen library → search "Aria".</p>
+      </div>
+      <div class="avatar-opt rec">
+        <h4>Custom Avatar — Korakot <span class="rec-tag">BEST OPTION</span></h4>
+        <p>Record a 2-minute talking video of yourself → upload to HeyGen "Instant Avatar". Your own face = most authentic trust signal for Thai restaurant owners.</p>
+      </div>
+      <div class="avatar-opt">
+        <h4>Lena (Business)</h4>
+        <p>Professional female presenter, neutral accent. Good for the UK market. Clean, modern style.</p>
+      </div>
+      <div class="avatar-opt">
+        <h4>Daniel (Professional)</h4>
+        <p>Professional male presenter, UK-style. Confident tone. Good for B2B pitch.</p>
+      </div>
+    </div>
+    <p style="font-size:12px; color:#888; margin-top:14px;">💡 Tip: HeyGen → Avatar Library → filter by "Professional" and preview a few with your script. The right voice matters more than the face.</p>
+  </div>
+
+  <div class="tip">
+    <strong>🎙️ Voice tip:</strong> In HeyGen, after selecting your avatar, click "Voice" and try different accents. For this video, a <strong>British English</strong> or <strong>neutral accent</strong> works best. Avoid strong American accents — your audience is in the UK.
+  </div>
+
+  <!-- SCENES -->
+  <h2>Scene-by-Scene Script</h2>
+
+  <!-- SCENE 1 -->
+  <div class="scene">
+    <div class="scene-header">
+      <span class="scene-num">Scene 1</span>
+      <span class="scene-title">The Problem — Four Apps</span>
+      <span class="scene-dur">0–12s · ~10 seconds</span>
+    </div>
+    <div class="scene-body">
+      <div class="scene-col">
+        <div class="col-label">Avatar Script — Paste This into HeyGen</div>
+        <p class="script-text">Running a Thai restaurant in the UK means juggling four different systems. Your EPOS. Your booking app. Your invoices. Your menu. All separate. All expensive. And none of them speak Thai.</p>
+      </div>
+      <div class="scene-col">
+        <div class="col-label">HeyGen Setup</div>
+        <div class="hg-field">
+          <div class="hg-label">Background</div>
+          <div class="hg-value">Upload a screenshot of 4 different app logos on a dark background (or use HeyGen's built-in dark gradient). Alternatively: a busy restaurant counter photo.</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Text Overlay</div>
+          <div class="hg-value highlight">❌ 4 Systems. 4 Problems.</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Avatar Position</div>
+          <div class="hg-value">Bottom-right circle (talking head bubble). Size: medium.</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Avatar Emotion</div>
+          <div class="hg-value">Empathetic / slightly serious</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENE 2 -->
+  <div class="scene">
+    <div class="scene-header">
+      <span class="scene-num">Scene 2</span>
+      <span class="scene-title">The Solution — SiamEPOS Reveal</span>
+      <span class="scene-dur">12–22s · ~10 seconds</span>
+    </div>
+    <div class="scene-body">
+      <div class="scene-col">
+        <div class="col-label">Avatar Script — Paste This into HeyGen</div>
+        <p class="script-text">Introducing SiamEPOS. The first cloud restaurant management system built specifically for Thai restaurants in the UK. Everything you need. In one place. In English and Thai.</p>
+      </div>
+      <div class="scene-col">
+        <div class="col-label">HeyGen Setup</div>
+        <div class="hg-field">
+          <div class="hg-label">Background</div>
+          <div class="hg-value">Navy blue solid colour (#0D1B3E) — or upload the SiamEPOS logo on navy background. This is the "brand moment" scene.</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Text Overlay</div>
+          <div class="hg-value highlight">SiamEPOS — Built for Thai Restaurants 🍜</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Avatar Position</div>
+          <div class="hg-value">Centre — full presenter view. This is the big reveal moment.</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Avatar Emotion</div>
+          <div class="hg-value">Confident, warm, slight smile</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENE 3 -->
+  <div class="scene">
+    <div class="scene-header">
+      <span class="scene-num">Scene 3</span>
+      <span class="scene-title">Feature 1 — Online Reservations</span>
+      <span class="scene-dur">22–35s · ~13 seconds</span>
+    </div>
+    <div class="scene-body">
+      <div class="scene-col">
+        <div class="col-label">Avatar Script — Paste This into HeyGen</div>
+        <p class="script-text">Take online reservations directly through your own website. No Resdiary. No OpenTable. No commission fees. Customers book — and 100% of that money stays with your restaurant.</p>
+      </div>
+      <div class="scene-col">
+        <div class="col-label">HeyGen Setup</div>
+        <div class="hg-field">
+          <div class="hg-label">Background</div>
+          <div class="hg-value">Screenshot of the SiamEPOS booking widget on the Baan Siam demo site (www.siamepos.net). Or record a screen recording and upload as video background.</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Text Overlay</div>
+          <div class="hg-value highlight">📅 Online Bookings — 0% Commission</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Avatar Position</div>
+          <div class="hg-value">Left side bubble — so the booking widget shows on the right.</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Avatar Emotion</div>
+          <div class="hg-value">Enthusiastic, leaning forward</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENE 4 -->
+  <div class="scene">
+    <div class="scene-header">
+      <span class="scene-num">Scene 4</span>
+      <span class="scene-title">Feature 2 — Table Map & Kitchen Display</span>
+      <span class="scene-dur">35–48s · ~13 seconds</span>
+    </div>
+    <div class="scene-body">
+      <div class="scene-col">
+        <div class="col-label">Avatar Script — Paste This into HeyGen</div>
+        <p class="script-text">Manage your floor with a live table map — see every table's status at a glance. Take orders on any device. And send them instantly to the kitchen display. No shouting. No paper tickets. No mistakes.</p>
+      </div>
+      <div class="scene-col">
+        <div class="col-label">HeyGen Setup</div>
+        <div class="hg-field">
+          <div class="hg-label">Background</div>
+          <div class="hg-value">Screenshot of the SiamEPOS table map from the live app (app.siamepos.co.uk). Colourful table tiles look great as a background.</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Text Overlay</div>
+          <div class="hg-value highlight">🗺️ Live Floor Map · Kitchen Display System</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Avatar Position</div>
+          <div class="hg-value">Bottom-right bubble</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Avatar Emotion</div>
+          <div class="hg-value">Confident, friendly</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENE 5 -->
+  <div class="scene">
+    <div class="scene-header">
+      <span class="scene-num">Scene 5</span>
+      <span class="scene-title">Feature 3 — Takeaway & AI Invoice</span>
+      <span class="scene-dur">48–63s · ~15 seconds</span>
+    </div>
+    <div class="scene-body">
+      <div class="scene-col">
+        <div class="col-label">Avatar Script — Paste This into HeyGen</div>
+        <p class="script-text">Offer online takeaway ordering — directly from your website — and keep every penny. No Deliveroo. No Uber Eats fees. And our AI invoice scanner automatically tracks your food costs, so you always know your profit margin.</p>
+      </div>
+      <div class="scene-col">
+        <div class="col-label">HeyGen Setup</div>
+        <div class="hg-field">
+          <div class="hg-label">Background</div>
+          <div class="hg-value">Split: left = screenshot of takeaway widget, right = screenshot of the food cost chart in Admin. Or use a solid navy background and let text do the work.</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Text Overlay (two lines)</div>
+          <div class="hg-value highlight">🥡 Online Takeaway — Keep 100%<br>🤖 AI Food Cost Tracking</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Avatar Position</div>
+          <div class="hg-value">Centre or left bubble</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Avatar Emotion</div>
+          <div class="hg-value">Enthusiastic — this is a big money-saving moment</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENE 6 -->
+  <div class="scene">
+    <div class="scene-header">
+      <span class="scene-num">Scene 6</span>
+      <span class="scene-title">Trust — Thai Support, Offline, Any Device</span>
+      <span class="scene-dur">63–75s · ~12 seconds</span>
+    </div>
+    <div class="scene-body">
+      <div class="scene-col">
+        <div class="col-label">Avatar Script — Paste This into HeyGen</div>
+        <p class="script-text">And because we're Thai-owned, our support team speaks Thai — by WhatsApp, in your language. SiamEPOS works offline, stays GDPR compliant, and runs on any device you already own. Mac, Windows, iPad, iPhone — whatever you have.</p>
+      </div>
+      <div class="scene-col">
+        <div class="col-label">HeyGen Setup</div>
+        <div class="hg-field">
+          <div class="hg-label">Background</div>
+          <div class="hg-value">List-style graphic (create in Canva): 4 rows with tick marks — "Thai-speaking support ✓", "Works offline ✓", "UK GDPR compliant ✓", "Any device ✓". Upload as image background.</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Text Overlay</div>
+          <div class="hg-value highlight">✅ Support in Thai · English · Any Device</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Avatar Position</div>
+          <div class="hg-value">Right side — checklist visible on left</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Avatar Emotion</div>
+          <div class="hg-value">Warm, reassuring — like talking to a friend</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENE 7 -->
+  <div class="scene">
+    <div class="scene-header">
+      <span class="scene-num">Scene 7</span>
+      <span class="scene-title">Price</span>
+      <span class="scene-dur">75–82s · ~7 seconds</span>
+    </div>
+    <div class="scene-body">
+      <div class="scene-col">
+        <div class="col-label">Avatar Script — Paste This into HeyGen</div>
+        <p class="script-text">All of this — for just £89 a month. All features included. No setup fee. Cancel any time.</p>
+      </div>
+      <div class="scene-col">
+        <div class="col-label">HeyGen Setup</div>
+        <div class="hg-field">
+          <div class="hg-label">Background</div>
+          <div class="hg-value">Dark green or navy. Simple and bold — let the price be the hero. Create a simple "£89/month" graphic in Canva with gold text on navy, upload as background.</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Text Overlay</div>
+          <div class="hg-value highlight">£89 / month — Everything Included</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Avatar Position</div>
+          <div class="hg-value">Left bubble</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Avatar Emotion</div>
+          <div class="hg-value">Confident, slight nod</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENE 8 -->
+  <div class="scene">
+    <div class="scene-header">
+      <span class="scene-num">Scene 8</span>
+      <span class="scene-title">Call to Action</span>
+      <span class="scene-dur">82–90s · ~8 seconds</span>
+    </div>
+    <div class="scene-body">
+      <div class="scene-col">
+        <div class="col-label">Avatar Script — Paste This into HeyGen</div>
+        <p class="script-text">SiamEPOS — built by Thai people, for Thai restaurants in the UK. Book your free demo today at siamepos.co.uk — I'll see you there.</p>
+      </div>
+      <div class="scene-col">
+        <div class="col-label">HeyGen Setup</div>
+        <div class="hg-field">
+          <div class="hg-label">Background</div>
+          <div class="hg-value">Navy with SiamEPOS logo. Use the website-design.html OG image style — gold on navy. This frame = your video thumbnail.</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Text Overlay</div>
+          <div class="hg-value highlight">📲 Book Free Demo → siamepos.co.uk</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Avatar Position</div>
+          <div class="hg-value">Centre — full presenter. End with a wave or nod if the avatar supports gesture.</div>
+        </div>
+        <div class="hg-field">
+          <div class="hg-label">Avatar Emotion</div>
+          <div class="hg-value">Warm smile, inviting. End on a high note.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FULL SCRIPT TO COPY -->
+  <h2 style="margin-top:40px;">Complete Script — Copy & Paste into HeyGen</h2>
+  <p style="font-size:13px; color:#888; margin-bottom:16px;">Paste each section into the matching scene in HeyGen. The [PAUSE] markers are reminders to split scenes — delete them before pasting.</p>
+
+  <div class="full-script">
+    <h3>SiamEPOS — AI Video Script (90 seconds)</h3>
+    <p>
+      Running a Thai restaurant in the UK means juggling four different systems. Your EPOS. Your booking app. Your invoices. Your menu. All separate. All expensive. And none of them speak Thai.
+      <span class="pause">— [Scene 2] —</span>
+      Introducing SiamEPOS. The first cloud restaurant management system built specifically for Thai restaurants in the UK. Everything you need. In one place. In English and Thai.
+      <span class="pause">— [Scene 3] —</span>
+      Take online reservations directly through your own website. No Resdiary. No OpenTable. No commission fees. Customers book — and 100% of that money stays with your restaurant.
+      <span class="pause">— [Scene 4] —</span>
+      Manage your floor with a live table map — see every table's status at a glance. Take orders on any device. And send them instantly to the kitchen display. No shouting. No paper tickets. No mistakes.
+      <span class="pause">— [Scene 5] —</span>
+      Offer online takeaway ordering — directly from your website — and keep every penny. No Deliveroo. No Uber Eats fees. And our AI invoice scanner automatically tracks your food costs, so you always know your profit margin.
+      <span class="pause">— [Scene 6] —</span>
+      And because we're Thai-owned, our support team speaks Thai — by WhatsApp, in your language. SiamEPOS works offline, stays GDPR compliant, and runs on any device you already own. Mac, Windows, iPad, iPhone — whatever you have.
+      <span class="pause">— [Scene 7] —</span>
+      All of this — for just £89 a month. All features included. No setup fee. Cancel any time.
+      <span class="pause">— [Scene 8] —</span>
+      SiamEPOS — built by Thai people, for Thai restaurants in the UK. Book your free demo today at siamepos.co.uk — I'll see you there.
+    </p>
+  </div>
+
+  <!-- THAI VERSION NOTE -->
+  <div class="tip" style="margin-top:20px;">
+    <strong>🇹🇭 Thai Version:</strong> Once you're happy with the English video, duplicate the HeyGen project → swap to a Thai-voice avatar → paste the Thai translation below into each scene. Target Thai restaurant owners who prefer Thai content on Facebook Thailand groups.
+  </div>
+
+  <div class="full-script" style="margin-top:8px;">
+    <h3>สคริปต์ภาษาไทย (Thai Script)</h3>
+    <p>
+      การบริหารร้านอาหารไทยในอังกฤษ ต้องจัดการกับแอปสี่ตัวพร้อมกัน ระบบแคชเชียร์ ระบบจองโต๊ะ ใบแจ้งหนี้ และเมนู แยกกันหมด แพงทุกตัว และไม่มีตัวไหนที่ใช้ภาษาไทยได้เลย
+      <span class="pause">— [ฉาก 2] —</span>
+      ขอแนะนำ SiamEPOS ระบบบริหารร้านอาหารบนคลาวด์ที่ออกแบบมาสำหรับร้านอาหารไทยในอังกฤษโดยเฉพาะ ทุกอย่างในที่เดียว ทั้งภาษาอังกฤษและภาษาไทย
+      <span class="pause">— [ฉาก 3] —</span>
+      รับการจองโต๊ะผ่านเว็บไซต์ร้านคุณโดยตรง ไม่ต้องผ่านใคร ไม่เสียค่าคอมมิชชัน เงินทุกบาทเป็นของร้านคุณ
+      <span class="pause">— [ฉาก 4] —</span>
+      จัดการพื้นที่ร้านด้วยแผนผังโต๊ะแบบเรียลไทม์ รับออร์เดอร์บนอุปกรณ์ไหนก็ได้ และส่งตรงไปยังหน้าจอครัวทันที ไม่ต้องตะโกน ไม่ต้องใช้กระดาษ
+      <span class="pause">— [ฉาก 5] —</span>
+      รับออร์เดอร์เดลิเวอรีผ่านเว็บไซต์ร้านเลย ไม่ต้องผ่าน Deliveroo ไม่เสียค่าธรรมเนียม และระบบ AI สแกนใบแจ้งหนี้อัตโนมัติ ให้คุณรู้กำไรได้ทุกวัน
+      <span class="pause">— [ฉาก 6] —</span>
+      ทีมซัพพอร์ตของเราพูดภาษาไทย ติดต่อได้ทาง WhatsApp ระบบทำงานได้แม้ไม่มีอินเตอร์เน็ต รองรับ GDPR และใช้ได้บนทุกอุปกรณ์ที่คุณมีอยู่แล้ว
+      <span class="pause">— [ฉาก 7] —</span>
+      ทั้งหมดนี้ในราคาเพียง £89 ต่อเดือน ครบทุกฟีเจอร์ ไม่มีค่าติดตั้ง ยกเลิกได้ทุกเมื่อ
+      <span class="pause">— [ฉาก 8] —</span>
+      SiamEPOS สร้างโดยคนไทย เพื่อร้านอาหารไทยในอังกฤษ จองเดโมฟรีวันนี้ที่ siamepos.co.uk แล้วพบกัน
+    </p>
+  </div>
+
+</div>
+
+<footer>SiamEPOS HeyGen Video Script · May 2026 · info@siamepos.co.uk</footer>
+
+</body>
+</html>

@@ -54,6 +54,9 @@ const post = (path, body) => api('POST',   path, body);
 const put  = (path, body) => api('PUT',    path, body);
 const del  = (path)       => api('DELETE', path);
 
+// Unique ID per test run — avoids stale data from previous runs
+const RUN_ID = `test-order-${Date.now()}`;
+
 // Track IDs for cleanup
 const cleanup = { ingredients: [], recipes: [] };
 
@@ -322,9 +325,9 @@ async function testBlock4(ids) {
   // Pad Thai uses: Chicken 0.15 kg, Rice 0.10 kg, Fish Sauce 0.02 L
   // Simulate 2× Pad Thai sale
   const deductions = [
-    { ingredient_id: ids['__TEST__ Chicken Breast'], quantity: -(0.15 * 2), movement_type: 'sale', cost_at_time: 4.80, note: 'Test sale: 2× Pad Thai', reference: 'test-order-001' },
-    { ingredient_id: ids['__TEST__ Jasmine Rice'],   quantity: -(0.10 * 2), movement_type: 'sale', cost_at_time: 1.20, note: 'Test sale: 2× Pad Thai', reference: 'test-order-001' },
-    { ingredient_id: ids['__TEST__ Fish Sauce'],     quantity: -(0.02 * 2), movement_type: 'sale', cost_at_time: 3.10, note: 'Test sale: 2× Pad Thai', reference: 'test-order-001' },
+    { ingredient_id: ids['__TEST__ Chicken Breast'], quantity: -(0.15 * 2), movement_type: 'sale', cost_at_time: 4.80, note: 'Test sale: 2× Pad Thai', reference: RUN_ID },
+    { ingredient_id: ids['__TEST__ Jasmine Rice'],   quantity: -(0.10 * 2), movement_type: 'sale', cost_at_time: 1.20, note: 'Test sale: 2× Pad Thai', reference: RUN_ID },
+    { ingredient_id: ids['__TEST__ Fish Sauce'],     quantity: -(0.02 * 2), movement_type: 'sale', cost_at_time: 3.10, note: 'Test sale: 2× Pad Thai', reference: RUN_ID },
   ];
 
   for (const d of deductions) {
@@ -368,7 +371,7 @@ async function testBlock4(ids) {
 
   // Stock log has sale entries
   const { data: movements } = await get('/api/stock/movements');
-  const saleMoves = movements.filter(m => m.reference === 'test-order-001');
+  const saleMoves = movements.filter(m => m.reference === RUN_ID);
   check('3 stock movement entries logged for test sale', saleMoves.length, 3);
 }
 

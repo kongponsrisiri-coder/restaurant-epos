@@ -49,7 +49,15 @@ try {
 app.get('/api/tables', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM tables ORDER BY table_number');
-    res.json(result.rows);
+    // BUG-003 — tables created via the Table Plan editor never get a
+    // `name` set, so the column is NULL and clients rendered "null".
+    // Fall back to "Table {number}" so the API always returns a usable
+    // display name.
+    const rows = result.rows.map(t => ({
+      ...t,
+      name: (t.name && String(t.name).trim()) ? t.name : `Table ${t.table_number}`,
+    }));
+    res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -428,6 +436,14 @@ app.post('/api/orders/:id/items', async (req, res) => {
     await client.query('BEGIN');
     const { items } = req.body;
     const orderId = req.params.id;
+    // BUG-001 — adding items to a non-existent order used to throw a
+    // raw FK violation → 500. Check the order exists first and return
+    // a clean 404.
+    const orderCheck = await client.query('SELECT id FROM orders WHERE id = $1', [orderId]);
+    if (orderCheck.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Order not found' });
+    }
     const firedBarIds = []; // SEPOS-032: bar items deplete stock on add
     const queuedItems = [];  // SEPOS-PRO-002: paired with local row id for cloud_id mapping
     for (const item of items) {
@@ -593,7 +609,14 @@ app.post('/api/orders/:id/pay', async (req, res) => {
   try {
     const { amount, method } = req.body;
     const orderId = req.params.id;
-    await pool.query('INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3)', [orderId, amount, method]);
+    // BUG-002 — reject non-positive / non-numeric payment amounts.
+    // A negative amount used to record with 200 OK, which is a way to
+    // quietly reduce takings.
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt <= 0) {
+      return res.status(400).json({ error: 'Payment amount must be a positive number' });
+    }
+    await pool.query('INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3)', [orderId, amt, method]);
     await pool.query("UPDATE orders SET status='closed', closed_at=NOW() WHERE id=$1", [orderId]);
     const orderRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [orderId]);
     const tableId = orderRes.rows[0]?.table_id;
@@ -1402,6 +1425,12 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
     if (!customer_phone?.trim()) return res.status(400).json({ error: 'Phone number is required' });
     if (!reservation_date) return res.status(400).json({ error: 'Date is required' });
     if (!reservation_time) return res.status(400).json({ error: 'Time is required' });
+    // BUG-004 — reject bookings for a date already in the past.
+    // reservation_date arrives as 'YYYY-MM-DD'; lexical compare against
+    // today works for that format. Same-day bookings are allowed.
+    if (String(reservation_date).slice(0, 10) < new Date().toISOString().slice(0, 10)) {
+      return res.status(400).json({ error: 'Reservation date cannot be in the past' });
+    }
     const coversNum = parseInt(covers, 10);
     if (!coversNum || coversNum < 1) return res.status(400).json({ error: 'Covers must be at least 1' });
     const slotCheck = await pool.query(`SELECT COALESCE(SUM(covers), 0) AS booked FROM reservations WHERE reservation_date = $1 AND TO_CHAR(reservation_time, 'HH24:MI') = $2 AND restaurant_id = $3 AND status NOT IN ('cancelled','no-show')`, [reservation_date, reservation_time.slice(0, 5), restaurant_id]);
@@ -1436,6 +1465,11 @@ app.put('/api/reservations/:id', async (req, res) => {
   try {
     const { customer_name, customer_phone, customer_email, covers, reservation_date, reservation_time, table_id, notes, status } = req.body;
     const result = await pool.query(`UPDATE reservations SET customer_name=$1, customer_phone=$2, customer_email=$3, covers=$4, reservation_date=$5, reservation_time=$6, table_id=$7, notes=$8, status=$9, updated_at=NOW() WHERE id=$10 RETURNING *`, [customer_name, customer_phone, customer_email || null, covers, reservation_date, reservation_time, table_id || null, notes || null, status, req.params.id]);
+    // BUG-005 — a PUT for a non-existent reservation used to UPDATE 0
+    // rows and still return 200 with an empty body (silent no-op).
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
     io.emit('reservation_updated', result.rows[0]);
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }

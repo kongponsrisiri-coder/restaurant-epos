@@ -10,8 +10,6 @@
 
 | Agent | Working On | Ticket | Started |
 |-------|-----------|--------|---------|
-| Nook | Inventory E2E test plan — invoice scan, recipes, price alerts, stock depletion | QA-INV-01 | 2026-05-15 |
-| Krit | SEPOS-046 fix — POST /api/supplier-invoices now processes line_items (stock update, cost update, auto-create, price_changes) | SEPOS-046 | 2026-05-15 |
 
 ---
 
@@ -23,6 +21,8 @@
 | 2026-05-14 | Krit | Bidirectional active-order sync, realtime cloud→Mac relay, kitchen direct mode, timezone fix, Pass tab cross-browser fix | SEPOS-PRO-002, PRO-003 |
 | 2026-05-14 | Pose | Finance page built (Starling Bank API integration, P&L, AI summary) | Back Office |
 | 2026-05-14 | Claude | Back Office CLAUDE.md, Spa CLAUDE.md (Sam), QA CLAUDE.md (Nook), Agent Guide updated | Setup |
+| 2026-05-15 | Krit + Nook | SEPOS-046 — Invoice scanner now processes line_items: stock update, cost update, price change detection, auto-create new ingredients. 52/53 tests passed. | SEPOS-046 |
+| 2026-05-15 | Krit + Nook | SEPOS-043 — Role-based access. Backend 23/23 tests passed. Supervisor blocked from closed bill delete. Admin/Manager unaffected. 3 manual frontend checks remain. | SEPOS-043 |
 | 2026-05-15 | Claude | Created TEAM-STATUS.md shared board, CLAUDE.md files for all 10 agents (Krit, Sam, Pose, Nook, Sandy, Kai, Maya, Nick, Nong + Krit-Cowork), auto-trigger end-of-session phrases added to all files | Team Infrastructure |
 
 ---
@@ -36,7 +36,7 @@
 | 2026-05-14 | Claude | Sam | Spa CLAUDE.md is saved at ~/Documents/Claude/Projects/SiamEpos/CLAUDE-Sam.md — copy to ~/Desktop/restaurant-epos/spa-epos/CLAUDE.md once you create that folder |
 | 2026-05-14 | Claude | Krit | Anthropic API key was revoked 2026-05-14 — update Railway env var ANTHROPIC_API_KEY as soon as Korakot rotates it |
 | 2026-05-14 | Claude | Krit | Next priority: SEPOS-043 role-based access hierarchy (supervisor cannot delete closed bills, waiters blocked from Admin tab) |
-| 2026-05-15 | Krit | Nook | SEPOS-046 fix deployed — POST /api/supplier-invoices now processes line_items. Ready for your 4-block test plan from NOOK-INVENTORY-TEST-PLAN.md. Ping back with results. |
+| 2026-05-15 | Krit | Nook | SEPOS-043 built and committed (7bd92cf). Ready to QA. Three files changed: src/server.js (2 backend guards), src/services/syncService.js (staff_role in sync payload), client/src/screens/admin/BillsSection.jsx (unlockedRole state + hide button for supervisor). Korakot needs to git push to trigger Railway + Netlify deploy. |
 
 ---
 
@@ -44,8 +44,7 @@
 
 | # | Ticket | Description | Assigned |
 |---|--------|-------------|----------|
-| 1 | SEPOS-046 | 🐛 BUG FIX — Invoice scanner: process line_items in POST /api/supplier-invoices (update stock, cost_per_unit, auto-create ingredients, return created/updated/price_changes). Blocks Nook QA. | Krit |
-| 2 | SEPOS-043 | Role-based access hierarchy (supervisor/waiter/kitchen restrictions) | Krit |
+| 1 | SEPOS-043 | Role-based access hierarchy (supervisor/waiter/kitchen restrictions) | Krit |
 | 2 | SEPOS-025 | Receipt printer (ESC/POS, needs Epson/Star device) | Krit |
 | 3 | SEPOS-026 | Kitchen printer | Krit |
 | 4 | SEPOS-027 | Reservations + walk-in SMS (needs Twilio) | Krit |

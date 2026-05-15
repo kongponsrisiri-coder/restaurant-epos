@@ -609,6 +609,10 @@ app.post('/api/orders/:id/pay', async (req, res) => {
   try {
     const { amount, method } = req.body;
     const orderId = req.params.id;
+    // BUG-006 — return 404 if the order does not exist, instead of letting
+    // the INSERT blow up with a FK violation and returning a raw 500.
+    const existing = await pool.query('SELECT id FROM orders WHERE id=$1', [orderId]);
+    if (!existing.rows[0]) return res.status(404).json({ error: 'Order not found' });
     // BUG-002 — reject non-positive / non-numeric payment amounts.
     // A negative amount used to record with 200 OK, which is a way to
     // quietly reduce takings.

@@ -1681,11 +1681,87 @@ app.delete('/api/expenses/:id', async (req, res) => {
 });
 
 app.post('/api/supplier-invoices', async (req, res) => {
+  const client = await pool.connect();
   try {
-    const { supplier_name, invoice_date, invoice_number, total_amount, status } = req.body;
-    const result = await pool.query(`INSERT INTO supplier_invoices (supplier_name, invoice_date, invoice_number, total_amount, status) VALUES ($1,$2,$3,$4,$5) RETURNING id`, [supplier_name, invoice_date, invoice_number, parseFloat(total_amount) || 0, status || 'processed']);
-    res.json({ id: result.rows[0].id, success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const { supplier_name, invoice_date, invoice_number, total_amount, status, line_items } = req.body;
+
+    // 1. Save the invoice header
+    const invoiceResult = await client.query(
+      `INSERT INTO supplier_invoices (supplier_name, invoice_date, invoice_number, total_amount, status)
+       VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      [supplier_name, invoice_date, invoice_number, parseFloat(total_amount) || 0, status || 'processed']
+    );
+    const invoiceId = invoiceResult.rows[0].id;
+
+    const created = [];
+    const updated = [];
+    const price_changes = [];
+
+    // 2. Process each line item
+    for (const item of (line_items || [])) {
+      const qty       = parseFloat(item.quantity)   || 0;
+      const unitPrice = parseFloat(item.unit_price) || 0;
+      if (qty <= 0) continue;
+
+      if (item.matched_ingredient_id) {
+        // Matched to an existing ingredient
+        const ingRes = await client.query(
+          `SELECT id, name_en, cost_per_unit FROM ingredients WHERE id = $1`,
+          [item.matched_ingredient_id]
+        );
+        if (ingRes.rows.length === 0) continue;
+        const ing = ingRes.rows[0];
+        const oldCost = parseFloat(ing.cost_per_unit) || 0;
+
+        await client.query(
+          `UPDATE ingredients
+           SET current_stock = current_stock + $1,
+               cost_per_unit = $2,
+               updated_at = NOW()
+           WHERE id = $3`,
+          [qty, unitPrice, ing.id]
+        );
+
+        await client.query(
+          `INSERT INTO stock_movements (ingredient_id, movement_type, quantity, cost_at_time, note, reference)
+           VALUES ($1, 'delivery', $2, $3, $4, $5)`,
+          [ing.id, qty, unitPrice, `Invoice ${invoice_number || ''}`, `invoice:${invoiceId}`]
+        );
+
+        updated.push(ing.name_en);
+
+        if (Math.abs(unitPrice - oldCost) > 0.001) {
+          price_changes.push({ name: ing.name_en, old_cost: oldCost, new_cost: unitPrice });
+        }
+
+      } else {
+        // No match — auto-create a new ingredient
+        const newName = item.name_extracted || item.name || 'Unknown Item';
+        const newIng = await client.query(
+          `INSERT INTO ingredients (name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, supplier_name, updated_at)
+           VALUES ($1, '', $2, $3, 100, 'Other', $4, $5, NOW())
+           RETURNING id, name_en`,
+          [newName, item.unit || 'unit', unitPrice, qty, supplier_name || '']
+        );
+
+        await client.query(
+          `INSERT INTO stock_movements (ingredient_id, movement_type, quantity, cost_at_time, note, reference)
+           VALUES ($1, 'delivery', $2, $3, $4, $5)`,
+          [newIng.rows[0].id, qty, unitPrice, `Invoice ${invoice_number || ''} (auto-created)`, `invoice:${invoiceId}`]
+        );
+
+        created.push(newName);
+      }
+    }
+
+    // 3. Return everything the frontend needs for the done screen
+    res.json({ id: invoiceId, success: true, created, updated, price_changes });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
 });
 
 app.get('/api/supplier-invoices', async (req, res) => {

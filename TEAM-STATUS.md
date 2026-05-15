@@ -10,7 +10,8 @@
 
 | Agent | Working On | Ticket | Started |
 |-------|-----------|--------|---------|
-| — | — | — | — |
+| Nook | Inventory E2E test plan — invoice scan, recipes, price alerts, stock depletion | QA-INV-01 | 2026-05-15 |
+| Krit | SEPOS-046 fix — POST /api/supplier-invoices now processes line_items (stock update, cost update, auto-create, price_changes) | SEPOS-046 | 2026-05-15 |
 
 ---
 
@@ -35,6 +36,7 @@
 | 2026-05-14 | Claude | Sam | Spa CLAUDE.md is saved at ~/Documents/Claude/Projects/SiamEpos/CLAUDE-Sam.md — copy to ~/Desktop/restaurant-epos/spa-epos/CLAUDE.md once you create that folder |
 | 2026-05-14 | Claude | Krit | Anthropic API key was revoked 2026-05-14 — update Railway env var ANTHROPIC_API_KEY as soon as Korakot rotates it |
 | 2026-05-14 | Claude | Krit | Next priority: SEPOS-043 role-based access hierarchy (supervisor cannot delete closed bills, waiters blocked from Admin tab) |
+| 2026-05-15 | Krit | Nook | SEPOS-046 fix deployed — POST /api/supplier-invoices now processes line_items. Ready for your 4-block test plan from NOOK-INVENTORY-TEST-PLAN.md. Ping back with results. |
 
 ---
 
@@ -42,7 +44,8 @@
 
 | # | Ticket | Description | Assigned |
 |---|--------|-------------|----------|
-| 1 | SEPOS-043 | Role-based access hierarchy (supervisor/waiter/kitchen restrictions) | Krit |
+| 1 | SEPOS-046 | 🐛 BUG FIX — Invoice scanner: process line_items in POST /api/supplier-invoices (update stock, cost_per_unit, auto-create ingredients, return created/updated/price_changes). Blocks Nook QA. | Krit |
+| 2 | SEPOS-043 | Role-based access hierarchy (supervisor/waiter/kitchen restrictions) | Krit |
 | 2 | SEPOS-025 | Receipt printer (ESC/POS, needs Epson/Star device) | Krit |
 | 3 | SEPOS-026 | Kitchen printer | Krit |
 | 4 | SEPOS-027 | Reservations + walk-in SMS (needs Twilio) | Krit |

@@ -252,6 +252,13 @@ client/src/screens/admin/inventory/CostSalesTab.jsx
   release.yml` handles publishing via `softprops/action-gh-release@v2`.
 
 ### Known limitations / future tickets
+- **SEPOS-046** — 🐛 BUG FIX (raised by Nook 2026-05-15): `POST /api/supplier-invoices`
+  ignores `line_items` entirely — stock and costs never update when an invoice
+  is confirmed. Fix: read `line_items` from req.body; for matched ingredients
+  UPDATE `current_stock += quantity` and `cost_per_unit = unit_price`, insert
+  `stock_movements` delivery row, detect price changes; for unmatched items
+  auto-create new ingredient; return `{created, updated, price_changes}` arrays.
+  Blocks Nook QA. Full spec: NOOK-INVENTORY-TEST-PLAN.md
 - SEPOS-021 HMRC submission — needs HMRC OAuth sandbox creds
 - SEPOS-025 — Receipt printer hardware (ESC/POS direct) — needs Epson/Star device
 - SEPOS-026 — Kitchen printer — same device dependency

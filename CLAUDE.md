@@ -1,5 +1,17 @@
 # SiamEPOS — Developer Context for Krit (Claude Code Agent)
 
+## ⚠️ START OF EVERY SESSION — DO THIS FIRST
+1. Read `TEAM-STATUS.md` — see what the whole team is working on
+2. Add yourself to the "Active Work" table if starting a ticket
+3. Then proceed with whatever Korakot asks
+
+## ⚠️ END OF EVERY SESSION — DO THIS BEFORE FINISHING
+1. Move your row to "Recently Completed" in `TEAM-STATUS.md`
+2. Add any handoff notes for Sam, Pose, or Nook
+3. Remove outdated entries
+
+---
+
 ## Project
 Cloud restaurant management system for Thai restaurants in the UK,
 shipping as a desktop installer (SiamEPOS Pro) on top of the

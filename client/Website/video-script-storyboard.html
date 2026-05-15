@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SiamEPOS — Company Video Script & Storyboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold: #C9A84C;
+  --navy: #0D1B3E;
+  --white: #FDFAF4;
+  --light: #f4f0e8;
+  --grey: #888;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Sarabun', sans-serif; background: var(--white); color: #2a2a2a; line-height: 1.7; }
+
+/* Cover */
+.cover {
+  background: var(--navy);
+  padding: 60px 40px;
+  text-align: center;
+  color: white;
+}
+.cover .logo-mark {
+  width: 64px; height: 64px; margin: 0 auto 24px;
+  display: block;
+}
+.cover h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 48px;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+.cover .subtitle {
+  font-size: 16px;
+  color: rgba(255,255,255,0.6);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 32px;
+}
+.cover .meta {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.5);
+}
+.cover .meta span { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.cover .meta strong { color: var(--gold); font-size: 16px; }
+
+/* Content */
+.container { max-width: 960px; margin: 0 auto; padding: 60px 24px; }
+
+h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 28px;
+  color: var(--navy);
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--gold);
+}
+
+/* Brief */
+.brief-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 48px;
+}
+.brief-card {
+  background: var(--light);
+  border-radius: 12px;
+  padding: 20px 24px;
+}
+.brief-card h4 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--grey);
+  margin-bottom: 8px;
+}
+.brief-card p { font-size: 15px; color: #333; }
+
+/* Act header */
+.act-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 48px 0 24px;
+}
+.act-badge {
+  background: var(--navy);
+  color: var(--gold);
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.act-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--navy);
+}
+.act-timing {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--grey);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Storyboard grid */
+.storyboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+.storyboard-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+.storyboard-grid.five { grid-template-columns: 1fr 1fr 1fr 1fr 1fr; }
+
+/* Shot card */
+.shot-card {
+  border: 1.5px solid #e0dcd2;
+  border-radius: 12px;
+  overflow: hidden;
+  background: white;
+}
+.shot-frame {
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: var(--navy);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.shot-frame .frame-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
+
+/* Frame visual styles */
+.frame-chaos { background: #1a1a2e; }
+.frame-chaos .chaos-app {
+  width: 38%; aspect-ratio: 3/2; border-radius: 4px; margin: 2px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: white; letter-spacing: 0.5px;
+}
+.frame-chaos .apps-row { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+.frame-chaos .chaos-app.red { background: #c0392b; }
+.frame-chaos .chaos-app.blue { background: #2980b9; }
+.frame-chaos .chaos-app.green { background: #27ae60; }
+.frame-chaos .chaos-app.purple { background: #8e44ad; }
+.frame-chaos .x-mark {
+  position: absolute; top: 6px; right: 6px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #e74c3c; color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 900;
+}
+
+.frame-thai { background: linear-gradient(135deg, #1a3a1a 0%, #0a1a0a 100%); }
+.frame-thai .thai-word { font-size: 22px; color: rgba(255,255,255,0.15); font-family: serif; }
+.frame-thai .no-thai { font-size: 11px; color: #e74c3c; font-weight: 700; margin-top: 6px; letter-spacing: 0.5px; }
+
+.frame-reveal { background: var(--navy); }
+.frame-reveal .siam-logo { font-family: 'Cormorant Garamond', serif; font-size: 20px; color: var(--gold); font-weight: 700; letter-spacing: 2px; }
+.frame-reveal .tagline { font-size: 9px; color: rgba(255,255,255,0.6); letter-spacing: 1.5px; margin-top: 4px; text-transform: uppercase; }
+.frame-reveal .glow { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(201,168,76,0.15) 0%, transparent 70%); }
+
+.frame-price { background: #0a2a0a; }
+.frame-price .price-tag { font-family: 'Cormorant Garamond', serif; font-size: 28px; color: #2ecc71; font-weight: 700; }
+.frame-price .price-sub { font-size: 10px; color: rgba(255,255,255,0.6); margin-top: 2px; letter-spacing: 1px; }
+.frame-price .per { font-size: 11px; color: var(--gold); }
+
+.frame-feature { background: #0d1b3e; }
+.frame-feature .feat-icon { font-size: 28px; margin-bottom: 6px; }
+.frame-feature .feat-label { font-size: 10px; color: var(--gold); font-weight: 700; letter-spacing: 1px; text-transform: uppercase; text-align: center; }
+
+.frame-trust { background: #1a1a2e; }
+.frame-trust .trust-row { display: flex; gap: 8px; align-items: center; margin: 3px 0; }
+.frame-trust .tick { color: #2ecc71; font-size: 12px; }
+.frame-trust .trust-text { font-size: 10px; color: rgba(255,255,255,0.8); }
+
+.frame-cta { background: var(--navy); overflow: hidden; }
+.frame-cta::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 30% 50%, rgba(201,168,76,0.2), transparent 60%); }
+.frame-cta .cta-text { font-family: 'Cormorant Garamond', serif; font-size: 15px; color: white; text-align: center; line-height: 1.4; z-index: 1; }
+.frame-cta .cta-url { font-size: 13px; color: var(--gold); font-weight: 700; margin-top: 6px; z-index: 1; letter-spacing: 1px; }
+.frame-cta .cta-btn { background: var(--gold); color: var(--navy); font-size: 9px; font-weight: 900; padding: 4px 12px; border-radius: 20px; margin-top: 6px; z-index: 1; letter-spacing: 1px; text-transform: uppercase; }
+
+/* Shot info */
+.shot-info { padding: 12px 14px; }
+.shot-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.shot-num { background: var(--light); color: var(--navy); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+.shot-time { font-size: 11px; color: var(--grey); }
+.shot-type { font-size: 11px; color: var(--gold); font-weight: 600; margin-left: auto; }
+.shot-vo { font-size: 13px; color: #333; line-height: 1.5; margin-bottom: 6px; font-style: italic; }
+.shot-vo::before { content: '"'; }
+.shot-vo::after { content: '"'; }
+.shot-dir { font-size: 11px; color: var(--grey); line-height: 1.4; }
+
+/* Script section */
+.script-block {
+  background: var(--light);
+  border-left: 4px solid var(--gold);
+  border-radius: 0 12px 12px 0;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+.script-block .script-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--gold);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.script-block p { font-size: 15px; color: #2a2a2a; line-height: 1.8; }
+
+/* Music bar */
+.music-bar {
+  background: var(--navy);
+  border-radius: 12px;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 24px 0;
+}
+.music-icon { font-size: 20px; }
+.music-info { flex: 1; }
+.music-info strong { color: var(--gold); font-size: 14px; }
+.music-info p { color: rgba(255,255,255,0.6); font-size: 12px; margin-top: 2px; }
+
+/* Timeline */
+.timeline {
+  display: flex;
+  background: var(--navy);
+  border-radius: 12px;
+  overflow: hidden;
+  height: 40px;
+  margin: 32px 0 48px;
+}
+.timeline-seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: white;
+  text-transform: uppercase;
+  border-right: 1px solid rgba(255,255,255,0.1);
+}
+.timeline-seg:last-child { border-right: none; }
+.tl-1 { width: 20%; background: #e74c3c; }
+.tl-2 { width: 20%; background: #e67e22; }
+.tl-3 { width: 30%; background: #27ae60; }
+.tl-4 { width: 13.3%; background: #2980b9; }
+.tl-5 { width: 16.7%; background: var(--gold); }
+
+/* Production notes */
+.notes-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+  margin: 24px 0;
+}
+.note-card {
+  background: var(--light);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+.note-card h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--grey); margin-bottom: 8px; }
+.note-card ul { list-style: none; }
+.note-card li { font-size: 13px; color: #333; padding: 3px 0; border-bottom: 1px solid #e8e4da; }
+.note-card li:last-child { border-bottom: none; }
+.note-card li::before { content: '→ '; color: var(--gold); font-weight: 700; }
+
+/* Divider */
+.divider { border: none; border-top: 1px solid #e0dcd2; margin: 48px 0; }
+
+/* Page break for print */
+@media print {
+  .act-header { break-before: page; }
+  .cover { break-after: page; }
+}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <svg class="logo-mark" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="50" cy="50" r="50" fill="#0D1B3E"/>
+    <circle cx="50" cy="50" r="45" fill="none" stroke="#C9A84C" stroke-width="1.8"/>
+    <g transform="translate(50,50)">
+      <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C"/>
+      <circle cx="0" cy="0" r="5" fill="#C9A84C"/>
+    </g>
+  </svg>
+  <h1>SiamEPOS</h1>
+  <p class="subtitle">Company Video — Script &amp; Storyboard</p>
+  <div class="meta">
+    <span><strong>90 sec</strong>Duration</span>
+    <span><strong>5 Acts</strong>Structure</span>
+    <span><strong>EN / TH</strong>Voiceover</span>
+    <span><strong>v1.0</strong>May 2026</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- BRIEF -->
+  <h2>Creative Brief</h2>
+  <div class="brief-grid">
+    <div class="brief-card">
+      <h4>Objective</h4>
+      <p>Convince Thai restaurant owners in the UK that SiamEPOS is the only EPOS built for them — and make booking a demo feel like the obvious next step.</p>
+    </div>
+    <div class="brief-card">
+      <h4>Target Audience</h4>
+      <p>Thai restaurant owners &amp; managers in the UK, aged 30–55, often bilingual. Currently using multiple disconnected apps or a generic EPOS with no Thai support.</p>
+    </div>
+    <div class="brief-card">
+      <h4>Tone</h4>
+      <p>Warm, confident, modern. Not salesy — more like a friend who found something brilliant and wants to share it. Proud of Thai culture.</p>
+    </div>
+    <div class="brief-card">
+      <h4>Distribution</h4>
+      <p>Facebook &amp; Instagram (paid + organic), YouTube pre-roll, siamepos.co.uk hero section, WhatsApp/Line outreach to prospects.</p>
+    </div>
+  </div>
+
+  <!-- VIDEO TIMELINE -->
+  <h2>Video Timeline</h2>
+  <div class="timeline">
+    <div class="timeline-seg tl-1">Act 1 · The Problem · 0–18s</div>
+    <div class="timeline-seg tl-2">Act 2 · Solution · 18–36s</div>
+    <div class="timeline-seg tl-3">Act 3 · Features · 36–63s</div>
+    <div class="timeline-seg tl-4">Act 4 · Trust · 63–75s</div>
+    <div class="timeline-seg tl-5">Act 5 · CTA · 75–90s</div>
+  </div>
+
+  <!-- MUSIC -->
+  <div class="music-bar">
+    <span class="music-icon">🎵</span>
+    <div class="music-info">
+      <strong>Music Direction</strong>
+      <p>Act 1: tense, low percussion (problem energy) → Act 2 downbeat: one clear piano note (the moment of discovery) → Acts 3–5: upbeat modern Thai-fusion, confident and warm. BPM ~110. Royalty-free recommendation: Artlist or Epidemic Sound, search "Thai fusion upbeat corporate".</p>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ===== ACT 1 ===== -->
+  <div class="act-header">
+    <span class="act-badge">ACT 1</span>
+    <span class="act-title">The Problem</span>
+    <span class="act-timing">0 – 18 sec</span>
+  </div>
+
+  <div class="script-block">
+    <p class="script-label">Voiceover (Thai accent, English)</p>
+    <p>"Running a Thai restaurant in the UK means juggling four different systems — and none of them speak Thai."</p>
+  </div>
+
+  <div class="storyboard-grid">
+    <!-- Shot 1 -->
+    <div class="shot-card">
+      <div class="shot-frame frame-chaos">
+        <div class="frame-content">
+          <div class="apps-row">
+            <div class="chaos-app red">EPOS</div>
+            <div class="chaos-app blue">Bookings</div>
+            <div class="chaos-app green">Invoices</div>
+            <div class="chaos-app purple">Menu</div>
+          </div>
+          <div class="x-mark">✕</div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">Shot 1</span>
+          <span class="shot-time">0–6s</span>
+          <span class="shot-type">Split screen</span>
+        </div>
+        <p class="shot-vo">Running a Thai restaurant in the UK means juggling four different systems…</p>
+        <p class="shot-dir">Screen splits into 4 tiles — each showing a different app logo (generic EPOS, booking app, invoice tool, menu builder). Slight shake/jitter to show chaos. Red ✕ overlaid on each.</p>
+      </div>
+    </div>
+
+    <!-- Shot 2 -->
+    <div class="shot-card">
+      <div class="shot-frame frame-thai">
+        <div class="frame-content">
+          <span class="thai-word">ยินดีต้อนรับ</span>
+          <span class="no-thai">NO THAI SUPPORT</span>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">Shot 2</span>
+          <span class="shot-time">6–12s</span>
+          <span class="shot-type">Close-up screen</span>
+        </div>
+        <p class="shot-vo">…and none of them speak Thai.</p>
+        <p class="shot-dir">Close-up of a tablet screen showing an English-only EPOS. Thai text appears ghosted behind the UI — then a big red "NO THAI SUPPORT" stamps across. Owner's frustrated expression partially visible.</p>
+      </div>
+    </div>
+
+    <!-- Shot 3 -->
+    <div class="shot-card">
+      <div class="shot-frame frame-chaos">
+        <div class="frame-content" style="flex-direction:row; gap:6px; flex-wrap:wrap; justify-content:center;">
+          <div style="text-align:center;">
+            <div style="font-size:22px;">😤</div>
+            <div style="font-size:10px; color:rgba(255,255,255,0.6); margin-top:4px;">Paper books</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:22px;">📱</div>
+            <div style="font-size:10px; color:rgba(255,255,255,0.6); margin-top:4px;">WhatsApp bookings</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:22px;">🧾</div>
+            <div style="font-size:10px; color:rgba(255,255,255,0.6); margin-top:4px;">Manual invoices</div>
+          </div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">Shot 3</span>
+          <span class="shot-time">12–18s</span>
+          <span class="shot-type">Montage cut</span>
+        </div>
+        <p class="shot-vo">(music builds tension)</p>
+        <p class="shot-dir">Quick 2-second cuts: paper reservation book, WhatsApp message on phone, hand-scribbled invoice. Each cut slightly faster. Ends on a freeze-frame black-out — then silence.</p>
+      </div>
+    </div>
+
+    <!-- Shot 4 - transition -->
+    <div class="shot-card">
+      <div class="shot-frame" style="background:#000;">
+        <div class="frame-content">
+          <div style="font-size:11px; color:rgba(255,255,255,0.3); letter-spacing:2px; text-transform:uppercase;">Until now.</div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">Trans.</span>
+          <span class="shot-time">17–18s</span>
+          <span class="shot-type">Title card</span>
+        </div>
+        <p class="shot-vo">Until now.</p>
+        <p class="shot-dir">Pure black screen. Single clear piano note. White text fades in: "Until now." — then dissolves to reveal the SiamEPOS logo.</p>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ===== ACT 2 ===== -->
+  <div class="act-header">
+    <span class="act-badge">ACT 2</span>
+    <span class="act-title">The Solution</span>
+    <span class="act-timing">18 – 36 sec</span>
+  </div>
+
+  <div class="script-block">
+    <p class="script-label">Voiceover</p>
+    <p>"Introducing SiamEPOS — the first cloud restaurant system designed specifically for Thai restaurants in the UK. Everything in one place. In English and Thai. From £89 a month."</p>
+  </div>
+
+  <div class="storyboard-grid">
+    <!-- Shot 5 -->
+    <div class="shot-card">
+      <div class="shot-frame frame-reveal">
+        <div class="frame-content">
+          <div class="glow"></div>
+          <div class="siam-logo">SiamEPOS</div>
+          <div class="tagline">Built for Thai Restaurants</div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">Shot 5</span>
+          <span class="shot-time">18–23s</span>
+          <span class="shot-type">Logo reveal</span>
+        </div>
+        <p class="shot-vo">Introducing SiamEPOS —</p>
+        <p class="shot-dir">Navy background. Gold SiamEPOS logo animates in from centre — expands outward with a soft golden glow pulse. Tagline fades in below. Music lifts to upbeat Thai-fusion theme.</p>
+      </div>
+    </div>
+
+    <!-- Shot 6 -->
+    <div class="shot-card">
+      <div class="shot-frame" style="background: #0d2b0d;">
+        <div class="frame-content">
+          <div style="font-size:11px; color:rgba(255,255,255,0.5); letter-spacing:1px; margin-bottom:8px;">SINGLE DASHBOARD</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; width:80%;">
+            <div style="background:rgba(201,168,76,0.15); border:1px solid rgba(201,168,76,0.3); border-radius:4px; padding:6px; text-align:center;">
+              <div style="font-size:9px; color:var(--gold);">ORDERS</div>
+            </div>
+            <div style="background:rgba(201,168,76,0.15); border:1px solid rgba(201,168,76,0.3); border-radius:4px; padding:6px; text-align:center;">
+              <div style="font-size:9px; color:var(--gold);">KDS</div>
+            </div>
+            <div style="background:rgba(201,168,76,0.15); border:1px solid rgba(201,168,76,0.3); border-radius:4px; padding:6px; text-align:center;">
+              <div style="font-size:9px; color:var(--gold);">BOOKINGS</div>
+            </div>
+            <div style="background:rgba(201,168,76,0.15); border:1px solid rgba(201,168,76,0.3); border-radius:4px; padding:6px; text-align:center;">
+              <div style="font-size:9px; color:var(--gold);">STOCK</div>
+            </div>
+          </div>
+          <div style="font-size:10px; color:rgba(255,255,255,0.4); margin-top:8px;">all in one</div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">Shot 6</span>
+          <span class="shot-time">23–28s</span>
+          <span class="shot-type">UI reveal</span>
+        </div>
+        <p class="shot-vo">…the first cloud restaurant system designed specifically for Thai restaurants in the UK. Everything in one place.</p>
+        <p class="shot-dir">Screen recording of the live SiamEPOS dashboard. Show the clean nav: Orders, Kitchen, Bookings, Inventory all within one UI. Smooth scroll/pan across the interface.</p>
+      </div>
+    </div>
+
+    <!-- Shot 7 -->
+    <div class="shot-card">
+      <div class="shot-frame" style="background:var(--navy);">
+        <div class="frame-content">
+          <div style="display:flex; gap:16px; align-items:center;">
+            <div style="text-align:center;">
+              <div style="font-size:20px; color:white; font-weight:700;">EN</div>
+              <div style="font-size:9px; color:rgba(255,255,255,0.4); margin-top:2px;">English</div>
+            </div>
+            <div style="font-size:20px; color:var(--gold);">⟺</div>
+            <div style="text-align:center;">
+              <div style="font-size:20px; color:var(--gold); font-family:serif;">ภาษาไทย</div>
+              <div style="font-size:9px; color:rgba(255,255,255,0.4); margin-top:2px;">Thai</div>
+            </div>
+          </div>
+          <div style="font-size:9px; color:rgba(255,255,255,0.35); margin-top:10px; letter-spacing:1px;">ONE TAP TO SWITCH</div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">Shot 7</span>
+          <span class="shot-time">28–32s</span>
+          <span class="shot-type">Feature highlight</span>
+        </div>
+        <p class="shot-vo">In English and Thai.</p>
+        <p class="shot-dir">Screen recording: tap the language toggle — UI switches from English to Thai instantly. Staff smiles. Emphasise how natural it looks in Thai. Text overlay: "ภาษาไทย ✓"</p>
+      </div>
+    </div>
+
+    <!-- Shot 8 -->
+    <div class="shot-card">
+      <div class="shot-frame frame-price">
+        <div class="frame-content">
+          <div class="price-tag">£89</div>
+          <div class="price-sub">per month</div>
+          <div class="per" style="margin-top:8px;">All features included</div>
+          <div style="font-size:9px; color:rgba(255,255,255,0.3); margin-top:4px;">No setup fee · Cancel anytime</div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">Shot 8</span>
+          <span class="shot-time">32–36s</span>
+          <span class="shot-type">Price card</span>
+        </div>
+        <p class="shot-vo">From £89 a month.</p>
+        <p class="shot-dir">Bold animated price counter counts up to £89. Sub-text animates in: "All features included. No setup fee. Cancel anytime." Green colour to feel accessible/affordable.</p>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ===== ACT 3 ===== -->
+  <div class="act-header">
+    <span class="act-badge">ACT 3</span>
+    <span class="act-title">Feature Showcase</span>
+    <span class="act-timing">36 – 63 sec</span>
+  </div>
+
+  <div class="script-block">
+    <p class="script-label">Voiceover</p>
+    <p>"Take bookings directly on your own website — zero commission. Manage every table with a live floor map. Send orders to the kitchen display instantly. Let customers order takeaway online — and keep 100% of the money. And let AI scan your invoices to track food costs automatically."</p>
+  </div>
+
+  <div class="storyboard-grid five">
+    <!-- Feature 1 -->
+    <div class="shot-card">
+      <div class="shot-frame frame-feature">
+        <div class="frame-content">
+          <div class="feat-icon">📅</div>
+          <div class="feat-label">Online Reservations</div>
+          <div style="font-size:9px; color:#2ecc71; margin-top:4px;">0% commission</div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">F1</span>
+          <span class="shot-time">36–41s</span>
+        </div>
+        <p class="shot-vo">Take bookings directly on your own website — zero commission.</p>
+        <p class="shot-dir">Show the booking widget on a restaurant website. Customer fills in name/date → confirmation email arrives. Bold "0% commission" text stamp.</p>
+      </div>
+    </div>
+
+    <!-- Feature 2 -->
+    <div class="shot-card">
+      <div class="shot-frame frame-feature">
+        <div class="frame-content">
+          <div class="feat-icon">🗺️</div>
+          <div class="feat-label">Live Floor Map</div>
+          <div style="font-size:9px; color:var(--gold); margin-top:4px;">Real-time status</div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">F2</span>
+          <span class="shot-time">41–46s</span>
+        </div>
+        <p class="shot-vo">Manage every table with a live floor map.</p>
+        <p class="shot-dir">Screen recording of the table map — tables changing colour (available → occupied → needs attention). Drag-and-drop table merge. Staff tapping to take order.</p>
+      </div>
+    </div>
+
+    <!-- Feature 3 -->
+    <div class="shot-card">
+      <div class="shot-frame frame-feature">
+        <div class="frame-content">
+          <div class="feat-icon">👨‍🍳</div>
+          <div class="feat-label">Kitchen Display</div>
+          <div style="font-size:9px; color:#e74c3c; margin-top:4px;">Instant tickets</div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">F3</span>
+          <span class="shot-time">46–51s</span>
+        </div>
+        <p class="shot-vo">Send orders to the kitchen display instantly.</p>
+        <p class="shot-dir">iPad in a kitchen showing KDS. New order ticket pops in with a subtle sound. Chef taps items as cooked — they turn green. No paper tickets on the floor.</p>
+      </div>
+    </div>
+
+    <!-- Feature 4 -->
+    <div class="shot-card">
+      <div class="shot-frame frame-feature">
+        <div class="frame-content">
+          <div class="feat-icon">🥡</div>
+          <div class="feat-label">Online Takeaway</div>
+          <div style="font-size:9px; color:#2ecc71; margin-top:4px;">Keep 100%</div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">F4</span>
+          <span class="shot-time">51–56s</span>
+        </div>
+        <p class="shot-vo">Let customers order takeaway online — and keep 100% of the money.</p>
+        <p class="shot-dir">Customer on phone → places takeaway order on restaurant website → order appears instantly in EPOS with 🥡 tag → kitchen sees it. "No Deliveroo fees" text overlay.</p>
+      </div>
+    </div>
+
+    <!-- Feature 5 -->
+    <div class="shot-card">
+      <div class="shot-frame frame-feature">
+        <div class="frame-content">
+          <div class="feat-icon">🤖</div>
+          <div class="feat-label">AI Invoice Scanner</div>
+          <div style="font-size:9px; color:var(--gold); margin-top:4px;">Auto cost tracking</div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">F5</span>
+          <span class="shot-time">56–63s</span>
+        </div>
+        <p class="shot-vo">And let AI scan your invoices to track food costs automatically.</p>
+        <p class="shot-dir">Photo of paper invoice → tap scan → AI extracts items and prices → cost vs. sales chart updates automatically. Show the food cost % figure dropping. Satisfying animation.</p>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ===== ACT 4 ===== -->
+  <div class="act-header">
+    <span class="act-badge">ACT 4</span>
+    <span class="act-title">Trust Signals</span>
+    <span class="act-timing">63 – 75 sec</span>
+  </div>
+
+  <div class="script-block">
+    <p class="script-label">Voiceover</p>
+    <p>"Supported by a Thai-speaking team. UK GDPR and allergen compliant. Works offline. Runs on any device you already own."</p>
+  </div>
+
+  <div class="storyboard-grid three">
+    <!-- Shot trust 1 -->
+    <div class="shot-card">
+      <div class="shot-frame frame-trust">
+        <div class="frame-content">
+          <div class="trust-row"><span class="tick">✓</span><span class="trust-text">Thai-speaking support team</span></div>
+          <div class="trust-row"><span class="tick">✓</span><span class="trust-text">UK GDPR compliant</span></div>
+          <div class="trust-row"><span class="tick">✓</span><span class="trust-text">Natasha's Law allergens</span></div>
+          <div class="trust-row"><span class="tick">✓</span><span class="trust-text">VAT-ready reports</span></div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">Shot 14</span>
+          <span class="shot-time">63–67s</span>
+          <span class="shot-type">Checklist animation</span>
+        </div>
+        <p class="shot-vo">Supported by a Thai-speaking team. UK GDPR and allergen compliant.</p>
+        <p class="shot-dir">Dark navy screen. Each ✓ item ticks in one by one with a satisfying sound. Thai-speaking team item shows a quick cut of a smiling Thai support agent on WhatsApp.</p>
+      </div>
+    </div>
+
+    <!-- Shot trust 2 -->
+    <div class="shot-card">
+      <div class="shot-frame" style="background:#1a2a1a;">
+        <div class="frame-content">
+          <div style="font-size:28px;">📶</div>
+          <div style="font-size:28px; margin-top:-8px;">❌</div>
+          <div style="font-size:11px; color:var(--gold); font-weight:700; margin-top:8px; letter-spacing:1px;">WORKS OFFLINE</div>
+          <div style="font-size:9px; color:rgba(255,255,255,0.4); margin-top:4px;">Syncs when back online</div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">Shot 15</span>
+          <span class="shot-time">67–71s</span>
+          <span class="shot-type">Feature callout</span>
+        </div>
+        <p class="shot-vo">Works offline.</p>
+        <p class="shot-dir">Wi-Fi icon crosses out. EPOS keeps working — orders still go through, kitchen still receives tickets. "Works Offline" badge stamps in gold. Shows sync resuming when connection returns.</p>
+      </div>
+    </div>
+
+    <!-- Shot trust 3 -->
+    <div class="shot-card">
+      <div class="shot-frame" style="background:#0d1b3e;">
+        <div class="frame-content">
+          <div style="display:flex; gap:10px; align-items:flex-end; justify-content:center;">
+            <div style="text-align:center;">
+              <div style="font-size:22px;">💻</div>
+              <div style="font-size:8px; color:rgba(255,255,255,0.4); margin-top:4px;">MacBook</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:26px;">🖥️</div>
+              <div style="font-size:8px; color:rgba(255,255,255,0.4); margin-top:4px;">Windows PC</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:22px;">📱</div>
+              <div style="font-size:8px; color:rgba(255,255,255,0.4); margin-top:4px;">iPad / Phone</div>
+            </div>
+          </div>
+          <div style="font-size:9px; color:var(--gold); margin-top:10px; letter-spacing:1px;">ANY DEVICE YOU OWN</div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">Shot 16</span>
+          <span class="shot-time">71–75s</span>
+          <span class="shot-type">Device showcase</span>
+        </div>
+        <p class="shot-vo">Runs on any device you already own.</p>
+        <p class="shot-dir">Show SiamEPOS running on a Windows laptop, iPad, and iPhone simultaneously — all synced. Real restaurant environment. No expensive proprietary hardware needed.</p>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ===== ACT 5 ===== -->
+  <div class="act-header">
+    <span class="act-badge">ACT 5</span>
+    <span class="act-title">Call to Action</span>
+    <span class="act-timing">75 – 90 sec</span>
+  </div>
+
+  <div class="script-block">
+    <p class="script-label">Voiceover</p>
+    <p>"SiamEPOS — built by Thai people, for Thai restaurants in the UK. Book a free demo today at siamepos.co.uk"</p>
+  </div>
+
+  <div class="storyboard-grid three">
+    <!-- Shot 17 -->
+    <div class="shot-card">
+      <div class="shot-frame" style="background:#0a2a0a;">
+        <div class="frame-content">
+          <div style="font-size:9px; color:rgba(255,255,255,0.4); letter-spacing:2px; text-transform:uppercase; margin-bottom:8px;">Real restaurants. Real results.</div>
+          <div style="display:flex; gap:12px;">
+            <div style="text-align:center;">
+              <div style="font-size:18px; color:#2ecc71; font-family:'Cormorant Garamond', serif; font-weight:700;">2hrs</div>
+              <div style="font-size:8px; color:rgba(255,255,255,0.4);">saved daily</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:18px; color:#2ecc71; font-family:'Cormorant Garamond', serif; font-weight:700;">0%</div>
+              <div style="font-size:8px; color:rgba(255,255,255,0.4);">booking fee</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:18px; color:#2ecc71; font-family:'Cormorant Garamond', serif; font-weight:700;">EN/TH</div>
+              <div style="font-size:8px; color:rgba(255,255,255,0.4);">bilingual</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">Shot 17</span>
+          <span class="shot-time">75–80s</span>
+          <span class="shot-type">Stats overlay</span>
+        </div>
+        <p class="shot-vo">SiamEPOS — built by Thai people, for Thai restaurants in the UK.</p>
+        <p class="shot-dir">Montage of real SiamEPOS usage moments: team in a busy Thai restaurant, food being plated, smiling front-of-house staff on an iPad. Stats count up over the footage.</p>
+      </div>
+    </div>
+
+    <!-- Shot 18 -->
+    <div class="shot-card">
+      <div class="shot-frame frame-cta">
+        <div class="frame-content">
+          <div class="cta-text">Book your free demo</div>
+          <div class="cta-url">siamepos.co.uk</div>
+          <div class="cta-btn">Book Demo →</div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">Shot 18</span>
+          <span class="shot-time">80–87s</span>
+          <span class="shot-type">CTA screen</span>
+        </div>
+        <p class="shot-vo">Book a free demo today at siamepos.co.uk</p>
+        <p class="shot-dir">Full-screen navy → SiamEPOS logo pulses in. URL and CTA button animate in. Gold glow effect. Calm, confident. This is the frame to screenshot for thumbnail.</p>
+      </div>
+    </div>
+
+    <!-- Shot 19 end card -->
+    <div class="shot-card">
+      <div class="shot-frame" style="background:var(--navy);">
+        <div class="frame-content">
+          <svg width="32" height="32" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="margin-bottom:8px;">
+            <circle cx="50" cy="50" r="50" fill="#0D1B3E"/>
+            <circle cx="50" cy="50" r="45" fill="none" stroke="#C9A84C" stroke-width="3"/>
+            <g transform="translate(50,50)">
+              <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C"/>
+              <circle cx="0" cy="0" r="5" fill="#C9A84C"/>
+            </g>
+          </svg>
+          <div style="font-family:'Cormorant Garamond',serif; font-size:16px; color:var(--gold); font-weight:700; letter-spacing:1px;">SiamEPOS</div>
+          <div style="font-size:9px; color:rgba(255,255,255,0.4); margin-top:6px; letter-spacing:1px;">info@siamepos.co.uk</div>
+          <div style="font-size:9px; color:rgba(255,255,255,0.3); margin-top:2px;">siamepos.co.uk</div>
+        </div>
+      </div>
+      <div class="shot-info">
+        <div class="shot-meta">
+          <span class="shot-num">End Card</span>
+          <span class="shot-time">87–90s</span>
+          <span class="shot-type">Outro / freeze</span>
+        </div>
+        <p class="shot-vo">(music fades)</p>
+        <p class="shot-dir">Logo lingers on screen with a subtle heartbeat pulse. Email and URL visible for 3 seconds. For social versions: YouTube subscribe button / Instagram follow button animates in bottom-right.</p>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- PRODUCTION NOTES -->
+  <h2>Production Notes</h2>
+  <div class="notes-grid">
+    <div class="note-card">
+      <h4>Filming Required</h4>
+      <ul>
+        <li>Thai restaurant interior (busy service)</li>
+        <li>Staff on iPad / tablet (POS in use)</li>
+        <li>Kitchen team reacting to KDS tickets</li>
+        <li>Close-up: invoice being scanned</li>
+        <li>Smiling front-of-house moment</li>
+        <li>Customer receiving takeaway bag</li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <h4>Screen Recordings</h4>
+      <ul>
+        <li>Table map in use (live data)</li>
+        <li>Language toggle EN → TH</li>
+        <li>Booking widget (siamepos.net)</li>
+        <li>AI invoice scan result</li>
+        <li>Takeaway order appearing in kitchen</li>
+        <li>Cost vs. sales chart</li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <h4>Text Overlays</h4>
+      <ul>
+        <li>"0% Commission" (Act 3, F1)</li>
+        <li>"ภาษาไทย ✓" (Act 2)</li>
+        <li>"No Deliveroo Fees" (Act 3, F4)</li>
+        <li>"Works Offline" badge (Act 4)</li>
+        <li>"£89/month" counter (Act 2)</li>
+        <li>siamepos.co.uk (Act 5)</li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <h4>Social Cuts</h4>
+      <ul>
+        <li>15s cut: Acts 1+5 only (awareness)</li>
+        <li>30s cut: Acts 2+3 only (features)</li>
+        <li>Vertical 9:16 reframe for Reels/Shorts</li>
+        <li>Subtitles on all versions (silent scroll)</li>
+        <li>Thai subtitles on TH-language version</li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <h4>Voiceover Brief</h4>
+      <ul>
+        <li>Native Thai speaker, English accent</li>
+        <li>Warm, professional — not "ad voice"</li>
+        <li>Male or female (test both)</li>
+        <li>Record Thai version separately</li>
+        <li>Pace: conversational, not rushed</li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <h4>OG Image / Thumbnail</h4>
+      <ul>
+        <li>Use Shot 18 (CTA frame) as thumbnail</li>
+        <li>Add "Free Demo" badge top-right</li>
+        <li>Export 1280×720 for YouTube</li>
+        <li>Export 1200×630 for Facebook</li>
+        <li>Save as og-image.jpg for website</li>
+      </ul>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- FULL SCRIPT -->
+  <h2>Full Voiceover Script</h2>
+  <div class="script-block" style="border-color: #e74c3c;">
+    <p class="script-label" style="color:#e74c3c;">Act 1 · 0–18s · The Problem</p>
+    <p>"Running a Thai restaurant in the UK means juggling four different systems — and none of them speak Thai."</p>
+  </div>
+  <div class="script-block" style="border-color: #e67e22;">
+    <p class="script-label" style="color:#e67e22;">Act 2 · 18–36s · The Solution</p>
+    <p>"Introducing SiamEPOS — the first cloud restaurant system designed specifically for Thai restaurants in the UK. Everything in one place. In English and Thai. From £89 a month."</p>
+  </div>
+  <div class="script-block" style="border-color: #27ae60;">
+    <p class="script-label" style="color:#27ae60;">Act 3 · 36–63s · Feature Showcase</p>
+    <p>"Take bookings directly on your own website — zero commission. Manage every table with a live floor map. Send orders to the kitchen display instantly. Let customers order takeaway online — and keep 100% of the money. And let AI scan your invoices to track food costs automatically."</p>
+  </div>
+  <div class="script-block" style="border-color: #2980b9;">
+    <p class="script-label" style="color:#2980b9;">Act 4 · 63–75s · Trust</p>
+    <p>"Supported by a Thai-speaking team. UK GDPR and allergen compliant. Works offline. Runs on any device you already own."</p>
+  </div>
+  <div class="script-block" style="border-color: var(--gold);">
+    <p class="script-label">Act 5 · 75–90s · CTA</p>
+    <p>"SiamEPOS — built by Thai people, for Thai restaurants in the UK. Book a free demo today at siamepos.co.uk"</p>
+  </div>
+
+  <div style="margin-top: 16px; padding: 16px 20px; background: var(--light); border-radius: 12px; font-size: 13px; color: #666;">
+    <strong>Total word count:</strong> ~110 words &nbsp;·&nbsp; <strong>Approx. read time:</strong> 88 seconds at natural pace &nbsp;·&nbsp; <strong>Version:</strong> Maya × Sandy, May 2026
+  </div>
+
+</div>
+
+<footer style="background:var(--navy); color:rgba(255,255,255,0.4); text-align:center; padding:24px; font-size:12px; margin-top:40px;">
+  SiamEPOS — Company Video Brief v1.0 · Prepared May 2026 · info@siamepos.co.uk
+</footer>
+
+</body>
+</html>

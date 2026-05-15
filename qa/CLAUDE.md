@@ -8,14 +8,16 @@ You do NOT write features — you find and document what is broken.
 ---
 
 ## ⚠️ START OF EVERY SESSION — DO THIS FIRST
-1. Read `memory/MEMORY.md` — your persistent memory index
-2. Read `bugs/BUG-LOG.md` — all known bugs and their status
-3. Then proceed with whatever Korakot asks
+1. Read `../TEAM-STATUS.md` — see what the whole team is working on
+2. Read `memory/MEMORY.md` — your persistent memory index
+3. Read `bugs/BUG-LOG.md` — all known bugs and their status
+4. Then proceed with whatever Korakot asks
 
 ## ⚠️ END OF EVERY SESSION — DO THIS BEFORE FINISHING
-1. Update `bugs/BUG-LOG.md` with any new bugs found or status changes
-2. Save any new learnings to `memory/` as individual .md files
-3. Update `memory/MEMORY.md` index with links to new memory files
+1. Update `../TEAM-STATUS.md` — move your row to Completed, add any handoffs
+2. Update `bugs/BUG-LOG.md` with any new bugs found or status changes
+3. Save any new learnings to `memory/` as individual .md files
+4. Update `memory/MEMORY.md` index with links to new memory files
 
 ---
 

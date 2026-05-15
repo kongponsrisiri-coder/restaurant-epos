@@ -25,6 +25,7 @@ export default function BillsSection() {
   // see just a normal heading. Managers who need to fix a mistaken bill
   // know the gesture.
   const [unlockedUntil, setUnlockedUntil]   = useState(null);
+  const [unlockedRole, setUnlockedRole]     = useState(null);  // SEPOS-043 — track which role unlocked
   const [showUnlockModal, setShowUnlockModal] = useState(false);
   const [tapCount, setTapCount] = useState(0);
   const [tick, setTick] = useState(0);
@@ -35,10 +36,10 @@ export default function BillsSection() {
     return () => clearInterval(id);
   }, [unlockedUntil]);
   useEffect(() => {
-    if (unlockedUntil && Date.now() > unlockedUntil) setUnlockedUntil(null);
+    if (unlockedUntil && Date.now() > unlockedUntil) { setUnlockedUntil(null); setUnlockedRole(null); }
   }, [tick, unlockedUntil]);
   // Auto-relock on tab change / unmount.
-  useEffect(() => () => setUnlockedUntil(null), []);
+  useEffect(() => () => { setUnlockedUntil(null); setUnlockedRole(null); }, []);
   // Tap counter auto-resets after 3 s of no taps. Prevents random taps
   // over a long period from accidentally triggering the unlock.
   useEffect(() => {
@@ -108,7 +109,7 @@ export default function BillsSection() {
               Manager mode · {fmtCountdown(secondsRemaining)}
             </span>
             <button
-              onClick={() => setUnlockedUntil(null)}
+              onClick={() => { setUnlockedUntil(null); setUnlockedRole(null); }}
               title="Lock now"
               style={{ background: 'transparent', border: 'none', color: '#166534', cursor: 'pointer', fontWeight: 800, fontSize: 11, padding: 0 }}
             >
@@ -155,8 +156,10 @@ export default function BillsSection() {
                 <span style={{ textAlign: 'center' }}>
                   {/* Delete buttons hidden until a manager unlocks the
                       session (top-right 🔒). PIN re-validated at the
-                      modal too — defence in depth. */}
-                  {isUnlocked && (
+                      modal too — defence in depth.
+                      SEPOS-043: supervisors can unlock but cannot delete
+                      closed bills — hide the button for that role. */}
+                  {isUnlocked && unlockedRole !== 'supervisor' && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setDeleteTarget(bill); }}
                       title="Delete this transaction (manager PIN required)"
@@ -220,18 +223,21 @@ export default function BillsSection() {
       {showUnlockModal && (
         <UnlockModal
           onClose={() => setShowUnlockModal(false)}
-          onUnlocked={() => { setUnlockedUntil(Date.now() + UNLOCK_DURATION_MS); setShowUnlockModal(false); }}
+          onUnlocked={(staff) => {
+            setUnlockedUntil(Date.now() + UNLOCK_DURATION_MS);
+            setUnlockedRole((staff?.role || '').toLowerCase());  // SEPOS-043
+            setShowUnlockModal(false);
+          }}
         />
       )}
     </div>
   );
 }
 
-// SEPOS-051 — manager unlock modal. Validates the PIN via loginStaff
-// (same backend gate the delete endpoint uses). Roles allowed match the
-// DELETE /api/orders endpoint: admin / manager / supervisor. SEPOS-043
-// will tighten supervisor out of delete-closed-bill later — when that
-// ships this should drop supervisor too.
+// Manager unlock modal. Validates the PIN via loginStaff (same backend gate
+// the delete endpoint uses). Roles allowed: admin / manager / supervisor.
+// SEPOS-043: supervisor can unlock (to see UI) but the 🗑️ button is hidden
+// for their role — and the backend rejects the delete too if bypassed.
 function UnlockModal({ onClose, onUnlocked }) {
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
@@ -248,7 +254,7 @@ function UnlockModal({ onClose, onUnlocked }) {
         setErr('That PIN doesn\'t have permission to delete bills.');
         setBusy(false); return;
       }
-      onUnlocked();
+      onUnlocked(staff);  // SEPOS-043 — pass staff so parent can track role
     } catch (e) {
       setErr(e.message || 'PIN check failed.');
       setBusy(false);

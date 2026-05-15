@@ -262,6 +262,7 @@ async function applyToCloud(actionType, payload) {
         body: JSON.stringify({
           order_id:   cloudId,
           staff_name: payload.staff_name,
+          staff_role: payload.staff_role,
           reason:     payload.reason,
         }),
       });

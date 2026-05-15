@@ -983,6 +983,16 @@ app.delete('/api/orders/:id', async (req, res) => {
     }
     const staff = staffRes.rows[0];
 
+    // SEPOS-043 — supervisor cannot delete closed bills.
+    // Peek at the order status before any destructive work.
+    if ((staff.role || '').toLowerCase() === 'supervisor') {
+      const peekRes = await pool.query(`SELECT status FROM orders WHERE id = $1`, [orderId]);
+      if (peekRes.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
+      if (peekRes.rows[0].status === 'closed') {
+        return res.status(403).json({ error: 'Supervisors cannot delete closed bills' });
+      }
+    }
+
     // Snapshot the order for the audit row — last chance to read it.
     // Also grab cloud_id so we can mirror the delete on the cloud after
     // the local row is gone (column exists only on the SQLite mirror;
@@ -1046,6 +1056,7 @@ app.delete('/api/orders/:id', async (req, res) => {
       localOrderId: orderId,
       cloudOrderId: order.cloud_id || orderId,  // cloud Mode: cloud_id == orderId
       staff_name:   staff.name,
+      staff_role:   staff.role,
       reason:       String(reason).trim(),
     });
 
@@ -1074,7 +1085,16 @@ app.post('/api/sync/delete-order', async (req, res) => {
     const orderId = parseInt(req.body?.order_id, 10);
     if (!orderId) return res.status(400).json({ error: 'order_id required' });
     const staffName = String(req.body?.staff_name || 'unknown').trim();
+    const staffRole = String(req.body?.staff_role || '').trim();
     const reason    = String(req.body?.reason || '').trim() || '(synced from Mac)';
+
+    // SEPOS-043 — supervisor cannot delete closed bills via sync either.
+    if (staffRole.toLowerCase() === 'supervisor') {
+      const peekRes = await pool.query(`SELECT status FROM orders WHERE id = $1`, [orderId]);
+      if (peekRes.rows.length > 0 && peekRes.rows[0].status === 'closed') {
+        return res.status(403).json({ error: 'Supervisors cannot delete closed bills' });
+      }
+    }
 
     const ordRes = await pool.query(
       `SELECT id, total, order_type, opened_at, closed_at, table_id FROM orders WHERE id = $1`,

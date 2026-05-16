@@ -403,80 +403,36 @@
     const postcodeOk  = isDelivery && state.customer.delivery_check?.deliverable === true;
     const showTime    = !isDelivery || postcodeOk;
 
-    // Build time slots
-    const today   = new Date();
-    const minTime = new Date(today.getTime() + 25 * 60 * 1000);
-    const slots   = [];
-    const [oh, om] = String(opening).slice(0,5).split(':').map(Number);
-    const [ch, cm] = String(closing).slice(0,5).split(':').map(Number);
-    const cur   = new Date(today); cur.setHours(oh, om, 0, 0);
-    const close = new Date(today); close.setHours(ch, cm, 0, 0);
-    while (cur <= close) {
-      if (cur >= minTime) slots.push({
-        iso: cur.toISOString(),
-        lbl: cur.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' }),
-      });
-      cur.setMinutes(cur.getMinutes() + 15);
-    }
-
     return `
-      <h2 class="tw-h2">${deliveryEnabled ? 'How would you like your order?' : 'When would you like to collect?'}</h2>
+      <h2 class="tw-h2">How would you like your order?</h2>
+      <div class="tw-help">Choose collection or delivery, then browse our menu.</div>
 
-      ${deliveryEnabled ? `
-        <div class="tw-pickup-row" style="margin-bottom:20px;">
-          <button class="tw-pickup-btn ${!isDelivery ? 'active' : ''}" data-subtype="collection">
-            <span class="tw-pickup-icon">🥡</span>
-            <span class="tw-pickup-label">Collection</span>
-            <span class="tw-pickup-sub">Pick up at the restaurant</span>
-          </button>
-          <button class="tw-pickup-btn ${isDelivery ? 'active' : ''}" data-subtype="delivery">
-            <span class="tw-pickup-icon">🚗</span>
-            <span class="tw-pickup-label">Delivery</span>
-            <span class="tw-pickup-sub">We bring it to you</span>
-          </button>
-        </div>
-        ${isDelivery && !postcodeOk ? renderDeliveryPostcodeCheck() : ''}
-        ${postcodeOk ? `
+      <div class="tw-pickup-row">
+        <button class="tw-pickup-btn ${!isDelivery ? 'active' : ''}" data-subtype="collection">
+          <span class="tw-pickup-icon">🥡</span>
+          <span class="tw-pickup-label">Collection</span>
+          <span class="tw-pickup-sub">Pick up at the restaurant</span>
+        </button>
+        <button class="tw-pickup-btn ${isDelivery ? 'active' : ''}" data-subtype="delivery">
+          <span class="tw-pickup-icon">🚗</span>
+          <span class="tw-pickup-label">Delivery</span>
+          <span class="tw-pickup-sub">We bring it to you</span>
+        </button>
+      </div>
+
+      ${isDelivery ? `
+        ${!postcodeOk ? renderDeliveryPostcodeCheck() : `
           <div style="background:#f0f7ee;border:1.5px solid #86efac;border-radius:12px;
-            padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+            padding:12px 16px;display:flex;align-items:center;gap:10px;">
             <span style="font-size:20px;">✅</span>
             <div>
               <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.05em;">Delivering to</div>
               <div style="font-weight:700;color:#166534;">${esc(state.customer.delivery_postcode)}
-                <span style="font-weight:400;font-size:12px;color:#888;margin-left:6px;">
-                  ${state.customer.delivery_check?.distance_miles != null ? `(${state.customer.delivery_check.distance_miles} mi)` : ''}
-                </span>
+                ${state.customer.delivery_check?.distance_miles != null
+                  ? `<span style="font-weight:400;font-size:12px;color:#888;margin-left:6px;">(${state.customer.delivery_check.distance_miles} mi)</span>`
+                  : ''}
               </div>
             </div>
-          </div>
-        ` : ''}
-      ` : ''}
-
-      ${showTime ? `
-        <div class="tw-help">Open ${String(opening).slice(0,5)} – ${String(closing).slice(0,5)}. We need ~25 min to prepare your order.</div>
-        <div class="tw-pickup-row">
-          <button class="tw-pickup-btn ${state.pickupKind==='asap' ? 'active' : ''}" id="tw-asap">
-            <span class="tw-pickup-icon">⚡</span>
-            <span class="tw-pickup-label">ASAP</span>
-            <span class="tw-pickup-sub">Ready in ~25 min</span>
-          </button>
-          <button class="tw-pickup-btn ${state.pickupKind==='scheduled' ? 'active' : ''}" id="tw-sched">
-            <span class="tw-pickup-icon">🕐</span>
-            <span class="tw-pickup-label">Schedule</span>
-            <span class="tw-pickup-sub">Pick a time</span>
-          </button>
-        </div>
-        ${state.pickupKind === 'scheduled' ? `
-          <div class="tw-slots-label">Choose a ${isDelivery ? 'delivery' : 'pickup'} time</div>
-          <div class="tw-slots">
-            ${slots.length === 0
-              ? '<div style="color:#888;font-size:13px;grid-column:1/-1;">No slots left today — choose ASAP.</div>'
-              : slots.map(s => `<button class="tw-slot ${state.pickupISO===s.iso ? 'active' : ''} tw-slot-btn" data-iso="${s.iso}">${s.lbl}</button>`).join('')}
-          </div>
-        ` : `
-          <div style="background:#f0f7ee;border:1.5px solid #86efac;border-radius:12px;padding:14px 16px;">
-            <div style="font-weight:700;color:#166534;margin-bottom:3px;">✓ Earliest ${isDelivery ? 'delivery' : 'pickup'}</div>
-            <div style="font-size:15px;color:#166534;">${new Date(Date.now()+25*60000).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})} today</div>
           </div>
         `}
       ` : ''}
@@ -705,7 +661,6 @@
     let nextLabel = 'Next →';
     let nextEnabled = true;
     if (state.step === 1) {
-      nextEnabled = state.pickupKind === 'asap' || !!state.pickupISO;
       nextLabel = 'Choose dishes →';
     } else if (state.step === 2) {
       nextEnabled = state.cart.length > 0;
@@ -771,15 +726,7 @@
     $('tw-close')?.addEventListener('click', closeWidget);
 
     if (state.step === 1) {
-      $('tw-asap')?.addEventListener('click', () => {
-        state.pickupKind = 'asap'; state.pickupISO = null; state.error = ''; render();
-      });
-      $('tw-sched')?.addEventListener('click', () => {
-        state.pickupKind = 'scheduled'; state.error = ''; render();
-      });
-      document.querySelectorAll('.tw-slot-btn').forEach(b => {
-        b.addEventListener('click', () => { state.pickupISO = b.dataset.iso; render(); });
-      });
+      // ASAP only — no schedule picker
     }
 
     if (state.step === 2) {
@@ -875,9 +822,6 @@
           if (!chk || chk.deliverable !== true) {
             state.error = 'Please check your postcode before continuing.'; render(); return;
           }
-        }
-        if (state.pickupKind === 'scheduled' && !state.pickupISO) {
-          state.error = 'Please pick a time slot.'; render(); return;
         }
         state.step = 2;
         if (state.menu.length === 0) await loadMenu();

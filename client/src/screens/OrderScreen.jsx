@@ -276,9 +276,16 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
       setCart([]);
       await fetchOrder();
 
-      // SEPOS-026 — kitchen ticket (non-bar items) and bar ticket (bar items) separately
-      if (hasKitchen) printFullOrderTicket({ order, items: allNewItems, popupWin: null });
-      if (hasBar)     printBarOrderTicket({ order, items: allNewItems, popupWin: barWin });
+      // SEPOS-026 — kitchen then bar, sequentially in background.
+      // Running both simultaneously causes the USB print server to receive two TCP
+      // connections at once and drop the first (kitchen) ticket. Chaining with .then()
+      // means bar only starts after kitchen's TCP connection closes (+ the 1.5s queue
+      // gap in printService). sendOrder doesn't await these — UI is unblocked.
+      const orderSnap = order; // capture before any async state changes
+      Promise.resolve()
+        .then(() => hasKitchen ? printFullOrderTicket({ order: orderSnap, items: allNewItems, popupWin: null }) : null)
+        .then(() => hasBar     ? printBarOrderTicket({ order: orderSnap, items: allNewItems, popupWin: barWin }) : null)
+        .catch(e => console.error('[sendOrder] print chain error:', e));
 
       if (isMobile) setMobileTab('order');
       alert('Order saved! Use 🔥 Fire buttons to send courses to kitchen.');

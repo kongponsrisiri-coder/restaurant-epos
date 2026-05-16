@@ -152,6 +152,41 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     if (newPaid.length >= splitItemCount) { setPaymentDetails({ method:'Split by Item', amountPaid:billTotal, tip:0, change:0 }); setStage('receipt'); }
   };
 
+  const handleSplitEqualPrint = (i) => {
+    printReceipt({
+      order: { ...order },
+      items: billItems,
+      settings: { ...settings },
+      paymentDetails: {
+        subtotal: afterDiscount / splitCount,
+        discountAmount: discountAmount / splitCount,
+        serviceCharge: serviceCharge / splitCount,
+        billTotal: splitAmount,
+        method: 'Split',
+        amountPaid: splitAmount,
+      }
+    });
+    handleSplitEqualPayment(i);
+  };
+
+  const handleSplitItemPrint = (personIdx) => {
+    const p = getPersonTotal(personIdx);
+    printReceipt({
+      order: { ...order },
+      items: p.items,
+      settings: { ...settings },
+      paymentDetails: {
+        subtotal: p.subtotal,
+        discountAmount: p.discount,
+        serviceCharge: p.service,
+        billTotal: p.total,
+        method: 'Split by Item',
+        amountPaid: p.total,
+      }
+    });
+    handleSplitItemPayment(personIdx);
+  };
+
   const overlay = { position:'fixed', inset:0, background:isMobile?'white':'rgba(0,0,0,0.75)', display:'flex', alignItems:isMobile?'flex-start':'center', justifyContent:'center', zIndex:9999, padding:isMobile?0:16, overflowY:'auto' };
   const card    = { background:'white', borderRadius:isMobile?0:20, width:'100%', maxWidth:isMobile?'100%':(stage==='amount'?820:stage==='split_items'?600:480), maxHeight:isMobile?'none':'95vh', overflowY:isMobile?'visible':'auto', boxShadow:isMobile?'none':'0 20px 60px rgba(0,0,0,0.5)' };
 
@@ -294,6 +329,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                         ? <div style={{ display:'flex', gap:8 }}>
                             <button onClick={() => handleSplitEqualPayment(i)} style={{ padding:isMobile?'12px 14px':'10px 14px', borderRadius:8, border:'none', background:'#1a1a2e', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>💵 Cash</button>
                             <button onClick={() => handleSplitEqualPayment(i)} style={{ padding:isMobile?'12px 14px':'10px 14px', borderRadius:8, border:'none', background:'#C9A84C', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>💳 Card</button>
+                            <button onClick={() => handleSplitEqualPrint(i)} style={{ padding:isMobile?'12px 14px':'10px 14px', borderRadius:8, border:'2px solid #1a1a2e', background:'white', color:'#1a1a2e', fontWeight:700, fontSize:13, cursor:'pointer' }}>🖨️ Print</button>
                           </div>
                         : <div style={{ color:'#22c55e', fontWeight:700 }}>Paid ✓</div>
                       }
@@ -378,6 +414,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                         {!isPaid && <div style={{ display:'flex', gap:8, marginTop:12 }}>
                           <button onClick={() => handleSplitItemPayment(i)} style={{ flex:1, padding:isMobile?'14px':'10px', borderRadius:8, border:'none', background:'#1a1a2e', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>💵 Cash</button>
                           <button onClick={() => handleSplitItemPayment(i)} style={{ flex:1, padding:isMobile?'14px':'10px', borderRadius:8, border:'none', background:personColors[i], color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>💳 Card</button>
+                          <button onClick={() => handleSplitItemPrint(i)} style={{ flex:1, padding:isMobile?'14px':'10px', borderRadius:8, border:'2px solid #1a1a2e', background:'white', color:'#1a1a2e', fontWeight:700, fontSize:13, cursor:'pointer' }}>🖨️ Print</button>
                         </div>}
                       </div>
                     );

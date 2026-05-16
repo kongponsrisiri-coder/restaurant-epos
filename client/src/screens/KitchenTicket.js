@@ -3,6 +3,7 @@
  * Prints an 80mm kitchen ticket silently to the kitchen printer when a
  * course is fired. Desktop app only — a kitchen printer must be chosen
  * in Admin → Settings → Printer and auto-print left on.
+ * Supports 1–3 copies via localStorage key `kitchen_print_copies`.
  */
 
 const COURSE_LABELS = { 1: 'STARTERS', 2: 'MAINS', 3: 'DESSERTS', 4: 'EXTRA' };
@@ -22,13 +23,17 @@ export function printKitchenTicket({ order, items, course }) {
   const active = (items || []).filter(i => i && !i.voided);
   if (active.length === 0) return;
 
-  const html = buildKitchenTicketHTML({ order, items: active, course });
+  const copies = Math.max(1, Math.min(5,
+    parseInt((typeof localStorage !== 'undefined' && localStorage.getItem('kitchen_print_copies')) || '1', 10) || 1
+  ));
+
+  const html = buildKitchenTicketHTML({ order, items: active, course, copies });
   window.siamepos.printHtml({ html, deviceName })
     .then(r => { if (!r || !r.success) console.error('[kitchen-ticket] print failed:', r && r.error); })
     .catch(e => console.error('[kitchen-ticket] print error:', e));
 }
 
-function buildKitchenTicketHTML({ order, items, course }) {
+function buildTicketBody({ order, items, course }) {
   const heading = order && order.order_type === 'takeaway'
     ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : `TAKEAWAY #${order.id}`)
     : `TABLE ${order && order.table_number != null ? order.table_number : '—'}`;
@@ -45,6 +50,28 @@ function buildKitchenTicketHTML({ order, items, course }) {
     ${i.notes ? `<div class="note">▸ ${esc(i.notes)}</div>` : ''}
   `).join('');
 
+  return `
+  <div class="head">${esc(heading)}</div>
+  <div class="course">${courseLabel}</div>
+  ${customer}
+  <div class="rule"></div>
+  ${itemRows}
+  <div class="rule"></div>
+  <div class="foot">${now} &middot; Order #${order && order.id != null ? order.id : '—'}</div>
+  `;
+}
+
+function buildKitchenTicketHTML({ order, items, course, copies = 1 }) {
+  const body = buildTicketBody({ order, items, course });
+
+  // Each copy separated by a page break so they print on separate tickets.
+  const pages = Array.from({ length: copies }, (_, i) => `
+    <div class="page${i < copies - 1 ? ' break' : ''}">
+      ${body}
+      <div style="height:12mm;"></div>
+    </div>
+  `).join('');
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -53,6 +80,8 @@ function buildKitchenTicketHTML({ order, items, course }) {
     *    { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:Arial,Helvetica,sans-serif; color:#000; background:#fff; width:80mm; padding:4mm 3mm; }
     @media print { @page { margin:0; size:80mm auto; } body { padding:3mm 2mm; } }
+    .page       { }
+    .break      { page-break-after:always; }
     .head   { text-align:center; font-size:24px; font-weight:900; letter-spacing:1px; }
     .course { text-align:center; font-size:16px; font-weight:700; margin-top:2px; }
     .sub    { text-align:center; font-size:13px; margin-top:2px; }
@@ -65,14 +94,7 @@ function buildKitchenTicketHTML({ order, items, course }) {
   </style>
 </head>
 <body>
-  <div class="head">${esc(heading)}</div>
-  <div class="course">${courseLabel}</div>
-  ${customer}
-  <div class="rule"></div>
-  ${itemRows}
-  <div class="rule"></div>
-  <div class="foot">${now} &middot; Order #${order && order.id != null ? order.id : '—'}</div>
-  <div style="height:12mm;"></div>
+  ${pages}
 </body>
 </html>`;
 }

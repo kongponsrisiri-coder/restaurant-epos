@@ -157,11 +157,13 @@ function BarCategoryManager() {
 // SiamEPOS desktop app; a plain browser falls back to the print dialog.
 function PrinterCard({ cardStyle }) {
   const isElectron = !!(typeof window !== 'undefined' && window.siamepos && window.siamepos.isElectron && window.siamepos.printHtml);
-  const [printers, setPrinters]       = useState([]);
-  const [receiptName, setReceiptName] = useState(() => localStorage.getItem('receipt_printer_name') || '');
-  const [kitchenName, setKitchenName] = useState(() => localStorage.getItem('kitchen_printer_name') || '');
-  const [autoKitchen, setAutoKitchen] = useState(() => localStorage.getItem('kitchen_auto_print') !== '0');
-  const [testState, setTestState]     = useState('idle'); // idle | printing | ok | fail
+  const [printers, setPrinters]           = useState([]);
+  const [receiptName, setReceiptName]     = useState(() => localStorage.getItem('receipt_printer_name') || '');
+  const [kitchenName, setKitchenName]     = useState(() => localStorage.getItem('kitchen_printer_name') || '');
+  const [kitchenCopies, setKitchenCopies] = useState(() => parseInt(localStorage.getItem('kitchen_print_copies') || '1', 10) || 1);
+  const [autoKitchen, setAutoKitchen]     = useState(() => localStorage.getItem('kitchen_auto_print') !== '0');
+  const [barName, setBarName]             = useState(() => localStorage.getItem('bar_printer_name') || '');
+  const [testState, setTestState]         = useState('idle'); // idle | printing | ok | fail
 
   useEffect(() => {
     if (!isElectron) return;
@@ -172,7 +174,9 @@ function PrinterCard({ cardStyle }) {
 
   const saveReceipt = (v) => { setReceiptName(v); localStorage.setItem('receipt_printer_name', v); };
   const saveKitchen = (v) => { setKitchenName(v); localStorage.setItem('kitchen_printer_name', v); };
+  const saveKitchenCopies = (v) => { setKitchenCopies(v); localStorage.setItem('kitchen_print_copies', String(v)); };
   const saveAuto    = (v) => { setAutoKitchen(v); localStorage.setItem('kitchen_auto_print', v ? '1' : '0'); };
+  const saveBar     = (v) => { setBarName(v); localStorage.setItem('bar_printer_name', v); };
 
   const testPrint = async () => {
     setTestState('printing');
@@ -203,6 +207,8 @@ function PrinterCard({ cardStyle }) {
                   : testState === 'fail'     ? '✗ Failed — check printer'
                   : 'Test print';
 
+  const sectionDivider = { borderTop:'1px solid #f0f0f0', margin:'20px 0' };
+
   return (
     <div style={cardStyle}>
       <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:6 }}>🖨️ Printer (this device)</h2>
@@ -219,27 +225,66 @@ function PrinterCard({ cardStyle }) {
             Choose the printers wired to this machine. Selected printers print silently — no dialog.
           </p>
 
+          {/* ── Receipt printer ── */}
           <label style={{ fontSize:14, fontWeight:600, color:'#555', display:'block', marginBottom:6 }}>Receipt printer</label>
           <select value={receiptName} onChange={e => saveReceipt(e.target.value)} style={selectStyle}>
             <option value="">— Don't auto-print (use print dialog) —</option>
             {printers.map(p => <option key={p.name} value={p.name}>{p.displayName}{p.isDefault ? ' (default)' : ''}</option>)}
           </select>
 
-          <label style={{ fontSize:14, fontWeight:600, color:'#555', display:'block', margin:'16px 0 6px' }}>Kitchen printer</label>
+          <div style={sectionDivider} />
+
+          {/* ── Kitchen printer ── */}
+          <label style={{ fontSize:14, fontWeight:600, color:'#555', display:'block', marginBottom:6 }}>Kitchen printer</label>
           <select value={kitchenName} onChange={e => saveKitchen(e.target.value)} style={selectStyle}>
             <option value="">— No kitchen printer —</option>
             {printers.map(p => <option key={p.name} value={p.name}>{p.displayName}{p.isDefault ? ' (default)' : ''}</option>)}
           </select>
 
           {kitchenName && (
-            <label style={{ display:'flex', alignItems:'center', gap:8, marginTop:14, fontSize:14, color:'#555', cursor:'pointer' }}>
-              <input type="checkbox" checked={autoKitchen} onChange={e => saveAuto(e.target.checked)}
-                style={{ width:16, height:16 }} />
-              Auto-print a kitchen ticket when items are sent to the kitchen
-            </label>
+            <>
+              <label style={{ fontSize:13, fontWeight:600, color:'#555', display:'block', margin:'14px 0 8px' }}>Copies per ticket</label>
+              <div style={{ display:'flex', gap:8 }}>
+                {[1, 2, 3].map(n => (
+                  <button key={n} onClick={() => saveKitchenCopies(n)} style={{
+                    width:56, height:44, borderRadius:8, border:'none', fontWeight:700, fontSize:15, cursor:'pointer',
+                    background: kitchenCopies === n ? '#1a1a2e' : '#f0f0f0',
+                    color:       kitchenCopies === n ? 'white'   : '#555',
+                  }}>
+                    {n}×
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize:11, color:'#aaa', marginTop:6 }}>
+                {kitchenCopies === 1 ? 'One ticket per course fire' : `${kitchenCopies} copies printed per course fire`}
+              </div>
+
+              <label style={{ display:'flex', alignItems:'center', gap:8, marginTop:14, fontSize:14, color:'#555', cursor:'pointer' }}>
+                <input type="checkbox" checked={autoKitchen} onChange={e => saveAuto(e.target.checked)}
+                  style={{ width:16, height:16 }} />
+                Auto-print a kitchen ticket when items are sent to the kitchen
+              </label>
+            </>
           )}
 
-          <div style={{ display:'flex', gap:10, alignItems:'center', marginTop:18, flexWrap:'wrap' }}>
+          <div style={sectionDivider} />
+
+          {/* ── Bar printer ── */}
+          <label style={{ fontSize:14, fontWeight:600, color:'#555', display:'block', marginBottom:6 }}>Bar printer</label>
+          <select value={barName} onChange={e => saveBar(e.target.value)} style={selectStyle}>
+            <option value="">— No bar printer —</option>
+            {printers.map(p => <option key={p.name} value={p.name}>{p.displayName}{p.isDefault ? ' (default)' : ''}</option>)}
+          </select>
+          {barName && (
+            <div style={{ fontSize:11, color:'#aaa', marginTop:6 }}>
+              Bar tickets will print silently to this printer when drinks are ordered.
+            </div>
+          )}
+
+          <div style={sectionDivider} />
+
+          {/* ── Test print ── */}
+          <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
             <button onClick={testPrint} disabled={testState==='printing'} style={{
               padding:'10px 20px', borderRadius:8, border:'none',
               background: testState==='ok' ? '#22c55e' : testState==='fail' ? '#ef4444' : '#0D1B3E',
@@ -331,10 +376,10 @@ export default function SettingsSection() {
             <label style={labelStyle}>Restaurant Logo</label>
             <div style={{ display:'flex', alignItems:'flex-start', gap:16 }}>
               {/* Preview box */}
-              <div style={{ width:100, height:100, borderRadius:10, border:'2px dashed #ddd', display:'flex', alignItems:'center', justifyContent:'center', background:'#fafafa', flexShrink:0, overflow:'hidden' }}>
+              <div style={{ width:160, height:140, borderRadius:10, border:'2px dashed #ddd', display:'flex', alignItems:'center', justifyContent:'center', background:'#fafafa', flexShrink:0, overflow:'hidden', padding:8 }}>
                 {logoPreview
-                  ? <img src={logoPreview} alt="Logo" style={{ width:'100%', height:'100%', objectFit:'contain' }} />
-                  : <span style={{ fontSize:28 }}>🏪</span>
+                  ? <img src={logoPreview} alt="Logo" style={{ maxWidth:'100%', maxHeight:'100%', objectFit:'contain' }} />
+                  : <span style={{ fontSize:36 }}>🏪</span>
                 }
               </div>
               <div style={{ flex:1, display:'flex', flexDirection:'column', gap:8 }}>
@@ -387,7 +432,7 @@ export default function SettingsSection() {
           <div style={{ background:'white', border:'1px solid #e5e7eb', borderRadius:8, padding:'16px 20px', maxWidth:300, margin:'0 auto', fontFamily:'Courier New, monospace', fontSize:12 }}>
             {logoPreview && (
               <div style={{ textAlign:'center', marginBottom:8 }}>
-                <img src={logoPreview} alt="Logo" style={{ maxWidth:160, maxHeight:60, objectFit:'contain' }} />
+                <img src={logoPreview} alt="Logo" style={{ maxWidth:220, maxHeight:100, objectFit:'contain' }} />
               </div>
             )}
             <div style={{ textAlign:'center', fontWeight:900, fontSize:14, marginBottom:2 }}>{settings.company_name||'Restaurant Name'}</div>

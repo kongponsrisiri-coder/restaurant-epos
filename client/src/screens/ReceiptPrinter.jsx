@@ -134,7 +134,7 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
 
   const logoHtml = logoDataUrl ? `
     <div style="text-align:center;margin-bottom:10px;">
-      <img src="${logoDataUrl}" style="max-width:160px;max-height:60px;object-fit:contain;" alt="Logo" />
+      <img src="${logoDataUrl}" style="max-width:220px;max-height:100px;object-fit:contain;" alt="Logo" />
     </div>` : '';
 
   const qrHtml = googleReviewUrl ? `

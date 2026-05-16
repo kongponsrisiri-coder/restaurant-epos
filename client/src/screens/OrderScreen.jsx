@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, SERVER_URL } from '../api';
 import BillScreen from './BillScreen';
-import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket } from './KitchenTicket';
+import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
 import DeleteOrderModal from '../components/DeleteOrderModal';
 import AllergenChips from '../components/AllergenChips';
 import { parseAllergens } from '../utils/allergens';
@@ -155,7 +155,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         return prev.map(c => c.cartKey === cartKey ? { ...c, quantity: c.quantity + 1 } : c);
       }
       return [...prev, {
-        cartKey, menu_item_id: item.id, name: item.name,
+        cartKey, menu_item_id: item.id, name: item.name, name_alt: item.name_alt || '',
         unit_price: item.price + extraPrice, quantity: 1,
         notes: modifierNames, item_note: note || '',
         course: isBar ? 0 : course,
@@ -258,18 +258,18 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     // Snapshot cart before clearing.  Detect bar/kitchen split now (before any await)
     // so we can pre-open popup windows while the user-gesture context is still live.
     const cartAsItems   = cart.map(c => ({
-      name: c.name, quantity: c.quantity, course: c.course || 1, notes: c.notes || '', is_bar: !!c.is_bar,
+      name: c.name, name_alt: c.name_alt || '', quantity: c.quantity, course: c.course || 1, notes: c.notes || '', is_bar: !!c.is_bar,
     }));
     const existingItems = (order?.items || []).filter(i => i && !i.voided);
     const allNewItems   = cartAsItems.length > 0 ? [...existingItems, ...cartAsItems] : existingItems;
     const hasKitchen    = allNewItems.some(i => !i.is_bar);
     const hasBar        = allNewItems.some(i => i.is_bar);
 
-    // ── Pre-open popup windows SYNCHRONOUSLY (user gesture is fresh here). ──────
-    // Browsers block window.open() called after async work; opening them here and
-    // passing them to the async print functions bypasses the popup blocker.
-    const kitchenWin = hasKitchen ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
-    const barWin     = hasBar     ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
+    // ── Pre-open ONE popup window SYNCHRONOUSLY (user gesture is fresh here). ───
+    // Chrome allows only ONE window.open() per user gesture. Kitchen always uses
+    // server-side TCP or Electron print, so we give the one popup slot to bar.
+    // If bar also uses server/Electron print the window is closed immediately.
+    const barWin = hasBar ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
 
     try {
       await addOrderItems(orderId, cart);
@@ -277,34 +277,30 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
       await fetchOrder();
 
       // SEPOS-026 — kitchen ticket (non-bar items) and bar ticket (bar items) separately
-      if (hasKitchen) printFullOrderTicket({ order, items: allNewItems, popupWin: kitchenWin });
+      if (hasKitchen) printFullOrderTicket({ order, items: allNewItems, popupWin: null });
       if (hasBar)     printBarOrderTicket({ order, items: allNewItems, popupWin: barWin });
 
       if (isMobile) setMobileTab('order');
       alert('Order saved! Use 🔥 Fire buttons to send courses to kitchen.');
     } catch (err) {
-      // Clean up pre-opened windows on error
-      try { if (kitchenWin && !kitchenWin.closed) kitchenWin.close(); } catch {}
-      try { if (barWin     && !barWin.closed)     barWin.close();     } catch {}
+      // Clean up pre-opened window on error
+      try { if (barWin && !barWin.closed) barWin.close(); } catch {}
       alert('Failed to send order.');
     }
   };
 
   const handleFireCourse = async (course) => {
     setFiringCourse(course);
-    const aboutToFire = (order?.items || []).filter(
-      i => (i.course || 1) === course && !i.is_fired && !i.voided && !i.is_bar
-    );
-    // Pre-open popup before awaits so browser doesn't block it
-    const coursePopupWin = aboutToFire.length > 0
-      ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes')
-      : null;
+    // Pre-open popup before awaits so browser doesn't block it (used only if no TCP printer)
+    const coursePopupWin = window.open('', '_blank', 'width=400,height=600,scrollbars=yes');
     try {
       await fireCourse(orderId, course);
       await fetchOrder();
-      printKitchenTicket({ order, items: aboutToFire, course, popupWin: coursePopupWin });
+      // Fire notice — just "TABLE X / FIRE MAINS", no item list
+      printFireNoticeTicket({ order, course, popupWin: coursePopupWin });
       alert(`🔥 ${COURSE_LABELS[course]} fired to kitchen!`);
     } catch (err) {
+      try { if (coursePopupWin && !coursePopupWin.closed) coursePopupWin.close(); } catch {}
       alert('Failed to fire course.');
     } finally {
       setFiringCourse(null);

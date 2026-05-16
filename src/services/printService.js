@@ -174,7 +174,37 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
   return flatten(parts);
 }
 
-// ── Kitchen ticket formatter (single course) ──────────────────────────────────
+// ── Course fire notice (TABLE X — FIRE MAINS — no item list) ─────────────────
+// Called when chef fires a specific course. Just a loud call card, no item detail.
+
+function buildFireNotice({ order, course, bilingual = true }) {
+  const heading  = order.order_type === 'takeaway'
+    ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : `TAKEAWAY #${order.id}`)
+    : `TABLE ${order.table_number != null ? order.table_number : '?'}`;
+  const courseEN = COURSES_EN[course] || 'ITEMS';
+  const courseTH = bilingual ? (COURSES_TH[course] || '') : '';
+  const now      = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+  const headSize = heading.length <= 10 ? CMD.SIZE_BIG : CMD.SIZE_TALL;
+
+  const parts = [
+    CAN, CMD.INIT, lf(),
+    CMD.ALIGN_CENTER,
+    CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    rule('='), lf(),
+    CMD.BOLD_ON, CMD.SIZE_BIG, txt('FIRE'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    CMD.BOLD_ON, CMD.SIZE_TALL, txt(courseEN), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    courseTH ? [txt(courseTH), lf()] : [],
+    rule('='), lf(),
+    CMD.ALIGN_CENTER,
+    txt(`${now}  ·  Order #${order.id}`), lf(2),
+    CMD.CUT,
+  ];
+
+  return flatten(parts);
+}
+
+// ── Kitchen ticket formatter (single course, full item list) ──────────────────
+// Used for Send-to-Bar and any other case where a full item list is needed.
 
 function buildKitchenTicket({ order, items, course, bilingual = true }) {
   const heading = order.order_type === 'takeaway'
@@ -186,7 +216,7 @@ function buildKitchenTicket({ order, items, course, bilingual = true }) {
   const headSize = heading.length <= 10 ? CMD.SIZE_BIG : CMD.SIZE_TALL;
 
   const parts = [
-    CAN, CMD.INIT, lf(),     // CAN discards leftover bytes; LF after INIT ensures clean start
+    CAN, CMD.INIT, lf(),
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(courseEN), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
@@ -194,12 +224,16 @@ function buildKitchenTicket({ order, items, course, bilingual = true }) {
     order.customer_name ? [txt(order.customer_name), lf()] : [],
     rule('='), lf(),
     CMD.ALIGN_LEFT,
-    ...items.flatMap(item => [
-      CMD.BOLD_ON, CMD.SIZE_TALL,
-      txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}`),
-      CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-      item.notes ? [txt('    > ' + item.notes), lf()] : [],
-    ]),
+    ...items.flatMap(item => {
+      const nameAlt = bilingual ? (item.name_alt || item.name_th || '') : '';
+      return [
+        CMD.BOLD_ON, CMD.SIZE_TALL,
+        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}`),
+        CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+        nameAlt   ? [txt('    ' + nameAlt), lf()] : [],
+        item.notes ? [txt('    > ' + item.notes), lf()] : [],
+      ];
+    }),
     rule('='), lf(),
     CMD.ALIGN_CENTER,
     txt(`${now}  ·  Order #${order.id}`), lf(2),
@@ -230,12 +264,16 @@ function buildFullKitchenTicket({ order, items, bilingual = true }) {
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(COURSES_EN[course] || 'ITEMS'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     bilingual && COURSES_TH[course] ? [txt(COURSES_TH[course]), lf()] : [],
     rule('-'), lf(),
-    ...byCourse[course].flatMap(item => [
-      CMD.BOLD_ON, CMD.SIZE_TALL,
-      txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}`),
-      CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-      item.notes ? [txt('    > ' + item.notes), lf()] : [],
-    ]),
+    ...byCourse[course].flatMap(item => {
+      const nameAlt = bilingual ? (item.name_alt || item.name_th || '') : '';
+      return [
+        CMD.BOLD_ON, CMD.SIZE_TALL,
+        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}`),
+        CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+        nameAlt    ? [txt('    ' + nameAlt), lf()] : [],
+        item.notes ? [txt('    > ' + item.notes), lf()] : [],
+      ];
+    }),
     idx < arr.length - 1 ? [rule('-'), lf()] : [],
   ]);
 
@@ -273,27 +311,41 @@ function buildTestPage() {
 }
 
 // ── TCP sender ────────────────────────────────────────────────────────────────
+// USB print servers (e.g. WAVLINK) have an internal buffer that can mix bytes
+// from back-to-back TCP connections, producing garbled text at ticket tops.
+// We serialise all jobs through a queue and wait 1.5 s after each write so
+// the USB print server has time to fully flush to the printer before the next
+// connection opens.
+
+let _printQueue = Promise.resolve();
 
 function sendRaw(ip, port, buf, timeoutMs = 6000) {
-  return new Promise((resolve, reject) => {
+  const job = () => new Promise((resolve, reject) => {
     const sock = new net.Socket();
     let settled = false;
     const done = (err) => {
       if (settled) return;
       settled = true;
       sock.destroy();
-      err ? reject(err) : resolve();
+      // Wait 1.5 s after the socket closes so the USB print server flushes
+      // its buffer to the printer before we open the next connection.
+      setTimeout(() => err ? reject(err) : resolve(), 1500);
     };
     sock.setTimeout(timeoutMs);
     sock.connect(parseInt(port, 10) || 9100, ip, () => {
-      sock.write(buf, (err) => {
-        if (err) return done(err);
-        setTimeout(() => done(null), 400);
-      });
+      sock.write(buf, (err) => { if (err) return done(err); });
+      // Give the printer 600 ms to receive all bytes, then close connection.
+      sock.once('drain', () => setTimeout(() => done(null), 600));
+      // Fallback if 'drain' doesn't fire (small buffers)
+      setTimeout(() => done(null), 800);
     });
     sock.on('error',   (e) => done(e));
-    sock.on('timeout', ()  => done(new Error(`Printer at ${ip} did not respond within ${timeoutMs}ms`)));
+    sock.on('timeout', ()  => done(new Error(`Printer at ${ip} timed out`)));
   });
+
+  // Enqueue — jobs run sequentially, never concurrently
+  _printQueue = _printQueue.catch(() => {}).then(job);
+  return _printQueue;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -303,6 +355,16 @@ async function printReceipt(settings, order, items, paymentDetails) {
   const port = settings.printer_receipt_port || 9100;
   if (!ip) throw new Error('NO_IP');
   await sendRaw(ip, port, buildReceipt({ order, items, settings, paymentDetails }));
+}
+
+async function printFireNotice(settings, order, course) {
+  const ip       = settings.printer_kitchen_ip;
+  const port     = settings.printer_kitchen_port || 9100;
+  const copies   = Math.max(1, Math.min(5, parseInt(settings.printer_kitchen_copies || 1, 10) || 1));
+  const bilingual = (settings.kitchen_language || 'en_th') === 'en_th';
+  if (!ip) throw new Error('NO_IP');
+  const buf = buildFireNotice({ order, course, bilingual });
+  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf);
 }
 
 async function printKitchenTicket(settings, order, items, course) {
@@ -338,4 +400,4 @@ async function testPrint(ip, port = 9100) {
   await sendRaw(ip, parseInt(port, 10) || 9100, buildTestPage());
 }
 
-module.exports = { printReceipt, printKitchenTicket, printFullKitchenTicket, printBarTicket, testPrint };
+module.exports = { printReceipt, printFireNotice, printKitchenTicket, printFullKitchenTicket, printBarTicket, testPrint };

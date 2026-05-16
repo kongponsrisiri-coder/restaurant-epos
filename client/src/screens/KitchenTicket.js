@@ -21,7 +21,7 @@
  *  'both'  — print AND KDS
  */
 
-import { serverPrintKitchen, serverPrintKitchenFull, serverPrintBar, getSettings } from '../api';
+import { serverPrintKitchen, serverPrintKitchenFull, serverPrintBar, serverPrintFireNotice, getSettings } from '../api';
 
 const COURSE_LABELS_EN = { 1: 'STARTERS', 2: 'MAINS', 3: 'DESSERTS', 4: 'EXTRAS' };
 const COURSE_LABELS_TH = { 1: 'กับแกล้ม', 2: 'อาหารหลัก', 3: 'ของหวาน',  4: 'เพิ่มเติม' };
@@ -145,6 +145,42 @@ export async function printKitchenTicket({ order, items, course, popupWin = null
   });
 }
 
+// ── Public: fire notice — "TABLE X / FIRE MAINS" call card, no item list ──────
+// Called when chef fires a course. Server prints via TCP; popup fallback
+// shows a minimal notice page.
+export async function printFireNoticeTicket({ order, course, popupWin = null }) {
+  const settings = await getCachedSettings();
+
+  // 1. Server-side network print
+  try {
+    if (settings && settings.printer_kitchen_ip) {
+      const r = await serverPrintFireNotice(order.id, course);
+      if (r && r.success) { closeWin(popupWin); return; }
+      console.warn('[fire-notice] server print failed, falling back:', r?.error || r?.reason);
+    }
+  } catch (e) {
+    console.warn('[fire-notice] server print error, falling back:', e);
+  }
+
+  // 2. Electron silent print
+  const deviceName = (typeof localStorage !== 'undefined' && localStorage.getItem('kitchen_printer_name')) || '';
+  const autoOn     = typeof localStorage === 'undefined' || localStorage.getItem('kitchen_auto_print') !== '0';
+  const bilingual  = isBilingual(settings);
+  const html       = buildFireNoticeHTML({ order, course, bilingual });
+
+  if (deviceName && autoOn && window.siamepos?.isElectron && window.siamepos.printHtml) {
+    closeWin(popupWin);
+    window.siamepos.printHtml({ html, deviceName })
+      .then(r => { if (!r || !r.success) console.error('[fire-notice] print failed:', r?.error); })
+      .catch(e => console.error('[fire-notice] print error:', e));
+    return;
+  }
+
+  // 3. Browser popup fallback
+  if (!autoOn) { closeWin(popupWin); return; }
+  openPrintPopup(html, popupWin);
+}
+
 // ── Public: print bar items to bar printer (called on Send Order) ─────────────
 // popupWin: pre-opened window from sendOrder (opened before async work so the
 // browser does not block the popup as an unattended window.open call).
@@ -202,19 +238,24 @@ function ticketCSS() {
     .item   { display:flex; gap:8px; align-items:baseline; margin:7px 0; }
     .qty    { font-size:22px; font-weight:900; min-width:42px; }
     .name   { font-size:20px; font-weight:800; line-height:1.2; }
-    .note   { font-size:14px; font-weight:700; margin:-2px 0 6px 50px; }
+    .note     { font-size:14px; font-weight:700; margin:-2px 0 6px 50px; }
+    .note-alt { font-size:15px; font-weight:700; margin:-4px 0 4px 50px; color:#333; }
     .foot   { text-align:center; font-size:13px; font-weight:700; margin-top:6px; }
   `;
 }
 
-function itemsHTML(items) {
-  return items.map(i => `
+function itemsHTML(items, bilingual = false) {
+  return items.map(i => {
+    const nameAlt = bilingual ? (i.name_alt || i.name_th || '') : '';
+    return `
     <div class="item">
       <span class="qty">${Number(i.quantity) || 1}×</span>
       <span class="name">${esc(i.name || i.item_name || 'Item')}</span>
     </div>
+    ${nameAlt ? `<div class="note-alt">${esc(nameAlt)}</div>` : ''}
     ${i.notes ? `<div class="note">▸ ${esc(i.notes)}</div>` : ''}
-  `).join('');
+  `;
+  }).join('');
 }
 
 // Single-course ticket body
@@ -231,7 +272,7 @@ function buildSingleCourseBody({ order, items, course, bilingual = true }) {
     ${courseTH ? `<div class="course-th">${courseTH}</div>` : ''}
     ${customer}
     <div class="rule"></div>
-    ${itemsHTML(items)}
+    ${itemsHTML(items, bilingual)}
     <div class="rule"></div>
     <div class="foot">${now} &middot; Order #${order?.id ?? '—'}</div>
   `;
@@ -256,7 +297,7 @@ function buildFullOrderBody({ order, items, bilingual = true }) {
     <div class="course-en">${COURSE_LABELS_EN[c] || 'ITEMS'}</div>
     ${bilingual && COURSE_LABELS_TH[c] ? `<div class="course-th">${COURSE_LABELS_TH[c]}</div>` : ''}
     <div class="rule"></div>
-    ${itemsHTML(byCourse[c])}
+    ${itemsHTML(byCourse[c], bilingual)}
     ${idx < courseKeys.length - 1 ? '<div class="rule-solid"></div>' : ''}
   `).join('');
 
@@ -280,6 +321,40 @@ function buildFullOrderTicketHTML({ order, items, copies = 1, bilingual = true }
   const body  = buildFullOrderBody({ order, items, bilingual });
   const pages = multiPage(body, copies);
   return wrapHTML(pages);
+}
+
+function buildFireNoticeHTML({ order, course, bilingual = true }) {
+  const COURSE_LABELS_EN_LOCAL = { 1: 'STARTERS', 2: 'MAINS', 3: 'DESSERTS', 4: 'EXTRAS' };
+  const COURSE_LABELS_TH_LOCAL = { 1: 'กับแกล้ม', 2: 'อาหารหลัก', 3: 'ของหวาน', 4: 'เพิ่มเติม' };
+  const heading   = orderHeading(order);
+  const courseEN  = COURSE_LABELS_EN_LOCAL[course] || 'COURSE';
+  const courseTH  = bilingual ? (COURSE_LABELS_TH_LOCAL[course] || '') : '';
+  const now       = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+  const css = `
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:Arial,Helvetica,sans-serif; color:#000; background:#fff; width:80mm; padding:6mm 3mm; text-align:center; }
+    @media print { @page { margin:0; size:80mm auto; } body { padding:4mm 2mm; } }
+    .head  { font-size:32px; font-weight:900; letter-spacing:1px; }
+    .rule  { border-top:3px solid #000; margin:10px 0; }
+    .fire  { font-size:48px; font-weight:900; letter-spacing:2px; margin:8px 0; }
+    .course-en { font-size:28px; font-weight:900; }
+    .course-th { font-size:20px; font-weight:700; color:#333; margin-top:4px; }
+    .foot  { font-size:13px; font-weight:700; margin-top:10px; }
+  `;
+
+  const body = `
+    <div class="head">${esc(heading)}</div>
+    <div class="rule"></div>
+    <div class="fire">🔥 FIRE</div>
+    <div class="course-en">${courseEN}</div>
+    ${courseTH ? `<div class="course-th">${courseTH}</div>` : ''}
+    <div class="rule"></div>
+    <div class="foot">${now} &middot; Order #${order?.id ?? '—'}</div>
+    <div style="height:12mm;"></div>
+  `;
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}</style></head><body>${body}</body></html>`;
 }
 
 function orderHeading(order) {

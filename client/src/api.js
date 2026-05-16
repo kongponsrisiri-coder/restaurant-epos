@@ -72,6 +72,7 @@ export const serverPrintReceipt   = (order_id, payment_details) => post('/api/pr
 export const serverPrintKitchen   = (order_id, items, course)   => post('/api/print/kitchen', { order_id, items, course });
 export const serverPrintBar           = (order_id, items)         => post('/api/print/bar',          { order_id, items });
 export const serverPrintKitchenFull   = (order_id, items)         => post('/api/print/kitchen-full', { order_id, items });
+export const serverPrintFireNotice    = (order_id, course)        => post('/api/print/kitchen-fire', { order_id, course });
 export const getDiscountReasons = () => get('/api/discount-reasons');
 export const addDiscountReason = (reason) => post('/api/discount-reasons', { reason });
 export const deleteDiscountReason = (id) => del(`/api/discount-reasons/${id}`);

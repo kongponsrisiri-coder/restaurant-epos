@@ -3175,6 +3175,22 @@ app.post('/api/print/bar', async (req, res) => {
   }
 });
 
+// Print a course fire notice (TABLE X / FIRE MAINS — no item list)
+app.post('/api/print/kitchen-fire', async (req, res) => {
+  const { order_id, course } = req.body;
+  try {
+    const settings = await loadSettings();
+    if (!settings.printer_kitchen_ip) return res.json({ success: false, reason: 'no_ip' });
+    const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [order_id]);
+    if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
+    await printService.printFireNotice(settings, orderRes.rows[0], course || 1);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[print/kitchen-fire]', err.message);
+    res.json({ success: false, error: err.message });
+  }
+});
+
 // Print a full-order kitchen ticket (all courses combined — fired on Send Order)
 app.post('/api/print/kitchen-full', async (req, res) => {
   const { order_id, items } = req.body;

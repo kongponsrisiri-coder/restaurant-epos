@@ -856,7 +856,7 @@ app.get('/api/reports/items', async (req, res) => {
 
 app.get('/api/kitchen/completed', async (req, res) => {
   try {
-    const result = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt, orders.covers, orders.id as order_id, tables.table_number, order_items.fired_at, order_items.served_at, orders.order_type, orders.customer_name, orders.pickup_time FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON menu_items.category_id = categories.id LEFT JOIN orders ON order_items.order_id = orders.id LEFT JOIN tables ON orders.table_id = tables.id WHERE order_items.status='served' AND order_items.voided=0 AND (categories.is_bar=0 OR categories.is_bar IS NULL) AND order_items.served_at::date = CURRENT_DATE ORDER BY order_items.order_id ASC`);
+    const result = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt, orders.covers, orders.id as order_id, tables.table_number, order_items.fired_at, order_items.served_at, orders.order_type, orders.customer_name, orders.pickup_time, orders.order_subtype, orders.delivery_address FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON menu_items.category_id = categories.id LEFT JOIN orders ON order_items.order_id = orders.id LEFT JOIN tables ON orders.table_id = tables.id WHERE order_items.status='served' AND order_items.voided=0 AND (categories.is_bar=0 OR categories.is_bar IS NULL) AND order_items.served_at::date = CURRENT_DATE ORDER BY order_items.order_id ASC`);
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2449,8 +2449,51 @@ app.get('/api/customers', async (req, res) => {
       ORDER BY MAX(r.reservation_date) DESC
     `);
 
+    // SEPOS-DELIVERY-002 — takeaway customers. Takeaway orders carry
+    // customer_name/phone/email directly on the order row, so we
+    // aggregate them the same way and merge into the reservation-derived
+    // list by email. No customers table needed — the CRM stays a
+    // derived view, now spanning both bookings AND takeaway.
+    const takeawayRes = await pool.query(`
+      SELECT
+        LOWER(TRIM(customer_email)) AS email_key,
+        MIN(customer_email) AS customer_email,
+        MIN(customer_name)  AS customer_name,
+        MIN(customer_phone) AS customer_phone,
+        MAX(COALESCE(marketing_consent, 0)) AS marketing_consent,
+        COUNT(*) AS total_visits,
+        MIN(DATE(opened_at)) AS first_visit,
+        MAX(DATE(opened_at)) AS last_visit,
+        COALESCE(SUM(total), 0) AS total_spend
+      FROM orders
+      WHERE order_type = 'takeaway'
+        AND customer_email IS NOT NULL AND TRIM(customer_email) <> ''
+      GROUP BY LOWER(TRIM(customer_email))
+    `);
+
+    // Merge: reservation customers first, then fold takeaway in.
+    const byEmail = new Map();
+    for (const row of r.rows) byEmail.set(row.email_key, { ...row });
+    for (const t of takeawayRes.rows) {
+      const ex = byEmail.get(t.email_key);
+      if (ex) {
+        ex.total_visits = Number(ex.total_visits || 0) + Number(t.total_visits || 0);
+        ex.total_spend  = Number(ex.total_spend  || 0) + Number(t.total_spend  || 0);
+        if (t.first_visit && (!ex.first_visit || new Date(t.first_visit) < new Date(ex.first_visit))) ex.first_visit = t.first_visit;
+        if (t.last_visit  && (!ex.last_visit  || new Date(t.last_visit)  > new Date(ex.last_visit)))  ex.last_visit  = t.last_visit;
+        ex.marketing_consent = (ex.marketing_consent || t.marketing_consent) ? 1 : 0;
+        ex.customer_name  = ex.customer_name  || t.customer_name;
+        ex.customer_phone = ex.customer_phone || t.customer_phone;
+      } else {
+        byEmail.set(t.email_key, { ...t, unsubscribed: 0 });
+      }
+    }
+    const merged = [...byEmail.values()].sort((a, b) =>
+      new Date(b.last_visit || 0) - new Date(a.last_visit || 0)
+    );
+
     const today = new Date();
-    const customers = r.rows.map(c => {
+    const customers = merged.map(c => {
       const visits = Number(c.total_visits || 0);
       const spend  = Number(c.total_spend  || 0);
       const lastVisitDate = c.last_visit ? new Date(c.last_visit) : null;

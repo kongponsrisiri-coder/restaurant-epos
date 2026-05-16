@@ -323,7 +323,7 @@
     cart: [],
     pickupKind: 'asap',
     pickupISO: null,
-    customer: { name:'', phone:'', email:'' },
+    customer: { name:'', phone:'', email:'', order_subtype:'collection', delivery_address:'', delivery_notes:'', marketing_consent:false },
     error: '',
     orderResult: null,
   };
@@ -482,8 +482,26 @@
   }
 
   function renderStep3() {
+    // SEPOS-DELIVERY-002 — collection (default) vs delivery.
+    const isDelivery = state.customer.order_subtype === 'delivery';
+    const toggleBtn = (kind, label, sub) => `
+      <button type="button" class="tw-subtype-btn${state.customer.order_subtype === kind ? ' tw-subtype-on' : ''}"
+        data-subtype="${kind}"
+        style="flex:1;padding:12px 8px;border-radius:10px;cursor:pointer;font:inherit;
+          border:2px solid ${state.customer.order_subtype === kind ? '#0D1B3E' : '#ddd'};
+          background:${state.customer.order_subtype === kind ? '#0D1B3E' : '#fff'};
+          color:${state.customer.order_subtype === kind ? '#fff' : '#555'};font-weight:700;">
+        ${label}<br><span style="font-weight:400;font-size:11px;opacity:.8;">${sub}</span>
+      </button>`;
     return `
       <h2 class="tw-h2">Your details</h2>
+
+      <label class="tw-label">How would you like your order?</label>
+      <div style="display:flex;gap:10px;margin-bottom:14px;">
+        ${toggleBtn('collection', '🥡 Collection', 'Pick up at the restaurant')}
+        ${toggleBtn('delivery',   '🚗 Delivery',   'We deliver to your address')}
+      </div>
+
       <div class="tw-help">We'll call out your name when your order's ready. Email is optional for a confirmation.</div>
       <label class="tw-label">Your name *</label>
       <input class="tw-input" id="tw-name" type="text" inputmode="text"
@@ -494,6 +512,22 @@
       <label class="tw-label">Email (optional)</label>
       <input class="tw-input" id="tw-email" type="email" inputmode="email"
         value="${esc(state.customer.email)}" placeholder="for order confirmation" autocomplete="email" />
+
+      ${isDelivery ? `
+        <label class="tw-label">Delivery address *</label>
+        <textarea class="tw-input" id="tw-delivery-address" rows="3"
+          placeholder="House/flat number, street, postcode" autocomplete="street-address"
+          style="resize:vertical;">${esc(state.customer.delivery_address)}</textarea>
+        <label class="tw-label">Delivery notes (optional)</label>
+        <input class="tw-input" id="tw-delivery-notes" type="text"
+          value="${esc(state.customer.delivery_notes)}" placeholder="e.g. ring buzzer 12, leave at door" />
+      ` : ''}
+
+      <label style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;font-size:13px;color:#555;cursor:pointer;">
+        <input type="checkbox" id="tw-consent" ${state.customer.marketing_consent ? 'checked' : ''}
+          style="margin-top:2px;width:16px;height:16px;flex-shrink:0;" />
+        <span>Keep me updated with offers and news. You can unsubscribe any time.</span>
+      </label>
       ${state.error ? `<div class="tw-error">${esc(state.error)}</div>` : ''}
     `;
   }
@@ -679,6 +713,18 @@
 
     $('tw-back')?.addEventListener('click', () => { state.step -= 1; state.error = ''; render(); });
 
+    // SEPOS-DELIVERY-002 — collection/delivery toggle. Capturing the
+    // current Step-3 inputs into state first means the re-render that
+    // shows/hides the address fields doesn't wipe what's been typed.
+    document.querySelectorAll('[data-subtype]').forEach(b => {
+      b.addEventListener('click', () => {
+        captureStep3();
+        state.customer.order_subtype = b.dataset.subtype;
+        state.error = '';
+        render();
+      });
+    });
+
     $('tw-next')?.addEventListener('click', async () => {
       state.error = '';
       if (state.step === 1) {
@@ -692,11 +738,12 @@
         if (state.cart.length === 0) { state.error = 'Add some items first.'; render(); return; }
         state.step = 3; render();
       } else if (state.step === 3) {
-        state.customer.name  = $('tw-name')?.value.trim()  || '';
-        state.customer.phone = $('tw-phone')?.value.trim() || '';
-        state.customer.email = $('tw-email')?.value.trim() || '';
+        captureStep3();
         if (!state.customer.name)  { state.error = 'Name is required.';         render(); return; }
         if (!state.customer.phone) { state.error = 'Phone number is required.'; render(); return; }
+        if (state.customer.order_subtype === 'delivery' && !state.customer.delivery_address) {
+          state.error = 'Delivery address is required.'; render(); return;
+        }
         state.step = 4; render();
       } else if (state.step === 4) {
         await submitOrder();
@@ -727,6 +774,19 @@
       state.error = 'Could not load menu — please try again.';
     }
   }
+  // SEPOS-DELIVERY-002 — read every Step-3 field that's currently in the
+  // DOM into state. Called before any re-render (toggle) and before
+  // moving to Step 4, so nothing typed is lost.
+  function captureStep3() {
+    const c = state.customer;
+    if ($('tw-name'))  c.name  = $('tw-name').value.trim();
+    if ($('tw-phone')) c.phone = $('tw-phone').value.trim();
+    if ($('tw-email')) c.email = $('tw-email').value.trim();
+    if ($('tw-delivery-address')) c.delivery_address = $('tw-delivery-address').value.trim();
+    if ($('tw-delivery-notes'))   c.delivery_notes   = $('tw-delivery-notes').value.trim();
+    if ($('tw-consent')) c.marketing_consent = $('tw-consent').checked;
+  }
+
   async function submitOrder() {
     const btn = $('tw-next');
     if (btn) { btn.disabled = true; btn.textContent = 'Placing order…'; }
@@ -739,6 +799,11 @@
           customer_phone: state.customer.phone,
           customer_email: state.customer.email || null,
           pickup_time:    computePickupISO(),
+          // SEPOS-DELIVERY-002 — collection/delivery + CRM consent.
+          order_subtype:     state.customer.order_subtype || 'collection',
+          delivery_address:  state.customer.delivery_address || null,
+          delivery_notes:    state.customer.delivery_notes || null,
+          marketing_consent: !!state.customer.marketing_consent,
           items: state.cart.map(c => ({
             menu_item_id: c.menu_item_id,
             quantity:     c.quantity,
@@ -766,7 +831,7 @@
     state = {
       step: 1, settings: state.settings, menu: state.menu, activeCategory: null,
       cart: [], pickupKind: 'asap', pickupISO: null,
-      customer: { name:'', phone:'', email:'' },
+      customer: { name:'', phone:'', email:'', order_subtype:'collection', delivery_address:'', delivery_notes:'', marketing_consent:false },
       error: '', orderResult: null,
     };
     injectStyles();

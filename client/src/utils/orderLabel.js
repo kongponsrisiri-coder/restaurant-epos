@@ -8,14 +8,24 @@ export function isTakeaway(order) {
   return order && order.order_type === 'takeaway';
 }
 
+// SEPOS-DELIVERY-002 — a takeaway order is either collection (default)
+// or delivery. Delivery orders get the 🚗 treatment so the kitchen +
+// expo bag them differently and know a courier/driver is involved.
+export function isDelivery(order) {
+  return isTakeaway(order) && order.order_subtype === 'delivery';
+}
+
 // Short label — fits in a card title, kitchen ticket, etc.
+//   delivery → "🚗 Online Delivery #123"
 //   takeaway → "🥡 Online Order #123"
 //   dine-in  → "Table 5"
 export function orderShortLabel(order) {
   if (!order) return '—';
   if (isTakeaway(order)) {
     const id = order.id ?? order.order_id ?? '—';
-    return `🥡 Online Order #${id}`;
+    return isDelivery(order)
+      ? `🚗 Online Delivery #${id}`
+      : `🥡 Online Order #${id}`;
   }
   return `Table ${order.table_number ?? '—'}`;
 }
@@ -25,7 +35,9 @@ export function orderShortLabelPlain(order) {
   if (!order) return '—';
   if (isTakeaway(order)) {
     const id = order.id ?? order.order_id ?? '—';
-    return `Online Order #${id}`;
+    return isDelivery(order)
+      ? `Online Delivery #${id}`
+      : `Online Order #${id}`;
   }
   return `Table ${order.table_number ?? '—'}`;
 }
@@ -45,6 +57,11 @@ export function orderSubLabel(order) {
         hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London',
       });
       bits.push(pickup);
+    }
+    // SEPOS-DELIVERY-002 — surface the delivery address so the kitchen
+    // knows where it's going (and whoever dispatches has it to hand).
+    if (isDelivery(order) && order.delivery_address) {
+      bits.push(`📍 ${order.delivery_address}`);
     }
     return bits.join(' · ');
   }

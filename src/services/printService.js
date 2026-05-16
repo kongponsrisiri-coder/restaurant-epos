@@ -174,17 +174,17 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
 
 // ── Kitchen ticket formatter (single course) ──────────────────────────────────
 
-function buildKitchenTicket({ order, items, course }) {
+function buildKitchenTicket({ order, items, course, bilingual = true }) {
   const heading = order.order_type === 'takeaway'
     ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : `TAKEAWAY #${order.id}`)
     : `TABLE ${order.table_number != null ? order.table_number : '?'}`;
   const courseEN = COURSES_EN[course] || 'ITEMS';
-  const courseTH = COURSES_TH[course] || '';
+  const courseTH = bilingual ? (COURSES_TH[course] || '') : '';
   const now = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
   const headSize = heading.length <= 10 ? CMD.SIZE_BIG : CMD.SIZE_TALL;
 
   const parts = [
-    CMD.INIT,
+    CMD.INIT, lf(),          // extra LF after INIT clears any residual buffer chars
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(courseEN), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
@@ -209,7 +209,7 @@ function buildKitchenTicket({ order, items, course }) {
 
 // ── Full order ticket (all courses combined) ──────────────────────────────────
 
-function buildFullKitchenTicket({ order, items }) {
+function buildFullKitchenTicket({ order, items, bilingual = true }) {
   const heading = order.order_type === 'takeaway'
     ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : `TAKEAWAY #${order.id}`)
     : `TABLE ${order.table_number != null ? order.table_number : '?'}`;
@@ -226,7 +226,7 @@ function buildFullKitchenTicket({ order, items }) {
 
   const courseBlocks = Object.keys(byCourse).sort().flatMap((course, idx, arr) => [
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(COURSES_EN[course] || 'ITEMS'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-    txt(COURSES_TH[course] || ''), lf(),
+    bilingual && COURSES_TH[course] ? [txt(COURSES_TH[course]), lf()] : [],
     rule('-'), lf(),
     ...byCourse[course].flatMap(item => [
       CMD.BOLD_ON, CMD.SIZE_TALL,
@@ -238,7 +238,7 @@ function buildFullKitchenTicket({ order, items }) {
   ]);
 
   const parts = [
-    CMD.INIT,
+    CMD.INIT, lf(),          // extra LF after INIT clears any residual buffer chars
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     order.customer_name ? [txt(order.customer_name), lf()] : [],
@@ -304,32 +304,31 @@ async function printReceipt(settings, order, items, paymentDetails) {
 }
 
 async function printKitchenTicket(settings, order, items, course) {
-  const ip     = settings.printer_kitchen_ip;
-  const port   = settings.printer_kitchen_port   || 9100;
-  const copies = Math.max(1, Math.min(5,
-    parseInt(settings.printer_kitchen_copies || 1, 10) || 1
-  ));
+  const ip       = settings.printer_kitchen_ip;
+  const port     = settings.printer_kitchen_port || 9100;
+  const copies   = Math.max(1, Math.min(5, parseInt(settings.printer_kitchen_copies || 1, 10) || 1));
+  const bilingual = (settings.kitchen_language || 'en_th') === 'en_th';
   if (!ip) throw new Error('NO_IP');
-  const buf = buildKitchenTicket({ order, items, course });
+  const buf = buildKitchenTicket({ order, items, course, bilingual });
   for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf);
 }
 
 async function printFullKitchenTicket(settings, order, items) {
-  const ip     = settings.printer_kitchen_ip;
-  const port   = settings.printer_kitchen_port   || 9100;
-  const copies = Math.max(1, Math.min(5,
-    parseInt(settings.printer_kitchen_copies || 1, 10) || 1
-  ));
+  const ip       = settings.printer_kitchen_ip;
+  const port     = settings.printer_kitchen_port || 9100;
+  const copies   = Math.max(1, Math.min(5, parseInt(settings.printer_kitchen_copies || 1, 10) || 1));
+  const bilingual = (settings.kitchen_language || 'en_th') === 'en_th';
   if (!ip) throw new Error('NO_IP');
-  const buf = buildFullKitchenTicket({ order, items });
+  const buf = buildFullKitchenTicket({ order, items, bilingual });
   for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf);
 }
 
 async function printBarTicket(settings, order, items) {
-  const ip   = settings.printer_bar_ip;
-  const port = settings.printer_bar_port || 9100;
+  const ip       = settings.printer_bar_ip;
+  const port     = settings.printer_bar_port || 9100;
+  const bilingual = (settings.kitchen_language || 'en_th') === 'en_th';
   if (!ip) throw new Error('NO_IP');
-  await sendRaw(ip, port, buildKitchenTicket({ order, items, course: 4 }));
+  await sendRaw(ip, port, buildKitchenTicket({ order, items, course: 4, bilingual }));
 }
 
 async function testPrint(ip, port = 9100) {

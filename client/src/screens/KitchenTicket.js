@@ -21,7 +21,7 @@
  *  'both'  — print AND KDS
  */
 
-import { serverPrintKitchen, serverPrintKitchenFull, getSettings } from '../api';
+import { serverPrintKitchen, serverPrintKitchenFull, serverPrintBar, getSettings } from '../api';
 
 const COURSE_LABELS_EN = { 1: 'STARTERS', 2: 'MAINS', 3: 'DESSERTS', 4: 'EXTRAS' };
 const COURSE_LABELS_TH = { 1: 'กับแกล้ม', 2: 'อาหารหลัก', 3: 'ของหวาน',  4: 'เพิ่มเติม' };
@@ -47,6 +47,11 @@ function esc(s) {
 function shouldPrint(settings) {
   const mode = (settings && settings.kitchen_print_mode) || 'print';
   return mode !== 'kds'; // 'print' or 'both' → yes; 'kds' → no
+}
+
+// ── Is bilingual mode on? ─────────────────────────────────────────────────────
+function isBilingual(settings) {
+  return (settings && settings.kitchen_language) !== 'en'; // default en_th
 }
 
 // ── Open browser popup and trigger print dialog ───────────────────────────────
@@ -94,18 +99,19 @@ async function dispatchPrint({ settings, serverFn, html }) {
 
 // ── Public: print ALL courses on one ticket (called on Send Order) ────────────
 export async function printFullOrderTicket({ order, items }) {
-  const active = (items || []).filter(i => i && !i.voided);
+  const active = (items || []).filter(i => i && !i.voided && !i.is_bar);
   if (active.length === 0) return;
 
   const settings = await getCachedSettings();
   const copies   = Math.max(1, Math.min(5,
     parseInt((typeof localStorage !== 'undefined' && localStorage.getItem('kitchen_print_copies')) || '1', 10) || 1
   ));
+  const bilingual = isBilingual(settings);
 
   await dispatchPrint({
     settings,
     serverFn: () => serverPrintKitchenFull(order.id, active),
-    html:     buildFullOrderTicketHTML({ order, items: active, copies }),
+    html:     buildFullOrderTicketHTML({ order, items: active, copies, bilingual }),
   });
 }
 
@@ -118,12 +124,48 @@ export async function printKitchenTicket({ order, items, course }) {
   const copies   = Math.max(1, Math.min(5,
     parseInt((typeof localStorage !== 'undefined' && localStorage.getItem('kitchen_print_copies')) || '1', 10) || 1
   ));
+  const bilingual = isBilingual(settings);
 
   await dispatchPrint({
     settings,
     serverFn: () => serverPrintKitchen(order.id, active, course),
-    html:     buildKitchenTicketHTML({ order, items: active, course, copies }),
+    html:     buildKitchenTicketHTML({ order, items: active, course, copies, bilingual }),
   });
+}
+
+// ── Public: print bar items to bar printer (called on Send Order) ─────────────
+export async function printBarOrderTicket({ order, items }) {
+  const barItems = (items || []).filter(i => i && !i.voided && i.is_bar);
+  if (barItems.length === 0) return;
+
+  const settings = await getCachedSettings();
+  const bilingual = isBilingual(settings);
+
+  // Bar uses the 'bar' printer IP — no KDS mode check (bar always prints)
+  try {
+    if (settings && settings.printer_bar_ip) {
+      const r = await serverPrintBar(order.id, barItems);
+      if (r && r.success) return;
+      console.warn('[bar-ticket] server print failed, falling back:', r?.error || r?.reason);
+    }
+  } catch (e) {
+    console.warn('[bar-ticket] server print error, falling back:', e);
+  }
+
+  // Electron silent print
+  const deviceName = (typeof localStorage !== 'undefined' && localStorage.getItem('bar_printer_name')) || '';
+  const autoOn     = typeof localStorage === 'undefined' || localStorage.getItem('kitchen_auto_print') !== '0';
+  const html       = buildKitchenTicketHTML({ order, items: barItems, course: 4, copies: 1, bilingual });
+
+  if (deviceName && autoOn && window.siamepos?.isElectron && window.siamepos.printHtml) {
+    window.siamepos.printHtml({ html, deviceName })
+      .then(r => { if (!r || !r.success) console.error('[bar-ticket] print failed:', r?.error); })
+      .catch(e => console.error('[bar-ticket] print error:', e));
+    return;
+  }
+
+  if (!autoOn) return;
+  openPrintPopup(html);
 }
 
 // ── HTML builders ─────────────────────────────────────────────────────────────
@@ -160,10 +202,10 @@ function itemsHTML(items) {
 }
 
 // Single-course ticket body
-function buildSingleCourseBody({ order, items, course }) {
+function buildSingleCourseBody({ order, items, course, bilingual = true }) {
   const heading     = orderHeading(order);
   const courseEN    = COURSE_LABELS_EN[course] || 'ITEMS';
-  const courseTH    = COURSE_LABELS_TH[course] || '';
+  const courseTH    = bilingual ? (COURSE_LABELS_TH[course] || '') : '';
   const now         = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const customer    = order?.customer_name ? `<div class="sub">${esc(order.customer_name)}</div>` : '';
 
@@ -180,7 +222,7 @@ function buildSingleCourseBody({ order, items, course }) {
 }
 
 // Full-order ticket body (all courses grouped)
-function buildFullOrderBody({ order, items }) {
+function buildFullOrderBody({ order, items, bilingual = true }) {
   const heading  = orderHeading(order);
   const now      = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const customer = order?.customer_name ? `<div class="sub">${esc(order.customer_name)}</div>` : '';
@@ -196,7 +238,7 @@ function buildFullOrderBody({ order, items }) {
   const courseKeys = Object.keys(byCourse).sort();
   const courseBlocks = courseKeys.map((c, idx) => `
     <div class="course-en">${COURSE_LABELS_EN[c] || 'ITEMS'}</div>
-    ${COURSE_LABELS_TH[c] ? `<div class="course-th">${COURSE_LABELS_TH[c]}</div>` : ''}
+    ${bilingual && COURSE_LABELS_TH[c] ? `<div class="course-th">${COURSE_LABELS_TH[c]}</div>` : ''}
     <div class="rule"></div>
     ${itemsHTML(byCourse[c])}
     ${idx < courseKeys.length - 1 ? '<div class="rule-solid"></div>' : ''}
@@ -212,14 +254,14 @@ function buildFullOrderBody({ order, items }) {
   `;
 }
 
-function buildKitchenTicketHTML({ order, items, course, copies = 1 }) {
-  const body  = buildSingleCourseBody({ order, items, course });
+function buildKitchenTicketHTML({ order, items, course, copies = 1, bilingual = true }) {
+  const body  = buildSingleCourseBody({ order, items, course, bilingual });
   const pages = multiPage(body, copies);
   return wrapHTML(pages);
 }
 
-function buildFullOrderTicketHTML({ order, items, copies = 1 }) {
-  const body  = buildFullOrderBody({ order, items });
+function buildFullOrderTicketHTML({ order, items, copies = 1, bilingual = true }) {
+  const body  = buildFullOrderBody({ order, items, bilingual });
   const pages = multiPage(body, copies);
   return wrapHTML(pages);
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, SERVER_URL } from '../api';
 import BillScreen from './BillScreen';
-import { printKitchenTicket, printFullOrderTicket } from './KitchenTicket';
+import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket } from './KitchenTicket';
 import DeleteOrderModal from '../components/DeleteOrderModal';
 import AllergenChips from '../components/AllergenChips';
 import { parseAllergens } from '../utils/allergens';
@@ -258,16 +258,21 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     // Merge with existing order items so re-orders (adding to existing table) print everything.
     const existingItems = (order?.items || []).filter(i => i && !i.voided);
     const cartAsItems   = cart.map(c => ({
-      name: c.name, quantity: c.quantity, course: c.course || 1, notes: c.notes || '',
+      name: c.name, quantity: c.quantity, course: c.course || 1, notes: c.notes || '', is_bar: !!c.is_bar,
     }));
     const allForTicket = existingItems.length > 0 ? existingItems : cartAsItems;
     try {
       await addOrderItems(orderId, cart);
       setCart([]);
       await fetchOrder();
-      // SEPOS-026 — print a combined ticket for all courses on Send Order.
-      if (allForTicket.length > 0) {
-        printFullOrderTicket({ order, items: cartAsItems.length > 0 ? [...existingItems, ...cartAsItems] : existingItems });
+      // SEPOS-026 — print a combined kitchen ticket for all NON-bar courses on Send Order.
+      const allNewItems = cartAsItems.length > 0 ? [...existingItems, ...cartAsItems] : existingItems;
+      if (allNewItems.filter(i => !i.is_bar).length > 0) {
+        printFullOrderTicket({ order, items: allNewItems });
+      }
+      // Bar items → bar printer
+      if (allNewItems.filter(i => i.is_bar).length > 0) {
+        printBarOrderTicket({ order, items: allNewItems });
       }
       // Sandy: switch to Order tab on mobile so waiter can see items and fire courses
       if (isMobile) setMobileTab('order');

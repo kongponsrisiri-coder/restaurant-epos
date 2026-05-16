@@ -319,6 +319,38 @@ export default function SettingsSection() {
         <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Standard UK rate is 12.5%. This is optional and always shown separately on the bill.</div>
       </div>
 
+      {/* ── Delivery (SEPOS-DELIVERY-002) ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>🚗 Online Delivery</h2>
+        <div style={{ fontSize:12, color:'#888', marginBottom:16 }}>
+          Set both fields to offer delivery on the takeaway widget. The widget checks each customer's postcode against this radius — anyone outside is offered collection instead. Leave blank to keep takeaway collection-only.
+        </div>
+        <div style={{ display:'flex', gap:20, flexWrap:'wrap' }}>
+          <div>
+            <label style={{ fontSize:14, fontWeight:600, color:'#555', display:'block', marginBottom:6 }}>Restaurant postcode</label>
+            <input
+              value={settings.restaurant_postcode || ''}
+              onChange={e => setSettings({ ...settings, restaurant_postcode: e.target.value.toUpperCase() })}
+              placeholder="e.g. SW1A 1AA"
+              style={{ width:160, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14, textTransform:'uppercase' }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize:14, fontWeight:600, color:'#555', display:'block', marginBottom:6 }}>Delivery radius (miles)</label>
+            <input
+              value={settings.delivery_radius_miles || ''}
+              onChange={e => setSettings({ ...settings, delivery_radius_miles: e.target.value })}
+              type="number" step="0.5" min="0" max="20"
+              placeholder="e.g. 3"
+              style={{ width:120, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}
+            />
+          </div>
+        </div>
+        <div style={{ fontSize:12, color:'#aaa', marginTop:10 }}>
+          Distance is straight-line ("as the crow flies"). 3 miles is a sensible starting radius for most UK Thai restaurants.
+        </div>
+      </div>
+
       {/* ── Save ── */}
       <button onClick={handleSave} style={{ width:'100%', padding:'14px', borderRadius:10, border:'none', background:saved?'#22c55e':'#1a1a2e', color:'white', cursor:'pointer', fontWeight:700, fontSize:16, marginBottom:20, transition:'background 0.3s' }}>
         {saved ? '✓ Saved!' : 'Save All Settings'}

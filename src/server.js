@@ -1998,8 +1998,98 @@ app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
              dinner_service_start, dinner_service_end
       FROM restaurant_settings WHERE restaurant_id = $1
     `, [process.env.RESTAURANT_ID || 'siamepos']);
-    res.json(r.rows[0] || {});
+    // SEPOS-DELIVERY-002 — delivery is offered only when the operator has
+    // set both a restaurant postcode and a radius. The widget uses this
+    // flag to decide whether to show the Delivery toggle at all.
+    const dr = await pool.query(
+      `SELECT key, value FROM settings WHERE key IN ('restaurant_postcode','delivery_radius_miles')`
+    );
+    const cfg = {};
+    dr.rows.forEach(row => { cfg[row.key] = row.value; });
+    const deliveryEnabled = !!(cfg.restaurant_postcode && Number(cfg.delivery_radius_miles) > 0);
+    res.json({
+      ...(r.rows[0] || {}),
+      delivery_enabled: deliveryEnabled,
+      delivery_radius_miles: deliveryEnabled ? Number(cfg.delivery_radius_miles) : 0,
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-DELIVERY-002 — postcode radius check for the takeaway widget.
+// Resolves the customer postcode + the restaurant postcode to lat/lng
+// via postcodes.io (free, no API key), measures the great-circle
+// distance, and compares it to the operator's delivery_radius_miles.
+//
+// The restaurant's resolved coordinates are cached in-process keyed by
+// the postcode string so repeated checks don't re-hit postcodes.io for
+// the (unchanging) restaurant location.
+let _restaurantGeoCache = { postcode: null, lat: null, lng: null };
+
+function haversineMiles(lat1, lon1, lat2, lon2) {
+  const R = 3958.8; // mean earth radius, miles
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function geocodePostcode(postcode) {
+  const clean = String(postcode || '').trim();
+  if (!clean) return null;
+  const r = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(clean)}`, {
+    signal: AbortSignal.timeout(6000),
+  });
+  if (!r.ok) return null;  // 404 = postcode not found
+  const j = await r.json();
+  if (!j || !j.result) return null;
+  return { lat: j.result.latitude, lng: j.result.longitude };
+}
+
+app.get('/api/takeaway/delivery-check', widgetCors, async (req, res) => {
+  try {
+    const postcode = String(req.query.postcode || '').trim();
+    if (!postcode) return res.status(400).json({ deliverable: false, error: 'Postcode required' });
+
+    // Operator config.
+    const cfgRes = await pool.query(
+      `SELECT key, value FROM settings WHERE key IN ('restaurant_postcode','delivery_radius_miles')`
+    );
+    const cfg = {};
+    cfgRes.rows.forEach(row => { cfg[row.key] = row.value; });
+    const restaurantPostcode = (cfg.restaurant_postcode || '').trim();
+    const radiusMiles = Number(cfg.delivery_radius_miles) || 0;
+    if (!restaurantPostcode || radiusMiles <= 0) {
+      return res.json({ deliverable: false, error: 'Delivery is not available from this restaurant.' });
+    }
+
+    // Resolve the restaurant location (cached).
+    if (_restaurantGeoCache.postcode !== restaurantPostcode) {
+      const g = await geocodePostcode(restaurantPostcode);
+      if (!g) return res.status(500).json({ deliverable: false, error: 'Restaurant postcode is misconfigured — contact the restaurant.' });
+      _restaurantGeoCache = { postcode: restaurantPostcode, lat: g.lat, lng: g.lng };
+    }
+
+    // Resolve the customer postcode.
+    const cust = await geocodePostcode(postcode);
+    if (!cust) {
+      return res.json({ deliverable: false, error: "We couldn't find that postcode — please check it." });
+    }
+
+    const distance = haversineMiles(
+      _restaurantGeoCache.lat, _restaurantGeoCache.lng, cust.lat, cust.lng
+    );
+    const distanceRounded = Math.round(distance * 10) / 10;
+    res.json({
+      deliverable: distance <= radiusMiles,
+      distance_miles: distanceRounded,
+      radius_miles: radiusMiles,
+    });
+  } catch (err) {
+    console.error('GET /api/takeaway/delivery-check error:', err);
+    res.status(500).json({ deliverable: false, error: 'Could not check your postcode — please try again.' });
+  }
 });
 
 // Submit a takeaway order from the public widget.

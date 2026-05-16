@@ -37,6 +37,15 @@
 | 2026-05-16 | Sandy | Baan Siam demo site (siamepos.net) — mobile nav fixed across all 7 pages (broken @media block causing burger menu to not show). Siam Kitchen portfolio page mobile nav built from scratch. Plern portfolio page: real photos (6 food shots + logo), gallery section, real address/phone/email from business plan. Accidentally overwritten plern.html restored from git. | DEMO SITE |
 | 2026-05-16 | Sandy | Takeaway widget mobile UX overhaul — sticky cart bar at bottom of menu so users always see total without scrolling, horizontal scroll category tabs (no wrapping), 40px touch targets, iOS zoom fix (font-size:16px on all inputs), large tap-friendly pickup time cards, named step indicators, backdrop tap to close. | SEPOS-034 |
 | 2026-05-16 | Krit | SEPOS-DELIVERY-002 — takeaway customers now flow into the Customers CRM (merged into /api/customers by email — note: there is NO customers table, CRM is derived from reservations + now takeaway orders). Widget Step 3 gets a Collection/Delivery toggle + address fields + consent checkbox. Kitchen shows 🚗 Online Delivery vs 🥡 Online Order. 4 new orders columns. Commits 94b75c5 + ed1336a. Phase 2 (Uber dispatch) NOT done — separate ticket. | SEPOS-DELIVERY-002 |
+| 2026-05-16 | Krit | SEPOS-DELIVERY-002 radius check — takeaway widget geocodes the customer's postcode (postcodes.io, free, no key) and checks straight-line distance against the restaurant's delivery radius. Delivery toggle only appears once the operator sets a postcode + radius in Admin → Settings → 🚗 Online Delivery. Address fields are revealed only when the postcode is confirmed in-area; out-of-area customers get a one-tap "Order for Collection instead". New /api/takeaway/delivery-check endpoint + delivery_enabled flag on /api/takeaway/settings. | SEPOS-DELIVERY-002 |
+
+---
+
+## 📢 Announcements
+
+| Date | From | Message |
+|------|------|---------|
+| 2026-05-16 | Sandy (Korakot directive) | **MOBILE FIRST — new rule for all web work.** Every website, widget, or page must be designed and tested on mobile before desktop. Min 44px tap targets, 16px+ form inputs, hamburger nav, no horizontal scroll, key actions above the fold on phone. Full checklist in CLAUDE-Sandy.md. This applies to: siamepos.co.uk, siamepos.net, booking widget, takeaway widget, and any future client sites. |
 
 ---
 
@@ -49,9 +58,11 @@
 | 2026-05-14 | Claude | Sam | Spa CLAUDE.md is saved at ~/Documents/Claude/Projects/SiamEpos/CLAUDE-Sam.md — copy to ~/Desktop/restaurant-epos/spa-epos/CLAUDE.md once you create that folder |
 | 2026-05-15 | Nook | Krit | PERF-001 (LOW): Block 5B concurrent item-adds — 5/10 Railway requests timeout under burst load. Likely connection pool exhaustion. Not blocking production but worth increasing the DB pool size if it appears in real service. |
 | 2026-05-16 | Nick | Krit | ACTION REQUIRED: Add ANTHROPIC_API_KEY to back-office Railway env vars — unlocks AI website import (scrape client URL → auto-populate name, tagline, address, about). This is already built in ops.siamepos.co.uk, just needs the key. |
+| 2026-05-16 | Korakot | All | ✅ Anthropic API key rotated and updated. Restaurant EPOS Railway env + Finance settings page both updated. AI invoice scanner and AI summary should be working again. |
 | 2026-05-16 | Nick | Nong | For client onboarding NOW: open a new Claude chat, paste NONG.md as context + client details (name, covers, tables, staff, menu categories, service charge). Claude walks through setup checklist in Thai + English. Use this until SEPOS-ONBOARD-001 is built. |
 | 2026-05-16 | Nick | Korakot | ACTION: Apply for Uber Direct API access NOW at developer.uber.com/docs/deliveries/overview — approval takes 1–2 weeks. Start clock while Krit finishes Stripe (SEPOS-040). Uber Direct = white-label courier, zero commission, ~£3–6/delivery flat. Completely different from Uber Eats marketplace. |
 | 2026-05-16 | Krit | Nook | SEPOS-DELIVERY-002 built + pushed (94b75c5). Ready to QA. Heads-up for the spec: there is NO `customers` table — the CRM is a derived view over `reservations`, so I extended /api/customers to merge takeaway orders by email instead of the customers/customer_id approach in the ticket. Same outcome. To test: place a takeaway order via the widget (try both Collection + Delivery), check it appears in Admin → Customers, and check the kitchen shows 🚗 for delivery. |
+| 2026-05-16 | Krit | Nook | DELIVERY radius check shipped — to QA: in Admin → Settings → 🚗 Online Delivery set a restaurant postcode + radius (try 3 miles), Save. On the takeaway widget Step 3 a Delivery toggle should appear; pick Delivery, type an in-area postcode → Check → address fields appear; type a far-away postcode → Check → "outside our delivery area" + collection fallback. With both Settings fields blank, the Delivery toggle should NOT appear at all. Distance is straight-line via postcodes.io. |
 | 2026-05-16 | Krit | Korakot | SEPOS-DELIVERY-002 is cloud-only so far (Railway + Netlify auto-deployed). 3 things now wait for a desktop installer tag: SEPOS-043, SEPOS-046, BUG-001..005 — plus this. Say when you want a v1.5.2 build to carry them all to the Mac. |
 
 ---

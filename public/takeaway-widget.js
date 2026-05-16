@@ -323,7 +323,7 @@
     cart: [],
     pickupKind: 'asap',
     pickupISO: null,
-    customer: { name:'', phone:'', email:'', order_subtype:'collection', delivery_address:'', delivery_notes:'', marketing_consent:false },
+    customer: { name:'', phone:'', email:'', order_subtype:'collection', delivery_postcode:'', delivery_address:'', delivery_notes:'', marketing_consent:false, delivery_check:null },
     error: '',
     orderResult: null,
   };
@@ -481,9 +481,57 @@
     `;
   }
 
+  // SEPOS-DELIVERY-002 — the delivery panel: postcode radius check first,
+  // address fields only revealed once the postcode is confirmed in-area.
+  function renderDeliveryPanel() {
+    const chk = state.customer.delivery_check;
+    const radius = Number(state.settings?.delivery_radius_miles) || 0;
+    const okBox = `
+      <div style="background:#e8f5e9;border:1px solid #43a047;border-radius:10px;
+        padding:10px 12px;margin-top:8px;color:#1b5e20;font-size:13px;font-weight:600;">
+        ✓ Great news — we deliver to you${chk && chk.distance_miles != null ? ` (${chk.distance_miles} mi away)` : ''}.
+      </div>
+      <label class="tw-label">Delivery address *</label>
+      <textarea class="tw-input" id="tw-delivery-address" rows="3"
+        placeholder="House/flat number, street" autocomplete="street-address"
+        style="resize:vertical;">${esc(state.customer.delivery_address)}</textarea>
+      <label class="tw-label">Delivery notes (optional)</label>
+      <input class="tw-input" id="tw-delivery-notes" type="text"
+        value="${esc(state.customer.delivery_notes)}" placeholder="e.g. ring buzzer 12, leave at door" />`;
+    const sorryBox = `
+      <div style="background:#fdecea;border:1px solid #e57373;border-radius:10px;
+        padding:10px 12px;margin-top:8px;color:#b71c1c;font-size:13px;">
+        <strong>Sorry — that's outside our delivery area.</strong><br>
+        ${chk && chk.error
+          ? esc(chk.error)
+          : `We deliver up to ${radius} miles from the restaurant${chk && chk.distance_miles != null ? ` — you're ${chk.distance_miles} mi away` : ''}.`}
+        <button type="button" id="tw-switch-collection"
+          style="display:block;margin-top:8px;padding:8px 14px;border-radius:8px;border:none;
+            background:#0D1B3E;color:#fff;font:inherit;font-weight:700;cursor:pointer;">
+          🥡 Order for Collection instead
+        </button>
+      </div>`;
+    return `
+      <label class="tw-label">Delivery postcode *</label>
+      <div style="display:flex;gap:8px;">
+        <input class="tw-input" id="tw-delivery-postcode" type="text" inputmode="text"
+          value="${esc(state.customer.delivery_postcode)}" placeholder="e.g. SW1A 1AA"
+          autocomplete="postal-code" style="flex:1;margin:0;text-transform:uppercase;" />
+        <button type="button" id="tw-postcode-check"
+          style="padding:0 18px;border-radius:10px;border:2px solid #0D1B3E;background:#0D1B3E;
+            color:#fff;font:inherit;font-weight:700;cursor:pointer;white-space:nowrap;">Check</button>
+      </div>
+      ${chk && chk.checking ? `<div class="tw-help">Checking your postcode…</div>` : ''}
+      ${chk && chk.deliverable === true  ? okBox    : ''}
+      ${chk && chk.checking !== true && chk.deliverable === false ? sorryBox : ''}`;
+  }
+
   function renderStep3() {
-    // SEPOS-DELIVERY-002 — collection (default) vs delivery.
-    const isDelivery = state.customer.order_subtype === 'delivery';
+    // SEPOS-DELIVERY-002 — collection (default) vs delivery. The Delivery
+    // option only shows when the restaurant has set a postcode + radius.
+    const deliveryEnabled = !!state.settings?.delivery_enabled;
+    if (!deliveryEnabled) state.customer.order_subtype = 'collection';
+    const isDelivery = deliveryEnabled && state.customer.order_subtype === 'delivery';
     const toggleBtn = (kind, label, sub) => `
       <button type="button" class="tw-subtype-btn${state.customer.order_subtype === kind ? ' tw-subtype-on' : ''}"
         data-subtype="${kind}"
@@ -496,11 +544,13 @@
     return `
       <h2 class="tw-h2">Your details</h2>
 
-      <label class="tw-label">How would you like your order?</label>
-      <div style="display:flex;gap:10px;margin-bottom:14px;">
-        ${toggleBtn('collection', '🥡 Collection', 'Pick up at the restaurant')}
-        ${toggleBtn('delivery',   '🚗 Delivery',   'We deliver to your address')}
-      </div>
+      ${deliveryEnabled ? `
+        <label class="tw-label">How would you like your order?</label>
+        <div style="display:flex;gap:10px;margin-bottom:14px;">
+          ${toggleBtn('collection', '🥡 Collection', 'Pick up at the restaurant')}
+          ${toggleBtn('delivery',   '🚗 Delivery',   'We deliver to your address')}
+        </div>
+      ` : ''}
 
       <div class="tw-help">We'll call out your name when your order's ready. Email is optional for a confirmation.</div>
       <label class="tw-label">Your name *</label>
@@ -513,15 +563,7 @@
       <input class="tw-input" id="tw-email" type="email" inputmode="email"
         value="${esc(state.customer.email)}" placeholder="for order confirmation" autocomplete="email" />
 
-      ${isDelivery ? `
-        <label class="tw-label">Delivery address *</label>
-        <textarea class="tw-input" id="tw-delivery-address" rows="3"
-          placeholder="House/flat number, street, postcode" autocomplete="street-address"
-          style="resize:vertical;">${esc(state.customer.delivery_address)}</textarea>
-        <label class="tw-label">Delivery notes (optional)</label>
-        <input class="tw-input" id="tw-delivery-notes" type="text"
-          value="${esc(state.customer.delivery_notes)}" placeholder="e.g. ring buzzer 12, leave at door" />
-      ` : ''}
+      ${isDelivery ? renderDeliveryPanel() : ''}
 
       <label style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;font-size:13px;color:#555;cursor:pointer;">
         <input type="checkbox" id="tw-consent" ${state.customer.marketing_consent ? 'checked' : ''}
@@ -725,6 +767,37 @@
       });
     });
 
+    // SEPOS-DELIVERY-002 — postcode radius check. Geocode via postcodes.io
+    // on the server, compare against the restaurant's delivery radius.
+    $('tw-postcode-check')?.addEventListener('click', async () => {
+      captureStep3();
+      const pc = state.customer.delivery_postcode;
+      if (!pc) { state.error = 'Please enter your postcode.'; render(); return; }
+      state.error = '';
+      state.customer.delivery_check = { checking: true };
+      render();
+      try {
+        const r = await fetch(API + '/api/takeaway/delivery-check?postcode=' + encodeURIComponent(pc));
+        const data = await r.json();
+        state.customer.delivery_check = {
+          deliverable:    !!data.deliverable,
+          distance_miles: data.distance_miles != null ? data.distance_miles : null,
+          error:          data.error || '',
+        };
+      } catch (e) {
+        state.customer.delivery_check = { deliverable: false, error: 'Could not check that postcode — please try again.' };
+      }
+      render();
+    });
+
+    // Out-of-area customers get a one-tap fallback to collection.
+    $('tw-switch-collection')?.addEventListener('click', () => {
+      captureStep3();
+      state.customer.order_subtype = 'collection';
+      state.error = '';
+      render();
+    });
+
     $('tw-next')?.addEventListener('click', async () => {
       state.error = '';
       if (state.step === 1) {
@@ -741,8 +814,14 @@
         captureStep3();
         if (!state.customer.name)  { state.error = 'Name is required.';         render(); return; }
         if (!state.customer.phone) { state.error = 'Phone number is required.'; render(); return; }
-        if (state.customer.order_subtype === 'delivery' && !state.customer.delivery_address) {
-          state.error = 'Delivery address is required.'; render(); return;
+        if (state.customer.order_subtype === 'delivery') {
+          const chk = state.customer.delivery_check;
+          if (!chk || chk.deliverable !== true) {
+            state.error = 'Please check your delivery postcode first.'; render(); return;
+          }
+          if (!state.customer.delivery_address) {
+            state.error = 'Delivery address is required.'; render(); return;
+          }
         }
         state.step = 4; render();
       } else if (state.step === 4) {
@@ -782,6 +861,7 @@
     if ($('tw-name'))  c.name  = $('tw-name').value.trim();
     if ($('tw-phone')) c.phone = $('tw-phone').value.trim();
     if ($('tw-email')) c.email = $('tw-email').value.trim();
+    if ($('tw-delivery-postcode')) c.delivery_postcode = $('tw-delivery-postcode').value.trim().toUpperCase();
     if ($('tw-delivery-address')) c.delivery_address = $('tw-delivery-address').value.trim();
     if ($('tw-delivery-notes'))   c.delivery_notes   = $('tw-delivery-notes').value.trim();
     if ($('tw-consent')) c.marketing_consent = $('tw-consent').checked;
@@ -800,9 +880,15 @@
           customer_email: state.customer.email || null,
           pickup_time:    computePickupISO(),
           // SEPOS-DELIVERY-002 — collection/delivery + CRM consent.
+          // Postcode is folded into the address so the kitchen/driver
+          // sees one complete line.
           order_subtype:     state.customer.order_subtype || 'collection',
-          delivery_address:  state.customer.delivery_address || null,
-          delivery_notes:    state.customer.delivery_notes || null,
+          delivery_address:  state.customer.order_subtype === 'delivery'
+            ? [state.customer.delivery_address, state.customer.delivery_postcode].filter(Boolean).join(', ')
+            : null,
+          delivery_notes:    state.customer.order_subtype === 'delivery'
+            ? (state.customer.delivery_notes || null)
+            : null,
           marketing_consent: !!state.customer.marketing_consent,
           items: state.cart.map(c => ({
             menu_item_id: c.menu_item_id,
@@ -831,7 +917,7 @@
     state = {
       step: 1, settings: state.settings, menu: state.menu, activeCategory: null,
       cart: [], pickupKind: 'asap', pickupISO: null,
-      customer: { name:'', phone:'', email:'', order_subtype:'collection', delivery_address:'', delivery_notes:'', marketing_consent:false },
+      customer: { name:'', phone:'', email:'', order_subtype:'collection', delivery_postcode:'', delivery_address:'', delivery_notes:'', marketing_consent:false, delivery_check:null },
       error: '', orderResult: null,
     };
     injectStyles();

@@ -50,16 +50,32 @@ export async function printKitchenTicket({ order, items, course }) {
   // ── 2. Electron silent print (desktop app) ───────────────────────────────
   const deviceName = (typeof localStorage !== 'undefined' && localStorage.getItem('kitchen_printer_name')) || '';
   const autoOn     = typeof localStorage === 'undefined' || localStorage.getItem('kitchen_auto_print') !== '0';
-  if (!deviceName || !autoOn) return;
-  if (!(window.siamepos && window.siamepos.isElectron && window.siamepos.printHtml)) return;
-
   const copies = Math.max(1, Math.min(5,
     parseInt((typeof localStorage !== 'undefined' && localStorage.getItem('kitchen_print_copies')) || '1', 10) || 1
   ));
   const html = buildKitchenTicketHTML({ order, items: active, course, copies });
-  window.siamepos.printHtml({ html, deviceName })
-    .then(r => { if (!r || !r.success) console.error('[kitchen-ticket] print failed:', r && r.error); })
-    .catch(e => console.error('[kitchen-ticket] print error:', e));
+
+  if (deviceName && autoOn && window.siamepos && window.siamepos.isElectron && window.siamepos.printHtml) {
+    window.siamepos.printHtml({ html, deviceName })
+      .then(r => { if (!r || !r.success) console.error('[kitchen-ticket] print failed:', r && r.error); })
+      .catch(e => console.error('[kitchen-ticket] print error:', e));
+    return;
+  }
+
+  // ── 3. Browser popup fallback (Chrome / iPad / no desktop app) ───────────
+  // Opens the ticket in a small window and triggers the print dialog.
+  // For truly silent auto-print, access SiamEPOS via the local network URL
+  // (shown in Admin → Settings → Network Setup QR code), not app.siamepos.co.uk.
+  if (!autoOn) return;
+  const win = window.open('', '_blank', 'width=400,height=600,scrollbars=yes');
+  if (!win) return; // popup blocked — nothing we can do
+  win.document.write(html);
+  win.document.close();
+  win.onload = () => setTimeout(() => {
+    win.focus();
+    win.print();
+    win.onafterprint = () => win.close();
+  }, 300);
 }
 
 function buildTicketBody({ order, items, course }) {

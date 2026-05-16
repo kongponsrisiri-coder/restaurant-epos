@@ -43,15 +43,79 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content
 .lang-toggle{background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.35);color:var(--gold);padding:6px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:700;font-family:'Sarabun',sans-serif;}
 .wa-float{position:fixed;bottom:28px;right:28px;z-index:98;}
 .wa-btn{display:flex;align-items:center;gap:10px;background:#25D366;color:white;padding:13px 20px;border-radius:50px;font-size:14px;font-weight:700;text-decoration:none;box-shadow:0 8px 24px rgba(37,211,102,0.4);}
-.hero{background:linear-gradient(160deg,var(--navy) 0%,var(--navy-mid) 100%);padding:140px 60px 90px;position:relative;overflow:hidden;text-align:center;}
+.hero{background:linear-gradient(160deg,var(--navy) 0%,var(--navy-mid) 100%);padding:130px 60px 80px;position:relative;overflow:hidden;}
 .hero::before{content:'';position:absolute;inset:0;background-image:repeating-linear-gradient(45deg,rgba(201,168,76,0.03) 0,rgba(201,168,76,0.03) 1px,transparent 1px,transparent 52px);}
+.hero-inner{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center;max-width:1100px;margin:0 auto;position:relative;z-index:1;}
+.hero-text{text-align:left;}
 .hero-tag{display:inline-flex;align-items:center;gap:8px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:var(--gold);padding:7px 16px;border-radius:30px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:24px;}
-.hero h1{font-family:'Cormorant Garamond',serif;font-size:62px;font-weight:700;color:white;line-height:1.05;margin-bottom:20px;}
+.hero h1{font-family:'Cormorant Garamond',serif;font-size:56px;font-weight:700;color:white;line-height:1.05;margin-bottom:20px;}
 .hero h1 em{font-style:italic;color:var(--gold);}
-.hero-sub{font-size:18px;color:rgba(255,255,255,0.7);line-height:1.75;max-width:620px;margin:0 auto 40px;}
+.hero-sub{font-size:17px;color:rgba(255,255,255,0.7);line-height:1.75;margin-bottom:36px;}
+.hero-actions{display:flex;gap:12px;flex-wrap:wrap;}
 .book-btn{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);padding:14px 28px;border-radius:10px;font-size:15px;font-weight:800;text-decoration:none;transition:transform 0.2s,box-shadow 0.2s;font-family:'Sarabun',sans-serif;}
 .book-btn:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(201,168,76,0.45);}
 .book-btn.ghost{background:transparent;border:2px solid var(--gold);color:var(--gold);}
+/* Hero proof bar */
+.hero-proof{display:flex;gap:0;margin-top:32px;border:1px solid rgba(201,168,76,0.2);border-radius:12px;overflow:hidden;}
+.hero-proof-item{flex:1;padding:14px 16px;text-align:center;border-right:1px solid rgba(201,168,76,0.15);}
+.hero-proof-item:last-child{border-right:none;}
+.hero-proof-num{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:700;color:var(--gold);line-height:1;}
+.hero-proof-label{font-size:10px;color:rgba(255,255,255,0.45);margin-top:3px;letter-spacing:0.3px;}
+/* Device mockup */
+.hero-device{display:flex;justify-content:center;align-items:center;position:relative;min-height:380px;}
+.phone-frame{width:200px;background:#111;border-radius:28px;padding:10px;box-shadow:0 32px 80px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.06);position:relative;z-index:2;}
+.phone-notch{width:60px;height:6px;background:#222;border-radius:3px;margin:0 auto 8px;}
+.phone-screen{background:white;border-radius:18px;overflow:hidden;}
+.phone-nav{background:#1a5c38;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;}
+.phone-nav-logo{color:white;font-weight:800;font-size:12px;letter-spacing:-0.3px;}
+.phone-nav-btn{background:rgba(255,255,255,0.15);color:white;font-size:9px;font-weight:700;padding:4px 8px;border-radius:4px;}
+.phone-hero{background:linear-gradient(170deg,#1a5c38 0%,#2d7a50 100%);padding:16px 12px 20px;text-align:center;}
+.phone-hero-name{font-size:16px;font-weight:800;color:white;margin-bottom:2px;}
+.phone-hero-sub{font-size:9px;color:rgba(255,255,255,0.65);margin-bottom:12px;}
+.phone-hero-btns{display:flex;gap:6px;}
+.phone-hero-btn{flex:1;background:rgba(255,255,255,0.15);color:white;font-size:9px;font-weight:700;padding:7px 4px;border-radius:6px;text-align:center;}
+.phone-hero-btn.primary{background:#C9A84C;color:#0D1B3E;}
+.phone-dishes{padding:10px;}
+.phone-dish{display:flex;justify-content:space-between;align-items:center;padding:8px;background:#f9f9f9;border-radius:6px;margin-bottom:5px;}
+.phone-dish-name{font-size:9px;font-weight:700;color:#1a1a1a;}
+.phone-dish-price{font-size:9px;font-weight:800;color:#1a5c38;}
+.phone-order-bar{background:#1a5c38;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;}
+.phone-order-txt{color:white;font-size:10px;font-weight:700;}
+.phone-order-chip{background:#C9A84C;color:#0D1B3E;font-size:9px;font-weight:800;padding:4px 10px;border-radius:20px;}
+/* Laptop behind phone */
+.laptop-behind{position:absolute;bottom:0;right:0;width:260px;z-index:1;}
+.laptop-lid{background:#1a1a1a;border-radius:8px 8px 0 0;padding:6px;box-shadow:0 -4px 20px rgba(0,0,0,0.4);}
+.laptop-screen-inner{background:white;border-radius:4px;overflow:hidden;}
+.laptop-urlbar{background:#f2f2f2;padding:4px 8px;font-size:7px;color:#999;display:flex;align-items:center;gap:4px;}
+.laptop-content{padding:8px 10px;background:white;}
+.laptop-heading{font-size:9px;font-weight:800;color:#1a5c38;margin-bottom:5px;}
+.laptop-row{height:5px;background:#eee;border-radius:2px;margin-bottom:4px;}
+.laptop-row.green{background:#1a5c38;width:55%;}
+.laptop-row.gold{background:#C9A84C;width:30%;}
+.laptop-base-bar{background:#2a2a2a;height:5px;}
+.laptop-stand{width:120px;height:4px;background:#1a1a1a;border-radius:0 0 6px 6px;margin:0 auto;}
+/* Comparison section */
+.compare-section{background:var(--white);}
+.compare-wrap{max-width:960px;margin:0 auto;}
+.compare-table{width:100%;border-collapse:separate;border-spacing:0;border-radius:16px;overflow:hidden;box-shadow:0 2px 16px rgba(13,27,62,0.08);}
+.compare-table thead th{padding:16px 20px;font-size:12px;font-weight:700;letter-spacing:0.5px;background:#F7F5F0;color:var(--text-muted);text-align:left;border-bottom:2px solid #E8E4DC;}
+.compare-table thead th.ct-us{background:var(--navy);color:var(--gold);text-align:center;}
+.compare-table tbody td{padding:13px 20px;font-size:13px;color:var(--text-muted);border-bottom:1px solid #F0EDE8;}
+.compare-table tbody td.ct-us{background:#FFFDF4;color:var(--navy);font-weight:700;text-align:center;border-left:1px solid rgba(201,168,76,0.2);border-right:1px solid rgba(201,168,76,0.2);}
+.compare-table tbody tr:last-child td{border-bottom:none;}
+.ct-tick{color:#1a7a4a;font-weight:800;}
+.ct-cross{color:#c0392b;}
+.ct-partial{color:#e0a020;}
+.compare-roi{background:var(--navy);border-radius:14px;padding:28px 32px;margin-top:20px;display:flex;align-items:center;gap:28px;}
+.compare-roi-text{flex:1;}
+.compare-roi-text strong{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:white;display:block;margin-bottom:4px;}
+.compare-roi-text span{font-size:14px;color:rgba(255,255,255,0.55);}
+.compare-roi-num{text-align:center;flex-shrink:0;}
+.compare-roi-num .big{font-family:'Cormorant Garamond',serif;font-size:52px;font-weight:700;color:var(--gold);line-height:1;}
+.compare-roi-num .small{font-size:12px;color:rgba(255,255,255,0.45);margin-top:2px;}
+/* Responsive adjustments */
+@media(max-width:900px){.hero-inner{grid-template-columns:1fr;}.hero-text{text-align:center;}.hero-actions{justify-content:center;}.hero-device{display:none;}.hero-proof{max-width:400px;margin:32px auto 0;}}
+@media(max-width:640px){.compare-roi{flex-direction:column;text-align:center;}.compare-table thead th,.compare-table tbody td{padding:10px 12px;font-size:12px;}.compare-section{padding:56px 20px !important;}}
 section{padding:80px 60px;}
 .section-label{display:inline-block;color:var(--gold);font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px;}
 .section-title{font-family:'Cormorant Garamond',serif;font-size:48px;font-weight:700;color:var(--navy);margin-bottom:16px;line-height:1.1;}
@@ -157,17 +221,85 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
 
 <!-- HERO -->
 <div class="hero">
-  <div style="position:relative;z-index:1;">
-    <div class="hero-tag">&#x1F3E8; <span class="lang-en">For Thai Restaurants in the UK</span><span class="lang-th">&#x0E2A;&#x0E33;&#x0E2B;&#x0E23;&#x0E31;&#x0E1A;&#x0E23;&#x0E49;&#x0E32;&#x0E19;&#x0E2D;&#x0E32;&#x0E2B;&#x0E32;&#x0E23;&#x0E44;&#x0E17;&#x0E22;&#x0E43;&#x0E19; UK</span></div>
-    <h1 class="lang-en">We build beautiful websites<br>for <em>Thai restaurants</em></h1>
-    <h1 class="lang-th">&#x0E40;&#x0E23;&#x0E32;&#x0E2A;&#x0E23;&#x0E49;&#x0E32;&#x0E07;&#x0E40;&#x0E27;&#x0E47;&#x0E1A;&#x0E44;&#x0E0B;&#x0E15;&#x0E4C;&#x0E2A;&#x0E27;&#x0E22;&#x0E07;&#x0E32;&#x0E21;<br><em>&#x0E2A;&#x0E33;&#x0E2B;&#x0E23;&#x0E31;&#x0E1A;&#x0E23;&#x0E49;&#x0E32;&#x0E19;&#x0E2D;&#x0E32;&#x0E2B;&#x0E32;&#x0E23;&#x0E44;&#x0E17;&#x0E22;</em></h1>
-    <p class="hero-sub lang-en">Too busy to build a website? We do it for you. Menu, bookings, online ordering, photos, Google Maps &mdash; ready in 48 hours. In Thai and English.</p>
-    <p class="hero-sub lang-th">&#x0E44;&#x0E21;&#x0E48;&#x0E21;&#x0E35;&#x0E40;&#x0E27;&#x0E25;&#x0E32;&#x0E2A;&#x0E23;&#x0E49;&#x0E32;&#x0E07;&#x0E40;&#x0E27;&#x0E47;&#x0E1A;&#x0E44;&#x0E0B;&#x0E15;&#x0E4C;? &#x0E40;&#x0E23;&#x0E32;&#x0E17;&#x0E33;&#x0E43;&#x0E2B;&#x0E49; &#x0E40;&#x0E21;&#x0E19;&#x0E39; &#x0E08;&#x0E2D;&#x0E07;&#x0E42;&#x0E15;&#x0E4A;&#x0E30; &#x0E2A;&#x0E31;&#x0E48;&#x0E07;&#x0E2D;&#x0E2D;&#x0E19;&#x0E44;&#x0E25;&#x0E19;&#x0E4C; &#x0E23;&#x0E39;&#x0E1B;&#x0E20;&#x0E32;&#x0E1E; &#x0E44;&#x0E17;&#x0E22;+&#x0E2D;&#x0E31;&#x0E07;&#x0E01;&#x0E24;&#x0E29; &#x0E40;&#x0E2A;&#x0E23;&#x0E47;&#x0E08;&#x0E43;&#x0E19; 48 &#x0E0A;&#x0E31;&#x0E48;&#x0E27;&#x0E42;&#x0E21;&#x0E07;</p>
-    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
-      <a href="https://wa.me/447700000000" class="book-btn lang-en">&#x1F4AC; WhatsApp Us Now</a>
-      <a href="https://wa.me/447700000000" class="book-btn lang-th">&#x1F4AC; &#x0E15;&#x0E34;&#x0E14;&#x0E15;&#x0E48;&#x0E2D;&#x0E40;&#x0E23;&#x0E32;&#x0E40;&#x0E14;&#x0E35;&#x0E22;&#x0E27;&#x0E19;&#x0E35;&#x0E49;</a>
-      <a href="#packages" class="book-btn ghost lang-en">View Packages &darr;</a>
-      <a href="#packages" class="book-btn ghost lang-th">&#x0E14;&#x0E39;&#x0E41;&#x0E1C;&#x0E19; &darr;</a>
+  <div class="hero-inner">
+    <!-- Left: text -->
+    <div class="hero-text">
+      <div class="hero-tag">&#x1F3E8; <span class="lang-en">For Thai Restaurants in the UK</span><span class="lang-th">&#x0E2A;&#x0E33;&#x0E2B;&#x0E23;&#x0E31;&#x0E1A;&#x0E23;&#x0E49;&#x0E32;&#x0E19;&#x0E2D;&#x0E32;&#x0E2B;&#x0E32;&#x0E23;&#x0E44;&#x0E17;&#x0E22;&#x0E43;&#x0E19; UK</span></div>
+      <h1 class="lang-en">Your restaurant<br>website, live in<br><em>48 hours</em></h1>
+      <h1 class="lang-th">&#x0E40;&#x0E27;&#x0E47;&#x0E1A;&#x0E44;&#x0E0B;&#x0E15;&#x0E4C;&#x0E23;&#x0E49;&#x0E32;&#x0E19;&#x0E04;&#x0E38;&#x0E13;<br>&#x0E2D;&#x0E2D;&#x0E19;&#x0E44;&#x0E25;&#x0E19;&#x0E4C;&#x0E43;&#x0E19;<br><em>48 &#x0E0A;&#x0E31;&#x0E48;&#x0E27;&#x0E42;&#x0E21;&#x0E07;</em></h1>
+      <p class="hero-sub lang-en">Menu, bookings, online ordering — connected to your EPOS. We build it for you in Thai and English. Zero commission, forever.</p>
+      <p class="hero-sub lang-th">&#x0E40;&#x0E21;&#x0E19;&#x0E39; &#x0E08;&#x0E2D;&#x0E07;&#x0E42;&#x0E15;&#x0E4A;&#x0E30; &#x0E2A;&#x0E31;&#x0E48;&#x0E07;&#x0E2D;&#x0E2D;&#x0E19;&#x0E44;&#x0E25;&#x0E19;&#x0E4C; — &#x0E40;&#x0E0A;&#x0E37;&#x0E48;&#x0E2D;&#x0E21;&#x0E15;&#x0E48;&#x0E2D; EPOS &#x0E04;&#x0E48;&#x0E32;&#x0E04;&#x0E2D;&#x0E21;&#x0E21;&#x0E34;&#x0E0A;&#x0E0A;&#x0E31;&#x0E48;&#x0E19; 0% &#x0E15;&#x0E25;&#x0E2D;&#x0E14;&#x0E44;&#x0E1B;</p>
+      <div class="hero-actions">
+        <a href="https://wa.me/447700000000" class="book-btn lang-en">&#x1F4AC; WhatsApp Us Now</a>
+        <a href="https://wa.me/447700000000" class="book-btn lang-th">&#x1F4AC; &#x0E15;&#x0E34;&#x0E14;&#x0E15;&#x0E48;&#x0E2D;&#x0E40;&#x0E23;&#x0E32;&#x0E40;&#x0E14;&#x0E35;&#x0E22;&#x0E27;&#x0E19;&#x0E35;&#x0E49;</a>
+        <a href="https://www.siamepos.net" target="_blank" class="book-btn ghost lang-en">See live example &rarr;</a>
+        <a href="https://www.siamepos.net" target="_blank" class="book-btn ghost lang-th">&#x0E14;&#x0E39;&#x0E15;&#x0E31;&#x0E27;&#x0E2D;&#x0E22;&#x0E48;&#x0E32;&#x0E07; &rarr;</a>
+      </div>
+      <div class="hero-proof">
+        <div class="hero-proof-item">
+          <div class="hero-proof-num">48h</div>
+          <div class="hero-proof-label lang-en">From sign-up to live</div>
+          <div class="hero-proof-label lang-th">&#x0E40;&#x0E2A;&#x0E23;&#x0E47;&#x0E08;&#x0E43;&#x0E19; 48 &#x0E0A;&#x0E31;&#x0E48;&#x0E27;&#x0E42;&#x0E21;&#x0E07;</div>
+        </div>
+        <div class="hero-proof-item">
+          <div class="hero-proof-num">0%</div>
+          <div class="hero-proof-label lang-en">Commission on orders</div>
+          <div class="hero-proof-label lang-th">&#x0E04;&#x0E48;&#x0E32;&#x0E04;&#x0E2D;&#x0E21;&#x0E21;&#x0E34;&#x0E0A;&#x0E0A;&#x0E31;&#x0E48;&#x0E19;</div>
+        </div>
+        <div class="hero-proof-item">
+          <div class="hero-proof-num">&#x0E44;&#x0E17;&#x0E22;</div>
+          <div class="hero-proof-label lang-en">Thai-speaking team</div>
+          <div class="hero-proof-label lang-th">&#x0E17;&#x0E35;&#x0E21;&#x0E04;&#x0E19;&#x0E44;&#x0E17;&#x0E22;</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: CSS phone mockup showing Baan Siam -->
+    <div class="hero-device">
+      <div class="phone-frame">
+        <div class="phone-notch"></div>
+        <div class="phone-screen">
+          <div class="phone-nav">
+            <span class="phone-nav-logo">Baan Siam</span>
+            <span class="phone-nav-btn">Menu</span>
+          </div>
+          <div class="phone-hero">
+            <div class="phone-hero-name">Authentic Thai</div>
+            <div class="phone-hero-sub">London &bull; Est. 2019</div>
+            <div class="phone-hero-btns">
+              <div class="phone-hero-btn primary">&#x1F4C5; Book Table</div>
+              <div class="phone-hero-btn">&#x1F6D2; Order</div>
+            </div>
+          </div>
+          <div class="phone-dishes">
+            <div class="phone-dish"><span class="phone-dish-name">Pad Thai</span><span class="phone-dish-price">£13.50</span></div>
+            <div class="phone-dish"><span class="phone-dish-name">Green Curry</span><span class="phone-dish-price">£15.00</span></div>
+            <div class="phone-dish"><span class="phone-dish-name">Tom Yum Soup</span><span class="phone-dish-price">£8.50</span></div>
+          </div>
+          <div class="phone-order-bar">
+            <span class="phone-order-txt">🛒 2 items · £28.00</span>
+            <span class="phone-order-chip">Checkout →</span>
+          </div>
+        </div>
+      </div>
+      <!-- Laptop behind -->
+      <div class="laptop-behind">
+        <div class="laptop-lid">
+          <div class="laptop-screen-inner">
+            <div class="laptop-urlbar">🔒 www.siamepos.net</div>
+            <div class="laptop-content">
+              <div class="laptop-heading">Baan Siam — Authentic Thai Restaurant</div>
+              <div class="laptop-row green"></div>
+              <div class="laptop-row"></div>
+              <div class="laptop-row" style="width:80%"></div>
+              <div class="laptop-row gold"></div>
+              <div class="laptop-row" style="width:60%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="laptop-base-bar"></div>
+        <div class="laptop-stand"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -188,6 +320,109 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
       <div class="wig-card"><div class="wig-icon">&#x1F5FA;&#xFE0F;</div><div class="wig-title lang-en">Google Maps &amp; SEO</div><div class="wig-title lang-th">Google Maps &amp; SEO</div><p class="wig-desc lang-en">Google Maps embedded, SEO optimised so customers find you when searching for Thai food nearby.</p><p class="wig-desc lang-th">&#x0E25;&#x0E39;&#x0E01;&#x0E04;&#x0E49;&#x0E32;&#x0E04;&#x0E49;&#x0E19;&#x0E2b;&#x0E32;&#x0E40;&#x0E08;&#x0E2d;&#x0E04;&#x0E38;&#x0E13;&#x0E44;&#x0E14;&#x0E49;&#x0E07;&#x0E48;&#x0E32;&#x0E22;</p></div>
       <div class="wig-card"><div class="wig-icon">&#x1F9EE;</div><div class="wig-title lang-en">Digital Menu</div><div class="wig-title lang-th">&#x0E40;&#x0E21;&#x0E19;&#x0E39;&#x0E14;&#x0E34;&#x0E08;&#x0E34;&#x0E17;&#x0E31;&#x0E25;</div><p class="wig-desc lang-en">Your full menu online with photos, allergens, descriptions. Synced with SiamEPOS.</p><p class="wig-desc lang-th">&#x0E40;&#x0E21;&#x0E19;&#x0E39;&#x0E04;&#x0E23;&#x0E1a;&#x0E2a;&#x0E21;&#x0E1a;&#x0E39;&#x0E23;&#x0E13;&#x0E4c;&#x0E2d;&#x0E2d;&#x0E19;&#x0E44;&#x0E25;&#x0E19;&#x0E4c;</p></div>
       <div class="wig-card"><div class="wig-icon">&#x1F4CA;</div><div class="wig-title lang-en">You Own the Data</div><div class="wig-title lang-th">&#x0E04;&#x0E38;&#x0E13;&#x0E40;&#x0E1b;&#x0E47;&#x0E19;&#x0E40;&#x0E08;&#x0E49;&#x0E32;&#x0E02;&#x0E2d;&#x0E07;&#x0E02;&#x0E49;&#x0E2d;&#x0E21;&#x0E39;&#x0E25;</div><p class="wig-desc lang-en">Every customer who books or orders gives you their email and phone. Yours to keep, yours to market to.</p><p class="wig-desc lang-th">&#x0E17;&#x0E38;&#x0E01;&#x0E2d;&#x0E35;&#x0E40;&#x0E21;&#x0E25;&#x0E41;&#x0E25;&#x0E30;&#x0E40;&#x0E1a;&#x0E2d;&#x0E23;&#x0E4c;&#x0E42;&#x0E17;&#x0E23;&#x0E40;&#x0E1b;&#x0E47;&#x0E19;&#x0E02;&#x0E2d;&#x0E07;&#x0E04;&#x0E38;&#x0E13;</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARISON / ROI -->
+<section class="compare-section">
+  <div class="compare-wrap" style="max-width:960px;margin:0 auto;">
+    <div style="text-align:center;margin-bottom:40px;">
+      <div class="section-label lang-en">The honest comparison</div>
+      <div class="section-label lang-th">&#x0E40;&#x0E1B;&#x0E23;&#x0E35;&#x0E22;&#x0E1A;&#x0E40;&#x0E17;&#x0E35;&#x0E22;&#x0E1A;</div>
+      <h2 class="section-title lang-en">Why not Deliveroo or Squarespace?</h2>
+      <h2 class="section-title lang-th">&#x0E17;&#x0E33;&#x0E44;&#x0E21;&#x0E44;&#x0E21;&#x0E48;&#x0E43;&#x0E0A;&#x0E49; Deliveroo &#x0E2B;&#x0E23;&#x0E37;&#x0E2D; Squarespace?</h2>
+    </div>
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th class="lang-en">Feature</th>
+          <th class="lang-th">&#x0E1F;&#x0E35;&#x0E40;&#x0E08;&#x0E2D;&#x0E23;&#x0E4C;</th>
+          <th class="ct-us lang-en">SiamEPOS Website</th>
+          <th class="ct-us lang-th">&#x0E40;&#x0E27;&#x0E47;&#x0E1A; SiamEPOS</th>
+          <th class="lang-en">DIY (Squarespace)</th>
+          <th class="lang-th">Squarespace DIY</th>
+          <th class="lang-en">Deliveroo / Just Eat</th>
+          <th class="lang-th">Deliveroo / Just Eat</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="lang-en">Commission on orders</td>
+          <td class="lang-th">&#x0E04;&#x0E48;&#x0E32;&#x0E04;&#x0E2D;&#x0E21;&#x0E21;&#x0E34;&#x0E0A;&#x0E0A;&#x0E31;&#x0E48;&#x0E19;</td>
+          <td class="ct-us"><span class="ct-tick">✓</span> 0% — forever</td>
+          <td class="ct-us"><span class="ct-tick">✓</span> 0% &#x0E15;&#x0E25;&#x0E2D;&#x0E14;&#x0E44;&#x0E1B;</td>
+          <td><span class="ct-partial">~</span> Needs a paid plugin</td>
+          <td><span class="ct-partial">~</span> &#x0E15;&#x0E49;&#x0E2D;&#x0E07;&#x0E40;&#x0E1E;&#x0E34;&#x0E48;&#x0E21;&#x0E41;&#x0E2D;&#x0E1B;</td>
+          <td><span class="ct-cross">✗</span> 30% per order</td>
+          <td><span class="ct-cross">✗</span> 30% &#x0E15;&#x0E48;&#x0E2D;&#x0E2D;&#x0E2D;&#x0E40;&#x0E14;&#x0E2D;&#x0E23;&#x0E4C;</td>
+        </tr>
+        <tr>
+          <td class="lang-en">Connected to your EPOS</td>
+          <td class="lang-th">&#x0E40;&#x0E0A;&#x0E37;&#x0E48;&#x0E2D;&#x0E21;&#x0E15;&#x0E48;&#x0E2D; EPOS</td>
+          <td class="ct-us"><span class="ct-tick">✓</span> Live menu sync</td>
+          <td class="ct-us"><span class="ct-tick">✓</span> &#x0E0B;&#x0E34;&#x0E07;&#x0E42;&#x0E04;&#x0E2A;&#x0E14;</td>
+          <td><span class="ct-cross">✗</span> Manual updates</td>
+          <td><span class="ct-cross">✗</span> &#x0E2D;&#x0E31;&#x0E1B;&#x0E40;&#x0E14;&#x0E15;&#x0E40;&#x0E2D;&#x0E07;</td>
+          <td><span class="ct-cross">✗</span> Separate system</td>
+          <td><span class="ct-cross">✗</span> &#x0E23;&#x0E30;&#x0E1A;&#x0E1A;&#x0E41;&#x0E22;&#x0E01;</td>
+        </tr>
+        <tr>
+          <td class="lang-en">Table reservations</td>
+          <td class="lang-th">&#x0E08;&#x0E2D;&#x0E07;&#x0E42;&#x0E15;&#x0E4A;&#x0E30;</td>
+          <td class="ct-us"><span class="ct-tick">✓</span> Included</td>
+          <td class="ct-us"><span class="ct-tick">✓</span> &#x0E23;&#x0E27;&#x0E21;&#x0E2D;&#x0E22;&#x0E39;&#x0E48;</td>
+          <td><span class="ct-partial">~</span> Third-party (£29/mo)</td>
+          <td><span class="ct-partial">~</span> £29/&#x0E40;&#x0E14;&#x0E37;&#x0E2D;&#x0E19;</td>
+          <td><span class="ct-cross">✗</span> Not available</td>
+          <td><span class="ct-cross">✗</span> &#x0E44;&#x0E21;&#x0E48;&#x0E21;&#x0E35;</td>
+        </tr>
+        <tr>
+          <td class="lang-en">You own customer data</td>
+          <td class="lang-th">&#x0E04;&#x0E38;&#x0E13;&#x0E40;&#x0E1B;&#x0E47;&#x0E19;&#x0E40;&#x0E08;&#x0E49;&#x0E32;&#x0E02;&#x0E2D;&#x0E07;&#x0E02;&#x0E49;&#x0E2D;&#x0E21;&#x0E39;&#x0E25;</td>
+          <td class="ct-us"><span class="ct-tick">✓</span> Every email + phone</td>
+          <td class="ct-us"><span class="ct-tick">✓</span> &#x0E2D;&#x0E35;&#x0E40;&#x0E21;&#x0E25;+&#x0E40;&#x0E1A;&#x0E2D;&#x0E23;&#x0E4C;&#x0E42;x0E17;&#x0E23;</td>
+          <td><span class="ct-partial">~</span> Depends on setup</td>
+          <td><span class="ct-partial">~</span> &#x0E02;&#x0E36;&#x0E49;&#x0E19;&#x0E2D;&#x0E22;&#x0E39;&#x0E48;&#x0E01;&#x0E31;&#x0E1A;&#x0E01;&#x0E32;&#x0E23;&#x0E15;&#x0E31;&#x0E49;&#x0E07;&#x0E04;&#x0E48;&#x0E32;</td>
+          <td><span class="ct-cross">✗</span> Deliveroo keeps it</td>
+          <td><span class="ct-cross">✗</span> Deliveroo &#x0E40;&#x0E01;&#x0E47;&#x0E1A;&#x0E44;&#x0E27;&#x0E49;</td>
+        </tr>
+        <tr>
+          <td class="lang-en">Setup time</td>
+          <td class="lang-th">&#x0E40;&#x0E27;&#x0E25;&#x0E32;&#x0E15;&#x0E34;&#x0E14;&#x0E15;&#x0E31;&#x0E49;&#x0E07;</td>
+          <td class="ct-us"><span class="ct-tick">✓</span> 48 hours</td>
+          <td class="ct-us">48 &#x0E0A;&#x0E31;&#x0E48;&#x0E27;&#x0E42;&#x0E21;&#x0E07;</td>
+          <td>2–4 weeks DIY</td>
+          <td>2–4 &#x0E2A;&#x0E31;&#x0E1B;&#x0E14;&#x0E32;&#x0E2B;&#x0E4C;</td>
+          <td>1–2 weeks approval</td>
+          <td>1–2 &#x0E2A;&#x0E31;&#x0E1B;&#x0E14;&#x0E32;&#x0E2B;&#x0E4C;</td>
+        </tr>
+        <tr>
+          <td class="lang-en">Thai &amp; English</td>
+          <td class="lang-th">&#x0E44;&#x0E17;&#x0E22; &amp; &#x0E2D;&#x0E31;&#x0E07;&#x0E01;&#x0E24;&#x0E29;</td>
+          <td class="ct-us"><span class="ct-tick">✓</span> Built in</td>
+          <td class="ct-us"><span class="ct-tick">✓</span> &#x0E23;&#x0E27;&#x0E21;&#x0E2D;&#x0E22;&#x0E39;&#x0E48;</td>
+          <td><span class="ct-cross">✗</span> You translate it</td>
+          <td><span class="ct-cross">✗</span> &#x0E41;&#x0E1B;&#x0E25;&#x0E40;&#x0E2D;&#x0E07;</td>
+          <td><span class="ct-cross">✗</span> English only</td>
+          <td><span class="ct-cross">✗</span> &#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E2D;&#x0E31;&#x0E07;&#x0E01;&#x0E24;&#x0E29;&#x0E2D;&#x0E22;&#x0E48;&#x0E32;&#x0E07;&#x0E40;&#x0E14;&#x0E35;&#x0E22;&#x0E27;</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ROI callout -->
+    <div class="compare-roi">
+      <div class="compare-roi-text">
+        <strong class="lang-en">One busy Saturday covers the setup fee</strong>
+        <strong class="lang-th">&#x0E40;&#x0E2A;&#x0E32;&#x0E23;&#x0E4C;&#x0E40;&#x0E14;&#x0E35;&#x0E22;&#x0E27;&#x0E04;&#x0E38;&#x0E49;&#x0E21;&#x0E04;&#x0E48;&#x0E32;&#x0E01;&#x0E32;&#x0E23;&#x0E15;&#x0E34;&#x0E14;&#x0E15;&#x0E31;&#x0E49;&#x0E07;</strong>
+        <span class="lang-en">20 takeaway orders × £25 average = £500. Deliveroo takes £150 of that. We charge £199 once, and nothing per order after that.</span>
+        <span class="lang-th">20 &#x0E2D;&#x0E2D;&#x0E40;&#x0E14;&#x0E2D;&#x0E23;&#x0E4C; × £25 = £500. Deliveroo &#x0E40;&#x0E2D;&#x0E32; £150. &#x0E40;&#x0E23;&#x0E32;&#x0E04;&#x0E34;&#x0E14; £199 &#x0E04;&#x0E23;&#x0E31;&#x0E49;&#x0E07;&#x0E40;&#x0E14;&#x0E35;&#x0E22;&#x0E27; &#x0E2B;&#x0E25;&#x0E31;&#x0E07;&#x0E08;&#x0E32;&#x0E01;&#x0E19;&#x0E31;&#x0E49;&#x0E19;&#x0E44;&#x0E21;&#x0E48;&#x0E04;&#x0E34;&#x0E14;&#x0E40;&#x0E1E;&#x0E34;&#x0E48;&#x0E21;</span>
+      </div>
+      <div class="compare-roi-num">
+        <div class="big">30%</div>
+        <div class="small lang-en">Deliveroo takes from every order</div>
+        <div class="small lang-th">Deliveroo &#x0E04;&#x0E34;&#x0E14;&#x0E08;&#x0E32;&#x0E01;&#x0E17;&#x0E38;&#x0E01;&#x0E2D;&#x0E2D;&#x0E40;&#x0E14;&#x0E2D;&#x0E23;&#x0E4C;</div>
+      </div>
     </div>
   </div>
 </section>

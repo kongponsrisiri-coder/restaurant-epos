@@ -56,6 +56,67 @@ ipcMain.handle('save-config', async (event, data) => {
   return { success: true };
 });
 
+// ── Printing (SEPOS-025 receipts / SEPOS-026 kitchen tickets) ────────
+// The renderer enumerates the OS printers and prints HTML silently —
+// no print dialog — to a chosen device. Printing goes through the
+// installed macOS/Windows driver, so it works with any thermal printer
+// (cnfujun 80.E-Z04-AA and other 80mm ESC/POS units alike).
+ipcMain.handle('list-printers', async () => {
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) return [];
+    const printers = await mainWindow.webContents.getPrintersAsync();
+    return printers.map((p) => ({
+      name: p.name,
+      displayName: p.displayName || p.name,
+      isDefault: !!p.isDefault,
+      status: p.status,
+    }));
+  } catch (err) {
+    console.error('[siamepos] list-printers failed:', err.message);
+    return [];
+  }
+});
+
+ipcMain.handle('print-html', async (event, opts) => {
+  const { html, deviceName, copies } = opts || {};
+  if (!html) return { success: false, error: 'Nothing to print.' };
+  return new Promise((resolve) => {
+    let settled = false;
+    const printWin = new BrowserWindow({
+      show: false,
+      webPreferences: { contextIsolation: true, nodeIntegration: false },
+    });
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      try { if (!printWin.isDestroyed()) printWin.close(); } catch (e) {}
+      resolve(result);
+    };
+    printWin.webContents.once('did-finish-load', () => {
+      // Brief pause so an embedded logo / Google-review QR image can
+      // load before the page is rasterised for the printer.
+      setTimeout(() => {
+        if (printWin.isDestroyed()) return finish({ success: false, error: 'Print window closed.' });
+        const printOpts = {
+          silent: true,
+          printBackground: true,
+          margins: { marginType: 'none' },
+          copies: Math.max(1, Number(copies) || 1),
+        };
+        if (deviceName) printOpts.deviceName = deviceName;
+        printWin.webContents.print(printOpts, (success, failureReason) => {
+          finish({ success, error: success ? null : (failureReason || 'Print failed.') });
+        });
+      }, 550);
+    });
+    printWin.webContents.once('did-fail-load', (e, code, desc) => {
+      finish({ success: false, error: `Could not render print content: ${desc}` });
+    });
+    printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+    setTimeout(() => finish({ success: false, error: 'Print timed out.' }), 20000);
+  });
+});
+
 async function runSetupWizard() {
   return new Promise((resolve) => {
     const setupWin = new BrowserWindow({

@@ -151,6 +151,111 @@ function BarCategoryManager() {
   );
 }
 
+// SEPOS-025/026 — printer selection. Per-device (the picked printer is
+// physically wired to THIS machine), so the choice lives in localStorage,
+// not the shared settings table. Silent printing only works inside the
+// SiamEPOS desktop app; a plain browser falls back to the print dialog.
+function PrinterCard({ cardStyle }) {
+  const isElectron = !!(typeof window !== 'undefined' && window.siamepos && window.siamepos.isElectron && window.siamepos.printHtml);
+  const [printers, setPrinters]       = useState([]);
+  const [receiptName, setReceiptName] = useState(() => localStorage.getItem('receipt_printer_name') || '');
+  const [kitchenName, setKitchenName] = useState(() => localStorage.getItem('kitchen_printer_name') || '');
+  const [autoKitchen, setAutoKitchen] = useState(() => localStorage.getItem('kitchen_auto_print') !== '0');
+  const [testState, setTestState]     = useState('idle'); // idle | printing | ok | fail
+
+  useEffect(() => {
+    if (!isElectron) return;
+    window.siamepos.listPrinters()
+      .then(list => setPrinters(Array.isArray(list) ? list : []))
+      .catch(() => setPrinters([]));
+  }, [isElectron]);
+
+  const saveReceipt = (v) => { setReceiptName(v); localStorage.setItem('receipt_printer_name', v); };
+  const saveKitchen = (v) => { setKitchenName(v); localStorage.setItem('kitchen_printer_name', v); };
+  const saveAuto    = (v) => { setAutoKitchen(v); localStorage.setItem('kitchen_auto_print', v ? '1' : '0'); };
+
+  const testPrint = async () => {
+    setTestState('printing');
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+      *{margin:0;padding:0;box-sizing:border-box;}
+      body{font-family:'Courier New',Courier,monospace;font-size:12px;color:#000;width:80mm;padding:4mm 2mm;text-align:center;}
+      @media print{@page{margin:0;size:80mm auto;}}
+      </style></head><body>
+      <div style="font-size:16px;font-weight:900;letter-spacing:1px;">SiamEPOS</div>
+      <div style="border-top:1px dashed #999;margin:6px 0;"></div>
+      <div style="font-weight:700;">Printer test successful ✓</div>
+      <div style="font-size:10px;color:#555;margin-top:6px;">${new Date().toLocaleString('en-GB')}</div>
+      <div style="height:12mm;"></div>
+      </body></html>`;
+    try {
+      const r = await window.siamepos.printHtml({ html, deviceName: receiptName || undefined });
+      setTestState(r && r.success ? 'ok' : 'fail');
+      if (r && !r.success) console.error('[printer] test print failed:', r.error);
+    } catch (e) {
+      setTestState('fail');
+    }
+    setTimeout(() => setTestState('idle'), 3000);
+  };
+
+  const selectStyle = { width:'100%', maxWidth:380, padding:'10px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14, background:'white' };
+  const testLabel = testState === 'printing' ? 'Printing…'
+                  : testState === 'ok'       ? '✓ Sent to printer'
+                  : testState === 'fail'     ? '✗ Failed — check printer'
+                  : 'Test print';
+
+  return (
+    <div style={cardStyle}>
+      <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:6 }}>🖨️ Printer (this device)</h2>
+      {!isElectron ? (
+        <p style={{ fontSize:13, color:'#888', lineHeight:1.6, margin:0 }}>
+          Direct printer selection is available in the <strong>SiamEPOS desktop app</strong>.
+          In a web browser, receipts print through the normal print dialog — pick your
+          thermal printer there. To print silently and send tickets to the kitchen
+          automatically, run the desktop app on the till connected to the printer.
+        </p>
+      ) : (
+        <>
+          <p style={{ fontSize:13, color:'#888', marginBottom:16 }}>
+            Choose the printers wired to this machine. Selected printers print silently — no dialog.
+          </p>
+
+          <label style={{ fontSize:14, fontWeight:600, color:'#555', display:'block', marginBottom:6 }}>Receipt printer</label>
+          <select value={receiptName} onChange={e => saveReceipt(e.target.value)} style={selectStyle}>
+            <option value="">— Don't auto-print (use print dialog) —</option>
+            {printers.map(p => <option key={p.name} value={p.name}>{p.displayName}{p.isDefault ? ' (default)' : ''}</option>)}
+          </select>
+
+          <label style={{ fontSize:14, fontWeight:600, color:'#555', display:'block', margin:'16px 0 6px' }}>Kitchen printer</label>
+          <select value={kitchenName} onChange={e => saveKitchen(e.target.value)} style={selectStyle}>
+            <option value="">— No kitchen printer —</option>
+            {printers.map(p => <option key={p.name} value={p.name}>{p.displayName}{p.isDefault ? ' (default)' : ''}</option>)}
+          </select>
+
+          {kitchenName && (
+            <label style={{ display:'flex', alignItems:'center', gap:8, marginTop:14, fontSize:14, color:'#555', cursor:'pointer' }}>
+              <input type="checkbox" checked={autoKitchen} onChange={e => saveAuto(e.target.checked)}
+                style={{ width:16, height:16 }} />
+              Auto-print a kitchen ticket when items are sent to the kitchen
+            </label>
+          )}
+
+          <div style={{ display:'flex', gap:10, alignItems:'center', marginTop:18, flexWrap:'wrap' }}>
+            <button onClick={testPrint} disabled={testState==='printing'} style={{
+              padding:'10px 20px', borderRadius:8, border:'none',
+              background: testState==='ok' ? '#22c55e' : testState==='fail' ? '#ef4444' : '#0D1B3E',
+              color:'white', fontWeight:700, fontSize:13,
+              cursor: testState==='printing' ? 'wait' : 'pointer', transition:'background 0.2s',
+            }}>{testLabel}</button>
+            <span style={{ fontSize:12, color:'#aaa' }}>
+              {printers.length} printer{printers.length === 1 ? '' : 's'} found on this machine
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function SettingsSection() {
   const [settings, setSettings] = useState({
     company_name:            '',
@@ -387,6 +492,9 @@ export default function SettingsSection() {
 
       {/* ── Network Setup (QR for iPads) ── */}
       <NetworkSetupCard cardStyle={cardStyle} />
+
+      {/* ── Printer (SEPOS-025/026) ── */}
+      <PrinterCard cardStyle={cardStyle} />
     </div>
   );
 }

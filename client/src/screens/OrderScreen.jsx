@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, SERVER_URL } from '../api';
 import BillScreen from './BillScreen';
+import { printKitchenTicket } from './KitchenTicket';
 import DeleteOrderModal from '../components/DeleteOrderModal';
 import AllergenChips from '../components/AllergenChips';
 import { parseAllergens } from '../utils/allergens';
@@ -267,9 +268,17 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
 
   const handleFireCourse = async (course) => {
     setFiringCourse(course);
+    // SEPOS-026 — snapshot the items about to be fired BEFORE the call.
+    // The server's course_fired payload also includes already-fired
+    // items, so we can't tell new from old after the fact.
+    const aboutToFire = (order?.items || []).filter(
+      i => (i.course || 1) === course && !i.is_fired && !i.voided && !i.is_bar
+    );
     try {
       await fireCourse(orderId, course);
       await fetchOrder();
+      // Auto-print a kitchen ticket (desktop app + kitchen printer only).
+      printKitchenTicket({ order, items: aboutToFire, course });
       alert(`🔥 ${COURSE_LABELS[course]} fired to kitchen!`);
     } catch (err) {
       alert('Failed to fire course.');

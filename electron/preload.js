@@ -8,4 +8,7 @@ contextBridge.exposeInMainWorld('siamepos', {
   onUpdateReady: (cb) => {
     ipcRenderer.on('siamepos:update-ready', () => cb && cb());
   },
+  // Printing (SEPOS-025 receipts / SEPOS-026 kitchen tickets).
+  listPrinters: () => ipcRenderer.invoke('list-printers'),
+  printHtml: (payload) => ipcRenderer.invoke('print-html', payload),
 });

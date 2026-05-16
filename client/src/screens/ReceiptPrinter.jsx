@@ -6,7 +6,31 @@
 
 export function printReceipt({ order, items, settings, paymentDetails = {} }) {
   const html = buildReceiptHTML({ order, items, settings, paymentDetails });
-  const win  = window.open('', '_blank', 'width=400,height=700,scrollbars=yes');
+
+  // SEPOS-025 — in the SiamEPOS desktop app, print silently (no dialog)
+  // to the receipt printer chosen in Admin → Settings → Printer. If no
+  // printer is chosen, or the silent print fails, fall back to the
+  // browser print-dialog popup so a receipt is never lost.
+  const deviceName = (typeof localStorage !== 'undefined' && localStorage.getItem('receipt_printer_name')) || '';
+  if (deviceName && window.siamepos?.isElectron && window.siamepos.printHtml) {
+    window.siamepos.printHtml({ html, deviceName })
+      .then((r) => {
+        if (!r || !r.success) {
+          console.error('[receipt] silent print failed:', r && r.error);
+          openPrintPopup(html);
+        }
+      })
+      .catch((e) => {
+        console.error('[receipt] silent print error:', e);
+        openPrintPopup(html);
+      });
+    return;
+  }
+  openPrintPopup(html);
+}
+
+function openPrintPopup(html) {
+  const win = window.open('', '_blank', 'width=400,height=700,scrollbars=yes');
   if (!win) { alert('Pop-up blocked. Please allow pop-ups for this site to print receipts.'); return; }
   win.document.write(html);
   win.document.close();

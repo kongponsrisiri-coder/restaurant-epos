@@ -3175,6 +3175,22 @@ app.post('/api/print/bar', async (req, res) => {
   }
 });
 
+// Print a full-order kitchen ticket (all courses combined — fired on Send Order)
+app.post('/api/print/kitchen-full', async (req, res) => {
+  const { order_id, items } = req.body;
+  try {
+    const settings = await loadSettings();
+    if (!settings.printer_kitchen_ip) return res.json({ success: false, reason: 'no_ip' });
+    const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [order_id]);
+    if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
+    await printService.printFullKitchenTicket(settings, orderRes.rows[0], items || []);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[print/kitchen-full]', err.message);
+    res.json({ success: false, error: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('');

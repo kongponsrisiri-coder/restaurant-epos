@@ -255,6 +255,35 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
         </div>
       )}
 
+      {/* Kitchen Output Mode — Print / KDS only / Both */}
+      <div style={{ marginBottom:16 }}>
+        <label style={{ fontSize:13, fontWeight:600, color:'#555', display:'block', marginBottom:8 }}>
+          🖨️ Kitchen Output Mode
+        </label>
+        <div style={{ display:'flex', gap:8 }}>
+          {[
+            { value: 'print', label: '🖨️ Print only' },
+            { value: 'kds',   label: '📺 KDS only' },
+            { value: 'both',  label: '🖨️ + 📺 Both' },
+          ].map(opt => (
+            <button key={opt.value}
+              onClick={() => setSettings(s => ({ ...s, kitchen_print_mode: opt.value }))}
+              style={{
+                flex:1, height:44, borderRadius:8, border:'none', fontWeight:700, fontSize:13, cursor:'pointer',
+                background: (settings.kitchen_print_mode || 'print') === opt.value ? '#1a1a2e' : '#f0f0f0',
+                color:      (settings.kitchen_print_mode || 'print') === opt.value ? 'white'   : '#555',
+              }}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize:11, color:'#aaa', marginTop:6 }}>
+          <strong>Print only</strong> — no KDS, tickets go straight to paper. &nbsp;
+          <strong>KDS only</strong> — no printer needed, tickets show on screen. &nbsp;
+          <strong>Both</strong> — print AND show on KDS.
+        </div>
+      </div>
+
       <div style={{ background:'#f0f9ff', border:'1px solid #bae6fd', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#0369a1' }}>
         💡 <strong>How to find your printer's IP:</strong> Log into your router admin page (usually 192.168.1.1) and look for the WAVLINK print server in the connected devices list. Give it a fixed/static IP so it never changes.
       </div>
@@ -424,6 +453,7 @@ export default function SettingsSection() {
     receipt_footer:          'Thank you for dining with us!',
     service_charge_rate:     '12.5',
     service_charge_enabled:  '1',
+    kitchen_print_mode:      'print',  // 'print' | 'kds' | 'both'
   });
   const [reasons, setReasons]     = useState([]);
   const [newReason, setNewReason] = useState('');

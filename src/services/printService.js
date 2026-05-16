@@ -19,21 +19,25 @@ const ESC = 0x1b;
 const GS  = 0x1d;
 
 const CMD = {
-  INIT:         Buffer.from([ESC, 0x40]),            // Initialize
+  INIT:         Buffer.from([ESC, 0x40]),
   ALIGN_LEFT:   Buffer.from([ESC, 0x61, 0x00]),
   ALIGN_CENTER: Buffer.from([ESC, 0x61, 0x01]),
   ALIGN_RIGHT:  Buffer.from([ESC, 0x61, 0x02]),
   BOLD_ON:      Buffer.from([ESC, 0x45, 0x01]),
   BOLD_OFF:     Buffer.from([ESC, 0x45, 0x00]),
-  SIZE_NORMAL:  Buffer.from([GS,  0x21, 0x00]),      // 1× width, 1× height
-  SIZE_TALL:    Buffer.from([GS,  0x21, 0x01]),      // 1× width, 2× height
-  SIZE_BIG:     Buffer.from([GS,  0x21, 0x11]),      // 2× width, 2× height
-  CUT:          Buffer.from([GS,  0x56, 0x41, 0x05]),// Partial cut + 5mm feed
-  LF:           Buffer.from([0x0a]),                 // Line feed
+  SIZE_NORMAL:  Buffer.from([GS,  0x21, 0x00]),   // 1× width, 1× height
+  SIZE_TALL:    Buffer.from([GS,  0x21, 0x01]),   // 1× width, 2× height
+  SIZE_WIDE:    Buffer.from([GS,  0x21, 0x10]),   // 2× width, 1× height
+  SIZE_BIG:     Buffer.from([GS,  0x21, 0x11]),   // 2× width, 2× height
+  CUT:          Buffer.from([GS,  0x56, 0x41, 0x05]), // Partial cut + 5mm feed
+  LF:           Buffer.from([0x0a]),
 };
 
-const LINE_WIDTH = 42;  // characters per line on 80mm paper at normal size
-const LINE_WIDE  = 21;  // characters per line at 2× width
+const LINE_WIDTH = 42;  // characters at normal size on 80mm paper
+
+// ── Bilingual course labels ───────────────────────────────────────────────────
+const COURSES_EN = { 1:'STARTERS', 2:'MAINS', 3:'DESSERTS', 4:'EXTRAS' };
+const COURSES_TH = { 1:'กับแกล้ม', 2:'อาหารหลัก', 3:'ของหวาน', 4:'เพิ่มเติม' };
 
 // ── Buffer helpers ────────────────────────────────────────────────────────────
 
@@ -41,14 +45,12 @@ const txt  = (s)       => Buffer.from(String(s ?? ''), 'utf8');
 const lf   = (n = 1)   => Buffer.alloc(n, 0x0a);
 const rule = (c = '-') => txt(c.repeat(LINE_WIDTH));
 
-/** Pad string to exact length (left or right aligned). */
 function pad(str, len, align = 'left') {
   const s = String(str ?? '').slice(0, len);
   const spaces = ' '.repeat(len - s.length);
   return align === 'right' ? spaces + s : s + spaces;
 }
 
-/** Two-column line: label on left, value on right, total = LINE_WIDTH. */
 function col2(label, value, width = LINE_WIDTH) {
   const v = String(value ?? '');
   const l = String(label ?? '');
@@ -56,7 +58,6 @@ function col2(label, value, width = LINE_WIDTH) {
   return txt(pad(l.slice(0, maxL), maxL) + ' ' + v);
 }
 
-/** Flatten an array that may contain Buffers and nested arrays of Buffers. */
 function flatten(parts) {
   return Buffer.concat(
     parts.flat(Infinity).filter(b => Buffer.isBuffer(b))
@@ -73,9 +74,9 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
   const footer  = settings.receipt_footer  || 'Thank you for dining with us!';
   const scRate  = parseFloat(settings.service_charge_rate || 12.5);
 
-  const now   = new Date();
-  const date  = now.toLocaleDateString('en-GB',  { day:'2-digit', month:'short', year:'numeric' });
-  const time  = now.toLocaleTimeString('en-GB',  { hour:'2-digit', minute:'2-digit' });
+  const now  = new Date();
+  const date = now.toLocaleDateString('en-GB',  { day:'2-digit', month:'short', year:'numeric' });
+  const time = now.toLocaleTimeString('en-GB',  { hour:'2-digit', minute:'2-digit' });
 
   const subtotal      = parseFloat(paymentDetails.subtotal       ?? 0);
   const discountAmt   = parseFloat(paymentDetails.discountAmount ?? 0);
@@ -86,24 +87,22 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
   const tip           = parseFloat(paymentDetails.tip            ?? 0);
   const method        = paymentDetails.method || '';
 
-  const activeItems   = (items || []).filter(i => !i.voided);
-  const COURSES       = { 1:'STARTERS', 2:'MAINS', 3:'DESSERTS', 4:'EXTRAS' };
-  const byCourse      = {};
+  const activeItems = (items || []).filter(i => !i.voided);
+  const byCourse    = {};
   activeItems.forEach(i => {
     const c = i.course || 1;
     if (!byCourse[c]) byCourse[c] = [];
     byCourse[c].push(i);
   });
 
-  // Use 2× size for short names, tall-only for long names (safe on 80mm)
+  // Restaurant name: large if short, tall if long
   const nameSize = name.length <= 14 ? [CMD.SIZE_BIG] : [CMD.SIZE_TALL];
-  const nameReset = name.length <= 14 ? [] : [];
 
   const parts = [
     CMD.INIT,
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, ...nameSize, txt(name), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-    addr   ? [txt(addr),           lf()] : [],
+    addr   ? [txt(addr),            lf()] : [],
     phone  ? [txt('Tel: ' + phone), lf()] : [],
     vatNo  ? [txt('VAT: ' + vatNo), lf()] : [],
     lf(),
@@ -124,9 +123,9 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
     col2('Order #', String(order.id)), lf(),
     rule(), lf(),
 
-    // Items grouped by course
+    // Items grouped by course — slightly larger for readability
     ...Object.keys(byCourse).sort().flatMap(course => [
-      CMD.BOLD_ON, txt(COURSES[course] || 'ITEMS'), CMD.BOLD_OFF, lf(),
+      CMD.BOLD_ON, CMD.SIZE_WIDE, txt(COURSES_EN[course] || 'ITEMS'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
       ...byCourse[course].flatMap(item => {
         const p   = item.unit_price * item.quantity;
         const d   = item.discount_value > 0
@@ -134,20 +133,22 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
           : 0;
         const net = p - d;
         return [
-          col2(`${item.quantity}x ${item.name}`, '£' + net.toFixed(2)), lf(),
+          CMD.BOLD_ON, col2(`${item.quantity}x ${item.name}`, '£' + net.toFixed(2)), CMD.BOLD_OFF, lf(),
           item.notes ? [txt('  > ' + item.notes), lf()] : [],
         ];
       }),
     ]),
     rule(), lf(),
 
-    // Totals
-    col2('Subtotal',                                '£' + subtotal.toFixed(2)),       lf(),
-    discountAmt   > 0 ? [col2('Discount',          '-£' + discountAmt.toFixed(2)),    lf()] : [],
-    serviceCharge > 0 ? [col2(`Service (${scRate}%)`, '£' + serviceCharge.toFixed(2)), lf()] : [],
-    tip           > 0 ? [col2('Gratuity',           '£' + tip.toFixed(2)),             lf()] : [],
-    CMD.BOLD_ON,  col2('TOTAL', '£' + billTotal.toFixed(2)), CMD.BOLD_OFF, lf(),
-    rule(), lf(),
+    // Totals — bolder and more spaced
+    col2('Subtotal', '£' + subtotal.toFixed(2)), lf(),
+    discountAmt   > 0 ? [col2('Discount',              '-£' + discountAmt.toFixed(2)),     lf()] : [],
+    serviceCharge > 0 ? [col2(`Service (${scRate}%)`,   '£' + serviceCharge.toFixed(2)),   lf()] : [],
+    tip           > 0 ? [col2('Gratuity',               '£' + tip.toFixed(2)),              lf()] : [],
+    rule('='), lf(),
+    CMD.BOLD_ON, CMD.SIZE_BIG, col2('TOTAL', '£' + billTotal.toFixed(2), LINE_WIDTH / 2),
+    CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    rule('='), lf(),
 
     // Payment
     method ? [
@@ -171,36 +172,79 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
   return flatten(parts);
 }
 
-// ── Kitchen ticket formatter ──────────────────────────────────────────────────
+// ── Kitchen ticket formatter (single course) ──────────────────────────────────
 
 function buildKitchenTicket({ order, items, course }) {
-  const COURSES = { 1:'STARTERS', 2:'MAINS', 3:'DESSERTS', 4:'EXTRAS' };
   const heading = order.order_type === 'takeaway'
     ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : `TAKEAWAY #${order.id}`)
     : `TABLE ${order.table_number != null ? order.table_number : '?'}`;
-  const courseLabel = COURSES[course] || 'ITEMS';
+  const courseEN = COURSES_EN[course] || 'ITEMS';
+  const courseTH = COURSES_TH[course] || '';
   const now = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
-
-  // Use 2× for short headings (TABLE 1–9), tall-only for longer (TAKEAWAY #123)
   const headSize = heading.length <= 10 ? CMD.SIZE_BIG : CMD.SIZE_TALL;
 
   const parts = [
     CMD.INIT,
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-    CMD.BOLD_ON, CMD.SIZE_TALL, txt(courseLabel), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    CMD.BOLD_ON, CMD.SIZE_TALL, txt(courseEN), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    courseTH ? [txt(courseTH), lf()] : [],
     order.customer_name ? [txt(order.customer_name), lf()] : [],
     rule('='), lf(),
     CMD.ALIGN_LEFT,
-
-    // Items — large bold text for readability across the kitchen
     ...items.flatMap(item => [
       CMD.BOLD_ON, CMD.SIZE_TALL,
       txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}`),
       CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
       item.notes ? [txt('    > ' + item.notes), lf()] : [],
     ]),
+    rule('='), lf(),
+    CMD.ALIGN_CENTER,
+    txt(`${now}  ·  Order #${order.id}`), lf(2),
+    CMD.CUT,
+  ];
 
+  return flatten(parts);
+}
+
+// ── Full order ticket (all courses combined) ──────────────────────────────────
+
+function buildFullKitchenTicket({ order, items }) {
+  const heading = order.order_type === 'takeaway'
+    ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : `TAKEAWAY #${order.id}`)
+    : `TABLE ${order.table_number != null ? order.table_number : '?'}`;
+  const now = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+  const headSize = heading.length <= 10 ? CMD.SIZE_BIG : CMD.SIZE_TALL;
+
+  // Group items by course
+  const byCourse = {};
+  items.forEach(i => {
+    const c = i.course || 1;
+    if (!byCourse[c]) byCourse[c] = [];
+    byCourse[c].push(i);
+  });
+
+  const courseBlocks = Object.keys(byCourse).sort().flatMap((course, idx, arr) => [
+    CMD.BOLD_ON, CMD.SIZE_TALL, txt(COURSES_EN[course] || 'ITEMS'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    txt(COURSES_TH[course] || ''), lf(),
+    rule('-'), lf(),
+    ...byCourse[course].flatMap(item => [
+      CMD.BOLD_ON, CMD.SIZE_TALL,
+      txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}`),
+      CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+      item.notes ? [txt('    > ' + item.notes), lf()] : [],
+    ]),
+    idx < arr.length - 1 ? [rule('-'), lf()] : [],
+  ]);
+
+  const parts = [
+    CMD.INIT,
+    CMD.ALIGN_CENTER,
+    CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    order.customer_name ? [txt(order.customer_name), lf()] : [],
+    rule('='), lf(),
+    CMD.ALIGN_LEFT,
+    ...courseBlocks,
     rule('='), lf(),
     CMD.ALIGN_CENTER,
     txt(`${now}  ·  Order #${order.id}`), lf(2),
@@ -242,7 +286,6 @@ function sendRaw(ip, port, buf, timeoutMs = 6000) {
     sock.connect(parseInt(port, 10) || 9100, ip, () => {
       sock.write(buf, (err) => {
         if (err) return done(err);
-        // Brief pause so the printer fully receives the buffer before we close
         setTimeout(() => done(null), 400);
       });
     });
@@ -253,13 +296,6 @@ function sendRaw(ip, port, buf, timeoutMs = 6000) {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/**
- * Print a customer receipt.
- * @param {object} settings  — full settings object from the DB
- * @param {object} order     — order row
- * @param {Array}  items     — order_items rows
- * @param {object} paymentDetails — { subtotal, discountAmount, serviceCharge, billTotal, method, amountPaid, change, tip }
- */
 async function printReceipt(settings, order, items, paymentDetails) {
   const ip   = settings.printer_receipt_ip;
   const port = settings.printer_receipt_port || 9100;
@@ -267,13 +303,6 @@ async function printReceipt(settings, order, items, paymentDetails) {
   await sendRaw(ip, port, buildReceipt({ order, items, settings, paymentDetails }));
 }
 
-/**
- * Print a kitchen ticket.
- * @param {object} settings — full settings object
- * @param {object} order    — order row
- * @param {Array}  items    — items for this course
- * @param {number} course   — 1 starters / 2 mains / 3 desserts / 4 extra
- */
 async function printKitchenTicket(settings, order, items, course) {
   const ip     = settings.printer_kitchen_ip;
   const port   = settings.printer_kitchen_port   || 9100;
@@ -285,9 +314,17 @@ async function printKitchenTicket(settings, order, items, course) {
   for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf);
 }
 
-/**
- * Print a bar ticket (same format as kitchen, course 4).
- */
+async function printFullKitchenTicket(settings, order, items) {
+  const ip     = settings.printer_kitchen_ip;
+  const port   = settings.printer_kitchen_port   || 9100;
+  const copies = Math.max(1, Math.min(5,
+    parseInt(settings.printer_kitchen_copies || 1, 10) || 1
+  ));
+  if (!ip) throw new Error('NO_IP');
+  const buf = buildFullKitchenTicket({ order, items });
+  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf);
+}
+
 async function printBarTicket(settings, order, items) {
   const ip   = settings.printer_bar_ip;
   const port = settings.printer_bar_port || 9100;
@@ -295,12 +332,9 @@ async function printBarTicket(settings, order, items) {
   await sendRaw(ip, port, buildKitchenTicket({ order, items, course: 4 }));
 }
 
-/**
- * Send a test page to any printer IP.
- */
 async function testPrint(ip, port = 9100) {
   if (!ip) throw new Error('NO_IP');
   await sendRaw(ip, parseInt(port, 10) || 9100, buildTestPage());
 }
 
-module.exports = { printReceipt, printKitchenTicket, printBarTicket, testPrint };
+module.exports = { printReceipt, printKitchenTicket, printFullKitchenTicket, printBarTicket, testPrint };

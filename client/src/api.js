@@ -65,6 +65,12 @@ export const voidItem = (itemId, reason, quantity, void_type) => {
 export const applyDiscount = (orderId, discount_type, discount_value, discount_reason) => put(`/api/orders/${orderId}/discount`, { discount_type, discount_value, discount_reason });
 export const getSettings = () => get('/api/settings');
 export const updateSettings = (settings) => put('/api/settings', settings);
+
+// SEPOS-025/026 — Network printing (server-side ESC/POS to TCP port 9100)
+export const testNetworkPrinter   = (ip, port)                => post('/api/print/test',    { ip, port });
+export const serverPrintReceipt   = (order_id, payment_details) => post('/api/print/receipt', { order_id, payment_details });
+export const serverPrintKitchen   = (order_id, items, course)   => post('/api/print/kitchen', { order_id, items, course });
+export const serverPrintBar       = (order_id, items)           => post('/api/print/bar',     { order_id, items });
 export const getDiscountReasons = () => get('/api/discount-reasons');
 export const addDiscountReason = (reason) => post('/api/discount-reasons', { reason });
 export const deleteDiscountReason = (id) => del(`/api/discount-reasons/${id}`);

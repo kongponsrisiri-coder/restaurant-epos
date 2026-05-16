@@ -1,10 +1,38 @@
 /**
- * SiamEPOS Receipt Printer — SEPOS-020
+ * SiamEPOS Receipt Printer — SEPOS-020 / SEPOS-025
  * Totals passed in from BillScreen — no recalculation.
  * Logo support via base64 stored in settings.
+ *
+ * Print priority:
+ *  1. Server-side ESC/POS via TCP (SEPOS-025) — works from iPad, browser,
+ *     any device on the same Wi-Fi. Requires printer_receipt_ip in settings.
+ *  2. Electron silent print — desktop app only, printer chosen in Settings.
+ *  3. Browser print dialog — universal fallback.
  */
 
+import { serverPrintReceipt } from '../api';
+
 export function printReceipt({ order, items, settings, paymentDetails = {} }) {
+  // ── 1. Server-side network print (iPad-friendly) ──────────────────────────
+  if (settings.printer_receipt_ip) {
+    serverPrintReceipt(order.id, paymentDetails)
+      .then(r => {
+        if (!r || !r.success) {
+          console.warn('[receipt] server print failed, falling back:', r?.error || r?.reason);
+          _clientPrint({ order, items, settings, paymentDetails });
+        }
+      })
+      .catch(e => {
+        console.warn('[receipt] server print error, falling back:', e);
+        _clientPrint({ order, items, settings, paymentDetails });
+      });
+    return;
+  }
+  // ── 2 + 3. Client-side (Electron silent or browser popup) ────────────────
+  _clientPrint({ order, items, settings, paymentDetails });
+}
+
+function _clientPrint({ order, items, settings, paymentDetails }) {
   const html = buildReceiptHTML({ order, items, settings, paymentDetails });
 
   // SEPOS-025 — in the SiamEPOS desktop app, print silently (no dialog)

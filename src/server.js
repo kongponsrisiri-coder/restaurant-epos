@@ -9,6 +9,7 @@ const offlineQueue = require('./services/offlineQueue');
 const syncService = require('./services/syncService');
 const cloudRelay = require('./services/cloudRelay');
 const makeWebhooks = require('./services/makeWebhooks');
+const printService = require('./services/printService');
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -3101,6 +3102,77 @@ app.post('/api/webhooks/run-now', async (req, res) => {
     const results = await makeWebhooks.runAll();
     res.json({ success: true, results });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── SEPOS-025/026 Network Printing ──────────────────────────────────────────
+// Helper: load all settings as a plain object
+async function loadSettings() {
+  const result = await pool.query('SELECT key, value FROM settings');
+  const s = {};
+  result.rows.forEach(r => { s[r.key] = r.value; });
+  return s;
+}
+
+// Test any printer by IP
+app.post('/api/print/test', async (req, res) => {
+  const { ip, port } = req.body;
+  if (!ip) return res.status(400).json({ success: false, error: 'ip required' });
+  try {
+    await printService.testPrint(ip, port || 9100);
+    res.json({ success: true });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// Print a receipt for a given order
+app.post('/api/print/receipt', async (req, res) => {
+  const { order_id, payment_details } = req.body;
+  try {
+    const settings = await loadSettings();
+    if (!settings.printer_receipt_ip) return res.json({ success: false, reason: 'no_ip' });
+    const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [order_id]);
+    if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
+    const order = orderRes.rows[0];
+    const itemsRes = await pool.query('SELECT * FROM order_items WHERE order_id = $1', [order_id]);
+    await printService.printReceipt(settings, order, itemsRes.rows, payment_details || {});
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[print/receipt]', err.message);
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// Print a kitchen ticket for a given order + course
+app.post('/api/print/kitchen', async (req, res) => {
+  const { order_id, items, course } = req.body;
+  try {
+    const settings = await loadSettings();
+    if (!settings.printer_kitchen_ip) return res.json({ success: false, reason: 'no_ip' });
+    const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [order_id]);
+    if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
+    await printService.printKitchenTicket(settings, orderRes.rows[0], items || [], course || 1);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[print/kitchen]', err.message);
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// Print a bar ticket
+app.post('/api/print/bar', async (req, res) => {
+  const { order_id, items } = req.body;
+  try {
+    const settings = await loadSettings();
+    if (!settings.printer_bar_ip) return res.json({ success: false, reason: 'no_ip' });
+    const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [order_id]);
+    if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
+    await printService.printBarTicket(settings, orderRes.rows[0], items || []);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[print/bar]', err.message);
+    res.json({ success: false, error: err.message });
+  }
 });
 
 const PORT = process.env.PORT || 3001;

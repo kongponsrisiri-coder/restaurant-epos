@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
-import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo } from '../../api';
+import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, testNetworkPrinter } from '../../api';
 import DiningDurationSettings from './DiningDurationSettings';
 
 // Network setup panel — shows the desktop's LAN URL + a scannable QR so
@@ -147,6 +147,117 @@ function BarCategoryManager() {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// SEPOS-025/026 — Network printer setup (ESC/POS over TCP port 9100).
+// Works from ANY device on the same Wi-Fi — iPad, browser, Electron.
+// The printer gets its own IP via a USB print server (e.g. WAVLINK) or
+// a built-in LAN port. IP stored in the shared settings table so all
+// devices know where to print.
+function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
+  const [testStates, setTestStates] = useState({});  // { receipt|kitchen|bar: idle|testing|ok|fail }
+
+  const setTest = (key, state) => setTestStates(prev => ({ ...prev, [key]: state }));
+
+  const testPrinter = async (key, ipKey, portKey) => {
+    const ip   = settings[ipKey];
+    const port = settings[portKey] || 9100;
+    if (!ip) return;
+    setTest(key, 'testing');
+    try {
+      const r = await testNetworkPrinter(ip, port);
+      setTest(key, r && r.success ? 'ok' : 'fail');
+    } catch { setTest(key, 'fail'); }
+    setTimeout(() => setTest(key, 'idle'), 3000);
+  };
+
+  const inputStyle = { width:160, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 };
+  const portStyle  = { width:80,  padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 };
+
+  const printerRow = (label, ipKey, portKey, testKey) => {
+    const state = testStates[testKey] || 'idle';
+    const testLabel = state === 'testing' ? 'Testing…'
+                    : state === 'ok'      ? '✓ OK'
+                    : state === 'fail'    ? '✗ Failed'
+                    : 'Test';
+    const testBg = state === 'ok' ? '#22c55e' : state === 'fail' ? '#ef4444' : '#f0f0f0';
+    const testColor = state === 'ok' || state === 'fail' ? 'white' : '#555';
+
+    return (
+      <div style={{ marginBottom:20 }}>
+        <label style={{ fontSize:14, fontWeight:600, color:'#555', display:'block', marginBottom:8 }}>{label}</label>
+        <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+          <div>
+            <div style={{ fontSize:11, color:'#aaa', marginBottom:4 }}>IP Address</div>
+            <input
+              value={settings[ipKey] || ''}
+              onChange={e => setSettings(s => ({ ...s, [ipKey]: e.target.value }))}
+              placeholder="192.168.1.100"
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:'#aaa', marginBottom:4 }}>Port</div>
+            <input
+              value={settings[portKey] || '9100'}
+              onChange={e => setSettings(s => ({ ...s, [portKey]: e.target.value }))}
+              placeholder="9100"
+              style={portStyle}
+              type="number"
+            />
+          </div>
+          {settings[ipKey] && (
+            <div style={{ marginTop:18 }}>
+              <button
+                onClick={() => testPrinter(testKey, ipKey, portKey)}
+                disabled={state === 'testing'}
+                style={{ padding:'8px 16px', borderRadius:8, border:'none', background:testBg, color:testColor, fontWeight:700, fontSize:13, cursor:'pointer' }}
+              >{testLabel}</button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={cardStyle}>
+      <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:4 }}>🌐 Network Printers</h2>
+      <p style={{ fontSize:13, color:'#888', marginBottom:20, lineHeight:1.6 }}>
+        Enter the IP address of each printer (via a USB print server or built-in LAN port).
+        Once set, <strong>all devices on the same Wi-Fi</strong> — including iPads — print
+        silently with no dialog. Port 9100 is the standard RAW print port. <strong>Save Settings</strong> after entering IPs.
+      </p>
+
+      {printerRow('🧾 Receipt Printer', 'printer_receipt_ip', 'printer_receipt_port', 'receipt')}
+      {printerRow('🍳 Kitchen Printer', 'printer_kitchen_ip', 'printer_kitchen_port', 'kitchen')}
+      {printerRow('🍹 Bar Printer',     'printer_bar_ip',     'printer_bar_port',     'bar')}
+
+      {settings.printer_kitchen_ip && (
+        <div style={{ marginTop:-8, marginBottom:16 }}>
+          <label style={{ fontSize:13, fontWeight:600, color:'#555', display:'block', marginBottom:8 }}>Kitchen copies per ticket</label>
+          <div style={{ display:'flex', gap:8 }}>
+            {[1, 2, 3].map(n => (
+              <button key={n} onClick={() => setSettings(s => ({ ...s, printer_kitchen_copies: String(n) }))}
+                style={{ width:56, height:44, borderRadius:8, border:'none', fontWeight:700, fontSize:15, cursor:'pointer',
+                  background: (settings.printer_kitchen_copies || '1') === String(n) ? '#1a1a2e' : '#f0f0f0',
+                  color:      (settings.printer_kitchen_copies || '1') === String(n) ? 'white'   : '#555',
+                }}>
+                {n}×
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize:11, color:'#aaa', marginTop:6 }}>
+            Prints this many tickets per course fire. Use 2× if you have a chef and a sous chef.
+          </div>
+        </div>
+      )}
+
+      <div style={{ background:'#f0f9ff', border:'1px solid #bae6fd', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#0369a1' }}>
+        💡 <strong>How to find your printer's IP:</strong> Log into your router admin page (usually 192.168.1.1) and look for the WAVLINK print server in the connected devices list. Give it a fixed/static IP so it never changes.
+      </div>
     </div>
   );
 }
@@ -538,7 +649,14 @@ export default function SettingsSection() {
       {/* ── Network Setup (QR for iPads) ── */}
       <NetworkSetupCard cardStyle={cardStyle} />
 
-      {/* ── Printer (SEPOS-025/026) ── */}
+      {/* ── Network Printers (SEPOS-025/026) — iPad-friendly ESC/POS over TCP ── */}
+      <NetworkPrinterCard
+        cardStyle={cardStyle}
+        settings={settings}
+        setSettings={setSettings}
+      />
+
+      {/* ── Electron Printer (this device only, desktop app) ── */}
       <PrinterCard cardStyle={cardStyle} />
     </div>
   );

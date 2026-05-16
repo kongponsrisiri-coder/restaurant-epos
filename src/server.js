@@ -2012,12 +2012,21 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
       items = [],     // [{ menu_item_id, quantity, unit_price, name, item_note }]
       notes,
       marketing_consent,
+      // SEPOS-DELIVERY-002 — collection (default) vs delivery.
+      order_subtype = 'collection',
+      delivery_address,
+      delivery_notes,
     } = req.body;
 
     if (!customer_name || !customer_name.trim()) return res.status(400).json({ error: 'Name is required' });
     if (!customer_phone || !customer_phone.trim()) return res.status(400).json({ error: 'Phone is required' });
     if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Cart is empty' });
     if (!pickup_time) return res.status(400).json({ error: 'Pickup time is required' });
+    // Normalise + validate the subtype. Delivery requires an address.
+    const subtype = order_subtype === 'delivery' ? 'delivery' : 'collection';
+    if (subtype === 'delivery' && (!delivery_address || !delivery_address.trim())) {
+      return res.status(400).json({ error: 'Delivery address is required for delivery orders' });
+    }
 
     // Closed-hours check — pickup_time must fall within the restaurant's
     // opening_time .. last_booking_time window. Soft validation: if
@@ -2046,13 +2055,19 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
       `INSERT INTO orders
          (table_id, status, covers, total, opened_at,
           order_type, customer_name, customer_phone, customer_email,
-          pickup_time, takeaway_status, payment_status, discount_reason)
+          pickup_time, takeaway_status, payment_status, discount_reason,
+          order_subtype, delivery_address, delivery_notes, marketing_consent)
        VALUES (NULL, 'open', 1, $1, NOW(),
                'takeaway', $2, $3, $4,
-               $5, 'pending', 'mock', $6)
+               $5, 'pending', 'mock', $6,
+               $7, $8, $9, $10)
        RETURNING id`,
       [total, customer_name.trim(), customer_phone.trim(), (customer_email || '').trim() || null,
-       pickup_time, notes || null]
+       pickup_time, notes || null,
+       subtype,
+       subtype === 'delivery' ? delivery_address.trim() : null,
+       subtype === 'delivery' ? (delivery_notes || '').trim() || null : null,
+       marketing_consent ? 1 : 0]
     );
     const orderId = orderRes.rows[0].id;
 
@@ -2079,13 +2094,9 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
     // failure here doesn't roll back the order.
     try { await depleteStockForItems(insertedItemIds, 'sale'); } catch {}
 
-    // Best-effort optional marketing consent capture (Phase 1 CRM).
-    if (customer_email && marketing_consent) {
-      // We don't have a "marketing_signups" table — the booking widget
-      // captures consent on reservations. For takeaway we'd want a CRM
-      // join too, but that's the next refinement. For now: log.
-      console.log('[takeaway] marketing consent captured for', customer_email);
-    }
+    // SEPOS-DELIVERY-002 — marketing_consent is now persisted on the
+    // order row itself; GET /api/customers reads it back so takeaway
+    // customers flow into the CRM with the right consent flag.
 
     // Kitchen iPad listens to this — pops up the ticket instantly.
     io.emit('new_takeaway_order', {
@@ -2095,6 +2106,8 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
       pickup_time,
       total,
       item_count: items.length,
+      order_subtype: subtype,
+      delivery_address: subtype === 'delivery' ? delivery_address.trim() : null,
     });
 
     // Fire-and-forget email confirmation via Brevo.

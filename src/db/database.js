@@ -141,6 +141,11 @@ async function initDB() {
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS takeaway_status VARCHAR(20)`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20)`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR(255)`);
+    // SEPOS-DELIVERY-002 — collection vs delivery for takeaway orders.
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_subtype VARCHAR(20) DEFAULT 'collection'`);
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT`);
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_notes TEXT`);
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS marketing_consent INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE orders ALTER COLUMN table_id DROP NOT NULL`).catch(() => {});
 
     // SEPOS-033 Phase 2 — campaign audit log

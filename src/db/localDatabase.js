@@ -370,6 +370,11 @@ function runMigrations() {
   addColumnIfMissing('orders', 'takeaway_status', 'TEXT');
   addColumnIfMissing('orders', 'payment_status', 'TEXT');
   addColumnIfMissing('orders', 'payment_intent_id', 'TEXT');
+  // SEPOS-DELIVERY-002 — collection vs delivery for takeaway orders.
+  addColumnIfMissing('orders', 'order_subtype', "TEXT DEFAULT 'collection'");
+  addColumnIfMissing('orders', 'delivery_address', 'TEXT');
+  addColumnIfMissing('orders', 'delivery_notes', 'TEXT');
+  addColumnIfMissing('orders', 'marketing_consent', 'INTEGER DEFAULT 0');
 
   // SEPOS-PRO-002: bidirectional active-order sync.
   // cloud_id maps a local row to its mirror on the cloud Postgres backend.

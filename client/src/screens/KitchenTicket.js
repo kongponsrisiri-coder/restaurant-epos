@@ -54,9 +54,11 @@ function isBilingual(settings) {
   return (settings && settings.kitchen_language) !== 'en'; // default en_th
 }
 
-// ── Open browser popup and trigger print dialog ───────────────────────────────
-function openPrintPopup(html) {
-  const win = window.open('', '_blank', 'width=400,height=600,scrollbars=yes');
+// ── Open browser popup and trigger print dialog ──────────────────────────────
+// Accepts an optional pre-opened window (opened before async work to keep
+// the browser's user-gesture context, preventing popup blocking).
+function openPrintPopup(html, preWin = null) {
+  const win = preWin || window.open('', '_blank', 'width=400,height=600,scrollbars=yes');
   if (!win) return;
   win.document.write(html);
   win.document.close();
@@ -67,15 +69,20 @@ function openPrintPopup(html) {
   }, 300);
 }
 
+function closeWin(win) { try { if (win && !win.closed) win.close(); } catch {} }
+
 // ── Core dispatcher — tries server → Electron → popup ────────────────────────
-async function dispatchPrint({ settings, serverFn, html }) {
-  if (!shouldPrint(settings)) return; // KDS-only mode — do nothing
+// popupWin: a pre-opened window (opened synchronously before any awaits in
+// the calling code). Closed when server/Electron handles print; used for popup
+// fallback so the window.open() bypass is preserved.
+async function dispatchPrint({ settings, serverFn, html, popupWin = null }) {
+  if (!shouldPrint(settings)) { closeWin(popupWin); return; }
 
   // 1. Server-side network print
   try {
     if (settings && settings.printer_kitchen_ip) {
       const r = await serverFn();
-      if (r && r.success) return;
+      if (r && r.success) { closeWin(popupWin); return; }
       console.warn('[kitchen-ticket] server print failed, falling back:', r?.error || r?.reason);
     }
   } catch (e) {
@@ -86,21 +93,23 @@ async function dispatchPrint({ settings, serverFn, html }) {
   const deviceName = (typeof localStorage !== 'undefined' && localStorage.getItem('kitchen_printer_name')) || '';
   const autoOn     = typeof localStorage === 'undefined' || localStorage.getItem('kitchen_auto_print') !== '0';
   if (deviceName && autoOn && window.siamepos?.isElectron && window.siamepos.printHtml) {
+    closeWin(popupWin); // Electron prints — no popup needed
     window.siamepos.printHtml({ html, deviceName })
       .then(r => { if (!r || !r.success) console.error('[kitchen-ticket] print failed:', r?.error); })
       .catch(e => console.error('[kitchen-ticket] print error:', e));
     return;
   }
 
-  // 3. Browser popup fallback
-  if (!autoOn) return;
-  openPrintPopup(html);
+  // 3. Browser popup fallback — use pre-opened window if available
+  if (!autoOn) { closeWin(popupWin); return; }
+  openPrintPopup(html, popupWin);
 }
 
 // ── Public: print ALL courses on one ticket (called on Send Order) ────────────
-export async function printFullOrderTicket({ order, items }) {
+// popupWin: pre-opened window from the calling code (to beat popup blocker).
+export async function printFullOrderTicket({ order, items, popupWin = null }) {
   const active = (items || []).filter(i => i && !i.voided && !i.is_bar);
-  if (active.length === 0) return;
+  if (active.length === 0) { closeWin(popupWin); return; }
 
   const settings = await getCachedSettings();
   const copies   = Math.max(1, Math.min(5,
@@ -112,13 +121,15 @@ export async function printFullOrderTicket({ order, items }) {
     settings,
     serverFn: () => serverPrintKitchenFull(order.id, active),
     html:     buildFullOrderTicketHTML({ order, items: active, copies, bilingual }),
+    popupWin,
   });
 }
 
 // ── Public: print a single course (called when a course is fired) ─────────────
-export async function printKitchenTicket({ order, items, course }) {
+// popupWin must be pre-opened by the caller before any awaits.
+export async function printKitchenTicket({ order, items, course, popupWin = null }) {
   const active = (items || []).filter(i => i && !i.voided);
-  if (active.length === 0) return;
+  if (active.length === 0) { closeWin(popupWin); return; }
 
   const settings = await getCachedSettings();
   const copies   = Math.max(1, Math.min(5,
@@ -130,42 +141,47 @@ export async function printKitchenTicket({ order, items, course }) {
     settings,
     serverFn: () => serverPrintKitchen(order.id, active, course),
     html:     buildKitchenTicketHTML({ order, items: active, course, copies, bilingual }),
+    popupWin,
   });
 }
 
 // ── Public: print bar items to bar printer (called on Send Order) ─────────────
-export async function printBarOrderTicket({ order, items }) {
+// popupWin: pre-opened window from sendOrder (opened before async work so the
+// browser does not block the popup as an unattended window.open call).
+export async function printBarOrderTicket({ order, items, popupWin = null }) {
   const barItems = (items || []).filter(i => i && !i.voided && i.is_bar);
-  if (barItems.length === 0) return;
+  if (barItems.length === 0) { closeWin(popupWin); return; }
 
   const settings = await getCachedSettings();
   const bilingual = isBilingual(settings);
 
-  // Bar uses the 'bar' printer IP — no KDS mode check (bar always prints)
+  // 1. Server-side TCP to bar printer IP
   try {
     if (settings && settings.printer_bar_ip) {
       const r = await serverPrintBar(order.id, barItems);
-      if (r && r.success) return;
+      if (r && r.success) { closeWin(popupWin); return; }
       console.warn('[bar-ticket] server print failed, falling back:', r?.error || r?.reason);
     }
   } catch (e) {
     console.warn('[bar-ticket] server print error, falling back:', e);
   }
 
-  // Electron silent print
+  // 2. Electron silent print to bar printer device
   const deviceName = (typeof localStorage !== 'undefined' && localStorage.getItem('bar_printer_name')) || '';
   const autoOn     = typeof localStorage === 'undefined' || localStorage.getItem('kitchen_auto_print') !== '0';
   const html       = buildKitchenTicketHTML({ order, items: barItems, course: 4, copies: 1, bilingual });
 
   if (deviceName && autoOn && window.siamepos?.isElectron && window.siamepos.printHtml) {
+    closeWin(popupWin);
     window.siamepos.printHtml({ html, deviceName })
       .then(r => { if (!r || !r.success) console.error('[bar-ticket] print failed:', r?.error); })
       .catch(e => console.error('[bar-ticket] print error:', e));
     return;
   }
 
-  if (!autoOn) return;
-  openPrintPopup(html);
+  // 3. Browser popup fallback — use pre-opened window so popup blocker is bypassed
+  if (!autoOn) { closeWin(popupWin); return; }
+  openPrintPopup(html, popupWin);
 }
 
 // ── HTML builders ─────────────────────────────────────────────────────────────

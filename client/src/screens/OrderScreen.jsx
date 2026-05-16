@@ -254,47 +254,55 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
 
   const sendOrder = async () => {
     if (cart.length === 0) return alert('No items to send!');
-    // Snapshot cart items BEFORE clearing — used for the combined kitchen ticket.
-    // Merge with existing order items so re-orders (adding to existing table) print everything.
-    const existingItems = (order?.items || []).filter(i => i && !i.voided);
+
+    // Snapshot cart before clearing.  Detect bar/kitchen split now (before any await)
+    // so we can pre-open popup windows while the user-gesture context is still live.
     const cartAsItems   = cart.map(c => ({
       name: c.name, quantity: c.quantity, course: c.course || 1, notes: c.notes || '', is_bar: !!c.is_bar,
     }));
-    const allForTicket = existingItems.length > 0 ? existingItems : cartAsItems;
+    const existingItems = (order?.items || []).filter(i => i && !i.voided);
+    const allNewItems   = cartAsItems.length > 0 ? [...existingItems, ...cartAsItems] : existingItems;
+    const hasKitchen    = allNewItems.some(i => !i.is_bar);
+    const hasBar        = allNewItems.some(i => i.is_bar);
+
+    // ── Pre-open popup windows SYNCHRONOUSLY (user gesture is fresh here). ──────
+    // Browsers block window.open() called after async work; opening them here and
+    // passing them to the async print functions bypasses the popup blocker.
+    const kitchenWin = hasKitchen ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
+    const barWin     = hasBar     ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
+
     try {
       await addOrderItems(orderId, cart);
       setCart([]);
       await fetchOrder();
-      // SEPOS-026 — print a combined kitchen ticket for all NON-bar courses on Send Order.
-      const allNewItems = cartAsItems.length > 0 ? [...existingItems, ...cartAsItems] : existingItems;
-      if (allNewItems.filter(i => !i.is_bar).length > 0) {
-        printFullOrderTicket({ order, items: allNewItems });
-      }
-      // Bar items → bar printer
-      if (allNewItems.filter(i => i.is_bar).length > 0) {
-        printBarOrderTicket({ order, items: allNewItems });
-      }
-      // Sandy: switch to Order tab on mobile so waiter can see items and fire courses
+
+      // SEPOS-026 — kitchen ticket (non-bar items) and bar ticket (bar items) separately
+      if (hasKitchen) printFullOrderTicket({ order, items: allNewItems, popupWin: kitchenWin });
+      if (hasBar)     printBarOrderTicket({ order, items: allNewItems, popupWin: barWin });
+
       if (isMobile) setMobileTab('order');
       alert('Order saved! Use 🔥 Fire buttons to send courses to kitchen.');
     } catch (err) {
+      // Clean up pre-opened windows on error
+      try { if (kitchenWin && !kitchenWin.closed) kitchenWin.close(); } catch {}
+      try { if (barWin     && !barWin.closed)     barWin.close();     } catch {}
       alert('Failed to send order.');
     }
   };
 
   const handleFireCourse = async (course) => {
     setFiringCourse(course);
-    // SEPOS-026 — snapshot the items about to be fired BEFORE the call.
-    // The server's course_fired payload also includes already-fired
-    // items, so we can't tell new from old after the fact.
     const aboutToFire = (order?.items || []).filter(
       i => (i.course || 1) === course && !i.is_fired && !i.voided && !i.is_bar
     );
+    // Pre-open popup before awaits so browser doesn't block it
+    const coursePopupWin = aboutToFire.length > 0
+      ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes')
+      : null;
     try {
       await fireCourse(orderId, course);
       await fetchOrder();
-      // Auto-print a kitchen ticket (desktop app + kitchen printer only).
-      printKitchenTicket({ order, items: aboutToFire, course });
+      printKitchenTicket({ order, items: aboutToFire, course, popupWin: coursePopupWin });
       alert(`🔥 ${COURSE_LABELS[course]} fired to kitchen!`);
     } catch (err) {
       alert('Failed to fire course.');

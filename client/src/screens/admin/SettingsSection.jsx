@@ -291,8 +291,8 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
         </label>
         <div style={{ display:'flex', gap:8 }}>
           {[
-            { value: 'en_th', label: '🇬🇧 + 🇹🇭 EN + Thai' },
-            { value: 'en',    label: '🇬🇧 English only' },
+            { value: 'en_th', label: '1st + 2nd Language' },
+            { value: 'en',    label: '1st Language only' },
           ].map(opt => (
             <button key={opt.value}
               onClick={() => setSettings(s => ({ ...s, kitchen_language: opt.value }))}

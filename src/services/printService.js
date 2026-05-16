@@ -18,6 +18,8 @@ const net = require('net');
 const ESC = 0x1b;
 const GS  = 0x1d;
 
+const CAN = Buffer.from([0x18]);   // Cancel — discards any buffered data since last LF
+
 const CMD = {
   INIT:         Buffer.from([ESC, 0x40]),
   ALIGN_LEFT:   Buffer.from([ESC, 0x61, 0x00]),
@@ -184,7 +186,7 @@ function buildKitchenTicket({ order, items, course, bilingual = true }) {
   const headSize = heading.length <= 10 ? CMD.SIZE_BIG : CMD.SIZE_TALL;
 
   const parts = [
-    CMD.INIT, lf(),          // extra LF after INIT clears any residual buffer chars
+    CAN, CMD.INIT, lf(),     // CAN discards leftover bytes; LF after INIT ensures clean start
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(courseEN), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
@@ -238,7 +240,7 @@ function buildFullKitchenTicket({ order, items, bilingual = true }) {
   ]);
 
   const parts = [
-    CMD.INIT, lf(),          // extra LF after INIT clears any residual buffer chars
+    CAN, CMD.INIT, lf(),     // CAN discards leftover bytes; LF after INIT ensures clean start
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     order.customer_name ? [txt(order.customer_name), lf()] : [],

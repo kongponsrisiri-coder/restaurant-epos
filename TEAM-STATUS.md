@@ -51,6 +51,7 @@
 |------|------|---------|
 | 2026-05-16 | Sandy (Korakot directive) | **MOBILE FIRST — new rule for all web work.** Every website, widget, or page must be designed and tested on mobile before desktop. Min 44px tap targets, 16px+ form inputs, hamburger nav, no horizontal scroll, key actions above the fold on phone. Full checklist in CLAUDE-Sandy.md. This applies to: siamepos.co.uk, siamepos.net, booking widget, takeaway widget, and any future client sites. |
 | 2026-05-16 | Korakot | All | **RECOMMENDED RECEIPT PRINTER for clients:** cnfujun 80mm thermal printer — under £30, ESC/POS (Epson compatible), USB + Ethernet built in, works on Mac + Windows + Linux. Model 80.E-Z04-AA. Driver download: cnfujun.com/d/33 (direct download, no page shown — just paste URL in browser). Korakot tested and confirmed working on Mac. Recommend this to all new SiamEPOS clients as the budget receipt printer option. |
+| 2026-05-16 | Krit | All (esp. Nong / onboarding) | **⚠️ PRINTER SETUP GOTCHA — cnfujun / POS80 thermal printer.** Symptom: receipts print as raw HTML/code on paper while the on-screen preview looks fine. Cause: macOS auto-installs the printer with the **"Generic PostScript Printer"** driver — the thermal printer can't read PostScript so it prints the page code as text. FIX: install the cnfujun driver (cnfujun.com/d/33), then in System Settings → Printers & Scanners set the printer's driver/"Use" to the **POS-80** driver (NOT Generic PostScript, NOT Generic PCL). Verify with Terminal: `lpoptions -p <printer>` should show `printer-make-and-model=POS-80`. Every client installing this printer will hit this — make it a step in the onboarding checklist. |
 
 ---
 
@@ -78,9 +79,7 @@
 
 | # | Ticket | Description | Assigned |
 |---|--------|-------------|----------|
-| 1 | SEPOS-025 | Receipt printer (ESC/POS, needs Epson/Star device) | Krit |
-| 2 | SEPOS-026 | Kitchen printer | Krit |
-| 3 | SEPOS-027 | Reservations + walk-in SMS (needs Twilio) | Krit |
+| 1 | SEPOS-027 | Reservations + walk-in SMS (needs Twilio) | Krit |
 | 4 | SEPOS-040 | Real Stripe payment on takeaway widget | Krit |
 | 5 | SEPOS-021 | HMRC VAT submission (needs HMRC OAuth sandbox) | Krit |
 | 6 | SPA-001 | Spa EPOS foundation (rooms, appointments, medical questionnaire) | Sam |

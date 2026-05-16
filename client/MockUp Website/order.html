@@ -173,26 +173,38 @@ p{font-weight:300;line-height:1.7;color:var(--stone);}
 </nav>
 
 <section class="hero">
-  <p class="label label--accent hero__eyebrow" style="display:inline-block;padding:4px 14px;border:1px solid var(--teak);">Now Live</p>
+  <p class="label label--accent hero__eyebrow" style="display:inline-block;padding:4px 14px;border:1px solid var(--teak);">Collection &amp; Delivery</p>
   <h1 class="hero__title" style="margin-top:18px;" class="lang-en">Order Online</h1>
-  <p class="hero__body lang-en">Order takeaway directly from Baan Siam. No Just Eat. No Deliveroo. No commission. Just great food.</p>
-  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:8px;">
-    <button class="btn btn--solid" data-siamepos-takeaway><span class="lang-en">Start Your Order</span></button>
-    <a href="menu.html" class="btn btn--outline-sm lang-en">View Full Menu</a>
-    </div>
-  <p style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--stone);margin-top:18px;">Pickup in 20 minutes · Pay by card · Confirmation by email</p>
+  <p class="hero__body lang-en">Collect from us or get it delivered to your door. No Just Eat. No Deliveroo. No commission. Direct from our kitchen.</p>
+
+  <!-- Collection / Delivery choice cards -->
+  <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:28px;max-width:480px;margin-left:auto;margin-right:auto;">
+    <button data-siamepos-takeaway style="flex:1;min-width:180px;background:var(--forest);color:var(--ivory);border:none;padding:22px 18px;cursor:pointer;font-family:var(--font);text-align:center;transition:background .15s;">
+      <div style="font-size:28px;margin-bottom:8px;">🥡</div>
+      <div style="font-size:12px;font-weight:400;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:4px;">Collection</div>
+      <div style="font-size:11px;opacity:0.7;letter-spacing:0.08em;">Ready in ~20 min</div>
+    </button>
+    <button data-siamepos-takeaway style="flex:1;min-width:180px;background:var(--ivory);color:var(--forest);border:1.5px solid var(--forest);padding:22px 18px;cursor:pointer;font-family:var(--font);text-align:center;transition:all .15s;">
+      <div style="font-size:28px;margin-bottom:8px;">🚗</div>
+      <div style="font-size:12px;font-weight:400;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:4px;">Delivery</div>
+      <div style="font-size:11px;opacity:0.6;letter-spacing:0.08em;">To your door</div>
+    </button>
+  </div>
+
+  <p style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--stone);margin-top:20px;">Pay by card · Confirmation by email · 0% commission</p>
+  <p style="margin-top:10px;"><a href="menu.html" style="font-size:12px;color:var(--stone);letter-spacing:0.12em;text-transform:uppercase;text-decoration:underline;text-underline-offset:3px;">Browse the menu first →</a></p>
 </section>
 
 <div class="features">
   <div class="feature">
     <p class="label label--accent feature__eyebrow">0%</p>
     <p class="feature__name lang-en">Commission</p>
-    <p style="font-size:13px;color:var(--stone);margin-top:8px;" class="lang-en">Just Eat takes up to 35% per order. We take nothing. Only Stripe's standard card fee applies.</p>
+    <p style="font-size:13px;color:var(--stone);margin-top:8px;" class="lang-en">Just Eat takes up to 35% per order. We keep every penny. Only Stripe's standard card fee applies.</p>
   </div>
   <div class="feature">
-    <p class="label label--accent feature__eyebrow">Direct</p>
-    <p class="feature__name lang-en">To kitchen</p>
-    <p style="font-size:13px;color:var(--stone);margin-top:8px;" class="lang-en">Payment confirmed — order fires to our kitchen instantly. Ready in 20 minutes.</p>
+    <p class="label label--accent feature__eyebrow">🥡 · 🚗</p>
+    <p class="feature__name lang-en">Your choice</p>
+    <p style="font-size:13px;color:var(--stone);margin-top:8px;" class="lang-en">Collect at the restaurant or get it delivered. You choose at checkout — no app download needed.</p>
   </div>
   <div class="feature">
     <p class="label label--accent feature__eyebrow">Yours</p>
@@ -208,7 +220,7 @@ p{font-weight:300;line-height:1.7;color:var(--stone);}
     <p class="lang-en" style="margin-bottom:28px;">Experience Baan Siam properly. Our team will take care of everything.</p>
     <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
       <a href="book.html" class="btn btn--solid lang-en">Reserve a Table</a>
-      </div>
+    </div>
   </div>
 </section>
 

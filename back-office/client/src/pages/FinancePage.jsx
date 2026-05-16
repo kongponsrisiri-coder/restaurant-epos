@@ -247,7 +247,7 @@ function TransactionTable({ transactions, loading, days, onDaysChange }) {
               key={d}
               onClick={() => onDaysChange(d)}
               style={{
-                padding: '6px 16px', borderRadius: 20, border: 'none',
+                padding: '6px 16px', borderRadius: 20,
                 fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
                 background: days === d ? C.gold : C.surfaceAlt,
                 color: days === d ? C.navy : C.textMuted,

@@ -361,9 +361,49 @@
   }
 
   // ── Step renderers ───────────────────────────────────────────────
+
+  // Postcode check panel (used inside step 1 when delivery is selected)
+  function renderDeliveryPostcodeCheck() {
+    const chk    = state.customer.delivery_check;
+    const radius = Number(state.settings?.delivery_radius_miles) || 0;
+    return `
+      <label class="tw-label">Your delivery postcode</label>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <input class="tw-input" id="tw-delivery-postcode" type="text" inputmode="text"
+          value="${esc(state.customer.delivery_postcode)}" placeholder="e.g. SW1A 1AA"
+          autocomplete="postal-code" style="flex:1;margin:0;text-transform:uppercase;" />
+        <button type="button" id="tw-postcode-check"
+          style="padding:0 18px;border-radius:10px;border:2px solid #0D1B3E;background:#0D1B3E;
+            color:#fff;font:inherit;font-weight:700;cursor:pointer;white-space:nowrap;min-height:48px;">
+          Check
+        </button>
+      </div>
+      ${chk?.checking ? `<div class="tw-help">Checking your postcode…</div>` : ''}
+      ${chk?.deliverable === false ? `
+        <div style="background:#fdecea;border:1px solid #e57373;border-radius:10px;
+          padding:12px 14px;font-size:13px;color:#b71c1c;line-height:1.5;">
+          <strong>Sorry — outside our delivery area.</strong><br>
+          We deliver up to ${radius} miles${chk.distance_miles != null ? ` — you're ${chk.distance_miles} mi away` : ''}.
+        </div>
+        <button type="button" id="tw-switch-collection"
+          style="margin-top:8px;padding:12px 16px;border-radius:10px;border:2px solid #0D1B3E;
+            background:white;color:#0D1B3E;font:inherit;font-weight:700;cursor:pointer;width:100%;">
+          Switch to 🥡 Collection instead
+        </button>
+      ` : ''}
+    `;
+  }
+
   function renderStep1() {
-    const opening = state.settings?.opening_time      || '11:00';
-    const closing = state.settings?.last_booking_time || '21:30';
+    const opening        = state.settings?.opening_time      || '11:00';
+    const closing        = state.settings?.last_booking_time || '21:30';
+    const deliveryEnabled = !!state.settings?.delivery_enabled;
+    if (!deliveryEnabled) state.customer.order_subtype = 'collection';
+    const isDelivery  = deliveryEnabled && state.customer.order_subtype === 'delivery';
+    const postcodeOk  = isDelivery && state.customer.delivery_check?.deliverable === true;
+    const showTime    = !isDelivery || postcodeOk;
+
+    // Build time slots
     const today   = new Date();
     const minTime = new Date(today.getTime() + 25 * 60 * 1000);
     const slots   = [];
@@ -372,47 +412,75 @@
     const cur   = new Date(today); cur.setHours(oh, om, 0, 0);
     const close = new Date(today); close.setHours(ch, cm, 0, 0);
     while (cur <= close) {
-      if (cur >= minTime) {
-        slots.push({
-          iso: cur.toISOString(),
-          lbl: cur.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' }),
-        });
-      }
+      if (cur >= minTime) slots.push({
+        iso: cur.toISOString(),
+        lbl: cur.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' }),
+      });
       cur.setMinutes(cur.getMinutes() + 15);
     }
 
     return `
-      <h2 class="tw-h2">When would you like to collect?</h2>
-      <div class="tw-help">Open ${String(opening).slice(0,5)} – ${String(closing).slice(0,5)}. We need ~25 min to prepare your order.</div>
+      <h2 class="tw-h2">${deliveryEnabled ? 'How would you like your order?' : 'When would you like to collect?'}</h2>
 
-      <div class="tw-pickup-row">
-        <button class="tw-pickup-btn ${state.pickupKind==='asap' ? 'active' : ''}" id="tw-asap">
-          <span class="tw-pickup-icon">⚡</span>
-          <span class="tw-pickup-label">ASAP</span>
-          <span class="tw-pickup-sub">Ready in ~25 min</span>
-        </button>
-        <button class="tw-pickup-btn ${state.pickupKind==='scheduled' ? 'active' : ''}" id="tw-sched">
-          <span class="tw-pickup-icon">🕐</span>
-          <span class="tw-pickup-label">Schedule</span>
-          <span class="tw-pickup-sub">Pick a time</span>
-        </button>
-      </div>
+      ${deliveryEnabled ? `
+        <div class="tw-pickup-row" style="margin-bottom:20px;">
+          <button class="tw-pickup-btn ${!isDelivery ? 'active' : ''}" data-subtype="collection">
+            <span class="tw-pickup-icon">🥡</span>
+            <span class="tw-pickup-label">Collection</span>
+            <span class="tw-pickup-sub">Pick up at the restaurant</span>
+          </button>
+          <button class="tw-pickup-btn ${isDelivery ? 'active' : ''}" data-subtype="delivery">
+            <span class="tw-pickup-icon">🚗</span>
+            <span class="tw-pickup-label">Delivery</span>
+            <span class="tw-pickup-sub">We bring it to you</span>
+          </button>
+        </div>
+        ${isDelivery && !postcodeOk ? renderDeliveryPostcodeCheck() : ''}
+        ${postcodeOk ? `
+          <div style="background:#f0f7ee;border:1.5px solid #86efac;border-radius:12px;
+            padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:20px;">✅</span>
+            <div>
+              <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.05em;">Delivering to</div>
+              <div style="font-weight:700;color:#166534;">${esc(state.customer.delivery_postcode)}
+                <span style="font-weight:400;font-size:12px;color:#888;margin-left:6px;">
+                  ${state.customer.delivery_check?.distance_miles != null ? `(${state.customer.delivery_check.distance_miles} mi)` : ''}
+                </span>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+      ` : ''}
 
-      ${state.pickupKind === 'scheduled' ? `
-        <div class="tw-slots-label">Choose a pickup time</div>
-        <div class="tw-slots">
-          ${slots.length === 0
-            ? '<div style="color:#888;font-size:13px;grid-column:1/-1;">No slots left today — choose ASAP.</div>'
-            : slots.map(s => `
-                <button class="tw-slot ${state.pickupISO===s.iso ? 'active' : ''} tw-slot-btn" data-iso="${s.iso}">${s.lbl}</button>
-              `).join('')}
+      ${showTime ? `
+        <div class="tw-help">Open ${String(opening).slice(0,5)} – ${String(closing).slice(0,5)}. We need ~25 min to prepare your order.</div>
+        <div class="tw-pickup-row">
+          <button class="tw-pickup-btn ${state.pickupKind==='asap' ? 'active' : ''}" id="tw-asap">
+            <span class="tw-pickup-icon">⚡</span>
+            <span class="tw-pickup-label">ASAP</span>
+            <span class="tw-pickup-sub">Ready in ~25 min</span>
+          </button>
+          <button class="tw-pickup-btn ${state.pickupKind==='scheduled' ? 'active' : ''}" id="tw-sched">
+            <span class="tw-pickup-icon">🕐</span>
+            <span class="tw-pickup-label">Schedule</span>
+            <span class="tw-pickup-sub">Pick a time</span>
+          </button>
         </div>
-      ` : `
-        <div style="background:#f0f7ee;border:1.5px solid #86efac;border-radius:12px;padding:14px 16px;">
-          <div style="font-weight:700;color:#166534;margin-bottom:3px;">✓ Earliest pickup</div>
-          <div style="font-size:15px;color:#166534;">${new Date(Date.now()+25*60000).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})} today</div>
-        </div>
-      `}
+        ${state.pickupKind === 'scheduled' ? `
+          <div class="tw-slots-label">Choose a ${isDelivery ? 'delivery' : 'pickup'} time</div>
+          <div class="tw-slots">
+            ${slots.length === 0
+              ? '<div style="color:#888;font-size:13px;grid-column:1/-1;">No slots left today — choose ASAP.</div>'
+              : slots.map(s => `<button class="tw-slot ${state.pickupISO===s.iso ? 'active' : ''} tw-slot-btn" data-iso="${s.iso}">${s.lbl}</button>`).join('')}
+          </div>
+        ` : `
+          <div style="background:#f0f7ee;border:1.5px solid #86efac;border-radius:12px;padding:14px 16px;">
+            <div style="font-weight:700;color:#166534;margin-bottom:3px;">✓ Earliest ${isDelivery ? 'delivery' : 'pickup'}</div>
+            <div style="font-size:15px;color:#166534;">${new Date(Date.now()+25*60000).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})} today</div>
+          </div>
+        `}
+      ` : ''}
+
       ${state.error ? `<div class="tw-error">${esc(state.error)}</div>` : ''}
     `;
   }
@@ -527,28 +595,18 @@
   }
 
   function renderStep3() {
-    // SEPOS-DELIVERY-002 — collection (default) vs delivery. The Delivery
-    // option only shows when the restaurant has set a postcode + radius.
-    const deliveryEnabled = !!state.settings?.delivery_enabled;
-    if (!deliveryEnabled) state.customer.order_subtype = 'collection';
-    const isDelivery = deliveryEnabled && state.customer.order_subtype === 'delivery';
-    const toggleBtn = (kind, label, sub) => `
-      <button type="button" class="tw-subtype-btn${state.customer.order_subtype === kind ? ' tw-subtype-on' : ''}"
-        data-subtype="${kind}"
-        style="flex:1;padding:12px 8px;border-radius:10px;cursor:pointer;font:inherit;
-          border:2px solid ${state.customer.order_subtype === kind ? '#0D1B3E' : '#ddd'};
-          background:${state.customer.order_subtype === kind ? '#0D1B3E' : '#fff'};
-          color:${state.customer.order_subtype === kind ? '#fff' : '#555'};font-weight:700;">
-        ${label}<br><span style="font-weight:400;font-size:11px;opacity:.8;">${sub}</span>
-      </button>`;
+    const isDelivery = state.customer.order_subtype === 'delivery';
     return `
       <h2 class="tw-h2">Your details</h2>
 
-      ${deliveryEnabled ? `
-        <label class="tw-label">How would you like your order?</label>
-        <div style="display:flex;gap:10px;margin-bottom:14px;">
-          ${toggleBtn('collection', '🥡 Collection', 'Pick up at the restaurant')}
-          ${toggleBtn('delivery',   '🚗 Delivery',   'We deliver to your address')}
+      ${isDelivery ? `
+        <div style="background:#f0f7ee;border:1.5px solid #86efac;border-radius:12px;
+          padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;">
+          <span style="font-size:20px;">🚗</span>
+          <div>
+            <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.05em;">Delivering to</div>
+            <div style="font-weight:700;color:#166534;">${esc(state.customer.delivery_postcode)}</div>
+          </div>
         </div>
       ` : ''}
 
@@ -563,7 +621,15 @@
       <input class="tw-input" id="tw-email" type="email" inputmode="email"
         value="${esc(state.customer.email)}" placeholder="for order confirmation" autocomplete="email" />
 
-      ${isDelivery ? renderDeliveryPanel() : ''}
+      ${isDelivery ? `
+        <label class="tw-label">Full delivery address *</label>
+        <textarea class="tw-input" id="tw-delivery-address" rows="3"
+          placeholder="House/flat number, street" autocomplete="street-address"
+          style="resize:vertical;">${esc(state.customer.delivery_address)}</textarea>
+        <label class="tw-label">Delivery notes (optional)</label>
+        <input class="tw-input" id="tw-delivery-notes" type="text"
+          value="${esc(state.customer.delivery_notes)}" placeholder="e.g. ring buzzer 12, leave at door" />
+      ` : ''}
 
       <label style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;font-size:13px;color:#555;cursor:pointer;">
         <input type="checkbox" id="tw-consent" ${state.customer.marketing_consent ? 'checked' : ''}
@@ -755,52 +821,61 @@
 
     $('tw-back')?.addEventListener('click', () => { state.step -= 1; state.error = ''; render(); });
 
-    // SEPOS-DELIVERY-002 — collection/delivery toggle. Capturing the
-    // current Step-3 inputs into state first means the re-render that
-    // shows/hides the address fields doesn't wipe what's been typed.
-    document.querySelectorAll('[data-subtype]').forEach(b => {
-      b.addEventListener('click', () => {
-        captureStep3();
-        state.customer.order_subtype = b.dataset.subtype;
+    // ── Step 1: collection/delivery toggle + postcode check ──
+    if (state.step === 1) {
+      document.querySelectorAll('[data-subtype]').forEach(b => {
+        b.addEventListener('click', () => {
+          state.customer.order_subtype = b.dataset.subtype;
+          // Reset postcode check when switching mode
+          if (b.dataset.subtype === 'collection') state.customer.delivery_check = null;
+          state.error = '';
+          render();
+        });
+      });
+
+      $('tw-postcode-check')?.addEventListener('click', async () => {
+        const pcInput = $('tw-delivery-postcode');
+        if (pcInput) state.customer.delivery_postcode = pcInput.value.trim().toUpperCase();
+        const pc = state.customer.delivery_postcode;
+        if (!pc) { state.error = 'Please enter your postcode.'; render(); return; }
+        state.error = '';
+        state.customer.delivery_check = { checking: true };
+        render();
+        try {
+          const r = await fetch(API + '/api/takeaway/delivery-check?postcode=' + encodeURIComponent(pc));
+          const data = await r.json();
+          state.customer.delivery_check = {
+            deliverable:    !!data.deliverable,
+            distance_miles: data.distance_miles != null ? data.distance_miles : null,
+            error:          data.error || '',
+          };
+        } catch (e) {
+          state.customer.delivery_check = { deliverable: false, error: 'Could not check that postcode — please try again.' };
+        }
+        render();
+      });
+
+      $('tw-switch-collection')?.addEventListener('click', () => {
+        state.customer.order_subtype = 'collection';
+        state.customer.delivery_check = null;
         state.error = '';
         render();
       });
-    });
-
-    // SEPOS-DELIVERY-002 — postcode radius check. Geocode via postcodes.io
-    // on the server, compare against the restaurant's delivery radius.
-    $('tw-postcode-check')?.addEventListener('click', async () => {
-      captureStep3();
-      const pc = state.customer.delivery_postcode;
-      if (!pc) { state.error = 'Please enter your postcode.'; render(); return; }
-      state.error = '';
-      state.customer.delivery_check = { checking: true };
-      render();
-      try {
-        const r = await fetch(API + '/api/takeaway/delivery-check?postcode=' + encodeURIComponent(pc));
-        const data = await r.json();
-        state.customer.delivery_check = {
-          deliverable:    !!data.deliverable,
-          distance_miles: data.distance_miles != null ? data.distance_miles : null,
-          error:          data.error || '',
-        };
-      } catch (e) {
-        state.customer.delivery_check = { deliverable: false, error: 'Could not check that postcode — please try again.' };
-      }
-      render();
-    });
-
-    // Out-of-area customers get a one-tap fallback to collection.
-    $('tw-switch-collection')?.addEventListener('click', () => {
-      captureStep3();
-      state.customer.order_subtype = 'collection';
-      state.error = '';
-      render();
-    });
+    }
 
     $('tw-next')?.addEventListener('click', async () => {
       state.error = '';
       if (state.step === 1) {
+        const isDelivery = state.customer.order_subtype === 'delivery';
+        if (isDelivery) {
+          // Save postcode if user typed but didn't hit Check
+          const pcInput = $('tw-delivery-postcode');
+          if (pcInput) state.customer.delivery_postcode = pcInput.value.trim().toUpperCase();
+          const chk = state.customer.delivery_check;
+          if (!chk || chk.deliverable !== true) {
+            state.error = 'Please check your postcode before continuing.'; render(); return;
+          }
+        }
         if (state.pickupKind === 'scheduled' && !state.pickupISO) {
           state.error = 'Please pick a time slot.'; render(); return;
         }
@@ -814,14 +889,8 @@
         captureStep3();
         if (!state.customer.name)  { state.error = 'Name is required.';         render(); return; }
         if (!state.customer.phone) { state.error = 'Phone number is required.'; render(); return; }
-        if (state.customer.order_subtype === 'delivery') {
-          const chk = state.customer.delivery_check;
-          if (!chk || chk.deliverable !== true) {
-            state.error = 'Please check your delivery postcode first.'; render(); return;
-          }
-          if (!state.customer.delivery_address) {
-            state.error = 'Delivery address is required.'; render(); return;
-          }
+        if (state.customer.order_subtype === 'delivery' && !state.customer.delivery_address) {
+          state.error = 'Please enter your full delivery address.'; render(); return;
         }
         state.step = 4; render();
       } else if (state.step === 4) {
@@ -858,13 +927,12 @@
   // moving to Step 4, so nothing typed is lost.
   function captureStep3() {
     const c = state.customer;
-    if ($('tw-name'))  c.name  = $('tw-name').value.trim();
-    if ($('tw-phone')) c.phone = $('tw-phone').value.trim();
-    if ($('tw-email')) c.email = $('tw-email').value.trim();
-    if ($('tw-delivery-postcode')) c.delivery_postcode = $('tw-delivery-postcode').value.trim().toUpperCase();
+    if ($('tw-name'))             c.name             = $('tw-name').value.trim();
+    if ($('tw-phone'))            c.phone            = $('tw-phone').value.trim();
+    if ($('tw-email'))            c.email            = $('tw-email').value.trim();
     if ($('tw-delivery-address')) c.delivery_address = $('tw-delivery-address').value.trim();
     if ($('tw-delivery-notes'))   c.delivery_notes   = $('tw-delivery-notes').value.trim();
-    if ($('tw-consent')) c.marketing_consent = $('tw-consent').checked;
+    if ($('tw-consent'))          c.marketing_consent = $('tw-consent').checked;
   }
 
   async function submitOrder() {

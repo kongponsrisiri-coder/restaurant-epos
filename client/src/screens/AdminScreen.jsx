@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { planCaps, liteAdminSections } from '../utils/plan';
 import TradingSection   from './admin/TradingSection';
 import MenuSection      from './admin/MenuSection';
 import TablePlanSection from './admin/TablePlanSection';
@@ -16,10 +17,11 @@ import SettingsSection  from './admin/SettingsSection';
 import InventorySection from './admin/inventory/InventorySection';
 import ReservationSettingsSection from './admin/ReservationSettingsSection';
 
-export default function AdminScreen() {
+export default function AdminScreen({ plan }) {
+  const caps = planCaps(plan);
   const [section, setSection] = useState('trading');
 
-  const navItems = [
+  const allNavItems = [
     { id: 'trading',      label: '📊 Trading' },
     { id: 'menu',         label: '🍽️ Menu' },
     { id: 'tableplan',    label: '🗺️ Table Plan' },
@@ -37,6 +39,19 @@ export default function AdminScreen() {
     { id: 'settings',     label: '⚙️ Settings' },
     { id: 'reservations', label: '📅 Reservations' },
   ];
+
+  // SEPOS-LITE-001 — lite plans get a limited Admin: Menu / Customers /
+  // Settings (+ Reservations for booking-capable tiers). Pro sees all.
+  const navItems = caps.fullAdmin
+    ? allNavItems
+    : allNavItems.filter(i => liteAdminSections(caps).includes(i.id));
+
+  // If the open section isn't in this plan's set, jump to the first one.
+  useEffect(() => {
+    if (!navItems.find(i => i.id === section)) {
+      setSection(navItems[0] ? navItems[0].id : 'settings');
+    }
+  }, [plan]);
 
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 60px)' }}>

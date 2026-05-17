@@ -804,6 +804,26 @@ app.put('/api/settings', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-LITE-001 Phase 2a — the restaurant's subscription plan. The
+// frontend uses `plan` to gate features (Pro = everything; lite tiers =
+// widgets + matching fulfilment screens). Fail-open to 'pro' on any
+// error or missing registry row so a Pro install can never be locked
+// out of its own EPOS.
+app.get('/api/restaurant', async (req, res) => {
+  const rid = resolveRestaurantId(req);
+  try {
+    const r = await pool.query(
+      `SELECT restaurant_id, name, plan, status FROM restaurants WHERE restaurant_id = $1`,
+      [rid]
+    );
+    if (r.rows[0]) return res.json(r.rows[0]);
+    res.json({ restaurant_id: rid, name: null, plan: 'pro', status: 'active' });
+  } catch (err) {
+    console.error('GET /api/restaurant error:', err.message);
+    res.json({ restaurant_id: rid, name: null, plan: 'pro', status: 'active' });
+  }
+});
+
 app.get('/api/discount-reasons', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM discount_reasons WHERE is_active=1');

@@ -65,6 +65,8 @@ export const voidItem = (itemId, reason, quantity, void_type) => {
 export const applyDiscount = (orderId, discount_type, discount_value, discount_reason) => put(`/api/orders/${orderId}/discount`, { discount_type, discount_value, discount_reason });
 export const getSettings = () => get('/api/settings');
 export const updateSettings = (settings) => put('/api/settings', settings);
+// SEPOS-LITE-001 — restaurant record incl. subscription plan.
+export const getRestaurant = () => get('/api/restaurant');
 
 // SEPOS-025/026 — Network printing (server-side ESC/POS to TCP port 9100)
 export const testNetworkPrinter   = (ip, port)                => post('/api/print/test',    { ip, port });

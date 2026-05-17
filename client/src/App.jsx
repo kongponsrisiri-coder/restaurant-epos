@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { startMonitoring, onStatusChange, getServerStatus } from './utils/serverDetect';
+import { getRestaurant } from './api';
+import { planCaps } from './utils/plan';
 import LoginScreen from './screens/LoginScreen';
 import TableMapScreen from './screens/TableMapScreen';
 import OrderScreen from './screens/OrderScreen';
@@ -55,6 +57,10 @@ export default function App() {
   const [staff, setStaff]               = useState(null);
   const [counterMode, setCounterMode]   = useState(readCounterMode);
   const [screen, setScreen]             = useState(() => readCounterMode() ? 'counter' : 'tables');
+  // SEPOS-LITE-001 — subscription plan drives which screens are shown.
+  // Defaults to 'pro' so a Pro install renders fully even before the
+  // fetch resolves (and if the fetch ever fails).
+  const [plan, setPlan]                 = useState('pro');
   const [activeOrder, setActiveOrder]   = useState(null);
   const [menuOpen, setMenuOpen]         = useState(false);
   const [serverStatus, setServerStatus] = useState(getServerStatus());
@@ -84,6 +90,28 @@ export default function App() {
       window.removeEventListener('appinstalled', onInstalled);
     };
   }, []);
+
+  // SEPOS-LITE-001 — load the restaurant's subscription plan. Fail-safe:
+  // any error leaves plan = 'pro' so the full EPOS still renders.
+  useEffect(() => {
+    getRestaurant()
+      .then((r) => { if (r && r.plan) setPlan(r.plan); })
+      .catch(() => {});
+  }, []);
+
+  // Keep the active screen valid for the plan — a lite restaurant has no
+  // Tables / Counter / Bar, so redirect off them to the first allowed screen.
+  useEffect(() => {
+    if (!staff) return;
+    const caps = planCaps(plan);
+    const allowed = new Set(['admin']);
+    if (caps.dineIn)     { allowed.add('tables'); allowed.add('counter'); allowed.add('order'); allowed.add('bar'); }
+    if (caps.reservations) allowed.add('reservations');
+    if (caps.kitchen)      allowed.add('kitchen');
+    if (!allowed.has(screen)) {
+      setScreen(caps.kitchen ? 'kitchen' : caps.reservations ? 'reservations' : 'admin');
+    }
+  }, [plan, staff, screen]);
 
   const handleInstall = async () => {
     if (!installPrompt) return;
@@ -182,14 +210,18 @@ export default function App() {
     const homeItem = counterMode
       ? { key: 'counter', label: '🛒 Counter' }
       : { key: 'tables',  label: '🗺️ Tables'  };
+    // SEPOS-LITE-001 — gate nav by plan. Pro shows all; lite plans drop
+    // the dine-in screens (Tables/Counter, Bar) and keep only the
+    // booking / KDS screens their tier includes.
+    const caps = planCaps(plan);
     const navItems = [
-      homeItem,
-      { key: 'reservations', label: '🗓️ Reservations' },
+      ...(caps.dineIn ? [homeItem] : []),
+      ...(caps.reservations ? [{ key: 'reservations', label: '🗓️ Reservations' }] : []),
       ...(staff.role === 'admin' || staff.role === 'manager' || staff.role === 'supervisor'
         ? [{ key: 'admin', label: '⚙️ Admin' }]
         : []),
-      { key: 'kitchen', label: '🍳 Kitchen' },
-      { key: 'bar',     label: '🍹 Bar' },
+      ...(caps.kitchen ? [{ key: 'kitchen', label: '🍳 Kitchen' }] : []),
+      ...(caps.dineIn ? [{ key: 'bar', label: '🍹 Bar' }] : []),
     ];
 
     const toggleCounterMode = () => {
@@ -292,7 +324,7 @@ export default function App() {
           {screen === 'reservations' && <ReservationsScreen />}
           {screen === 'kitchen'      && <KitchenScreen />}
           {screen === 'bar'          && <BarScreen />}
-          {screen === 'admin'        && <AdminScreen />}
+          {screen === 'admin'        && <AdminScreen plan={plan} />}
         </main>
       </div>
     );

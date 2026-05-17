@@ -4,9 +4,14 @@
 // Phase 1). In production this is the shared MULTI_TENANT Lite Railway Postgres.
 const { Pool } = require('pg');
 
+// Use LITE_DATABASE_URL if set (avoids Railway auto-overriding DATABASE_URL
+// with the internal postgres.railway.internal hostname when the Lite server
+// is in a different Railway project from the shared Postgres).
+const connStr = process.env.LITE_DATABASE_URL || process.env.DATABASE_URL;
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('localhost')
+  connectionString: connStr,
+  ssl: connStr && !connStr.includes('localhost')
     ? { rejectUnauthorized: false }
     : false,
 });

@@ -1,36 +1,70 @@
-// SEPOS-LITE-001 — plan capability model.
-// One source of truth for what each subscription tier unlocks.
+// SEPOS-LITE-002 — plan feature gating.
+// Single source of truth for what each subscription tier unlocks.
 //
-//   pro            — the full EPOS (everything)
-//   lite_booking   — booking widget only      → Reservations
-//   lite_ordering  — takeaway/delivery only    → Kitchen (KDS)
-//   lite_bundle    — booking + ordering        → Reservations + Kitchen
+//   lite_booking  — Reservations + table plan/setup, Customers, Campaigns, Embed codes
+//   lite_ordering — Orders + Kitchen, Customers, Campaigns, Embed codes
+//   lite_bundle   — booking + ordering combined
+//   pro           — everything, incl. dine-in EPOS (billing, staff, Z-report, inventory)
 //
-// An unknown/missing plan falls back to 'pro' — a Pro install must
+// An unknown / missing plan falls back to 'pro' — a Pro install must
 // never be locked out of its own EPOS by a bad plan value.
 
-export function planCaps(plan) {
-  const p = plan || 'pro';
-  const lite = p.indexOf('lite') === 0;
-  return {
-    plan: p,
-    isLite: lite,
-    // Dine-in EPOS: Tables / Counter / Bar + the order & bill flow.
-    dineIn: !lite,
-    // Reservations screen + booking-widget settings.
-    reservations: !lite || p === 'lite_booking' || p === 'lite_bundle',
-    // Kitchen (KDS) — for lite, shows online orders only.
-    kitchen: !lite || p === 'lite_ordering' || p === 'lite_bundle',
-    // Full Admin vs the limited lite Admin.
-    fullAdmin: !lite,
-  };
+const KNOWN = ['lite_booking', 'lite_ordering', 'lite_bundle', 'pro'];
+
+export function normalisePlan(plan) {
+  return KNOWN.includes(plan) ? plan : 'pro';
 }
 
-// AdminScreen section ids a lite plan keeps. Pro sees every section.
-// `reservations` (booking-widget settings) is added only for plans that
-// actually take bookings — without it lite_booking can't be configured.
-export function liteAdminSections(caps) {
-  const ids = ['menu', 'customers', 'settings'];
-  if (caps.reservations) ids.push('reservations');
-  return ids;
+export function planLabel(plan) {
+  return {
+    lite_booking:  'Lite Booking',
+    lite_ordering: 'Lite Ordering',
+    lite_bundle:   'Lite Bundle',
+    pro:           'Pro',
+  }[normalisePlan(plan)];
+}
+
+// Reservations — also unlocks the table plan / floor map / table setup,
+// because a booking restaurant needs the floor to seat its reservations.
+export function canAccessReservations(plan) {
+  const p = normalisePlan(plan);
+  return p === 'pro' || p === 'lite_booking' || p === 'lite_bundle';
+}
+
+// Kitchen (KDS).
+export function canAccessKitchen(plan) {
+  const p = normalisePlan(plan);
+  return p === 'pro' || p === 'lite_ordering' || p === 'lite_bundle';
+}
+
+// Online takeaway / delivery orders — same tiers as the kitchen.
+export function canAccessOrders(plan) {
+  return canAccessKitchen(plan);
+}
+
+// Full dine-in EPOS: table ordering + billing, Counter, Bar, staff
+// management, Z-report, inventory, full reports. Pro only.
+export function canAccessFullEPOS(plan) {
+  return normalisePlan(plan) === 'pro';
+}
+
+// Admin section -> the capability check it needs. Sections not listed
+// are open to every plan (Menu, Settings, Customers, Campaigns, Allergens).
+const ADMIN_SECTION_GATE = {
+  trading:      canAccessFullEPOS,
+  tableplan:    canAccessReservations,
+  reservations: canAccessReservations,
+  reports:      canAccessFullEPOS,
+  bills:        canAccessFullEPOS,
+  zreport:      canAccessFullEPOS,
+  staff:        canAccessFullEPOS,
+  clock:        canAccessFullEPOS,
+  performance:  canAccessFullEPOS,
+  vat:          canAccessFullEPOS,
+  inventory:    canAccessFullEPOS,
+};
+
+export function canAccessAdminSection(plan, sectionId) {
+  const gate = ADMIN_SECTION_GATE[sectionId];
+  return gate ? gate(plan) : true;
 }

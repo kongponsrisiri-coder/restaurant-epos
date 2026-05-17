@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { startMonitoring, onStatusChange, getServerStatus } from './utils/serverDetect';
 import { getRestaurant } from './api';
-import { planCaps } from './utils/plan';
+import { canAccessReservations, canAccessKitchen, canAccessFullEPOS } from './utils/plan';
+import UpgradeLocked from './components/UpgradeLocked';
 import LoginScreen from './screens/LoginScreen';
 import TableMapScreen from './screens/TableMapScreen';
 import OrderScreen from './screens/OrderScreen';
@@ -91,27 +92,27 @@ export default function App() {
     };
   }, []);
 
-  // SEPOS-LITE-001 — load the restaurant's subscription plan. Fail-safe:
-  // any error leaves plan = 'pro' so the full EPOS still renders.
+  // SEPOS-LITE-001/002 — load the restaurant's subscription plan, then
+  // land on a screen the plan can actually use. Fail-safe: any error
+  // leaves plan = 'pro' so the full EPOS still renders. Locked screens
+  // stay reachable — they show an upgrade panel, not a blank page.
   useEffect(() => {
     getRestaurant()
-      .then((r) => { if (r && r.plan) setPlan(r.plan); })
+      .then((r) => {
+        const p = (r && r.plan) || 'pro';
+        setPlan(p);
+        setScreen((cur) => {
+          if (cur === 'counter' && !canAccessFullEPOS(p)) {
+            return canAccessReservations(p) ? 'tables' : canAccessKitchen(p) ? 'kitchen' : 'admin';
+          }
+          if (cur === 'tables' && !canAccessReservations(p) && !canAccessFullEPOS(p)) {
+            return canAccessKitchen(p) ? 'kitchen' : 'admin';
+          }
+          return cur;
+        });
+      })
       .catch(() => {});
   }, []);
-
-  // Keep the active screen valid for the plan — a lite restaurant has no
-  // Tables / Counter / Bar, so redirect off them to the first allowed screen.
-  useEffect(() => {
-    if (!staff) return;
-    const caps = planCaps(plan);
-    const allowed = new Set(['admin']);
-    if (caps.dineIn)     { allowed.add('tables'); allowed.add('counter'); allowed.add('order'); allowed.add('bar'); }
-    if (caps.reservations) allowed.add('reservations');
-    if (caps.kitchen)      allowed.add('kitchen');
-    if (!allowed.has(screen)) {
-      setScreen(caps.kitchen ? 'kitchen' : caps.reservations ? 'reservations' : 'admin');
-    }
-  }, [plan, staff, screen]);
 
   const handleInstall = async () => {
     if (!installPrompt) return;
@@ -190,15 +191,19 @@ export default function App() {
           </div>
         </nav>
         <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-          <OrderScreen
-            orderId={activeOrder.orderId}
-            tableId={activeOrder.tableId}
-            staff={staff}
-            onClose={() => {
-              setActiveOrder(null);
-              setScreen('tables');
-            }}
-          />
+          {canAccessFullEPOS(plan) ? (
+            <OrderScreen
+              orderId={activeOrder.orderId}
+              tableId={activeOrder.tableId}
+              staff={staff}
+              onClose={() => {
+                setActiveOrder(null);
+                setScreen('tables');
+              }}
+            />
+          ) : (
+            <UpgradeLocked feature="Dine-in Ordering" />
+          )}
         </div>
       </div>
     );
@@ -207,21 +212,27 @@ export default function App() {
     // SEPOS-045 — in counter mode the home tab is the till; in floor mode
     // it's the table map. The other tabs (Kitchen / Bar / Reservations /
     // Admin) are always available regardless of mode.
-    const homeItem = counterMode
-      ? { key: 'counter', label: '🛒 Counter' }
-      : { key: 'tables',  label: '🗺️ Tables'  };
-    // SEPOS-LITE-001 — gate nav by plan. Pro shows all; lite plans drop
-    // the dine-in screens (Tables/Counter, Bar) and keep only the
-    // booking / KDS screens their tier includes.
-    const caps = planCaps(plan);
+    // SEPOS-LITE-002 — capability gates for this restaurant's plan.
+    const caps = {
+      reservations: canAccessReservations(plan),  // also unlocks the table plan
+      kitchen:      canAccessKitchen(plan),
+      fullEPOS:     canAccessFullEPOS(plan),       // dine-in ordering/billing, Counter, Bar
+    };
+    // Counter mode is a dine-in (full EPOS) feature.
+    const effectiveCounter = counterMode && caps.fullEPOS;
+    const homeItem = effectiveCounter
+      ? { key: 'counter', label: '🛒 Counter', locked: false }
+      : { key: 'tables',  label: '🗺️ Tables',  locked: !(caps.reservations || caps.fullEPOS) };
+    // Every tab still shows; tabs the plan doesn't include are marked
+    // locked and open a friendly "upgrade" panel when clicked.
     const navItems = [
-      ...(caps.dineIn ? [homeItem] : []),
-      ...(caps.reservations ? [{ key: 'reservations', label: '🗓️ Reservations' }] : []),
+      homeItem,
+      { key: 'reservations', label: '🗓️ Reservations', locked: !caps.reservations },
       ...(staff.role === 'admin' || staff.role === 'manager' || staff.role === 'supervisor'
-        ? [{ key: 'admin', label: '⚙️ Admin' }]
+        ? [{ key: 'admin', label: '⚙️ Admin', locked: false }]
         : []),
-      ...(caps.kitchen ? [{ key: 'kitchen', label: '🍳 Kitchen' }] : []),
-      ...(caps.dineIn ? [{ key: 'bar', label: '🍹 Bar' }] : []),
+      { key: 'kitchen', label: '🍳 Kitchen', locked: !caps.kitchen },
+      { key: 'bar',     label: '🍹 Bar',     locked: !caps.fullEPOS },
     ];
 
     const toggleCounterMode = () => {
@@ -244,8 +255,10 @@ export default function App() {
                 key={item.key}
                 className={screen === item.key ? 'active' : ''}
                 onClick={() => setScreen(item.key)}
+                style={item.locked ? { opacity: 0.5 } : undefined}
+                title={item.locked ? 'Not in your plan — upgrade to unlock' : undefined}
               >
-                {item.label}
+                {item.label}{item.locked ? ' 🔒' : ''}
               </button>
             ))}
           </div>
@@ -264,21 +277,24 @@ export default function App() {
             <StatusBadge />
             {/* SEPOS-044 — always-visible pill when anything is queued. */}
             <SyncQueuePill compact={isMobile} />
-            {/* SEPOS-045 — counter/floor mode toggle. Per-device flag. */}
-            <button
-              onClick={toggleCounterMode}
-              title={counterMode ? 'Switch to floor (dine-in) mode' : 'Switch to counter (till) mode'}
-              style={{
-                background: counterMode ? '#C9A84C' : 'rgba(255,255,255,0.12)',
-                color: counterMode ? '#0D1B3E' : 'white',
-                border: '1px solid rgba(255,255,255,0.2)',
-                borderRadius: 6, padding: isMobile ? '5px 9px' : '6px 12px',
-                fontSize: isMobile ? 11 : 12, fontWeight: 800, cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {counterMode ? '🛒 Counter' : '🏠 Floor'}
-            </button>
+            {/* SEPOS-045 — counter/floor mode toggle. Per-device flag.
+                SEPOS-LITE-002 — dine-in only, hidden for lite plans. */}
+            {caps.fullEPOS && (
+              <button
+                onClick={toggleCounterMode}
+                title={counterMode ? 'Switch to floor (dine-in) mode' : 'Switch to counter (till) mode'}
+                style={{
+                  background: counterMode ? '#C9A84C' : 'rgba(255,255,255,0.12)',
+                  color: counterMode ? '#0D1B3E' : 'white',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: 6, padding: isMobile ? '5px 9px' : '6px 12px',
+                  fontSize: isMobile ? 11 : 12, fontWeight: 800, cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {counterMode ? '🛒 Counter' : '🏠 Floor'}
+              </button>
+            )}
             <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
             <button className="logout-btn" onClick={() => setStaff(null)}>Log out</button>
           </div>
@@ -301,9 +317,10 @@ export default function App() {
                   color: screen === item.key ? '#C9A84C' : 'rgba(255,255,255,0.8)',
                   padding: '12px 16px', borderRadius: 8,
                   textAlign: 'left', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+                  opacity: item.locked ? 0.5 : 1,
                 }}
               >
-                {item.label}
+                {item.label}{item.locked ? ' 🔒' : ''}
               </button>
             ))}
           </div>
@@ -312,18 +329,20 @@ export default function App() {
         {/* Screen content */}
         <main className="main-content">
           {screen === 'tables' && (
-            <TableMapScreen
-              staff={staff}
-              onOpenOrder={(orderId, tableId) => {
-                setActiveOrder({ orderId, tableId });
-                setScreen('order');
-              }}
-            />
+            (caps.reservations || caps.fullEPOS)
+              ? <TableMapScreen
+                  staff={staff}
+                  onOpenOrder={(orderId, tableId) => {
+                    setActiveOrder({ orderId, tableId });
+                    setScreen('order');
+                  }}
+                />
+              : <UpgradeLocked feature="Table Plan" />
           )}
-          {screen === 'counter'      && <CounterScreen staff={staff} />}
-          {screen === 'reservations' && <ReservationsScreen />}
-          {screen === 'kitchen'      && <KitchenScreen />}
-          {screen === 'bar'          && <BarScreen />}
+          {screen === 'counter'      && (caps.fullEPOS ? <CounterScreen staff={staff} /> : <UpgradeLocked feature="Counter" />)}
+          {screen === 'reservations' && (caps.reservations ? <ReservationsScreen /> : <UpgradeLocked feature="Reservations" />)}
+          {screen === 'kitchen'      && (caps.kitchen ? <KitchenScreen /> : <UpgradeLocked feature="Kitchen" />)}
+          {screen === 'bar'          && (caps.fullEPOS ? <BarScreen /> : <UpgradeLocked feature="Bar" />)}
           {screen === 'admin'        && <AdminScreen plan={plan} />}
         </main>
       </div>

@@ -50,17 +50,21 @@ router.patch('/', authRequired, async (req, res) => {
 // ── Settings (key-value store from restaurant_settings) ───────────────────────
 
 // GET /api/restaurant/settings
+// Uses the EPOS `settings` table (setting_key / setting_value columns)
 router.get('/settings', authRequired, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT key, value FROM restaurant_settings WHERE restaurant_id = $1',
+      `SELECT setting_key AS key, setting_value AS value
+       FROM settings WHERE restaurant_id = $1`,
       [req.user.restaurantId]
     );
     const settings = {};
     rows.forEach(r => { settings[r.key] = r.value; });
     return res.json(settings);
   } catch (err) {
-    return res.status(500).json({ error: 'Server error' });
+    // Fall back to empty settings rather than 500
+    console.error('[settings get]', err.message);
+    return res.json({});
   }
 });
 
@@ -73,9 +77,9 @@ router.patch('/settings', authRequired, async (req, res) => {
     await client.query('BEGIN');
     for (const [key, value] of Object.entries(updates)) {
       await client.query(
-        `INSERT INTO restaurant_settings (restaurant_id, key, value)
+        `INSERT INTO settings (restaurant_id, setting_key, setting_value)
          VALUES ($1, $2, $3)
-         ON CONFLICT (restaurant_id, key) DO UPDATE SET value = $3`,
+         ON CONFLICT (restaurant_id, setting_key) DO UPDATE SET setting_value = $3`,
         [req.user.restaurantId, key, String(value)]
       );
     }
@@ -83,6 +87,7 @@ router.patch('/settings', authRequired, async (req, res) => {
     return res.json({ ok: true });
   } catch (err) {
     await client.query('ROLLBACK');
+    console.error('[settings patch]', err.message);
     return res.status(500).json({ error: 'Server error' });
   } finally {
     client.release();
@@ -141,30 +146,38 @@ router.get('/bookings', authRequired, async (req, res) => {
 
 // ── Online orders (takeaway + delivery) ───────────────────────────────────────
 
-// GET /api/restaurant/orders?status=open&limit=50
+// GET /api/restaurant/orders?status=open,pending,...&limit=50
 router.get('/orders', authRequired, async (req, res) => {
   try {
     const { status, limit = 50, offset = 0 } = req.query;
     // Online orders are identified by order_type IN ('takeaway','delivery')
-    let sql = `SELECT o.*,
-                 COUNT(oi.id) AS item_count,
-                 SUM(oi.price * oi.quantity) AS subtotal
+    let sql = `SELECT o.*, COUNT(oi.id) AS item_count
                FROM orders o
                LEFT JOIN order_items oi ON oi.order_id = o.id
                WHERE o.restaurant_id = $1
                  AND o.order_type IN ('takeaway','delivery')`;
     const params = [req.user.restaurantId];
-    if (status === 'open') {
-      sql += ` AND o.status = 'open'`;
-    } else if (status === 'closed') {
-      sql += ` AND o.status = 'closed'`;
+
+    // status may be a single value or comma-separated list
+    if (status) {
+      const statuses = status.split(',').map(s => s.trim()).filter(Boolean);
+      if (statuses.length === 1) {
+        sql += ` AND o.status = $${params.length + 1}`;
+        params.push(statuses[0]);
+      } else if (statuses.length > 1) {
+        const placeholders = statuses.map((_, i) => `$${params.length + i + 1}`).join(',');
+        sql += ` AND o.status IN (${placeholders})`;
+        params.push(...statuses);
+      }
     }
+
     sql += ` GROUP BY o.id ORDER BY o.created_at DESC
              LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(Number(limit), Number(offset));
     const { rows } = await pool.query(sql, params);
     return res.json(rows);
   } catch (err) {
+    console.error('[orders]', err.message);
     return res.status(500).json({ error: 'Server error' });
   }
 });

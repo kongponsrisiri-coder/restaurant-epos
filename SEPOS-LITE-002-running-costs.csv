@@ -1,0 +1,40 @@
+SiamEPOS Lite — Running Cost Model (SEPOS-LITE-002),,,
+Prepared by Krit 2026-05-18. Figures are ESTIMATES — Railway is usage-based; verify against live bills.,,,
+Account context: Korakot is on the Railway Pro plan — $20/mo which INCLUDES $20 of resource usage.,,,
+FX used: $1 ~= £0.79,,,
+,,,
+MODEL A — "LITE AS PRO" (each Lite customer = own backend + own database),,,
+Item,Est GBP per customer per month,Why / basis,Notes
+Railway backend service,2 - 5,Small always-on Node service; light traffic — widget bookings/orders only with no dine-in load,Usage-based; rises with traffic
+Railway Postgres database,2 - 5,Dedicated small DB; holds bookings + a small menu + a few orders a day,Light end of Railway's range; a busy SaaS DB is ~£14 but Lite is far lighter
+Railway Pro plan seat,~0,$20/mo fixed for the whole account (incl. $20 usage) — amortised across every deployment,One-off account overhead (~£16/mo) not a per-customer cost
+Netlify frontend hosting,0,Static React bundle served on the free tier at low bandwidth,Free tier
+Stripe subscription fee,0.60 - 1.00,1.5% + 20p UK card rate on the monthly £29–£49 charge,Stripe UK standard rate (verified May 2026)
+Brevo email,0,Booking / order confirmation emails sit within the free tier,Free tier
+Subdomain,0,Free name.siamepos.co.uk subdomain,No per-customer domain cost
+Support time,FILL IN,Human time per customer (hours x rate) — Korakot / Nick to estimate,NOT included below — can exceed infra cost
+PER-CUSTOMER INFRA SUBTOTAL,~5 - 11,Sum of infra lines above; excludes support time,
+,,,
+MODEL B — SHARED MULTI-TENANT (one backend + one database for ALL Lite customers),,,
+Item,Est GBP per month TOTAL,Why / basis,Notes
+Railway shared backend,20 - 40,One larger service handling every tenant,Usage-based
+Railway shared Postgres,15 - 35,One database holding every tenant's data,Usage-based; grows with total data
+Netlify frontend,0,Shared static bundle,Free tier
+SHARED INFRA TOTAL,35 - 75,Roughly fixed regardless of customer count,
+Marginal cost of one extra customer,~0 - 1,Adding one more tenant adds almost nothing,
+Per-customer at 20 customers,~2 - 4,Shared total divided by 20,
+Per-customer at 100 customers,~0.4 - 0.8,Shared total divided by 100,
+NOT SHOWN: Model B also needs the cross-tenant security build (RLS / Phase 2b) — real engineering cost + risk,,,
+,,,
+MARGIN PER PLAN,,,
+Plan,Price GBP/mo,Model A infra cost,Model A margin,Model B infra cost (@20 cust) + margin
+lite_booking,29,5 - 11,18 - 24,2-4 cost / 25-27 margin
+lite_ordering,39,5 - 11,28 - 34,2-4 cost / 35-37 margin
+lite_bundle,49,5 - 11,38 - 44,2-4 cost / 45-47 margin
+pro,89,5 - 11,78 - 84,n/a
+,,,
+KEY TAKEAWAYS,,,
+1,,Model A margin on the £29 plan is ~£18–24/mo — healthy. £29 is NOT too cheap on infrastructure grounds.,
+2,,Model B is cheaper per customer BUT adds the cross-tenant security workstream (RLS / Phase 2b) — build cost + data-leak risk not priced here.,
+3,,The real unknown is SUPPORT TIME per customer — fill it in. It can dwarf the infra cost.,
+4,,lite_ordering £39 is underpriced for the value delivered (0% takeaway commission vs Just Eat ~14%) — that is a pricing call for Nick, not a cost issue.,

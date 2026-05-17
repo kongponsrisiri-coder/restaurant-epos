@@ -55,6 +55,39 @@ function resolveRestaurantId(req) {
   );
 }
 
+// ── SEPOS-LITE-002 — backend plan gate ───────────────────────────────
+// Server-side backstop for the in-app feature gating: blocks Pro-only
+// API routes on a lite-plan deployment. Under "Lite as Pro" each
+// deployment is single-tenant, so the plan is read once from the
+// restaurants registry and cached (10-min TTL so an upgrade is picked
+// up without a restart). Fail-open to 'pro' — a Pro deployment, or any
+// deployment whose plan can't be read, keeps full access; the
+// middleware is completely inert for them.
+let _deploymentPlan = null;
+let _deploymentPlanAt = 0;
+async function getDeploymentPlan() {
+  if (_deploymentPlan && Date.now() - _deploymentPlanAt < 600000) return _deploymentPlan;
+  try {
+    const rid = process.env.RESTAURANT_ID || 'siamepos';
+    const r = await pool.query(`SELECT plan FROM restaurants WHERE restaurant_id = $1`, [rid]);
+    _deploymentPlan = (r.rows[0] && r.rows[0].plan) || 'pro';
+  } catch (e) {
+    _deploymentPlan = 'pro';
+  }
+  _deploymentPlanAt = Date.now();
+  return _deploymentPlan;
+}
+// Pro-only route families with clean, unambiguous prefixes — dine-in
+// inventory, Z-report and clock records. (Order + staff routes are
+// intentionally not gated here: they are shared with lite-tier flows.)
+const PRO_ONLY_API = /^\/api\/(z-?report|ingredients|recipes|stock|supplier-invoices|clock)\b/i;
+app.use(async (req, res, next) => {
+  if (!PRO_ONLY_API.test(req.path)) return next();
+  const plan = await getDeploymentPlan();
+  if (plan === 'pro') return next();
+  return res.status(403).json({ error: 'This feature is not included in your plan. Upgrade to unlock it.' });
+});
+
 let sendBookingConfirmation = async () => {};
 let sendBookingSms = async () => {};
 try {

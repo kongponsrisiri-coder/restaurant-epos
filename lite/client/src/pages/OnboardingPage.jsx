@@ -71,9 +71,9 @@ export default function OnboardingPage({ onLogin }) {
   };
 
   const planLabels = {
-    lite_booking:  { label: 'Booking Only',  price: '£29/mo', colour: '#0ea5e9' },
-    lite_ordering: { label: 'Ordering Only', price: '£39/mo', colour: '#22c55e' },
-    lite_bundle:   { label: 'Bundle',        price: '£49/mo', colour: C.gold    },
+    lite_booking:  { label: 'Booking Only',  price: '£39/mo', colour: '#0ea5e9' },
+    lite_ordering: { label: 'Ordering Only', price: '£49/mo', colour: '#22c55e' },
+    lite_bundle:   { label: 'Bundle',        price: '£69/mo', colour: C.gold    },
     pro:           { label: 'Pro',           price: '£89/mo', colour: '#a855f7' },
   };
 

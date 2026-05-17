@@ -10,7 +10,7 @@
 
 | Agent | Working On | Ticket | Started |
 |-------|-----------|--------|---------|
-| Krit | SiamEPOS Lite (SEPOS-LITE-001-design.md). Phase 1 done (multi-tenant DB schema). Phase 2a write-path done: MULTI_TENANT flag + resolveRestaurantId, restaurant_id written onto takeaway orders, takeaway widget passes restaurant_id (in commit 611eb6a). Remaining 2a: plan-based feature gating. 2b (endpoint read-scoping) held. | SEPOS-LITE-001 | 2026-05-17 |
+| Krit | SiamEPOS Lite (SEPOS-LITE-001-design.md). Phase 1 + 2a DONE — multi-tenant DB schema; MULTI_TENANT flag + resolveRestaurantId; restaurant_id on takeaway writes; takeaway widget passes restaurant_id; plan-based feature gating (GET /api/restaurant + utils/plan.js — lite plans hide dine-in nav + limited Admin). Commit a3aebc0. 2b (endpoint read-scoping) held until the Lite backend is deployed; Phases 3–4 pending Korakot's §14 questions. | SEPOS-LITE-001 | 2026-05-17 |
 
 ---
 

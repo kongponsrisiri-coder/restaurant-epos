@@ -15,18 +15,31 @@
 (function () {
   'use strict';
 
-  const API = (function () {
+  // Locate this widget's own <script> tag — used for both the API origin
+  // and the data-restaurant attribute (SEPOS-LITE-001 multi-tenancy).
+  const SELF_SCRIPT = (function () {
     try {
       const scripts = document.getElementsByTagName('script');
       for (let i = scripts.length - 1; i >= 0; i--) {
-        const src = scripts[i].src || '';
-        if (src.indexOf('takeaway-widget.js') !== -1) {
-          return new URL(src).origin;
+        if ((scripts[i].src || '').indexOf('takeaway-widget.js') !== -1) {
+          return scripts[i];
         }
       }
     } catch (e) {}
+    return null;
+  })();
+
+  const API = (function () {
+    try {
+      if (SELF_SCRIPT && SELF_SCRIPT.src) return new URL(SELF_SCRIPT.src).origin;
+    } catch (e) {}
     return 'https://restaurant-epos-production.up.railway.app';
   })();
+
+  // Which restaurant this widget belongs to. Single-tenant installs can
+  // omit data-restaurant — the backend resolves it. The Lite shared
+  // backend uses this to route the order to the right tenant.
+  const RESTAURANT_ID = (SELF_SCRIPT && SELF_SCRIPT.getAttribute('data-restaurant')) || 'siamepos';
 
   // ── Styles ──────────────────────────────────────────────────────
   const css = `
@@ -789,7 +802,7 @@
         state.customer.delivery_check = { checking: true };
         render();
         try {
-          const r = await fetch(API + '/api/takeaway/delivery-check?postcode=' + encodeURIComponent(pc));
+          const r = await fetch(API + '/api/takeaway/delivery-check?restaurant_id=' + encodeURIComponent(RESTAURANT_ID) + '&postcode=' + encodeURIComponent(pc));
           const data = await r.json();
           state.customer.delivery_check = {
             deliverable:    !!data.deliverable,
@@ -848,7 +861,7 @@
   // ── Data + submit ────────────────────────────────────────────────
   async function loadSettings() {
     try {
-      const r = await fetch(API + '/api/takeaway/settings');
+      const r = await fetch(API + '/api/takeaway/settings?restaurant_id=' + encodeURIComponent(RESTAURANT_ID));
       if (r.ok) state.settings = await r.json();
     } catch (e) {}
   }
@@ -887,6 +900,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          restaurant_id:  RESTAURANT_ID,
           customer_name:  state.customer.name,
           customer_phone: state.customer.phone,
           customer_email: state.customer.email || null,

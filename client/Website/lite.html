@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-R0E872VB21"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-R0E872VB21');
+</script>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='50' fill='%230D1B3E'/%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%23C9A84C' stroke-width='1.8'/%3E%3Cg transform='translate(50,50)'%3E%3Cpath d='M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z' fill='%23C9A84C'/%3E%3Cpath d='M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z' fill='%23C9A84C' opacity='0.82' transform='rotate(72)'/%3E%3Ccircle cx='0' cy='0' r='5' fill='%23C9A84C'/%3E%3C/g%3E%3C/svg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SiamEPOS Lite — Add Online Booking & Ordering to Any Restaurant</title>
+<meta name="description" content="Already on another EPOS? Add SiamEPOS booking and ordering widgets from just £29/month. No commission, no contracts. Upgrade to full SiamEPOS Pro when you're ready.">
+<link rel="canonical" href="https://siamepos.co.uk/lite.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SiamEPOS">
+<meta property="og:url" content="https://siamepos.co.uk/lite.html">
+<meta property="og:title" content="SiamEPOS Lite — Start With Just the Widgets">
+<meta property="og:description" content="Already on another EPOS? Add online booking and 0% commission ordering from £29/month. No need to switch — yet.">
+<meta property="og:image" content="https://siamepos.co.uk/og-image.jpg">
+<meta property="og:locale" content="en_GB">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="SiamEPOS Lite — Start With Just the Widgets">
+<meta name="twitter:description" content="Already on another EPOS? Add online booking and 0% commission ordering from £29/month.">
+<meta name="twitter:image" content="https://siamepos.co.uk/og-image.jpg">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--gold:#C9A84C;--gold-light:#E8C96A;--navy:#0D1B3E;--navy-mid:#1A2F6B;--white:#FDFAF4;--text-muted:#6B7A9F;}
+*{margin:0;padding:0;box-sizing:border-box;}html{scroll-behavior:smooth;}
+body{font-family:'Sarabun',sans-serif;background:var(--white);color:var(--navy);overflow-x:hidden;}
+body.thai .lang-en{display:none;}body:not(.thai) .lang-th{display:none;}
+
+/* ── NAV ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content:space-between;align-items:center;padding:12px 60px;background:rgba(13,27,62,0.97);backdrop-filter:blur(12px);border-bottom:1px solid rgba(201,168,76,0.2);}
+nav.footer-links{position:static;background:none;border:none;padding:0;backdrop-filter:none;display:flex;flex-wrap:wrap;gap:16px;z-index:auto;}
+.nav-logo{display:flex;align-items:center;text-decoration:none;}
+.nav-links{display:flex;align-items:center;gap:24px;list-style:none;}
+.nav-links a{color:rgba(255,255,255,0.75);text-decoration:none;font-size:14px;font-weight:600;transition:color 0.2s;}
+.nav-links a:hover,.nav-links a.active{color:var(--gold);}
+.nav-cta{background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy)!important;padding:9px 20px;border-radius:8px;font-weight:700!important;}
+.lang-toggle{background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.35);color:var(--gold);padding:6px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:700;font-family:'Sarabun',sans-serif;}
+.nav-burger{display:none;flex-direction:column;gap:5px;cursor:pointer;background:none;border:none;padding:4px;}
+.nav-burger span{display:block;width:24px;height:2px;background:white;transition:all 0.3s;}
+body.menu-open .nav-burger span:nth-child(1){transform:translateY(7px) rotate(45deg);}
+body.menu-open .nav-burger span:nth-child(2){opacity:0;}
+body.menu-open .nav-burger span:nth-child(3){transform:translateY(-7px) rotate(-45deg);}
+@media(max-width:768px){
+  nav{padding:16px 20px;}
+  .nav-links{display:none;flex-direction:column;position:fixed;top:64px;left:0;right:0;background:rgba(13,27,62,0.99);padding:24px 20px;gap:0;border-bottom:1px solid rgba(201,168,76,0.2);}
+  .nav-links li{border-bottom:1px solid rgba(255,255,255,0.06);}
+  .nav-links a{display:block;padding:14px 0;font-size:16px;}
+  .nav-cta{margin-top:8px;display:block;text-align:center;padding:14px;}
+  body.menu-open .nav-links{display:flex;}
+  .nav-burger{display:flex;}
+  .lang-toggle{display:none;}
+}
+
+/* ── HERO ── */
+.hero{background:linear-gradient(160deg,var(--navy) 0%,#162050 100%);padding:130px 60px 80px;text-align:center;position:relative;overflow:hidden;}
+.hero::before{content:'';position:absolute;inset:0;background-image:repeating-linear-gradient(45deg,rgba(201,168,76,0.03) 0px,rgba(201,168,76,0.03) 1px,transparent 1px,transparent 60px);}
+.hero-tag{display:inline-flex;align-items:center;gap:8px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:var(--gold);padding:7px 18px;border-radius:30px;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:28px;position:relative;}
+.hero h1{font-family:'Cormorant Garamond',serif;font-size:64px;font-weight:700;color:white;line-height:1.08;margin-bottom:22px;position:relative;}
+.hero h1 em{font-style:italic;color:var(--gold);}
+.hero-sub{font-size:18px;color:rgba(255,255,255,0.62);max-width:580px;margin:0 auto 36px;line-height:1.75;position:relative;}
+.hero-cta-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;position:relative;}
+.btn-gold{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);padding:14px 30px;border-radius:10px;font-size:15px;font-weight:800;text-decoration:none;font-family:'Sarabun',sans-serif;transition:all 0.2s;}
+.btn-gold:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(201,168,76,0.45);}
+.btn-outline{display:inline-flex;align-items:center;gap:8px;border:1.5px solid rgba(201,168,76,0.45);color:rgba(255,255,255,0.8);padding:13px 28px;border-radius:10px;font-size:15px;font-weight:600;text-decoration:none;font-family:'Sarabun',sans-serif;transition:all 0.2s;}
+.btn-outline:hover{border-color:var(--gold);color:var(--gold);}
+.hero-proof{display:flex;justify-content:center;gap:36px;margin-top:44px;flex-wrap:wrap;position:relative;}
+.hero-proof-item{color:rgba(255,255,255,0.45);font-size:13px;display:flex;align-items:center;gap:6px;}
+.hero-proof-item strong{color:rgba(255,255,255,0.8);}
+@media(max-width:768px){
+  .hero{padding:110px 24px 60px;}
+  .hero h1{font-size:38px;}
+  .hero-sub{font-size:16px;}
+  .btn-gold,.btn-outline{width:100%;justify-content:center;padding:15px;}
+  .hero-cta-row{flex-direction:column;}
+  .hero-proof{gap:20px;}
+}
+
+/* ── PAIN STRIP ── */
+.pain-strip{background:var(--navy);padding:28px 60px;border-top:1px solid rgba(201,168,76,0.15);border-bottom:1px solid rgba(201,168,76,0.15);}
+.pain-strip-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:center;gap:40px;flex-wrap:wrap;}
+.pain-item{display:flex;align-items:center;gap:10px;color:rgba(255,255,255,0.55);font-size:13px;font-weight:400;}
+.pain-item strong{color:var(--gold);font-weight:700;}
+.pain-divider{width:1px;height:20px;background:rgba(201,168,76,0.2);}
+@media(max-width:768px){
+  .pain-strip{padding:20px 24px;}
+  .pain-divider{display:none;}
+  .pain-item{font-size:12px;}
+}
+
+/* ── SECTION LABELS ── */
+.section-label{text-align:center;margin-bottom:16px;}
+.section-label span{display:inline-block;font-size:11px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:var(--gold);}
+.section-title{font-family:'Cormorant Garamond',serif;font-size:46px;font-weight:700;color:var(--navy);line-height:1.15;text-align:center;margin-bottom:12px;}
+.section-title em{font-style:italic;color:var(--gold);}
+.section-sub{text-align:center;color:var(--text-muted);font-size:16px;line-height:1.7;max-width:560px;margin:0 auto 56px;}
+@media(max-width:768px){
+  .section-title{font-size:32px;}
+  .section-sub{font-size:15px;margin-bottom:36px;}
+}
+
+/* ── LITE PRICING CARDS ── */
+.pricing-section{padding:90px 60px;background:var(--white);}
+.cards-grid{max-width:1060px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:24px;}
+.pricing-card{background:white;border:1.5px solid rgba(13,27,62,0.1);border-radius:20px;padding:36px 30px;display:flex;flex-direction:column;position:relative;transition:all 0.25s;}
+.pricing-card:hover{transform:translateY(-4px);box-shadow:0 20px 50px rgba(13,27,62,0.1);}
+.pricing-card.featured{background:var(--navy);border-color:var(--gold);border-width:2px;box-shadow:0 24px 60px rgba(13,27,62,0.25);}
+.card-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);font-size:10px;font-weight:800;padding:5px 18px;border-radius:20px;text-transform:uppercase;letter-spacing:1.5px;white-space:nowrap;}
+.card-icon{font-size:32px;margin-bottom:16px;}
+.card-tier{font-size:11px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;}
+.pricing-card.featured .card-tier{color:rgba(201,168,76,0.7);}
+.card-name{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:var(--navy);margin-bottom:6px;}
+.pricing-card.featured .card-name{color:white;}
+.card-tagline{font-size:13px;color:var(--text-muted);margin-bottom:24px;line-height:1.5;}
+.pricing-card.featured .card-tagline{color:rgba(255,255,255,0.5);}
+.card-price{display:flex;align-items:baseline;gap:4px;margin-bottom:4px;}
+.card-price-num{font-family:'Cormorant Garamond',serif;font-size:52px;font-weight:700;color:var(--navy);line-height:1;}
+.pricing-card.featured .card-price-num{color:white;}
+.card-price-period{font-size:14px;color:var(--text-muted);font-weight:400;}
+.pricing-card.featured .card-price-period{color:rgba(255,255,255,0.4);}
+.card-save{font-size:12px;color:#22c55e;font-weight:700;margin-bottom:28px;}
+.card-divider{border:none;border-top:1px solid rgba(13,27,62,0.08);margin-bottom:24px;}
+.pricing-card.featured .card-divider{border-color:rgba(201,168,76,0.2);}
+.card-features{list-style:none;display:flex;flex-direction:column;gap:10px;margin-bottom:32px;flex:1;}
+.card-features li{display:flex;align-items:flex-start;gap:10px;font-size:14px;color:rgba(13,27,62,0.7);line-height:1.5;}
+.pricing-card.featured .card-features li{color:rgba(255,255,255,0.7);}
+.card-features li::before{content:'✓';color:var(--gold);font-weight:900;flex-shrink:0;margin-top:1px;}
+.card-btn{display:block;width:100%;padding:14px;border-radius:10px;font-size:14px;font-weight:700;text-align:center;text-decoration:none;font-family:'Sarabun',sans-serif;transition:all 0.2s;border:1.5px solid var(--navy);}
+.card-btn-primary{background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);border-color:transparent;}
+.card-btn-primary:hover{box-shadow:0 8px 24px rgba(201,168,76,0.45);transform:translateY(-1px);}
+.card-btn-secondary{background:transparent;color:var(--navy);}
+.card-btn-secondary:hover{background:var(--navy);color:white;}
+.card-btn-ghost{background:transparent;color:rgba(255,255,255,0.7);border-color:rgba(201,168,76,0.35);}
+.card-btn-ghost:hover{border-color:var(--gold);color:var(--gold);}
+@media(max-width:900px){
+  .cards-grid{grid-template-columns:1fr;max-width:460px;}
+  .pricing-card.featured{order:-1;}
+}
+@media(max-width:768px){
+  .pricing-section{padding:60px 20px;}
+  .cards-grid{gap:16px;}
+}
+
+/* ── HOW IT WORKS ── */
+.how-section{padding:90px 60px;background:linear-gradient(160deg,var(--navy) 0%,#162050 100%);position:relative;overflow:hidden;}
+.how-section::before{content:'';position:absolute;inset:0;background-image:repeating-linear-gradient(45deg,rgba(201,168,76,0.03) 0px,rgba(201,168,76,0.03) 1px,transparent 1px,transparent 60px);}
+.how-section .section-label span{color:rgba(201,168,76,0.7);}
+.how-section .section-title{color:white;}
+.how-section .section-sub{color:rgba(255,255,255,0.5);}
+.how-steps{max-width:900px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:0;position:relative;}
+.how-steps::before{content:'';position:absolute;top:28px;left:calc(16.66% + 16px);right:calc(16.66% + 16px);height:1px;background:linear-gradient(90deg,transparent,rgba(201,168,76,0.3),rgba(201,168,76,0.3),transparent);}
+.step-item{text-align:center;padding:0 24px;position:relative;}
+.step-num{width:56px;height:56px;border-radius:50%;background:rgba(201,168,76,0.12);border:1.5px solid rgba(201,168,76,0.4);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:700;color:var(--gold);position:relative;z-index:1;background:var(--navy);}
+.step-title{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:white;margin-bottom:10px;}
+.step-desc{font-size:14px;color:rgba(255,255,255,0.5);line-height:1.7;}
+.step-desc strong{color:var(--gold);}
+@media(max-width:768px){
+  .how-section{padding:60px 24px;}
+  .how-steps{grid-template-columns:1fr;gap:36px;}
+  .how-steps::before{display:none;}
+}
+
+/* ── ROI CALCULATOR STRIP ── */
+.roi-section{padding:80px 60px;background:var(--white);}
+.roi-inner{max-width:900px;margin:0 auto;background:var(--navy);border:2px solid rgba(201,168,76,0.35);border-radius:24px;padding:52px 60px;display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;}
+.roi-left h2{font-family:'Cormorant Garamond',serif;font-size:40px;font-weight:700;color:white;line-height:1.15;margin-bottom:16px;}
+.roi-left h2 em{color:var(--gold);font-style:italic;}
+.roi-left p{font-size:15px;color:rgba(255,255,255,0.55);line-height:1.75;}
+.roi-table{display:flex;flex-direction:column;gap:14px;}
+.roi-row{display:flex;justify-content:space-between;align-items:center;padding-bottom:14px;border-bottom:1px solid rgba(201,168,76,0.12);}
+.roi-row:last-child{border-bottom:none;padding-bottom:0;}
+.roi-row-label{font-size:13px;color:rgba(255,255,255,0.5);}
+.roi-row-val{font-size:15px;font-weight:700;color:white;}
+.roi-row-val.red{color:#f87171;}
+.roi-row-val.green{color:#4ade80;}
+.roi-row-val.gold{color:var(--gold);font-family:'Cormorant Garamond',serif;font-size:28px;}
+.roi-row-val.gold small{font-size:14px;font-family:'Sarabun',sans-serif;color:rgba(255,255,255,0.4);margin-left:4px;}
+@media(max-width:768px){
+  .roi-section{padding:60px 20px;}
+  .roi-inner{grid-template-columns:1fr;padding:36px 24px;gap:32px;}
+  .roi-left h2{font-size:30px;}
+}
+
+/* ── PRO UPGRADE BANNER ── */
+.upgrade-section{padding:80px 60px;background:linear-gradient(160deg,#0a1428 0%,var(--navy) 100%);position:relative;overflow:hidden;}
+.upgrade-section::after{content:'';position:absolute;top:-120px;right:-120px;width:400px;height:400px;background:radial-gradient(circle,rgba(201,168,76,0.08) 0%,transparent 70%);pointer-events:none;}
+.upgrade-inner{max-width:800px;margin:0 auto;text-align:center;position:relative;}
+.upgrade-pill{display:inline-flex;align-items:center;gap:8px;background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.3);color:var(--gold);padding:7px 18px;border-radius:30px;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:24px;}
+.upgrade-inner h2{font-family:'Cormorant Garamond',serif;font-size:52px;font-weight:700;color:white;line-height:1.1;margin-bottom:18px;}
+.upgrade-inner h2 em{color:var(--gold);font-style:italic;}
+.upgrade-inner p{font-size:16px;color:rgba(255,255,255,0.55);margin-bottom:40px;line-height:1.75;max-width:560px;margin-left:auto;margin-right:auto;}
+.upgrade-compare{display:grid;grid-template-columns:1fr 1fr;gap:0;max-width:640px;margin:0 auto 40px;border:1.5px solid rgba(201,168,76,0.25);border-radius:16px;overflow:hidden;}
+.upgrade-col{padding:28px 28px;}
+.upgrade-col:first-child{border-right:1px solid rgba(201,168,76,0.15);}
+.upgrade-col-label{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:16px;}
+.upgrade-col:first-child .upgrade-col-label{color:rgba(255,255,255,0.35);}
+.upgrade-col:last-child .upgrade-col-label{color:var(--gold);}
+.upgrade-price{font-family:'Cormorant Garamond',serif;font-size:38px;font-weight:700;color:white;margin-bottom:4px;}
+.upgrade-price-note{font-size:12px;color:rgba(255,255,255,0.35);margin-bottom:16px;}
+.upgrade-features{list-style:none;display:flex;flex-direction:column;gap:8px;}
+.upgrade-features li{font-size:13px;color:rgba(255,255,255,0.55);display:flex;gap:8px;align-items:flex-start;}
+.upgrade-features li.pro::before{content:'✓';color:var(--gold);font-weight:900;flex-shrink:0;}
+.upgrade-features li.lite::before{content:'–';color:rgba(255,255,255,0.25);flex-shrink:0;}
+.upgrade-cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
+@media(max-width:768px){
+  .upgrade-section{padding:60px 20px;}
+  .upgrade-inner h2{font-size:34px;}
+  .upgrade-compare{grid-template-columns:1fr;}
+  .upgrade-col:first-child{border-right:none;border-bottom:1px solid rgba(201,168,76,0.15);}
+  .upgrade-cta-row{flex-direction:column;}
+  .btn-gold,.btn-outline{width:100%;justify-content:center;}
+}
+
+/* ── FOOTER ── */
+footer{background:var(--navy);padding:48px 60px 28px;border-top:1px solid rgba(201,168,76,0.15);}
+.footer-inner{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr auto;gap:40px;align-items:start;margin-bottom:40px;}
+.footer-brand p{font-size:13px;color:rgba(255,255,255,0.4);margin-top:12px;max-width:280px;line-height:1.7;}
+.footer-links{display:flex;gap:24px;flex-wrap:wrap;}
+.footer-links a{color:rgba(255,255,255,0.45);font-size:13px;text-decoration:none;transition:color 0.2s;}
+.footer-links a:hover{color:var(--gold);}
+.footer-bottom{border-top:1px solid rgba(255,255,255,0.07);padding-top:24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;}
+.footer-bottom p{font-size:12px;color:rgba(255,255,255,0.25);}
+@media(max-width:768px){
+  footer{padding:40px 24px 24px;}
+  .footer-inner{grid-template-columns:1fr;}
+  .footer-bottom{flex-direction:column;align-items:flex-start;}
+}
+
+/* ── WA FLOAT ── */
+.wa-float{position:fixed;bottom:28px;right:28px;z-index:98;}
+.wa-btn{display:flex;align-items:center;gap:10px;background:#25D366;color:white;padding:13px 20px;border-radius:50px;font-size:14px;font-weight:700;text-decoration:none;box-shadow:0 8px 24px rgba(37,211,102,0.4);}
+@media(max-width:768px){.wa-btn span{display:none;}}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="index.html" class="nav-logo"><svg width="170" height="50" viewBox="0 0 340 100" xmlns="http://www.w3.org/2000/svg"><circle cx="52" cy="50" r="44" fill="none" stroke="#C9A84C" stroke-width="1.5"/><circle cx="52" cy="50" r="38" fill="none" stroke="#C9A84C" stroke-width="0.5" opacity="0.28"/><g transform="translate(52,50)"><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/><circle cx="0" cy="0" r="8" fill="#0D1B3E"/><circle cx="0" cy="0" r="4.5" fill="#C9A84C"/></g><line x1="110" y1="16" x2="110" y2="84" stroke="#C9A84C" stroke-width="0.8" opacity="0.32"/><text x="126" y="58" font-family="Georgia, serif" font-size="40" font-weight="700" letter-spacing="-1"><tspan fill="white">Siam</tspan><tspan fill="#C9A84C">EPOS</tspan></text></svg></a>
+  <ul class="nav-links" id="navLinks">
+    <li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li>
+    <li><a href="pricing.html" class="lang-en">SiamPRO</a><a href="pricing.html" class="lang-th">SiamPRO</a></li>
+    <li><a href="lite.html" class="active lang-en">SiamLite</a><a href="lite.html" class="active lang-th">SiamLite</a></li>
+    <li><a href="why-siamepos.html" class="lang-en">Why Us</a><a href="why-siamepos.html" class="lang-th">ทำไมเรา</a></li>
+    <li><a href="website-design.html" class="lang-en">Website Design</a><a href="website-design.html" class="lang-th">ออกแบบเว็บ</a></li>
+    <li><a href="book-demo.html" class="nav-cta lang-en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th">ทดลองใช้ฟรี</a></li>
+  </ul>
+  <button class="nav-burger" id="navBurger" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+  <button class="lang-toggle" onclick="document.body.classList.toggle('thai');this.textContent=document.body.classList.contains('thai')?'EN':'ภาษาไทย'">ภาษาไทย</button>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-tag">✦ <span class="lang-en">No EPOS switch required</span><span class="lang-th">ไม่ต้องเปลี่ยนระบบ EPOS</span></div>
+  <h1>
+    <span class="lang-en">Already on another<br><em>EPOS system?</em><br>Start with just the widgets.</span>
+    <span class="lang-th">ใช้ระบบ EPOS อื่นอยู่?<br><em>เริ่มด้วยวิดเจ็ตก่อนได้เลย</em></span>
+  </h1>
+  <p class="hero-sub">
+    <span class="lang-en">Add online booking and 0% commission ordering to your restaurant — from £29/month. No commitment. Upgrade to the full system whenever you're ready.</span>
+    <span class="lang-th">เพิ่มระบบจองออนไลน์และสั่งอาหาร 0% ค่าคอมมิชชันให้ร้านคุณ เริ่มต้นเพียง £29/เดือน ไม่มีสัญญาผูกมัด</span>
+  </p>
+  <div class="hero-cta-row">
+    <a href="book-demo.html" class="btn-gold"><span class="lang-en">See It in 20 Minutes →</span><span class="lang-th">ดูระบบใน 20 นาที →</span></a>
+    <a href="#pricing" class="btn-outline"><span class="lang-en">View Pricing</span><span class="lang-th">ดูราคา</span></a>
+  </div>
+  <div class="hero-proof">
+    <div class="hero-proof-item">✓ <strong class="lang-en">No EPOS contract needed</strong><strong class="lang-th">ไม่ต้องมีสัญญา EPOS</strong></div>
+    <div class="hero-proof-item">✓ <strong class="lang-en">Works alongside any till</strong><strong class="lang-th">ใช้ร่วมกับระบบเดิมได้</strong></div>
+    <div class="hero-proof-item">✓ <strong class="lang-en">0% delivery commission</strong><strong class="lang-th">ค่าคอมมิชชัน 0%</strong></div>
+    <div class="hero-proof-item">✓ <strong class="lang-en">Cancel anytime</strong><strong class="lang-th">ยกเลิกได้ทุกเมื่อ</strong></div>
+  </div>
+</section>
+
+<!-- PAIN STRIP -->
+<div class="pain-strip">
+  <div class="pain-strip-inner">
+    <div class="pain-item"><span class="lang-en">Deliveroo takes <strong>30% commission</strong> on every order</span><span class="lang-th">Deliveroo เก็บค่าคอม <strong>30%</strong> ทุกออเดอร์</span></div>
+    <div class="pain-divider"></div>
+    <div class="pain-item"><span class="lang-en">OpenTable charges <strong>£299+/month</strong> plus per-cover fees</span><span class="lang-th">OpenTable เก็บ <strong>£299+/เดือน</strong> บวกค่าต่อโต๊ะ</span></div>
+    <div class="pain-divider"></div>
+    <div class="pain-item"><span class="lang-en">FoodBooking.com <strong>closing March 2027</strong></span><span class="lang-th">FoodBooking.com <strong>ปิดตัว มีนาคม 2027</strong></span></div>
+  </div>
+</div>
+
+<!-- PRICING CARDS -->
+<section class="pricing-section" id="pricing">
+  <div class="section-label"><span class="lang-en">SiamEPOS Lite — Pick what you need</span><span class="lang-th">เลือกแค่ที่คุณต้องการ</span></div>
+  <h2 class="section-title"><span class="lang-en">Simple pricing.<br><em>No hidden fees.</em></span><span class="lang-th">ราคาชัดเจน<br><em>ไม่มีค่าใช้จ่ายซ่อน</em></span></h2>
+  <p class="section-sub lang-en">Start with the widget you need most. Add the other later. Upgrade to the full system when your EPOS contract is up — widgets are included.</p>
+  <p class="section-sub lang-th">เริ่มจากวิดเจ็ตที่คุณต้องการก่อน เพิ่มอีกตัวทีหลังได้ และอัปเกรดเป็นระบบเต็มรูปแบบเมื่อสัญญา EPOS หมด</p>
+
+  <div class="cards-grid">
+
+    <!-- BOOKING -->
+    <div class="pricing-card">
+      <div class="card-icon">📅</div>
+      <div class="card-tier lang-en">Booking Widget</div>
+      <div class="card-tier lang-th">วิดเจ็ตจองโต๊ะ</div>
+      <div class="card-name lang-en">Booking Lite</div>
+      <div class="card-name lang-th">Booking Lite</div>
+      <p class="card-tagline lang-en">Embed online reservations on any website — no OpenTable, no per-cover charges.</p>
+      <p class="card-tagline lang-th">ฝังระบบจองออนไลน์บนเว็บไซต์ใดก็ได้ ไม่มีค่าต่อโต๊ะ</p>
+      <div class="card-price">
+        <span class="card-price-num">£29</span>
+        <span class="card-price-period">/month</span>
+      </div>
+      <p class="card-save lang-en">Save £270+/month vs OpenTable</p>
+      <p class="card-save lang-th">ประหยัด £270+/เดือน เทียบกับ OpenTable</p>
+      <hr class="card-divider">
+      <ul class="card-features">
+        <li class="lang-en">Online table reservations 24/7</li>
+        <li class="lang-th">รับจองโต๊ะออนไลน์ตลอด 24 ชั่วโมง</li>
+        <li class="lang-en">Instant email confirmations to guests</li>
+        <li class="lang-th">ส่งอีเมลยืนยันให้ลูกค้าทันที</li>
+        <li class="lang-en">Embed on your existing website</li>
+        <li class="lang-th">ฝังบนเว็บไซต์ปัจจุบันของคุณ</li>
+        <li class="lang-en">No per-cover fees — ever</li>
+        <li class="lang-th">ไม่มีค่าต่อโต๊ะ</li>
+        <li class="lang-en">Manage bookings from any device</li>
+        <li class="lang-th">จัดการการจองจากอุปกรณ์ใดก็ได้</li>
+      </ul>
+      <a href="book-demo.html" class="card-btn card-btn-secondary lang-en">Get Started →</a>
+      <a href="book-demo.html" class="card-btn card-btn-secondary lang-th">เริ่มต้น →</a>
+    </div>
+
+    <!-- BUNDLE — FEATURED -->
+    <div class="pricing-card featured">
+      <div class="card-badge lang-en">Best Value</div>
+      <div class="card-badge lang-th">คุ้มที่สุด</div>
+      <div class="card-icon">⚡</div>
+      <div class="card-tier lang-en">Booking + Ordering</div>
+      <div class="card-tier lang-th">จองโต๊ะ + สั่งอาหาร</div>
+      <div class="card-name lang-en">Bundle Lite</div>
+      <div class="card-name lang-th">Bundle Lite</div>
+      <p class="card-tagline lang-en">Both widgets together — the full front-of-house experience without switching EPOS.</p>
+      <p class="card-tagline lang-th">ทั้งสองวิดเจ็ตในแพ็กเดียว ประสบการณ์ครบครันโดยไม่ต้องเปลี่ยนระบบ</p>
+      <div class="card-price">
+        <span class="card-price-num">£49</span>
+        <span class="card-price-period">/month</span>
+      </div>
+      <p class="card-save lang-en">Save £19/month vs buying separately</p>
+      <p class="card-save lang-th">ประหยัด £19/เดือน เทียบกับซื้อแยก</p>
+      <hr class="card-divider">
+      <ul class="card-features">
+        <li class="lang-en">Everything in Booking Lite</li>
+        <li class="lang-th">ทุกอย่างใน Booking Lite</li>
+        <li class="lang-en">Everything in Ordering Lite</li>
+        <li class="lang-th">ทุกอย่างใน Ordering Lite</li>
+        <li class="lang-en">0% commission on all orders</li>
+        <li class="lang-th">ค่าคอมมิชชัน 0% ทุกออเดอร์</li>
+        <li class="lang-en">Shared customer database</li>
+        <li class="lang-th">ฐานข้อมูลลูกค้าร่วมกัน</li>
+        <li class="lang-en">Thai WhatsApp support</li>
+        <li class="lang-th">ซัพพอร์ตทาง WhatsApp ภาษาไทย</li>
+      </ul>
+      <a href="book-demo.html" class="card-btn card-btn-primary lang-en">Get Started →</a>
+      <a href="book-demo.html" class="card-btn card-btn-primary lang-th">เริ่มต้น →</a>
+    </div>
+
+    <!-- ORDERING -->
+    <div class="pricing-card">
+      <div class="card-icon">🥡</div>
+      <div class="card-tier lang-en">Ordering Widget</div>
+      <div class="card-tier lang-th">วิดเจ็ตสั่งอาหาร</div>
+      <div class="card-name lang-en">Ordering Lite</div>
+      <div class="card-name lang-th">Ordering Lite</div>
+      <p class="card-tagline lang-en">Your own branded ordering page — zero commission. Collection or delivery.</p>
+      <p class="card-tagline lang-th">หน้าสั่งอาหารแบรนด์คุณเอง ค่าคอมมิชชัน 0% รับที่ร้านหรือส่งก็ได้</p>
+      <div class="card-price">
+        <span class="card-price-num">£39</span>
+        <span class="card-price-period">/month</span>
+      </div>
+      <p class="card-save lang-en">Save £800+/month vs Deliveroo</p>
+      <p class="card-save lang-th">ประหยัด £800+/เดือน เทียบกับ Deliveroo</p>
+      <hr class="card-divider">
+      <ul class="card-features">
+        <li class="lang-en">Branded online menu & ordering page</li>
+        <li class="lang-th">เมนูออนไลน์และหน้าสั่งอาหารแบรนด์คุณ</li>
+        <li class="lang-en">0% commission — keep every penny</li>
+        <li class="lang-th">ค่าคอมมิชชัน 0% เงินทุกบาทเป็นของคุณ</li>
+        <li class="lang-en">Collection or delivery options</li>
+        <li class="lang-th">รับที่ร้านหรือจัดส่ง</li>
+        <li class="lang-en">Postcode delivery radius check</li>
+        <li class="lang-th">ตรวจสอบรัศมีจัดส่งด้วยรหัสไปรษณีย์</li>
+        <li class="lang-en">Order confirmation emails to customers</li>
+        <li class="lang-th">อีเมลยืนยันออเดอร์ให้ลูกค้า</li>
+      </ul>
+      <a href="book-demo.html" class="card-btn card-btn-secondary lang-en">Get Started →</a>
+      <a href="book-demo.html" class="card-btn card-btn-secondary lang-th">เริ่มต้น →</a>
+    </div>
+
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how-section">
+  <div class="section-label"><span class="lang-en">How it works</span><span class="lang-th">วิธีการทำงาน</span></div>
+  <h2 class="section-title" style="color:white;margin-bottom:12px;"><span class="lang-en">Live in <em style="color:var(--gold);">under a week</em></span><span class="lang-th">เริ่มใช้งานได้<em style="color:var(--gold);"> ภายในหนึ่งสัปดาห์</em></span></h2>
+  <p class="section-sub" style="margin-bottom:60px;"><span class="lang-en">We set everything up — you just copy one line of code to your website.</span><span class="lang-th">เราตั้งค่าทุกอย่าง คุณแค่คัดลอกโค้ดหนึ่งบรรทัดไปวางบนเว็บไซต์</span></p>
+  <div class="how-steps">
+    <div class="step-item">
+      <div class="step-num">1</div>
+      <div class="step-title lang-en">Book a 20-min demo</div>
+      <div class="step-title lang-th">นัดดูระบบ 20 นาที</div>
+      <p class="step-desc lang-en">We show you the widgets live. You tell us your menu, opening hours, and delivery radius. <strong>No jargon.</strong></p>
+      <p class="step-desc lang-th">เราสาธิตวิดเจ็ตสด บอกเราเรื่องเมนู เวลาเปิด-ปิด และรัศมีจัดส่ง</p>
+    </div>
+    <div class="step-item">
+      <div class="step-num">2</div>
+      <div class="step-title lang-en">We configure everything</div>
+      <div class="step-title lang-th">เราตั้งค่าทุกอย่าง</div>
+      <p class="step-desc lang-en">We set up your booking page, ordering menu, and branding. Usually done <strong>within 48 hours.</strong></p>
+      <p class="step-desc lang-th">เราตั้งค่าหน้าจอง เมนูสั่งอาหาร และแบรนดิ้งให้คุณ ปกติเสร็จภายใน 48 ชั่วโมง</p>
+    </div>
+    <div class="step-item">
+      <div class="step-num">3</div>
+      <div class="step-title lang-en">Paste one line of code</div>
+      <div class="step-title lang-th">วางโค้ดหนึ่งบรรทัด</div>
+      <p class="step-desc lang-en">Copy a snippet to your existing website — or we add it for you. <strong>Done. You're live.</strong></p>
+      <p class="step-desc lang-th">คัดลอกโค้ดไปวางบนเว็บไซต์เดิม หรือเราจัดการให้เลย เท่านั้นเอง</p>
+    </div>
+  </div>
+</section>
+
+<!-- ROI SECTION -->
+<section class="roi-section">
+  <div class="roi-inner">
+    <div class="roi-left">
+      <h2><span class="lang-en">A restaurant doing<br>£3,000/month takeaway<br><em>saves £861+/month</em></span><span class="lang-th">ร้านที่มียอดสั่ง £3,000/เดือน<br><em>ประหยัดได้ £861+/เดือน</em></span></h2>
+      <p class="lang-en" style="margin-top:12px;">Moving even a third of your orders off Deliveroo pays for the entire SiamEPOS Lite bundle — with £800 to spare every month.</p>
+      <p class="lang-th" style="margin-top:12px;">แค่ย้ายหนึ่งในสามของออเดอร์ออกจาก Deliveroo ก็ครอบคลุมค่า SiamEPOS Lite ทั้งหมด และยังเหลือเก็บอีก £800 ต่อเดือน</p>
+    </div>
+    <div class="roi-table">
+      <div class="roi-row">
+        <span class="roi-row-label lang-en">Deliveroo commission (30% of £3,000)</span>
+        <span class="roi-row-label lang-th">ค่าคอม Deliveroo 30% ของ £3,000</span>
+        <span class="roi-row-val red">−£900/mo</span>
+      </div>
+      <div class="roi-row">
+        <span class="roi-row-label lang-en">SiamEPOS Ordering Lite</span>
+        <span class="roi-row-label lang-th">SiamEPOS Ordering Lite</span>
+        <span class="roi-row-val red">−£39/mo</span>
+      </div>
+      <div class="roi-row">
+        <span class="roi-row-label lang-en">Commission on same orders via SiamEPOS</span>
+        <span class="roi-row-label lang-th">ค่าคอมเมื่อสั่งผ่าน SiamEPOS</span>
+        <span class="roi-row-val green">£0</span>
+      </div>
+      <div class="roi-row">
+        <span class="roi-row-label lang-en">You keep every month</span>
+        <span class="roi-row-label lang-th">คุณประหยัดได้ทุกเดือน</span>
+        <span class="roi-row-val gold">£861 <small class="lang-en">/month back</small><small class="lang-th">/เดือน</small></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRO UPGRADE BANNER -->
+<section class="upgrade-section">
+  <div class="upgrade-inner">
+    <div class="upgrade-pill">✦ <span class="lang-en">When you're ready to go further</span><span class="lang-th">เมื่อคุณพร้อมก้าวต่อไป</span></div>
+    <h2><span class="lang-en">Upgrade to<br><em>full SiamEPOS Pro</em><br>for £40 more.</span><span class="lang-th">อัปเกรดเป็น<br><em>SiamEPOS Pro เต็มรูปแบบ</em><br>เพิ่มแค่ £40</span></h2>
+    <p class="lang-en">When your EPOS contract expires, switch to the full system. Your widgets carry over — no setup fee, no learning curve. Just more power.</p>
+    <p class="lang-th">เมื่อสัญญา EPOS ของคุณหมด ย้ายมาใช้ระบบเต็มรูปแบบ วิดเจ็ตของคุณยังอยู่ครบ ไม่มีค่าตั้งค่า ไม่ต้องเรียนรู้ใหม่</p>
+    <div class="upgrade-compare">
+      <div class="upgrade-col">
+        <div class="upgrade-col-label lang-en">Bundle Lite</div>
+        <div class="upgrade-col-label lang-th">Bundle Lite</div>
+        <div class="upgrade-price">£49</div>
+        <div class="upgrade-price-note lang-en">per month</div>
+        <div class="upgrade-price-note lang-th">ต่อเดือน</div>
+        <ul class="upgrade-features">
+          <li class="pro lang-en">Online booking widget</li>
+          <li class="pro lang-th">วิดเจ็ตจองโต๊ะ</li>
+          <li class="pro lang-en">0% commission ordering</li>
+          <li class="pro lang-th">สั่งอาหาร 0% ค่าคอม</li>
+          <li class="lite lang-en">Table plan & KDS</li>
+          <li class="lite lang-th">แผนผังโต๊ะและ KDS</li>
+          <li class="lite lang-en">Full EPOS & staff management</li>
+          <li class="lite lang-th">EPOS และจัดการพนักงาน</li>
+          <li class="lite lang-en">AI invoice scanner</li>
+          <li class="lite lang-th">สแกนใบแจ้งหนี้ด้วย AI</li>
+        </ul>
+      </div>
+      <div class="upgrade-col" style="background:rgba(201,168,76,0.06);">
+        <div class="upgrade-col-label lang-en">SiamEPOS Pro</div>
+        <div class="upgrade-col-label lang-th">SiamEPOS Pro</div>
+        <div class="upgrade-price">£89</div>
+        <div class="upgrade-price-note lang-en">per month · widgets included</div>
+        <div class="upgrade-price-note lang-th">ต่อเดือน · รวมวิดเจ็ต</div>
+        <ul class="upgrade-features">
+          <li class="pro lang-en">Online booking widget</li>
+          <li class="pro lang-th">วิดเจ็ตจองโต๊ะ</li>
+          <li class="pro lang-en">0% commission ordering</li>
+          <li class="pro lang-th">สั่งอาหาร 0% ค่าคอม</li>
+          <li class="pro lang-en">Full table plan & KDS screen</li>
+          <li class="pro lang-th">แผนผังโต๊ะและ KDS</li>
+          <li class="pro lang-en">Complete EPOS & staff management</li>
+          <li class="pro lang-th">EPOS และจัดการพนักงานครบครัน</li>
+          <li class="pro lang-en">AI invoice scanner & profit reports</li>
+          <li class="pro lang-th">สแกนใบแจ้งหนี้ AI และรายงานกำไร</li>
+        </ul>
+      </div>
+    </div>
+    <div class="upgrade-cta-row">
+      <a href="book-demo.html" class="btn-gold"><span class="lang-en">Start with Lite Today →</span><span class="lang-th">เริ่มด้วย Lite วันนี้ →</span></a>
+      <a href="pricing.html" class="btn-outline"><span class="lang-en">See Full Pro Pricing</span><span class="lang-th">ดูราคา Pro เต็มรูปแบบ</span></a>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <svg width="120" height="22" viewBox="0 0 220 36" xmlns="http://www.w3.org/2000/svg">
+        <text x="0" y="27" font-family="Cormorant Garamond, Georgia, serif" font-size="30" font-weight="700" fill="#FDFAF4">Siam</text>
+        <text x="72" y="27" font-family="Cormorant Garamond, Georgia, serif" font-size="30" font-weight="700" fill="#C9A84C">EPOS</text>
+      </svg>
+      <p class="lang-en">Built for Thai restaurants in the UK. Start with widgets — grow into the full system.</p>
+      <p class="lang-th">สร้างขึ้นสำหรับร้านอาหารไทยในสหราชอาณาจักร เริ่มจากวิดเจ็ต แล้วค่อยขยายไปสู่ระบบเต็มรูปแบบ</p>
+    </div>
+    <nav class="footer-links">
+      <a href="index.html" class="lang-en">Home</a>
+      <a href="index.html" class="lang-th">หน้าแรก</a>
+      <a href="features.html" class="lang-en">Features</a>
+      <a href="features.html" class="lang-th">ฟีเจอร์</a>
+      <a href="pricing.html" class="lang-en">Pricing</a>
+      <a href="pricing.html" class="lang-th">ราคา</a>
+      <a href="why-siamepos.html" class="lang-en">Why Us</a>
+      <a href="why-siamepos.html" class="lang-th">ทำไมต้องเรา</a>
+      <a href="book-demo.html" class="lang-en">Book Demo</a>
+      <a href="book-demo.html" class="lang-th">นัดดูระบบ</a>
+      <a href="privacy-policy.html">Privacy</a>
+      <a href="terms.html">Terms</a>
+    </nav>
+  </div>
+  <div class="footer-bottom">
+    <p>© 2026 SiamEPOS — info@siamepos.co.uk</p>
+    <p class="lang-en">Thai restaurant management software · UK</p>
+    <p class="lang-th">ซอฟต์แวร์จัดการร้านอาหารไทย · UK</p>
+  </div>
+</footer>
+
+<!-- WHATSAPP FLOAT -->
+<div class="wa-float">
+  <a href="https://wa.me/447700000000" class="wa-btn" target="_blank" rel="noopener">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+    <span class="lang-en">Chat on WhatsApp</span>
+    <span class="lang-th">แชทผ่าน WhatsApp</span>
+  </a>
+</div>
+
+<script>
+  // Mobile nav toggle
+  const burger = document.getElementById('navBurger');
+  burger.addEventListener('click', () => document.body.classList.toggle('menu-open'));
+  document.getElementById('navLinks').querySelectorAll('a').forEach(a => {
+    a.addEventListener('click', () => document.body.classList.remove('menu-open'));
+  });
+</script>
+</body>
+</html>

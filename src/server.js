@@ -37,6 +37,24 @@ if (process.env.CLIENT_DIST_PATH) {
   console.log('Serving client bundle from', process.env.CLIENT_DIST_PATH);
 }
 
+// ── SEPOS-LITE-001 Phase 2a — multi-tenancy ──────────────────────────
+// MULTI_TENANT off (the Pro default): every request resolves to the one
+// configured restaurant — behaviour is identical to before this change.
+// On the shared Lite backend (MULTI_TENANT=1) the restaurant is resolved
+// per request: widgets pass restaurant_id, authenticated calls send an
+// X-Restaurant-Id header. Endpoint queries get scoped by restaurant_id
+// in Phase 2b; for now resolveRestaurantId tags newly-created rows.
+const MULTI_TENANT = process.env.MULTI_TENANT === '1';
+function resolveRestaurantId(req) {
+  if (!MULTI_TENANT) return process.env.RESTAURANT_ID || 'siamepos';
+  return (
+    (req.body && req.body.restaurant_id) ||
+    (req.query && req.query.restaurant_id) ||
+    req.get('X-Restaurant-Id') ||
+    process.env.RESTAURANT_ID || 'siamepos'
+  );
+}
+
 let sendBookingConfirmation = async () => {};
 let sendBookingSms = async () => {};
 try {
@@ -1998,7 +2016,7 @@ app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
              service_type, lunch_service_start, lunch_service_end,
              dinner_service_start, dinner_service_end
       FROM restaurant_settings WHERE restaurant_id = $1
-    `, [process.env.RESTAURANT_ID || 'siamepos']);
+    `, [resolveRestaurantId(req)]);
     // SEPOS-DELIVERY-002 — delivery is offered only when the operator has
     // set both a restaurant postcode and a radius. The widget uses this
     // flag to decide whether to show the Delivery toggle at all.
@@ -2122,9 +2140,10 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
     // Closed-hours check — pickup_time must fall within the restaurant's
     // opening_time .. last_booking_time window. Soft validation: if
     // restaurant_settings is missing we let it through.
+    const restaurantId = resolveRestaurantId(req);
     const settingsRes = await client.query(
       `SELECT opening_time, last_booking_time FROM restaurant_settings WHERE restaurant_id = $1`,
-      [process.env.RESTAURANT_ID || 'siamepos']
+      [restaurantId]
     );
     const settings = settingsRes.rows[0];
     if (settings) {
@@ -2147,18 +2166,20 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
          (table_id, status, covers, total, opened_at,
           order_type, customer_name, customer_phone, customer_email,
           pickup_time, takeaway_status, payment_status, discount_reason,
-          order_subtype, delivery_address, delivery_notes, marketing_consent)
+          order_subtype, delivery_address, delivery_notes, marketing_consent,
+          restaurant_id)
        VALUES (NULL, 'open', 1, $1, NOW(),
                'takeaway', $2, $3, $4,
                $5, 'pending', 'mock', $6,
-               $7, $8, $9, $10)
+               $7, $8, $9, $10, $11)
        RETURNING id`,
       [total, customer_name.trim(), customer_phone.trim(), (customer_email || '').trim() || null,
        pickup_time, notes || null,
        subtype,
        subtype === 'delivery' ? delivery_address.trim() : null,
        subtype === 'delivery' ? (delivery_notes || '').trim() || null : null,
-       marketing_consent ? 1 : 0]
+       marketing_consent ? 1 : 0,
+       restaurantId]
     );
     const orderId = orderRes.rows[0].id;
 
@@ -2170,12 +2191,12 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
       const ins = await client.query(
         `INSERT INTO order_items
            (order_id, menu_item_id, item_name, quantity, unit_price, notes, course,
-            item_note, is_fired, fired_at, cooking_started_at, status)
-         VALUES ($1, $2, $3, $4, $5, $6, 1, $7, 1, $8, $8, 'cooking') RETURNING id`,
+            item_note, is_fired, fired_at, cooking_started_at, status, restaurant_id)
+         VALUES ($1, $2, $3, $4, $5, $6, 1, $7, 1, $8, $8, 'cooking', $9) RETURNING id`,
         [orderId, it.menu_item_id || null, it.name || 'Item',
          it.quantity || 1, it.unit_price || 0,
          it.modifiers ? (Array.isArray(it.modifiers) ? it.modifiers.map(m => m.name).join(', ') : String(it.modifiers)) : '',
-         it.item_note || '', now]
+         it.item_note || '', now, restaurantId]
       );
       insertedItemIds.push(ins.rows[0].id);
     }

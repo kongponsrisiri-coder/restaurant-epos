@@ -66,14 +66,6 @@ router.post('/start', async (req, res) => {
       [restaurantId, name.trim(), plan || 'lite_bundle', email.trim().toLowerCase(), phone || '', address || '']
     );
 
-    // Seed default restaurant_settings row
-    await client.query(
-      `INSERT INTO restaurant_settings (restaurant_id, key, value)
-       VALUES ($1, 'restaurant_name', $2)
-       ON CONFLICT (restaurant_id, key) DO NOTHING`,
-      [restaurantId, name.trim()]
-    );
-
     // Create owner user
     const { rows } = await client.query(
       `INSERT INTO lite_users (restaurant_id, email, password_hash, name, role)

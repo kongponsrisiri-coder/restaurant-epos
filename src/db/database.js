@@ -406,6 +406,46 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS dinne
     // that got NULL'd by the old code path.
     await pool.query(`UPDATE staff SET is_active = 1 WHERE is_active IS NULL`);
 
+    // ── SEPOS-LITE-001 Phase 1 — multi-tenancy foundation ────────────
+    // A `restaurants` registry plus a `restaurant_id` column on every
+    // tenant-scoped table. Default 'siamepos' so single-tenant Pro
+    // installs are untouched — restaurant_id is a no-op for them. The
+    // shared multi-tenant Lite backend resolves restaurant_id per
+    // request (Phase 2). ADD COLUMN with a constant default is a fast
+    // metadata-only change in Postgres, safe on populated tables.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS restaurants (
+        restaurant_id          VARCHAR(100) PRIMARY KEY,
+        name                   VARCHAR(255),
+        plan                   VARCHAR(30)  DEFAULT 'pro',
+        api_key                VARCHAR(100) UNIQUE,
+        status                 VARCHAR(20)  DEFAULT 'active',
+        stripe_customer_id     VARCHAR(255),
+        stripe_subscription_id VARCHAR(255),
+        created_at             TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`
+      INSERT INTO restaurants (restaurant_id, name, plan)
+      VALUES ('siamepos', 'SiamEPOS', 'pro')
+      ON CONFLICT (restaurant_id) DO NOTHING
+    `);
+    const TENANT_TABLES = [
+      'orders', 'order_items', 'payments', 'menu_items', 'categories',
+      'subcategories', 'modifier_groups', 'modifiers', 'order_item_modifiers',
+      'staff', 'tables', 'settings', 'campaigns', 'clock_events',
+      'discount_reasons', 'z_reports', 'order_deletions', 'webhook_fires',
+      'reservation_reminders',
+    ];
+    for (const t of TENANT_TABLES) {
+      await pool.query(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS restaurant_id VARCHAR(100) DEFAULT 'siamepos'`);
+    }
+    // Indexes on the high-traffic tables — only meaningful for the
+    // shared multi-tenant Lite DB; harmless on a single-tenant Pro DB.
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_orders_restaurant      ON orders(restaurant_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_order_items_restaurant ON order_items(restaurant_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_menu_items_restaurant  ON menu_items(restaurant_id)`);
+
     console.log('✅ Database ready');
   } catch (err) {
     console.error('Database init error:', err);

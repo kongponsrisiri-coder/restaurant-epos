@@ -317,6 +317,18 @@ function initSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_webhook_fires_event_entity ON webhook_fires(event_type, entity_key);
 
+    -- SEPOS-LITE-001 Phase 1 — multi-tenancy registry (mirrors cloud schema)
+    CREATE TABLE IF NOT EXISTS restaurants (
+      restaurant_id TEXT PRIMARY KEY,
+      name TEXT,
+      plan TEXT DEFAULT 'pro',
+      api_key TEXT UNIQUE,
+      status TEXT DEFAULT 'active',
+      stripe_customer_id TEXT,
+      stripe_subscription_id TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- SEPOS — sync engine state (e.g. cursor for closed-orders pull)
     CREATE TABLE IF NOT EXISTS sync_state (
       key TEXT PRIMARY KEY,
@@ -385,6 +397,19 @@ function runMigrations() {
   addColumnIfMissing('order_items', 'cloud_id', 'INTEGER');
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_cloud_id      ON orders(cloud_id)      WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] orders.cloud_id index:', err.message); }
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_order_items_cloud_id ON order_items(cloud_id) WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] order_items.cloud_id index:', err.message); }
+
+  // SEPOS-LITE-001 Phase 1 — multi-tenancy. restaurant_id mirrors the
+  // cloud schema so cloud→local sync stays column-aligned; Pro installs
+  // keep the default 'siamepos' (single-tenant, so it's a no-op here).
+  for (const t of [
+    'orders', 'order_items', 'payments', 'menu_items', 'categories',
+    'subcategories', 'modifier_groups', 'modifiers', 'order_item_modifiers',
+    'staff', 'tables', 'settings', 'campaigns', 'clock_events',
+    'discount_reasons', 'z_reports', 'order_deletions', 'webhook_fires',
+    'reservation_reminders',
+  ]) {
+    addColumnIfMissing(t, 'restaurant_id', "TEXT DEFAULT 'siamepos'");
+  }
 }
 
 function seedDefaults() {

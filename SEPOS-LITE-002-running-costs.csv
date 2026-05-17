@@ -1,40 +1,39 @@
-SiamEPOS Lite — Running Cost Model (SEPOS-LITE-002),,,
-Prepared by Krit 2026-05-18. Figures are ESTIMATES — Railway is usage-based; verify against live bills.,,,
-Account context: Korakot is on the Railway Pro plan — $20/mo which INCLUDES $20 of resource usage.,,,
-FX used: $1 ~= £0.79,,,
-,,,
-MODEL A — "LITE AS PRO" (each Lite customer = own backend + own database),,,
-Item,Est GBP per customer per month,Why / basis,Notes
-Railway backend service,2 - 5,Small always-on Node service; light traffic — widget bookings/orders only with no dine-in load,Usage-based; rises with traffic
-Railway Postgres database,2 - 5,Dedicated small DB; holds bookings + a small menu + a few orders a day,Light end of Railway's range; a busy SaaS DB is ~£14 but Lite is far lighter
-Railway Pro plan seat,~0,$20/mo fixed for the whole account (incl. $20 usage) — amortised across every deployment,One-off account overhead (~£16/mo) not a per-customer cost
-Netlify frontend hosting,0,Static React bundle served on the free tier at low bandwidth,Free tier
-Stripe subscription fee,0.60 - 1.00,1.5% + 20p UK card rate on the monthly £29–£49 charge,Stripe UK standard rate (verified May 2026)
-Brevo email,0,Booking / order confirmation emails sit within the free tier,Free tier
-Subdomain,0,Free name.siamepos.co.uk subdomain,No per-customer domain cost
-Support time,FILL IN,Human time per customer (hours x rate) — Korakot / Nick to estimate,NOT included below — can exceed infra cost
-PER-CUSTOMER INFRA SUBTOTAL,~5 - 11,Sum of infra lines above; excludes support time,
-,,,
-MODEL B — SHARED MULTI-TENANT (one backend + one database for ALL Lite customers),,,
-Item,Est GBP per month TOTAL,Why / basis,Notes
-Railway shared backend,20 - 40,One larger service handling every tenant,Usage-based
-Railway shared Postgres,15 - 35,One database holding every tenant's data,Usage-based; grows with total data
-Netlify frontend,0,Shared static bundle,Free tier
-SHARED INFRA TOTAL,35 - 75,Roughly fixed regardless of customer count,
-Marginal cost of one extra customer,~0 - 1,Adding one more tenant adds almost nothing,
-Per-customer at 20 customers,~2 - 4,Shared total divided by 20,
-Per-customer at 100 customers,~0.4 - 0.8,Shared total divided by 100,
-NOT SHOWN: Model B also needs the cross-tenant security build (RLS / Phase 2b) — real engineering cost + risk,,,
-,,,
-MARGIN PER PLAN,,,
-Plan,Price GBP/mo,Model A infra cost,Model A margin,Model B infra cost (@20 cust) + margin
-lite_booking,29,5 - 11,18 - 24,2-4 cost / 25-27 margin
-lite_ordering,39,5 - 11,28 - 34,2-4 cost / 35-37 margin
-lite_bundle,49,5 - 11,38 - 44,2-4 cost / 45-47 margin
-pro,89,5 - 11,78 - 84,n/a
-,,,
-KEY TAKEAWAYS,,,
-1,,Model A margin on the £29 plan is ~£18–24/mo — healthy. £29 is NOT too cheap on infrastructure grounds.,
-2,,Model B is cheaper per customer BUT adds the cross-tenant security workstream (RLS / Phase 2b) — build cost + data-leak risk not priced here.,
-3,,The real unknown is SUPPORT TIME per customer — fill it in. It can dwarf the infra cost.,
-4,,lite_ordering £39 is underpriced for the value delivered (0% takeaway commission vs Just Eat ~14%) — that is a pricing call for Nick, not a cost issue.,
+SEPOS-LITE-002 — Running Cost Analysis,,,,,
+Generated: 2026-05-18 | Owner: Korakot + Nick | Status: DRAFT — support time line needs filling in,,,,,
+,,,,,
+"== MODEL A — ""Lite as Pro"" (each customer: own Railway service + own Postgres DB) ==",,,,,
+Line item,£/customer/mo LOW,£/customer/mo HIGH,Why / Basis,,
+Railway backend service,2.00,5.00,"Own Node.js service per customer on Railway Pro. Widget-only traffic is light — mostly booking queries and takeaway menu fetches. Usage-based billing: small idle service ~$2.50, busy service ~$6.",,
+Railway Postgres,2.00,5.00,"Dedicated Postgres instance per customer. Small DB footprint: bookings + menu cache + daily orders. Estimate $2.50–6/mo per instance on Railway.",,
+Railway Pro seat (amortised),0.00,0.00,"$20/mo fixed plan includes $20 of usage credit — essentially the first $20 of usage is free. Fixed cost amortised across all deployments; negligible per customer at any meaningful scale.",,
+Netlify (widget JS hosting),0.00,0.00,"Free tier covers static hosting. Widget JS served from Netlify CDN — no cost regardless of customer count.",,
+Brevo (transactional email),0.00,0.00,"Free tier: 300 emails/day. Booking confirmations comfortably within limit per restaurant.",,
+Subdomain (slug.lite.siamepos.co.uk),0.00,0.00,"DNS CNAME record — no cost. Covered by existing Namecheap domain.",,
+Stripe subscription fee,0.79,1.50,"UK card rate: 1.5% + £0.20 per charge. On £39: £0.79. On £49: £0.94. On £69: £1.24. Range £0.79–1.50 across plans.",,
+"Support time — ⚠️ FILL IN",?,?,"Infra is cheap. Human support time is the real unknown and can dwarf infra. Estimate: hrs per customer per month × your effective hourly rate. Only Korakot can fill this in.",,
+INFRA TOTAL (ex-support),4.79,11.50,"Low: 2+2+0+0+0+0+0.79. High: 5+5+0+0+0+0+1.50.",,
+,,,,,
+"== MODEL B — Multi-tenant (all customers share one Railway service + one Postgres DB, row-level isolation via restaurant_id) ==",,,,,
+Line item,£/customer/mo LOW,£/customer/mo HIGH,Why / Basis,,
+Railway backend service (shared),0.10,0.40,"One shared Node service for all Lite customers. Cost amortised across customer count. At 10 customers sharing a $5/mo service = $0.50/customer (~£0.40).",,
+Railway Postgres (shared),0.10,0.30,"One shared DB with restaurant_id on every table. Very low per-customer footprint — a few hundred rows per restaurant per day.",,
+Railway Pro seat (amortised),0.00,0.00,"Same as Model A — fixed plan cost negligible at scale.",,
+Netlify / Brevo / subdomain,0.00,0.00,"Same as Model A — free tiers unchanged.",,
+Stripe subscription fee,0.64,1.00,"Same as Model A — per-transaction cost is identical regardless of architecture.",,
+Phase 2b development (amortised),0.50,2.00,"⚠️ Hidden cost. Retrofitting all ~40 endpoints with tenant middleware = 2–4 weeks of dev time. Amortised over 24 months across projected customers. Higher at low customer count.",,
+GDPR / data-leak risk (unquantified),?,?,"⚠️ Cross-tenant data leak = regulatory liability. ICO fine up to 4% of annual turnover or £17.5M whichever is higher. Model A eliminates this risk entirely. Model B requires perfect query discipline forever.",,
+"Support time — ⚠️ FILL IN",?,?,"Same unknown as Model A.",,
+INFRA TOTAL (ex-support ex-risk),1.34,3.70,"Low: 0.10+0.10+0+0+0.64+0.50. High: 0.40+0.30+0+0+1.00+2.00.",,
+,,,,,
+== MARGIN PER PLAN ==,,,,,,,,,,
+Plan,Price (£/mo),Model A infra LOW (£),Model A infra HIGH (£),Model A margin LOW ex-support (£),Model A margin HIGH ex-support (£),Model B infra LOW (£),Model B infra HIGH (£),Model B margin LOW ex-support (£),Model B margin HIGH ex-support (£),Notes for Nick
+Lite Booking,39.00,4.79,11.00,28.00,34.21,1.49,3.70,35.30,37.51,"Healthy margin. Still cheaper than ResDiary (~£50/mo) and OpenTable (per-cover fees). Value prop: 24/7 online bookings, zero per-cover charge."
+Lite Ordering,49.00,4.94,11.20,37.80,44.06,1.64,3.90,45.10,47.36,"Strong margin. 0% commission saves restaurant £280+/mo vs Just Eat. At £49 this is still a 5.7× ROI for the customer. Recommended range was £49–59 — this is the floor."
+Lite Bundle,69.00,5.24,11.50,57.50,63.76,1.94,4.20,64.80,67.06,"£39+£49=£88 separately. Bundle at £69 = £19 saving. Premium anchor — positions bundle as the serious tier, not a discount product. Exceptional margin on both models."
+,,,,,,,,,,,
+== NOTES ==,,,,,,,,,,
+"1. All figures in GBP. Railway costs converted at $1 = £0.80 (approximate — check current rate).",,,,,,,,,,,
+"2. Model A margin figures are gross margin before support time, admin, and Korakot's time. Add those to get true net.",,,,,,,,,,,
+"3. Model B infra savings vs Model A are real (£3–7/customer/mo) but are partially offset by Phase 2b dev cost and ongoing GDPR risk.",,,,,,,,,,,
+"4. Stripe fee in margin table uses the low end (£0.64 on £29, £0.79 on £39, £0.94 on £49) — margin LOW column is therefore conservative.",,,,,,,,,,,
+"5. Sources: Railway pricing docs (docs.railway.com/pricing), Stripe UK fees (stripe.com/resources/more/uk-card-processing-fees-101).",,,,,,,,,,,

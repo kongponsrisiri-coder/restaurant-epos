@@ -1,67 +1,147 @@
-# SEPOS-LITE-002 — Lite Architecture & Pricing Decision Note
+# SEPOS-LITE-002 — Architecture Decision Note
 
-**For:** Korakot + Nick to settle  ·  **Author:** Krit  ·  **Date:** 2026-05-18
-**Companion file:** `SEPOS-LITE-002-running-costs.csv`
+**Date:** 2026-05-18  
+**Author:** Korakot (with Claude)  
+**Reviewers:** Nick  
+**Status:** Model A CONFIRMED by Korakot 2026-05-18 — Nick still to confirm Lite Ordering price  
 
 ---
 
-## The decision
-SEPOS-LITE-002 puts Lite customers on the **full SiamEPOS app**, not a
-separate dashboard. That forces one architectural choice — how each Lite
-customer's data is kept separate from every other's:
+## Context
 
-- **Model A — "Lite as Pro":** each Lite customer gets their **own backend +
-  own database**, exactly like a Pro client.
-- **Model B — Shared multi-tenant:** one backend + one database for all Lite
-  customers, kept apart by `restaurant_id` + Postgres Row-Level Security.
+SiamEPOS Lite is a new widget-only product targeting restaurants already on another EPOS. It offers booking and/or online ordering widgets at £39–69/month, with the explicit goal of being a "land and convert" strategy — restaurants on Lite that outgrow it upgrade to SiamEPOS Pro (£89/month).
 
-## Recommendation — Model A ("Lite as Pro")
-1. **Eliminates the cross-tenant data-leak risk entirely.** Separate
-   databases — there is no shared table to leak from. No RLS, and no Phase 2b
-   endpoint retrofit (the large, risky workstream).
-2. **Reuses infrastructure that already exists** — SiamEPOS already
-   auto-provisions per-client deployments for Pro (SEPOS-029).
-3. **Ships sooner.** The only Lite-specific code is plan-based feature gating,
-   most of which is already built (Phase 2a).
-4. **Multi-tenancy is a scale optimisation.** Building it before there is a
-   single Lite customer is premature — and premature in a way that carries
-   security risk. Migrate to shared infra later *if* Lite volume ever makes the
-   per-tenant cost hurt.
+SEPOS-LITE-001 Phase 1 added a multi-tenant schema to the existing backend (restaurant_id on 19 tables, restaurants registry). This note decides what happens next: do we **keep building on the shared architecture**, or **spin each Lite customer their own backend**?
 
-## Running cost — the headline
-With Korakot now on the **Railway Pro plan** ($20/mo, $20 usage included),
-Model A costs roughly **£5–11 per customer per month** in infrastructure (own
-small backend + small Postgres; light widget-only traffic). Full line-by-line
-breakdown — and the "why" behind each number — is in
-`SEPOS-LITE-002-running-costs.csv`.
+---
 
-## Pricing — is £29 too cheap?
-**On infrastructure grounds: no.** Model A leaves **~£18–24/month margin** on
-the £29 `lite_booking` plan — healthy for an acquisition product.
+## The Two Models
 
-Two caveats:
-- **Support time per customer is the real unknown** — not infra. It needs to
-  be filled in (see the CSV); it can dwarf the infra cost.
-- **`lite_ordering` at £39 is underpriced for the value** — online takeaway at
-  0% commission vs Just Eat's ~14% saves a restaurant doing £2,000/mo online
-  about £280+/mo. At £39 it is such a good deal it risks becoming a *permanent
-  home* rather than a *bait* — undercutting the convert-to-Pro strategy.
-  Consider £49–59, or consciously accept it as a deliberately sticky product.
-  This is a positioning call for **Nick**.
+### Model A — "Lite as Pro" (recommended)
 
-## What Model A changes for the build
-- **Phase 2b (endpoint read-scoping / RLS) — CANCELLED.** The risky workstream
-  is removed.
-- Phase 1 / 2a tenancy code (`restaurant_id` columns, `resolveRestaurantId`) —
-  goes dormant, harmless (already a no-op in single-tenant mode).
-- **Plan-based feature gating** (Phase 2a + the SEPOS-LITE-002 matrix) remains
-  and is the whole job — safe, small.
-- Pose's Lite onboarding shifts to: *provision a Pro-style deployment, set
-  `plan = lite_*`.*
+Each Lite customer gets:
+- Their own Railway service (cloned from the Pro backend)
+- Their own Railway Postgres instance
+- A subdomain (e.g., `baan-siam.lite.siamepos.co.uk`)
 
-## Decisions needed from Korakot + Nick
-1. **Confirm Model A** ("Lite as Pro").
-2. **Fill in support-time-per-customer** in the CSV — the one cost unknown.
-3. **Nick:** revisit `lite_ordering` pricing (£39 vs ~£49–59).
-4. Confirm "the full app" means **`app.siamepos.co.uk`** (the EPOS), not the
-   internal `ops.siamepos.co.uk` tool.
+This is identical to how Pro customers are onboarded today.
+
+**Running cost: ~£5–11/customer/month infra** (ex-support)  
+**Margin on £39 plan (Booking): ~£28–34/month** (ex-support)  
+**Margin on £49 plan (Ordering): ~£38–44/month** (ex-support)  
+**Margin on £69 plan (Bundle): ~£57–64/month** (ex-support)
+
+### Model B — Multi-tenant (shared backend + DB)
+
+All Lite customers share one Railway service and one Postgres database. Data is isolated by `restaurant_id` on every query. This is what the Phase 1 schema work was building toward.
+
+**Running cost: ~£1.30–3.70/customer/month infra** (ex-support, ex-Phase 2b dev cost)  
+**Margin on £39 plan (Booking): ~£35–38/month** (ex-support)
+
+---
+
+## Why Model A Wins
+
+### 1. Cost difference is smaller than it looks
+
+Model B saves ~£3–7/customer/month on infra. On a £29 plan both models are profitable. The saving is real but not the deciding factor.
+
+### 2. Phase 2b is risky and slow
+
+To make Model B production-safe, all ~40 backend endpoints need retrofitting with tenant middleware. That is 2–4 weeks of Krit's time touching every route in a live production server. One missed `WHERE restaurant_id = $1` sends a customer's booking data to another restaurant. That is a GDPR incident, not a bug.
+
+Model A avoids Phase 2b entirely. We deploy a fresh instance — the same way we'd onboard a Pro customer — and Phase 2b never needs to happen.
+
+### 3. Model A deletes the GDPR data-leak risk
+
+With separate databases, cross-tenant data leakage is architecturally impossible. With a shared DB it requires perfect query discipline, forever, across every future endpoint. ICO fines for a GDPR breach are up to 4% of annual turnover or £17.5M. Model A eliminates this exposure at the cost of ~£3–7/month of Railway spend.
+
+### 4. Onboarding is simpler and already understood
+
+We know how to spin up a new Railway service. We've done it for Pro. A Lite onboarding script (`scripts/provision-lite.sh`) can clone the service, set environment variables, and run migrations in under 10 minutes. No new middleware, no tenant-awareness code, no regression risk to existing Pro customers.
+
+### 5. Conversion to Pro is seamless
+
+When a Lite customer upgrades to Pro, their database already has the right schema. We update their plan in Stripe, point them to the full app, and done. With a shared DB we'd need to extract and migrate their rows out of the multi-tenant tables — more work at the moment we most want the conversion to be frictionless.
+
+---
+
+## What This Means for Phase 1 Work
+
+The multi-tenant schema Krit built in Phase 1 is not wasted:
+
+- The `restaurants` registry table stays — used to track all Lite customers and their plan status.
+- The `restaurant_id` default `'siamepos'` on existing tables is harmless — it simply never gets used for routing.
+- Phase 2a (tenant middleware, tenantQuery helper) can be built as dead code for a future decision. It is safe and non-breaking.
+- **Phase 2b (endpoint retrofit) is cancelled.** Do not start it.
+
+---
+
+## Open Questions — Korakot + Nick to Resolve
+
+### Q1: Support time cost (blocking — FILL IN before launch)
+
+The running-cost CSV has a "Support time — FILL IN" line. Infra is cheap. The unknown is: how long does Korakot (or a future support hire) spend per Lite customer per month? At early stage this could be 30–60 mins/month per new customer while they learn the widgets.
+
+**Action:** Estimate hours × your effective hourly rate and add to the CSV. This changes the break-even customer count significantly.
+
+### Q2: Pricing confirmed — Korakot's decision
+
+Pricing locked:
+- **Lite Booking: £39/month**
+- **Lite Ordering: £49/month**
+- **Lite Bundle: £69/month** (£88 separately → £19 saving; premium anchor tier)
+
+At £49/month, a restaurant on Just Eat paying 7% on £4,000/month saves **£280/month** by switching. The widget costs them £49. That is a 5.7× ROI. Nick: make sure the pricing page leads with this number.
+
+### Q3: At what customer count do we revisit Model B?
+
+Model B becomes worth the risk at very high scale (100+ Lite customers) where the per-customer Railway cost becomes material. Suggested trigger: revisit when Lite has 50 paying customers and Railway costs exceed £500/month.
+
+---
+
+## Decision
+
+| Question | Decision |
+|---|---|
+| Model A vs Model B | **Model A — "Lite as Pro"** |
+| Phase 2b (endpoint retrofit) | **Cancelled** |
+| Phase 2a (tenant middleware) | Proceed — safe, non-breaking |
+| Lite Ordering price | **Nick to decide: £39 (current) or £49–59** |
+| Support time | **Korakot to fill in before launch** |
+| Lite customer management | **Back office (ops.siamepos.co.uk)** — same as Pro |
+
+---
+
+## Lite customer management — the back office
+
+**Decided 2026-05-18:** Lite customers are managed from the existing
+**back office (ops.siamepos.co.uk)** — the same place the team already
+manages Pro clients. Under Model A a Lite customer *is* a client like any
+other: their own deployment, an entry in the back-office client list, with
+`plan` set to a lite tier instead of `pro`.
+
+This means:
+- **No separate Lite admin system.** The back-office client list, per-client
+  provisioning (SEPOS-029), health monitoring, notes and billing all apply to
+  Lite customers unchanged.
+- Onboarding a Lite customer = the back-office `NewClientWizard` with a plan
+  picker; provisioning spins up a Lite deployment the same way it does for Pro.
+- **Important boundary:** the back office is the *team's* tool. Lite
+  *customers* never log into `ops.siamepos.co.uk` — they use the main EPOS app
+  (`app.siamepos.co.uk`), with features gated by their plan. ops = how the
+  team runs the business; app = what the customer uses.
+
+This further supersedes Pose's separate Lite dashboard/client at
+`siamepos-lite.netlify.app` — see the Pose handoff in `TEAM-STATUS.md`.
+
+---
+
+## Next Steps
+
+- [ ] **Korakot:** Fill in support time estimate in `SEPOS-LITE-002-running-costs.csv`
+- [ ] **Nick:** Decision on Lite Ordering price (£39 vs £49–59) — update pricing page + business plan v5
+- [ ] **Krit:** Build `scripts/provision-lite.sh` — clone Railway service, set env vars, run migrations, create `restaurants` row
+- [ ] **Krit:** Phase 2a only — tenant middleware + tenantQuery helper + MULTI_TENANT flag (dead code until wired)
+- [ ] **Korakot:** Create 4 Stripe Products (Lite Booking, Lite Ordering, Lite Bundle, Pro) to get STRIPE_PRICE_* IDs
+- [ ] **All:** Once first real Lite customer onboards, run the provision script end-to-end and document time taken

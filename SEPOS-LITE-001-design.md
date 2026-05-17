@@ -195,18 +195,29 @@ concern.
    the print bridge agent *(Krit)*.
 4. **Phase 4 — Billing & launch:** Stripe subscriptions, then go live. *(Pose + Krit)*
 
-## 14. Open questions for Korakot
-1. **Hosting:** one shared Railway instance + Postgres for all Lite tenants —
-   agreed? Rough scale expectation for year one (how many Lite restaurants)?
-2. **Lite dashboard:** new customer-facing page at `lite.siamepos.co.uk`
-   (recommended) vs simplified ops view — confirm.
-3. **Plan tiers:** are the four (`lite_booking` / `lite_ordering` /
-   `lite_bundle` / `pro`) right? Pricing per tier?
-4. **Billing owner:** who builds Stripe subscriptions — and does it block Phase 1,
-   or can the foundation work start now in parallel?
-5. ✅ **RESOLVED (2026-05-17):** Printing — go with the **print bridge** (§7). A
-   small bridge install is acceptable; the restaurant already has a kitchen
-   tablet for the KDS.
+## 14. Decisions (all resolved 2026-05-17)
+1. ✅ **Hosting:** one shared Railway service (`siamepos-lite`) + one shared
+   Postgres for all Lite tenants — this is the economic basis of the
+   multi-tenant design. A single small instance comfortably serves many Lite
+   tenants (low traffic: widget orders + bookings only). Pro stays
+   per-deployment, untouched. Revisit instance sizing at ~50+ active Lite
+   tenants; the `restaurant_id` partitioning + indexes already support growth,
+   so no precise year-one number is needed to proceed.
+2. ✅ **Lite dashboard:** a NEW customer-facing dashboard at
+   `lite.siamepos.co.uk` — NOT the internal ops.siamepos.co.uk tool (Lite
+   customers must never see internal ops data). Lightweight: bookings list,
+   orders list, KDS link, settings, widget embed codes.
+3. ✅ **Plan tiers + pricing:** four tiers, names as already in the schema +
+   code — `lite_booking`, `lite_ordering`, `lite_bundle`, `pro`. Pricing per
+   the live `lite.html` marketing page: Booking £29/mo, Ordering £39/mo,
+   Bundle £49/mo, Pro £89/mo (Pro includes the widgets).
+4. ✅ **Billing owner:** Stripe **subscription** billing (distinct from the
+   SEPOS-040 takeaway transaction payment) is owned by **Pose** — it lives with
+   the Lite onboarding + customer dashboard and writes back to
+   `restaurants.plan` / `stripe_subscription_id`. It does NOT block Phases
+   2b/3 (build in parallel) but must be live before Lite launch.
+5. ✅ **Printing:** go with the **print bridge** (§7). A small bridge install is
+   acceptable; the restaurant already has a kitchen tablet for the KDS.
 
 ## 15. Risks
 - **Cross-tenant data leak** — the headline risk. Mitigated by the `tenantQuery`

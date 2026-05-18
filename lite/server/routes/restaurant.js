@@ -229,7 +229,7 @@ router.get('/revenue', authRequired, async (req, res) => {
        FROM orders
        WHERE restaurant_id = $1
          AND order_type IN ('takeaway','delivery')
-         AND created_at >= NOW() - ($2 || ' days')::interval
+         AND created_at >= NOW() - ($2 * INTERVAL '1 day')
        GROUP BY DATE(created_at)
        ORDER BY date ASC`,
       [rid, days]

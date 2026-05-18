@@ -2641,7 +2641,7 @@ async function dispatchCourier(orderId) {
   }
 
   const itRes = await pool.query(
-    `SELECT name, quantity FROM order_items WHERE order_id = $1 AND voided = 0`,
+    `SELECT item_name AS name, quantity FROM order_items WHERE order_id = $1 AND voided = 0`,
     [orderId]
   );
   const pickup = {

@@ -11,7 +11,8 @@ const { signToken, authRequired } = require('../middleware/auth');
 // Call the main EPOS backend to seed the owner's email login in the staff table.
 // Krit's SEPOS-LITE-003 added POST /api/auth/set-credentials for this purpose.
 function seedEposLogin(restaurantId, email, password, name) {
-  const eposApi = process.env.LITE_EPOS_API_URL || 'https://restaurant-epos-production.up.railway.app';
+  const eposApi    = process.env.LITE_EPOS_API_URL  || 'https://restaurant-epos-production.up.railway.app';
+  const authSecret = process.env.LITE_AUTH_SECRET   || 'siamepos-dev-auth-secret-change-me';
   const body = JSON.stringify({ restaurant_id: restaurantId, email, password, name });
   const url  = new URL('/api/auth/set-credentials', eposApi);
   const lib  = url.protocol === 'https:' ? https : http;
@@ -20,7 +21,11 @@ function seedEposLogin(restaurantId, email, password, name) {
     port:     url.port || (url.protocol === 'https:' ? 443 : 80),
     path:     url.pathname,
     method:   'POST',
-    headers:  { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    headers:  {
+      'Content-Type':    'application/json',
+      'Content-Length':  Buffer.byteLength(body),
+      'X-Setup-Secret':  authSecret,
+    },
   };
   const req = lib.request(opts, res => {
     if (res.statusCode >= 200 && res.statusCode < 300) {

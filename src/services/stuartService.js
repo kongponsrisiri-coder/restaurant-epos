@@ -113,7 +113,7 @@ async function createJob({ order, pickup }) {
       dropoffs: [{
         package_type: 'small',
         package_description: itemSummary,
-        client_reference: `sepos-order-${order.id}`,
+        client_reference: `sepos-order-${order.id}-${Date.now()}`,
         address: order.delivery_address,
         comment: order.delivery_notes || '',
         contact: {

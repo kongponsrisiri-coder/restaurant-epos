@@ -72,7 +72,7 @@ export default function EmbedCodesPage({ user }) {
           available={hasBooking}
           unavailablePlan={plan}
           feature="Booking"
-          code={codes?.booking_widget}
+          code={codes?.booking}
           copied={copied}
           onCopy={text => copy('booking', text)}
           preview="bookings"
@@ -86,7 +86,7 @@ export default function EmbedCodesPage({ user }) {
           available={hasOrdering}
           unavailablePlan={plan}
           feature="Ordering"
-          code={codes?.takeaway_widget}
+          code={codes?.takeaway}
           copied={copied}
           onCopy={text => copy('ordering', text)}
           preview="orders"

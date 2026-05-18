@@ -45,11 +45,15 @@ async function getOrder(id) {
 
 async function createDeliveryOrder(item, tag) {
   const ts = Date.now();
+  // Use tomorrow at 12:00 UTC to always land within business hours (11:00–21:30)
+  const tomorrow = new Date();
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  tomorrow.setUTCHours(12, 0, 0, 0);
   const { status, data } = await api('POST', '/api/takeaway/orders', {
     customer_name: `__TEST__ ${tag}`,
     customer_phone: `0700000${ts.toString().slice(-4)}`,
     customer_email: `test-courier-${ts}@nook.qa`,
-    pickup_time: new Date(Date.now() + 45 * 60000).toISOString(),
+    pickup_time: tomorrow.toISOString(),
     order_subtype: 'delivery',
     delivery_address: '12 Chiltern Street, London, W1U 7PT',
     delivery_notes: 'QA test — please ignore',
@@ -88,9 +92,10 @@ console.log(`  Backend: ${BASE}\n`);
   let dispatchOrderId;
   {
     const { status, data } = await createDeliveryOrder(testItem, 'Dispatch Test');
-    if (status === 201 && data.id) {
+    const orderId = data.id || data.order_id;
+    if (status === 201 && orderId) {
       pass('Delivery order created (201)');
-      dispatchOrderId = data.id;
+      dispatchOrderId = orderId;
       createdOrders.push(dispatchOrderId);
       info(`Order ID: ${dispatchOrderId}`);
     } else {
@@ -191,8 +196,8 @@ console.log(`  Backend: ${BASE}\n`);
   let closeOrderId;
   {
     const { status, data } = await createDeliveryOrder(testItem, 'Webhook Close Test');
-    if (status === 201 && data.id) {
-      closeOrderId = data.id;
+    if (status === 201 && (data.id || data.order_id)) {
+      closeOrderId = data.id || data.order_id;
       createdOrders.push(closeOrderId);
       info(`Created order #${closeOrderId} for close test`);
 
@@ -233,8 +238,8 @@ console.log(`  Backend: ${BASE}\n`);
   let retryOrderId;
   {
     const { status, data } = await createDeliveryOrder(testItem, 'Retry Test');
-    if (status === 201 && data.id) {
-      retryOrderId = data.id;
+    if (status === 201 && (data.id || data.order_id)) {
+      retryOrderId = data.id || data.order_id;
       createdOrders.push(retryOrderId);
       info(`Created order #${retryOrderId} for retry test`);
 

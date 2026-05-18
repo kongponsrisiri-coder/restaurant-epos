@@ -129,7 +129,8 @@ async function createJob({ order, pickup }) {
     jobId: res.id != null ? String(res.id) : null,
     status: delivery.status || res.status || 'new',
     trackingUrl: delivery.tracking_url || null,
-    eta: delivery.eta || res.dropoff_at || null,
+    eta: (typeof delivery.eta === 'string' ? delivery.eta : null) ||
+         (typeof res.dropoff_at === 'string' ? res.dropoff_at : null) || null,
   };
 }
 

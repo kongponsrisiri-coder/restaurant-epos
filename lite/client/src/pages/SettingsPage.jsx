@@ -5,7 +5,7 @@ import { C, card, btn, input, label } from '../theme.js';
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
 const DEFAULT_HOURS = Object.fromEntries(
-  DAYS.map(d => [d.toLowerCase(), { open: '12:00', close: '22:00', closed: false }])
+  DAYS.map(d => [d.toLowerCase(), { open: '12:00', close: '22:00', closed: false, break: false, break_start: '15:00', break_end: '17:00' }])
 );
 
 export default function SettingsPage({ user, setUser }) {
@@ -151,30 +151,49 @@ export default function SettingsPage({ user, setUser }) {
           <Section title="Opening hours" icon="🕐">
             <form onSubmit={saveSettings}>
               {settError && <ErrorBanner msg={settError} />}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                 {DAYS.map(day => {
                   const key = day.toLowerCase();
-                  const h = hours[key] || { open: '12:00', close: '22:00', closed: false };
+                  const h = hours[key] || { open: '12:00', close: '22:00', closed: false, break: false, break_start: '15:00', break_end: '17:00' };
                   return (
-                    <div key={day} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, width: 80, flexShrink: 0 }}>
-                        {day.slice(0,3)}
-                      </span>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.text, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={!h.closed} onChange={e => setHour(key, 'closed', !e.target.checked)}
-                          style={{ width: 14, height: 14 }} />
-                        Open
-                      </label>
-                      {!h.closed ? (
-                        <>
-                          <input type="time" value={h.open}  onChange={e => setHour(key, 'open',  e.target.value)}
-                            style={{ ...input, width: 100, padding: '6px 8px', fontSize: 13 }} />
+                    <div key={day} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {/* Main row */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, width: 34, flexShrink: 0 }}>
+                          {day.slice(0,3)}
+                        </span>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.text, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={!h.closed} onChange={e => setHour(key, 'closed', !e.target.checked)}
+                            style={{ width: 14, height: 14 }} />
+                          Open
+                        </label>
+                        {!h.closed ? (
+                          <>
+                            <input type="time" value={h.open}  onChange={e => setHour(key, 'open',  e.target.value)}
+                              style={{ ...input, width: 95, padding: '6px 8px', fontSize: 13 }} />
+                            <span style={{ fontSize: 12, color: C.textMuted }}>to</span>
+                            <input type="time" value={h.close} onChange={e => setHour(key, 'close', e.target.value)}
+                              style={{ ...input, width: 95, padding: '6px 8px', fontSize: 13 }} />
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: C.textMuted, cursor: 'pointer', marginLeft: 4 }}>
+                              <input type="checkbox" checked={!!h.break} onChange={e => setHour(key, 'break', e.target.checked)}
+                                style={{ width: 13, height: 13 }} />
+                              Break
+                            </label>
+                          </>
+                        ) : (
+                          <span style={{ fontSize: 12, color: C.textFaint, fontStyle: 'italic' }}>Closed</span>
+                        )}
+                      </div>
+                      {/* Break row */}
+                      {!h.closed && h.break && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 44 }}>
+                          <span style={{ fontSize: 11, color: C.textMuted, width: 38, flexShrink: 0 }}>Break</span>
+                          <input type="time" value={h.break_start || '15:00'} onChange={e => setHour(key, 'break_start', e.target.value)}
+                            style={{ ...input, width: 95, padding: '5px 8px', fontSize: 12 }} />
                           <span style={{ fontSize: 12, color: C.textMuted }}>to</span>
-                          <input type="time" value={h.close} onChange={e => setHour(key, 'close', e.target.value)}
-                            style={{ ...input, width: 100, padding: '6px 8px', fontSize: 13 }} />
-                        </>
-                      ) : (
-                        <span style={{ fontSize: 12, color: C.textFaint, fontStyle: 'italic' }}>Closed</span>
+                          <input type="time" value={h.break_end || '17:00'} onChange={e => setHour(key, 'break_end', e.target.value)}
+                            style={{ ...input, width: 95, padding: '5px 8px', fontSize: 12 }} />
+                        </div>
                       )}
                     </div>
                   );

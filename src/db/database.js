@@ -152,6 +152,7 @@ async function initDB() {
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_status VARCHAR(40)`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_url TEXT`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_eta TIMESTAMP`);
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS deliveroo_order_id VARCHAR(255)`);
     await pool.query(`ALTER TABLE orders ALTER COLUMN table_id DROP NOT NULL`).catch(() => {});
 
     // SEPOS-033 Phase 2 — campaign audit log

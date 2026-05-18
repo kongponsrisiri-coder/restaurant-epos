@@ -13,6 +13,7 @@ const makeWebhooks = require('./services/makeWebhooks');
 const printService = require('./services/printService');
 const stuartService = require('./services/stuartService');
 const uberDirectService = require('./services/uberDirectService');
+const deliverooService = require('./services/deliverooService');
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -2774,6 +2775,111 @@ app.post('/api/delivery/uber-webhook', async (req, res) => {
     console.error('[courier] Uber Direct webhook error:', err.message);
   }
   res.json({ received: true });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// SEPOS-DELIVEROO-001 — Deliveroo Partner Platform webhook + kitchen
+// ready endpoint. Deliveroo pushes order.placed events to
+// POST /api/deliveroo/webhook. We auto-accept, create a SiamEPOS
+// takeaway order tagged 🛵 Deliveroo, and hold it open until the
+// kitchen marks it ready (POST /api/deliveroo/ready/:orderId).
+// ─────────────────────────────────────────────────────────────────────
+
+app.post('/api/deliveroo/webhook', async (req, res) => {
+  // Always 200 immediately — Deliveroo retries on non-200.
+  res.json({ received: true });
+  try {
+    const parsed = deliverooService.parseWebhook(req.body);
+    if (!parsed) {
+      console.log('[deliveroo] webhook received but no order found in payload');
+      return;
+    }
+    console.log(`[deliveroo] order.placed: Deliveroo #${parsed.displayId} (${parsed.customerName})`);
+
+    // Deduplicate — ignore if this Deliveroo order ID already exists.
+    const exists = await pool.query(
+      `SELECT id FROM orders WHERE deliveroo_order_id = $1`,
+      [parsed.deliverooOrderId]
+    );
+    if (exists.rows.length > 0) {
+      console.log(`[deliveroo] order ${parsed.deliverooOrderId} already imported — skipping`);
+      return;
+    }
+
+    // Insert the order as a takeaway delivery order.
+    const orderRes = await pool.query(
+      `INSERT INTO orders
+         (order_type, order_subtype, status, takeaway_status,
+          customer_name, customer_phone, delivery_notes,
+          pickup_time, deliveroo_order_id, courier_name,
+          opened_at, created_at)
+       VALUES ('takeaway','delivery','open','received',
+               $1,$2,$3,$4,$5,'Deliveroo',NOW(),NOW())
+       RETURNING id`,
+      [
+        parsed.customerName,
+        parsed.customerPhone,
+        parsed.customerNotes,
+        parsed.pickupTime,
+        parsed.deliverooOrderId,
+      ]
+    );
+    const orderId = orderRes.rows[0].id;
+
+    // Insert order items.
+    for (const item of parsed.items) {
+      await pool.query(
+        `INSERT INTO order_items (order_id, item_name, quantity, unit_price, notes, status, fired_at)
+         VALUES ($1,$2,$3,$4,$5,'pending',NOW())`,
+        [orderId, item.name, item.quantity, item.unit_price, item.notes || null]
+      );
+    }
+
+    // Auto-accept the order back to Deliveroo (required within ~10 min).
+    if (deliverooService.isConfigured()) {
+      try {
+        await deliverooService.acceptOrder(parsed.deliverooOrderId);
+      } catch (err) {
+        console.error('[deliveroo] accept order error:', err.message);
+      }
+    }
+
+    // Notify kitchen via socket.
+    io.emit('new_order_items', { order_id: orderId });
+    console.log(`🛵 Deliveroo order #${parsed.displayId} → SiamEPOS #${orderId}`);
+  } catch (err) {
+    console.error('[deliveroo] webhook processing error:', err.message);
+  }
+});
+
+// Kitchen marks a Deliveroo order ready for collection.
+app.post('/api/deliveroo/ready/:orderId', async (req, res) => {
+  try {
+    const orderId = Number(req.params.orderId);
+    const oRes = await pool.query(
+      `SELECT id, deliveroo_order_id, takeaway_status FROM orders WHERE id = $1`,
+      [orderId]
+    );
+    const order = oRes.rows[0];
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!order.deliveroo_order_id) return res.status(400).json({ error: 'Not a Deliveroo order' });
+
+    // Tell Deliveroo the order is ready.
+    if (deliverooService.isConfigured()) {
+      await deliverooService.markReady(order.deliveroo_order_id);
+    }
+
+    // Update status in our DB.
+    await pool.query(
+      `UPDATE orders SET takeaway_status = 'ready' WHERE id = $1`,
+      [orderId]
+    );
+    io.emit('takeaway_status', { order_id: orderId, status: 'ready' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[deliveroo] ready error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Brevo confirmation email — same template flavour as booking confirmation.

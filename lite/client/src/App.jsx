@@ -8,6 +8,7 @@ import BookingsPage    from './pages/BookingsPage.jsx';
 import OrdersPage      from './pages/OrdersPage.jsx';
 import SettingsPage    from './pages/SettingsPage.jsx';
 import EmbedCodesPage  from './pages/EmbedCodesPage.jsx';
+import RevenuePage     from './pages/RevenuePage.jsx';
 import Shell           from './components/Shell.jsx';
 
 export default function App() {
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="/orders"      element={<OrdersPage />} />
           <Route path="/settings"    element={<SettingsPage   user={user} setUser={setUser} />} />
           <Route path="/embed-codes" element={<EmbedCodesPage user={user} />} />
+          <Route path="/revenue"     element={<RevenuePage />} />
         </Route>
 
         <Route path="*" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />

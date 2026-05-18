@@ -35,6 +35,7 @@ export const api = {
   getBookings:      (params = {})   => req('GET',  '/api/restaurant/bookings?' + new URLSearchParams(params)),
   getOrders:        (params = {})   => req('GET',  '/api/restaurant/orders?'   + new URLSearchParams(params)),
   getStats:         ()              => req('GET',  '/api/restaurant/stats'),
+  getRevenue:       (days = 30)    => req('GET',  `/api/restaurant/revenue?days=${days}`),
 
   // Stripe
   getPlans:         ()              => req('GET',  '/api/stripe/plans'),

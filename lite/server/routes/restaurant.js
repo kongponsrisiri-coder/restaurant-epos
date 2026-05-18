@@ -213,4 +213,32 @@ router.get('/stats', authRequired, async (req, res) => {
   }
 });
 
+// ── Revenue history ───────────────────────────────────────────────────────────
+
+// GET /api/restaurant/revenue?days=30
+// Returns daily revenue + order count for the last N days (default 30).
+router.get('/revenue', authRequired, async (req, res) => {
+  const rid  = req.user.restaurantId;
+  const days = Math.min(Math.max(Number(req.query.days) || 30, 7), 90);
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         DATE(created_at)                          AS date,
+         COUNT(*)::int                             AS orders,
+         COALESCE(SUM(total_amount), 0)::numeric   AS revenue
+       FROM orders
+       WHERE restaurant_id = $1
+         AND order_type IN ('takeaway','delivery')
+         AND created_at >= NOW() - ($2 || ' days')::interval
+       GROUP BY DATE(created_at)
+       ORDER BY date ASC`,
+      [rid, days]
+    );
+    return res.json(rows);
+  } catch (err) {
+    console.error('[revenue]', err.message);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

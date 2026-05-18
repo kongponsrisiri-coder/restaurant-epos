@@ -42,7 +42,7 @@ export default function DashboardPage({ user }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
         <StatCard icon="📅" label="Bookings today"  value={loading ? '—' : stats?.bookings_today ?? 0} to="/bookings" />
         <StatCard icon="🥡" label="Orders today"    value={loading ? '—' : stats?.orders_today   ?? 0} to="/orders"  />
-        <StatCard icon="💷" label="Revenue today"   value={loading ? '—' : `£${Number(stats?.revenue_today ?? 0).toFixed(2)}`} />
+        <StatCard icon="💷" label="Revenue today"   value={loading ? '—' : `£${Number(stats?.revenue_today ?? 0).toFixed(2)}`} to="/revenue" />
       </div>
 
       {/* Quick links */}

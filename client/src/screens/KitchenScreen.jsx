@@ -24,6 +24,49 @@ function OrderHeading({ order }) {
 // SEPOS-DELIVERY-001 — an online order set for delivery (vs collection).
 const isDelivery = (o) => !!o && o.order_subtype === 'delivery';
 
+// Kitchen-specific sub-label: customer + time only.
+// The delivery address is shown separately so it doesn't wrap in the header.
+function kitchenSubLabel(order) {
+  if (!order) return '';
+  if (isTakeaway(order)) {
+    const bits = [];
+    if (order.customer_name) bits.push(order.customer_name);
+    if (order.pickup_time) {
+      const t = new Date(order.pickup_time).toLocaleTimeString('en-GB', {
+        hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London',
+      });
+      bits.push(t);
+    }
+    return bits.join(' · ');
+  }
+  if (order.covers) return `${order.covers} cvr`;
+  return '';
+}
+
+// Compact heading for kitchen + pass cards.
+// Main label stays on one line (truncated). Sub-label inline at smaller size.
+// Delivery address shown as a second compact line — never wraps the header.
+function KitchenCardHeading({ order }) {
+  const sub = kitchenSubLabel(order);
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ color: 'white', fontWeight: 800, fontSize: 18, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {orderShortLabel(order)}
+        {sub && (
+          <span style={{ fontSize: 12, fontWeight: 600, marginLeft: 8, opacity: 0.85 }}>
+            · {sub}
+          </span>
+        )}
+      </div>
+      {isDelivery(order) && order.delivery_address && (
+        <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: 600, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          📍 {order.delivery_address}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Friendly label for a raw courier status string.
 function courierLabel(s) {
   const map = {
@@ -431,7 +474,7 @@ export default function KitchenScreen() {
           {orders.length === 0 ? (
             <div style={{ textAlign: 'center', color: '#555', marginTop: 100, fontSize: 20 }}>✅ Kitchen is clear!</div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
               {orders.map(order => {
                 // In Direct Mode, cooked items also live on the Kitchen tab
                 // (they stay ticked until the chef marks the whole order off).
@@ -450,11 +493,9 @@ if (upcoming.length === 0 && cooking.length === 0 && ready.length === 0) return 
 const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 && upcoming.length === 0;
 
                 return (
-                  <div key={order.id} style={{ background: '#1a1a1a', borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' }}>
-                    <div style={{ background: allReadyForOff ? '#22c55e' : '#e94560', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                      <div style={{ color: 'white', fontWeight: 800, fontSize: 24, flex: 1, minWidth: 0 }}>
-                        <OrderHeading order={order} />
-                      </div>
+                  <div key={order.id} style={{ background: '#1a1a1a', borderRadius: 12, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' }}>
+                    <div style={{ background: allReadyForOff ? '#22c55e' : '#e94560', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <KitchenCardHeading order={order} />
                       {allReadyForOff && (
                         <button
                           onClick={async () => {
@@ -519,9 +560,7 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                       </span>
                     </div>
 
-                    <div style={{ padding: 12 }}>
-
-                      <div style={{ padding: 12 }}>
+                    <div style={{ padding: 10 }}>
 
   {/* ── READY (Direct Mode only — cooked items waiting to go out) ── */}
   {ready.length > 0 && (
@@ -656,7 +695,6 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
       })()}
     </div>
   )}
-</div>
                     </div>
                   </div>
                 );
@@ -674,11 +712,9 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
               {passOrders.map(order => (
-                <div key={order.id} style={{ background: '#1a1a1a', borderRadius: 16, overflow: 'hidden' }}>
-                  <div style={{ background: '#8b5cf6', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                    <div style={{ color: 'white', fontWeight: 800, fontSize: 22, flex: 1, minWidth: 0 }}>
-                      <OrderHeading order={order} />
-                    </div>
+                <div key={order.id} style={{ background: '#1a1a1a', borderRadius: 12, overflow: 'hidden' }}>
+                  <div style={{ background: '#8b5cf6', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <KitchenCardHeading order={order} />
                     {isDelivery(order) ? (
                       <CourierControls order={order} onChange={fetchOrders} />
                     ) : isTakeaway(order) ? (

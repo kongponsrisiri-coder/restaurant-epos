@@ -65,14 +65,14 @@ function KitchenCardHeading({ order }) {
 // Friendly label for a raw courier status string.
 function courierLabel(s) {
   const map = {
-    new: 'finding rider', searching: 'finding rider', pending: 'finding rider',
-    scheduled: 'scheduled', in_progress: 'rider assigned',
-    picking: 'heading to restaurant', almost_picking: 'heading to restaurant',
-    waiting_at_pickup: 'rider at restaurant', delivering: 'on the way',
-    almost_delivering: 'on the way', waiting_at_delivery: 'arriving',
-    delivered: 'delivered', dispatched: 'dispatched', updated: 'dispatched',
+    new: 'Finding rider', searching: 'Finding rider', pending: 'Finding rider',
+    scheduled: 'Scheduled', in_progress: 'Rider assigned',
+    picking: 'Heading to restaurant', almost_picking: 'Heading to restaurant',
+    waiting_at_pickup: 'Rider at restaurant', delivering: 'On the way',
+    almost_delivering: 'On the way', waiting_at_delivery: 'Arriving',
+    delivered: 'Delivered', dispatched: 'Dispatched', updated: 'Dispatched',
   };
-  return map[String(s || '').toLowerCase()] || s || 'dispatched';
+  return map[String(s || '').toLowerCase()] || s || 'Dispatched';
 }
 
 // Courier dispatch button + live status, shown in a delivery order's
@@ -98,14 +98,19 @@ function CourierControls({ order, onChange }) {
   };
 
   if (dispatched) {
+    const delivered = status === 'delivered';
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
-        <span style={{ color: 'white', fontWeight: 800, fontSize: 12, whiteSpace: 'nowrap' }}>
-          🛵 {order.courier_name || 'Courier'} · {courierLabel(status)}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
+        <span style={{
+          display: 'inline-block', background: delivered ? '#16a34a' : 'rgba(255,255,255,0.2)',
+          color: 'white', fontWeight: 800, fontSize: 11, padding: '3px 9px',
+          borderRadius: 999, whiteSpace: 'nowrap',
+        }}>
+          🛵 {courierLabel(status)}
         </span>
         {order.tracking_url && (
           <a href={order.tracking_url} target="_blank" rel="noreferrer"
-             style={{ color: '#bfdbfe', fontSize: 11, fontWeight: 700 }}>📍 Track delivery</a>
+             style={{ color: '#bfdbfe', fontSize: 10, fontWeight: 700, textDecoration: 'underline' }}>Track</a>
         )}
       </div>
     );

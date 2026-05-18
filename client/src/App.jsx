@@ -55,7 +55,19 @@ function readCounterMode() {
 }
 
 export default function App() {
-  const [staff, setStaff]               = useState(null);
+  const [staff, setStaff]               = useState(() => {
+    // SEPOS-LITE-003 — restore a persisted email-login session (14-day
+    // token) so a Lite owner isn't asked to sign in every day.
+    try {
+      const raw = localStorage.getItem('siamepos_auth');
+      if (raw) {
+        const a = JSON.parse(raw);
+        if (a && a.staff && a.expires_at && a.expires_at > Date.now()) return a.staff;
+        localStorage.removeItem('siamepos_auth');
+      }
+    } catch {}
+    return null;
+  });
   const [counterMode, setCounterMode]   = useState(readCounterMode);
   const [screen, setScreen]             = useState(() => readCounterMode() ? 'counter' : 'tables');
   // SEPOS-LITE-001 — subscription plan drives which screens are shown.
@@ -126,6 +138,12 @@ export default function App() {
     try { localStorage.setItem(INSTALL_DISMISSED_KEY, '1'); } catch {}
   };
 
+  // SEPOS-LITE-003 — log out: clear any persisted email-login session.
+  const logout = () => {
+    try { localStorage.removeItem('siamepos_auth'); } catch {}
+    setStaff(null);
+  };
+
   // ── Status badge ──────────────────────────────────────────────
   const StatusBadge = () => (
     <span style={{
@@ -187,7 +205,7 @@ export default function App() {
           <div className="navbar-user">
             <StatusBadge />
             <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
-            <button className="logout-btn" onClick={() => setStaff(null)}>Log out</button>
+            <button className="logout-btn" onClick={logout}>Log out</button>
           </div>
         </nav>
         <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
@@ -296,7 +314,7 @@ export default function App() {
               </button>
             )}
             <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
-            <button className="logout-btn" onClick={() => setStaff(null)}>Log out</button>
+            <button className="logout-btn" onClick={logout}>Log out</button>
           </div>
         </nav>
 

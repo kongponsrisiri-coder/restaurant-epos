@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { loginStaff, clockIn, clockOut } from '../api';
+import { loginStaff, clockIn, clockOut, emailLogin } from '../api';
 
 // ── Sandy: LoginScreen — SiamEPOS Brand CI v1.1 ───────────────────
 // Deep Navy #0D1B3E background · Thai Gold #C9A84C lotus logo
@@ -10,6 +10,10 @@ export default function LoginScreen({ onLogin }) {
   const [error, setError]     = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  // SEPOS-LITE-003 — 'pin' (default, staff) or 'email' (Lite owner).
+  const [mode, setMode]         = useState('pin');
+  const [email, setEmail]       = useState('');
+  const [password, setPassword] = useState('');
 
   async function handleLogin(pinToUse) {
     const p = pinToUse ?? pin;
@@ -54,6 +58,33 @@ export default function LoginScreen({ onLogin }) {
     } catch {
       setError('Connection error. Check your network.');
       setPin('');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // SEPOS-LITE-003 — email + password login for Lite restaurant owners.
+  // On success the 14-day token is persisted so the owner stays signed
+  // in; App.jsx restores it on load.
+  async function handleEmailLogin() {
+    if (!email || !password) return;
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      const r = await emailLogin(email.trim(), password);
+      if (r?.error || !r?.token || !r?.staff) {
+        setError(r?.error || 'Invalid email or password.');
+      } else {
+        try {
+          localStorage.setItem('siamepos_auth', JSON.stringify({
+            token: r.token, staff: r.staff, expires_at: r.expires_at,
+          }));
+        } catch {}
+        onLogin(r.staff);
+      }
+    } catch {
+      setError('Connection error. Check your network.');
     } finally {
       setLoading(false);
     }
@@ -122,7 +153,7 @@ export default function LoginScreen({ onLogin }) {
         </div>
 
         <div style={{ color: 'rgba(201,168,76,0.55)', fontSize: 12, marginTop: 6, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-          Staff Login
+          {mode === 'pin' ? 'Staff Login' : 'Owner Login'}
         </div>
       </div>
 
@@ -137,6 +168,7 @@ export default function LoginScreen({ onLogin }) {
       }}>
 
         {/* PIN dots / placeholder */}
+        {mode === 'pin' && (
         <div style={{ height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 20 }}>
           {pin.length === 0 ? (
             <span style={{ color: 'rgba(255,255,255,0.22)', fontSize: 14, letterSpacing: '0.05em' }}>
@@ -148,6 +180,7 @@ export default function LoginScreen({ onLogin }) {
             ))
           )}
         </div>
+        )}
 
         {/* Error / success message */}
         {error && (
@@ -173,6 +206,8 @@ export default function LoginScreen({ onLogin }) {
           </div>
         )}
 
+        {/* SEPOS-LITE-003 — PIN entry (staff). Email form below for owners. */}
+        {mode === 'pin' && (<>
         {/* Numpad */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
           {keys.map((k, i) => {
@@ -243,6 +278,57 @@ export default function LoginScreen({ onLogin }) {
             }}
           >Clock Out 🕔</button>
         </div>
+        </>)}
+
+        {/* SEPOS-LITE-003 — email + password login (Lite owners) */}
+        {mode === 'email' && (
+          <form onSubmit={(e) => { e.preventDefault(); handleEmailLogin(); }}>
+            <input
+              type="email" value={email} autoComplete="email"
+              onChange={e => { setEmail(e.target.value); setError(''); }}
+              placeholder="Email address"
+              style={{
+                width: '100%', height: 48, borderRadius: 12, boxSizing: 'border-box',
+                border: '1px solid rgba(201,168,76,0.25)', background: 'rgba(255,255,255,0.07)',
+                color: 'white', fontSize: 15, padding: '0 14px', marginBottom: 10,
+              }}
+            />
+            <input
+              type="password" value={password} autoComplete="current-password"
+              onChange={e => { setPassword(e.target.value); setError(''); }}
+              placeholder="Password"
+              style={{
+                width: '100%', height: 48, borderRadius: 12, boxSizing: 'border-box',
+                border: '1px solid rgba(201,168,76,0.25)', background: 'rgba(255,255,255,0.07)',
+                color: 'white', fontSize: 15, padding: '0 14px', marginBottom: 14,
+              }}
+            />
+            <button
+              type="submit" disabled={loading || !email || !password}
+              style={{
+                width: '100%', height: 52, borderRadius: 12, border: 'none',
+                background: (!loading && email && password) ? '#e94560' : 'rgba(255,255,255,0.07)',
+                color: (!loading && email && password) ? 'white' : 'rgba(255,255,255,0.3)',
+                fontSize: 16, fontWeight: 800, letterSpacing: '0.03em',
+                cursor: (!loading && email && password) ? 'pointer' : 'default',
+              }}
+            >
+              {loading ? 'Signing in…' : 'Sign In'}
+            </button>
+          </form>
+        )}
+
+        {/* SEPOS-LITE-003 — switch between staff PIN and owner email login */}
+        <button
+          onClick={() => { setMode(mode === 'pin' ? 'email' : 'pin'); setError(''); setSuccess(''); }}
+          style={{
+            width: '100%', marginTop: 14, background: 'none', border: 'none',
+            color: 'rgba(201,168,76,0.7)', fontSize: 13, fontWeight: 600,
+            cursor: 'pointer', letterSpacing: '0.03em',
+          }}
+        >
+          {mode === 'pin' ? 'Sign in with email →' : '← Back to PIN login'}
+        </button>
       </div>
 
       {/* Footer */}

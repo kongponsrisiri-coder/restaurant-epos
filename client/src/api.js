@@ -50,6 +50,8 @@ export const addOrderItems = (orderId, items) => post(`/api/orders/${orderId}/it
 export const payOrder = (orderId, amount, method) => post(`/api/orders/${orderId}/pay`, { amount, method });
 export const updateItemStatus = (itemId, status) => put(`/api/order-items/${itemId}/status`, { status });
 export const loginStaff = (pin) => post('/api/staff/login', { pin });
+// SEPOS-LITE-003 — email + password login (Lite restaurant owners).
+export const emailLogin = (email, password) => post('/api/auth/email-login', { email, password });
 export const getDailyReport = (date) => get(`/api/reports/daily${date ? `?date=${date}` : ''}`);
 export const getItemModifiers = (itemId) => get(`/api/menu/items/${itemId}/modifiers`);
 export const addModifierGroup = (itemId, group) => post(`/api/menu/items/${itemId}/modifiers`, group);

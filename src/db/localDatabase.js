@@ -410,6 +410,10 @@ function runMigrations() {
   ]) {
     addColumnIfMissing(t, 'restaurant_id', "TEXT DEFAULT 'siamepos'");
   }
+
+  // SEPOS-LITE-003 — email + password login on the staff table.
+  addColumnIfMissing('staff', 'email', 'TEXT');
+  addColumnIfMissing('staff', 'password_hash', 'TEXT');
 }
 
 function seedDefaults() {

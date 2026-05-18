@@ -3,6 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const crypto = require('crypto');
 
 const pool = require('./db/dbAdapter');
 const offlineQueue = require('./services/offlineQueue');
@@ -752,6 +753,81 @@ app.post('/api/staff/login', async (req, res) => {
     const staff = result.rows[0];
     if (!staff) return res.status(401).json({ error: 'Invalid PIN' });
     res.json({ id: staff.id, name: staff.name, role: staff.role });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── SEPOS-LITE-003 — email + password login ──────────────────────────
+// An additional login path for Lite restaurant owners using the full
+// app. Credentials live on the staff table; the PIN login above is
+// untouched. Built on Node's `crypto` — no extra dependencies.
+// password_hash format: "<saltHex>:<scrypt(password,salt,64)Hex>".
+const AUTH_SECRET = process.env.AUTH_SECRET || 'siamepos-dev-auth-secret-change-me';
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  return `${salt}:${crypto.scryptSync(String(password), salt, 64).toString('hex')}`;
+}
+function verifyPassword(password, stored) {
+  if (!stored || stored.indexOf(':') === -1) return false;
+  const [salt, hash] = stored.split(':');
+  const test = crypto.scryptSync(String(password), salt, 64).toString('hex');
+  const a = Buffer.from(hash, 'hex');
+  const b = Buffer.from(test, 'hex');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+// Self-expiring HMAC-signed session token (a minimal JWT-style token).
+function signToken(payload) {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', AUTH_SECRET).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+// Owner signs in with email + password. Returns a 14-day token.
+app.post('/api/auth/email-login', async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
+    const r = await pool.query(
+      `SELECT * FROM staff WHERE LOWER(email) = LOWER($1) AND is_active = 1`,
+      [String(email).trim()]
+    );
+    const staff = r.rows[0];
+    if (!staff || !staff.password_hash || !verifyPassword(password, staff.password_hash)) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    const exp = Date.now() + 14 * 24 * 60 * 60 * 1000; // 14-day session
+    const token = signToken({ sid: staff.id, name: staff.name, role: staff.role, exp });
+    res.json({
+      token,
+      expires_at: exp,
+      staff: { id: staff.id, name: staff.name, role: staff.role },
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Create / update an email + password login on the staff table. Called
+// by the Lite onboarding when a deployment is provisioned. Secret-gated
+// (X-Setup-Secret must match AUTH_SECRET) so it can't be abused to mint
+// admin logins.
+app.post('/api/auth/set-credentials', async (req, res) => {
+  try {
+    if ((req.get('X-Setup-Secret') || '') !== AUTH_SECRET) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const { email, password, name } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
+    const clean = String(email).trim();
+    const hash = hashPassword(password);
+    const existing = await pool.query(`SELECT id FROM staff WHERE LOWER(email) = LOWER($1)`, [clean]);
+    if (existing.rows[0]) {
+      await pool.query(`UPDATE staff SET password_hash = $1, is_active = 1 WHERE id = $2`, [hash, existing.rows[0].id]);
+      return res.json({ id: existing.rows[0].id, updated: true });
+    }
+    const ins = await pool.query(
+      `INSERT INTO staff (name, role, email, password_hash, is_active) VALUES ($1, 'admin', $2, $3, 1) RETURNING id`,
+      [name || 'Owner', clean, hash]
+    );
+    res.json({ id: ins.rows[0].id, created: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2408,7 +2484,7 @@ app.put('/api/customers/marketing-consent', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 // SEPOS-033 Phase 2 — email campaigns + unsubscribe
 // ─────────────────────────────────────────────────────────────────────
-const crypto = require('crypto');
+// (crypto is required once at the top of the file)
 function unsubscribeToken(email) {
   const secret = process.env.UNSUB_SECRET || 'siamepos-default-unsub-secret-change-me';
   const e = String(email || '').trim().toLowerCase();

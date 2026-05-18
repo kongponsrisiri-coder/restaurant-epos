@@ -406,6 +406,15 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS dinne
     // that got NULL'd by the old code path.
     await pool.query(`UPDATE staff SET is_active = 1 WHERE is_active IS NULL`);
 
+    // SEPOS-LITE-003 — email + password login (for Lite restaurant
+    // owners using the full app). Optional columns on staff; PIN login
+    // is unaffected — a staff member can have a PIN, an email login, or
+    // both. pin becomes nullable so an email-only owner needs no PIN
+    // (pin stays UNIQUE — Postgres allows multiple NULLs).
+    await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS email VARCHAR(255)`);
+    await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS password_hash TEXT`);
+    await pool.query(`ALTER TABLE staff ALTER COLUMN pin DROP NOT NULL`).catch(() => {});
+
     // ── SEPOS-LITE-001 Phase 1 — multi-tenancy foundation ────────────
     // A `restaurants` registry plus a `restaurant_id` column on every
     // tenant-scoped table. Default 'siamepos' so single-tenant Pro

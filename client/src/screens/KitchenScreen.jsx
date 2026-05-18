@@ -474,7 +474,7 @@ export default function KitchenScreen() {
           {orders.length === 0 ? (
             <div style={{ textAlign: 'center', color: '#555', marginTop: 100, fontSize: 20 }}>✅ Kitchen is clear!</div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
               {orders.map(order => {
                 // In Direct Mode, cooked items also live on the Kitchen tab
                 // (they stay ticked until the chef marks the whole order off).

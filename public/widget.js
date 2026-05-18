@@ -405,6 +405,9 @@
 
   // Step 1 — Date + Covers
   function renderStep1() {
+    const maxParty = settings?.max_party_size || 8;
+    // A returning user may have a covers value above a newly-lowered cap.
+    if (selected.covers > maxParty) selected.covers = maxParty;
     el('sw-body').innerHTML = `
       <label class="sw-label">📅 Select Date</label>
       <input class="sw-input" id="sw-date" type="date"
@@ -417,14 +420,15 @@
         <button class="sw-step-btn" id="sw-inc">+</button>
         <span class="sw-covers-label">guests</span>
       </div>
+      <div id="sw-party-note" style="display:none;font-size:13px;line-height:1.5;color:#555;background:#f7f7f7;border-radius:8px;padding:10px 12px;margin-top:10px"></div>
       <div id="sw-error"></div>
       <button class="sw-btn sw-btn-primary" id="sw-next-1">See Available Times →</button>
     `;
     el('sw-dec').addEventListener('click', () => {
-      if (selected.covers > 1) { selected.covers--; el('sw-covers-num').textContent = selected.covers; }
+      if (selected.covers > 1) { selected.covers--; el('sw-covers-num').textContent = selected.covers; updatePartyNote(); }
     });
     el('sw-inc').addEventListener('click', () => {
-      if (selected.covers < 30) { selected.covers++; el('sw-covers-num').textContent = selected.covers; }
+      if (selected.covers < maxParty) { selected.covers++; el('sw-covers-num').textContent = selected.covers; updatePartyNote(); }
     });
     el('sw-next-1').addEventListener('click', () => {
       const dateVal = el('sw-date').value;
@@ -432,6 +436,24 @@
       selected.date = dateVal;
       renderStep(2);
     });
+    updatePartyNote();
+  }
+
+  // SEPOS-050 — once the guest count reaches the restaurant's online cap,
+  // tell the customer to phone for bigger parties.
+  function updatePartyNote() {
+    const note = el('sw-party-note');
+    if (!note) return;
+    const maxParty = settings?.max_party_size || 8;
+    if (selected.covers >= maxParty) {
+      const phone = settings?.restaurant_phone;
+      note.innerHTML = phone
+        ? `Larger party? For groups of more than ${maxParty}, please call us on <strong>${phone}</strong>.`
+        : `Larger party? For groups of more than ${maxParty}, please contact the restaurant directly.`;
+      note.style.display = '';
+    } else {
+      note.style.display = 'none';
+    }
   }
 
   // Step 2 — Time Slots (with lunch/dinner sections if split service)

@@ -263,6 +263,8 @@ function initSchema() {
       lunch_service_end TEXT DEFAULT '14:30',
       dinner_service_start TEXT DEFAULT '17:30',
       dinner_service_end TEXT DEFAULT '21:30',
+      max_party_size INTEGER DEFAULT 8,
+      restaurant_phone TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -373,6 +375,9 @@ function runMigrations() {
   // SEPOS-033: marketing consent + unsubscribe (GDPR)
   addColumnIfMissing('reservations', 'marketing_consent', 'INTEGER DEFAULT 0');
   addColumnIfMissing('reservations', 'unsubscribed_at', 'TIMESTAMP');
+  // SEPOS-050: per-restaurant online-booking party-size cap + contact phone
+  addColumnIfMissing('restaurant_settings', 'max_party_size', 'INTEGER DEFAULT 8');
+  addColumnIfMissing('restaurant_settings', 'restaurant_phone', 'TEXT');
   // SEPOS-034: takeaway / delivery online ordering
   addColumnIfMissing('orders', 'order_type', "TEXT DEFAULT 'dine_in'");
   addColumnIfMissing('orders', 'customer_name', 'TEXT');

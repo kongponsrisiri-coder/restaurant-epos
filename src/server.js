@@ -1446,10 +1446,21 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
     const settingsRes = await pool.query('SELECT * FROM restaurant_settings WHERE restaurant_id = $1', [restaurant_id]);
     const s = settingsRes.rows[0] || {
       opening_time: '11:00', last_booking_time: '21:30',
-      slot_interval_mins: 15, max_covers_per_slot: 20,
+      slot_interval_mins: 15, max_covers_per_slot: 20, max_party_size: 8,
       booking_lead_hours: 1, booking_advance_days: 60,
       service_type: 'all_day',
     };
+
+    // SEPOS-050 — per-restaurant cap on online party size. Larger parties
+    // can't self-serve a slot; the widget tells them to phone instead.
+    const maxPartySize = s.max_party_size || 8;
+    if (coversNum > maxPartySize) {
+      return res.json({
+        date, covers: coversNum, restaurant_id, slots: [],
+        max_party_size: maxPartySize, restaurant_phone: s.restaurant_phone || null,
+        message: `For parties larger than ${maxPartySize}, please call the restaurant directly to book.`,
+      });
+    }
 
     const requestedDate = new Date(date + 'T00:00:00');
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -1542,7 +1553,8 @@ app.get('/api/reservations/settings/:restaurantId', widgetCors, async (req, res)
               TO_CHAR(lunch_service_end, 'HH24:MI')    AS lunch_service_end,
               TO_CHAR(dinner_service_start, 'HH24:MI') AS dinner_service_start,
               TO_CHAR(dinner_service_end, 'HH24:MI')   AS dinner_service_end,
-              slot_interval_mins, max_covers_per_slot,
+              slot_interval_mins, max_covers_per_slot, max_party_size,
+              restaurant_phone,
               booking_lead_hours, booking_advance_days, is_active
        FROM restaurant_settings WHERE restaurant_id = $1`,
       [req.params.restaurantId]
@@ -1586,7 +1598,19 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
     const coversNum = parseInt(covers, 10);
     if (!coversNum || coversNum < 1) return res.status(400).json({ error: 'Covers must be at least 1' });
     const slotCheck = await pool.query(`SELECT COALESCE(SUM(covers), 0) AS booked FROM reservations WHERE reservation_date = $1 AND TO_CHAR(reservation_time, 'HH24:MI') = $2 AND restaurant_id = $3 AND status NOT IN ('cancelled','no-show')`, [reservation_date, reservation_time.slice(0, 5), restaurant_id]);
-    const settingsRes = await pool.query('SELECT max_covers_per_slot FROM restaurant_settings WHERE restaurant_id = $1', [restaurant_id]);
+    const settingsRes = await pool.query('SELECT max_covers_per_slot, max_party_size, restaurant_phone FROM restaurant_settings WHERE restaurant_id = $1', [restaurant_id]);
+    // SEPOS-050 — online (widget) bookings are capped to the restaurant's
+    // max party size. Staff-created bookings are NOT capped — staff can
+    // link tables and judge their own floor.
+    const maxPartySize = settingsRes.rows[0]?.max_party_size || 8;
+    if (source === 'widget' && coversNum > maxPartySize) {
+      const phone = settingsRes.rows[0]?.restaurant_phone;
+      return res.status(400).json({
+        error: phone
+          ? `For parties larger than ${maxPartySize}, please call us on ${phone} to book.`
+          : `For parties larger than ${maxPartySize}, please contact the restaurant directly to book.`,
+      });
+    }
     const maxCovers = settingsRes.rows[0]?.max_covers_per_slot || 20;
     const alreadyBooked = parseInt(slotCheck.rows[0]?.booked || 0, 10);
     if (alreadyBooked + coversNum > maxCovers) return res.status(409).json({ error: 'This time slot is no longer available. Please choose another time.' });
@@ -1734,7 +1758,7 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
       restaurant_name, brand_colour, opening_time, last_booking_time,
       service_type, lunch_service_start, lunch_service_end,
       dinner_service_start, dinner_service_end,
-      slot_interval_mins, max_covers_per_slot,
+      slot_interval_mins, max_covers_per_slot, max_party_size, restaurant_phone,
       booking_lead_hours, booking_advance_days, is_active,
     } = req.body;
     await pool.query(
@@ -1742,8 +1766,9 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
          (restaurant_id, restaurant_name, brand_colour, opening_time, last_booking_time,
           service_type, lunch_service_start, lunch_service_end,
           dinner_service_start, dinner_service_end,
-          slot_interval_mins, max_covers_per_slot, booking_lead_hours, booking_advance_days, is_active)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+          slot_interval_mins, max_covers_per_slot, max_party_size, restaurant_phone,
+          booking_lead_hours, booking_advance_days, is_active)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        ON CONFLICT (restaurant_id) DO UPDATE SET
          restaurant_name      = EXCLUDED.restaurant_name,
          brand_colour         = EXCLUDED.brand_colour,
@@ -1756,13 +1781,16 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
          dinner_service_end   = EXCLUDED.dinner_service_end,
          slot_interval_mins   = EXCLUDED.slot_interval_mins,
          max_covers_per_slot  = EXCLUDED.max_covers_per_slot,
+         max_party_size       = EXCLUDED.max_party_size,
+         restaurant_phone     = EXCLUDED.restaurant_phone,
          booking_lead_hours   = EXCLUDED.booking_lead_hours,
          booking_advance_days = EXCLUDED.booking_advance_days,
          is_active            = EXCLUDED.is_active`,
       [req.params.restaurantId, restaurant_name, brand_colour, opening_time, last_booking_time,
        service_type || 'all_day', lunch_service_start || '11:00', lunch_service_end || '14:30',
        dinner_service_start || '17:30', dinner_service_end || '21:30',
-       slot_interval_mins, max_covers_per_slot, booking_lead_hours, booking_advance_days, is_active]
+       slot_interval_mins, max_covers_per_slot, max_party_size || 8, restaurant_phone || null,
+       booking_lead_hours, booking_advance_days, is_active]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }

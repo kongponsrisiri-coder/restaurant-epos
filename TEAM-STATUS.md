@@ -10,6 +10,7 @@
 
 | Agent | Working On | Ticket | Started |
 |-------|-----------|--------|---------|
+| Krit | Timeline linked-table fix + per-restaurant online booking party-size cap | SEPOS-049, SEPOS-050 | 2026-05-18 |
 
 ---
 

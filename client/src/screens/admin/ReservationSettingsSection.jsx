@@ -46,6 +46,7 @@ function TimeRangePair({ startLabel, endLabel, startValue, endValue, onStartChan
 export default function ReservationSettingsSection() {
   const [settings, setSettings] = useState({
     restaurant_name:      '',
+    restaurant_phone:     '',
     brand_colour:         '#C9A84C',
     service_type:         'all_day',
     opening_time:         '11:00',
@@ -56,6 +57,7 @@ export default function ReservationSettingsSection() {
     dinner_service_end:   '21:30',
     slot_interval_mins:   15,
     max_covers_per_slot:  20,
+    max_party_size:       8,
     booking_lead_hours:   1,
     booking_advance_days: 60,
     is_active:            true,
@@ -134,6 +136,9 @@ export default function ReservationSettingsSection() {
       <Card title="Restaurant Info" emoji="🏢">
         <Field label="Restaurant Name" hint="Shown on booking confirmation emails">
           <input value={settings.restaurant_name} onChange={e => set('restaurant_name', e.target.value)} placeholder="e.g. Siam Thai Restaurant" style={inp} />
+        </Field>
+        <Field label="Restaurant Phone" hint="Shown to customers whose party is too large to book online — they're asked to call this number">
+          <input value={settings.restaurant_phone || ''} onChange={e => set('restaurant_phone', e.target.value)} placeholder="e.g. 020 7946 0000" style={inp} />
         </Field>
         <Field label="Brand Colour" hint="Accent colour in the booking widget">
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -218,6 +223,10 @@ export default function ReservationSettingsSection() {
         <Field label="Maximum covers per slot" hint="Total restaurant capacity — how many covers can be seated across all tables at the same time">
           <input type="number" min={1} max={500} value={settings.max_covers_per_slot}
             onChange={e => set('max_covers_per_slot', parseInt(e.target.value) || 1)} style={inp} />
+        </Field>
+        <Field label="Maximum party size for online booking" hint="Largest party the booking widget will accept. Bigger groups are asked to phone the restaurant instead — set this to the largest party your tables (single or linked) can comfortably seat.">
+          <input type="number" min={1} max={100} value={settings.max_party_size}
+            onChange={e => set('max_party_size', parseInt(e.target.value) || 1)} style={inp} />
         </Field>
         <div style={{ background: '#f8f8f8', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: '#555', lineHeight: 1.7 }}>
           <div style={{ fontWeight: 700, marginBottom: 4 }}>How this works with Dining Duration:</div>

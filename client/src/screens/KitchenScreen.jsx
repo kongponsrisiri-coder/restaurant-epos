@@ -285,7 +285,7 @@ export default function KitchenScreen() {
   completedItems.forEach(item => {
     const key = item.order_id;
     if (!completedByOrder[key]) {
-      completedByOrder[key] = { order_id: item.order_id, table_number: item.table_number, covers: item.covers, items: [], order_type: item.order_type, customer_name: item.customer_name, pickup_time: item.pickup_time };
+      completedByOrder[key] = { order_id: item.order_id, table_number: item.table_number, covers: item.covers, items: [], order_type: item.order_type, customer_name: item.customer_name, pickup_time: item.pickup_time, takeaway_status: item.takeaway_status };
     }
     completedByOrder[key].items.push(item);
   });
@@ -792,7 +792,7 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                     <div style={{ color: 'white', fontWeight: 800, fontSize: 18, flex: 1, minWidth: 0 }}>
                       <OrderHeading order={orderForLabel} />
                     </div>
-                    {isTakeaway(group) && (
+                    {isTakeaway(group) && group.takeaway_status !== 'collected' && (
                       <button
                         onClick={async () => {
                           if (!window.confirm(`Mark Online Order #${group.order_id} as collected? This closes the order and counts it as a sale.`)) return;

@@ -328,6 +328,7 @@ function initSchema() {
       status TEXT DEFAULT 'active',
       stripe_customer_id TEXT,
       stripe_subscription_id TEXT,
+      payment_failed_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -378,6 +379,8 @@ function runMigrations() {
   // SEPOS-050: per-restaurant online-booking party-size cap + contact phone
   addColumnIfMissing('restaurant_settings', 'max_party_size', 'INTEGER DEFAULT 8');
   addColumnIfMissing('restaurant_settings', 'restaurant_phone', 'TEXT');
+  // SEPOS-STRIPE-001: Stripe webhook payment-failure flag
+  addColumnIfMissing('restaurants', 'payment_failed_at', 'TIMESTAMP');
   // SEPOS-034: takeaway / delivery online ordering
   addColumnIfMissing('orders', 'order_type', "TEXT DEFAULT 'dine_in'");
   addColumnIfMissing('orders', 'customer_name', 'TEXT');

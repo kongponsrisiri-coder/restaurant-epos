@@ -433,6 +433,7 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS resta
         status                 VARCHAR(20)  DEFAULT 'active',
         stripe_customer_id     VARCHAR(255),
         stripe_subscription_id VARCHAR(255),
+        payment_failed_at      TIMESTAMP,
         created_at             TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -441,6 +442,9 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS resta
       VALUES ('siamepos', 'SiamEPOS', 'pro')
       ON CONFLICT (restaurant_id) DO NOTHING
     `);
+    // SEPOS-STRIPE-001 — flag set by the Stripe webhook on a failed
+    // subscription invoice; cleared when the subscription recovers.
+    await pool.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS payment_failed_at TIMESTAMP`);
     const TENANT_TABLES = [
       'orders', 'order_items', 'payments', 'menu_items', 'categories',
       'subcategories', 'modifier_groups', 'modifiers', 'order_item_modifiers',

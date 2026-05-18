@@ -26,6 +26,10 @@ app.use(cors({
   optionsSuccessStatus: 204,
 }));
 app.options(/.*/, cors());
+// SEPOS-STRIPE-001 — the Stripe webhook needs the raw, unparsed request
+// body for signature verification, so its raw parser must be registered
+// before the global express.json() (which would otherwise consume it).
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
 
@@ -829,6 +833,142 @@ app.post('/api/auth/set-credentials', async (req, res) => {
     );
     res.json({ id: ins.rows[0].id, created: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// SEPOS-STRIPE-001 — Stripe subscription billing webhook
+// The central SiamEPOS Stripe account posts subscription lifecycle
+// events here. We map the subscription's price ID to a SiamEPOS plan,
+// write it onto the restaurants registry, and flag payment failures.
+// Raw body parser is registered up top (next to express.json).
+// ─────────────────────────────────────────────────────────────────────
+
+// Stripe price ID → SiamEPOS plan name. Price IDs come from the four
+// Stripe Products, supplied as Railway env vars.
+const STRIPE_PLAN_PRICES = {
+  lite_booking:  process.env.STRIPE_PRICE_LITE_BOOKING,
+  lite_ordering: process.env.STRIPE_PRICE_LITE_ORDERING,
+  lite_bundle:   process.env.STRIPE_PRICE_LITE_BUNDLE,
+  pro:           process.env.STRIPE_PRICE_PRO,
+};
+function planForPriceId(priceId) {
+  if (!priceId) return null;
+  const hit = Object.entries(STRIPE_PLAN_PRICES).find(([, id]) => id && id === priceId);
+  return hit ? hit[0] : null;
+}
+
+// Resolve which restaurant a Stripe object belongs to. The Lite checkout
+// stamps subscription_data.metadata.restaurant_id, so events usually
+// carry it; otherwise fall back to the Stripe customer / subscription id
+// already stored on the restaurants registry.
+async function restaurantIdForStripe({ metadataRestaurantId, customerId, subscriptionId }) {
+  if (metadataRestaurantId) return metadataRestaurantId;
+  if (subscriptionId) {
+    const r = await pool.query(`SELECT restaurant_id FROM restaurants WHERE stripe_subscription_id = $1`, [subscriptionId]);
+    if (r.rows[0]) return r.rows[0].restaurant_id;
+  }
+  if (customerId) {
+    const r = await pool.query(`SELECT restaurant_id FROM restaurants WHERE stripe_customer_id = $1`, [customerId]);
+    if (r.rows[0]) return r.rows[0].restaurant_id;
+  }
+  return null;
+}
+
+app.post('/api/stripe/webhook', async (req, res) => {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret || !process.env.STRIPE_SECRET_KEY) {
+    console.error('[stripe] STRIPE_WEBHOOK_SECRET / STRIPE_SECRET_KEY not set — cannot verify webhook');
+    return res.status(500).json({ error: 'Webhook not configured' });
+  }
+
+  let event;
+  try {
+    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], secret);
+  } catch (err) {
+    console.error('[stripe] webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  try {
+    switch (event.type) {
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
+        const sub = event.data.object;
+        const rid = await restaurantIdForStripe({
+          metadataRestaurantId: sub.metadata?.restaurant_id,
+          customerId: sub.customer,
+          subscriptionId: sub.id,
+        });
+        const plan = planForPriceId(sub.items?.data?.[0]?.price?.id);
+        if (!rid) {
+          console.warn(`[stripe] ${event.type}: no matching restaurant (customer=${sub.customer}, sub=${sub.id})`);
+        } else if (!plan) {
+          console.warn(`[stripe] ${event.type}: price not mapped to a plan for ${rid}`);
+        } else {
+          // A recovered subscription (back to active) clears any earlier
+          // payment-failure flag.
+          const clearFailure = sub.status === 'active' ? ', payment_failed_at = NULL' : '';
+          await pool.query(
+            `UPDATE restaurants
+                SET plan = $1,
+                    status = 'active',
+                    stripe_customer_id = $2,
+                    stripe_subscription_id = $3${clearFailure}
+              WHERE restaurant_id = $4`,
+            [plan, sub.customer || null, sub.id, rid]
+          );
+          console.log(`[stripe] ${event.type}: ${rid} → plan=${plan} status=${sub.status}`);
+        }
+        break;
+      }
+      case 'customer.subscription.deleted': {
+        const sub = event.data.object;
+        const rid = await restaurantIdForStripe({
+          metadataRestaurantId: sub.metadata?.restaurant_id,
+          customerId: sub.customer,
+          subscriptionId: sub.id,
+        });
+        if (rid) {
+          await pool.query(
+            `UPDATE restaurants SET plan = 'suspended', status = 'suspended' WHERE restaurant_id = $1`,
+            [rid]
+          );
+          console.log(`[stripe] subscription cancelled: ${rid} → suspended`);
+        } else {
+          console.warn(`[stripe] subscription.deleted: no matching restaurant (sub=${sub.id})`);
+        }
+        break;
+      }
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object;
+        const rid = await restaurantIdForStripe({
+          metadataRestaurantId: invoice.metadata?.restaurant_id,
+          customerId: invoice.customer,
+          subscriptionId: invoice.subscription,
+        });
+        if (rid) {
+          await pool.query(
+            `UPDATE restaurants SET payment_failed_at = CURRENT_TIMESTAMP WHERE restaurant_id = $1`,
+            [rid]
+          );
+          console.warn(`[stripe] payment failed: ${rid} flagged (invoice=${invoice.id})`);
+        } else {
+          console.warn(`[stripe] invoice.payment_failed: no matching restaurant (customer=${invoice.customer})`);
+        }
+        break;
+      }
+      default:
+        // Other event types are acknowledged so Stripe stops retrying.
+        break;
+    }
+  } catch (err) {
+    // Log but still 200 — a non-2xx makes Stripe retry the same failing
+    // event for days. The event stays recoverable from the Stripe
+    // dashboard if a handler bug needs fixing.
+    console.error(`[stripe] handler error for ${event.type}:`, err.message);
+  }
+  return res.json({ received: true });
 });
 
 app.get('/api/staff', async (req, res) => {

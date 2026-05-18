@@ -10,7 +10,7 @@
 
 | Agent | Working On | Ticket | Started |
 |-------|-----------|--------|---------|
-| Krit | SiamEPOS Lite (SEPOS-LITE-001-design.md). Phase 1 + 2a DONE — multi-tenant DB schema; MULTI_TENANT flag + resolveRestaurantId; restaurant_id on takeaway writes; takeaway widget passes restaurant_id; plan-based feature gating (GET /api/restaurant + utils/plan.js — lite plans hide dine-in nav + limited Admin). Commit a3aebc0. 2b (endpoint read-scoping) held until the Lite backend is deployed; Phases 3–4 pending Korakot's §14 questions. | SEPOS-LITE-001 | 2026-05-17 |
+| Krit | SiamEPOS Lite — SEPOS-LITE-002 DONE (commits c52200b + 5b5ade0): plan-based feature gating in the main EPOS app. utils/plan.js → canAccessReservations/Kitchen/Orders/FullEPOS; nav tabs + admin sections show locked (🔒 + "Upgrade to unlock" panel) for features the plan excludes; lite_booking keeps table plan + table setup. Backend requirePlan middleware 403s Pro-only routes (inventory/Z-report/clock) on lite deployments. No-op for Pro. Architecture = Model A "Lite as Pro" (SEPOS-LITE-002-architecture-note.md). | SEPOS-LITE-002 | 2026-05-18 |
 
 ---
 

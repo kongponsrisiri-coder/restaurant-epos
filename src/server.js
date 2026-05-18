@@ -1790,7 +1790,20 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
 app.put('/api/reservations/:id', async (req, res) => {
   try {
     const { customer_name, customer_phone, customer_email, covers, reservation_date, reservation_time, table_id, notes, status } = req.body;
-    const result = await pool.query(`UPDATE reservations SET customer_name=$1, customer_phone=$2, customer_email=$3, covers=$4, reservation_date=$5, reservation_time=$6, table_id=$7, notes=$8, status=$9, updated_at=NOW() WHERE id=$10 RETURNING *`, [customer_name, customer_phone, customer_email || null, covers, reservation_date, reservation_time, table_id || null, notes || null, status, req.params.id]);
+    // Multi-table join — `table_ids` is the full set of tables for this
+    // booking; `table_id` is kept as the primary (first) table for order
+    // creation and legacy single-table reads. Callers may send either.
+    let tableIdsArr;
+    if (Array.isArray(req.body.table_ids)) {
+      tableIdsArr = req.body.table_ids.map(Number).filter(Boolean);
+    } else if (table_id != null && table_id !== '') {
+      tableIdsArr = [Number(table_id)].filter(Boolean);
+    } else {
+      tableIdsArr = [];
+    }
+    const primaryId   = tableIdsArr[0] || null;
+    const tableIdsCsv = tableIdsArr.length ? tableIdsArr.join(',') : null;
+    const result = await pool.query(`UPDATE reservations SET customer_name=$1, customer_phone=$2, customer_email=$3, covers=$4, reservation_date=$5, reservation_time=$6, table_id=$7, table_ids=$8, notes=$9, status=$10, updated_at=NOW() WHERE id=$11 RETURNING *`, [customer_name, customer_phone, customer_email || null, covers, reservation_date, reservation_time, primaryId, tableIdsCsv, notes || null, status, req.params.id]);
     // BUG-005 — a PUT for a non-existent reservation used to UPDATE 0
     // rows and still return 200 with an empty body (silent no-op).
     if (result.rows.length === 0) {

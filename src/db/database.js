@@ -131,6 +131,7 @@ async function initDB() {
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS vat_rate DECIMAL(5,2) DEFAULT 20.0`); // SEPOS-021
     await pool.query(`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS marketing_consent INTEGER DEFAULT 0`); // SEPOS-033 (GDPR)
     await pool.query(`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS unsubscribed_at TIMESTAMP`); // SEPOS-033
+    await pool.query(`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS table_ids TEXT`); // multi-table join — CSV of table ids, table_id stays the primary
 
     // SEPOS-034: takeaway / delivery online ordering
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_type VARCHAR(20) DEFAULT 'dine_in'`);

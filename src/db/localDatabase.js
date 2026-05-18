@@ -235,6 +235,7 @@ function initSchema() {
       source TEXT DEFAULT 'epos',
       marketing_consent INTEGER DEFAULT 0,
       unsubscribed_at TIMESTAMP,
+      table_ids TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -376,6 +377,7 @@ function runMigrations() {
   // SEPOS-033: marketing consent + unsubscribe (GDPR)
   addColumnIfMissing('reservations', 'marketing_consent', 'INTEGER DEFAULT 0');
   addColumnIfMissing('reservations', 'unsubscribed_at', 'TIMESTAMP');
+  addColumnIfMissing('reservations', 'table_ids', 'TEXT'); // multi-table join
   // SEPOS-050: per-restaurant online-booking party-size cap + contact phone
   addColumnIfMissing('restaurant_settings', 'max_party_size', 'INTEGER DEFAULT 8');
   addColumnIfMissing('restaurant_settings', 'restaurant_phone', 'TEXT');

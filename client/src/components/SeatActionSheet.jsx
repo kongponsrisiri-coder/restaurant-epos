@@ -37,7 +37,7 @@ async function putReservation(id, body) {
 }
 
 export default function SeatActionSheet({
-  table, bookings = [], currentBooking, onClose, onSeated, onViewBooking, staff,
+  table, bookings = [], currentBooking, onClose, onSeated, onViewBooking, staff, selectedDate,
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState('');
@@ -52,11 +52,15 @@ export default function SeatActionSheet({
 
   const nowMin = (() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); })();
   const todayIso = new Date().toISOString().slice(0, 10);
+  // The floor plan can show any date now; walk-ins and "seat now" are
+  // today-only, so gate them on whether the viewed date is today.
+  const selDate = selectedDate ? String(selectedDate).slice(0, 10) : todayIso;
+  const isToday = selDate === todayIso;
   const isOccupied = !!currentBooking;
 
   // Bookings due within ±30 min, not yet seated/cancelled. Used only on
   // empty tables — for the "seat now" list.
-  const dueNow = bookings
+  const dueNow = !isToday ? [] : bookings
     .filter(r => {
       if (currentBooking && r.id === currentBooking.id) return false;
       const date = String(r.reservation_date || '').slice(0, 10);
@@ -72,15 +76,18 @@ export default function SeatActionSheet({
   // Pending/confirmed bookings later today (after the ±30-min window).
   // Used for "pre-assign to this table" on any table — including occupied
   // ones — so staff can plan the next sitting on the same table.
+  // Bookings on the viewed date that can be pre-assigned to a table. On
+  // today that's everything past the ±30-min "due soon" window; on any
+  // other date it's simply that date's pending/confirmed bookings.
   const laterToday = bookings
     .filter(r => {
       if (currentBooking && r.id === currentBooking.id) return false;
       const date = String(r.reservation_date || '').slice(0, 10);
-      if (date !== todayIso) return false;
+      if (date !== selDate) return false;
       if (r.status !== 'pending' && r.status !== 'confirmed') return false;
       const m = toMins(r.reservation_time);
       if (m == null) return false;
-      return (m - nowMin) > 30;  // strictly later
+      return isToday ? (m - nowMin) > 30 : true;
     })
     .sort((a, b) => toMins(a.reservation_time) - toMins(b.reservation_time));
 
@@ -168,33 +175,40 @@ export default function SeatActionSheet({
             </div>
           )}
 
-          {/* Bookings due soon — empty tables only */}
+          {/* Bookings due soon + walk-in — empty tables, today only */}
           {!isOccupied && (
             <div style={{ marginBottom: 18 }}>
-              <div style={sectionLabel}>Bookings due soon (±30 min)</div>
-              {dueNow.length === 0 ? (
-                <div style={emptyHint}>No bookings due in the next 30 minutes.</div>
-              ) : (
-                dueNow.map(b => (
-                  <button key={b.id} onClick={() => seatBooking(b)} disabled={busy} style={candidateRow}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: '#0d1b3e' }}>
-                        {b.customer_name}
-                        <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: '#64748b' }}>· {b.covers} {b.covers === 1 ? 'guest' : 'guests'}</span>
-                      </div>
-                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                        {String(b.reservation_time).slice(0,5)} {b._delta < 0 ? `· ${-b._delta}m late` : b._delta === 0 ? '· now' : `· in ${b._delta}m`}
-                        {b.notes ? ` · ${b.notes}` : ''}
-                      </div>
-                    </div>
-                    <span style={seatBtn}>Seat →</span>
+              {isToday ? (
+                <>
+                  <div style={sectionLabel}>Bookings due soon (±30 min)</div>
+                  {dueNow.length === 0 ? (
+                    <div style={emptyHint}>No bookings due in the next 30 minutes.</div>
+                  ) : (
+                    dueNow.map(b => (
+                      <button key={b.id} onClick={() => seatBooking(b)} disabled={busy} style={candidateRow}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: '#0d1b3e' }}>
+                            {b.customer_name}
+                            <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: '#64748b' }}>· {b.covers} {b.covers === 1 ? 'guest' : 'guests'}</span>
+                          </div>
+                          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                            {String(b.reservation_time).slice(0,5)} {b._delta < 0 ? `· ${-b._delta}m late` : b._delta === 0 ? '· now' : `· in ${b._delta}m`}
+                            {b.notes ? ` · ${b.notes}` : ''}
+                          </div>
+                        </div>
+                        <span style={seatBtn}>Seat →</span>
+                      </button>
+                    ))
+                  )}
+                  <button onClick={submitWalkIn} disabled={busy} style={{ ...walkInBtn, opacity: busy ? 0.6 : 1 }}>
+                    {busy ? 'Seating…' : `+ Seat walk-in at Table ${table.table_number}`}
                   </button>
-                ))
+                </>
+              ) : (
+                <div style={emptyHint}>
+                  📅 Walk-ins can only be seated on today's date. Pre-assign one of this date's bookings to the table below.
+                </div>
               )}
-
-              <button onClick={submitWalkIn} disabled={busy} style={{ ...walkInBtn, opacity: busy ? 0.6 : 1 }}>
-                {busy ? 'Seating…' : `+ Seat walk-in at Table ${table.table_number}`}
-              </button>
             </div>
           )}
 

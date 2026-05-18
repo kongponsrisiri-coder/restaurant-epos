@@ -58,11 +58,6 @@ function KitchenCardHeading({ order }) {
           </span>
         )}
       </div>
-      {isDelivery(order) && order.delivery_address && (
-        <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: 600, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          📍 {order.delivery_address}
-        </div>
-      )}
     </div>
   );
 }
@@ -559,6 +554,13 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                         #{order.id} · {getTimeAgo(order.created_at)}
                       </span>
                     </div>
+
+                    {/* Delivery address strip — always fully visible, not in the header */}
+                    {isDelivery(order) && order.delivery_address && (
+                      <div style={{ background: '#1e3a5f', padding: '5px 14px', fontSize: 13, fontWeight: 700, color: '#bfdbfe', borderBottom: '1px solid #1e40af' }}>
+                        📍 {order.delivery_address}
+                      </div>
+                    )}
 
                     <div style={{ padding: 10 }}>
 

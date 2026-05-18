@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getOrders, getOrder, updateItemStatus, setTakeawayStatus } from '../api';
+import { getOrders, getOrder, updateItemStatus, setTakeawayStatus, dispatchDelivery } from '../api';
 import { io } from 'socket.io-client';
 import { SERVER_URL } from '../api';
 import { orderShortLabel, orderSubLabel, orderShortLabelPlain, isTakeaway } from '../utils/orderLabel';
@@ -18,6 +18,69 @@ function OrderHeading({ order }) {
       {orderShortLabel(order)}
       {sub && <span style={{ fontSize: 14, fontWeight: 600, marginLeft: 8, opacity: 0.9 }}>· {sub}</span>}
     </span>
+  );
+}
+
+// SEPOS-DELIVERY-001 — an online order set for delivery (vs collection).
+const isDelivery = (o) => !!o && o.order_subtype === 'delivery';
+
+// Friendly label for a raw courier status string.
+function courierLabel(s) {
+  const map = {
+    new: 'finding rider', searching: 'finding rider', pending: 'finding rider',
+    scheduled: 'scheduled', in_progress: 'rider assigned',
+    picking: 'heading to restaurant', almost_picking: 'heading to restaurant',
+    waiting_at_pickup: 'rider at restaurant', delivering: 'on the way',
+    almost_delivering: 'on the way', waiting_at_delivery: 'arriving',
+    delivered: 'delivered', dispatched: 'dispatched', updated: 'dispatched',
+  };
+  return map[String(s || '').toLowerCase()] || s || 'dispatched';
+}
+
+// Courier dispatch button + live status, shown in a delivery order's
+// kitchen card header.
+function CourierControls({ order, onChange }) {
+  const [busy, setBusy] = useState(false);
+  const status = String(order.delivery_status || '').toLowerCase();
+  const failed = ['failed', 'cancelled', 'canceled'].includes(status);
+  const dispatched = !!order.courier_job_id && !failed;
+
+  const doDispatch = async () => {
+    if (busy) return;
+    if (!window.confirm(`Book a courier to deliver Online Order #${order.id}?`)) return;
+    setBusy(true);
+    try {
+      const r = await dispatchDelivery(order.id);
+      if (r && r.error) window.alert('Could not dispatch courier: ' + r.error);
+    } catch (err) {
+      window.alert('Could not dispatch courier: ' + (err?.message || 'unknown error'));
+    }
+    setBusy(false);
+    onChange();
+  };
+
+  if (dispatched) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
+        <span style={{ color: 'white', fontWeight: 800, fontSize: 12, whiteSpace: 'nowrap' }}>
+          🛵 {order.courier_name || 'Courier'} · {courierLabel(status)}
+        </span>
+        {order.tracking_url && (
+          <a href={order.tracking_url} target="_blank" rel="noreferrer"
+             style={{ color: '#bfdbfe', fontSize: 11, fontWeight: 700 }}>📍 Track delivery</a>
+        )}
+      </div>
+    );
+  }
+  return (
+    <button onClick={doDispatch} disabled={busy}
+      style={{
+        background: failed ? '#f59e0b' : '#3b82f6', color: 'white', border: 'none', borderRadius: 8,
+        padding: '8px 14px', fontWeight: 800, fontSize: 13, cursor: busy ? 'wait' : 'pointer',
+        whiteSpace: 'nowrap', flexShrink: 0, opacity: busy ? 0.6 : 1,
+      }}>
+      {busy ? '… dispatching' : failed ? '🔁 Retry Courier' : '🚗 Dispatch Courier'}
+    </button>
   );
 }
 
@@ -402,7 +465,9 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                             // For takeaway orders, also collapse the lifecycle to
                             // 'collected' so the order closes and lands in reports
                             // even if the auto-collect path missed any items.
-                            if (isTakeaway(order)) {
+                            // Collection orders collapse to 'collected'; delivery
+                            // orders stay open until the courier delivers them.
+                            if (isTakeaway(order) && !isDelivery(order)) {
                               try { await setTakeawayStatus(order.id, 'collected'); } catch {}
                             }
                             fetchOrders();
@@ -414,7 +479,7 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                           }}
                         >✓ Off Kitchen ({ready.length})</button>
                       )}
-                      {isTakeaway(order) && !allReadyForOff && (
+                      {isTakeaway(order) && !isDelivery(order) && !allReadyForOff && (
                         // Explicit Collected button for takeaway orders on the
                         // Kitchen tab — always reachable in Pass mode AND Direct
                         // mode, even before every item is served. Closes the
@@ -436,6 +501,9 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                             whiteSpace: 'nowrap', flexShrink: 0,
                           }}
                         >🥡 Collected</button>
+                      )}
+                      {isDelivery(order) && (
+                        <CourierControls order={order} onChange={fetchOrders} />
                       )}
                       {/* SEPOS-042 — manager-gated delete for open orders. */}
                       <button
@@ -611,7 +679,9 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                     <div style={{ color: 'white', fontWeight: 800, fontSize: 22, flex: 1, minWidth: 0 }}>
                       <OrderHeading order={order} />
                     </div>
-                    {isTakeaway(order) ? (
+                    {isDelivery(order) ? (
+                      <CourierControls order={order} onChange={fetchOrders} />
+                    ) : isTakeaway(order) ? (
                       <button
                         onClick={async () => {
                           if (!window.confirm(`Mark Online Order #${order.id} as collected? This closes the order and counts it as a sale.`)) return;

@@ -190,6 +190,10 @@ export const setTakeawayStatus = (orderId, status) =>
 // SEPOS-034 — active takeaway list (drives the strip on the table-map screen).
 export const getActiveTakeaway = () => get('/api/takeaway/orders/active');
 
+// SEPOS-DELIVERY-001 — courier dispatch (Stuart / Uber Direct).
+export const dispatchDelivery = (orderId) => post('/api/delivery/dispatch', { order_id: orderId });
+export const getDeliveryQuote = (orderId) => post('/api/delivery/quote', { order_id: orderId });
+
 // SEPOS-044 — Floor-Plan polish: seat a booking or a walk-in.
 // Both endpoints return { reservation, order } where order is the newly
 // opened dine-in order on the table (id used to navigate to OrderScreen).

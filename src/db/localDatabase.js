@@ -395,6 +395,12 @@ function runMigrations() {
   addColumnIfMissing('orders', 'delivery_address', 'TEXT');
   addColumnIfMissing('orders', 'delivery_notes', 'TEXT');
   addColumnIfMissing('orders', 'marketing_consent', 'INTEGER DEFAULT 0');
+  // SEPOS-DELIVERY-001 — courier auto-dispatch fields
+  addColumnIfMissing('orders', 'courier_name', 'TEXT');
+  addColumnIfMissing('orders', 'courier_job_id', 'TEXT');
+  addColumnIfMissing('orders', 'delivery_status', 'TEXT');
+  addColumnIfMissing('orders', 'tracking_url', 'TEXT');
+  addColumnIfMissing('orders', 'delivery_eta', 'TIMESTAMP');
 
   // SEPOS-PRO-002: bidirectional active-order sync.
   // cloud_id maps a local row to its mirror on the cloud Postgres backend.

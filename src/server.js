@@ -11,6 +11,8 @@ const syncService = require('./services/syncService');
 const cloudRelay = require('./services/cloudRelay');
 const makeWebhooks = require('./services/makeWebhooks');
 const printService = require('./services/printService');
+const stuartService = require('./services/stuartService');
+const uberDirectService = require('./services/uberDirectService');
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -581,11 +583,15 @@ app.put('/api/order-items/:id/status', async (req, res) => {
     // already disappeared by the time everything is served.
     if (status === 'served' && item.order_id) {
       const orderRes = await pool.query(
-        'SELECT id, order_type, status, takeaway_status FROM orders WHERE id = $1',
+        'SELECT id, order_type, order_subtype, status, takeaway_status FROM orders WHERE id = $1',
         [item.order_id]
       );
       const order = orderRes.rows[0];
-      if (order && order.order_type === 'takeaway' && order.status === 'open' && order.takeaway_status !== 'collected') {
+      // Collection takeaway orders auto-close once every item is served.
+      // Delivery orders must NOT — they stay open until the courier
+      // webhook reports the parcel delivered (SEPOS-DELIVERY-001).
+      if (order && order.order_type === 'takeaway' && order.order_subtype !== 'delivery'
+          && order.status === 'open' && order.takeaway_status !== 'collected') {
         const remainingRes = await pool.query(
           `SELECT COUNT(*) AS n FROM order_items
            WHERE order_id = $1 AND voided = 0 AND status <> 'served'`,
@@ -2579,6 +2585,195 @@ app.put('/api/orders/:id/takeaway-status', async (req, res) => {
     io.emit('takeaway_status', { order_id: Number(req.params.id), status });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// SEPOS-DELIVERY-001 — courier auto-dispatch (Stuart live, Uber Direct
+// scaffolded). The kitchen taps "Dispatch Courier" on a delivery order
+// → POST /api/delivery/dispatch. The chosen courier job is created, the
+// tracking URL stored, and the order is held OPEN until the courier
+// webhook reports the parcel delivered.
+// ─────────────────────────────────────────────────────────────────────
+const COURIER_SERVICES = { stuart: stuartService, uber_direct: uberDirectService };
+
+async function readSettings(keys) {
+  const ph = keys.map((_, i) => `$${i + 1}`).join(',');
+  const r = await pool.query(`SELECT key, value FROM settings WHERE key IN (${ph})`, keys);
+  const out = {};
+  r.rows.forEach((row) => { out[row.key] = row.value; });
+  return out;
+}
+
+async function dispatchCourier(orderId) {
+  const oRes = await pool.query(
+    `SELECT id, order_type, order_subtype, status, takeaway_status,
+            delivery_address, delivery_notes, customer_name, customer_phone,
+            courier_job_id, courier_name, delivery_status
+       FROM orders WHERE id = $1`,
+    [orderId]
+  );
+  const order = oRes.rows[0];
+  if (!order) throw new Error('Order not found');
+  if (order.order_type !== 'takeaway' || order.order_subtype !== 'delivery') {
+    throw new Error('Order is not an online delivery order');
+  }
+  if (!order.delivery_address) throw new Error('Order has no delivery address');
+  // Block a double dispatch — but allow re-dispatch after a failure/cancel.
+  if (order.courier_job_id &&
+      !['failed', 'cancelled', 'canceled'].includes(String(order.delivery_status || ''))) {
+    throw new Error(`Already dispatched via ${order.courier_name || 'a courier'}`);
+  }
+
+  const cfg = await readSettings([
+    'courier_dispatch_enabled', 'courier_provider',
+    'courier_pickup_address', 'courier_pickup_phone', 'restaurant_postcode',
+  ]);
+  if (cfg.courier_dispatch_enabled !== '1') {
+    throw new Error('Courier dispatch is turned off in Settings');
+  }
+  const service = COURIER_SERVICES[cfg.courier_provider || 'stuart'];
+  if (!service) throw new Error('Unknown courier provider: ' + cfg.courier_provider);
+  if (!service.isConfigured()) {
+    throw new Error(`${service.PROVIDER} is not configured — add its API credentials in Railway`);
+  }
+  if (!cfg.courier_pickup_address) {
+    throw new Error('Set the restaurant pickup address in Settings → Courier Dispatch');
+  }
+
+  const itRes = await pool.query(
+    `SELECT name, quantity FROM order_items WHERE order_id = $1 AND voided = 0`,
+    [orderId]
+  );
+  const pickup = {
+    address: [cfg.courier_pickup_address, cfg.restaurant_postcode].filter(Boolean).join(', '),
+    phone: cfg.courier_pickup_phone || '',
+    name: process.env.RESTAURANT_NAME || 'Restaurant',
+  };
+
+  let job;
+  try {
+    job = await service.createJob({ order: { ...order, items: itRes.rows }, pickup });
+  } catch (err) {
+    await pool.query(`UPDATE orders SET delivery_status = 'failed' WHERE id = $1`, [orderId]);
+    io.emit('delivery_status', { order_id: Number(orderId), delivery_status: 'failed' });
+    throw err;
+  }
+
+  await pool.query(
+    `UPDATE orders SET courier_name = $1, courier_job_id = $2, delivery_status = $3,
+            tracking_url = $4, delivery_eta = $5, takeaway_status = 'ready'
+      WHERE id = $6`,
+    [service.PROVIDER, job.jobId, job.status || 'dispatched',
+     job.trackingUrl || null, job.eta || null, orderId]
+  );
+  io.emit('delivery_status', {
+    order_id: Number(orderId), delivery_status: job.status || 'dispatched',
+    courier_name: service.PROVIDER, tracking_url: job.trackingUrl || null,
+  });
+  io.emit('takeaway_status', { order_id: Number(orderId), status: 'ready' });
+  console.log(`🚗 dispatched order #${orderId} via ${service.PROVIDER} (job ${job.jobId})`);
+  return {
+    courier_name: service.PROVIDER, courier_job_id: job.jobId,
+    delivery_status: job.status || 'dispatched',
+    tracking_url: job.trackingUrl || null, delivery_eta: job.eta || null,
+  };
+}
+
+// Apply a courier webhook status update to the matching order.
+async function applyCourierWebhook(providerLabel, parsed) {
+  if (!parsed || (!parsed.jobId && !parsed.clientReference)) return;
+  let order = null;
+  if (parsed.jobId) {
+    const r = await pool.query(`SELECT id, status FROM orders WHERE courier_job_id = $1`, [String(parsed.jobId)]);
+    order = r.rows[0] || null;
+  }
+  if (!order && parsed.clientReference) {
+    const m = String(parsed.clientReference).match(/(\d+)/);
+    if (m) {
+      const r = await pool.query(`SELECT id, status FROM orders WHERE id = $1`, [Number(m[1])]);
+      order = r.rows[0] || null;
+    }
+  }
+  if (!order) {
+    console.warn(`[courier] ${providerLabel} webhook — no matching order (job ${parsed.jobId})`);
+    return;
+  }
+  const status = String(parsed.status || 'updated').toLowerCase();
+  const svc = COURIER_SERVICES[providerLabel === 'Uber Direct' ? 'uber_direct' : 'stuart'];
+  await pool.query(
+    `UPDATE orders SET delivery_status = $1,
+            tracking_url = COALESCE($2, tracking_url),
+            delivery_eta = COALESCE($3, delivery_eta)
+      WHERE id = $4`,
+    [status, parsed.trackingUrl || null, parsed.eta || null, order.id]
+  );
+  if (svc && svc.DELIVERED_STATUSES.includes(status) && order.status === 'open') {
+    await pool.query(
+      `UPDATE orders SET status='closed', closed_at=NOW(), takeaway_status='collected' WHERE id=$1`,
+      [order.id]
+    );
+    await pool.query(
+      `UPDATE order_items SET status='served', served_at=NOW() WHERE order_id=$1 AND status<>'served'`,
+      [order.id]
+    );
+    io.emit('takeaway_status', { order_id: order.id, status: 'collected' });
+    console.log(`✅ courier delivered order #${order.id} — order closed`);
+  }
+  io.emit('delivery_status', { order_id: order.id, delivery_status: status });
+}
+
+// Manual / kitchen-triggered dispatch.
+app.post('/api/delivery/dispatch', async (req, res) => {
+  try {
+    const orderId = Number(req.body && req.body.order_id);
+    if (!orderId) return res.status(400).json({ error: 'order_id is required' });
+    const result = await dispatchCourier(orderId);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Live price quote for a delivery order.
+app.post('/api/delivery/quote', async (req, res) => {
+  try {
+    const orderId = Number(req.body && req.body.order_id);
+    if (!orderId) return res.status(400).json({ error: 'order_id is required' });
+    const oRes = await pool.query(`SELECT delivery_address FROM orders WHERE id = $1`, [orderId]);
+    const order = oRes.rows[0];
+    if (!order || !order.delivery_address) {
+      return res.status(400).json({ error: 'Order has no delivery address' });
+    }
+    const cfg = await readSettings(['courier_provider', 'courier_pickup_address', 'restaurant_postcode']);
+    const service = COURIER_SERVICES[cfg.courier_provider || 'stuart'];
+    if (!service || !service.isConfigured()) {
+      return res.status(400).json({ error: 'Courier provider not configured' });
+    }
+    const pickupAddress = [cfg.courier_pickup_address, cfg.restaurant_postcode].filter(Boolean).join(', ');
+    const quote = await service.getQuote({ pickupAddress, dropoffAddress: order.delivery_address });
+    res.json({ success: true, provider: service.PROVIDER, ...quote });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Courier status webhooks — always 200 so the courier stops retrying.
+app.post('/api/delivery/stuart-webhook', async (req, res) => {
+  try {
+    await applyCourierWebhook('Stuart', stuartService.parseWebhook(req.body));
+  } catch (err) {
+    console.error('[courier] Stuart webhook error:', err.message);
+  }
+  res.json({ received: true });
+});
+
+app.post('/api/delivery/uber-webhook', async (req, res) => {
+  try {
+    await applyCourierWebhook('Uber Direct', uberDirectService.parseWebhook(req.body));
+  } catch (err) {
+    console.error('[courier] Uber Direct webhook error:', err.message);
+  }
+  res.json({ received: true });
 });
 
 // Brevo confirmation email — same template flavour as booking confirmation.

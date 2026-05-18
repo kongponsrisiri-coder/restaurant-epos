@@ -670,6 +670,58 @@ export default function SettingsSection() {
         </div>
       </div>
 
+      {/* ── Courier Dispatch (SEPOS-DELIVERY-001) ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>🛵 Courier Dispatch</h2>
+        <div style={{ fontSize:12, color:'#888', marginBottom:16 }}>
+          When the kitchen marks a delivery order ready, SiamEPOS can automatically book a courier to collect and deliver it — the customer gets a live tracking link. Set up Online Delivery (above) first.
+        </div>
+        <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:14, marginBottom:16 }}>
+          <input
+            type="checkbox"
+            checked={settings.courier_dispatch_enabled === '1'}
+            onChange={e => setSettings({ ...settings, courier_dispatch_enabled: e.target.checked ? '1' : '0' })}
+          />
+          Enable automatic courier dispatch
+        </label>
+        {settings.courier_dispatch_enabled === '1' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+            <div>
+              <label style={labelStyle}>Courier provider</label>
+              <select
+                value={settings.courier_provider || 'stuart'}
+                onChange={e => setSettings({ ...settings, courier_provider: e.target.value })}
+                style={inputStyle}
+              >
+                <option value="stuart">Stuart</option>
+                <option value="uber_direct">Uber Direct (pending API approval)</option>
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Pickup address (where the courier collects)</label>
+              <input
+                value={settings.courier_pickup_address || ''}
+                onChange={e => setSettings({ ...settings, courier_pickup_address: e.target.value })}
+                placeholder="123 High Street, London"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Pickup contact phone</label>
+              <input
+                value={settings.courier_pickup_phone || ''}
+                onChange={e => setSettings({ ...settings, courier_pickup_phone: e.target.value })}
+                placeholder="+44 20 1234 5678"
+                style={inputStyle}
+              />
+            </div>
+            <div style={{ fontSize:12, color:'#aaa' }}>
+              The restaurant postcode from Online Delivery above is appended to the pickup address automatically. Courier API credentials are configured in Railway.
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* ── Save ── */}
       <button onClick={handleSave} style={{ width:'100%', padding:'14px', borderRadius:10, border:'none', background:saved?'#22c55e':'#1a1a2e', color:'white', cursor:'pointer', fontWeight:700, fontSize:16, marginBottom:20, transition:'background 0.3s' }}>
         {saved ? '✓ Saved!' : 'Save All Settings'}

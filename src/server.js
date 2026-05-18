@@ -876,14 +876,17 @@ async function restaurantIdForStripe({ metadataRestaurantId, customerId, subscri
 
 app.post('/api/stripe/webhook', async (req, res) => {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!secret || !process.env.STRIPE_SECRET_KEY) {
-    console.error('[stripe] STRIPE_WEBHOOK_SECRET / STRIPE_SECRET_KEY not set — cannot verify webhook');
+  if (!secret) {
+    console.error('[stripe] STRIPE_WEBHOOK_SECRET not set — cannot verify webhook');
     return res.status(500).json({ error: 'Webhook not configured' });
   }
 
   let event;
   try {
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    // constructEvent is pure HMAC verification — it never calls the Stripe
+    // API, so no real secret key is needed here; the SDK constructor just
+    // requires *some* key string to instantiate.
+    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_webhook_verify_only');
     event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], secret);
   } catch (err) {
     console.error('[stripe] webhook signature verification failed:', err.message);

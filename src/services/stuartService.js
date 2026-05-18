@@ -10,7 +10,7 @@
 const https = require('https');
 
 const ENV = (process.env.STUART_ENV || 'sandbox').toLowerCase();
-const API_HOST = ENV === 'production' ? 'api.stuart.com' : 'api.stuart-sandbox.com';
+const API_HOST = ENV === 'production' ? 'api.stuart.com' : 'api.sandbox.stuart.com';
 
 const PROVIDER = 'Stuart';
 

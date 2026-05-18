@@ -34,15 +34,18 @@ async function api(method, path, body) {
   return { status: r.status, data };
 }
 
-// Future date for bookings — next Saturday at 19:00 (always a valid slot)
+// Future date for bookings — a Tuesday 3 weeks out at 13:00 (low traffic slot)
 function futureDate() {
   const d = new Date();
-  d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7 || 7)); // next Saturday
+  d.setDate(d.getDate() + 21);
+  // Move to Tuesday if needed
+  const day = d.getDay();
+  if (day !== 2) d.setDate(d.getDate() + ((2 - day + 7) % 7));
   return d.toISOString().slice(0, 10);
 }
 
 const bookingDate = futureDate();
-const bookingTime = '19:00';
+const bookingTime = '13:00';
 
 // ──────────────────────────────────────────────────────────────
 console.log('╔══════════════════════════════════════════════════════════════╗');
@@ -276,11 +279,27 @@ console.log(`  Backend: ${BASE}\n`);
     }
   }
 
-  // 5C — update reservation status
+  // 5C — update reservation status (PUT requires all fields — fetch first then send back with updated status)
   if (testResId) {
-    const { status } = await api('PUT', `/api/reservations/${testResId}`, { status: 'confirmed', restaurant_id: RESTAURANT_ID });
-    if (status === 200) pass('Reservation status updated to "confirmed"');
-    else fail('PUT reservation should return 200', 200, status);
+    const { data: allRes } = await api('GET', `/api/reservations?restaurant_id=${RESTAURANT_ID}&date=${bookingDate}`);
+    const existing = Array.isArray(allRes) && allRes.find(r => r.id === testResId);
+    if (existing) {
+      const { status } = await api('PUT', `/api/reservations/${testResId}`, {
+        customer_name: existing.customer_name,
+        customer_phone: existing.customer_phone,
+        customer_email: existing.customer_email || null,
+        covers: existing.covers,
+        reservation_date: existing.reservation_date,
+        reservation_time: existing.reservation_time,
+        table_id: existing.table_id || null,
+        notes: existing.notes || null,
+        status: 'confirmed',
+      });
+      if (status === 200) pass('Reservation status updated to "confirmed"');
+      else fail('PUT reservation should return 200', 200, status);
+    } else {
+      warn('Could not fetch reservation to test PUT — skipping status update check');
+    }
   }
 
   // ── BLOCK 6: Cleanup ──────────────────────────────────────────

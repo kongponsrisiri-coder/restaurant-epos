@@ -269,52 +269,71 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
   const slots = [];
   for (let m = timeStart; m <= timeEnd; m += SLOT) slots.push(m);
 
-  // Build rows — one per table/group, collect ALL bookings per row
-  const assignedIds = new Set(reservations.filter(r => r.table_id).map(r => r.table_id));
+  // SEPOS-049 — Build rows: one per PHYSICAL table. Linked tables used to
+  // collapse into a single combined row, so a small party dropped on one
+  // linked table visually consumed the whole linked group, and a second
+  // small party on a sibling table looked like an overlap conflict.
+  // Each table now gets its own row. A booking only spills onto its
+  // sibling rows when it genuinely needs the linked group — i.e. its
+  // covers exceed the assigned table's own capacity — the same rule the
+  // floor plan and /api/tables/status already use (SEPOS-044).
+  const tableById = {};
+  tables.forEach(t => { tableById[t.id] = t; });
+
   const rowMap = {};
-
-  reservations.filter(r => r.table_id).forEach(r => {
-    const group = tableGroups.find(g => g.ids.includes(r.table_id));
-    const key = group ? `grp-${group.ids[0]}` : `t-${r.table_id}`;
-    if (!rowMap[key]) {
-      const t = tables.find(t => t.id === r.table_id);
-      rowMap[key] = { key, label: group ? group.label : (t ? `T${t.table_number}` : 'T?'), capacity: group ? group.capacity : (t?.capacity || 0), reservations: [] };
+  const ensureRow = (t) => {
+    if (!rowMap[t.id]) {
+      rowMap[t.id] = {
+        key: `t-${t.id}`, tableNumber: t.table_number,
+        label: `T${t.table_number}`, capacity: t.capacity || 0,
+        linked: tableGroups.some(g => g.ids.includes(t.id)),
+        entries: [],
+      };
     }
-    if (!rowMap[key].reservations.find(x => x.id === r.id)) rowMap[key].reservations.push(r);
+    return rowMap[t.id];
+  };
+  tables.forEach(t => ensureRow(t));
+
+  reservations.filter(r => r.table_id && tableById[r.table_id]).forEach(r => {
+    const primary = tableById[r.table_id];
+    ensureRow(primary).entries.push({ res: r, isPrimary: true });
+    // Spanning booking → also occupy the sibling rows of the linked group
+    // so staff can see those tables are consumed by the large party.
+    if ((r.covers || 0) > (primary.capacity || 0)) {
+      const group = tableGroups.find(g => g.ids.includes(r.table_id));
+      if (group) group.ids.forEach(id => {
+        if (id === r.table_id) return;
+        const sib = tableById[id];
+        if (sib) ensureRow(sib).entries.push({ res: r, isPrimary: false });
+      });
+    }
   });
 
-  tables.sort((a,b) => a.table_number - b.table_number).forEach(t => {
-    if (assignedIds.has(t.id)) return;
-    const group = tableGroups.find(g => g.ids.includes(t.id));
-    const key = group ? `grp-${group.ids[0]}` : `t-${t.id}`;
-    if (rowMap[key]) return;
-    rowMap[key] = { key, label: group ? group.label : `T${t.table_number}`, capacity: group ? group.capacity : t.capacity, reservations: [] };
-  });
-
-  const unassigned = reservations.filter(r => !r.table_id);
-  const rows = Object.values(rowMap).sort((a, b) => parseInt(a.label.match(/\d+/)?.[0]||999) - parseInt(b.label.match(/\d+/)?.[0]||999));
+  // No table_id, or a table_id pointing at a since-deleted table → surface
+  // it in the Unassigned row so staff can re-seat it.
+  const unassigned = reservations.filter(r => !r.table_id || !tableById[r.table_id]);
+  const rows = Object.values(rowMap).sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0));
 
   function pxLeft(ts) { return ((toMins(ts) - timeStart) / totalMins) * (slots.length * COL_W); }
   function pxWidth(ts, cov) { return (getDuration(cov, tiers) / totalMins) * (slots.length * COL_W) - 4; }
 
   // Detect overlaps within a row and assign vertical lanes
-  function assignLanes(rowReservations) {
-    const sorted = [...rowReservations].sort((a, b) => toMins(a.reservation_time) - toMins(b.reservation_time));
-    const lanes = []; // each lane is array of reservations
-    sorted.forEach(r => {
-      const rStart = toMins(r.reservation_time);
-      const rEnd = rStart + getDuration(r.covers, tiers);
+  function assignLanes(rowEntries) {
+    const sorted = [...rowEntries].sort((a, b) => toMins(a.res.reservation_time) - toMins(b.res.reservation_time));
+    const lanes = []; // each lane is array of entries
+    sorted.forEach(e => {
+      const rStart = toMins(e.res.reservation_time);
       let placed = false;
       for (let i = 0; i < lanes.length; i++) {
-        const lastInLane = lanes[i][lanes[i].length - 1];
-        const lastEnd = toMins(lastInLane.reservation_time) + getDuration(lastInLane.covers, tiers);
-        if (rStart >= lastEnd) { lanes[i].push(r); placed = true; break; }
+        const last = lanes[i][lanes[i].length - 1].res;
+        const lastEnd = toMins(last.reservation_time) + getDuration(last.covers, tiers);
+        if (rStart >= lastEnd) { lanes[i].push(e); placed = true; break; }
       }
-      if (!placed) lanes.push([r]);
+      if (!placed) lanes.push([e]);
     });
     // Build map: res.id → laneIndex
     const laneMap = {};
-    lanes.forEach((lane, i) => lane.forEach(r => { laneMap[r.id] = i; }));
+    lanes.forEach((lane, i) => lane.forEach(e => { laneMap[e.res.id] = i; }));
     return { laneMap, laneCount: lanes.length };
   }
 
@@ -332,14 +351,17 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
         </div>
 
         {rows.map((row, ri) => {
-          const { laneMap, laneCount } = assignLanes(row.reservations);
+          const { laneMap, laneCount } = assignLanes(row.entries);
           const LANE_H = 44;
           const rowH = Math.max(54, laneCount * LANE_H + 10);
 
           return (
             <div key={row.key} style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', background: ri % 2 === 0 ? 'white' : '#fafafa', height: rowH }}>
               <div style={{ width: LBL_W, flexShrink: 0, padding: '0 12px', display: 'flex', flexDirection: 'column', justifyContent: 'center', borderRight: '2px solid #e5e7eb', position: 'sticky', left: 0, background: 'inherit', zIndex: 2 }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>{row.label}</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>
+                  {row.label}
+                  {row.linked && <span title="Can be linked with adjacent tables" style={{ marginLeft: 4, fontSize: 11 }}>🔗</span>}
+                </div>
                 <div style={{ fontSize: 11, color: laneCount > 1 ? '#ef4444' : '#9ca3af' }}>
                   {row.capacity}p {laneCount > 1 && <span style={{ fontWeight: 700 }}>⚠ {laneCount} overlap</span>}
                 </div>
@@ -348,22 +370,30 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
                 {slots.map(m => <div key={m} style={{ position: 'absolute', left: ((m - timeStart) / totalMins) * (slots.length * COL_W), top: 0, bottom: 0, width: 1, background: m % 60 === 0 ? '#e5e7eb' : '#f3f4f6' }} />)}
                 {/* Overlap warning band */}
                 {laneCount > 1 && <div style={{ position: 'absolute', inset: 0, background: 'rgba(239,68,68,0.04)', pointerEvents: 'none' }} />}
-                {row.reservations.map(r => {
+                {row.entries.map(({ res: r, isPrimary }) => {
                   const c = STATUS_COLORS[r.status] || STATUS_COLORS.pending;
                   const isSel = selectedRes?.id === r.id;
                   const lane = laneMap[r.id] || 0;
                   const top = 5 + lane * LANE_H;
                   const h = LANE_H - 6;
+                  // isPrimary === false → this booking is too large for its own
+                  // table and spills across the linked group; show it as a
+                  // dashed "ghost" so staff see the table is consumed.
                   return (
-                    <div key={r.id} onClick={() => onSelect(r)}
+                    <div key={`${r.id}-${isPrimary ? 'p' : 'g'}`} onClick={() => onSelect(r)}
+                      title={isPrimary ? undefined : `${r.customer_name} (${r.covers}p) — uses this table as part of a linked group`}
                       style={{ position: 'absolute', left: pxLeft(r.reservation_time) + 2, top, height: h,
                         width: Math.max(pxWidth(r.reservation_time, r.covers), 70),
-                        background: isSel ? '#1a1a2e' : c.bg,
-                        border: `2px solid ${isSel ? '#e94560' : laneCount > 1 ? '#ef4444' : c.border}`,
+                        background: isSel ? '#1a1a2e' : isPrimary ? c.bg : 'repeating-linear-gradient(45deg, #f3f4f6, #f3f4f6 6px, #e8eaed 6px, #e8eaed 12px)',
+                        border: `2px ${isPrimary ? 'solid' : 'dashed'} ${isSel ? '#e94560' : laneCount > 1 ? '#ef4444' : isPrimary ? c.border : '#cbd5e1'}`,
                         borderRadius: 8, padding: '3px 8px', cursor: 'pointer', overflow: 'hidden', zIndex: isSel ? 5 : 3,
                         boxShadow: isSel ? '0 4px 16px rgba(0,0,0,0.25)' : '0 1px 3px rgba(0,0,0,0.08)', transition: 'all 0.15s' }}>
-                      <div style={{ fontSize: 11, fontWeight: 800, color: isSel ? 'white' : c.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.customer_name}</div>
-                      <div style={{ fontSize: 10, color: isSel ? 'rgba(255,255,255,0.7)' : c.text, opacity: 0.85 }}>{r.reservation_time} · {r.covers}p</div>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: isSel ? 'white' : isPrimary ? c.text : '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {isPrimary ? r.customer_name : `🔗 ${r.customer_name}`}
+                      </div>
+                      <div style={{ fontSize: 10, color: isSel ? 'rgba(255,255,255,0.7)' : isPrimary ? c.text : '#6b7280', opacity: 0.85 }}>
+                        {isPrimary ? `${r.reservation_time} · ${r.covers}p` : `linked · ${r.covers}p`}
+                      </div>
                     </div>
                   );
                 })}

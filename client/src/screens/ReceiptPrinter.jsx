@@ -81,6 +81,7 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
   const googleReviewUrl = settings?.google_review_url   || '';
   const footerMsg       = settings?.receipt_footer      || 'Thank you for dining with us!';
   const logoDataUrl     = settings?.company_logo        || '';  // base64 data URL
+  const logoSizePx      = { small:'80px', medium:'150px', large:'220px', full:'100%' }[settings?.receipt_logo_size||'medium'];
   const scRate          = parseFloat(settings?.service_charge_rate || settings?.service_charge_percent || 12.5);
 
   const now  = new Date();
@@ -162,7 +163,7 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
 
   const logoHtml = logoDataUrl ? `
     <div style="text-align:center;margin-bottom:10px;">
-      <img src="${logoDataUrl}" style="max-width:220px;max-height:100px;object-fit:contain;" alt="Logo" />
+      <img src="${logoDataUrl}" style="max-width:${logoSizePx};${logoSizePx==='100%'?'width:100%;':''}object-fit:contain;display:block;margin:0 auto;" alt="Logo" />
     </div>` : '';
 
   const qrHtml = googleReviewUrl ? `

@@ -476,6 +476,7 @@ export default function SettingsSection() {
     company_email:           '',
     company_vat:             '',
     company_logo:            '',
+    receipt_logo_size:       'medium',   // 'small' | 'medium' | 'large' | 'full'
     google_review_url:       '',
     receipt_footer:          'Thank you for dining with us!',
     service_charge_rate:     '12.5',
@@ -568,6 +569,21 @@ export default function SettingsSection() {
                     🗑 Remove Logo
                   </button>
                 )}
+                {logoPreview && (
+                  <div>
+                    <div style={{ fontSize:11, color:'#666', fontWeight:700, marginBottom:5 }}>Logo size on receipt</div>
+                    <div style={{ display:'flex', gap:6 }}>
+                      {[['small','S'],['medium','M'],['large','L'],['full','Full']].map(([val, label]) => (
+                        <button key={val} onClick={() => setSettings(s => ({ ...s, receipt_logo_size: val }))}
+                          style={{ padding:'6px 12px', borderRadius:7, border:'2px solid', cursor:'pointer', fontWeight:700, fontSize:12,
+                            borderColor: settings.receipt_logo_size === val ? '#1a1a2e' : '#ddd',
+                            background:  settings.receipt_logo_size === val ? '#1a1a2e' : 'white',
+                            color:       settings.receipt_logo_size === val ? 'white'   : '#555',
+                          }}>{label}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div style={{ fontSize:11, color:'#aaa', lineHeight:1.5 }}>
                   PNG, JPG or SVG · Max 500KB<br/>
                   Appears at the top of printed receipts
@@ -601,7 +617,11 @@ export default function SettingsSection() {
           <div style={{ background:'white', border:'1px solid #e5e7eb', borderRadius:8, padding:'16px 20px', maxWidth:300, margin:'0 auto', fontFamily:'Courier New, monospace', fontSize:12 }}>
             {logoPreview && (
               <div style={{ textAlign:'center', marginBottom:8 }}>
-                <img src={logoPreview} alt="Logo" style={{ maxWidth:220, maxHeight:100, objectFit:'contain' }} />
+                <img src={logoPreview} alt="Logo" style={{
+                  maxWidth: { small:'80px', medium:'150px', large:'220px', full:'100%' }[settings.receipt_logo_size||'medium'],
+                  width: settings.receipt_logo_size === 'full' ? '100%' : undefined,
+                  objectFit:'contain', display:'block', margin:'0 auto'
+                }} />
               </div>
             )}
             <div style={{ textAlign:'center', fontWeight:900, fontSize:14, marginBottom:2 }}>{settings.company_name||'Restaurant Name'}</div>

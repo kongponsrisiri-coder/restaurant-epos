@@ -17,6 +17,10 @@ const getServerURL = () => {
   ) {
     return `http://${host}:3001`;
   }
+  // Per-client Netlify deploy: set VITE_API_URL env var to override
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
   // Otherwise use cloud
   return 'https://restaurant-epos-production.up.railway.app';
 };

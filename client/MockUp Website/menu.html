@@ -225,7 +225,7 @@ p{font-weight:300;line-height:1.7;color:var(--stone);}
 <script>const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:.08});document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));</script>
 <script>
 (async function(){
-  var SERVER='https://restaurant-epos-production.up.railway.app';
+  var SERVER='https://baan-siam.siamepos.co.uk';
   var tabs=document.getElementById('menuTabs');
   var body=document.getElementById('menuBody');
   function esc(s){return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -334,7 +334,7 @@ p{font-weight:300;line-height:1.7;color:var(--stone);}
 </script>
 
 <!-- SiamEPOS Takeaway Widget — binds to [data-siamepos-takeaway] -->
-<script src="https://restaurant-epos-production.up.railway.app/takeaway-widget.js"></script>
+<script src="https://baan-siam.siamepos.co.uk/takeaway-widget.js"></script>
 <script>document.querySelectorAll('.nav__burger').forEach(function(b){b.addEventListener('click',function(){document.body.classList.toggle('menu-open');});});document.querySelectorAll('.nav__links a').forEach(function(a){a.addEventListener('click',function(){document.body.classList.remove('menu-open');});});</script>
 </body>
 </html>

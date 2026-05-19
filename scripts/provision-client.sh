@@ -4,12 +4,12 @@
 # Usage: ./scripts/provision-client.sh
 #
 # Provisions a new SiamEPOS client with:
-#   - Their own Railway service + Postgres DB
-#   - Subdomain: <slug>.siamepos.co.uk
+#   - Their own Railway service + Postgres DB (created manually in dashboard)
+#   - Environment variables set via Railway CLI
 #   - Owner email login (set-credentials)
 #   - Plan set in the restaurants table
 #
-# Requires: Railway CLI (railway.app/docs/cli) — run `railway login` first
+# Requires: Railway CLI v4+ — run `railway login` first
 # =============================================================================
 
 set -e
@@ -19,12 +19,14 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 CYAN='\033[0;36m'
+BOLD='\033[1m'
 NC='\033[0m'
 
 log()  { echo -e "${GREEN}✔ $1${NC}"; }
 info() { echo -e "${CYAN}→ $1${NC}"; }
 warn() { echo -e "${YELLOW}⚠ $1${NC}"; }
 err()  { echo -e "${RED}✖ $1${NC}"; exit 1; }
+step() { echo -e "\n${BOLD}$1${NC}"; }
 
 echo ""
 echo "╔══════════════════════════════════════════════╗"
@@ -46,7 +48,7 @@ read -p "Restaurant address (for Stuart/emails):     " RESTAURANT_ADDRESS
 read -p "Restaurant phone:                           " RESTAURANT_PHONE
 read -p "Restaurant email (public-facing):           " RESTAURANT_EMAIL
 
-# Validate slug (lowercase, hyphens only)
+# Validate slug
 if [[ ! "$SLUG" =~ ^[a-z0-9-]+$ ]]; then
   err "Slug must be lowercase letters, numbers and hyphens only (e.g. baan-siam)"
 fi
@@ -65,7 +67,6 @@ info "Provisioning: ${RESTAURANT_NAME}"
 info "Service:      ${SERVICE_NAME}"
 info "Subdomain:    ${SUBDOMAIN}"
 info "Plan:         ${PLAN}"
-echo ""
 
 # ── 2. Check Railway CLI ──────────────────────────────────────────────────────
 if ! command -v railway &> /dev/null; then
@@ -82,23 +83,33 @@ AUTH_SECRET=$(openssl rand -hex 32)
 SYNC_SECRET=$(openssl rand -hex 32)
 log "Secrets generated"
 
-# ── 4. Create Railway service ─────────────────────────────────────────────────
-info "Creating Railway service: ${SERVICE_NAME}..."
+# ── 4. Manual Railway dashboard steps ────────────────────────────────────────
+echo ""
+echo "╔══════════════════════════════════════════════════════════════════╗"
+echo "║           MANUAL STEP — DO THIS IN RAILWAY DASHBOARD            ║"
+echo "╠══════════════════════════════════════════════════════════════════╣"
+echo "║  1. Go to railway.com → your SiamEPOS project                   ║"
+echo "║  2. Click '+ New' → 'Empty Service'                             ║"
+printf "║     Name it exactly: %-45s║\n" "${SERVICE_NAME}"
+echo "║  3. In that service → click '+ New' → 'Database' → PostgreSQL   ║"
+echo "║     (DATABASE_URL is auto-set — no action needed)               ║"
+echo "║  4. In that service → Settings → Source → connect to GitHub     ║"
+echo "║     repo: restaurant-epos, branch: main                         ║"
+echo "╚══════════════════════════════════════════════════════════════════╝"
+echo ""
+read -p "Press ENTER once you've created the service and Postgres DB in Railway..."
 
-# Link to the SiamEPOS project (uses the current directory's railway.json)
-railway service create --name "$SERVICE_NAME" || err "Failed to create Railway service"
-log "Railway service created: ${SERVICE_NAME}"
+# ── 5. Link CLI to the new service ───────────────────────────────────────────
+info "Linking Railway CLI to service ${SERVICE_NAME}..."
+echo "   (A prompt will appear — select your project and the '${SERVICE_NAME}' service)"
+echo ""
+railway link
+log "Railway CLI linked"
 
-# ── 5. Add Postgres database ──────────────────────────────────────────────────
-info "Adding Postgres database..."
-railway add --plugin postgresql --service "$SERVICE_NAME" || err "Failed to add Postgres"
-log "Postgres database added (DATABASE_URL auto-set by Railway)"
-
-# ── 6. Set environment variables ──────────────────────────────────────────────
-info "Setting environment variables..."
+# ── 6. Set environment variables ─────────────────────────────────────────────
+info "Setting environment variables on ${SERVICE_NAME}..."
 
 railway variables set \
-  --service "$SERVICE_NAME" \
   NODE_ENV=production \
   RESTAURANT_NAME="$RESTAURANT_NAME" \
   RESTAURANT_EMAIL="$RESTAURANT_EMAIL" \
@@ -114,41 +125,28 @@ railway variables set \
 
 log "Environment variables set"
 
-# ── 7. Deploy the codebase ────────────────────────────────────────────────────
-info "Deploying codebase to ${SERVICE_NAME}..."
-railway up --service "$SERVICE_NAME" --detach
-log "Deployment triggered (Railway will build in ~2-3 minutes)"
+# ── 7. Deploy ─────────────────────────────────────────────────────────────────
+info "Deploying codebase..."
+railway up --detach
+log "Deployment triggered — Railway will build in ~2-3 minutes"
 
 # ── 8. Wait for deployment ────────────────────────────────────────────────────
 echo ""
-info "Waiting for deployment to complete..."
-echo "   (checking every 15 seconds — up to 5 minutes)"
-
-DEPLOY_URL=""
-for i in {1..20}; do
-  sleep 15
-  # Get the service URL
-  DEPLOY_URL=$(railway service --service "$SERVICE_NAME" --json 2>/dev/null | \
-    python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('url',''))" 2>/dev/null || echo "")
-
-  if [ -n "$DEPLOY_URL" ]; then
-    # Try hitting the health endpoint
-    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${DEPLOY_URL}/api/health" 2>/dev/null || echo "000")
-    if [ "$HTTP_STATUS" = "200" ]; then
-      log "Service is live at ${DEPLOY_URL}"
-      break
-    fi
-  fi
-  echo "   Attempt ${i}/20 — still deploying..."
-done
-
-if [ -z "$DEPLOY_URL" ]; then
-  warn "Could not auto-detect service URL. Get it from Railway dashboard then run step 9 manually."
-  read -p "Paste the Railway service URL (e.g. https://xxx.up.railway.app): " DEPLOY_URL
-fi
+info "Waiting for deployment..."
+echo "   Watch Railway dashboard for the green ✓ deploy status"
+echo ""
+read -p "Paste the Railway service URL once deployed (e.g. https://xxx.up.railway.app): " DEPLOY_URL
 
 # Strip trailing slash
 DEPLOY_URL="${DEPLOY_URL%/}"
+
+# Health check
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${DEPLOY_URL}/api/health" 2>/dev/null || echo "000")
+if [ "$HTTP_STATUS" = "200" ]; then
+  log "Service is live at ${DEPLOY_URL}"
+else
+  warn "Health check returned ${HTTP_STATUS} — service may still be starting, continuing anyway"
+fi
 
 # ── 9. Seed owner credentials ─────────────────────────────────────────────────
 info "Creating owner login (${OWNER_EMAIL})..."
@@ -166,7 +164,7 @@ else
 fi
 
 # ── 10. Seed restaurants row ──────────────────────────────────────────────────
-info "Seeding restaurants registry row (plan: ${PLAN})..."
+info "Seeding restaurants row (plan: ${PLAN})..."
 
 RESTAURANTS_RESPONSE=$(curl -s -X POST "${DEPLOY_URL}/api/setup/restaurant" \
   -H "Content-Type: application/json" \
@@ -186,41 +184,54 @@ else
   warn "You may need to add the restaurants row manually in the DB"
 fi
 
-# ── 11. Add custom domain to Railway ─────────────────────────────────────────
-info "Adding custom domain ${SUBDOMAIN} to Railway service..."
-railway domain add "$SUBDOMAIN" --service "$SERVICE_NAME" || \
-  warn "Could not auto-add domain — add ${SUBDOMAIN} manually in Railway → service → Settings → Domains"
+# ── 11. Print DNS + summary ───────────────────────────────────────────────────
+echo ""
+echo "╔══════════════════════════════════════════════════════════════════╗"
+echo "║               NAMECHEAP DNS — ADD THIS CNAME                    ║"
+echo "╠══════════════════════════════════════════════════════════════════╣"
+printf "║  Type:  CNAME                                                    ║\n"
+printf "║  Host:  %-57s║\n" "${SLUG}"
+printf "║  Value: %-57s║\n" "(the .up.railway.app URL from Railway dashboard)"
+printf "║  TTL:   Automatic                                                ║\n"
+echo "╠══════════════════════════════════════════════════════════════════╣"
+echo "║  In Railway: service → Settings → Domains → Add Custom Domain   ║"
+printf "║  Enter: %-57s║\n" "${SUBDOMAIN}"
+echo "╚══════════════════════════════════════════════════════════════════╝"
+echo ""
+echo "╔══════════════════════════════════════════════════════════════════╗"
+echo "║                    PROVISIONING COMPLETE ✅                      ║"
+echo "╠══════════════════════════════════════════════════════════════════╣"
+printf "║  Restaurant:  %-51s║\n" "$RESTAURANT_NAME"
+printf "║  URL:         %-51s║\n" "https://${SUBDOMAIN} (after DNS)"
+printf "║  Temp URL:    %-51s║\n" "$DEPLOY_URL"
+printf "║  Owner:       %-51s║\n" "$OWNER_EMAIL"
+printf "║  Plan:        %-51s║\n" "$PLAN"
+echo "╠══════════════════════════════════════════════════════════════════╣"
+echo "║  NEXT STEPS:                                                     ║"
+echo "║  1. Add CNAME in Namecheap (see above)                           ║"
+echo "║  2. Add custom domain in Railway → Settings → Domains            ║"
+echo "║  3. Add BREVO_API_KEY in Railway env vars for email              ║"
+echo "║  4. Add STRIPE_WEBHOOK_SECRET when Stripe billing is ready       ║"
+printf "║  5. Test login at %-48s║\n" "${DEPLOY_URL}"
+echo "╚══════════════════════════════════════════════════════════════════╝"
+echo ""
 
-# ── 12. Print DNS instructions ────────────────────────────────────────────────
-echo ""
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║                  NAMECHEAP DNS — ADD THIS                   ║"
-echo "╠══════════════════════════════════════════════════════════════╣"
-echo "║  Type:  CNAME                                               ║"
-echo "║  Host:  ${SLUG}                                             ║"
-echo "║  Value: (copy the Railway-generated domain from dashboard)  ║"
-echo "║  TTL:   Automatic                                           ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
-echo ""
-echo "  Go to: Railway → ${SERVICE_NAME} → Settings → Domains"
-echo "  Copy the .up.railway.app URL and use it as the CNAME value"
-echo ""
+# Save secrets to a local file for reference
+SECRETS_FILE="scripts/.secrets-${SLUG}.txt"
+cat > "$SECRETS_FILE" << EOF
+# SiamEPOS client secrets — ${RESTAURANT_NAME}
+# Generated: $(date)
+# KEEP THIS FILE PRIVATE — do not commit to git
 
-# ── 13. Summary ───────────────────────────────────────────────────────────────
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║                    PROVISIONING COMPLETE                     ║"
-echo "╠══════════════════════════════════════════════════════════════╣"
-printf "║  Restaurant:  %-46s ║\n" "$RESTAURANT_NAME"
-printf "║  Slug:        %-46s ║\n" "$SLUG"
-printf "║  Plan:        %-46s ║\n" "$PLAN"
-printf "║  URL:         %-46s ║\n" "https://${SUBDOMAIN}"
-printf "║  Owner:       %-46s ║\n" "$OWNER_EMAIL"
-printf "║  Service:     %-46s ║\n" "$SERVICE_NAME"
-echo "╠══════════════════════════════════════════════════════════════╣"
-echo "║  NEXT STEPS:                                                 ║"
-echo "║  1. Add CNAME in Namecheap (see above)                       ║"
-echo "║  2. Add STRIPE_WEBHOOK_SECRET in Railway when ready          ║"
-echo "║  3. Add BREVO_API_KEY if email confirmations needed          ║"
-echo "║  4. Test login at https://${SUBDOMAIN}                       ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
-echo ""
+SERVICE_NAME=${SERVICE_NAME}
+SUBDOMAIN=${SUBDOMAIN}
+DEPLOY_URL=${DEPLOY_URL}
+OWNER_EMAIL=${OWNER_EMAIL}
+PLAN=${PLAN}
+
+JWT_SECRET=${JWT_SECRET}
+AUTH_SECRET=${AUTH_SECRET}
+SYNC_SECRET=${SYNC_SECRET}
+EOF
+chmod 600 "$SECRETS_FILE"
+log "Secrets saved to ${SECRETS_FILE} (keep private)"

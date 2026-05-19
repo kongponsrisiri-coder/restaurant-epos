@@ -6,6 +6,9 @@ restaurant-local.db-wal
 restaurant-local.db-shm
 .env
 
+# Client provisioning secrets — never commit
+scripts/.secrets-*.txt
+
 # macOS Finder metadata
 .DS_Store
 **/.DS_Store

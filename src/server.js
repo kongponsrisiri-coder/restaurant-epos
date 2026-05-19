@@ -849,22 +849,22 @@ app.post('/api/setup/restaurant', async (req, res) => {
     if ((req.get('X-Setup-Secret') || '') !== AUTH_SECRET) {
       return res.status(403).json({ error: 'Forbidden' });
     }
-    const { restaurant_id, name, plan, email, status } = req.body || {};
+    const { restaurant_id, name, plan, status } = req.body || {};
     if (!restaurant_id || !name) return res.status(400).json({ error: 'restaurant_id and name required' });
-    const existing = await pool.query(`SELECT id FROM restaurants WHERE restaurant_id = $1`, [restaurant_id]);
+    const existing = await pool.query(`SELECT restaurant_id FROM restaurants WHERE restaurant_id = $1`, [restaurant_id]);
     if (existing.rows[0]) {
       await pool.query(
-        `UPDATE restaurants SET name=$1, plan=$2, email=$3, status=$4 WHERE restaurant_id=$5`,
-        [name, plan || 'pro', email || null, status || 'active', restaurant_id]
+        `UPDATE restaurants SET name=$1, plan=$2, status=$3 WHERE restaurant_id=$4`,
+        [name, plan || 'pro', status || 'active', restaurant_id]
       );
-      return res.json({ id: existing.rows[0].id, updated: true, restaurant_id });
+      return res.json({ updated: true, restaurant_id });
     }
-    const ins = await pool.query(
-      `INSERT INTO restaurants (restaurant_id, name, plan, email, status, created_at)
-       VALUES ($1,$2,$3,$4,$5,NOW()) RETURNING id`,
-      [restaurant_id, name, plan || 'pro', email || null, status || 'active']
+    await pool.query(
+      `INSERT INTO restaurants (restaurant_id, name, plan, status, created_at)
+       VALUES ($1,$2,$3,$4,NOW())`,
+      [restaurant_id, name, plan || 'pro', status || 'active']
     );
-    res.json({ id: ins.rows[0].id, created: true, restaurant_id });
+    res.json({ created: true, restaurant_id });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

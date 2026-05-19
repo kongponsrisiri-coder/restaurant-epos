@@ -582,7 +582,7 @@ function BookingPanel({ res, allReservations, tables, tableGroups, tiers, onAssi
   }, 0);
   const enough = selectedCapacity >= res.covers;
 
-  const allTables = [...tables].sort((a, b) => a.capacity - b.capacity || a.table_number - b.table_number);
+  const allTables = [...tables].sort((a, b) => a.table_number - b.table_number);
   const allCombos = getAllCombos(tableGroups, tables);
 
   // A table only warns when ANOTHER booking overlaps this slot. Capacity

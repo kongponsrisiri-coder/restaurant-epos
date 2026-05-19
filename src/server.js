@@ -842,6 +842,32 @@ app.post('/api/auth/set-credentials', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Seed the restaurants registry row for a new client deployment.
+// Called by provision-client.sh after deployment — secret-gated.
+app.post('/api/setup/restaurant', async (req, res) => {
+  try {
+    if ((req.get('X-Setup-Secret') || '') !== AUTH_SECRET) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const { restaurant_id, name, plan, email, status } = req.body || {};
+    if (!restaurant_id || !name) return res.status(400).json({ error: 'restaurant_id and name required' });
+    const existing = await pool.query(`SELECT id FROM restaurants WHERE restaurant_id = $1`, [restaurant_id]);
+    if (existing.rows[0]) {
+      await pool.query(
+        `UPDATE restaurants SET name=$1, plan=$2, email=$3, status=$4 WHERE restaurant_id=$5`,
+        [name, plan || 'pro', email || null, status || 'active', restaurant_id]
+      );
+      return res.json({ id: existing.rows[0].id, updated: true, restaurant_id });
+    }
+    const ins = await pool.query(
+      `INSERT INTO restaurants (restaurant_id, name, plan, email, status, created_at)
+       VALUES ($1,$2,$3,$4,$5,NOW()) RETURNING id`,
+      [restaurant_id, name, plan || 'pro', email || null, status || 'active']
+    );
+    res.json({ id: ins.rows[0].id, created: true, restaurant_id });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─────────────────────────────────────────────────────────────────────
 // SEPOS-STRIPE-001 — Stripe subscription billing webhook
 // The central SiamEPOS Stripe account posts subscription lifecycle

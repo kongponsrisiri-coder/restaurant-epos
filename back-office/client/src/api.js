@@ -207,4 +207,30 @@ export const api = {
       headers: { 'Content-Type': 'application/json', ...tokenHeader() },
       body: JSON.stringify({ transactions }),
     }).then(handle),
+
+  // ── Invoice attachments ──────────────────────────────────────
+  getAttachments: (ids) =>
+    fetch(`${API}/api/finance/attachments?ids=${ids.join(',')}`, { headers: tokenHeader() }).then(handle),
+
+  uploadAttachment: (txId, body) =>
+    fetch(`${API}/api/finance/transactions/${txId}/attachment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify(body),
+    }).then(handle),
+
+  downloadAttachment: async (txId, filename) => {
+    const r = await fetch(`${API}/api/finance/transactions/${txId}/attachment`, { headers: tokenHeader() });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const blob = await r.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  },
+
+  deleteAttachment: (txId) =>
+    fetch(`${API}/api/finance/transactions/${txId}/attachment`, {
+      method: 'DELETE', headers: tokenHeader(),
+    }).then(handle),
 };

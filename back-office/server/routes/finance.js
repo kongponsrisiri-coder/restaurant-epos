@@ -205,4 +205,99 @@ router.post('/summary', authRequired, async (req, res) => {
   }
 });
 
+// ── Invoice attachments ───────────────────────────────────────────────────
+
+// GET /api/finance/attachments?ids=uid1,uid2,...
+// Returns a map of { [transaction_id]: { id, filename, mimetype, file_size, uploaded_at } }
+// for the given list of transaction IDs. Used by the transaction table to
+// show which rows already have an attachment without fetching all files.
+router.get('/attachments', authRequired, async (req, res) => {
+  try {
+    const ids = (req.query.ids || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (!ids.length) return res.json({});
+    const { rows } = await pool.query(
+      `SELECT transaction_id, id, filename, mimetype, file_size, uploaded_by, uploaded_at
+       FROM transaction_attachments
+       WHERE transaction_id = ANY($1)`,
+      [ids]
+    );
+    const map = {};
+    rows.forEach(r => { map[r.transaction_id] = r; });
+    return res.json(map);
+  } catch (err) {
+    console.error('[finance] attachments GET error', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/finance/transactions/:txId/attachment
+// Body: { filename, mimetype, file_data (base64), file_size }
+// Upserts — re-uploading replaces the existing attachment.
+router.post('/transactions/:txId/attachment', authRequired, async (req, res) => {
+  const { txId } = req.params;
+  const { filename, mimetype, file_data, file_size } = req.body || {};
+  if (!filename || !file_data) {
+    return res.status(400).json({ error: 'filename and file_data are required' });
+  }
+  // 5 MB limit on base64 payload (~3.75 MB original file)
+  if (file_data.length > 5 * 1024 * 1024 * 1.4) {
+    return res.status(413).json({ error: 'File too large — maximum 5 MB' });
+  }
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO transaction_attachments
+         (transaction_id, filename, mimetype, file_data, file_size, uploaded_by)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (transaction_id) DO UPDATE SET
+         filename    = EXCLUDED.filename,
+         mimetype    = EXCLUDED.mimetype,
+         file_data   = EXCLUDED.file_data,
+         file_size   = EXCLUDED.file_size,
+         uploaded_by = EXCLUDED.uploaded_by,
+         uploaded_at = NOW()
+       RETURNING id, filename, mimetype, file_size, uploaded_at`,
+      [txId, filename, mimetype || 'application/octet-stream', file_data,
+       file_size || null, req.user?.email || null]
+    );
+    return res.json(rows[0]);
+  } catch (err) {
+    console.error('[finance] attachment upload error', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/finance/transactions/:txId/attachment
+// Returns the file as a download (Content-Disposition: attachment).
+router.get('/transactions/:txId/attachment', authRequired, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT filename, mimetype, file_data FROM transaction_attachments WHERE transaction_id = $1',
+      [req.params.txId]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'No attachment found' });
+    const { filename, mimetype, file_data } = rows[0];
+    const buf = Buffer.from(file_data, 'base64');
+    res.set('Content-Type', mimetype);
+    res.set('Content-Disposition', `attachment; filename="${filename}"`);
+    res.set('Content-Length', buf.length);
+    return res.send(buf);
+  } catch (err) {
+    console.error('[finance] attachment download error', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE /api/finance/transactions/:txId/attachment
+router.delete('/transactions/:txId/attachment', authRequired, async (req, res) => {
+  try {
+    await pool.query(
+      'DELETE FROM transaction_attachments WHERE transaction_id = $1',
+      [req.params.txId]
+    );
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

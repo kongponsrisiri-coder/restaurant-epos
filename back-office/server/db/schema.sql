@@ -125,3 +125,18 @@ CREATE TABLE IF NOT EXISTS finance_settings (
 );
 -- Ensure exactly one row exists.
 INSERT INTO finance_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+-- SEPOS-FINANCE-002 — Invoice attachments. One file per Starling transaction
+-- (identified by feedItemUid). File stored as base64 text so no external
+-- storage service is needed. Typical receipt PDFs are 50–500 KB; fine in PG.
+CREATE TABLE IF NOT EXISTS transaction_attachments (
+  id               SERIAL PRIMARY KEY,
+  transaction_id   TEXT NOT NULL UNIQUE,   -- Starling feedItemUid
+  filename         TEXT NOT NULL,
+  mimetype         TEXT NOT NULL DEFAULT 'application/octet-stream',
+  file_data        TEXT NOT NULL,           -- base64-encoded file content
+  file_size        INT,                     -- bytes (original, pre-encoding)
+  uploaded_by      TEXT,                   -- team user email
+  uploaded_at      TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_tx_attach_txid ON transaction_attachments (transaction_id);

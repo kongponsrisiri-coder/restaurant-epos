@@ -2,7 +2,7 @@
 // Shows live balance + transaction history from Starling, P&L summary,
 // and an AI-generated plain-English monthly summary (Anthropic).
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { C, card } from '../theme.js';
 import { api } from '../api.js';
 
@@ -233,9 +233,94 @@ function PLSummary({ transactions }) {
   );
 }
 
+// ── Attachment button ─────────────────────────────────────────────────────
+function AttachmentCell({ tx, attachments, onAttachmentsChange }) {
+  const att       = attachments[tx.id];
+  const [busy, setBusy] = useState(false);
+  const inputRef  = useRef();
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { alert('File too large — maximum 5 MB'); return; }
+    setBusy(true);
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      await api.uploadAttachment(tx.id, {
+        filename:  file.name,
+        mimetype:  file.type || 'application/octet-stream',
+        file_data: base64,
+        file_size: file.size,
+      });
+      onAttachmentsChange(tx.id, { filename: file.name, mimetype: file.type, file_size: file.size });
+    } catch (err) {
+      alert('Upload failed: ' + err.message);
+    } finally {
+      setBusy(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleDownload = () => api.downloadAttachment(tx.id, att.filename).catch(err => alert(err.message));
+
+  const handleDelete = async () => {
+    if (!confirm(`Remove "${att.filename}"?`)) return;
+    setBusy(true);
+    try {
+      await api.deleteAttachment(tx.id);
+      onAttachmentsChange(tx.id, null);
+    } catch (err) { alert(err.message); }
+    finally { setBusy(false); }
+  };
+
+  if (busy) return <span style={{ fontSize: 16 }}>⏳</span>;
+
+  if (att) return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <button onClick={handleDownload} title={att.filename}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: 0 }}>
+        🗂️
+      </button>
+      <button onClick={handleDelete} title="Remove attachment"
+        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#dc2626', padding: 0, opacity: 0.7 }}>
+        ×
+      </button>
+    </div>
+  );
+
+  return (
+    <>
+      <input ref={inputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style={{ display: 'none' }} onChange={handleFileChange} />
+      <button onClick={() => inputRef.current?.click()} title="Attach invoice"
+        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, opacity: 0.45, padding: 0 }}>
+        📎
+      </button>
+    </>
+  );
+}
+
 // ── Transactions table ───────────────────────────────────────────────────
 function TransactionTable({ transactions, loading, days, onDaysChange }) {
   const DAYS = [30, 60, 90];
+  const [attachments, setAttachments] = useState({});
+
+  // Load attachment metadata whenever the transaction list changes
+  useEffect(() => {
+    const ids = transactions.map(t => t.id).filter(Boolean);
+    if (!ids.length) return;
+    api.getAttachments(ids)
+      .then(setAttachments)
+      .catch(() => {});
+  }, [transactions]);
+
+  const handleAttachmentsChange = (txId, meta) => {
+    setAttachments(prev => meta ? { ...prev, [txId]: meta } : Object.fromEntries(Object.entries(prev).filter(([k]) => k !== txId)));
+  };
 
   return (
     <div style={{ ...card, padding: 24, marginBottom: 24 }}>
@@ -277,11 +362,12 @@ function TransactionTable({ transactions, loading, days, onDaysChange }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  {['Date', 'Description', 'Category', 'Amount'].map(h => (
-                    <th key={h} style={{
+                  {['Date', 'Description', 'Category', 'Amount', ''].map((h, i) => (
+                    <th key={i} style={{
                       textAlign: h === 'Amount' ? 'right' : 'left',
                       padding: '8px 12px', color: C.textMuted,
                       fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.7,
+                      width: h === '' ? 60 : 'auto',
                     }}>
                       {h}
                     </th>
@@ -302,6 +388,13 @@ function TransactionTable({ transactions, loading, days, onDaysChange }) {
                       color: tx.direction === 'IN' ? '#166534' : '#991b1b',
                     }}>
                       {tx.direction === 'IN' ? '+' : '-'}{fmtGBP(tx.amount)}
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <AttachmentCell
+                        tx={tx}
+                        attachments={attachments}
+                        onAttachmentsChange={handleAttachmentsChange}
+                      />
                     </td>
                   </tr>
                 ))}

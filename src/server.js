@@ -234,8 +234,10 @@ app.delete('/api/table-walls/:id', async (req, res) => {
 
 app.get('/api/dining-duration-tiers', async (req, res) => {
   try {
+    const rid = resolveRestaurantId(req);
     const result = await pool.query(
-      "SELECT * FROM dining_duration_tiers WHERE restaurant_id = 'siamepos' ORDER BY covers_min"
+      'SELECT * FROM dining_duration_tiers WHERE restaurant_id = $1 ORDER BY covers_min',
+      [rid]
     );
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -879,6 +881,39 @@ app.post('/api/setup/seed-categories', async (req, res) => {
       );
     }
     res.json({ seeded: true, count: categories.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Migrate all rows stamped with a stale restaurant_id to the correct one.
+// Safe to call multiple times — only touches rows with the old id.
+// Usage: POST /api/setup/migrate-restaurant-id { from: 'siamepos', to: 'baan-siam' }
+app.post('/api/setup/migrate-restaurant-id', async (req, res) => {
+  try {
+    if ((req.get('X-Setup-Secret') || '') !== AUTH_SECRET) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const from = req.body.from || 'siamepos';
+    const to   = req.body.to   || (process.env.RESTAURANT_ID || 'siamepos');
+    if (from === to) return res.json({ skipped: true, message: 'from and to are the same' });
+
+    const tables = [
+      'reservations', 'orders', 'order_items', 'payments',
+      'menu_items', 'categories', 'staff', 'tables',
+      'settings', 'dining_duration_tiers', 'restaurant_settings',
+    ];
+    const results = {};
+    for (const table of tables) {
+      try {
+        const r = await pool.query(
+          `UPDATE ${table} SET restaurant_id = $1 WHERE restaurant_id = $2`,
+          [to, from]
+        );
+        results[table] = r.rowCount;
+      } catch (e) {
+        results[table] = `skipped (${e.message})`;
+      }
+    }
+    res.json({ migrated: true, from, to, results });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

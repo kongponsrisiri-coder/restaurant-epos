@@ -865,6 +865,30 @@ app.post('/api/auth/set-credentials', async (req, res) => {
 
 // Seed the restaurants registry row for a new client deployment.
 // Called by provision-client.sh after deployment — secret-gated.
+app.post('/api/setup/seed-categories', async (req, res) => {
+  try {
+    if ((req.get('X-Setup-Secret') || '') !== AUTH_SECRET) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const existing = await pool.query('SELECT COUNT(*) as n FROM categories');
+    if (parseInt(existing.rows[0].n) > 0) {
+      return res.json({ skipped: true, message: 'Categories already exist' });
+    }
+    // Accept categories passed in from the provision script (copied from main system)
+    const categories = req.body.categories;
+    if (!categories || !Array.isArray(categories) || categories.length === 0) {
+      return res.status(400).json({ error: 'categories array required' });
+    }
+    for (const cat of categories) {
+      await pool.query(
+        'INSERT INTO categories (name, sort_order, is_bar, default_course) VALUES ($1, $2, $3, $4)',
+        [cat.name, cat.sort_order, cat.is_bar ?? 0, cat.default_course ?? 1]
+      );
+    }
+    res.json({ seeded: true, count: categories.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/setup/restaurant', async (req, res) => {
   try {
     if ((req.get('X-Setup-Secret') || '') !== AUTH_SECRET) {

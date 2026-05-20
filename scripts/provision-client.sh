@@ -184,7 +184,27 @@ else
   warn "You may need to add the restaurants row manually in the DB"
 fi
 
-# ── 11. Print DNS + summary ───────────────────────────────────────────────────
+# ── 11. Seed menu categories — copied from main system ───────────────────────
+info "Fetching categories from main system..."
+MAIN_CATS=$(curl -s "https://restaurant-epos-production.up.railway.app/api/categories")
+
+if echo "$MAIN_CATS" | grep -q '"name"'; then
+  log "Fetched categories from main system"
+  CATS_RESPONSE=$(curl -s -X POST "${DEPLOY_URL}/api/setup/seed-categories" \
+    -H "Content-Type: application/json" \
+    -H "X-Setup-Secret: ${AUTH_SECRET}" \
+    -d "{\"categories\": ${MAIN_CATS}}")
+  if echo "$CATS_RESPONSE" | grep -q '"seeded"\|"skipped"'; then
+    log "Menu categories seeded (copied from main system)"
+  else
+    warn "Category seed returned: ${CATS_RESPONSE}"
+  fi
+else
+  warn "Could not fetch categories from main system. Got: ${MAIN_CATS}"
+  warn "Seed manually after deploy: POST ${DEPLOY_URL}/api/setup/seed-categories"
+fi
+
+# ── 12. Print DNS + summary ───────────────────────────────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════════════════════════════╗"
 echo "║               NAMECHEAP DNS — ADD THIS CNAME                    ║"

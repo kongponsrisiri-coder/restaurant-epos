@@ -126,6 +126,19 @@ railway variables set \
 
 log "Environment variables set"
 
+# Verify the critical RESTAURANT_ID actually registered. Without it the
+# deployment defaults to 'siamepos' and the admin can't see widget bookings
+# (they get tagged with the right slug but the admin filter falls back to
+# the env). This caught us once on Baan Siam — don't ship without it.
+if railway variables 2>/dev/null | grep -E "RESTAURANT_ID.*${SLUG}" -q; then
+  log "Verified RESTAURANT_ID=${SLUG} on the Railway service"
+else
+  warn "Could NOT confirm RESTAURANT_ID=${SLUG} on the service."
+  warn "Set it manually before continuing:"
+  warn "  railway variables --set RESTAURANT_ID=${SLUG}"
+  read -p "Press ENTER once it is set..."
+fi
+
 # ── 7. Deploy ─────────────────────────────────────────────────────────────────
 info "Deploying codebase..."
 railway up --detach
@@ -183,6 +196,23 @@ if echo "$RESTAURANTS_RESPONSE" | grep -q '"id"\|"created"\|"restaurant_id"'; th
 else
   warn "Restaurant seed returned: ${RESTAURANTS_RESPONSE}"
   warn "You may need to add the restaurants row manually in the DB"
+fi
+
+# ── 10b. Verify the LIVE deployment resolves to the right RESTAURANT_ID ──────
+# This is the real safety net: GET /api/restaurant uses the env-resolved
+# restaurant_id to look up the registry row. If the env didn't take, the
+# slug we just seeded won't be returned — fix it now, not in production.
+info "Verifying the live deployment identifies as '${SLUG}'..."
+WHO_AM_I=$(curl -s "${DEPLOY_URL}/api/restaurant" --max-time 10 2>/dev/null)
+RETURNED_ID=$(echo "$WHO_AM_I" | sed -n 's/.*"restaurant_id"[^"]*"\([^"]*\)".*/\1/p')
+if [ "$RETURNED_ID" = "$SLUG" ]; then
+  log "Live deployment correctly identifies as '${SLUG}'"
+else
+  warn "Deployment returned restaurant_id='${RETURNED_ID}' (expected '${SLUG}')"
+  warn "Widget bookings will be INVISIBLE in the admin until this is fixed."
+  warn "Fix:"
+  warn "  railway variables --set RESTAURANT_ID=${SLUG}"
+  warn "  Then trigger a redeploy from the Railway dashboard."
 fi
 
 # ── 11. Seed menu categories — copied from main system ───────────────────────
@@ -249,6 +279,7 @@ SUBDOMAIN=${SUBDOMAIN}
 DEPLOY_URL=${DEPLOY_URL}
 OWNER_EMAIL=${OWNER_EMAIL}
 PLAN=${PLAN}
+RESTAURANT_ID=${SLUG}
 
 JWT_SECRET=${JWT_SECRET}
 AUTH_SECRET=${AUTH_SECRET}

@@ -111,6 +111,7 @@ info "Setting environment variables on ${SERVICE_NAME}..."
 
 railway variables set \
   NODE_ENV=production \
+  RESTAURANT_ID="$SLUG" \
   RESTAURANT_NAME="$RESTAURANT_NAME" \
   RESTAURANT_EMAIL="$RESTAURANT_EMAIL" \
   RESTAURANT_ADDRESS="$RESTAURANT_ADDRESS" \

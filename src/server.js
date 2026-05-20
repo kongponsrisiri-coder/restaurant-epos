@@ -1652,7 +1652,8 @@ function toMins(t) {
 // ── Availability — supports all_day and split (lunch/dinner) service ──
 app.get('/api/reservations/availability', widgetCors, async (req, res) => {
   try {
-    const { date, covers = 2, restaurant_id = 'siamepos' } = req.query;
+    const { date, covers = 2 } = req.query;
+    const restaurant_id = req.query.restaurant_id || process.env.RESTAURANT_ID || 'siamepos';
     if (!date) return res.status(400).json({ error: 'date is required (YYYY-MM-DD)' });
     const coversNum = parseInt(covers, 10);
     if (isNaN(coversNum) || coversNum < 1) return res.status(400).json({ error: 'covers must be a positive number' });
@@ -1785,7 +1786,8 @@ app.get('/api/reservations/settings/:restaurantId', widgetCors, async (req, res)
 
 app.get('/api/reservations', async (req, res) => {
   try {
-    const { date, status, restaurant_id = 'siamepos' } = req.query;
+    const { date, status } = req.query;
+    const restaurant_id = req.query.restaurant_id || process.env.RESTAURANT_ID || 'siamepos';
     let query = `SELECT r.*, TO_CHAR(r.reservation_date, 'YYYY-MM-DD') AS reservation_date, TO_CHAR(r.reservation_time, 'HH24:MI') AS reservation_time, t.name AS table_name FROM reservations r LEFT JOIN tables t ON r.table_id = t.id WHERE r.restaurant_id = $1`;
     const params = [restaurant_id];
     if (date) { params.push(date); query += ` AND r.reservation_date = $${params.length}`; }
@@ -1798,7 +1800,8 @@ app.get('/api/reservations', async (req, res) => {
 
 app.post('/api/reservations', widgetCors, async (req, res) => {
   try {
-    const { restaurant_id = 'siamepos', customer_name, customer_phone, customer_email, covers, reservation_date, reservation_time, notes, source = 'widget', table_id = null, status = 'pending', marketing_consent = 0 } = req.body;
+    const { customer_name, customer_phone, customer_email, covers, reservation_date, reservation_time, notes, source = 'widget', table_id = null, status = 'pending', marketing_consent = 0 } = req.body;
+    const restaurant_id = req.body.restaurant_id || process.env.RESTAURANT_ID || 'siamepos';
     if (!customer_name?.trim()) return res.status(400).json({ error: 'Guest name is required' });
     if (!customer_phone?.trim()) return res.status(400).json({ error: 'Phone number is required' });
     if (!reservation_date) return res.status(400).json({ error: 'Date is required' });
@@ -1927,11 +1930,11 @@ app.post('/api/reservations/:id/seat', async (req, res) => {
 app.post('/api/reservations/walk-in', async (req, res) => {
   try {
     const {
-      restaurant_id = 'siamepos',
       table_id, covers,
       customer_name = 'Walk-in', customer_phone = null, customer_email = null,
       staff_id = null, notes = null,
     } = req.body || {};
+    const restaurant_id = (req.body || {}).restaurant_id || process.env.RESTAURANT_ID || 'siamepos';
     if (!table_id) return res.status(400).json({ error: 'table_id required' });
     const coversNum = parseInt(covers, 10);
     if (!coversNum || coversNum < 1) return res.status(400).json({ error: 'covers must be at least 1' });

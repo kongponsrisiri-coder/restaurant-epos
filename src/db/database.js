@@ -9,6 +9,12 @@ const pool = new Pool({
   connectionTimeoutMillis: 3000,
 });
 
+// Set UK timezone on every connection so CURRENT_TIMESTAMP / NOW() reflect
+// London time (handles BST ↔ GMT automatically).
+pool.on('connect', client => {
+  client.query("SET timezone='Europe/London'").catch(() => {});
+});
+
 async function initDB() {
   try {
     await pool.query(`

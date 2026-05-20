@@ -97,8 +97,6 @@ export const getBarOrders = () => get('/api/orders/bar');
 export const getCategories = () => get('/api/categories');
 export const updateCategoryBar = (id, is_bar) => put(`/api/categories/${id}/bar`, { is_bar });
 export const updateCategoryDefaultCourse = (id, default_course) => put(`/api/categories/${id}/default-course`, { default_course });
-export const addCategory = (name) => post('/api/categories', { name });
-export const deleteCategory = (id) => del(`/api/categories/${id}`);
 export const getSubcategories = () => get('/api/subcategories');
 export const addSubcategory = (category_id, name) => post('/api/subcategories', { category_id, name });
 export const deleteSubcategory = (id) => del(`/api/subcategories/${id}`);

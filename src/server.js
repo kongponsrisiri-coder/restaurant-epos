@@ -260,6 +260,20 @@ app.get('/api/categories', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.post('/api/categories', async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Category name required' });
+    const existing = await pool.query('SELECT MAX(sort_order) as max_order FROM categories');
+    const nextOrder = (existing.rows[0].max_order || 0) + 1;
+    const result = await pool.query(
+      'INSERT INTO categories (name, sort_order) VALUES ($1, $2) RETURNING *',
+      [name.trim(), nextOrder]
+    );
+    res.json(result.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.put('/api/categories/:id/bar', async (req, res) => {
   try {
     const { is_bar } = req.body;

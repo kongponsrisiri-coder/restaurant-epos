@@ -5,6 +5,7 @@ import {
   getItemModifiers, addModifierGroup, addModifierOption,
   deleteModifierGroup, deleteModifier,
   getSubcategories, addSubcategory, deleteSubcategory,
+  addCategory, deleteCategory,
 } from '../../api';
 
 // ── AI Menu Scanner Modal ─────────────────────────────────────────
@@ -136,6 +137,8 @@ export default function MenuSection() {
   const [activeGroup, setActiveGroup]       = useState(null);
   const [showSubcatManager, setShowSubcatManager] = useState(false);
   const [newSubcatName, setNewSubcatName]   = useState('');
+  const [newCatName, setNewCatName]         = useState('');
+  const [showAddCat, setShowAddCat]         = useState(false);
   const [dragIndex, setDragIndex]           = useState(null);
   const [dragOverIndex, setDragOverIndex]   = useState(null);
   const [localItems, setLocalItems]         = useState([]);
@@ -147,6 +150,19 @@ export default function MenuSection() {
   };
   useEffect(() => { fetchMenu(); }, []);
   useEffect(() => { const items = menu.find(c => c.id === activeCategory)?.items || []; setLocalItems([...items]); }, [activeCategory, menu]);
+
+  const handleAddCategory = async () => {
+    if (!newCatName.trim()) return;
+    const cat = await addCategory(newCatName.trim());
+    setNewCatName(''); setShowAddCat(false);
+    await fetchMenu();
+    setActiveCategory(cat.id);
+  };
+  const handleDeleteCategory = async (catId, catName) => {
+    if (!confirm(`Delete category "${catName}" and all its items?`)) return;
+    await deleteCategory(catId);
+    await fetchMenu();
+  };
 
   const openAddForm  = () => { setForm({ name: '', description: '', price: '', category_id: activeCategory, subcategory_id: null, vat_rate: 20 }); setEditItem(null); setShowForm(true); };
   const openEditForm = (item) => { setForm({ name: item.name, name_alt: item.name_alt || '', description: item.description || '', price: item.price, category_id: item.category_id, subcategory_id: item.subcategory_id || null, vat_rate: item.vat_rate ?? 20 }); setEditItem(item); setShowForm(true); };
@@ -178,7 +194,23 @@ export default function MenuSection() {
     <div style={{ padding: 24 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 20 }}>Menu Manager</h1>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        {menu.map(cat => (<button key={cat.id} onClick={() => setActiveCategory(cat.id)} style={{ padding: '8px 20px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, background: activeCategory === cat.id ? '#1a1a2e' : '#e0e0e0', color: activeCategory === cat.id ? 'white' : '#555' }}>{cat.name} ({cat.items?.length || 0})</button>))}
+        {menu.map(cat => (
+          <div key={cat.id} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+            <button onClick={() => setActiveCategory(cat.id)} style={{ padding: '8px 20px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, background: activeCategory === cat.id ? '#1a1a2e' : '#e0e0e0', color: activeCategory === cat.id ? 'white' : '#555' }}>{cat.name} ({cat.items?.length || 0})</button>
+            {activeCategory === cat.id && (
+              <button onClick={() => handleDeleteCategory(cat.id, cat.name)} title="Delete category" style={{ marginLeft: -8, width: 20, height: 20, borderRadius: '50%', border: 'none', background: '#ef4444', color: 'white', cursor: 'pointer', fontSize: 12, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>×</button>
+            )}
+          </div>
+        ))}
+        {showAddCat ? (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input autoFocus value={newCatName} onChange={e => setNewCatName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddCategory(); if (e.key === 'Escape') { setShowAddCat(false); setNewCatName(''); } }} placeholder="Category name..." style={{ padding: '7px 12px', borderRadius: 20, border: '2px solid #1a1a2e', fontSize: 13, outline: 'none', width: 160 }} />
+            <button onClick={handleAddCategory} style={{ padding: '7px 14px', borderRadius: 20, border: 'none', background: '#1a1a2e', color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>Add</button>
+            <button onClick={() => { setShowAddCat(false); setNewCatName(''); }} style={{ padding: '7px 12px', borderRadius: 20, border: 'none', background: '#e0e0e0', color: '#555', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>✕</button>
+          </div>
+        ) : (
+          <button onClick={() => setShowAddCat(true)} style={{ padding: '8px 16px', borderRadius: 20, border: '2px dashed #C9A84C', background: 'white', color: '#C9A84C', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>+ Category</button>
+        )}
         <button onClick={() => setShowSubcatManager(!showSubcatManager)} style={{ padding: '8px 16px', borderRadius: 20, border: '2px dashed #3b82f6', background: 'white', color: '#3b82f6', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>⊕ Sub-categories</button>
       </div>
       {showSubcatManager && (
@@ -202,7 +234,13 @@ export default function MenuSection() {
           <button onClick={openAddForm} style={{ background: '#e94560', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }}>+ Add Item</button>
         </div>
       </div>
-      {localItems.length === 0 ? <div style={{ textAlign: 'center', color: '#bbb', marginTop: 60 }}>No items yet — click "+ Add Item" or use 🤖 AI Scanner</div> : (
+      {menu.length === 0 ? (
+        <div style={{ textAlign: 'center', color: '#888', marginTop: 60 }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📂</div>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>No menu categories yet</div>
+          <div style={{ fontSize: 13, color: '#bbb', marginBottom: 20 }}>Click <strong style={{ color: '#C9A84C' }}>+ Category</strong> above to create your first category (e.g. Starters, Mains, Desserts)</div>
+        </div>
+      ) : localItems.length === 0 ? <div style={{ textAlign: 'center', color: '#bbb', marginTop: 60 }}>No items yet — click "+ Add Item" or use 🤖 AI Scanner</div> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {localItems.map((item, index) => {
             const subcat = subcategories.find(s => s.id === item.subcategory_id);

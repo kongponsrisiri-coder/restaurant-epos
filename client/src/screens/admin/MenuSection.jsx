@@ -5,7 +5,7 @@ import {
   getItemModifiers, addModifierGroup, addModifierOption,
   deleteModifierGroup, deleteModifier,
   getSubcategories, addSubcategory, deleteSubcategory,
-  addCategory,
+  addCategory, updateCategoryDefaultCourse,
 } from '../../api';
 
 // ── AI Menu Scanner Modal ─────────────────────────────────────────
@@ -189,7 +189,22 @@ export default function MenuSection() {
     <div style={{ padding: 24 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 20 }}>Menu Manager</h1>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        {menu.map(cat => (<button key={cat.id} onClick={() => setActiveCategory(cat.id)} style={{ padding: '8px 20px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, background: activeCategory === cat.id ? '#1a1a2e' : '#e0e0e0', color: activeCategory === cat.id ? 'white' : '#555' }}>{cat.name} ({cat.items?.length || 0})</button>))}
+        {menu.map(cat => (
+          <div key={cat.id} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+            <button onClick={() => setActiveCategory(cat.id)} style={{ padding: '8px 20px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, background: activeCategory === cat.id ? '#1a1a2e' : '#e0e0e0', color: activeCategory === cat.id ? 'white' : '#555' }}>{cat.name} ({cat.items?.length || 0})</button>
+            <select
+              value={cat.default_course || 1}
+              onChange={async e => { await updateCategoryDefaultCourse(cat.id, Number(e.target.value)); fetchMenu(); }}
+              title="Which course does this appear as on the kitchen screen?"
+              style={{ fontSize: 10, padding: '1px 4px', borderRadius: 6, border: '1px solid #ddd', background: ['','#fde68a','#bbf7d0','#fca5a5','#bfdbfe'][cat.default_course||1] || '#eee', cursor: 'pointer', fontWeight: 600, color: '#333' }}
+            >
+              <option value={1}>🟡 Starter</option>
+              <option value={2}>🟢 Main</option>
+              <option value={3}>🔴 Dessert</option>
+              <option value={4}>🔵 Extra/Bar</option>
+            </select>
+          </div>
+        ))}
         {showAddCat ? (
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input autoFocus value={newCatName} onChange={e => setNewCatName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddCategory(); if (e.key === 'Escape') { setShowAddCat(false); setNewCatName(''); } }} placeholder="Category name…" style={{ padding: '7px 12px', borderRadius: 20, border: '2px solid #1a1a2e', fontSize: 13, outline: 'none', width: 160 }} />

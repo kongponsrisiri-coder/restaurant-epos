@@ -1,4 +1,6 @@
-const CLOUD_URL = 'https://restaurant-epos-production.up.railway.app';
+// Respect VITE_API_URL so per-client Netlify deploys (e.g. Baan Siam)
+// probe their own backend, not the main restaurant-epos-production one.
+const CLOUD_URL = import.meta.env.VITE_API_URL || 'https://restaurant-epos-production.up.railway.app';
 const LOCAL_IP_KEY = 'siamepos_local_ip';
 const LOCAL_PORT_KEY = 'siamepos_local_port';
 

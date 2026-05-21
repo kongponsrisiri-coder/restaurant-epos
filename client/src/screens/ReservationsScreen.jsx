@@ -1,13 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
 import ReservationPlanView from './ReservationPlanView';
-
-const SERVER_URL = (() => {
-  const host = window.location.hostname;
-  if (host === 'localhost' || host.startsWith('192.168.') || host.startsWith('10.'))
-    return window.location.origin;
-  return 'https://restaurant-epos-production.up.railway.app';
-})();
+// Use the canonical SERVER_URL from api.js — it respects VITE_API_URL
+// so per-client Netlify deploys (e.g. Baan Siam) talk to their own
+// backend instead of the main restaurant-epos-production one.
+import { SERVER_URL } from '../api';
 
 const STATUS_CONFIG = {
   pending:   { label: 'Pending',   bg: '#fef9c3', color: '#92400e', dot: '#f59e0b' },

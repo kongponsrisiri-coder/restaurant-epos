@@ -1,12 +1,9 @@
 import { useState, useEffect } from 'react';
 import SeatActionSheet from '../components/SeatActionSheet';
-
-const SERVER_URL = (() => {
-  const host = window.location.hostname;
-  if (host === 'localhost' || host.startsWith('192.168.') || host.startsWith('10.'))
-    return window.location.origin;
-  return 'https://restaurant-epos-production.up.railway.app';
-})();
+// Use the canonical SERVER_URL from api.js — it respects VITE_API_URL
+// so per-client Netlify deploys (e.g. Baan Siam) talk to their own
+// backend instead of the main restaurant-epos-production one.
+import { SERVER_URL } from '../api';
 
 const api = url => fetch(`${SERVER_URL}${url}`).then(r => r.json());
 const put = (url, d) => fetch(`${SERVER_URL}${url}`, {

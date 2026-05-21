@@ -1791,6 +1791,26 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
   }
 });
 
+// ── GET reservation settings (no-param version — uses RESTAURANT_ID env) ──
+app.get('/api/reservations/settings', async (req, res) => {
+  req.params = { restaurantId: resolveRestaurantId(req) };
+  // fall through to the parameterised handler below via direct call
+  const rid = resolveRestaurantId(req);
+  try {
+    const result = await pool.query(
+      `SELECT restaurant_id, restaurant_name, brand_colour,
+              opening_time, last_booking_time, slot_interval, default_duration,
+              service_start, service_end, lunch_start, lunch_end,
+              dinner_start, dinner_end, use_split_service,
+              max_covers_per_slot, max_party_size, restaurant_phone,
+              is_active, confirmation_email
+       FROM restaurant_settings WHERE restaurant_id = $1`, [rid]
+    );
+    const s = result.rows[0] || { restaurant_id: rid, is_active: true };
+    res.json(s);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── GET reservation settings — includes all new fields ──
 app.get('/api/reservations/settings/:restaurantId', widgetCors, async (req, res) => {
   try {

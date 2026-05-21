@@ -179,7 +179,7 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
       api('/api/tables'),
       api('/api/table-combinations').catch(() => []),
       api('/api/dining-duration-tiers').catch(() => []),
-      api('/api/reservations/settings/siamepos').catch(() => null),
+      api('/api/reservations/settings').catch(() => null),
     ]).then(([tabs, combs, trs, sett]) => {
       setTables(Array.isArray(tabs) ? tabs : []);
       setCombinations(Array.isArray(combs) ? combs : []);

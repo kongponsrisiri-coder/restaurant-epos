@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-R0E872VB21"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-R0E872VB21');</script>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='50' fill='%230D1B3E'/%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%23C9A84C' stroke-width='1.8'/%3E%3Cg transform='translate(50,50)'%3E%3Cpath d='M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z' fill='%23C9A84C'/%3E%3Cpath d='M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z' fill='%23C9A84C' opacity='0.82' transform='rotate(72)'/%3E%3Ccircle cx='0' cy='0' r='5' fill='%23C9A84C'/%3E%3C/g%3E%3C/svg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SiamSpa — Spa Management for Thai Massage Shops in the UK</title>
+<meta name="description" content="SiamSpa is the complete management system for Thai spas and massage shops in the UK. Online booking, therapist scheduling, client CRM, medical records, revenue reports — all in one place.">
+<link rel="canonical" href="https://siamepos.co.uk/spa.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="SiamSpa — Spa Management for Thai Massage Shops in the UK">
+<meta property="og:description" content="Online booking with therapist selection. Live appointment timeline. Client CRM and medical records. Built for Thai spas and massage shops in the UK.">
+<meta property="og:url" content="https://siamepos.co.uk/spa.html">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold:#C9A84C; --gold-light:#E8C96A;
+  --navy:#0D1B3E; --navy-mid:#1A2F6B;
+  --white:#FDFAF4; --text-muted:#6B7A9F;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{font-family:'Sarabun',sans-serif;background:var(--white);color:var(--navy);overflow-x:hidden;}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content:space-between;align-items:center;padding:18px 60px;background:rgba(13,27,62,0.96);backdrop-filter:blur(12px);border-bottom:1px solid rgba(201,168,76,0.2);}
+.nav-logo{display:flex;align-items:center;text-decoration:none;}
+.nav-links{display:flex;align-items:center;gap:24px;list-style:none;}
+.nav-links a{color:rgba(255,255,255,0.75);text-decoration:none;font-size:14px;font-weight:600;transition:color 0.2s;}
+.nav-links a:hover{color:var(--gold);}
+.nav-links a.active{color:var(--gold);}
+.nav-cta{background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy)!important;padding:9px 20px;border-radius:8px;font-weight:700!important;}
+.nav-burger{display:none;background:none;border:none;color:white;font-size:24px;line-height:1;cursor:pointer;padding:4px 6px;margin-left:6px;}
+
+/* BUTTONS */
+.book-btn{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);padding:13px 26px;border-radius:10px;font-size:15px;font-weight:800;border:none;cursor:pointer;font-family:'Sarabun',sans-serif;transition:transform 0.2s,box-shadow 0.2s;white-space:nowrap;text-decoration:none;}
+.book-btn:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(201,168,76,0.45);}
+.book-btn.ghost{background:transparent;border:2px solid var(--gold);color:var(--gold);}
+.book-btn.ghost:hover{background:rgba(201,168,76,0.1);}
+.book-btn.navy{background:var(--navy);color:white;}
+.book-btn.navy:hover{background:var(--navy-mid);}
+
+/* WHATSAPP */
+.wa-float{position:fixed;bottom:28px;right:28px;z-index:98;}
+.wa-btn{display:flex;align-items:center;gap:10px;background:#25D366;color:white;padding:13px 20px;border-radius:50px;font-size:14px;font-weight:700;text-decoration:none;box-shadow:0 8px 24px rgba(37,211,102,0.4);transition:transform 0.2s;font-family:'Sarabun',sans-serif;}
+.wa-btn:hover{transform:translateY(-2px);}
+
+/* HERO */
+.hero{min-height:100vh;background:linear-gradient(160deg,var(--navy) 0%,var(--navy-mid) 60%,#0A2456 100%);display:flex;align-items:center;position:relative;overflow:hidden;padding:120px 60px 80px;}
+.hero::before{content:'';position:absolute;inset:0;background-image:repeating-linear-gradient(45deg,rgba(201,168,76,0.03) 0px,rgba(201,168,76,0.03) 1px,transparent 1px,transparent 60px),repeating-linear-gradient(-45deg,rgba(201,168,76,0.03) 0px,rgba(201,168,76,0.03) 1px,transparent 1px,transparent 60px);}
+.hero::after{content:'';position:absolute;width:600px;height:600px;background:radial-gradient(circle,rgba(201,168,76,0.1) 0%,transparent 70%);right:-100px;top:50%;transform:translateY(-50%);border-radius:50%;}
+.hero-content{max-width:680px;position:relative;z-index:1;}
+.hero-tag{display:inline-flex;align-items:center;gap:8px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:var(--gold);padding:7px 16px;border-radius:30px;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:24px;}
+.hero h1{font-family:'Cormorant Garamond',serif;font-size:64px;font-weight:700;line-height:1.05;color:white;margin-bottom:20px;}
+.hero h1 em{font-style:italic;color:var(--gold);}
+.hero-sub{font-size:18px;color:rgba(255,255,255,0.75);line-height:1.75;margin-bottom:36px;font-weight:300;max-width:560px;}
+.hero-actions{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:52px;}
+.hero-stats{display:flex;gap:40px;flex-wrap:wrap;}
+.hstat-num{font-family:'Cormorant Garamond',serif;font-size:38px;font-weight:700;color:var(--gold);line-height:1;}
+.hstat-label{font-size:11px;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:1px;margin-top:3px;}
+
+/* PROOF BAR */
+.proof-bar{background:linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.06));border-top:1px solid rgba(201,168,76,0.25);border-bottom:1px solid rgba(201,168,76,0.25);padding:20px 60px;display:flex;justify-content:center;align-items:center;gap:48px;flex-wrap:wrap;}
+.proof-item{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;color:white;}
+.proof-item .pi-icon{font-size:22px;}
+.proof-item span{color:var(--gold);}
+
+/* SECTIONS */
+section{padding:100px 60px;}
+.section-label{display:inline-block;color:var(--gold);font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin-bottom:14px;}
+.section-title{font-family:'Cormorant Garamond',serif;font-size:48px;font-weight:700;line-height:1.1;color:var(--navy);margin-bottom:18px;}
+.section-title.white{color:white;}
+.section-sub{font-size:17px;color:var(--text-muted);line-height:1.7;max-width:560px;}
+
+/* PROBLEM BANNER */
+.problem-banner{background:var(--navy);padding:60px;}
+.problem-inner{max-width:900px;margin:0 auto;text-align:center;}
+.problem-inner p{font-size:19px;color:rgba(255,255,255,0.8);line-height:1.85;font-weight:300;}
+.problem-inner strong{color:var(--gold);}
+
+/* FEATURES */
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;max-width:1100px;margin:60px auto 0;}
+.fcard{background:white;border:1px solid #E8E8F0;border-radius:20px;padding:32px 28px;transition:transform 0.3s,box-shadow 0.3s,border-color 0.3s;position:relative;overflow:hidden;}
+.fcard::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--gold),var(--gold-light));transform:scaleX(0);transform-origin:left;transition:transform 0.3s;}
+.fcard:hover{transform:translateY(-6px);box-shadow:0 20px 50px rgba(13,27,62,0.1);border-color:rgba(201,168,76,0.3);}
+.fcard:hover::before{transform:scaleX(1);}
+.fcard.highlight{border-color:rgba(201,168,76,0.3);background:linear-gradient(160deg,#FDFAF4,#FBF5E6);}
+.fcard-icon{font-size:36px;margin-bottom:14px;}
+.fcard-badge{display:inline-block;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.3);color:var(--gold);font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;padding:3px 10px;border-radius:20px;margin-bottom:10px;}
+.fcard-villain{font-size:11px;color:#c0392b;font-weight:700;margin-bottom:6px;letter-spacing:0.3px;}
+.fcard-title{font-size:18px;font-weight:700;color:var(--navy);margin-bottom:8px;}
+.fcard-desc{font-size:13px;color:var(--text-muted);line-height:1.65;}
+
+/* TIMELINE DEMO SECTION */
+.timeline-demo{background:#F7F5F0;padding:100px 60px;}
+.timeline-mockup{max-width:920px;margin:60px auto 0;background:var(--navy);border-radius:20px;overflow:hidden;box-shadow:0 40px 80px rgba(13,27,62,0.3);}
+.tm-header{background:rgba(0,0,0,0.25);padding:14px 20px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(201,168,76,0.2);}
+.tm-dots{display:flex;gap:6px;}
+.tm-dot{width:12px;height:12px;border-radius:50%;}
+.tm-title{font-size:13px;font-weight:600;color:rgba(255,255,255,0.6);margin-left:8px;}
+.tm-date-nav{margin-left:auto;display:flex;gap:8px;align-items:center;}
+.tm-date-nav span{font-size:12px;color:rgba(255,255,255,0.7);font-weight:700;}
+.tm-date-nav button{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:white;padding:3px 10px;border-radius:6px;font-size:11px;cursor:default;}
+.tm-body{display:flex;overflow:hidden;}
+.tm-time-col{width:48px;flex-shrink:0;background:rgba(255,255,255,0.03);border-right:1px solid rgba(255,255,255,0.08);}
+.tm-hour{height:56px;display:flex;align-items:flex-start;padding:6px 6px 0;justify-content:flex-end;}
+.tm-hour span{font-size:9px;font-weight:700;color:rgba(255,255,255,0.3);}
+.tm-therapist-cols{display:flex;flex:1;}
+.tm-col{flex:1;min-width:0;border-right:1px solid rgba(255,255,255,0.07);position:relative;}
+.tm-col:last-child{border-right:none;}
+.tm-col-header{padding:10px 8px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.1);}
+.tm-col-name{font-size:11px;font-weight:800;color:white;}
+.tm-col-sub{font-size:9px;color:rgba(201,168,76,0.8);margin-top:1px;}
+.tm-col-body{position:relative;height:224px;}/* 4 hours × 56px */
+.tm-grid-line{position:absolute;left:0;right:0;height:1px;background:rgba(255,255,255,0.04);}
+.tm-appt{position:absolute;left:4px;right:4px;border-radius:7px;padding:5px 7px;overflow:hidden;}
+.tm-appt-name{font-size:10px;font-weight:800;line-height:1.3;}
+.tm-appt-treat{font-size:9px;opacity:0.85;line-height:1.3;}
+.tm-now-line{position:absolute;left:0;right:0;height:2px;background:#ef4444;opacity:0.8;z-index:10;}
+.tm-now-line::before{content:'NOW';position:absolute;right:6px;top:-8px;font-size:8px;font-weight:800;color:#ef4444;}
+
+/* COMPARE */
+.compare-section{background:var(--navy);}
+.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:820px;margin:60px auto 0;}
+.cmp-col{border-radius:20px;overflow:hidden;}
+.cmp-header{padding:20px 28px;font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;}
+.cmp-col.bad .cmp-header{background:#1a0808;color:#ff6b6b;}
+.cmp-col.good .cmp-header{background:rgba(201,168,76,0.2);color:var(--gold);}
+.cmp-row{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,0.06);}
+.cmp-col.bad .cmp-row{background:rgba(255,255,255,0.02);}
+.cmp-col.good .cmp-row{background:rgba(201,168,76,0.03);}
+.cmp-row:last-child{border-bottom:none;}
+.cmp-icon{font-size:16px;flex-shrink:0;width:22px;text-align:center;}
+.cmp-text{font-size:13px;color:rgba(255,255,255,0.7);line-height:1.4;}
+.cmp-col.bad .cmp-text{color:rgba(255,150,150,0.8);}
+
+/* PRICING */
+.pricing-section{background:var(--white);}
+.pricing-card{max-width:480px;margin:60px auto 0;background:var(--navy);border:1px solid rgba(201,168,76,0.3);border-radius:24px;padding:40px;text-align:center;}
+.pc-tier{font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:12px;}
+.pc-price{font-family:'Cormorant Garamond',serif;font-size:72px;font-weight:700;color:white;line-height:1;}
+.pc-period{font-size:14px;color:rgba(255,255,255,0.45);margin-bottom:8px;}
+.pc-sub{font-size:14px;color:rgba(255,255,255,0.55);margin-bottom:28px;line-height:1.6;}
+.pc-features{list-style:none;text-align:left;margin-bottom:28px;display:flex;flex-direction:column;gap:10px;}
+.pc-features li{display:flex;align-items:flex-start;gap:10px;font-size:14px;color:rgba(255,255,255,0.75);}
+.pc-features li::before{content:'✓';color:var(--gold);font-weight:800;flex-shrink:0;margin-top:1px;}
+
+/* TRUST / FINAL CTA */
+.trust-bar{background:#F7F5F0;border-top:1px solid #E8E5DC;border-bottom:1px solid #E8E5DC;padding:24px 60px;display:flex;justify-content:center;align-items:center;gap:48px;flex-wrap:wrap;}
+.trust-item{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600;color:var(--navy);}
+.trust-item .t-icon{font-size:18px;}
+.final-cta{background:linear-gradient(135deg,var(--navy) 0%,#0A2456 100%);text-align:center;position:relative;overflow:hidden;}
+.final-cta::before{content:'';position:absolute;width:700px;height:700px;background:radial-gradient(circle,rgba(201,168,76,0.07) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);}
+.final-cta .section-title{color:white;}
+.final-cta .section-sub{color:rgba(255,255,255,0.6);margin:0 auto 40px;}
+.cta-trust-row{display:flex;justify-content:center;align-items:center;gap:28px;flex-wrap:wrap;margin-top:28px;}
+.cta-trust-chip{display:flex;align-items:center;gap:6px;font-size:12px;color:rgba(255,255,255,0.45);font-weight:600;}
+
+/* FOOTER */
+footer{background:#070F24;padding:56px 60px;display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:48px;}
+.footer-logo{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700;color:var(--gold);margin-bottom:12px;}
+.footer-logo span{color:white;}
+.footer-tagline{color:rgba(255,255,255,0.4);font-size:13px;line-height:1.7;max-width:240px;margin-bottom:20px;}
+.footer-col h4{color:white;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:16px;}
+.footer-col ul{list-style:none;display:flex;flex-direction:column;gap:9px;}
+.footer-col ul a{color:rgba(255,255,255,0.4);font-size:13px;text-decoration:none;transition:color 0.2s;}
+.footer-col ul a:hover{color:var(--gold);}
+.footer-bottom{background:#040A18;padding:18px 60px;display:flex;justify-content:space-between;align-items:center;}
+.footer-bottom p{color:rgba(255,255,255,0.22);font-size:12px;}
+.footer-bottom a{color:var(--gold);text-decoration:none;}
+
+/* ANIMATIONS */
+.reveal{opacity:0;transform:translateY(20px);transition:opacity 0.7s ease,transform 0.7s ease;}
+.reveal.visible{opacity:1;transform:translateY(0);}
+.rd1{transition-delay:0.1s} .rd2{transition-delay:0.2s} .rd3{transition-delay:0.3s}
+
+/* RESPONSIVE */
+@media(max-width:960px){
+  nav{padding:14px 20px;}
+  .nav-links{display:none;}
+  .nav-burger{display:block;}
+  body.menu-open .nav-links{display:flex;flex-direction:column;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(13,27,62,0.98);z-index:200;justify-content:center;align-items:center;gap:32px;padding:40px 24px;}
+  body.menu-open .nav-links li a{font-size:22px;}
+  .hero{padding:100px 24px 60px;}
+  .hero h1{font-size:44px;}
+  .hero-stats{gap:28px;}
+  section{padding:64px 24px;}
+  .features-grid{grid-template-columns:1fr;}
+  .compare-grid{grid-template-columns:1fr;}
+  .timeline-demo{padding:64px 24px;}
+  .tm-therapist-cols{overflow-x:auto;}
+  .tm-col{min-width:110px;}
+  footer{grid-template-columns:1fr;padding:40px 24px;}
+  .footer-bottom{padding:16px 24px;flex-direction:column;gap:8px;text-align:center;}
+  .proof-bar{padding:20px 24px;gap:24px;}
+  .trust-bar{padding:20px 24px;gap:24px;}
+  .cta-trust-row{flex-direction:column;gap:14px;}
+  .pricing-card{margin:40px 24px 0;padding:28px 24px;}
+}
+</style>
+</head>
+<body>
+
+<!-- WHATSAPP -->
+<div class="wa-float">
+  <a href="https://wa.me/447700000000?text=Hello%2C%20I%27m%20interested%20in%20SiamSpa" target="_blank" class="wa-btn">
+    <span style="font-size:20px;">💬</span> WhatsApp Us
+  </a>
+</div>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="index.html">
+    <svg width="170" height="50" viewBox="0 0 340 100" xmlns="http://www.w3.org/2000/svg"><circle cx="52" cy="50" r="44" fill="none" stroke="#C9A84C" stroke-width="1.5"/><circle cx="52" cy="50" r="38" fill="none" stroke="#C9A84C" stroke-width="0.5" opacity="0.28"/><g transform="translate(52,50)"><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/><circle cx="0" cy="0" r="8" fill="#0D1B3E"/><circle cx="0" cy="0" r="4.5" fill="#C9A84C"/></g><line x1="110" y1="16" x2="110" y2="84" stroke="#C9A84C" stroke-width="0.8" opacity="0.32"/><text x="126" y="58" font-family="Georgia, serif" font-size="40" font-weight="700" letter-spacing="-1"><tspan fill="white">Siam</tspan><tspan fill="#C9A84C">EPOS</tspan></text></svg>
+  </a>
+  <ul class="nav-links">
+    <li><a href="features.html">Features</a></li>
+    <li><a href="pricing.html">SiamPRO</a></li>
+    <li><a href="lite.html">SiamLite</a></li>
+    <li><a href="spa.html" class="active" style="color:var(--gold);">SiamSpa</a></li>
+    <li><a href="why-siamepos.html">Why Us</a></li>
+    <li><a href="website-design.html">Website Design</a></li>
+    <li><a href="book-demo.html" class="nav-cta">Book a Demo</a></li>
+  </ul>
+  <button class="nav-burger" aria-label="Open menu">☰</button>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-tag">💆 Built for Thai spas &amp; massage shops in the UK</div>
+    <h1>Your Thai spa.<br>Every booking.<br><em>Fully in control.</em></h1>
+    <p class="hero-sub">See who's in, who's booked, who's free — right now, from any device. Customers pick their therapist and book online without calling you. No more LINE messages at midnight. No more double bookings. No more paper diaries.</p>
+    <div class="hero-actions">
+      <a href="book-demo.html" class="book-btn">Book a Free Demo</a>
+      <a href="https://wa.me/447700000000?text=Hello%2C%20I%27d%20like%20to%20know%20more%20about%20SiamSpa" target="_blank" class="book-btn ghost" style="text-decoration:none;">💬 WhatsApp us first</a>
+    </div>
+    <div class="hero-stats">
+      <div><div class="hstat-num">£0</div><div class="hstat-label">Booking commission</div></div>
+      <div><div class="hstat-num">0</div><div class="hstat-label">Double bookings ever</div></div>
+      <div><div class="hstat-num">24/7</div><div class="hstat-label">Customers book online</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PROOF BAR -->
+<div class="proof-bar">
+  <div class="proof-item"><span class="pi-icon">👥</span> Client CRM — <span>every visit, every preference, on record</span></div>
+  <div class="proof-item"><span class="pi-icon">⭐</span> Customers choose their <span>preferred therapist</span></div>
+  <div class="proof-item"><span class="pi-icon">🔒</span> Client medical records <span>stored securely</span></div>
+  <div class="proof-item"><span class="pi-icon">🇹🇭</span> Built for <span>Thai massage shops</span> in the UK</div>
+</div>
+
+<!-- PROBLEM BANNER -->
+<div class="problem-banner">
+  <div class="problem-inner reveal">
+    <p>"Thai massage shops in the UK are running on WhatsApp groups, paper diaries, and LINE messages from customers at 11pm asking if 'Nong' is available on Saturday. You miss bookings when you're away from the shop. You get double bookings when two people book the same therapist. And you have no idea which treatments are making you money. <strong>SiamSpa was built to fix all of this — professionally, in 20 minutes.</strong>"</p>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section style="background:var(--white);" class="reveal">
+  <div style="text-align:center;">
+    <div class="section-label">What SiamSpa does</div>
+    <h2 class="section-title">Everything your spa needs.<br>Nothing it doesn't.</h2>
+  </div>
+  <div class="features-grid">
+
+    <div class="fcard highlight reveal rd1">
+      <div class="fcard-icon">📅</div>
+      <div class="fcard-badge">Always up to date</div>
+      <div class="fcard-title">Live appointment timeline — every therapist, every booking</div>
+      <p class="fcard-desc">One screen shows every therapist, every booking, every gap — updated in real time. From the office, from home, from anywhere — see exactly what's happening in your spa. Tap any appointment to view client details, start the treatment, or take payment.</p>
+    </div>
+
+    <div class="fcard highlight reveal rd2">
+      <div class="fcard-icon">⭐</div>
+      <div class="fcard-badge">What VDIT charges extra for</div>
+      <div class="fcard-villain">Competitors charge per month just for this feature</div>
+      <div class="fcard-title">Customers choose their therapist online</div>
+      <p class="fcard-desc">Your booking widget lets customers pick their treatment, then choose their preferred therapist by name. No more "Can I have Malee?" messages on LINE. No more calling the shop to ask if a specific person is available. They book it themselves, 24 hours a day.</p>
+    </div>
+
+    <div class="fcard reveal rd3">
+      <div class="fcard-icon">🚫</div>
+      <div class="fcard-badge">Automatic protection</div>
+      <div class="fcard-title">Double bookings — impossible</div>
+      <p class="fcard-desc">The system checks the therapist and the room at the same time. If Nong is already booked at 2pm, that slot disappears from the online calendar. No overlap. No awkward conversations with customers. No more two clients arriving at the same time for the same therapist.</p>
+    </div>
+
+    <div class="fcard reveal rd1">
+      <div class="fcard-icon">🏥</div>
+      <div class="fcard-badge">Required by law</div>
+      <div class="fcard-title">Client medical records — digital, signed</div>
+      <p class="fcard-desc">Every client completes a health questionnaire and signs digitally before their first treatment. Pregnancy, heart conditions, skin conditions — all recorded and stored. No more paper forms that get lost. No more liability if something goes wrong and there's no record.</p>
+    </div>
+
+    <div class="fcard reveal rd2">
+      <div class="fcard-icon">📅</div>
+      <div class="fcard-badge">Know who's working</div>
+      <div class="fcard-title">Rota — who works which days, what hours</div>
+      <p class="fcard-desc">Set each therapist's weekly schedule once. The online booking widget only shows available slots for therapists who are actually working that day. Change a day off? Override it once. The whole system updates automatically — no manual calendar changes needed.</p>
+    </div>
+
+    <div class="fcard reveal rd3">
+      <div class="fcard-icon">📊</div>
+      <div class="fcard-badge">See your numbers</div>
+      <div class="fcard-title">Daily revenue, top treatments, payment breakdown</div>
+      <p class="fcard-desc">Open the app and see today's revenue, how many appointments ran, your top 5 treatments, and how people paid — cash, card, voucher, Treatwell. Which therapist is busiest? Which treatment makes you the most money? Now you know, without doing any maths.</p>
+    </div>
+
+  </div>
+</section>
+
+<!-- TIMELINE DEMO (visual mockup) -->
+<section class="timeline-demo">
+  <div style="text-align:center;" class="reveal">
+    <div class="section-label">The timeline</div>
+    <h2 class="section-title">Every therapist. Every booking.<br>Right in front of you.</h2>
+    <p class="section-sub" style="margin:0 auto;">This is what the owner sees — in real time, from any device. Red line is the current time. Green = in progress. Blue = upcoming. Tap any appointment to view details, start the treatment, or take payment.</p>
+  </div>
+
+  <!-- Mockup of the timeline -->
+  <div class="timeline-mockup reveal">
+    <div class="tm-header">
+      <div class="tm-dots">
+        <div class="tm-dot" style="background:#ff5f57;"></div>
+        <div class="tm-dot" style="background:#febc2e;"></div>
+        <div class="tm-dot" style="background:#28c840;"></div>
+      </div>
+      <span class="tm-title">SiamSpa · Appointments</span>
+      <div class="tm-date-nav">
+        <button>‹</button>
+        <span>Thu 22 May</span>
+        <button>›</button>
+      </div>
+    </div>
+    <div class="tm-body">
+      <!-- Time column -->
+      <div class="tm-time-col">
+        <div class="tm-hour"><span>10:00</span></div>
+        <div class="tm-hour"><span>11:00</span></div>
+        <div class="tm-hour"><span>12:00</span></div>
+        <div class="tm-hour"><span>13:00</span></div>
+      </div>
+      <!-- Therapist columns -->
+      <div class="tm-therapist-cols">
+        <!-- Anong -->
+        <div class="tm-col">
+          <div class="tm-col-header" style="background:rgba(0,0,0,0.2);">
+            <div class="tm-col-name">Anong</div>
+            <div class="tm-col-sub">2 appts</div>
+          </div>
+          <div class="tm-col-body">
+            <div class="tm-grid-line" style="top:56px;"></div>
+            <div class="tm-grid-line" style="top:112px;"></div>
+            <div class="tm-grid-line" style="top:168px;"></div>
+            <!-- 10:30 - 12:00 (90min) → starts at 28px, height 84px → crosses NOW at 94px = IN PROGRESS -->
+            <div class="tm-appt" style="top:28px;height:84px;background:#dcfce7;border:2px solid #22c55e;">
+              <div class="tm-appt-name" style="color:#14532d;">Sarah M.</div>
+              <div class="tm-appt-treat" style="color:#14532d;">▶ Thai Massage 90min</div>
+            </div>
+            <!-- 13:00 - 14:00 → future → BOOKED -->
+            <div class="tm-appt" style="top:168px;height:56px;background:#dbeafe;border:2px solid #3b82f6;">
+              <div class="tm-appt-name" style="color:#1e40af;">James K.</div>
+              <div class="tm-appt-treat" style="color:#1e40af;">Aromatherapy 60min</div>
+            </div>
+            <!-- Now line at 11:40 -->
+            <div class="tm-now-line" style="top:94px;"></div>
+          </div>
+        </div>
+        <!-- Malee -->
+        <div class="tm-col">
+          <div class="tm-col-header" style="background:rgba(0,0,0,0.2);">
+            <div class="tm-col-name">Malee</div>
+            <div class="tm-col-sub">2 appts</div>
+          </div>
+          <div class="tm-col-body">
+            <div class="tm-grid-line" style="top:56px;"></div>
+            <div class="tm-grid-line" style="top:112px;"></div>
+            <div class="tm-grid-line" style="top:168px;"></div>
+            <!-- 11:00 - 12:00 (60min) → top 56px, height 56px → crosses NOW at 94px = IN PROGRESS -->
+            <div class="tm-appt" style="top:56px;height:56px;background:#dcfce7;border:2px solid #22c55e;">
+              <div class="tm-appt-name" style="color:#14532d;">Emma R.</div>
+              <div class="tm-appt-treat" style="color:#14532d;">▶ Hot Stone 60min</div>
+            </div>
+            <!-- 12:30 - 13:30 → future → BOOKED -->
+            <div class="tm-appt" style="top:140px;height:56px;background:#dbeafe;border:2px solid #3b82f6;">
+              <div class="tm-appt-name" style="color:#1e40af;">Priya S.</div>
+              <div class="tm-appt-treat" style="color:#1e40af;">Back Massage 60min</div>
+            </div>
+            <div class="tm-now-line" style="top:94px;"></div>
+          </div>
+        </div>
+        <!-- Niran -->
+        <div class="tm-col">
+          <div class="tm-col-header" style="background:rgba(0,0,0,0.2);">
+            <div class="tm-col-name">Niran</div>
+            <div class="tm-col-sub">1 appt</div>
+          </div>
+          <div class="tm-col-body">
+            <div class="tm-grid-line" style="top:56px;"></div>
+            <div class="tm-grid-line" style="top:112px;"></div>
+            <div class="tm-grid-line" style="top:168px;"></div>
+            <div class="tm-now-line" style="top:94px;"></div>
+            <!-- 12:00 → future → BOOKED -->
+            <div class="tm-appt" style="top:112px;height:56px;background:#dbeafe;border:2px solid #3b82f6;">
+              <div class="tm-appt-name" style="color:#1e40af;">Yui C.</div>
+              <div class="tm-appt-treat" style="color:#1e40af;">Thai Massage 60min</div>
+            </div>
+          </div>
+        </div>
+        <!-- Suthida -->
+        <div class="tm-col">
+          <div class="tm-col-header" style="background:rgba(0,0,0,0.2);">
+            <div class="tm-col-name">Suthida</div>
+            <div class="tm-col-sub">3 appts</div>
+          </div>
+          <div class="tm-col-body">
+            <div class="tm-grid-line" style="top:56px;"></div>
+            <div class="tm-grid-line" style="top:112px;"></div>
+            <div class="tm-grid-line" style="top:168px;"></div>
+            <!-- 10:00 - 11:00 → ends at 56px → before NOW at 94px = COMPLETED -->
+            <div class="tm-appt" style="top:0;height:56px;background:#e0e7ff;border:2px solid #6366f1;opacity:0.8;">
+              <div class="tm-appt-name" style="color:#3730a3;">Michael T.</div>
+              <div class="tm-appt-treat" style="color:#3730a3;">✓ Foot Massage 60min</div>
+            </div>
+            <!-- 12:00 - 13:00 → future → BOOKED -->
+            <div class="tm-appt" style="top:112px;height:56px;background:#dbeafe;border:2px solid #3b82f6;">
+              <div class="tm-appt-name" style="color:#1e40af;">Lisa B.</div>
+              <div class="tm-appt-treat" style="color:#1e40af;">Swedish 60min</div>
+            </div>
+            <!-- 13:00 - 14:00 → future → BOOKED -->
+            <div class="tm-appt" style="top:168px;height:56px;background:#dbeafe;border:2px solid #3b82f6;">
+              <div class="tm-appt-name" style="color:#1e40af;">David W.</div>
+              <div class="tm-appt-treat" style="color:#1e40af;">Deep Tissue 60min</div>
+            </div>
+            <div class="tm-now-line" style="top:94px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p style="text-align:center;margin-top:24px;font-size:13px;color:var(--text-muted);">
+    The red line is right now — 11:40am. Green = in progress (crosses the line). Purple = completed. Blue = upcoming. Tap any block to see client details, start the treatment, or take payment.
+  </p>
+</section>
+
+<!-- COMPARISON — SiamSpa vs the old way -->
+<section class="compare-section reveal">
+  <div style="text-align:center;">
+    <div class="section-label" style="color:var(--gold);">Honest comparison</div>
+    <h2 class="section-title white">Why spa owners switch to SiamSpa</h2>
+  </div>
+  <div class="compare-grid">
+    <div class="cmp-col bad">
+      <div class="cmp-header">Before SiamSpa</div>
+      <div class="cmp-row"><span class="cmp-icon">❌</span><span class="cmp-text">Paper diary — lost, smudged, can't read it on your phone</span></div>
+      <div class="cmp-row"><span class="cmp-icon">❌</span><span class="cmp-text">WhatsApp/LINE at all hours — customers asking if "Nong" is free</span></div>
+      <div class="cmp-row"><span class="cmp-icon">❌</span><span class="cmp-text">Double bookings — two clients turn up for the same therapist</span></div>
+      <div class="cmp-row"><span class="cmp-icon">❌</span><span class="cmp-text">Paper health forms — get lost, no signature, legal risk</span></div>
+      <div class="cmp-row"><span class="cmp-icon">❌</span><span class="cmp-text">No idea which treatments make money until end of month</span></div>
+      <div class="cmp-row"><span class="cmp-icon">❌</span><span class="cmp-text">Can't check bookings unless you're physically in the shop</span></div>
+      <div class="cmp-row"><span class="cmp-icon">❌</span><span class="cmp-text">Booking-only tools (like VDIT) — still need separate systems for revenue, rota, records</span></div>
+    </div>
+    <div class="cmp-col good">
+      <div class="cmp-header">With SiamSpa</div>
+      <div class="cmp-row"><span class="cmp-icon">✅</span><span class="cmp-text">Live timeline on your phone — anywhere, any time</span></div>
+      <div class="cmp-row"><span class="cmp-icon">✅</span><span class="cmp-text">Customers book the therapist they want, online, 24/7</span></div>
+      <div class="cmp-row"><span class="cmp-icon">✅</span><span class="cmp-text">Double bookings impossible — system blocks the slot automatically</span></div>
+      <div class="cmp-row"><span class="cmp-icon">✅</span><span class="cmp-text">Digital health questionnaire with e-signature, stored securely</span></div>
+      <div class="cmp-row"><span class="cmp-icon">✅</span><span class="cmp-text">Daily revenue, top treatments, payment breakdown — always open</span></div>
+      <div class="cmp-row"><span class="cmp-icon">✅</span><span class="cmp-text">Open your phone, see the whole day, tap to call any client</span></div>
+      <div class="cmp-row"><span class="cmp-icon">✅</span><span class="cmp-text">One system: booking + rota + records + revenue + CRM</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing-section reveal">
+  <div style="text-align:center;">
+    <div class="section-label">Simple pricing</div>
+    <h2 class="section-title">One price. Everything included.</h2>
+    <p class="section-sub" style="margin:0 auto 0;">No per-booking fees. No commission on treatments. No hidden charges for "premium features". Just one flat monthly fee for everything.</p>
+  </div>
+  <div class="pricing-card">
+    <div class="pc-tier">SiamSpa</div>
+    <div class="pc-price">£49</div>
+    <div class="pc-period">per month · cancel anytime</div>
+    <div class="pc-sub">Everything a Thai massage shop needs to run professionally and grow.</div>
+    <ul class="pc-features">
+      <li>Live appointment timeline — desktop &amp; mobile</li>
+      <li>Online booking widget with therapist selection</li>
+      <li>Prevents double booking (therapist + room)</li>
+      <li>Client profiles &amp; digital medical questionnaire</li>
+      <li>Rota management — weekly schedule + day overrides</li>
+      <li>Daily trading report (revenue, treatments, payments)</li>
+      <li>Gift vouchers — sell &amp; redeem at checkout</li>
+      <li>CRM — client history, visit count, spend, status</li>
+      <li>Treatwell integration (bookings flow in automatically)</li>
+      <li>Thai-speaking WhatsApp support</li>
+    </ul>
+    <a href="book-demo.html" class="book-btn" style="display:block;text-align:center;width:100%;justify-content:center;">Book a Free Demo</a>
+    <p style="margin-top:14px;font-size:12px;color:rgba(255,255,255,0.35);text-align:center;">No contract · No setup fee · Cancel anytime</p>
+  </div>
+</section>
+
+<!-- TRUST BAR -->
+<div class="trust-bar reveal">
+  <div class="trust-item"><span class="t-icon">🇹🇭</span> Thai-speaking WhatsApp support</div>
+  <div class="trust-item"><span class="t-icon">📱</span> Works on any phone, tablet or laptop</div>
+  <div class="trust-item"><span class="t-icon">🔒</span> UK GDPR compliant — client data secure</div>
+  <div class="trust-item"><span class="t-icon">✅</span> Cancel anytime — no long-term contract</div>
+  <div class="trust-item"><span class="t-icon">⚡</span> Up and running in 20 minutes</div>
+</div>
+
+<!-- FINAL CTA -->
+<section class="final-cta">
+  <div style="position:relative;z-index:1;max-width:640px;margin:0 auto;" class="reveal">
+    <div class="section-label">Let's talk</div>
+    <h2 class="section-title white">Book a free 20-minute demo.<br>We'll show you everything.</h2>
+    <p style="max-width:520px;margin:0 auto 32px;font-size:16px;color:rgba(255,255,255,0.55);line-height:1.8;font-weight:300;font-style:italic;">"No contract. No pressure. A Thai-speaking person who understands how your massage shop works — showing you exactly how SiamSpa would work for yours."</p>
+    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
+      <a href="book-demo.html" class="book-btn">Book Your Free Demo</a>
+      <a href="https://wa.me/447700000000?text=Hello%2C%20I%27d%20like%20to%20know%20more%20about%20SiamSpa" target="_blank" class="book-btn ghost" style="text-decoration:none;">💬 WhatsApp us instead</a>
+    </div>
+    <div class="cta-trust-row">
+      <span class="cta-trust-chip">✅ No contract</span>
+      <span class="cta-trust-chip">✅ No setup fee</span>
+      <span class="cta-trust-chip">✅ Cancel anytime</span>
+      <span class="cta-trust-chip">✅ Thai support via WhatsApp</span>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><svg width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="none" stroke="#C9A84C" stroke-width="1.8"/><g transform="translate(50,50)"><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><circle cx="0" cy="0" r="9" fill="#0D1B3E"/><circle cx="0" cy="0" r="5" fill="#C9A84C"/></g></svg><span style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:#C9A84C;">Siam<span style="color:white;">EPOS</span></span></div>
+    <p class="footer-tagline">The Thai Business Management System. Built for Thai restaurants and spas in the UK.</p>
+    <a href="https://wa.me/447700000000" target="_blank" style="display:inline-flex;align-items:center;gap:8px;background:#25D366;color:white;padding:10px 18px;border-radius:50px;font-size:13px;font-weight:700;text-decoration:none;margin-top:4px;">💬 WhatsApp / LINE</a>
+  </div>
+  <div class="footer-col">
+    <h4>Products</h4>
+    <ul>
+      <li><a href="index.html">SiamEPOS (Restaurant)</a></li>
+      <li><a href="pricing.html">SiamPRO</a></li>
+      <li><a href="lite.html">SiamLite</a></li>
+      <li><a href="spa.html" style="color:var(--gold);">SiamSpa</a></li>
+      <li><a href="website-design.html">Website Design</a></li>
+    </ul>
+  </div>
+  <div class="footer-col">
+    <h4>Support</h4>
+    <ul>
+      <li><a href="https://wa.me/447700000000">WhatsApp Support</a></li>
+      <li><a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></li>
+      <li><a href="book-demo.html">Book a Demo</a></li>
+    </ul>
+  </div>
+  <div class="footer-col">
+    <h4>Legal</h4>
+    <ul>
+      <li><a href="privacy-policy.html">Privacy Policy</a></li>
+      <li><a href="terms.html">Terms of Service</a></li>
+      <li><a href="cookie-policy.html">Cookie Policy</a></li>
+    </ul>
+  </div>
+</footer>
+<div class="footer-bottom">
+  <p>© 2026 SiamEPOS. All rights reserved.</p>
+  <p><a href="why-siamepos.html">Why SiamEPOS?</a></p>
+</div>
+
+<script>
+// Scroll reveal
+const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:0.1});
+document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
+// Mobile nav
+document.querySelectorAll('.nav-burger').forEach(function(b){b.addEventListener('click',function(){document.body.classList.toggle('menu-open');});});
+document.querySelectorAll('.nav-links a').forEach(function(a){a.addEventListener('click',function(){document.body.classList.remove('menu-open');});});
+</script>
+</body>
+</html>

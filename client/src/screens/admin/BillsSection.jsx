@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getBills, getBillItems, loginStaff } from '../../api';
 import DeleteOrderModal from '../../components/DeleteOrderModal';
+import { downloadCsv } from '../../utils/csv';
 
 // Manager-unlock window. After this many ms with no fresh PIN entry the
 // delete buttons hide themselves again — same pattern OpenTable + Toast use
@@ -86,6 +87,25 @@ export default function BillsSection() {
   const itemsByCourse = {};
   billItems.forEach(item => { const c = item.course ?? 0; if (!itemsByCourse[c]) itemsByCourse[c] = []; itemsByCourse[c].push(item); });
 
+  const exportCsv = () => {
+    if (!bills.length) return;
+    const rows = [['Bill #', 'Table', 'Covers', 'Closed at', 'Method', 'Discount', 'Discount reason', 'Total £', 'Paid £']];
+    bills.forEach(b => {
+      const discountStr = b.discount_value > 0
+        ? (b.discount_type === 'percent' ? `-${b.discount_value}%` : `-£${b.discount_value}`)
+        : '';
+      rows.push([
+        b.id, b.table_number || '', b.covers || '',
+        b.closed_at ? new Date(b.closed_at).toISOString() : '',
+        b.method || '', discountStr, b.discount_reason || '',
+        Number(b.total || 0).toFixed(2),
+        Number(b.paid_amount || 0).toFixed(2),
+      ]);
+    });
+    rows.push(['', '', '', '', '', '', `TOTAL (${bills.length} bills)`, totalSales.toFixed(2), '']);
+    downloadCsv(`bills_${from}_to_${to}${method !== 'all' ? '_' + method : ''}.csv`, rows);
+  };
+
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -127,6 +147,7 @@ export default function BillsSection() {
               <option value="all">All Methods</option><option value="Cash">Cash</option><option value="Card">Card</option><option value="Other">Other</option>
             </select></div>
           <button onClick={fetchBills} style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Search</button>
+          <button onClick={exportCsv} disabled={!bills.length} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 14, cursor: bills.length ? 'pointer' : 'not-allowed', opacity: bills.length ? 1 : 0.5 }}>⬇ Export CSV</button>
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>

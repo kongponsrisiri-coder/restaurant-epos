@@ -2,6 +2,7 @@ import { useState, useEffect, Fragment } from 'react';
 import { SERVER_URL } from '../../api';
 import { getAllMenu as getMenu } from '../../api';
 import { invAPI } from './shared';
+import { downloadCsv } from '../../utils/csv';
 
 export default function AllergenSection() {
   const [menu,        setMenu]        = useState([]);
@@ -150,6 +151,22 @@ export default function AllergenSection() {
     finally { setSyncing(false); }
   };
 
+  const exportCsv = () => {
+    if (!allCategories.length) return;
+    const headers = ['Category', 'Dish', ...UK14.map(a => `${a.code} ${a.name}`), 'Source'];
+    const rows = [headers];
+    allCategories.forEach(cat => {
+      (cat.items || []).forEach(item => {
+        const { allergens: set, source } = getDishAllergens(item.id);
+        const row = [cat.name, item.name];
+        UK14.forEach(a => row.push(set.has(a.name) ? 'Y' : ''));
+        row.push(source);
+        rows.push(row);
+      });
+    });
+    downloadCsv(`allergens_${new Date().toISOString().slice(0,10)}.csv`, rows);
+  };
+
   // ── Stats ──────────────────────────────────────────────────────
   const totalDishes  = allCategories.reduce((s, c) => s + (c.items || []).length, 0);
   const withRecipe   = allCategories.reduce((s, c) => s + (c.items || []).filter(i => getDishAllergens(i.id).source === 'recipe').length, 0);
@@ -186,6 +203,10 @@ export default function AllergenSection() {
               {syncing ? '⏳ Syncing…' : `🤖 Confirm AI Allergens (${withScanned})`}
             </button>
           )}
+          <button onClick={exportCsv}
+            style={{ padding: '12px 20px', borderRadius: 10, border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
+            ⬇ Export CSV
+          </button>
           <button onClick={() => window.print()}
             style={{ padding: '12px 24px', borderRadius: 10, border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
             🖨️ Print Allergen Sheet

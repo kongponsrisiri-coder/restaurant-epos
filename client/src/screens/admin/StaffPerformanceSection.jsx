@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getStaffPerformance } from '../../api';
+import { downloadCsv } from '../../utils/csv';
 
 // SEPOS-030 — Staff Performance.
 // Orders / staff member, average table turn time, starter→dessert
@@ -33,6 +34,23 @@ export default function StaffPerformanceSection() {
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
 
+  function exportCsv() {
+    if (!data.length) return;
+    const rows = [['Staff', 'Role', 'Orders', 'Covers', 'Total sales £', 'Avg per cover £', 'Avg turn mins', 'Starters', 'Desserts', 'Dessert ratio %']];
+    data.forEach(s => {
+      rows.push([
+        s.staff_name, s.staff_role || '',
+        s.orders, s.covers,
+        Number(s.total_sales || 0).toFixed(2),
+        Number(s.avg_per_cover || 0).toFixed(2),
+        Number.isFinite(s.avg_turn_mins) ? Number(s.avg_turn_mins).toFixed(1) : '',
+        s.starters, s.desserts,
+        s.starters > 0 ? (Number(s.dessert_ratio || 0) * 100).toFixed(0) : '',
+      ]);
+    });
+    downloadCsv(`staff-performance_${from}_to_${to}.csv`, rows);
+  }
+
   const cardStyle = { background:'white', borderRadius:12, padding:20, marginBottom:16, boxShadow:'0 1px 4px rgba(0,0,0,0.08)' };
   const inputStyle = { padding:'8px 10px', borderRadius:8, border:'1px solid #ddd', fontSize:13, fontFamily:'inherit' };
 
@@ -54,6 +72,11 @@ export default function StaffPerformanceSection() {
           background:'#1a1a2e', color:'white', fontWeight:700, fontSize:13,
           cursor: loading ? 'wait' : 'pointer'
         }}>{loading ? 'Loading…' : 'Refresh'}</button>
+        <button onClick={exportCsv} disabled={!data.length} style={{
+          padding:'10px 18px', borderRadius:8, border:'1px solid #1a1a2e',
+          background:'white', color:'#1a1a2e', fontWeight:700, fontSize:13,
+          cursor: data.length ? 'pointer' : 'not-allowed', opacity: data.length ? 1 : 0.5,
+        }}>⬇ Export CSV</button>
       </div>
 
       <div style={cardStyle}>

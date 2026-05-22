@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getZReportPreview, saveZReport, getZReportHistory } from '../../api';
+import { downloadCsv } from '../../utils/csv';
 
 export default function ZReportSection() {
   const [step, setStep]           = useState(1);
@@ -66,6 +67,67 @@ export default function ZReportSection() {
   };
 
   const formatDateTime = (dt) => dt ? new Date(dt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+
+  const exportHistoryCsv = () => {
+    if (!history.length) return;
+    const rows = [['Closed at', 'Type', 'Orders', 'Total sales £', 'Cash £', 'Card £', 'Other £', 'Float £', 'Petty cash £', 'Actual cash £', 'Cash difference £']];
+    history.forEach(r => {
+      rows.push([
+        r.closed_at ? new Date(r.closed_at).toISOString() : '',
+        r.type, r.total_orders || 0,
+        Number(r.total_sales || 0).toFixed(2),
+        Number(r.total_cash || 0).toFixed(2),
+        Number(r.total_card || 0).toFixed(2),
+        Number(r.total_other || 0).toFixed(2),
+        Number(r.float_amount || 0).toFixed(2),
+        Number(r.petty_cash || 0).toFixed(2),
+        Number(r.actual_cash || 0).toFixed(2),
+        Number(r.cash_difference || 0).toFixed(2),
+      ]);
+    });
+    downloadCsv(`z-report-history_${new Date().toISOString().slice(0,10)}.csv`, rows);
+  };
+
+  const exportReportCsv = () => {
+    if (!reportData) return;
+    const rows = [];
+    rows.push(['Z Report', reportType === 'day' ? 'End of Day' : 'Shift Close']);
+    rows.push(['From', reportData.from || '']);
+    rows.push(['To', reportData.to || '']);
+    rows.push([]);
+    rows.push(['Sales summary', 'Amount £']);
+    rows.push(['Cash', Number(reportData.total_cash || 0).toFixed(2)]);
+    rows.push(['Card', Number(reportData.total_card || 0).toFixed(2)]);
+    rows.push(['Other', Number(reportData.total_other || 0).toFixed(2)]);
+    rows.push(['TOTAL SALES', Number(reportData.total_sales || 0).toFixed(2)]);
+    rows.push([]);
+    rows.push(['Channel', 'Amount £', 'Orders']);
+    rows.push(['Dine-in', Number(reportData.total_dine_in || 0).toFixed(2), reportData.dine_in_count || 0]);
+    rows.push(['Takeaway', Number(reportData.total_takeaway || 0).toFixed(2), reportData.takeaway_count || 0]);
+    rows.push([]);
+    rows.push(['Orders', reportData.total_orders || 0]);
+    rows.push(['Covers', reportData.total_covers || 0]);
+    rows.push(['Avg per cover £', Number(reportData.avg_per_cover || 0).toFixed(2)]);
+    rows.push(['Discounts £', Number(reportData.total_discounts || 0).toFixed(2)]);
+    rows.push(['Void items', reportData.void_count || 0]);
+    if (Array.isArray(reportData.vat_breakdown) && reportData.vat_breakdown.length) {
+      rows.push([]);
+      rows.push(['VAT breakdown', 'Rate %', 'Net £', 'VAT £']);
+      reportData.vat_breakdown.forEach(b => {
+        rows.push(['', b.rate, Number(b.net || 0).toFixed(2), Number(b.vat || 0).toFixed(2)]);
+      });
+      rows.push(['', 'Total VAT', '', Number(reportData.vat_total || 0).toFixed(2)]);
+    }
+    if (Array.isArray(reportData.voids_by_type) && reportData.voids_by_type.length) {
+      rows.push([]);
+      rows.push(['Voids by type', 'Type', 'Count', 'Value £']);
+      reportData.voids_by_type.forEach(v => {
+        rows.push(['', v.void_type, v.count, Number(v.value || 0).toFixed(2)]);
+      });
+    }
+    const dt = (reportData.from || new Date().toISOString()).slice(0, 10);
+    downloadCsv(`z-report_${reportType || 'shift'}_${dt}.csv`, rows);
+  };
   const floatNum     = parseFloat(floatAmount) || 0;
   const pettyNum     = parseFloat(pettyCash) || 0;
   const actualNum    = parseFloat(actualCash) || 0;
@@ -82,7 +144,10 @@ export default function ZReportSection() {
 
       {showHistory && (
         <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>Past Z Reports</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>Past Z Reports</div>
+            <button onClick={exportHistoryCsv} disabled={!history.length} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 12, cursor: history.length ? 'pointer' : 'not-allowed', opacity: history.length ? 1 : 0.5 }}>⬇ Export CSV</button>
+          </div>
           {history.length === 0 ? <div style={{ color: '#aaa', fontSize: 14 }}>No Z reports yet</div> : history.map(r => (
             <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f0f0f0', fontSize: 14 }}>
               <div><span style={{ fontWeight: 600, marginRight: 8 }}>{r.type === 'day' ? '🌙 End of Day' : '⏰ Shift Close'}</span><span style={{ color: '#888' }}>{formatDateTime(r.closed_at)}</span></div>
@@ -276,6 +341,7 @@ export default function ZReportSection() {
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={() => window.print()} style={{ flex: 2, padding: '16px', borderRadius: 12, border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>🖨️ Print Z Report</button>
+            <button onClick={exportReportCsv} style={{ flex: 1, padding: '16px', borderRadius: 12, border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>⬇ CSV</button>
             <button onClick={() => { setStep(1); setReportData(null); setSaved(false); setFloatAmount(''); setPettyCash(''); setPettyCashReason(''); setActualCash(''); }} style={{ flex: 1, padding: '16px', borderRadius: 12, border: 'none', background: '#f0f0f0', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Done</button>
           </div>
         </div>

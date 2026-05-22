@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getSummaryReport, getWastageReport } from '../../../api';
 import { invAPI, today } from '../shared';
+import { downloadCsv } from '../../../utils/csv';
 
 export default function CostSalesTab() {
   const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
@@ -55,6 +56,47 @@ export default function CostSalesTab() {
   };
   const deleteExpense = async (id) => { if (!confirm('Delete this expense?')) return; await invAPI.deleteExpense(id); loadData(); };
 
+  const exportCsv = () => {
+    const rows = [];
+    rows.push(['Cost vs Sales', `${from} to ${to}`]);
+    rows.push([]);
+    rows.push(['Profit & Loss', 'Amount £']);
+    rows.push(['Revenue', totalRevenue.toFixed(2)]);
+    rows.push(['Stock purchasing cost (COGS)', cogs.toFixed(2)]);
+    rows.push(['Overheads', overheads.toFixed(2)]);
+    rows.push(['Labour', labour.toFixed(2)]);
+    rows.push(['Other', other.toFixed(2)]);
+    rows.push(['Total costs', totalCosts.toFixed(2)]);
+    rows.push(['Gross profit', grossProfit.toFixed(2)]);
+    rows.push(['Gross margin %', grossMarginPct.toFixed(1)]);
+    rows.push(['Net profit', netProfit.toFixed(2)]);
+    rows.push(['Net margin %', netMarginPct.toFixed(1)]);
+    if (wastage && wastage.total && wastage.total.dish_count > 0) {
+      rows.push([]);
+      rows.push(['Wastage summary']);
+      rows.push(['Dishes voided', wastage.total.dish_count]);
+      rows.push(['Wastage cost £', Number(wastage.total.wastage_cost).toFixed(2)]);
+      rows.push(['Revenue lost £', Number(wastage.total.revenue_lost).toFixed(2)]);
+      if (Array.isArray(wastage.by_type) && wastage.by_type.length) {
+        rows.push([]);
+        rows.push(['Wastage by type', 'Type', 'Dishes', 'Cost £']);
+        wastage.by_type.forEach(t => rows.push(['', t.void_type, t.dish_count, Number(t.wastage_cost).toFixed(2)]));
+      }
+      if (Array.isArray(wastage.top_dishes) && wastage.top_dishes.length) {
+        rows.push([]);
+        rows.push(['Top wasted dishes', 'Dish', 'Qty', 'Cost £', 'Revenue lost £']);
+        wastage.top_dishes.forEach(d => rows.push(['', d.item_name, d.dish_count, Number(d.wastage_cost).toFixed(2), Number(d.revenue_lost).toFixed(2)]));
+      }
+    }
+    if (filteredExp.length) {
+      rows.push([]);
+      rows.push(['Logged expenses', 'Date', 'Category', 'Description', 'Amount £']);
+      filteredExp.forEach(e => rows.push(['', (e.date || '').slice(0,10), e.category, e.description, Number(e.amount || 0).toFixed(2)]));
+      rows.push(['', '', '', 'Total expenses', (overheads + labour + other).toFixed(2)]);
+    }
+    downloadCsv(`cost-sales_${from}_to_${to}.csv`, rows);
+  };
+
   const catLabel = { overhead: '🏢 Overhead', labour: '👥 Labour', other: '📌 Other' };
   const catColor = { overhead: { color: '#8b5cf6', bg: '#ede9fe' }, labour: { color: '#3b82f6', bg: '#dbeafe' }, other: { color: '#f97316', bg: '#ffedd5' } };
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '—';
@@ -65,6 +107,7 @@ export default function CostSalesTab() {
         <div><label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>From</label><input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }} /></div>
         <div><label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>To</label><input type="date" value={to} onChange={e => setTo(e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }} /></div>
         <button onClick={loadData} style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, cursor: 'pointer' }}>Calculate</button>
+        <button onClick={exportCsv} disabled={loading} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 13, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.5 : 1 }}>⬇ Export CSV</button>
         <div style={{ display: 'flex', gap: 6 }}>
           {[{ label: 'This Month', from: firstOfMonth, to: today }, { label: 'Last 7 Days', from: new Date(Date.now() - 7 * 864e5).toISOString().split('T')[0], to: today }, { label: 'Today', from: today, to: today }].map(p => (
             <button key={p.label} onClick={() => { setFrom(p.from); setTo(p.to); }} style={{ padding: '6px 12px', borderRadius: 20, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 600, fontSize: 12, color: '#555' }}>{p.label}</button>

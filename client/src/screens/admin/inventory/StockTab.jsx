@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { invAPI } from '../shared';
+import { downloadCsv } from '../../../utils/csv';
 
 export default function StockTab() {
   const [movements, setMovements]   = useState([]);
@@ -30,6 +31,23 @@ export default function StockTab() {
 
   const formatDateTime = (dt) => dt ? new Date(dt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
 
+  const exportCsv = () => {
+    if (!filtered.length) return;
+    const rows = [['Date', 'Ingredient', 'Type', 'Quantity', 'Note']];
+    filtered.forEach(m => {
+      const ing = ingredients.find(x => x.id === m.ingredient_id);
+      const name = ing?.name_en || m.ingredient_name || 'Deleted ingredient';
+      rows.push([
+        m.created_at ? new Date(m.created_at).toISOString() : '',
+        name, m.movement_type,
+        Number(m.quantity).toFixed(2),
+        m.note || '',
+      ]);
+    });
+    const today = new Date().toISOString().slice(0,10);
+    downloadCsv(`stock-movements_${today}${filterType !== 'all' ? '_' + filterType : ''}.csv`, rows);
+  };
+
   return (
     <div>
       <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
@@ -43,8 +61,9 @@ export default function StockTab() {
         </div>
         <div style={{ fontSize: 12, color: '#888', marginTop: 8 }}>💡 Use positive numbers for stock in (deliveries), negative numbers for stock out (waste, adjustments)</div>
       </div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
         {MOVEMENT_TYPES.map(t => (<button key={t.id} onClick={() => setFilterType(t.id)} style={{ padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, background: filterType === t.id ? '#1a1a2e' : '#e0e0e0', color: filterType === t.id ? 'white' : '#555' }}>{t.label}</button>))}
+        <button onClick={exportCsv} disabled={!filtered.length} style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 12, cursor: filtered.length ? 'pointer' : 'not-allowed', opacity: filtered.length ? 1 : 0.5 }}>⬇ Export CSV</button>
       </div>
       {loading ? <div style={{ textAlign: 'center', color: '#888', padding: 40 }}>Loading stock movements...</div> : (
         <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getCampaigns, getRecipientCount, sendCampaign } from '../../api';
+import { downloadCsv } from '../../utils/csv';
 
 // SEPOS-033 Phase 2 — email campaigns.
 // Pick a segment → write subject + body → preview → send via Brevo.
@@ -79,6 +80,22 @@ export default function CampaignsSection() {
       const r = await getCampaigns();
       setHistory(Array.isArray(r) ? r : []);
     } catch {}
+  }
+
+  function exportHistoryCsv() {
+    if (!history.length) return;
+    const rows = [['Sent', 'Segment', 'Subject', 'Recipients', 'Sent', 'Failed']];
+    history.forEach(h => {
+      rows.push([
+        new Date(h.created_at).toISOString(),
+        h.segment,
+        h.subject,
+        h.recipient_count,
+        h.sent_count,
+        h.failed_count,
+      ]);
+    });
+    downloadCsv(`campaigns_${new Date().toISOString().slice(0,10)}.csv`, rows);
   }
   useEffect(() => { loadCount(segment); }, [segment]);
   useEffect(() => { loadHistory(); }, []);
@@ -174,7 +191,13 @@ export default function CampaignsSection() {
 
       {history.length > 0 && (
         <div style={cardStyle}>
-          <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:12 }}>History</h2>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+            <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>History</h2>
+            <button onClick={exportHistoryCsv} style={{
+              padding:'8px 14px', borderRadius:8, border:'1px solid #1a1a2e',
+              background:'white', color:'#1a1a2e', fontWeight:700, fontSize:12, cursor:'pointer'
+            }}>⬇ Export CSV</button>
+          </div>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
             <thead>
               <tr style={{ textAlign:'left', color:'#888', fontSize:11, textTransform:'uppercase' }}>

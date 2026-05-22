@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getSummaryReport, getItemSalesReport } from '../../api';
 import { getDateRange } from './shared';
+import { downloadCsv } from '../../utils/csv';
 
 export default function ReportsSection() {
   const [tab, setTab] = useState('sales');
@@ -17,6 +18,33 @@ export default function ReportsSection() {
     });
   }, [period]);
 
+  const exportCsv = () => {
+    const today = new Date().toISOString().slice(0,10);
+    if (tab === 'sales') {
+      if (!data?.orders?.length) return;
+      const rows = [['Order #', 'Type', 'Table / Customer', 'Method', 'Covers', 'Total £']];
+      data.orders.forEach(o => {
+        rows.push([
+          o.id,
+          o.order_type || 'dine_in',
+          o.order_type === 'takeaway' ? (o.customer_name || 'Online') : `Table ${o.table_number || '-'}`,
+          o.method || (o.order_type === 'takeaway' ? 'Online' : ''),
+          o.covers || '',
+          Number(o.total || 0).toFixed(2),
+        ]);
+      });
+      rows.push(['', '', '', '', `TOTAL (${data.order_count || 0} orders · ${data.total_covers || 0} covers)`, Number(data.total_sales || 0).toFixed(2)]);
+      downloadCsv(`sales-report_${period}_${today}.csv`, rows);
+    } else {
+      if (!itemData.length) return;
+      const rows = [['Item', 'Price £', 'Qty sold', 'Revenue £']];
+      itemData.forEach(i => {
+        rows.push([i.name, Number(i.price).toFixed(2), i.qty_sold, Number(i.total_revenue).toFixed(2)]);
+      });
+      downloadCsv(`item-sales_${period}_${today}.csv`, rows);
+    }
+  };
+
   return (
     <div style={{ padding: 24 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 20 }}>Reports</h1>
@@ -25,12 +53,13 @@ export default function ReportsSection() {
           <button key={p} onClick={() => setPeriod(p)} style={{ padding: '6px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, textTransform: 'capitalize', background: period === p ? '#1a1a2e' : '#e0e0e0', color: period === p ? 'white' : '#555' }}>{p}</button>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, alignItems: 'center' }}>
         {['sales', 'items'].map(t => (
           <button key={t} onClick={() => setTab(t)} style={{ padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, background: tab === t ? '#e94560' : '#f0f0f0', color: tab === t ? 'white' : '#555' }}>
             {t === 'sales' ? 'Sales Report' : 'Item Sales'}
           </button>
         ))}
+        <button onClick={exportCsv} style={{ marginLeft: 'auto', padding: '8px 16px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>⬇ Export CSV</button>
       </div>
       {loading ? <div style={{ color: '#888' }}>Loading...</div> : (
         <>

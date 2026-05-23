@@ -11,9 +11,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { C, card, btn, input, label } from '../theme.js';
 
-const TOTAL_STEPS = 5;
+// BO-SPA-001: step 0 is now the product picker; existing steps
+// 1-5 become 2-6. Total 6 steps when product is chosen.
+const TOTAL_STEPS = 6;
 
 const BLANK = {
+  // Step 0 — product type
+  product: '',   // '' = not chosen yet; 'restaurant' | 'spa'
   // Step 1
   restaurant_name: '',
   owner_name: '',
@@ -53,16 +57,30 @@ export default function NewClientWizard() {
 
   const set = (k, v) => setF(prev => {
     const next = { ...prev, [k]: v };
-    // Auto-fill the subdomain slug as the operator types the restaurant
-    // name — but only if they haven't manually overridden it.
+    // Auto-fill the subdomain slug from the business name.
     if (k === 'restaurant_name' && (!prev.subdomain_slug || prev.subdomain_slug === autoSlug(prev.restaurant_name))) {
       next.subdomain_slug = autoSlug(v);
+    }
+    // When product is chosen, preset plan + fee defaults.
+    if (k === 'product') {
+      if (v === 'spa') {
+        next.plan = 'spa';
+        next.monthly_fee = '49';
+        next.has_takeaway = false;
+        next.has_inventory = false;
+      } else {
+        next.plan = 'trial';
+        next.monthly_fee = '';
+      }
     }
     return next;
   });
 
   const errors = useMemo(() => validate(f), [f]);
-  const stepErrors = errors[`step${step}`] || [];
+  // Step 0 is the product picker — block until chosen.
+  const stepErrors = step === 0
+    ? (f.product ? [] : ['Please choose a product type.'])
+    : (errors[`step${step}`] || []);
 
   const canAdvance = stepErrors.length === 0;
 
@@ -70,6 +88,7 @@ export default function NewClientWizard() {
     setSaving(true); setErr('');
     try {
       const body = {
+        product:            f.product || 'restaurant',
         restaurant_name:    f.restaurant_name.trim(),
         owner_name:         f.owner_name.trim() || null,
         owner_email:        f.owner_email.trim() || null,
@@ -121,6 +140,7 @@ export default function NewClientWizard() {
       <StepProgress step={step} total={TOTAL_STEPS} />
 
       <div style={{ ...card, padding: 28, marginTop: 18 }}>
+        {step === 0 && <Step0 f={f} set={set} />}
         {step === 1 && <Step1 f={f} set={set} errors={stepErrors} />}
         {step === 2 && <Step2 f={f} set={set} errors={stepErrors} />}
         {step === 3 && <Step3 f={f} set={set} />}
@@ -134,8 +154,8 @@ export default function NewClientWizard() {
         )}
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 22, paddingTop: 16, borderTop: `1px solid ${C.borderSoft}` }}>
-          {step > 1 && <button onClick={() => setStep(s => s - 1)} style={btn.ghost} disabled={saving}>← Back</button>}
-          {step < TOTAL_STEPS && (
+          {step > 0 && <button onClick={() => setStep(s => s - 1)} style={btn.ghost} disabled={saving}>← Back</button>}
+          {step < TOTAL_STEPS - 1 && (
             <button
               onClick={() => canAdvance ? setStep(s => s + 1) : null}
               disabled={!canAdvance}
@@ -144,7 +164,7 @@ export default function NewClientWizard() {
               Next →
             </button>
           )}
-          {step === TOTAL_STEPS && (
+          {step === TOTAL_STEPS - 1 && (
             <button onClick={submit} disabled={saving} style={{ ...btn.gold, opacity: saving ? 0.6 : 1 }}>
               {saving ? 'Creating client…' : '✓ Create + send welcome email'}
             </button>
@@ -156,9 +176,11 @@ export default function NewClientWizard() {
 }
 
 // ── Validation ──────────────────────────────────────────────────
+// Steps 1-5 map to the renumbered display steps 1-5 (after Step 0).
 function validate(f) {
   const out = { step1: [], step2: [], step3: [], step4: [], step5: [] };
-  if (!f.restaurant_name.trim())          out.step1.push('Restaurant name is required.');
+  const nameLbl = f.product === 'spa' ? 'Spa name' : 'Restaurant name';
+  if (!f.restaurant_name.trim())          out.step1.push(`${nameLbl} is required.`);
   if (!f.owner_email.trim())              out.step1.push('Owner email is required (the welcome email goes here).');
   else if (!/^\S+@\S+\.\S+$/.test(f.owner_email)) out.step1.push('Owner email looks invalid.');
   if (!f.subdomain_slug.trim())           out.step2.push('Subdomain slug is required.');
@@ -189,19 +211,85 @@ function StepProgress({ step, total }) {
 }
 
 // ── Steps ───────────────────────────────────────────────────────
-function Step1({ f, set, errors }) {
+
+// Step 0 — choose product type (Restaurant or Spa)
+function Step0({ f, set }) {
+  const products = [
+    {
+      key: 'restaurant',
+      emoji: '🍽',
+      title: 'Restaurant',
+      desc: 'Full EPOS — dine-in, takeaway, KDS, reservations, delivery, CRM.',
+      accentBg: '#f0fdf4',
+      accentBorder: '#86efac',
+      accentText: '#166534',
+    },
+    {
+      key: 'spa',
+      emoji: '🌿',
+      title: 'Spa',
+      desc: 'SiamSpa EPOS — appointments, therapists, rooms, vouchers, Treatwell, online booking.',
+      accentBg: '#fdf4ff',
+      accentBorder: '#d8b4fe',
+      accentText: '#7e22ce',
+    },
+  ];
   return (
-    <Stepped title="Step 1 · Restaurant details" subtitle="The basics. Everything here lands on the client row + welcome email.">
+    <Stepped title="Step 0 · Choose product" subtitle="What are you setting up? This controls the rest of the wizard.">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        {products.map(p => {
+          const chosen = f.product === p.key;
+          return (
+            <div
+              key={p.key}
+              onClick={() => set('product', p.key)}
+              style={{
+                border: `2px solid ${chosen ? p.accentBorder : C.border}`,
+                borderRadius: 14, padding: 22, cursor: 'pointer',
+                background: chosen ? p.accentBg : C.surface,
+                transition: 'all 0.15s',
+                boxShadow: chosen ? `0 0 0 3px ${p.accentBorder}44` : 'none',
+              }}
+            >
+              <div style={{ fontSize: 36, marginBottom: 8 }}>{p.emoji}</div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: chosen ? p.accentText : C.text, marginBottom: 4 }}>{p.title}</div>
+              <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.5 }}>{p.desc}</div>
+              {chosen && (
+                <div style={{ marginTop: 12, background: p.accentBorder, color: p.accentText, fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 999, display: 'inline-block' }}>
+                  ✓ Selected
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Stepped>
+  );
+}
+
+function Step1({ f, set, errors }) {
+  const isSpa = f.product === 'spa';
+  const nameLbl = isSpa ? 'Spa name *' : 'Restaurant name *';
+  return (
+    <Stepped
+      title={`Step 1 · ${isSpa ? 'Spa' : 'Restaurant'} details`}
+      subtitle="The basics. Everything here lands on the client row + welcome email."
+    >
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <Field label="Restaurant name *">
+        <Field label={nameLbl}>
           <input value={f.restaurant_name} onChange={(e) => set('restaurant_name', e.target.value)} style={input} />
         </Field>
         <Field label="Plan">
-          <select value={f.plan} onChange={(e) => set('plan', e.target.value)} style={input}>
-            <option value="trial">Trial</option>
-            <option value="starter">Starter</option>
-            <option value="cloud">Cloud</option>
-            <option value="pro">Pro</option>
+          <select value={f.plan} onChange={(e) => set('plan', e.target.value)} style={input} disabled={isSpa}>
+            {isSpa
+              ? <option value="spa">Spa £49/mo</option>
+              : <>
+                  <option value="trial">Trial</option>
+                  <option value="starter">Starter</option>
+                  <option value="cloud">Cloud</option>
+                  <option value="pro">Pro</option>
+                </>
+            }
           </select>
         </Field>
         <Field label="Owner name">
@@ -232,8 +320,12 @@ function Step1({ f, set, errors }) {
 }
 
 function Step2({ f, set, errors }) {
+  const isSpa = f.product === 'spa';
+  const anthropicLbl = isSpa
+    ? 'Anthropic API key (for AI treatment/invoice scanner)'
+    : 'Anthropic API key (for AI menu scanner)';
   return (
-    <Stepped title="Step 2 · Tech setup" subtitle="What's needed to provision the tenant. The sync key is generated for you on Step 5.">
+    <Stepped title="Step 2 · Tech setup" subtitle="What's needed to provision the tenant. The sync key is generated for you on the last step.">
       <Field label="Subdomain slug *">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input value={f.subdomain_slug} onChange={(e) => set('subdomain_slug', e.target.value.toLowerCase())} style={{ ...input, fontFamily: 'ui-monospace, monospace' }} />
@@ -241,25 +333,34 @@ function Step2({ f, set, errors }) {
         </div>
       </Field>
 
-      <Field label="Brevo API key (for owner-side booking + receipt emails)">
+      <Field label="Brevo API key (for booking confirmation + receipt emails)">
         <input value={f.brevo_api_key} onChange={(e) => set('brevo_api_key', e.target.value)} style={{ ...input, fontFamily: 'ui-monospace, monospace', fontSize: 12 }} placeholder="xkeysib-…" />
       </Field>
       <div style={{ fontSize: 11, color: C.textFaint, marginTop: -8 }}>
-        Each tenant uses their OWN Brevo account so emails come from <em>their</em> domain. Skip if they don't have one yet — the dashboard will flag it.
+        Each client uses their OWN Brevo account so emails come from <em>their</em> domain. Skip if they don't have one yet.
       </div>
 
-      <Field label="Anthropic API key (for AI menu scanner)">
+      <Field label={anthropicLbl}>
         <input value={f.anthropic_api_key} onChange={(e) => set('anthropic_api_key', e.target.value)} style={{ ...input, fontFamily: 'ui-monospace, monospace', fontSize: 12 }} placeholder="sk-ant-…" />
       </Field>
 
-      <div>
-        <label style={label}>Features</label>
-        <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
-          <Checkbox checked={f.has_reservations} onChange={(v) => set('has_reservations', v)} label="Online reservations" />
-          <Checkbox checked={f.has_takeaway}     onChange={(v) => set('has_takeaway', v)}     label="Online takeaway (will need Stripe Connect later)" />
-          <Checkbox checked={f.has_inventory}    onChange={(v) => set('has_inventory', v)}    label="Inventory + recipe cost tracking" />
+      {isSpa ? (
+        <div style={{ ...card, padding: 14, background: '#fdf4ff', border: '1px solid #d8b4fe' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#7e22ce', marginBottom: 8 }}>🌿 Spa features included by default</div>
+          <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.6 }}>
+            Online booking widget · Therapist + room management · Vouchers (monetary + sessions) · Treatwell integration · Client CRM · Online deposit (Stripe) · Reports + Z-report
+          </div>
         </div>
-      </div>
+      ) : (
+        <div>
+          <label style={label}>Features</label>
+          <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
+            <Checkbox checked={f.has_reservations} onChange={(v) => set('has_reservations', v)} label="Online reservations" />
+            <Checkbox checked={f.has_takeaway}     onChange={(v) => set('has_takeaway', v)}     label="Online takeaway (will need Stripe Connect later)" />
+            <Checkbox checked={f.has_inventory}    onChange={(v) => set('has_inventory', v)}    label="Inventory + recipe cost tracking" />
+          </div>
+        </div>
+      )}
 
       <Errors items={errors} />
     </Stepped>
@@ -316,19 +417,20 @@ function Step4({ f, set, errors }) {
 }
 
 function Step5Review({ f }) {
+  const isSpa = f.product === 'spa';
+  const featuresLabel = isSpa
+    ? 'All spa features included'
+    : [f.has_reservations && 'Reservations', f.has_takeaway && 'Takeaway', f.has_inventory && 'Inventory'].filter(Boolean).join(' · ') || '—';
   const items = [
-    ['Restaurant',        f.restaurant_name],
+    ['Product',           isSpa ? '🌿 Spa' : '🍽 Restaurant'],
+    [isSpa ? 'Spa name' : 'Restaurant', f.restaurant_name],
     ['Owner',             `${f.owner_name || '—'} · ${f.owner_email}`],
     ['Phone',             f.phone || '—'],
     ['Plan',              `${f.plan}${f.monthly_fee ? ` · £${f.monthly_fee}/mo` : ''}`],
     ['Subdomain',         `${f.subdomain_slug}.siamepos.co.uk`],
     ['Brevo API key',     f.brevo_api_key ? '✓ provided' : '— skipped'],
     ['Anthropic API key', f.anthropic_api_key ? '✓ provided' : '— skipped'],
-    ['Features',          [
-                            f.has_reservations && 'Reservations',
-                            f.has_takeaway     && 'Takeaway',
-                            f.has_inventory    && 'Inventory',
-                          ].filter(Boolean).join(' · ') || '—'],
+    ['Features',          featuresLabel],
     ['Owner PIN',         f.owner_pin],
   ];
   return (

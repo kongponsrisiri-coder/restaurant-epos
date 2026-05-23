@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
-import { C, card, btn, input, label, fmtRelTime, fmtMoney, PLAN_LABEL, STATUS_STYLE } from '../theme.js';
+import { C, card, btn, input, label, fmtRelTime, fmtMoney, PLAN_LABEL, STATUS_STYLE, PRODUCT_BADGE } from '../theme.js';
 import StatusPill from '../components/StatusPill.jsx';
 import HealthDot from '../components/HealthDot.jsx';
 
@@ -11,6 +11,7 @@ export default function DashboardPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  const [productFilter, setProductFilter] = useState('all');
   const nav = useNavigate();
 
   const load = async () => {
@@ -26,12 +27,13 @@ export default function DashboardPage() {
     const q = search.trim().toLowerCase();
     return clients.filter(c => {
       if (filter !== 'all' && c.status !== filter) return false;
+      if (productFilter !== 'all' && (c.product || 'restaurant') !== productFilter) return false;
       if (!q) return true;
       return (c.restaurant_name || '').toLowerCase().includes(q) ||
              (c.owner_name || '').toLowerCase().includes(q) ||
              (c.email || '').toLowerCase().includes(q);
     });
-  }, [clients, search, filter]);
+  }, [clients, search, filter, productFilter]);
 
   const counts = clients.reduce((a, c) => ({ ...a, [c.status]: (a[c.status] || 0) + 1 }), {});
   const onlineCount = clients.filter(c => c.last_is_online).length;
@@ -44,7 +46,7 @@ export default function DashboardPage() {
         <div>
           <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0, color: C.text, letterSpacing: -0.5 }}>Clients</h1>
           <p style={{ margin: '4px 0 0', color: C.textMuted, fontSize: 14 }}>
-            {clients.length} {clients.length === 1 ? 'restaurant' : 'restaurants'} · {onlineCount} online now
+            {clients.length} {clients.length === 1 ? 'client' : 'clients'} · {onlineCount} online now
           </p>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
@@ -65,6 +67,19 @@ export default function DashboardPage() {
         <StatTile label="In setup"     value={counts.setup  || 0}                                      accent={C.warning} />
         <StatTile label="Online now"   value={onlineCount}        sub={`/ ${clients.length} total`}    accent={C.gold} />
         <StatTile label="Churned"      value={counts.churned || 0}                                     accent={C.textMuted} />
+      </div>
+
+      {/* Product filter chips */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        {[['all', 'All'], ['restaurant', '🍽 Restaurant'], ['spa', '🌿 Spa']].map(([k, l]) => (
+          <button key={k} onClick={() => setProductFilter(k)} style={{
+            padding: '6px 14px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            border: `1px solid ${productFilter === k ? C.navy : C.border}`,
+            background: productFilter === k ? C.navy : C.surface,
+            color: productFilter === k ? 'white' : C.textMuted,
+            transition: 'all 0.12s',
+          }}>{l}</button>
+        ))}
       </div>
 
       {/* Filter bar */}
@@ -110,6 +125,7 @@ function StatTile({ label, value, sub, accent }) {
 function ClientCard({ client, onClick }) {
   const online = client.last_is_online;
   const lastChecked = client.last_checked_at;
+  const prod = PRODUCT_BADGE[client.product || 'restaurant'];
   return (
     <div onClick={onClick} style={{
       ...card, padding: 18, cursor: 'pointer', transition: 'transform 0.12s, box-shadow 0.12s',
@@ -122,6 +138,9 @@ function ClientCard({ client, onClick }) {
             <HealthDot online={online} size={9} pulsing={online} />
             <span style={{ fontSize: 16, fontWeight: 800, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {client.restaurant_name}
+            </span>
+            <span style={{ background: prod.bg, color: prod.color, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {prod.emoji} {prod.label}
             </span>
           </div>
           <div style={{ fontSize: 12, color: C.textFaint, fontFamily: 'ui-monospace, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -158,6 +177,7 @@ function AddClientModal({ onClose, onSaved }) {
   const [f, setF] = useState({
     restaurant_name: '', owner_name: '', email: '', phone: '',
     railway_url: '', plan: 'trial', status: 'setup', monthly_fee: '',
+    product: 'restaurant',
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -184,17 +204,27 @@ function AddClientModal({ onClose, onSaved }) {
         </div>
         {err && <div style={{ background: C.dangerBg, color: '#991b1b', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 16, border: `1px solid ${C.danger}33` }}>{err}</div>}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-          <Field label="Restaurant name *" gridColumn="1 / span 2" value={f.restaurant_name} onChange={(v) => set('restaurant_name', v)} />
+          <Field label="Business name *" gridColumn="1 / span 2" value={f.restaurant_name} onChange={(v) => set('restaurant_name', v)} />
+          <div>
+            <label style={label}>Product</label>
+            <select value={f.product} onChange={(e) => set('product', e.target.value)} style={input}>
+              <option value="restaurant">🍽 Restaurant</option>
+              <option value="spa">🌿 Spa</option>
+            </select>
+          </div>
+          <div>
+            <label style={label}>Plan</label>
+            <select value={f.plan} onChange={(e) => set('plan', e.target.value)} style={input}>
+              {f.product === 'spa'
+                ? <option value="spa">Spa £49/mo</option>
+                : <><option value="trial">Trial</option><option value="cloud">Cloud</option><option value="pro">Pro</option></>
+              }
+            </select>
+          </div>
           <Field label="Owner name"  value={f.owner_name} onChange={(v) => set('owner_name', v)} />
           <Field label="Phone"       value={f.phone}      onChange={(v) => set('phone', v)} />
           <Field label="Email"       value={f.email}      onChange={(v) => set('email', v)} type="email" gridColumn="1 / span 2" />
           <Field label="Railway URL" value={f.railway_url} onChange={(v) => set('railway_url', v)} placeholder="xyz.up.railway.app" gridColumn="1 / span 2" mono />
-          <div>
-            <label style={label}>Plan</label>
-            <select value={f.plan} onChange={(e) => set('plan', e.target.value)} style={input}>
-              <option value="trial">Trial</option><option value="cloud">Cloud</option><option value="pro">Pro</option>
-            </select>
-          </div>
           <div>
             <label style={label}>Status</label>
             <select value={f.status} onChange={(e) => set('status', e.target.value)} style={input}>

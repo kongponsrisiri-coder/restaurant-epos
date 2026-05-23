@@ -22,8 +22,10 @@ CREATE TABLE IF NOT EXISTS clients (
   metadata        JSONB DEFAULT '{}'::jsonb,
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
--- Idempotent migration for existing installs.
+-- Idempotent migrations for existing installs.
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+-- BO-SPA-001 — multi-product support: 'restaurant' | 'spa'
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS product TEXT DEFAULT 'restaurant';
 
 CREATE TABLE IF NOT EXISTS health_checks (
   id              SERIAL PRIMARY KEY,

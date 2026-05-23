@@ -101,7 +101,13 @@ export const STATUS_STYLE = {
   paused:  { bg: '#f1f5f9', color: '#475569', label: 'Paused' },
 };
 
-export const PLAN_LABEL = { trial: 'Trial', cloud: 'Cloud', pro: 'Pro' };
+export const PLAN_LABEL = { trial: 'Trial', cloud: 'Cloud', pro: 'Pro', spa: 'Spa £49/mo' };
+
+// BO-SPA-001 — product type badges
+export const PRODUCT_BADGE = {
+  restaurant: { emoji: '🍽', label: 'Restaurant', bg: '#f0fdf4', color: '#166534' },
+  spa:        { emoji: '🌿', label: 'Spa',        bg: '#fdf4ff', color: '#7e22ce' },
+};
 
 // Helpers
 export function initials(name) {

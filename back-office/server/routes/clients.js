@@ -80,15 +80,17 @@ router.post('/', async (req, res) => {
     const {
       restaurant_name, owner_name, email, phone, railway_url,
       plan, status, monthly_fee, trial_start, sub_start, next_billing,
+      product,
     } = req.body || {};
     if (!restaurant_name) return res.status(400).json({ error: 'restaurant_name required' });
     const r = await pool.query(
       `INSERT INTO clients (restaurant_name, owner_name, email, phone, railway_url,
-                            plan, status, monthly_fee, trial_start, sub_start, next_billing)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+                            plan, status, monthly_fee, trial_start, sub_start, next_billing, product)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [restaurant_name, owner_name || null, email || null, phone || null, railway_url || null,
        plan || 'trial', status || 'setup', monthly_fee || null,
-       trial_start || null, sub_start || null, next_billing || null]
+       trial_start || null, sub_start || null, next_billing || null,
+       product || 'restaurant']
     );
     res.json(r.rows[0]);
   } catch (err) {
@@ -126,6 +128,7 @@ router.put('/:id', async (req, res) => {
       'restaurant_name', 'owner_name', 'email', 'phone', 'railway_url',
       'plan', 'status', 'monthly_fee', 'trial_start', 'sub_start', 'next_billing',
       'metadata',  // SEPOS-WEB-002 — flexible setup / credentials bag.
+      'product',   // BO-SPA-001 — 'restaurant' | 'spa'
     ];
     const sets = [];
     const params = [];
@@ -216,8 +219,8 @@ router.post('/onboard', async (req, res) => {
 
     const r = await pool.query(
       `INSERT INTO clients
-         (restaurant_name, owner_name, email, phone, plan, status, monthly_fee, trial_start, metadata)
-       VALUES ($1,$2,$3,$4,$5,'setup',$6,$7,$8)
+         (restaurant_name, owner_name, email, phone, plan, status, monthly_fee, trial_start, metadata, product)
+       VALUES ($1,$2,$3,$4,$5,'setup',$6,$7,$8,$9)
        RETURNING *`,
       [
         b.restaurant_name.trim(),
@@ -228,6 +231,7 @@ router.post('/onboard', async (req, res) => {
         b.monthly_fee || null,
         b.trial_start_date || null,
         JSON.stringify(metadata),
+        b.product || 'restaurant',
       ]
     );
     const client = r.rows[0];

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
-import { C, card, btn, input, label, fmtRelTime, fmtMoney, STATUS_STYLE, PLAN_LABEL } from '../theme.js';
+import { C, card, btn, input, label, fmtRelTime, fmtMoney, STATUS_STYLE, PLAN_LABEL, PRODUCT_BADGE } from '../theme.js';
 import StatusPill from '../components/StatusPill.jsx';
 import HealthDot from '../components/HealthDot.jsx';
 import Avatar from '../components/Avatar.jsx';
@@ -26,6 +26,8 @@ export default function ClientDetailPage() {
   if (!data) return <div style={{ color: C.textMuted }}>Loading…</div>;
   const { client, health, notes } = data;
   const latest = health[0];
+  const isSpa = (client.product || 'restaurant') === 'spa';
+  const prod = PRODUCT_BADGE[client.product || 'restaurant'];
 
   const saveField = async (field, value) => {
     setSaving(true);
@@ -68,6 +70,9 @@ export default function ClientDetailPage() {
                 {client.restaurant_name}
               </h1>
               <StatusPill status={client.status} />
+              <span style={{ background: prod.bg, color: prod.color, fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 999 }}>
+                {prod.emoji} {prod.label}
+              </span>
             </div>
             <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.78)', marginBottom: 6 }}>
               {client.owner_name && <>{client.owner_name}</>}
@@ -111,7 +116,7 @@ export default function ClientDetailPage() {
           ['setup',      '🔐 Setup'],
           ['health',     `Health (${health.length})`],
           ['notes',      `Notes (${notes.length})`],
-          ['website',    '🌐 Website'],
+          ...(!isSpa ? [['website', '🌐 Website']] : []),
         ].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{
             padding: '10px 18px', background: 'transparent',
@@ -127,7 +132,10 @@ export default function ClientDetailPage() {
           <SectionCard title="Subscription">
             <FormRow label="Plan">
               <select value={client.plan || 'trial'} onChange={(e) => saveField('plan', e.target.value)} disabled={saving} style={miniInput}>
-                <option value="trial">Trial</option><option value="cloud">Cloud</option><option value="pro">Pro</option>
+                {isSpa
+                  ? <option value="spa">Spa £49/mo</option>
+                  : <><option value="trial">Trial</option><option value="cloud">Cloud</option><option value="pro">Pro</option></>
+                }
               </select>
             </FormRow>
             <FormRow label="Status">

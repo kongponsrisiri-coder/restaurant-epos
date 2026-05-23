@@ -1797,13 +1797,24 @@ app.get('/api/reservations/settings', async (req, res) => {
   // fall through to the parameterised handler below via direct call
   const rid = resolveRestaurantId(req);
   try {
+    // BUG-EPOS-001 — the previous SELECT named deprecated columns
+    // (slot_interval, default_duration, service_start/end, lunch_start/end,
+    // dinner_start/end, use_split_service, confirmation_email) that don't
+    // exist on the current restaurant_settings schema → 500. Mirror the
+    // SELECT from the widget handler below; only the fallback behaviour
+    // differs (admin returns defaults if no row, widget 404s).
     const result = await pool.query(
       `SELECT restaurant_id, restaurant_name, brand_colour,
-              opening_time, last_booking_time, slot_interval, default_duration,
-              service_start, service_end, lunch_start, lunch_end,
-              dinner_start, dinner_end, use_split_service,
-              max_covers_per_slot, max_party_size, restaurant_phone,
-              is_active, confirmation_email
+              TO_CHAR(opening_time, 'HH24:MI')         AS opening_time,
+              TO_CHAR(last_booking_time, 'HH24:MI')    AS last_booking_time,
+              service_type,
+              TO_CHAR(lunch_service_start, 'HH24:MI')  AS lunch_service_start,
+              TO_CHAR(lunch_service_end, 'HH24:MI')    AS lunch_service_end,
+              TO_CHAR(dinner_service_start, 'HH24:MI') AS dinner_service_start,
+              TO_CHAR(dinner_service_end, 'HH24:MI')   AS dinner_service_end,
+              slot_interval_mins, max_covers_per_slot, max_party_size,
+              restaurant_phone,
+              booking_lead_hours, booking_advance_days, is_active
        FROM restaurant_settings WHERE restaurant_id = $1`, [rid]
     );
     const s = result.rows[0] || { restaurant_id: rid, is_active: true };

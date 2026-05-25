@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ELECTRON_RUN_AS_NODE=1 ./electron/node_modules/.bin/electron -e \"const D=require\\('better-sqlite3'\\); const d=new D\\(':memory:'\\); console.log\\('loaded under Electron Node', process.versions.modules, 'sqlite', d.prepare\\('SELECT sqlite_version\\(\\) v'\\).get\\(\\).v\\);\")",
+      "Bash(npm start *)",
+      "Bash(curl -s http://localhost:3001/api/staff)",
+      "Bash(pkill -f \"electron/node_modules/.bin/electron\")",
+      "Bash(pkill -f \"Electron.app/Contents/MacOS/Electron\")",
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(pkill -f \"node src/server.js\")",
+      "Bash(rm -f /Users/korakot/Desktop/restaurant-epos/restaurant-local.db*)",
+      "Bash(npm rebuild *)",
+      "Bash(node *)",
+      "Bash(curl -s http://localhost:3098/api/sync-status)",
+      "Bash(curl -s -X POST http://localhost:3098/api/tables -H \"Content-Type: application/json\" -d '{\"table_number\":1,\"capacity\":4}')",
+      "Bash(curl -s -X POST http://localhost:3098/api/orders -H \"Content-Type: application/json\" -d '{\"table_id\":1,\"covers\":2}')",
+      "Bash(DB_MODE=local PORT=3098 CLOUD_API_URL=http://localhost:9876 SYNC_PING_MS=2000 node *)",
+      "Bash(sqlite3 /Users/korakot/Desktop/restaurant-epos/restaurant-local.db \"SELECT id, action_type, synced, synced_at FROM sync_queue\")",
+      "Bash(sqlite3 /Users/korakot/Desktop/restaurant-epos/restaurant-local.db \"SELECT id, action_type, synced FROM sync_queue\")",
+      "Bash(curl -s -X POST http://localhost:3098/api/orders -H \"Content-Type: application/json\" -d '{\"table_id\":1,\"covers\":3}')",
+      "Bash(curl -s -X POST http://localhost:3098/api/orders/2/items -H \"Content-Type: application/json\" -d '{\"items\":[{\"menu_item_id\":1,\"quantity\":1,\"unit_price\":5.5}]}')",
+      "Bash(pkill -f \"node /tmp/mock-cloud.js\")",
+      "Bash(rm -f /tmp/mock-cloud.js /Users/korakot/Desktop/restaurant-epos/restaurant-local.db*)",
+      "Bash(curl -s http://localhost:3001/api/sync-status)",
+      "Bash(rm -f \"/Users/korakot/Library/Application Support/siamepos-electron/siamepos-local.db\" \"/Users/korakot/Library/Application Support/siamepos-electron/siamepos-local.db-shm\" \"/Users/korakot/Library/Application Support/siamepos-electron/siamepos-local.db-wal\")",
+      "Read(//Users/korakot/Library/Application Support/siamepos-electron/**)",
+      "Bash(/api/orders'\" /Users/korakot/Desktop/restaurant-epos/src/server.js | head -3; echo \"---\"; grep -nE \"getOrders\\\\\\(\\\\\\)|app\\\\.get\\\\\\('/api/orders\" /Users/korakot/Desktop/restaurant-epos/src/server.js | head)",
+      "Bash(grep -nE \"app\\\\.get\\\\\\('/api/orders'\\\\\\)|app\\\\.get\\\\\\(`/api/orders'\" /Users/korakot/Desktop/restaurant-epos/src/server.js | head -3; echo \"---\"; grep -nE \"getOrders\\\\\\(\\\\\\)|app\\\\.get\\\\\\('/api/orders\" /Users/korakot/Desktop/restaurant-epos/src/server.js | head)",
+      "mcp__claude_ai_Google_Drive__get_file_permissions",
+      "Bash(git commit TEAM-STATUS.md -m ' *)",
+      "Bash(git push *)",
+      "Bash(curl -s https://baan-siam.siamepos.co.uk/ --max-time 10)"
+    ]
+  }
+}

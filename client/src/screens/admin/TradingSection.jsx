@@ -28,7 +28,7 @@ export default function TradingSection() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 16, marginBottom: 24 }}>
             {[
-              { label: 'Total Sales',   value: `£${(data?.total_sales || 0).toFixed(2)}`, color: '#e94560' },
+              { label: 'Total Sales',   value: `£${Number(data?.total_sales || 0).toFixed(2)}`, color: '#e94560' },
               { label: 'Orders',        value: data?.order_count || 0,                    color: '#3b82f6' },
               { label: 'Covers',        value: data?.total_covers || 0,                   color: '#22c55e' },
               { label: 'Avg per Cover', value: `£${avgPerHead.toFixed(2)}`,               color: '#eab308' },
@@ -46,7 +46,7 @@ export default function TradingSection() {
               {Object.entries(data.by_method).map(([method, amount]) => (
                 <div key={method} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
                   <span style={{ color: '#555' }}>{method}</span>
-                  <span style={{ fontWeight: 700 }}>£{amount.toFixed(2)}</span>
+                  <span style={{ fontWeight: 700 }}>£{Number(amount).toFixed(2)}</span>
                 </div>
               ))}
             </div>
@@ -57,7 +57,7 @@ export default function TradingSection() {
               {data.orders.slice(0, 10).map(order => (
                 <div key={order.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0', fontSize: 14 }}>
                   <span style={{ color: '#555' }}>Table {order.table_number} · #{order.id} · {order.method}</span>
-                  <span style={{ fontWeight: 700, color: '#1a1a2e' }}>£{(order.total || 0).toFixed(2)}</span>
+                  <span style={{ fontWeight: 700, color: '#1a1a2e' }}>£{Number(order.total || 0).toFixed(2)}</span>
                 </div>
               ))}
             </div>

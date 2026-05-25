@@ -70,16 +70,19 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     fetchData();
   }, [orderId]);
 
-  // SEPOS — memoise per-item allergen lists so we don't reparse on
-  // every render. Priority: dish_allergens (manual) > menu_items.allergens
-  // (AI scanned). Recipe-derived path is handled in admin and would have
-  // already populated dish_allergens via the "Sync all" action there.
+  // SEPOS — menu-button allergen chips render ONLY from confirmed
+  // entries in dish_allergens (the Allergen Matrix). AI-scanner output
+  // on menu_items.allergens is treated as a suggestion only, surfaced
+  // in admin → Allergen Menu where staff review and tap "🤖 Confirm AI
+  // Allergens" (bulk) or individual cells to promote them. Once
+  // promoted, they land in dish_allergens and the chips appear here.
+  // This prevents an unreviewed AI guess from showing to a waiter as
+  // gospel — Natasha's Law is a real liability if we get it wrong.
   const allergensByItemId = useMemo(() => {
     const out = {};
     for (const cat of menu) {
       for (const item of (cat.items || [])) {
-        const raw = allergenOverrides[item.id] ?? item.allergens;
-        const parsed = parseAllergens(raw);
+        const parsed = parseAllergens(allergenOverrides[item.id]);
         if (parsed.length > 0) out[item.id] = parsed;
       }
     }

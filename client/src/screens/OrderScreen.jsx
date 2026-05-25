@@ -580,7 +580,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       <AllergenChips list={allergensByItemId[item.id]} />
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: allergensByItemId[item.id] ? 8 : 0 }}>
                         <span style={{ fontSize: 17, fontWeight: 800, color: isBar ? '#1e40af' : '#e94560' }}>
-                          £{item.price.toFixed(2)}
+                          £{Number(item.price || 0).toFixed(2)}
                         </span>
                         {totalQty > 0 && (
                           <div
@@ -1166,7 +1166,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 )}
               </div>
               <p style={{ color: '#888', fontSize: 14, marginBottom: 20 }}>
-                £{modifierPopup.item.price.toFixed(2)}
+                £{Number(modifierPopup.item.price || 0).toFixed(2)}
               </p>
               {modifierPopup.modifiers.map(group => (
                 <div key={group.id} style={{ marginBottom: 20 }}>
@@ -1189,7 +1189,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                         }}>
                         <span style={{ fontSize: 15, fontWeight: selected ? 700 : 400 }}>{opt.name}</span>
                         <span style={{ fontSize: 14, color: opt.extra_price > 0 ? '#e94560' : '#aaa' }}>
-                          {opt.extra_price > 0 ? `+£${opt.extra_price.toFixed(2)}` : 'included'}
+                          {opt.extra_price > 0 ? `+£${Number(opt.extra_price).toFixed(2)}` : 'included'}
                         </span>
                       </div>
                     );

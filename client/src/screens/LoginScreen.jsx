@@ -182,29 +182,20 @@ export default function LoginScreen({ onLogin }) {
         </div>
         )}
 
-        {/* Error / success message */}
-        {error && (
-          <div style={{
-            background: 'rgba(239,68,68,0.14)',
-            border: '1px solid rgba(239,68,68,0.35)',
-            color: '#fca5a5',
-            borderRadius: 8, padding: '9px 14px',
-            fontSize: 13, textAlign: 'center', marginBottom: 16, fontWeight: 500,
-          }}>
-            {error}
-          </div>
-        )}
-        {success && (
-          <div style={{
-            background: 'rgba(34,197,94,0.16)',
-            border: '1px solid rgba(34,197,94,0.4)',
-            color: '#86efac',
-            borderRadius: 8, padding: '9px 14px',
-            fontSize: 13, textAlign: 'center', marginBottom: 16, fontWeight: 600,
-          }}>
-            {success}
-          </div>
-        )}
+        {/* Error / success — fixed-height slot so numpad never shifts */}
+        <div style={{ height: 38, marginBottom: 16 }}>
+          {(error || success) && (
+            <div style={{
+              background: error ? 'rgba(239,68,68,0.14)' : 'rgba(34,197,94,0.16)',
+              border: `1px solid ${error ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.4)'}`,
+              color: error ? '#fca5a5' : '#86efac',
+              borderRadius: 8, padding: '9px 14px',
+              fontSize: 13, textAlign: 'center', fontWeight: 500,
+            }}>
+              {error || success}
+            </div>
+          )}
+        </div>
 
         {/* SEPOS-LITE-003 — PIN entry (staff). Email form below for owners. */}
         {mode === 'pin' && (<>

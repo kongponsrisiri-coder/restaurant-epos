@@ -513,7 +513,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                         marginTop: 4,
                         fontWeight: 600
                       }}>
-                        {order.covers} cvr · £{(order.total || 0).toFixed(2)}
+                        {order.covers} cvr · £{Number(order.total || 0).toFixed(2)}
                       </div>
                     )}
                     {/* SEPOS-044 — pre-claim badge on grid tile */}
@@ -556,7 +556,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                 Table {tableActionPopup.table.table_number}
               </div>
               <div style={{ color: '#888', fontSize: 14 }}>
-                {tableActionPopup.order.covers} covers · £{(tableActionPopup.order.total || 0).toFixed(2)}
+                {tableActionPopup.order.covers} covers · £{Number(tableActionPopup.order.total || 0).toFixed(2)}
               </div>
             </div>
 

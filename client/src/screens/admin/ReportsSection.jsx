@@ -34,6 +34,15 @@ export default function ReportsSection() {
         ]);
       });
       rows.push(['', '', '', '', `TOTAL (${data.order_count || 0} orders · ${data.total_covers || 0} covers)`, Number(data.total_sales || 0).toFixed(2)]);
+      // SEPOS-VOUCHER-001 — append voucher activity for the period
+      if (data?.vouchers_sold?.count > 0 || data?.vouchers_redeemed?.count > 0) {
+        rows.push([]);
+        rows.push(['🎁 GIFT VOUCHERS', '', '', '', '', '']);
+        rows.push(['Sold total', '', '', '', data.vouchers_sold?.count || 0, Number(data.vouchers_sold?.total || 0).toFixed(2)]);
+        rows.push(['  via till (cash/card)', '', '', '', '', Number(data.vouchers_sold?.till_total || 0).toFixed(2)]);
+        rows.push(['  online (Stripe)',      '', '', '', '', Number(data.vouchers_sold?.stripe_total || 0).toFixed(2)]);
+        rows.push(['Redeemed against bills', '', '', '', data.vouchers_redeemed?.count || 0, '-' + Number(data.vouchers_redeemed?.total || 0).toFixed(2)]);
+      }
       downloadCsv(`sales-report_${period}_${today}.csv`, rows);
     } else {
       if (!itemData.length) return;
@@ -97,6 +106,36 @@ export default function ReportsSection() {
                     <span style={{ color: '#e94560' }}>£{Number(data.total_sales || 0).toFixed(2)}</span>
                   </div>
                 </>
+              )}
+            </div>
+          )}
+
+          {/* SEPOS-VOUCHER-001 — gift voucher activity for this period */}
+          {tab === 'sales' && (data?.vouchers_sold?.count > 0 || data?.vouchers_redeemed?.count > 0) && (
+            <div style={{ marginTop: 16, background: '#fdf6ec', border: '1px solid #f3e1bb', borderRadius: 12, overflow: 'hidden' }}>
+              <div style={{ padding: '12px 20px', background: '#fbeed0', fontWeight: 700, color: '#5b4a2a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>🎁 Gift Vouchers</span>
+                <span style={{ fontSize: 11, fontWeight: 400, color: '#8a7a4f' }}>tracked separately from food/drink</span>
+              </div>
+              <div style={{ padding: '12px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, fontSize: 13 }}>
+                <div>
+                  <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>Sold total ({data.vouchers_sold?.count || 0})</div>
+                  <div style={{ fontWeight: 800, color: '#5b4a2a', fontSize: 18 }}>£{Number(data.vouchers_sold?.total || 0).toFixed(2)}</div>
+                </div>
+                <div>
+                  <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>Via till (cash/card)</div>
+                  <div style={{ fontWeight: 800, color: '#1a1a2e', fontSize: 18 }}>£{Number(data.vouchers_sold?.till_total || 0).toFixed(2)}</div>
+                </div>
+                <div>
+                  <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>Online (Stripe)</div>
+                  <div style={{ fontWeight: 800, color: '#1a1a2e', fontSize: 18 }}>£{Number(data.vouchers_sold?.stripe_total || 0).toFixed(2)}</div>
+                </div>
+              </div>
+              {data?.vouchers_redeemed?.count > 0 && (
+                <div style={{ padding: '10px 20px', borderTop: '1px solid #f3e1bb', background: 'white', display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                  <span style={{ color: '#666' }}>Redeemed against bills ({data.vouchers_redeemed.count})</span>
+                  <span style={{ fontWeight: 700, color: '#8b5cf6' }}>−£{Number(data.vouchers_redeemed.total).toFixed(2)}</span>
+                </div>
               )}
             </div>
           )}

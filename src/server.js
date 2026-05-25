@@ -1243,13 +1243,46 @@ app.get('/api/reports/daily', async (req, res) => {
 app.get('/api/reports/summary', async (req, res) => {
   try {
     const { from, to } = req.query;
-    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.customer_name, payments.method, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date ORDER BY orders.closed_at DESC`, [from, to]);
+    const [result, voucherSoldRes, voucherRedeemedRes] = await Promise.all([
+      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.customer_name, payments.method, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date ORDER BY orders.closed_at DESC`, [from, to]),
+      // SEPOS-VOUCHER-001 — vouchers sold in the date range, split by method
+      pool.query(`SELECT payment_method, COUNT(*)::int AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at::date >= $1::date AND created_at::date <= $2::date GROUP BY payment_method`, [from, to]).catch(() => ({ rows: [] })),
+      pool.query(`SELECT COUNT(*)::int AS count, COALESCE(SUM(amount_used), 0) AS total FROM voucher_redemptions WHERE used_at::date >= $1::date AND used_at::date <= $2::date`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
+    ]);
     const rows = result.rows;
     const total_sales = rows.reduce((sum, r) => sum + (r.total || 0), 0);
     const total_covers = rows.reduce((sum, r) => sum + (r.covers || 0), 0);
     const by_method = {};
     rows.forEach(r => { if (r.method) by_method[r.method] = (by_method[r.method] || 0) + (r.total || 0); });
-    res.json({ orders: rows, total_sales, order_count: rows.length, total_covers, by_method, ...splitByOrderType(rows) });
+
+    // Voucher sales — exposed both as a single total and broken down by
+    // payment_method (cash / card / stripe / mock) so Trading + Reports
+    // can render the right "till vs off-till" framing.
+    const vouchersByMethod = {};
+    let voucherCount = 0, voucherTotal = 0, voucherTillTotal = 0, voucherStripeTotal = 0;
+    for (const r of voucherSoldRes.rows) {
+      const m = r.payment_method || 'unknown';
+      const t = Number(r.total || 0);
+      vouchersByMethod[m] = { count: Number(r.count || 0), total: t };
+      voucherCount += Number(r.count || 0);
+      voucherTotal += t;
+      if (m === 'cash' || m === 'card') voucherTillTotal += t;
+      else if (m === 'stripe')          voucherStripeTotal += t;
+    }
+    const vRedeemed = voucherRedeemedRes.rows[0] || { count: 0, total: 0 };
+
+    res.json({
+      orders: rows, total_sales, order_count: rows.length, total_covers, by_method,
+      vouchers_sold: {
+        count: voucherCount,
+        total: voucherTotal,
+        till_total:   voucherTillTotal,   // cash+card — physically went through the till
+        stripe_total: voucherStripeTotal, // off-till
+        by_method:    vouchersByMethod,
+      },
+      vouchers_redeemed: { count: Number(vRedeemed.count || 0), total: Number(vRedeemed.total || 0) },
+      ...splitByOrderType(rows),
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

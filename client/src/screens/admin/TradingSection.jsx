@@ -51,6 +51,36 @@ export default function TradingSection() {
               ))}
             </div>
           )}
+
+          {/* SEPOS-VOUCHER-001 — gift voucher activity (off the food/drink total — sold separately) */}
+          {(data?.vouchers_sold?.count > 0 || data?.vouchers_redeemed?.count > 0) && (
+            <div style={{ background: '#fdf6ec', border: '1px solid #f3e1bb', borderRadius: 12, padding: 20, marginBottom: 20 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4, color: '#5b4a2a' }}>🎁 Gift Vouchers</div>
+              <div style={{ fontSize: 12, color: '#8a7a4f', marginBottom: 12 }}>Tracked separately from food/drink sales — recognised as revenue when sold, not when redeemed.</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+                <div style={{ background: 'white', borderRadius: 8, padding: '10px 14px' }}>
+                  <div style={{ fontSize: 11, color: '#888' }}>Sold ({data.vouchers_sold?.count || 0})</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: '#5b4a2a' }}>£{Number(data.vouchers_sold?.total || 0).toFixed(2)}</div>
+                </div>
+                {Number(data.vouchers_sold?.till_total || 0) > 0 && (
+                  <div style={{ background: 'white', borderRadius: 8, padding: '10px 14px' }}>
+                    <div style={{ fontSize: 11, color: '#888' }}>↳ Via till (cash/card)</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>£{Number(data.vouchers_sold.till_total).toFixed(2)}</div>
+                  </div>
+                )}
+                {Number(data.vouchers_sold?.stripe_total || 0) > 0 && (
+                  <div style={{ background: 'white', borderRadius: 8, padding: '10px 14px' }}>
+                    <div style={{ fontSize: 11, color: '#888' }}>↳ Online (Stripe)</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>£{Number(data.vouchers_sold.stripe_total).toFixed(2)}</div>
+                  </div>
+                )}
+                <div style={{ background: 'white', borderRadius: 8, padding: '10px 14px' }}>
+                  <div style={{ fontSize: 11, color: '#888' }}>Redeemed ({data.vouchers_redeemed?.count || 0})</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: '#8b5cf6' }}>£{Number(data.vouchers_redeemed?.total || 0).toFixed(2)}</div>
+                </div>
+              </div>
+            </div>
+          )}
           {data?.orders?.length > 0 && (
             <div style={{ background: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
               <div style={{ fontWeight: 700, marginBottom: 12, color: '#1a1a2e' }}>Recent Orders</div>

@@ -59,7 +59,7 @@ function AIScannerModal({ onClose, onImported }) {
       const menuRes = await fetch(`${SERVER_URL}/api/menu/all`);
       const menuData = await menuRes.json();
       const firstCategoryId = menuData?.[0]?.id || 1;
-      await fetch(`${SERVER_URL}/api/menu/items`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: dish.name_en, name_alt: dish.name_th || '', description: dish.description || '', price: parseFloat(dish.price) || 0, category_id: firstCategoryId, subcategory_id: null }) });
+      await fetch(`${SERVER_URL}/api/menu/items`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: dish.name_en, name_alt: dish.name_th || '', description: dish.description || '', price: parseFloat(dish.price) || 0, category_id: firstCategoryId, subcategory_id: null, allergens: dish.allergens || [] }) });
       setAddedItems(prev => new Set([...prev, globalIndex])); onImported();
     } catch { alert('Failed to add item — try again'); }
     finally { setLoadingItem(null); }

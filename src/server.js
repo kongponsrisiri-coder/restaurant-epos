@@ -339,10 +339,15 @@ app.get('/api/menu/all', async (req, res) => {
 
 app.post('/api/menu/items', async (req, res) => {
   try {
-    const { category_id, subcategory_id, name, name_alt, description, price, vat_rate } = req.body;
+    const { category_id, subcategory_id, name, name_alt, description, price, vat_rate, allergens } = req.body;
+    // AI scanner sends allergens as ["Fish","Soybeans"]; normalise to JSON
+    // string for the column so the Allergen Matrix sees the scanned source.
+    let allergensStr = null;
+    if (Array.isArray(allergens) && allergens.length > 0) allergensStr = JSON.stringify(allergens);
+    else if (typeof allergens === 'string' && allergens.trim()) allergensStr = JSON.stringify([allergens]);
     const result = await pool.query(
-      'INSERT INTO menu_items (category_id, subcategory_id, name, name_alt, description, price, vat_rate) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
-      [category_id, subcategory_id || null, name, name_alt || null, description, price, vat_rate ?? 20]
+      'INSERT INTO menu_items (category_id, subcategory_id, name, name_alt, description, price, vat_rate, allergens) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
+      [category_id, subcategory_id || null, name, name_alt || null, description, price, vat_rate ?? 20, allergensStr]
     );
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }

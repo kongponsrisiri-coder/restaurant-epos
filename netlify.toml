@@ -1,7 +1,6 @@
-[build]
-  base    = "client"
-  command = "npm run build"
-  publish = "dist"
-
-[build.environment]
-  NODE_VERSION = "20"
+# Root netlify.toml — intentionally minimal (no base= so it doesn't
+# override per-site dashboard settings in this monorepo).
+# Each site sets its own Base directory in the Netlify dashboard:
+#   Restaurant EPOS  (app.siamepos.co.uk)       → base: client
+#   Spa EPOS         (siamepos-spa.netlify.app)  → base: spa-epos/client
+# Each subdirectory has its own netlify.toml with build + redirect rules.

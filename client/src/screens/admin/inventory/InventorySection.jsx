@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import IngredientsTab    from './IngredientsTab';
 import RecipesTab        from './RecipesTab';
+import BatchesTab        from './BatchesTab';
 import StockTab          from './StockTab';
 import InvoiceScannerTab from './InvoiceScannerTab';
 import CostSalesTab      from './CostSalesTab';
@@ -11,6 +12,7 @@ export default function InventorySection() {
   const tabs = [
     { id: 'ingredients', label: '🧅 Ingredients' },
     { id: 'recipes',     label: '📋 Recipes & Costs' },
+    { id: 'batches',     label: '🥣 Batches' },
     { id: 'stock',       label: '📦 Stock Log' },
     { id: 'invoices',    label: '🧾 Invoice Scanner' },
     { id: 'costsales',   label: '💰 Cost vs Sales' },
@@ -34,6 +36,7 @@ export default function InventorySection() {
       <div style={{ flex: 1, minHeight: 0, overflowY: tab === 'recipes' ? 'hidden' : 'auto', padding: '0 24px 24px' }}>
         {tab === 'ingredients' && <IngredientsTab />}
         {tab === 'recipes'     && <RecipesTab />}
+        {tab === 'batches'     && <BatchesTab />}
         {tab === 'stock'       && <StockTab />}
         {tab === 'invoices'    && <InvoiceScannerTab />}
         {tab === 'costsales'   && <CostSalesTab />}

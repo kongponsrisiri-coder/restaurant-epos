@@ -516,6 +516,75 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS resta
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_voucher_redemptions_voucher ON voucher_redemptions (voucher_id)`);
 
+    // ── SEPOS-BATCH-001 — kitchen batch prep ───────────────────────────
+    // batch_recipes is the make-template (e.g. "Red Curry Paste: 5kg from
+    // ingredients X+Y+Z, shelf life 5 days"). Creating a batch_recipe
+    // also auto-creates a matching `ingredients` row with is_batch=true,
+    // so menu recipes can use the batch as an ingredient like any other.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS batch_recipes (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        output_quantity NUMERIC(10,3) NOT NULL,
+        output_unit VARCHAR(20) NOT NULL,
+        shelf_life_days INTEGER NOT NULL DEFAULT 3,
+        total_cost NUMERIC(10,2) DEFAULT 0,
+        cost_per_unit NUMERIC(10,4) DEFAULT 0,
+        notes TEXT,
+        last_calculated TIMESTAMP DEFAULT NOW(),
+        created_at TIMESTAMP DEFAULT NOW(),
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos'
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS batch_recipe_lines (
+        id SERIAL PRIMARY KEY,
+        batch_recipe_id INTEGER NOT NULL REFERENCES batch_recipes(id) ON DELETE CASCADE,
+        ingredient_id INTEGER NOT NULL,
+        quantity_used NUMERIC(10,3) NOT NULL,
+        unit VARCHAR(20),
+        line_cost NUMERIC(10,2) DEFAULT 0
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_batch_recipe_lines_recipe ON batch_recipe_lines(batch_recipe_id)`);
+
+    // batches = actual physical instances of made batches. Each one has
+    // its own cost-locked-at-make-time + expiry. Status flow:
+    //   active → expired (auto on read after expires_on)
+    //   active|expired → discarded (chef tick: subtract remaining from stock,
+    //                                write stock_movements waste row)
+    //   active|expired → active (chef tick "✓ Still good" → expires_on += 1)
+    //   active → used_up (manual or computed when remaining hits 0)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS batches (
+        id SERIAL PRIMARY KEY,
+        batch_recipe_id INTEGER REFERENCES batch_recipes(id) ON DELETE SET NULL,
+        ingredient_id INTEGER NOT NULL,
+        made_on DATE NOT NULL DEFAULT CURRENT_DATE,
+        expires_on DATE NOT NULL,
+        original_quantity NUMERIC(10,3) NOT NULL,
+        locked_cost_per_unit NUMERIC(10,4) NOT NULL,
+        status VARCHAR(20) DEFAULT 'active',
+        made_by INTEGER,
+        notes TEXT,
+        discarded_qty NUMERIC(10,3),
+        discarded_at TIMESTAMP,
+        discarded_by INTEGER,
+        extended_count INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos'
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_batches_recipe     ON batches(batch_recipe_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_batches_ingredient ON batches(ingredient_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_batches_status_exp ON batches(status, expires_on)`);
+
+    // Tag ingredients that ARE batches so the recipe picker can show a 🥣
+    // badge + UI can prevent direct edits (cost comes from batch makes,
+    // not manual entry).
+    await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS is_batch BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS batch_recipe_id INTEGER`);
+
     console.log('✅ Database ready');
   } catch (err) {
     console.error('Database init error:', err);

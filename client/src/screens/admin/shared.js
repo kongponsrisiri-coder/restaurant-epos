@@ -33,6 +33,15 @@ export const invAPI = {
   getExpenses:      ()         => fetch(`${SERVER_URL}/api/expenses`).then(r => r.ok ? r.json() : []).catch(() => []),
   addExpense:       (data)     => fetch(`${SERVER_URL}/api/expenses`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
   deleteExpense:    (id)       => fetch(`${SERVER_URL}/api/expenses/${id}`, { method: 'DELETE' }).then(r => r.json()),
+  // SEPOS-BATCH-001 — batch prep
+  getBatchRecipes:   ()         => fetch(`${SERVER_URL}/api/batch-recipes`).then(r => r.ok ? r.json() : []).catch(() => []),
+  addBatchRecipe:    (data)     => fetch(`${SERVER_URL}/api/batch-recipes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
+  updateBatchRecipe: (id, data) => fetch(`${SERVER_URL}/api/batch-recipes/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
+  deleteBatchRecipe: (id)       => fetch(`${SERVER_URL}/api/batch-recipes/${id}`, { method: 'DELETE' }).then(r => r.json()),
+  getBatches:        ()         => fetch(`${SERVER_URL}/api/batches`).then(r => r.ok ? r.json() : []).catch(() => []),
+  makeBatch:         (data)     => fetch(`${SERVER_URL}/api/batches/make`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(r => r.json()),
+  discardBatch:      (id, data) => fetch(`${SERVER_URL}/api/batches/${id}/discard`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) }).then(r => r.json()),
+  extendBatch:       (id)       => fetch(`${SERVER_URL}/api/batches/${id}/extend`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(r => r.json()),
 };
 
 // ── Recipe costing helpers ────────────────────

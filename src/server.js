@@ -2448,6 +2448,285 @@ app.get('/api/stock/movements', async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── SEPOS-BATCH-001 — Batch recipes + batch instances ──────────────
+// batch_recipes is the "how to make it" template. Each one auto-creates
+// a matching ingredients row tagged is_batch=true so menu recipes can
+// reference the batch as an ingredient.
+
+app.get('/api/batch-recipes', async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT * FROM batch_recipes ORDER BY name`);
+    if (!r.rows.length) return res.json([]);
+    const ids = r.rows.map(x => x.id);
+    const linesRes = await pool.query(`SELECT rl.*, i.name_en AS ingredient_name, i.unit AS ingredient_unit, i.cost_per_unit FROM batch_recipe_lines rl JOIN ingredients i ON i.id = rl.ingredient_id WHERE rl.batch_recipe_id = ANY($1)`, [ids]);
+    const byRecipe = {};
+    linesRes.rows.forEach(l => { (byRecipe[l.batch_recipe_id] ||= []).push(l); });
+    res.json(r.rows.map(br => ({ ...br, lines: byRecipe[br.id] || [] })));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/batch-recipes', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { name, output_quantity, output_unit, shelf_life_days, lines, notes } = req.body || {};
+    if (!name || !output_quantity || !output_unit) return res.status(400).json({ error: 'name, output_quantity, output_unit required' });
+    const totalCost = (lines || []).reduce((s, l) => s + (parseFloat(l.line_cost) || 0), 0);
+    const costPerUnit = Number(output_quantity) > 0 ? totalCost / Number(output_quantity) : 0;
+    await client.query('BEGIN');
+    const brRes = await client.query(
+      `INSERT INTO batch_recipes (name, output_quantity, output_unit, shelf_life_days, total_cost, cost_per_unit, notes, last_calculated)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW()) RETURNING *`,
+      [name, output_quantity, output_unit, shelf_life_days || 3, totalCost, costPerUnit, notes || null],
+    );
+    const br = brRes.rows[0];
+    // Auto-create matching ingredient row so menu recipes can pick it up
+    const ingRes = await client.query(
+      `INSERT INTO ingredients (name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, is_batch, batch_recipe_id, updated_at)
+       VALUES ($1,'',$2,$3,100,'Batch',0,TRUE,$4,NOW()) RETURNING id`,
+      [name, output_unit, costPerUnit, br.id],
+    );
+    for (const l of (lines || [])) {
+      await client.query(
+        `INSERT INTO batch_recipe_lines (batch_recipe_id, ingredient_id, quantity_used, unit, line_cost)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [br.id, l.ingredient_id, l.quantity_used, l.unit, l.line_cost],
+      );
+    }
+    await client.query('COMMIT');
+    res.status(201).json({ ...br, ingredient_id: ingRes.rows[0].id });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[batch-recipes] create', err);
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+app.put('/api/batch-recipes/:id', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { name, output_quantity, output_unit, shelf_life_days, lines, notes } = req.body || {};
+    const totalCost = (lines || []).reduce((s, l) => s + (parseFloat(l.line_cost) || 0), 0);
+    const costPerUnit = Number(output_quantity) > 0 ? totalCost / Number(output_quantity) : 0;
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE batch_recipes SET name=$1, output_quantity=$2, output_unit=$3, shelf_life_days=$4, total_cost=$5, cost_per_unit=$6, notes=$7, last_calculated=NOW() WHERE id=$8`,
+      [name, output_quantity, output_unit, shelf_life_days || 3, totalCost, costPerUnit, notes || null, req.params.id],
+    );
+    // Keep matching ingredient in step with the new name / unit / cost
+    await client.query(
+      `UPDATE ingredients SET name_en=$1, unit=$2, cost_per_unit=$3, updated_at=NOW() WHERE batch_recipe_id=$4`,
+      [name, output_unit, costPerUnit, req.params.id],
+    );
+    await client.query(`DELETE FROM batch_recipe_lines WHERE batch_recipe_id=$1`, [req.params.id]);
+    for (const l of (lines || [])) {
+      await client.query(
+        `INSERT INTO batch_recipe_lines (batch_recipe_id, ingredient_id, quantity_used, unit, line_cost) VALUES ($1,$2,$3,$4,$5)`,
+        [req.params.id, l.ingredient_id, l.quantity_used, l.unit, l.line_cost],
+      );
+    }
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[batch-recipes] update', err);
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+app.delete('/api/batch-recipes/:id', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Refuse if the matching ingredient is used in any menu recipe — the
+    // chef would lose links to dishes silently otherwise.
+    const used = await client.query(
+      `SELECT COUNT(*)::int AS n FROM recipe_lines rl
+       JOIN ingredients i ON i.id = rl.ingredient_id
+       WHERE i.batch_recipe_id = $1`,
+      [req.params.id],
+    );
+    if (used.rows[0].n > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: `In use on ${used.rows[0].n} menu recipe line(s) — remove those first or hide instead.` });
+    }
+    await client.query(`DELETE FROM batch_recipe_lines WHERE batch_recipe_id=$1`, [req.params.id]);
+    await client.query(`DELETE FROM batches            WHERE batch_recipe_id=$1`, [req.params.id]);
+    await client.query(`DELETE FROM ingredients        WHERE batch_recipe_id=$1`, [req.params.id]);
+    await client.query(`DELETE FROM batch_recipes      WHERE id=$1`,              [req.params.id]);
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+// List physical batches. Auto-flips active→expired on read so the UI
+// always sees current state without a separate cron.
+app.get('/api/batches', async (req, res) => {
+  try {
+    await pool.query(`UPDATE batches SET status='expired' WHERE status='active' AND expires_on < CURRENT_DATE`);
+    const r = await pool.query(
+      `SELECT b.*, br.name AS recipe_name, br.output_unit AS unit, i.name_en AS ingredient_name, s.name AS made_by_name
+       FROM batches b
+       LEFT JOIN batch_recipes br ON br.id = b.batch_recipe_id
+       LEFT JOIN ingredients   i  ON i.id  = b.ingredient_id
+       LEFT JOIN staff         s  ON s.id  = b.made_by
+       ORDER BY (b.status = 'active') DESC, b.expires_on ASC, b.created_at DESC
+       LIMIT 500`,
+    );
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/batches/make — chef physically made a batch. Atomic:
+//   1. Deduct raw ingredients from stock (using current cost per unit
+//      to lock the total cost at make-time — paste cost stays stable
+//      even if ingredient prices change next week).
+//   2. Write a stock_movements row per consumed ingredient.
+//   3. Compute cost_per_unit = total_cost / output_quantity.
+//   4. Bump the batch ingredient's current_stock by output_quantity.
+//   5. INSERT batches row with locked cost + expires_on.
+app.post('/api/batches/make', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { batch_recipe_id, made_by, notes } = req.body || {};
+    if (!batch_recipe_id) return res.status(400).json({ error: 'batch_recipe_id required' });
+    await client.query('BEGIN');
+
+    const brRes = await client.query(`SELECT * FROM batch_recipes WHERE id=$1`, [batch_recipe_id]);
+    const br = brRes.rows[0];
+    if (!br) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Batch recipe not found' }); }
+
+    const linesRes = await client.query(
+      `SELECT rl.*, i.cost_per_unit, i.current_stock, i.name_en
+       FROM batch_recipe_lines rl JOIN ingredients i ON i.id = rl.ingredient_id
+       WHERE rl.batch_recipe_id = $1`,
+      [batch_recipe_id],
+    );
+
+    let totalCost = 0;
+    for (const l of linesRes.rows) {
+      const qty       = Number(l.quantity_used || 0);
+      const costPerU  = Number(l.cost_per_unit || 0);
+      const lineCost  = qty * costPerU;
+      totalCost += lineCost;
+      // Deduct raw stock (don't block on underflow — production realities;
+      // chef can fix with a manual adjustment if it goes negative).
+      await client.query(`UPDATE ingredients SET current_stock = current_stock - $1, updated_at = NOW() WHERE id = $2`, [qty, l.ingredient_id]);
+      await client.query(
+        `INSERT INTO stock_movements (ingredient_id, movement_type, quantity, cost_at_time, note, reference)
+         VALUES ($1, 'batch_prep', $2, $3, $4, $5)`,
+        [l.ingredient_id, -qty, costPerU, `Used in batch: ${br.name}`, `batch_recipe:${br.id}`],
+      );
+    }
+    const outQty       = Number(br.output_quantity);
+    const costPerUnit  = outQty > 0 ? totalCost / outQty : 0;
+
+    // Find the matching batch-as-ingredient row
+    const ingRes = await client.query(`SELECT id FROM ingredients WHERE batch_recipe_id = $1`, [br.id]);
+    if (!ingRes.rows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(500).json({ error: 'Matching batch ingredient row missing — re-create the batch recipe' });
+    }
+    const batchIngredientId = ingRes.rows[0].id;
+
+    // Update the batch ingredient's stock + cost (weighted avg of recent
+    // make would be ideal; for v1 we just snap to latest make cost, which
+    // is what most kitchens want for forward-looking menu costing).
+    await client.query(
+      `UPDATE ingredients SET current_stock = current_stock + $1, cost_per_unit = $2, updated_at = NOW() WHERE id = $3`,
+      [outQty, costPerUnit, batchIngredientId],
+    );
+
+    // Compute expires_on. shelf_life_days is INCLUSIVE — made today,
+    // 3-day shelf life → expires_on = today + 3.
+    const shelfDays = br.shelf_life_days || 3;
+    const batchRes = await client.query(
+      `INSERT INTO batches
+         (batch_recipe_id, ingredient_id, made_on, expires_on,
+          original_quantity, locked_cost_per_unit, status, made_by, notes)
+       VALUES ($1,$2,CURRENT_DATE,CURRENT_DATE + ($3 || ' days')::INTERVAL,
+               $4,$5,'active',$6,$7) RETURNING *`,
+      [br.id, batchIngredientId, shelfDays, outQty, costPerUnit, made_by || null, notes || null],
+    );
+
+    // Log a positive movement on the batch ingredient too, so the stock
+    // movements report shows "5kg batch produced".
+    await client.query(
+      `INSERT INTO stock_movements (ingredient_id, movement_type, quantity, cost_at_time, note, reference)
+       VALUES ($1, 'batch_made', $2, $3, $4, $5)`,
+      [batchIngredientId, outQty, costPerUnit, `Made batch #${batchRes.rows[0].id} of ${br.name}`, `batch:${batchRes.rows[0].id}`],
+    );
+
+    await client.query('COMMIT');
+    res.status(201).json({ batch: batchRes.rows[0], total_cost: totalCost, cost_per_unit: costPerUnit });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[batches] make', err);
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+// Discard a batch. quantity defaults to the full original — chef can
+// override if they used some before throwing the rest out.
+app.post('/api/batches/:id/discard', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { quantity, reason, discarded_by } = req.body || {};
+    await client.query('BEGIN');
+    const r = await client.query(`SELECT * FROM batches WHERE id=$1 FOR UPDATE`, [req.params.id]);
+    const b = r.rows[0];
+    if (!b) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Batch not found' }); }
+    if (b.status === 'discarded') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Already discarded' }); }
+
+    const discardQty = Number(quantity != null ? quantity : b.original_quantity);
+    const cost       = Number(b.locked_cost_per_unit || 0);
+
+    // Subtract from the batch ingredient's stock (don't go below 0)
+    await client.query(
+      `UPDATE ingredients SET current_stock = GREATEST(0, current_stock - $1), updated_at = NOW() WHERE id = $2`,
+      [discardQty, b.ingredient_id],
+    );
+    // Wastage log — uses the same 'waste' movement_type wastage reports already read
+    await client.query(
+      `INSERT INTO stock_movements (ingredient_id, movement_type, quantity, cost_at_time, note, reference)
+       VALUES ($1, 'waste', $2, $3, $4, $5)`,
+      [b.ingredient_id, -discardQty, cost, `Batch #${b.id} discarded${reason ? ` — ${reason}` : ''}`, `batch:${b.id}`],
+    );
+    await client.query(
+      `UPDATE batches SET status='discarded', discarded_qty=$1, discarded_at=NOW(), discarded_by=$2, notes=COALESCE(notes||' / ','') || $3 WHERE id=$4`,
+      [discardQty, discarded_by || null, reason || 'discarded', b.id],
+    );
+    await client.query('COMMIT');
+    res.json({ success: true, discarded_qty: discardQty, cost_lost: +(discardQty * cost).toFixed(2) });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[batches] discard', err);
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+// Extend a batch by 1 day. Useful when the chef judges it's still good
+// past the system's shelf-life estimate. Capped at +3 extensions to
+// avoid indefinitely deferring a real waste.
+app.post('/api/batches/:id/extend', async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT extended_count FROM batches WHERE id=$1`, [req.params.id]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Batch not found' });
+    if ((r.rows[0].extended_count || 0) >= 3) return res.status(400).json({ error: 'Already extended 3 times — discard if past use' });
+    const u = await pool.query(
+      `UPDATE batches
+         SET expires_on = expires_on + INTERVAL '1 day',
+             status = 'active',
+             extended_count = COALESCE(extended_count, 0) + 1
+       WHERE id = $1 RETURNING *`,
+      [req.params.id],
+    );
+    res.json({ success: true, batch: u.rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/stock/adjustment', async (req, res) => {
   const client = await pool.connect();
   try {

@@ -117,7 +117,7 @@ export default function RecipesTab() {
               {lines.length === 0 && <div style={{ padding: '24px 16px', textAlign: 'center', color: '#bbb', fontSize: 13 }}>No ingredients added yet</div>}
               {lines.map((line, i) => (
                 <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 90px 36px', padding: '10px 16px', borderBottom: '1px solid #f0f0f0', fontSize: 13, alignItems: 'center' }}>
-                  <div><div style={{ fontWeight: 600, color: '#1a1a2e' }}>{line.ingredient_name}</div>{line.ingredient_name_th && <div style={{ fontSize: 11, color: '#C9A84C' }}>{line.ingredient_name_th}</div>}<div style={{ fontSize: 10, color: '#aaa' }}>yield {line.yield_percentage}% · £{Number(line.cost_per_unit).toFixed(2)}/{line.unit}</div></div>
+                  <div><div style={{ fontWeight: 600, color: '#1a1a2e' }}>{ingredients.find(i => i.id === line.ingredient_id)?.is_batch && <span title="Batch ingredient — cost from kitchen prep">🥣 </span>}{line.ingredient_name}</div>{line.ingredient_name_th && <div style={{ fontSize: 11, color: '#C9A84C' }}>{line.ingredient_name_th}</div>}<div style={{ fontSize: 10, color: '#aaa' }}>yield {line.yield_percentage}% · £{Number(line.cost_per_unit).toFixed(2)}/{line.unit}</div></div>
                   <span style={{ textAlign: 'right', color: '#555' }}>{line.quantity_used}</span>
                   <span style={{ textAlign: 'center', color: '#555' }}>{line.unit}</span>
                   <span style={{ textAlign: 'right', fontWeight: 700, color: '#1a1a2e' }}>£{Number(line.line_cost).toFixed(2)}</span>
@@ -127,7 +127,7 @@ export default function RecipesTab() {
               {/* Add new ingredient row */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 90px 36px', padding: '10px 16px', borderTop: '2px dashed #e0e0e0', gap: 6, alignItems: 'center' }}>
                 <select value={newLine.ingredient_id} onChange={e => { const ing = ingredients.find(i => i.id === Number(e.target.value)); setNewLine({ ...newLine, ingredient_id: e.target.value, unit: ing?.unit || 'kg' }); }} style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }}>
-                  <option value="">— Select ingredient —</option>{ingredients.map(ing => <option key={ing.id} value={ing.id}>{ing.name_en}</option>)}
+                  <option value="">— Select ingredient —</option>{ingredients.map(ing => <option key={ing.id} value={ing.id}>{ing.is_batch ? '🥣 ' : ''}{ing.name_en}</option>)}
                 </select>
                 <input type="number" step="0.001" value={newLine.quantity_used} onChange={e => setNewLine({ ...newLine, quantity_used: e.target.value })} placeholder="Qty" style={{ padding: '7px 8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, textAlign: 'right' }} />
                 <select value={newLine.unit} onChange={e => setNewLine({ ...newLine, unit: e.target.value })} style={{ padding: '7px 6px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }}>{UNITS.map(u => <option key={u} value={u}>{u}</option>)}</select>

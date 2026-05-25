@@ -22,13 +22,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
-    getBill(orderId).then(data => {
-      setBill(data);
-      setLoading(false);
-      // Only mark the bill as printed if it actually exists — otherwise
-      // we'd needlessly POST a "printed" flag against a deleted order.
-      if (data?.order?.id) markBillPrinted(orderId);
-    });
+    getBill(orderId).then(data => { setBill(data); setLoading(false); markBillPrinted(orderId); });
   }, [orderId]);
 
   useEffect(() => {
@@ -42,18 +36,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
       <div style={{ color:'white', fontSize:18 }}>Loading bill...</div>
     </div>
   );
-  // Order missing or stripped (no id) → friendly notice instead of a blank
-  // page. Backend now 404s; this also catches a stale 200-with-empty-order.
-  if (!bill || !bill.order || !bill.order.id) return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999, padding:20 }}>
-      <div style={{ background:'white', borderRadius:12, padding:'28px 32px', maxWidth:420, textAlign:'center' }}>
-        <div style={{ fontSize:32, marginBottom:8 }}>🧾</div>
-        <div style={{ fontSize:18, fontWeight:800, color:'#1a1a2e', marginBottom:6 }}>Bill not available</div>
-        <div style={{ fontSize:13, color:'#666', marginBottom:18 }}>This order no longer exists — it may have been deleted or closed.</div>
-        <button onClick={onClose} style={{ background:'#0d1b3e', color:'white', border:'none', padding:'10px 18px', borderRadius:8, fontWeight:700, fontSize:14, cursor:'pointer' }}>Close</button>
-      </div>
-    </div>
-  );
+  if (!bill || !bill.order) return null;
 
   const { order, settings } = bill;
   const serviceChargePercent = parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5) / 100;

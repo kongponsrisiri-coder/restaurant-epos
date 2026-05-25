@@ -153,7 +153,7 @@ export default function ZReportSection() {
               <div><span style={{ fontWeight: 600, marginRight: 8 }}>{r.type === 'day' ? '🌙 End of Day' : '⏰ Shift Close'}</span><span style={{ color: '#888' }}>{formatDateTime(r.closed_at)}</span></div>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                 <span style={{ color: '#555' }}>{r.total_orders} orders</span>
-                <span style={{ fontWeight: 700, color: '#e94560' }}>£{(r.total_sales || 0).toFixed(2)}</span>
+                <span style={{ fontWeight: 700, color: '#e94560' }}>£{Number(r.total_sales || 0).toFixed(2)}</span>
                 {r.cash_difference !== 0 && <span style={{ fontWeight: 700, fontSize: 12, color: r.cash_difference > 0 ? '#22c55e' : '#ef4444' }}>{r.cash_difference > 0 ? `Over £${Number(r.cash_difference).toFixed(2)}` : `Short £${Math.abs(Number(r.cash_difference)).toFixed(2)}`}</span>}
               </div>
             </div>
@@ -212,31 +212,31 @@ export default function ZReportSection() {
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>💰 Sales Summary</div>
               {[{ label: '💵 Cash Sales', value: reportData.total_cash || 0, color: '#22c55e' }, { label: '💳 Card Sales', value: reportData.total_card || 0, color: '#3b82f6' }, { label: '🔄 Other', value: reportData.total_other || 0, color: '#8b5cf6' }].map(p => (
-                <div key={p.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0f0f0', fontSize: 15 }}><span>{p.label}</span><span style={{ fontWeight: 700, color: p.color }}>£{p.value.toFixed(2)}</span></div>
+                <div key={p.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0f0f0', fontSize: 15 }}><span>{p.label}</span><span style={{ fontWeight: 700, color: p.color }}>£{Number(p.value).toFixed(2)}</span></div>
               ))}
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0', fontSize: 20, fontWeight: 800, color: '#e94560' }}><span>TOTAL SALES</span><span>£{(reportData.total_sales || 0).toFixed(2)}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0', fontSize: 20, fontWeight: 800, color: '#e94560' }}><span>TOTAL SALES</span><span>£{Number(reportData.total_sales || 0).toFixed(2)}</span></div>
               {(reportData.takeaway_count > 0 || reportData.dine_in_count > 0) && (
                 <div style={{ marginTop: 4, marginBottom: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
                     <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>Dine-in</div>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: '#1a1a2e' }}>£{(reportData.total_dine_in || 0).toFixed(2)}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#1a1a2e' }}>£{Number(reportData.total_dine_in || 0).toFixed(2)}</div>
                     <div style={{ fontSize: 11, color: '#888' }}>{reportData.dine_in_count || 0} orders</div>
                   </div>
                   <div>
                     <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>🥡 Online Takeaway</div>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: '#C9A84C' }}>£{(reportData.total_takeaway || 0).toFixed(2)}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#C9A84C' }}>£{Number(reportData.total_takeaway || 0).toFixed(2)}</div>
                     <div style={{ fontSize: 11, color: '#888' }}>{reportData.takeaway_count || 0} orders</div>
                   </div>
                 </div>
               )}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
-              {[{ label: 'Orders', value: reportData.total_orders || 0, color: '#3b82f6' }, { label: 'Covers', value: reportData.total_covers || 0, color: '#22c55e' }, { label: 'Avg/Cover', value: `£${(reportData.avg_per_cover || 0).toFixed(2)}`, color: '#8b5cf6' }].map(s => (
+              {[{ label: 'Orders', value: reportData.total_orders || 0, color: '#3b82f6' }, { label: 'Covers', value: reportData.total_covers || 0, color: '#22c55e' }, { label: 'Avg/Cover', value: `£${Number(reportData.avg_per_cover || 0).toFixed(2)}`, color: '#8b5cf6' }].map(s => (
                 <div key={s.label} style={{ background: '#f8f8f8', borderRadius: 10, padding: 12, textAlign: 'center' }}><div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div><div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{s.label}</div></div>
               ))}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <div style={{ flex: 1, background: '#f0fdf4', borderRadius: 10, padding: 12, border: '1px solid #bbf7d0' }}><div style={{ fontSize: 11, color: '#888' }}>Discounts Given</div><div style={{ fontSize: 18, fontWeight: 800, color: '#22c55e' }}>£{(reportData.total_discounts || 0).toFixed(2)}</div></div>
+              <div style={{ flex: 1, background: '#f0fdf4', borderRadius: 10, padding: 12, border: '1px solid #bbf7d0' }}><div style={{ fontSize: 11, color: '#888' }}>Discounts Given</div><div style={{ fontSize: 18, fontWeight: 800, color: '#22c55e' }}>£{Number(reportData.total_discounts || 0).toFixed(2)}</div></div>
               <div style={{ flex: 1, background: '#fff0f3', borderRadius: 10, padding: 12, border: '1px solid #fecdd3' }}><div style={{ fontSize: 11, color: '#888' }}>Void Items</div><div style={{ fontSize: 18, fontWeight: 800, color: '#e94560' }}>{reportData.void_count || 0} items</div></div>
             </div>
 
@@ -293,7 +293,7 @@ export default function ZReportSection() {
         <div>
           <div style={{ background: 'white', borderRadius: 16, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: 20 }}>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 20, color: '#1a1a2e' }}>💵 Till Reconciliation</div>
-            <div style={{ background: '#f0f7ff', borderRadius: 10, padding: 14, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 14, color: '#555' }}>Cash Sales from System</span><span style={{ fontSize: 20, fontWeight: 800, color: '#1e40af' }}>£{(reportData.total_cash || 0).toFixed(2)}</span></div>
+            <div style={{ background: '#f0f7ff', borderRadius: 10, padding: 14, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 14, color: '#555' }}>Cash Sales from System</span><span style={{ fontSize: 20, fontWeight: 800, color: '#1e40af' }}>£{Number(reportData.total_cash || 0).toFixed(2)}</span></div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div><label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>💰 Float at Start of Shift</label><div style={{ position: 'relative' }}><span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span><input type="number" step="0.01" value={floatAmount} onChange={e => setFloatAmount(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} /></div></div>
               <div><label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>🧾 Petty Cash Out</label><div style={{ position: 'relative', marginBottom: 8 }}><span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span><input type="number" step="0.01" value={pettyCash} onChange={e => setPettyCash(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} /></div><input value={pettyCashReason} onChange={e => setPettyCashReason(e.target.value)} placeholder="Reason e.g. Bought supplies..." style={inputStyle} /></div>
@@ -302,7 +302,7 @@ export default function ZReportSection() {
             {actualCash !== '' && (
               <div style={{ marginTop: 20, background: '#f8f8f8', borderRadius: 12, padding: 16 }}>
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: '#1a1a2e' }}>📊 Cash Calculation</div>
-                {[{ label: 'Cash Sales', val: `£${(reportData.total_cash || 0).toFixed(2)}` }, floatNum > 0 && { label: 'Less Float', val: `-£${floatNum.toFixed(2)}` }, pettyNum > 0 && { label: 'Less Petty Cash', val: `-£${pettyNum.toFixed(2)}` }].filter(Boolean).map(r => (
+                {[{ label: 'Cash Sales', val: `£${Number(reportData.total_cash || 0).toFixed(2)}` }, floatNum > 0 && { label: 'Less Float', val: `-£${floatNum.toFixed(2)}` }, pettyNum > 0 && { label: 'Less Petty Cash', val: `-£${pettyNum.toFixed(2)}` }].filter(Boolean).map(r => (
                   <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 8, color: '#555' }}><span>{r.label}</span><span>{r.val}</span></div>
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 700, marginBottom: 8, paddingTop: 8, borderTop: '1px solid #eee' }}><span>Expected Cash</span><span>£{expectedCash.toFixed(2)}</span></div>
@@ -330,7 +330,7 @@ export default function ZReportSection() {
               <div style={{ fontSize: 13, color: '#888', marginTop: 4 }}>{formatDateTime(reportData.from)} — {formatDateTime(reportData.to)}</div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 16 }}>
-              {[{ label: 'Total Sales', value: `£${(reportData.total_sales || 0).toFixed(2)}`, color: '#e94560' }, { label: 'Cash Sales', value: `£${(reportData.total_cash || 0).toFixed(2)}`, color: '#22c55e' }, { label: 'Card Sales', value: `£${(reportData.total_card || 0).toFixed(2)}`, color: '#3b82f6' }, { label: 'Orders', value: reportData.total_orders || 0, color: '#8b5cf6' }].map(s => (
+              {[{ label: 'Total Sales', value: `£${(reportData.total_sales || 0).toFixed(2)}`, color: '#e94560' }, { label: 'Cash Sales', value: `£${Number(reportData.total_cash || 0).toFixed(2)}`, color: '#22c55e' }, { label: 'Card Sales', value: `£${Number(reportData.total_card || 0).toFixed(2)}`, color: '#3b82f6' }, { label: 'Orders', value: reportData.total_orders || 0, color: '#8b5cf6' }].map(s => (
                 <div key={s.label} style={{ background: '#f8f8f8', borderRadius: 10, padding: 14, textAlign: 'center' }}><div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div><div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{s.label}</div></div>
               ))}
             </div>

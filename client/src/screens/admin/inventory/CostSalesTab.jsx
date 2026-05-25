@@ -39,7 +39,7 @@ export default function CostSalesTab() {
   const labour        = filteredExp.filter(e => e.category === 'labour').reduce((s, e) => s + Number(e.amount || 0), 0);
   const other         = filteredExp.filter(e => e.category === 'other').reduce((s, e) => s + Number(e.amount || 0), 0);
 
-  const totalRevenue   = revenue?.total_sales || 0;
+  const totalRevenue   = Number(revenue?.total_sales || 0); // PG SUM returns string; coerce so .toFixed downstream is safe
   const grossProfit    = totalRevenue - cogs;
   const grossMarginPct = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
   const totalCosts     = cogs + overheads + labour + other;

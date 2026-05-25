@@ -80,9 +80,9 @@ export default function BillsSection() {
     finally { setLoadingItems(false); }
   };
 
-  const totalSales = bills.reduce((s, b) => s + (b.total || 0), 0);
-  const totalCash  = bills.filter(b => b.method === 'Cash').reduce((s, b) => s + (b.total || 0), 0);
-  const totalCard  = bills.filter(b => b.method === 'Card').reduce((s, b) => s + (b.total || 0), 0);
+  const totalSales = bills.reduce((s, b) => s + Number(b.total || 0), 0);
+  const totalCash  = bills.filter(b => b.method === 'Cash').reduce((s, b) => s + Number(b.total || 0), 0);
+  const totalCard  = bills.filter(b => b.method === 'Card').reduce((s, b) => s + Number(b.total || 0), 0);
   const formatDateTime = (dt) => dt ? new Date(dt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
   const itemsByCourse = {};
   billItems.forEach(item => { const c = item.course ?? 0; if (!itemsByCourse[c]) itemsByCourse[c] = []; itemsByCourse[c].push(item); });
@@ -173,7 +173,7 @@ export default function BillsSection() {
                 <span style={{ color: '#555' }}>{formatDateTime(bill.closed_at)}</span>
                 <span><span style={{ background: bill.method === 'Cash' ? '#dcfce7' : bill.method === 'Card' ? '#dbeafe' : '#f3f4f6', color: bill.method === 'Cash' ? '#14532d' : bill.method === 'Card' ? '#1e40af' : '#374151', padding: '2px 8px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{bill.method === 'Cash' ? '💵' : bill.method === 'Card' ? '💳' : '🔄'} {bill.method}</span></span>
                 <span style={{ textAlign: 'right', color: bill.discount_value > 0 ? '#22c55e' : '#bbb', fontSize: 13 }}>{bill.discount_value > 0 ? bill.discount_type === 'percent' ? `-${bill.discount_value}%` : `-£${bill.discount_value}` : '—'}</span>
-                <span style={{ textAlign: 'right', fontWeight: 700, color: '#1a1a2e' }}>£{(bill.total || 0).toFixed(2)}</span>
+                <span style={{ textAlign: 'right', fontWeight: 700, color: '#1a1a2e' }}>£{Number(bill.total || 0).toFixed(2)}</span>
                 <span style={{ textAlign: 'center' }}>
                   {/* Delete buttons hidden until a manager unlocks the
                       session (top-right 🔒). PIN re-validated at the
@@ -209,13 +209,13 @@ export default function BillsSection() {
                       </div>
                       <div style={{ flex: 1, minWidth: 200 }}>
                         <div style={{ fontWeight: 700, fontSize: 13, color: '#1e40af', marginBottom: 10 }}>Bill Summary</div>
-                        {[{ label: 'Date', value: formatDateTime(bill.closed_at) }, { label: 'Method', value: bill.method }, { label: 'Covers', value: bill.covers || '—' }, { label: 'Discount', value: bill.discount_value > 0 ? `${bill.discount_type === 'percent' ? bill.discount_value + '%' : '£' + bill.discount_value} (${bill.discount_reason})` : 'None' }, { label: 'Amount Paid', value: `£${(bill.paid_amount || 0).toFixed(2)}` }].map(item => (
+                        {[{ label: 'Date', value: formatDateTime(bill.closed_at) }, { label: 'Method', value: bill.method }, { label: 'Covers', value: bill.covers || '—' }, { label: 'Discount', value: bill.discount_value > 0 ? `${bill.discount_type === 'percent' ? bill.discount_value + '%' : '£' + bill.discount_value} (${bill.discount_reason})` : 'None' }, { label: 'Amount Paid', value: `£${Number(bill.paid_amount || 0).toFixed(2)}` }].map(item => (
                           <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #e0edff' }}>
                             <span style={{ color: '#888' }}>{item.label}</span><span style={{ fontWeight: 600 }}>{item.value}</span>
                           </div>
                         ))}
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 800, paddingTop: 8, borderTop: '2px solid #3b82f6', marginTop: 4 }}>
-                          <span>Total</span><span style={{ color: '#e94560' }}>£{(bill.total || 0).toFixed(2)}</span>
+                          <span>Total</span><span style={{ color: '#e94560' }}>£{Number(bill.total || 0).toFixed(2)}</span>
                         </div>
                       </div>
                     </div>

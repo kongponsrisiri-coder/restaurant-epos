@@ -2957,6 +2957,61 @@ app.post('/api/vouchers/:id/void', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Admin — at-till voucher sale. Customer walks in wanting to buy a £50
+// gift voucher with cash/card. No Stripe involved — payment is taken at
+// the EPOS till the same way Cash/Card on a normal order is. The voucher
+// row records payment_method='cash' or 'card' so the Z-Report shows
+// it as on-till revenue (not the off-till Stripe block).
+app.post('/api/vouchers/sell', async (req, res) => {
+  try {
+    const {
+      amount, payment_method,
+      recipient_name, recipient_email, sender_name, message, delivery_date,
+      sold_by,
+    } = req.body || {};
+    const v = voucherSvc.validateAmount(amount);
+    if (!v.ok) return res.status(400).json({ error: v.error });
+    const method = String(payment_method || '').toLowerCase();
+    if (!['cash', 'card'].includes(method)) {
+      return res.status(400).json({ error: 'payment_method must be cash or card' });
+    }
+    let code;
+    for (let i = 0; i < 10; i++) {
+      code = voucherSvc.generateCode();
+      const exists = await pool.query('SELECT id FROM vouchers WHERE code = $1', [code]);
+      if (!exists.rows[0]) break;
+    }
+    const expires = voucherSvc.defaultExpiryDate();
+    const rid = resolveRestaurantId(req);
+    const result = await pool.query(
+      `INSERT INTO vouchers
+         (code, original_amount, balance, recipient_name, recipient_email,
+          sender_name, message, delivery_date, expires_at,
+          payment_method, restaurant_id)
+       VALUES ($1,$2,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [code, v.amount,
+       recipient_name || null, recipient_email || null,
+       sender_name || null, message || null,
+       delivery_date || null, expires,
+       method, rid],
+    );
+    const voucher = result.rows[0];
+    if (voucher.recipient_email) {
+      voucherSvc.sendVoucherGiftEmail(voucher)
+        .then(async (r) => {
+          if (r && r.ok) await pool.query('UPDATE vouchers SET email_sent_at = NOW() WHERE id = $1', [voucher.id]);
+        })
+        .catch((e) => console.error('[voucher] gift email failed', e));
+    }
+    res.status(201).json({
+      voucher: { ...voucher, balance: Number(voucher.balance), original_amount: Number(voucher.original_amount) },
+    });
+  } catch (err) {
+    console.error('[voucher] sell', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Admin — resend gift email (operator-initiated, e.g. lost-in-spam)
 app.post('/api/vouchers/:id/resend-email', async (req, res) => {
   try {

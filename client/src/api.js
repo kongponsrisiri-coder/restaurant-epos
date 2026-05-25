@@ -245,3 +245,4 @@ export const listVouchers  = (q, status) => {
 export const getVoucherDetail   = (id) => get(`/api/vouchers/${id}`);
 export const voidVoucher        = (id, voided_by) => post(`/api/vouchers/${id}/void`, { voided_by });
 export const resendVoucherEmail = (id) => post(`/api/vouchers/${id}/resend-email`, {});
+export const sellVoucher        = (body) => post('/api/vouchers/sell', body);

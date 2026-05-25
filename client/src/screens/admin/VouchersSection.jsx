@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import {
-  listVouchers, getVoucherDetail, voidVoucher, resendVoucherEmail,
+  listVouchers, getVoucherDetail, voidVoucher, resendVoucherEmail, sellVoucher,
 } from '../../api';
 import { downloadCsv } from '../../utils/csv';
 
@@ -39,6 +39,8 @@ export default function VouchersSection() {
   const [detailId,     setDetailId]     = useState(null);
   const [detail,       setDetail]       = useState(null);
   const [busy,         setBusy]         = useState(false);
+  const [sellOpen,     setSellOpen]     = useState(false);
+  const [sold,         setSold]         = useState(null); // success-modal state
 
   async function load() {
     setLoading(true);
@@ -107,10 +109,16 @@ export default function VouchersSection() {
           <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>🎁 Gift Vouchers</h1>
           <p style={{ fontSize: 13, color: '#888', margin: 0 }}>Vouchers sold via the public widget — redeemed at checkout</p>
         </div>
-        <button onClick={exportCsv}
-          style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-          ⬇ Export CSV
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setSellOpen(true)}
+            style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: '#C9A84C', color: '#1a1a2e', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+            + Sell voucher
+          </button>
+          <button onClick={exportCsv}
+            style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            ⬇ Export CSV
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -173,6 +181,19 @@ export default function VouchersSection() {
           );
         })}
       </div>
+
+      {/* Sell voucher modal */}
+      {sellOpen && (
+        <SellVoucherModal
+          onClose={() => setSellOpen(false)}
+          onSold={(voucher) => { setSellOpen(false); setSold(voucher); load(); }}
+        />
+      )}
+
+      {/* Sold success */}
+      {sold && (
+        <SoldSuccessModal voucher={sold} onClose={() => setSold(null)} />
+      )}
 
       {/* Detail modal */}
       {detailId && (
@@ -242,6 +263,137 @@ export default function VouchersSection() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function SellVoucherModal({ onClose, onSold }) {
+  const PRESETS = [25, 50, 100, 150];
+  const [amount, setAmount]                   = useState(50);
+  const [recipientName, setRecipientName]     = useState('');
+  const [recipientEmail, setRecipientEmail]   = useState('');
+  const [senderName, setSenderName]           = useState('');
+  const [message, setMessage]                 = useState('');
+  const [method, setMethod]                   = useState(null);
+  const [busy, setBusy]                       = useState(false);
+  const [err, setErr]                         = useState('');
+
+  const valid = amount >= 10 && amount <= 500 && !!method;
+
+  async function submit() {
+    if (!valid || busy) return;
+    setErr(''); setBusy(true);
+    try {
+      const r = await sellVoucher({
+        amount,
+        payment_method: method,
+        recipient_name:  recipientName  || null,
+        recipient_email: recipientEmail || null,
+        sender_name:     senderName     || null,
+        message:         message        || null,
+      });
+      if (r.error) throw new Error(r.error);
+      onSold(r.voucher);
+    } catch (e) { setErr(e.message || 'Sell failed'); }
+    finally     { setBusy(false); }
+  }
+
+  return (
+    <div onClick={(e) => e.target === e.currentTarget && onClose()}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+      <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 520, maxHeight: '92vh', overflowY: 'auto' }}>
+        <div style={{ padding: '18px 22px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontWeight: 800, fontSize: 18 }}>🎁 Sell a Gift Voucher</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>×</button>
+        </div>
+        <div style={{ padding: 22 }}>
+          <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, fontWeight: 700 }}>Amount (£10–£500)</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 8 }}>
+            {PRESETS.map(p => (
+              <button key={p} onClick={() => setAmount(p)}
+                style={{ padding: '14px 8px', borderRadius: 8, border: `2px solid ${amount === p ? '#1e3a6e' : '#e0e0e0'}`, background: amount === p ? '#fdf6ec' : 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 16, cursor: 'pointer' }}>
+                £{p}
+              </button>
+            ))}
+          </div>
+          <input type="number" min="10" max="500" step="1" value={amount}
+            onChange={(e) => setAmount(parseInt(e.target.value, 10) || 0)}
+            placeholder="Custom amount"
+            style={{ width: '100%', padding: '12px', border: '1px solid #ccc', borderRadius: 8, fontSize: 16, fontWeight: 700, marginBottom: 16, boxSizing: 'border-box' }}/>
+
+          <Field label="Recipient's name"
+            value={recipientName} onChange={setRecipientName} />
+          <Field label="Recipient's email (optional — leave blank for printed card)"
+            value={recipientEmail} onChange={setRecipientEmail} type="email" />
+          <Field label="From (sender's name)"
+            value={senderName} onChange={setSenderName} />
+          <Field label="Message (optional)"
+            value={message} onChange={setMessage} textarea />
+
+          <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, fontWeight: 700, marginTop: 8 }}>Payment taken at till</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {[{ k: 'cash', label: '💵 Cash' }, { k: 'card', label: '💳 Card' }].map(m => (
+              <button key={m.k} onClick={() => setMethod(m.k)}
+                style={{ padding: '14px', borderRadius: 8, border: `2px solid ${method === m.k ? '#1e3a6e' : '#e0e0e0'}`, background: method === m.k ? '#fdf6ec' : 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {err && <div style={{ marginTop: 14, background: '#fee2e2', color: '#991b1b', padding: '10px 12px', borderRadius: 8, fontSize: 13 }}>⚠️ {err}</div>}
+
+          <button onClick={submit} disabled={!valid || busy}
+            style={{ marginTop: 20, width: '100%', padding: 16, borderRadius: 10, border: 'none', background: '#C9A84C', color: '#1a1a2e', fontWeight: 800, fontSize: 16, cursor: 'pointer', opacity: (!valid || busy) ? 0.5 : 1 }}>
+            {busy ? 'Creating…' : `Sell £${amount} voucher`}
+          </button>
+          <p style={{ fontSize: 11, color: '#888', marginTop: 10, lineHeight: 1.4 }}>
+            Take payment at the till like a normal Cash/Card sale. The voucher code is generated immediately and (if an email is provided) sent to the recipient automatically.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, type = 'text', textarea }) {
+  return (
+    <label style={{ display: 'block', marginBottom: 12 }}>
+      <span style={{ display: 'block', fontSize: 11, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, fontWeight: 700 }}>{label}</span>
+      {textarea
+        ? <textarea value={value} onChange={(e) => onChange(e.target.value)} maxLength={400}
+            style={{ width: '100%', padding: '11px 12px', border: '1px solid #ccc', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', minHeight: 70, resize: 'vertical', boxSizing: 'border-box' }}/>
+        : <input type={type} value={value} onChange={(e) => onChange(e.target.value)} maxLength={120}
+            style={{ width: '100%', padding: '11px 12px', border: '1px solid #ccc', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}/>}
+    </label>
+  );
+}
+
+function SoldSuccessModal({ voucher, onClose }) {
+  return (
+    <div onClick={(e) => e.target === e.currentTarget && onClose()}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001, padding: 20 }}>
+      <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 440 }}>
+        <div style={{ padding: 26, textAlign: 'center' }}>
+          <div style={{ fontSize: 44, color: '#22c55e', marginBottom: 4 }}>✓</div>
+          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>Voucher created</div>
+          <p style={{ fontSize: 13, color: '#666', margin: '4px 0 18px' }}>
+            {voucher.recipient_email
+              ? `Gift email is on its way to ${voucher.recipient_email}`
+              : 'No email on file — write the code on a printed card or read it to the customer'}
+          </p>
+          <div style={{ background: 'linear-gradient(135deg,#1e3a6e,#2a4d8a)', borderRadius: 12, padding: 22, color: 'white' }}>
+            <div style={{ color: '#C9A84C', fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, marginBottom: 6 }}>Voucher value</div>
+            <div style={{ fontSize: 36, fontWeight: 800, marginBottom: 14 }}>£{Number(voucher.original_amount).toFixed(2)}</div>
+            <div style={{ background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.4)', borderRadius: 8, padding: 12, fontFamily: 'Menlo,Consolas,monospace', fontSize: 20, letterSpacing: 3, fontWeight: 700 }}>
+              {voucher.code}
+            </div>
+          </div>
+          <button onClick={onClose}
+            style={{ marginTop: 20, width: '100%', padding: 14, borderRadius: 10, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+            Done
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

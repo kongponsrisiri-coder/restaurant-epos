@@ -17,7 +17,18 @@ export default function BillPeek({ orderId, onClose, onOpenFull }) {
     let cancelled = false;
     setLoading(true); setErr('');
     getBill(orderId)
-      .then(data => { if (!cancelled) { setBill(data); setLoading(false); } })
+      .then(data => {
+        if (cancelled) return;
+        // Order missing or stripped (no id) → surface a real message instead
+        // of rendering an empty modal. Belt-and-braces: backend now 404s,
+        // and this catches a 200-with-empty-order too.
+        if (!data || !data.order || !data.order.id) {
+          setErr(data?.error || 'This order no longer exists — it may have been deleted or closed.');
+        } else {
+          setBill(data);
+        }
+        setLoading(false);
+      })
       .catch(e => { if (!cancelled) { setErr(e.message || String(e)); setLoading(false); } });
     return () => { cancelled = true; };
   }, [orderId]);

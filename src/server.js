@@ -767,9 +767,14 @@ app.get('/api/orders/:id/bill', async (req, res) => {
       pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt, menu_items.vat_rate FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id=$1 AND order_items.voided=0`, [req.params.id]),
       pool.query('SELECT * FROM settings')
     ]);
+    // Missing order used to return 200 with `{order:{items:[]}}` — the
+    // frontend's `bill?.order` check passes because `{items:[]}` is truthy,
+    // and BillPeek/BillScreen then render with no order data → blank panel.
+    const order = orderRes.rows[0];
+    if (!order) return res.status(404).json({ error: 'Order not found' });
     const settings = {};
     settingsRes.rows.forEach(r => settings[r.key] = r.value);
-    res.json({ order: { ...orderRes.rows[0], items: itemsRes.rows }, settings });
+    res.json({ order: { ...order, items: itemsRes.rows }, settings });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

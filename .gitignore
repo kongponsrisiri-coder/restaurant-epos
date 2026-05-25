@@ -9,6 +9,9 @@ restaurant-local.db-shm
 # Client provisioning secrets — never commit
 scripts/.secrets-*.txt
 
+# Built frontend — Netlify builds from source, no need to track in git
+client/dist/
+
 # macOS Finder metadata
 .DS_Store
 **/.DS_Store

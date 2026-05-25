@@ -477,6 +477,45 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS resta
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_order_items_restaurant ON order_items(restaurant_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_menu_items_restaurant  ON menu_items(restaurant_id)`);
 
+    // ── SEPOS-VOUCHER-001 — gift vouchers (monetary only) ──────────────
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vouchers (
+        id SERIAL PRIMARY KEY,
+        code VARCHAR(20) UNIQUE NOT NULL,
+        original_amount NUMERIC(10,2) NOT NULL,
+        balance NUMERIC(10,2) NOT NULL,
+        recipient_name TEXT,
+        recipient_email TEXT,
+        sender_name TEXT,
+        message TEXT,
+        delivery_date DATE,
+        expires_at DATE NOT NULL,
+        payment_method VARCHAR(20) DEFAULT 'stripe',
+        stripe_payment_intent_id TEXT,
+        status VARCHAR(20) DEFAULT 'active',
+        email_sent_at TIMESTAMP,
+        voided_by TEXT,
+        voided_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos'
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_vouchers_code        ON vouchers (code)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_vouchers_restaurant  ON vouchers (restaurant_id)`);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS voucher_redemptions (
+        id SERIAL PRIMARY KEY,
+        voucher_id INTEGER NOT NULL REFERENCES vouchers(id) ON DELETE CASCADE,
+        bill_id INTEGER,
+        amount_used NUMERIC(10,2) NOT NULL,
+        redeemed_by INTEGER,
+        used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos'
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_voucher_redemptions_voucher ON voucher_redemptions (voucher_id)`);
+
     console.log('✅ Database ready');
   } catch (err) {
     console.error('Database init error:', err);

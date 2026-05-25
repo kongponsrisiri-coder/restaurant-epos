@@ -349,6 +349,41 @@ function initSchema() {
       synced INTEGER DEFAULT 0,
       synced_at TIMESTAMP
     );
+
+    -- SEPOS-VOUCHER-001 — gift vouchers
+    CREATE TABLE IF NOT EXISTS vouchers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE NOT NULL,
+      original_amount REAL NOT NULL,
+      balance REAL NOT NULL,
+      recipient_name TEXT,
+      recipient_email TEXT,
+      sender_name TEXT,
+      message TEXT,
+      delivery_date TEXT,
+      expires_at TEXT NOT NULL,
+      payment_method TEXT DEFAULT 'stripe',
+      stripe_payment_intent_id TEXT,
+      status TEXT DEFAULT 'active',
+      email_sent_at TIMESTAMP,
+      voided_by TEXT,
+      voided_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      restaurant_id TEXT DEFAULT 'siamepos'
+    );
+    CREATE INDEX IF NOT EXISTS idx_vouchers_code        ON vouchers (code);
+    CREATE INDEX IF NOT EXISTS idx_vouchers_restaurant  ON vouchers (restaurant_id);
+
+    CREATE TABLE IF NOT EXISTS voucher_redemptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      voucher_id INTEGER NOT NULL,
+      bill_id INTEGER,
+      amount_used REAL NOT NULL,
+      redeemed_by INTEGER,
+      used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      restaurant_id TEXT DEFAULT 'siamepos'
+    );
+    CREATE INDEX IF NOT EXISTS idx_voucher_redemptions_voucher ON voucher_redemptions (voucher_id);
   `);
 }
 

@@ -230,3 +230,18 @@ export const deleteOrder = (orderId, pin, reason) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ pin, reason }),
   }).then(r => r.json());
+
+// ── SEPOS-VOUCHER-001 — gift voucher API ─────────────────────────
+export const getVoucher    = (code) => get(`/api/widget/voucher/${encodeURIComponent(code)}`);
+export const redeemVoucher = (code, amount, bill_id, redeemed_by) =>
+  post(`/api/vouchers/${encodeURIComponent(code)}/redeem`, { amount, bill_id, redeemed_by });
+export const listVouchers  = (q, status) => {
+  const qs = new URLSearchParams();
+  if (q)      qs.set('q', q);
+  if (status) qs.set('status', status);
+  const s = qs.toString();
+  return get('/api/vouchers' + (s ? `?${s}` : ''));
+};
+export const getVoucherDetail   = (id) => get(`/api/vouchers/${id}`);
+export const voidVoucher        = (id, voided_by) => post(`/api/vouchers/${id}/void`, { voided_by });
+export const resendVoucherEmail = (id) => post(`/api/vouchers/${id}/resend-email`, {});

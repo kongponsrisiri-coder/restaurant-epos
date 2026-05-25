@@ -1567,7 +1567,7 @@ app.post('/api/sync/delete-order', async (req, res) => {
 app.get('/api/z-report/preview', async (req, res) => {
   try {
     const { from, to } = req.query;
-    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes] = await Promise.all([
+    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, vouchersSoldRes, vouchersRedeemedRes] = await Promise.all([
       pool.query(`SELECT orders.*, tables.table_number, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp ORDER BY orders.closed_at DESC`, [from, to]),
       pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='open'`),
       pool.query(`SELECT COUNT(*) as void_count, SUM(order_items.unit_price * order_items.quantity) as void_value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp`, [from, to]),
@@ -1575,6 +1575,10 @@ app.get('/api/z-report/preview', async (req, res) => {
       pool.query(`SELECT COALESCE(order_items.void_type, 'Uncategorised') AS void_type, COUNT(*) AS count, COALESCE(SUM(order_items.unit_price * order_items.quantity), 0) AS value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp GROUP BY order_items.void_type ORDER BY value DESC`, [from, to]),
       // SEPOS-021: rows for VAT breakdown (aggregated in JS)
       pool.query(`SELECT COALESCE(mi.vat_rate, 20) AS vat_rate, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id LEFT JOIN orders o ON o.id = oi.order_id WHERE o.status='closed' AND oi.voided=0 AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp`, [from, to]),
+      // SEPOS-VOUCHER-001: vouchers sold in the range (Stripe — off till)
+      pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at >= $1::timestamp AND created_at <= $2::timestamp AND payment_method != 'mock'`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
+      // SEPOS-VOUCHER-001: vouchers redeemed in the range (off till — already paid for at sale time)
+      pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(amount_used), 0) AS total FROM voucher_redemptions WHERE used_at >= $1::timestamp AND used_at <= $2::timestamp`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
     ]);
     const orders = ordersRes.rows;
     const voids = voidsRes.rows[0];
@@ -1602,7 +1606,9 @@ app.get('/api/z-report/preview', async (req, res) => {
     const totalOther = orders.filter(o => o.method !== 'Cash' && o.method !== 'Card').reduce((s, o) => s + (o.paid_amount || 0), 0);
     const totalDiscounts = orders.reduce((s, o) => { if (!o.discount_value) return s; return s + (o.discount_type === 'percent' ? (o.total || 0) * (o.discount_value / 100) : o.discount_value); }, 0);
     const orderTypeSplit = splitByOrderType(orders);
-    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_covers: totalCovers, total_orders: orders.length, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: orders.length > 0 ? totalSales / orders.length : 0, ...orderTypeSplit });
+    const vouchersSold     = vouchersSoldRes.rows[0]     || { count: 0, total: 0 };
+    const vouchersRedeemed = vouchersRedeemedRes.rows[0] || { count: 0, total: 0 };
+    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_covers: totalCovers, total_orders: orders.length, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: orders.length > 0 ? totalSales / orders.length : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0) }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, ...orderTypeSplit });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2725,6 +2731,242 @@ app.get('/api/takeaway/orders/active', async (req, res) => {
       ORDER BY o.pickup_time ASC NULLS LAST, o.id ASC
     `);
     res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── SEPOS-VOUCHER-001 — Gift voucher endpoints ─────────────────────
+const voucherSvc = require('./services/voucherService');
+
+// Public — widget config (min/max/expiry + publishable key if Stripe set)
+app.get('/api/widget/voucher/config', widgetCors, (req, res) => {
+  res.json({
+    min:                 voucherSvc.VOUCHER_MIN_AMOUNT,
+    max:                 voucherSvc.VOUCHER_MAX_AMOUNT,
+    expiry_months:       voucherSvc.VOUCHER_EXPIRY_MONTHS,
+    stripe_publishable:  process.env.STRIPE_PUBLISHABLE_KEY || null,
+    stripe_enabled:      !!process.env.STRIPE_SECRET_KEY,
+    restaurant_name:     process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant',
+  });
+});
+
+// Public — create the Stripe PI (or mock PI). Doesn't create the voucher
+// yet; the voucher is born on /confirm once payment verifies, so failed
+// purchases don't leave phantom vouchers in the DB.
+app.post('/api/widget/voucher/purchase', widgetCors, async (req, res) => {
+  try {
+    const v = voucherSvc.validateAmount(req.body?.amount);
+    if (!v.ok) return res.status(400).json({ error: v.error });
+    const pi = await voucherSvc.createPaymentIntent(v.amount);
+    res.json({ ...pi, amount: v.amount });
+  } catch (err) {
+    console.error('[voucher] purchase', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public — verify payment + create voucher + fire gift email
+app.post('/api/widget/voucher/confirm', widgetCors, async (req, res) => {
+  try {
+    const {
+      payment_intent_id, amount,
+      recipient_name, recipient_email, sender_name, message, delivery_date,
+    } = req.body || {};
+    const v = voucherSvc.validateAmount(amount);
+    if (!v.ok) return res.status(400).json({ error: v.error });
+    const verify = await voucherSvc.verifyPaymentIntent(payment_intent_id, v.amount);
+    if (!verify.ok) return res.status(402).json({ error: verify.error });
+    // Re-trust server's amount_paid over client's amount — defends
+    // against the client submitting a £500 PI then asking for a £1000
+    // voucher in /confirm.
+    if (Math.abs(verify.amount_paid - v.amount) > 0.01) {
+      return res.status(400).json({ error: `Paid amount (£${verify.amount_paid}) doesn't match voucher amount (£${v.amount})` });
+    }
+
+    // Ensure unique code (collision astronomical, but loop a few times)
+    let code;
+    for (let i = 0; i < 10; i++) {
+      code = voucherSvc.generateCode();
+      const exists = await pool.query('SELECT id FROM vouchers WHERE code = $1', [code]);
+      if (!exists.rows[0]) break;
+    }
+    const expires = voucherSvc.defaultExpiryDate();
+    const rid = resolveRestaurantId(req);
+    const result = await pool.query(
+      `INSERT INTO vouchers
+         (code, original_amount, balance, recipient_name, recipient_email,
+          sender_name, message, delivery_date, expires_at,
+          payment_method, stripe_payment_intent_id, restaurant_id)
+       VALUES ($1,$2,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [code, v.amount,
+       recipient_name || null, recipient_email || null,
+       sender_name || null, message || null,
+       delivery_date || null, expires,
+       verify.mode === 'mock' ? 'mock' : 'stripe',
+       payment_intent_id, rid],
+    );
+    const voucher = result.rows[0];
+
+    // Fire-and-forget gift email. If delivery_date is today/past we send
+    // now; future dates are also sent immediately for v1 (no scheduler
+    // yet — recipient can read it now and use it any time before expiry).
+    if (voucher.recipient_email) {
+      voucherSvc.sendVoucherGiftEmail(voucher)
+        .then(async (r) => {
+          if (r && r.ok) {
+            await pool.query('UPDATE vouchers SET email_sent_at = NOW() WHERE id = $1', [voucher.id]);
+          }
+        })
+        .catch((e) => console.error('[voucher] gift email failed', e));
+    }
+
+    res.status(201).json({
+      voucher: { ...voucher, balance: Number(voucher.balance), original_amount: Number(voucher.original_amount) },
+    });
+  } catch (err) {
+    console.error('[voucher] confirm', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public-ish — lookup by code. Used by widget success screen + EPOS
+// redemption modal to preview balance before applying.
+app.get('/api/widget/voucher/:code', widgetCors, async (req, res) => {
+  try {
+    const code = String(req.params.code || '').trim().toUpperCase();
+    if (!code) return res.status(400).json({ error: 'code required' });
+    const r = await pool.query('SELECT * FROM vouchers WHERE code = $1', [code]);
+    const v = r.rows[0];
+    if (!v) return res.status(404).json({ error: 'Voucher not found' });
+    // Auto-expire on read
+    if (v.status === 'active' && voucherSvc.isExpired(v.expires_at)) {
+      await pool.query("UPDATE vouchers SET status = 'expired' WHERE id = $1", [v.id]);
+      v.status = 'expired';
+    }
+    res.json({
+      code: v.code,
+      original_amount: Number(v.original_amount),
+      balance:         Number(v.balance),
+      expires_at:      v.expires_at,
+      status:          v.status,
+      recipient_name:  v.recipient_name,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// EPOS — redeem against a bill. Atomic decrement under FOR UPDATE so two
+// terminals can't double-spend the same voucher. Returns the new balance
+// + amount_used so the caller can compose the discount line.
+app.post('/api/vouchers/:code/redeem', async (req, res) => {
+  const code = String(req.params.code || '').trim().toUpperCase();
+  const { amount, bill_id, redeemed_by } = req.body || {};
+  const amtNum = Number(amount);
+  if (!amtNum || amtNum <= 0) return res.status(400).json({ error: 'amount required' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query('SELECT * FROM vouchers WHERE code = $1 FOR UPDATE', [code]);
+    const v = rows[0];
+    if (!v) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Voucher not found' }); }
+    if (v.status !== 'active') { await client.query('ROLLBACK'); return res.status(400).json({ error: `Voucher is ${v.status}` }); }
+    if (voucherSvc.isExpired(v.expires_at)) {
+      await client.query("UPDATE vouchers SET status = 'expired' WHERE id = $1", [v.id]);
+      await client.query('COMMIT');
+      return res.status(400).json({ error: 'Voucher has expired' });
+    }
+    const deduct       = Math.min(amtNum, Number(v.balance));
+    const newBalance   = +(Number(v.balance) - deduct).toFixed(2);
+    const newStatus    = newBalance <= 0 ? 'depleted' : 'active';
+    await client.query(
+      'UPDATE vouchers SET balance = $1, status = $2 WHERE id = $3',
+      [newBalance, newStatus, v.id],
+    );
+    const r = await client.query(
+      `INSERT INTO voucher_redemptions
+         (voucher_id, bill_id, amount_used, redeemed_by, restaurant_id)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [v.id, bill_id || null, deduct, redeemed_by || null, v.restaurant_id],
+    );
+    await client.query('COMMIT');
+    res.json({
+      redemption:   r.rows[0],
+      amount_used:  deduct,
+      balance:      newBalance,
+      voucher_code: v.code,
+      depleted:     newBalance <= 0,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[voucher] redeem', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Admin — list (auto-expires any active+past while reading)
+app.get('/api/vouchers', async (req, res) => {
+  try {
+    const { q, status } = req.query;
+    let where = 'WHERE 1=1';
+    const params = [];
+    if (q) {
+      params.push(`%${q}%`);
+      where += ` AND (code ILIKE $${params.length} OR recipient_email ILIKE $${params.length} OR recipient_name ILIKE $${params.length} OR sender_name ILIKE $${params.length})`;
+    }
+    if (status) { params.push(status); where += ` AND status = $${params.length}`; }
+    const r = await pool.query(`SELECT * FROM vouchers ${where} ORDER BY created_at DESC LIMIT 500`, params);
+    // Auto-expire pass — cheap because the index on status filters fast
+    const toExpire = r.rows.filter(v => v.status === 'active' && voucherSvc.isExpired(v.expires_at));
+    if (toExpire.length > 0) {
+      await pool.query(`UPDATE vouchers SET status = 'expired' WHERE id = ANY($1::int[])`, [toExpire.map(v => v.id)]);
+      toExpire.forEach(v => { v.status = 'expired'; });
+    }
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin — voucher detail + redemption history
+app.get('/api/vouchers/:id', async (req, res) => {
+  try {
+    const v = await pool.query('SELECT * FROM vouchers WHERE id = $1', [req.params.id]);
+    if (!v.rows[0]) return res.status(404).json({ error: 'not found' });
+    const r = await pool.query(
+      `SELECT vr.*, s.name AS redeemed_by_name
+       FROM voucher_redemptions vr
+       LEFT JOIN staff s ON s.id = vr.redeemed_by
+       WHERE vr.voucher_id = $1
+       ORDER BY vr.used_at DESC`,
+      [req.params.id],
+    );
+    res.json({ voucher: v.rows[0], redemptions: r.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin — soft-void (manager-PIN gated by frontend; backend trusts staff_id)
+app.post('/api/vouchers/:id/void', async (req, res) => {
+  try {
+    const { voided_by } = req.body || {};
+    const r = await pool.query(
+      `UPDATE vouchers SET status = 'voided', voided_by = $1, voided_at = NOW()
+       WHERE id = $2 AND status IN ('active','depleted') RETURNING *`,
+      [voided_by || null, req.params.id],
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'Voucher not found or already voided/expired' });
+    res.json({ voucher: r.rows[0] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin — resend gift email (operator-initiated, e.g. lost-in-spam)
+app.post('/api/vouchers/:id/resend-email', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM vouchers WHERE id = $1', [req.params.id]);
+    const v = r.rows[0];
+    if (!v) return res.status(404).json({ error: 'not found' });
+    if (!v.recipient_email) return res.status(400).json({ error: 'no recipient email on file' });
+    const out = await voucherSvc.sendVoucherGiftEmail(v);
+    if (out.ok) await pool.query('UPDATE vouchers SET email_sent_at = NOW() WHERE id = $1', [v.id]);
+    res.json(out);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

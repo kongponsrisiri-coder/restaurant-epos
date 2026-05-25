@@ -240,6 +240,25 @@ export default function ZReportSection() {
               <div style={{ flex: 1, background: '#fff0f3', borderRadius: 10, padding: 12, border: '1px solid #fecdd3' }}><div style={{ fontSize: 11, color: '#888' }}>Void Items</div><div style={{ fontSize: 18, fontWeight: 800, color: '#e94560' }}>{reportData.void_count || 0} items</div></div>
             </div>
 
+            {/* SEPOS-VOUCHER-001 — gift voucher activity (off till — settled to Stripe at sale time) */}
+            {(reportData.vouchers_sold?.count > 0 || reportData.vouchers_redeemed?.count > 0) && (
+              <div style={{ marginTop: 12, background: '#fdf6ec', border: '1px solid #f3e1bb', borderRadius: 10, padding: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#5b4a2a', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  🎁 Gift vouchers — settled to Stripe, not the till
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <div style={{ flex: 1, fontSize: 13 }}>
+                    <div style={{ color: '#888' }}>Sold ({reportData.vouchers_sold?.count || 0})</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: '#5b4a2a' }}>£{Number(reportData.vouchers_sold?.total || 0).toFixed(2)}</div>
+                  </div>
+                  <div style={{ flex: 1, fontSize: 13 }}>
+                    <div style={{ color: '#888' }}>Redeemed ({reportData.vouchers_redeemed?.count || 0})</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: '#5b4a2a' }}>£{Number(reportData.vouchers_redeemed?.total || 0).toFixed(2)}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* SEPOS-021 — VAT breakdown */}
             {Array.isArray(reportData.vat_breakdown) && reportData.vat_breakdown.length > 0 && (
               <div style={{ marginTop: 12, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: 12 }}>

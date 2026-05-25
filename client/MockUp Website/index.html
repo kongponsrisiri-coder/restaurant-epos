@@ -180,6 +180,7 @@ p{font-weight:300;line-height:1.7;color:var(--stone);}
   <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
     <a href="book.html" class="btn btn--solid lang-en">Reserve a Table</a>
     <button class="btn btn--outline-sm lang-en" data-siamepos-takeaway>Order Takeaway</button>
+    <button class="btn btn--outline-sm lang-en" data-siamepos-voucher>🎁 Gift Voucher</button>
     <a href="menu.html" class="btn btn--outline-sm lang-en">View Menu</a>
     </div>
 </section>
@@ -413,6 +414,8 @@ function swOK(p,ref){
 
 <!-- SiamEPOS Takeaway Widget -->
 <script src="https://baan-siam.siamepos.co.uk/takeaway-widget.js"></script>
+<!-- SiamEPOS Gift Voucher Widget -->
+<script src="https://baan-siam.siamepos.co.uk/voucher-widget.js" data-restaurant="baan-siam"></script>
 <script>document.querySelectorAll('.nav__burger').forEach(function(b){b.addEventListener('click',function(){document.body.classList.toggle('menu-open');});});document.querySelectorAll('.nav__links a').forEach(function(a){a.addEventListener('click',function(){document.body.classList.remove('menu-open');});});</script>
 </body>
 </html>

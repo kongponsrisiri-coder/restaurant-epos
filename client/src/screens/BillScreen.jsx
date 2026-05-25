@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getBill, markBillPrinted } from '../api';
+import { getBill, markBillPrinted, getVoucher, redeemVoucher, payOrder, applyDiscount } from '../api';
 import { printReceipt } from './ReceiptPrinter';
 import { orderShortLabelPlain, orderSubLabel, isTakeaway } from '../utils/orderLabel';
 
@@ -18,6 +18,12 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const [itemAssignments, setItemAssignments] = useState({});
   const [splitItemPaid, setSplitItemPaid]   = useState([]);
   const [activePerson, setActivePerson]     = useState(0);
+
+  // SEPOS-VOUCHER-001 — gift voucher redemption state
+  const [voucherCode,    setVoucherCode]    = useState('');
+  const [voucherLoading, setVoucherLoading] = useState(false);
+  const [voucherDetails, setVoucherDetails] = useState(null); // {code, balance, status, ...}
+  const [voucherErr,     setVoucherErr]     = useState('');
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -134,6 +140,49 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     if (amountPaidPence < billTotalPence) { alert(`Amount £${amountPaid.toFixed(2)} is less than bill £${billTotal.toFixed(2)}`); return; }
     setPaymentDetails({ method: selectedMethod, amountPaid, tip: actualTip, change: Math.max(0, change) });
     setStage('receipt');
+  };
+
+  // SEPOS-VOUCHER-001 — voucher redemption
+  const handleVoucherLookup = async () => {
+    const code = (voucherCode || '').trim().toUpperCase();
+    if (!code) { setVoucherErr('Enter a voucher code'); return; }
+    setVoucherLoading(true); setVoucherErr(''); setVoucherDetails(null);
+    try {
+      const v = await getVoucher(code);
+      if (v.error) { setVoucherErr(v.error); }
+      else if (v.status !== 'active')   { setVoucherErr(`Voucher is ${v.status}`); }
+      else if (Number(v.balance) <= 0)  { setVoucherErr('Voucher has no balance left'); }
+      else                              { setVoucherDetails(v); }
+    } catch (e) { setVoucherErr(e.message || 'Lookup failed'); }
+    finally     { setVoucherLoading(false); }
+  };
+
+  const handleVoucherApply = async () => {
+    if (!voucherDetails) return;
+    const code      = voucherDetails.code;
+    const balance   = Number(voucherDetails.balance);
+    const isFull    = balance >= billTotal;
+    const useAmount = isFull ? billTotal : balance;
+    setVoucherLoading(true); setVoucherErr('');
+    try {
+      const r = await redeemVoucher(code, useAmount, orderId, null);
+      if (r.error) { setVoucherErr(r.error); setVoucherLoading(false); return; }
+      if (isFull) {
+        // Voucher covers the full bill — close as method='voucher'.
+        await payOrder(orderId, billTotal, 'voucher');
+        setPaymentDetails({ method: 'Voucher', amountPaid: billTotal, tip: 0, change: 0, voucher_code: code });
+        setStage('receipt');
+      } else {
+        // Partial — apply as a discount, leave the bill open for Cash/Card
+        // to settle the remainder. Customer-facing wording mirrors the
+        // spa pattern so the receipt reads sensibly.
+        await applyDiscount(orderId, 'fixed', useAmount, `Voucher ${code} −£${useAmount.toFixed(2)}`);
+        const fresh = await getBill(orderId);
+        setBill(fresh);
+        setStage('bill');
+      }
+    } catch (e) { setVoucherErr(e.message || 'Apply failed'); }
+    finally     { setVoucherLoading(false); }
   };
 
   const handleFinish = () => {
@@ -442,8 +491,77 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 {[{method:'Cash',icon:'💵'},{method:'Card',icon:'💳'},{method:'Other',icon:'🔄'}].map(({method,icon}) => (
                   <button key={method} onClick={() => { setSelectedMethod(method); setPaymentInput(''); setStage('amount'); }} style={{ padding:isMobile?'22px':'20px', borderRadius:12, border:'2px solid #1a1a2e', background:'white', color:'#1a1a2e', fontSize:isMobile?22:20, fontWeight:700, cursor:'pointer' }}>{icon} {method}</button>
                 ))}
+                <button onClick={() => { setVoucherCode(''); setVoucherDetails(null); setVoucherErr(''); setStage('voucher'); }} style={{ padding:isMobile?'22px':'20px', borderRadius:12, border:'2px solid #C9A84C', background:'#fdf6ec', color:'#5b4a2a', fontSize:isMobile?22:20, fontWeight:700, cursor:'pointer' }}>🎁 Voucher</button>
               </div>
               {!isMobile && <button onClick={() => setStage('bill')} style={{ width:'100%', padding:'14px', borderRadius:10, border:'none', background:'#f0f0f0', cursor:'pointer', fontWeight:700, fontSize:15 }}>← Back to Bill</button>}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════ VOUCHER ═══════════════ */}
+        {stage === 'voucher' && (
+          <div>
+            {mobileTopBar('Gift Voucher', () => setStage('method'), '← Method')}
+            <div style={{ padding: isMobile ? '24px 16px 32px' : 32 }}>
+              <div style={{ textAlign: 'center', marginBottom: 22 }}>
+                <div style={{ fontSize: 13, color: '#888', marginBottom: 6 }}>Bill total</div>
+                <div style={{ fontSize: 36, fontWeight: 800, color: '#1a1a2e' }}>£{billTotal.toFixed(2)}</div>
+              </div>
+
+              <div style={{ background: '#fdf6ec', border: '2px solid #C9A84C', borderRadius: 12, padding: 18, marginBottom: 16 }}>
+                <label style={{ fontSize: 12, color: '#5b4a2a', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 8 }}>Voucher code</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input type="text" autoFocus value={voucherCode}
+                    onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleVoucherLookup(); }}
+                    placeholder="GIFT-XXXXXXXX"
+                    style={{ flex: 1, padding: '14px', border: '1px solid #C9A84C', borderRadius: 8, fontFamily: 'Menlo,Consolas,monospace', fontSize: 18, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', background: 'white' }} />
+                  <button onClick={handleVoucherLookup} disabled={voucherLoading || !voucherCode}
+                    style={{ padding: '14px 20px', borderRadius: 8, border: 'none', background: '#1e3a6e', color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: voucherLoading || !voucherCode ? 0.5 : 1 }}>
+                    {voucherLoading ? '…' : 'Look up'}
+                  </button>
+                </div>
+              </div>
+
+              {voucherErr && (
+                <div style={{ background: '#fee2e2', color: '#991b1b', padding: '12px 14px', borderRadius: 8, fontSize: 14, marginBottom: 16 }}>
+                  ⚠️ {voucherErr}
+                </div>
+              )}
+
+              {voucherDetails && (
+                <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 12, padding: 18, marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: '#888' }}>Voucher</div>
+                      <div style={{ fontFamily: 'Menlo,Consolas,monospace', fontWeight: 700, color: '#1e3a6e' }}>{voucherDetails.code}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 12, color: '#888' }}>Balance</div>
+                      <div style={{ fontSize: 24, fontWeight: 800, color: '#22c55e' }}>£{Number(voucherDetails.balance).toFixed(2)}</div>
+                    </div>
+                  </div>
+                  {Number(voucherDetails.balance) >= billTotal ? (
+                    <div style={{ background: '#dcfce7', color: '#15803d', padding: '10px 12px', borderRadius: 8, fontSize: 13 }}>
+                      ✅ Covers the full bill — £{(Number(voucherDetails.balance) - billTotal).toFixed(2)} will remain on the voucher
+                    </div>
+                  ) : (
+                    <div style={{ background: '#fef3c7', color: '#92400e', padding: '10px 12px', borderRadius: 8, fontSize: 13 }}>
+                      ⚠️ Partial — applies <strong>£{Number(voucherDetails.balance).toFixed(2)}</strong> as a discount. Customer pays remaining <strong>£{(billTotal - Number(voucherDetails.balance)).toFixed(2)}</strong> by Cash/Card.
+                    </div>
+                  )}
+                  <button onClick={handleVoucherApply} disabled={voucherLoading}
+                    style={{ marginTop: 14, width: '100%', padding: 16, borderRadius: 10, border: 'none', background: '#C9A84C', color: '#1a1a2e', fontWeight: 800, fontSize: 16, cursor: 'pointer', opacity: voucherLoading ? 0.5 : 1 }}>
+                    {voucherLoading
+                      ? 'Processing…'
+                      : Number(voucherDetails.balance) >= billTotal
+                        ? `Pay £${billTotal.toFixed(2)} with voucher`
+                        : `Apply £${Number(voucherDetails.balance).toFixed(2)} from voucher`}
+                  </button>
+                </div>
+              )}
+
+              {!isMobile && <button onClick={() => setStage('method')} style={{ width: '100%', padding: '14px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>← Back to Methods</button>}
             </div>
           </div>
         )}

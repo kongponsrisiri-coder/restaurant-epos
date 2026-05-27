@@ -1,6 +1,6 @@
 {
   "name": "siamepos-electron",
-  "version": "1.5.2",
+  "version": "1.6.1",
   "description": "SiamEPOS Pro desktop shell — offline-capable EPOS for Thai restaurants",
   "main": "main.js",
   "private": true,
@@ -27,9 +27,18 @@
       "build/**"
     ],
     "extraResources": [
-      { "from": "../client/dist",     "to": "client-dist" },
-      { "from": "../src",             "to": "src" },
-      { "from": "../package.json",    "to": "package.json" },
+      {
+        "from": "../client/dist",
+        "to": "client-dist"
+      },
+      {
+        "from": "../src",
+        "to": "src"
+      },
+      {
+        "from": "../package.json",
+        "to": "package.json"
+      },
       {
         "from": "../node_modules",
         "to": "node_modules",
@@ -45,7 +54,14 @@
     ],
     "mac": {
       "icon": "../client/public/icon-512.png",
-      "target": [{ "target": "dmg", "arch": ["arm64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
       "category": "public.app-category.business"
     },
     "dmg": {
@@ -53,7 +69,14 @@
     },
     "win": {
       "icon": "../client/public/icon-512.png",
-      "target": [{ "target": "nsis", "arch": ["x64"] }]
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -62,12 +85,14 @@
       "createDesktopShortcut": true,
       "shortcutName": "SiamEPOS"
     },
-    "publish": [{
-      "provider": "github",
-      "owner": "kongponsrisiri-coder",
-      "repo": "restaurant-epos",
-      "releaseType": "release"
-    }]
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "kongponsrisiri-coder",
+        "repo": "restaurant-epos",
+        "releaseType": "release"
+      }
+    ]
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.4",

@@ -4500,12 +4500,16 @@ async function loadSettings() {
   return s;
 }
 
-// Test any printer by IP
+// Test any printer by IP and/or CUPS printer name.
+// Either ip OR printer_name (or both) must be supplied.
+// If both, TCP is tried first and CUPS is used as fallback on failure.
 app.post('/api/print/test', async (req, res) => {
-  const { ip, port } = req.body;
-  if (!ip) return res.status(400).json({ success: false, error: 'ip required' });
+  const { ip, port, printer_name } = req.body;
+  if (!ip && !printer_name) {
+    return res.status(400).json({ success: false, error: 'ip or printer_name required' });
+  }
   try {
-    await printService.testPrint(ip, port || 9100);
+    await printService.testPrint(ip || '', port || 9100, printer_name || '');
     res.json({ success: true });
   } catch (err) {
     res.json({ success: false, error: err.message });

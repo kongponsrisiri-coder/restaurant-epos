@@ -13,6 +13,10 @@
 'use strict';
 
 const net = require('net');
+const fs  = require('fs').promises;
+const os  = require('os');
+const path = require('path');
+const { exec } = require('child_process');
 
 // ── ESC/POS command bytes ─────────────────────────────────────────────────────
 const ESC = 0x1b;
@@ -310,38 +314,93 @@ function buildTestPage() {
   ]);
 }
 
-// ── TCP sender ────────────────────────────────────────────────────────────────
-// USB print servers (e.g. WAVLINK) have an internal buffer that can mix bytes
-// from back-to-back TCP connections, producing garbled text at ticket tops.
-// We serialise all jobs through a queue and wait 1.5 s after each write so
-// the USB print server has time to fully flush to the printer before the next
-// connection opens.
+// ── TCP sender (with CUPS fallback) ───────────────────────────────────────────
+// Strategy:
+//   1. If `ip` is configured → try direct TCP socket to port 9100 first.
+//      Works for any ESC/POS printer with a built-in LAN port (Epson TM-T20,
+//      Star TSP, cnfujun 80mm, etc.) and most USB-to-LAN print servers.
+//   2. If TCP fails AND `printerName` is configured → fall back to shelling
+//      out to `lpr -P <name> -o raw` (CUPS). This is the fix for the WAVLINK
+//      USB print server which silently swallows direct TCP 9100 writes
+//      (data received but never relayed to the USB printer), while CUPS raw
+//      mode reaches it correctly.
+//   3. If only `printerName` is configured (no IP) → skip TCP, go straight
+//      to CUPS. Useful for printers attached directly to the same Mac that
+//      runs the EPOS server.
+//
+// CUPS fallback only works on macOS / Linux where the printer is installed
+// in the OS print queue. On Windows this branch will fail; rely on TCP there.
+//
+// USB print servers (e.g. WAVLINK) also have an internal buffer that can mix
+// bytes from back-to-back TCP connections — we serialise all jobs through a
+// queue and wait 1.5 s after each write so the server can flush.
 
 let _printQueue = Promise.resolve();
 
-function sendRaw(ip, port, buf, timeoutMs = 6000) {
-  const job = () => new Promise((resolve, reject) => {
+function _sendTcp(ip, port, buf, timeoutMs = 6000) {
+  return new Promise((resolve, reject) => {
     const sock = new net.Socket();
     let settled = false;
     const done = (err) => {
       if (settled) return;
       settled = true;
       sock.destroy();
-      // Wait 1.5 s after the socket closes so the USB print server flushes
-      // its buffer to the printer before we open the next connection.
       setTimeout(() => err ? reject(err) : resolve(), 1500);
     };
     sock.setTimeout(timeoutMs);
     sock.connect(parseInt(port, 10) || 9100, ip, () => {
       sock.write(buf, (err) => { if (err) return done(err); });
-      // Give the printer 600 ms to receive all bytes, then close connection.
       sock.once('drain', () => setTimeout(() => done(null), 600));
-      // Fallback if 'drain' doesn't fire (small buffers)
       setTimeout(() => done(null), 800);
     });
     sock.on('error',   (e) => done(e));
     sock.on('timeout', ()  => done(new Error(`Printer at ${ip} timed out`)));
   });
+}
+
+async function _sendCups(printerName, buf) {
+  // Write the raw bytes to a tmp file because `lpr` needs a path. Inline
+  // stdin would work too but tmp file is more debuggable.
+  const tmp = path.join(os.tmpdir(),
+    `siamepos-print-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.bin`);
+  await fs.writeFile(tmp, buf);
+  try {
+    await new Promise((resolve, reject) => {
+      // Quote-escape the printer name to defend against shell injection in
+      // case anyone ever puts a hostile string in the settings table.
+      const safeName = String(printerName).replace(/"/g, '\\"');
+      exec(`lpr -P "${safeName}" -o raw "${tmp}"`, (err, _stdout, stderr) => {
+        if (err) return reject(new Error(`CUPS print failed: ${(stderr || '').trim() || err.message}`));
+        resolve();
+      });
+    });
+  } finally {
+    fs.unlink(tmp).catch(() => {});
+  }
+}
+
+function sendRaw(ip, port, buf, options = {}) {
+  const printerName = (options.printerName || '').trim();
+  const hasTcp  = !!ip;
+  const hasCups = !!printerName;
+
+  if (!hasTcp && !hasCups) {
+    return Promise.reject(new Error('NO_IP and no printer_name configured'));
+  }
+
+  const job = async () => {
+    if (hasTcp) {
+      try { return await _sendTcp(ip, port, buf); }
+      catch (err) {
+        if (hasCups) {
+          console.warn(`[print] TCP ${ip}:${port} failed (${err.message}) — falling back to CUPS '${printerName}'`);
+          return _sendCups(printerName, buf);
+        }
+        throw err;
+      }
+    }
+    return _sendCups(printerName, buf);
+  };
 
   // Enqueue — jobs run sequentially, never concurrently
   _printQueue = _printQueue.catch(() => {}).then(job);
@@ -350,54 +409,65 @@ function sendRaw(ip, port, buf, timeoutMs = 6000) {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+// Each public method reads an optional CUPS printer name from settings.
+// Operators set these (per-printer) in Admin → Settings → Network Printers
+// only when their printer needs the CUPS fallback (e.g. WAVLINK USB server).
+// If unset, only TCP is attempted — existing behaviour.
 async function printReceipt(settings, order, items, paymentDetails) {
   const ip   = settings.printer_receipt_ip;
   const port = settings.printer_receipt_port || 9100;
-  if (!ip) throw new Error('NO_IP');
-  await sendRaw(ip, port, buildReceipt({ order, items, settings, paymentDetails }));
+  const printerName = settings.printer_receipt_name || '';
+  if (!ip && !printerName) throw new Error('NO_IP');
+  await sendRaw(ip, port, buildReceipt({ order, items, settings, paymentDetails }), { printerName });
 }
 
 async function printFireNotice(settings, order, course) {
   const ip       = settings.printer_kitchen_ip;
   const port     = settings.printer_kitchen_port || 9100;
+  const printerName = settings.printer_kitchen_name || '';
   const copies   = Math.max(1, Math.min(5, parseInt(settings.printer_kitchen_copies || 1, 10) || 1));
   const bilingual = (settings.kitchen_language || 'en_th') === 'en_th';
-  if (!ip) throw new Error('NO_IP');
+  if (!ip && !printerName) throw new Error('NO_IP');
   const buf = buildFireNotice({ order, course, bilingual });
-  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf);
+  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName });
 }
 
 async function printKitchenTicket(settings, order, items, course) {
   const ip       = settings.printer_kitchen_ip;
   const port     = settings.printer_kitchen_port || 9100;
+  const printerName = settings.printer_kitchen_name || '';
   const copies   = Math.max(1, Math.min(5, parseInt(settings.printer_kitchen_copies || 1, 10) || 1));
   const bilingual = (settings.kitchen_language || 'en_th') === 'en_th';
-  if (!ip) throw new Error('NO_IP');
+  if (!ip && !printerName) throw new Error('NO_IP');
   const buf = buildKitchenTicket({ order, items, course, bilingual });
-  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf);
+  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName });
 }
 
 async function printFullKitchenTicket(settings, order, items) {
   const ip       = settings.printer_kitchen_ip;
   const port     = settings.printer_kitchen_port || 9100;
+  const printerName = settings.printer_kitchen_name || '';
   const copies   = Math.max(1, Math.min(5, parseInt(settings.printer_kitchen_copies || 1, 10) || 1));
   const bilingual = (settings.kitchen_language || 'en_th') === 'en_th';
-  if (!ip) throw new Error('NO_IP');
+  if (!ip && !printerName) throw new Error('NO_IP');
   const buf = buildFullKitchenTicket({ order, items, bilingual });
-  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf);
+  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName });
 }
 
 async function printBarTicket(settings, order, items) {
   const ip       = settings.printer_bar_ip;
   const port     = settings.printer_bar_port || 9100;
+  const printerName = settings.printer_bar_name || '';
   const bilingual = (settings.kitchen_language || 'en_th') === 'en_th';
-  if (!ip) throw new Error('NO_IP');
-  await sendRaw(ip, port, buildKitchenTicket({ order, items, course: 4, bilingual }));
+  if (!ip && !printerName) throw new Error('NO_IP');
+  await sendRaw(ip, port, buildKitchenTicket({ order, items, course: 4, bilingual }), { printerName });
 }
 
-async function testPrint(ip, port = 9100) {
-  if (!ip) throw new Error('NO_IP');
-  await sendRaw(ip, parseInt(port, 10) || 9100, buildTestPage());
+// testPrint accepts an optional printer_name so the admin Test button can
+// validate either path. Body shape: { ip, port, printer_name }.
+async function testPrint(ip, port = 9100, printerName = '') {
+  if (!ip && !printerName) throw new Error('NO_IP');
+  await sendRaw(ip, parseInt(port, 10) || 9100, buildTestPage(), { printerName });
 }
 
 module.exports = { printReceipt, printFireNotice, printKitchenTicket, printFullKitchenTicket, printBarTicket, testPrint };

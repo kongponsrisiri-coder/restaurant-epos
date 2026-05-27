@@ -161,13 +161,14 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
 
   const setTest = (key, state) => setTestStates(prev => ({ ...prev, [key]: state }));
 
-  const testPrinter = async (key, ipKey, portKey) => {
+  const testPrinter = async (key, ipKey, portKey, nameKey) => {
     const ip   = settings[ipKey];
     const port = settings[portKey] || 9100;
-    if (!ip) return;
+    const name = settings[nameKey];
+    if (!ip && !name) return;
     setTest(key, 'testing');
     try {
-      const r = await testNetworkPrinter(ip, port);
+      const r = await testNetworkPrinter(ip || '', port, name || '');
       setTest(key, r && r.success ? 'ok' : 'fail');
     } catch { setTest(key, 'fail'); }
     setTimeout(() => setTest(key, 'idle'), 3000);
@@ -176,7 +177,7 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
   const inputStyle = { width:160, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 };
   const portStyle  = { width:80,  padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 };
 
-  const printerRow = (label, ipKey, portKey, testKey) => {
+  const printerRow = (label, ipKey, portKey, testKey, nameKey) => {
     const state = testStates[testKey] || 'idle';
     const testLabel = state === 'testing' ? 'Testing…'
                     : state === 'ok'      ? '✓ OK'
@@ -208,10 +209,19 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
               type="number"
             />
           </div>
-          {settings[ipKey] && (
+          <div>
+            <div style={{ fontSize:11, color:'#aaa', marginBottom:4 }} title="CUPS printer name for WAVLINK-style fallback (macOS/Linux only). Set this only if TCP 9100 doesn't work — usually leave blank.">CUPS name <span style={{ color:'#ccc' }}>(optional)</span></div>
+            <input
+              value={settings[nameKey] || ''}
+              onChange={e => setSettings(s => ({ ...s, [nameKey]: e.target.value }))}
+              placeholder="POS80"
+              style={inputStyle}
+            />
+          </div>
+          {(settings[ipKey] || settings[nameKey]) && (
             <div style={{ marginTop:18 }}>
               <button
-                onClick={() => testPrinter(testKey, ipKey, portKey)}
+                onClick={() => testPrinter(testKey, ipKey, portKey, nameKey)}
                 disabled={state === 'testing'}
                 style={{ padding:'8px 16px', borderRadius:8, border:'none', background:testBg, color:testColor, fontWeight:700, fontSize:13, cursor:'pointer' }}
               >{testLabel}</button>
@@ -231,9 +241,9 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
         silently with no dialog. Port 9100 is the standard RAW print port. <strong>Save Settings</strong> after entering IPs.
       </p>
 
-      {printerRow('🧾 Receipt Printer', 'printer_receipt_ip', 'printer_receipt_port', 'receipt')}
-      {printerRow('🍳 Kitchen Printer', 'printer_kitchen_ip', 'printer_kitchen_port', 'kitchen')}
-      {printerRow('🍹 Bar Printer',     'printer_bar_ip',     'printer_bar_port',     'bar')}
+      {printerRow('🧾 Receipt Printer', 'printer_receipt_ip', 'printer_receipt_port', 'receipt', 'printer_receipt_name')}
+      {printerRow('🍳 Kitchen Printer', 'printer_kitchen_ip', 'printer_kitchen_port', 'kitchen', 'printer_kitchen_name')}
+      {printerRow('🍹 Bar Printer',     'printer_bar_ip',     'printer_bar_port',     'bar',     'printer_bar_name')}
 
       {settings.printer_kitchen_ip && (
         <div style={{ marginTop:-8, marginBottom:16 }}>

@@ -1,8 +1,8 @@
-# SiamEPOS Pro — v1.6.0
+# SiamEPOS Pro — v1.6.1
 
 **For:** SiamEPOS team (sales, support, ops, dev) + restaurant operators
 **Date:** 27 May 2026
-**Previous release:** v1.5.2 (11 May)
+**Previous release:** v1.5.2 (11 May) — v1.6.0 was published but broken (the build ran with stale `package.json` saying `1.5.2`, so `latest-mac.yml` reported `1.5.2` and no install auto-updated). **v1.6.1 supersedes it.** Delete the v1.6.0 Release from the GitHub UI to avoid confusion for anyone downloading from the Releases page.
 **Installs auto-update on next restart.** First-time installs still need a manual download from the GitHub Release.
 
 ---
@@ -129,8 +129,8 @@ Pre-existing belt-and-braces from PRO-002 reinforced — Mac is authoritative fo
 - BILL-404 — Bill endpoint returns proper 404 instead of blank panel
 - Scanner allergen persistence fix (server `POST /api/menu/items` + handleAddItem)
 
-Full commit log: `git log v1.5.2..v1.6.0`.
+Full commit log: `git log v1.5.2..v1.6.1`.
 
 ---
 
-*🤖 Generated alongside the v1.6.0 build by Krit.*
+*🤖 Generated alongside the v1.6.1 build by Krit.*

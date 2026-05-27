@@ -4522,7 +4522,10 @@ app.post('/api/print/receipt', async (req, res) => {
   try {
     const settings = await loadSettings();
     if (!settings.printer_receipt_ip) return res.json({ success: false, reason: 'no_ip' });
-    const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [order_id]);
+    const orderRes = await pool.query(
+      `SELECT orders.*, tables.table_number
+       FROM orders LEFT JOIN tables ON orders.table_id = tables.id
+       WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
     const order = orderRes.rows[0];
     const itemsRes = await pool.query('SELECT * FROM order_items WHERE order_id = $1', [order_id]);
@@ -4540,7 +4543,10 @@ app.post('/api/print/kitchen', async (req, res) => {
   try {
     const settings = await loadSettings();
     if (!settings.printer_kitchen_ip) return res.json({ success: false, reason: 'no_ip' });
-    const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [order_id]);
+    const orderRes = await pool.query(
+      `SELECT orders.*, tables.table_number
+       FROM orders LEFT JOIN tables ON orders.table_id = tables.id
+       WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
     await printService.printKitchenTicket(settings, orderRes.rows[0], items || [], course || 1);
     res.json({ success: true });
@@ -4556,7 +4562,10 @@ app.post('/api/print/bar', async (req, res) => {
   try {
     const settings = await loadSettings();
     if (!settings.printer_bar_ip) return res.json({ success: false, reason: 'no_ip' });
-    const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [order_id]);
+    const orderRes = await pool.query(
+      `SELECT orders.*, tables.table_number
+       FROM orders LEFT JOIN tables ON orders.table_id = tables.id
+       WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
     await printService.printBarTicket(settings, orderRes.rows[0], items || []);
     res.json({ success: true });
@@ -4572,7 +4581,10 @@ app.post('/api/print/kitchen-fire', async (req, res) => {
   try {
     const settings = await loadSettings();
     if (!settings.printer_kitchen_ip) return res.json({ success: false, reason: 'no_ip' });
-    const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [order_id]);
+    const orderRes = await pool.query(
+      `SELECT orders.*, tables.table_number
+       FROM orders LEFT JOIN tables ON orders.table_id = tables.id
+       WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
     await printService.printFireNotice(settings, orderRes.rows[0], course || 1);
     res.json({ success: true });
@@ -4588,7 +4600,10 @@ app.post('/api/print/kitchen-full', async (req, res) => {
   try {
     const settings = await loadSettings();
     if (!settings.printer_kitchen_ip) return res.json({ success: false, reason: 'no_ip' });
-    const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [order_id]);
+    const orderRes = await pool.query(
+      `SELECT orders.*, tables.table_number
+       FROM orders LEFT JOIN tables ON orders.table_id = tables.id
+       WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
     await printService.printFullKitchenTicket(settings, orderRes.rows[0], items || []);
     res.json({ success: true });

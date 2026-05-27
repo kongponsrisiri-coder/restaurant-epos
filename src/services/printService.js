@@ -47,7 +47,12 @@ const COURSES_TH = { 1:'กับแกล้ม', 2:'อาหารหลั�
 
 // ── Buffer helpers ────────────────────────────────────────────────────────────
 
-const txt  = (s)       => Buffer.from(String(s ?? ''), 'utf8');
+// Strip any codepoint > 0xFF before sending to the printer. Most UK thermal
+// printers ship without Thai / CJK glyphs, so multi-byte UTF-8 sequences
+// render as garbage (e.g. "ดูดัดดูดัน" instead of the intended Thai name).
+// Keeping Latin-1 preserves £, é, ñ, etc. — drops everything beyond that.
+const stripUnsupported = (s) => String(s ?? '').replace(/[^\x00-\xFF]/g, '');
+const txt  = (s)       => Buffer.from(stripUnsupported(s), 'utf8');
 const lf   = (n = 1)   => Buffer.alloc(n, 0x0a);
 const rule = (c = '-') => txt(c.repeat(LINE_WIDTH));
 
@@ -426,7 +431,11 @@ async function printFireNotice(settings, order, course) {
   const port     = settings.printer_kitchen_port || 9100;
   const printerName = settings.printer_kitchen_name || '';
   const copies   = Math.max(1, Math.min(5, parseInt(settings.printer_kitchen_copies || 1, 10) || 1));
-  const bilingual = (settings.kitchen_language || 'en_th') === 'en_th';
+  // Opt-in: bilingual Thai labels only print if the operator explicitly
+  // sets kitchen_language='en_th' AND has a Thai-capable printer. Default
+  // is English-only, since most UK thermal printers can't render Thai
+  // glyphs and the bilingual line just renders as garbage.
+  const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
   const buf = buildFireNotice({ order, course, bilingual });
   for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName });
@@ -437,7 +446,11 @@ async function printKitchenTicket(settings, order, items, course) {
   const port     = settings.printer_kitchen_port || 9100;
   const printerName = settings.printer_kitchen_name || '';
   const copies   = Math.max(1, Math.min(5, parseInt(settings.printer_kitchen_copies || 1, 10) || 1));
-  const bilingual = (settings.kitchen_language || 'en_th') === 'en_th';
+  // Opt-in: bilingual Thai labels only print if the operator explicitly
+  // sets kitchen_language='en_th' AND has a Thai-capable printer. Default
+  // is English-only, since most UK thermal printers can't render Thai
+  // glyphs and the bilingual line just renders as garbage.
+  const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
   const buf = buildKitchenTicket({ order, items, course, bilingual });
   for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName });
@@ -448,7 +461,11 @@ async function printFullKitchenTicket(settings, order, items) {
   const port     = settings.printer_kitchen_port || 9100;
   const printerName = settings.printer_kitchen_name || '';
   const copies   = Math.max(1, Math.min(5, parseInt(settings.printer_kitchen_copies || 1, 10) || 1));
-  const bilingual = (settings.kitchen_language || 'en_th') === 'en_th';
+  // Opt-in: bilingual Thai labels only print if the operator explicitly
+  // sets kitchen_language='en_th' AND has a Thai-capable printer. Default
+  // is English-only, since most UK thermal printers can't render Thai
+  // glyphs and the bilingual line just renders as garbage.
+  const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
   const buf = buildFullKitchenTicket({ order, items, bilingual });
   for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName });
@@ -458,7 +475,11 @@ async function printBarTicket(settings, order, items) {
   const ip       = settings.printer_bar_ip;
   const port     = settings.printer_bar_port || 9100;
   const printerName = settings.printer_bar_name || '';
-  const bilingual = (settings.kitchen_language || 'en_th') === 'en_th';
+  // Opt-in: bilingual Thai labels only print if the operator explicitly
+  // sets kitchen_language='en_th' AND has a Thai-capable printer. Default
+  // is English-only, since most UK thermal printers can't render Thai
+  // glyphs and the bilingual line just renders as garbage.
+  const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
   await sendRaw(ip, port, buildKitchenTicket({ order, items, course: 4, bilingual }), { printerName });
 }

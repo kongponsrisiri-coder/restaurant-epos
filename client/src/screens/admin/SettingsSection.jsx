@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
-import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, testNetworkPrinter } from '../../api';
+import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, testNetworkPrinter, cupsQueueForIp } from '../../api';
 import DiningDurationSettings from './DiningDurationSettings';
 
 // Network setup panel — shows the desktop's LAN URL + a scannable QR so
@@ -195,6 +195,20 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
             <input
               value={settings[ipKey] || ''}
               onChange={e => setSettings(s => ({ ...s, [ipKey]: e.target.value }))}
+              onBlur={async (e) => {
+                // Auto-detect: if operator just typed an IP and CUPS-name
+                // field is empty, ask the backend to look up the matching
+                // queue via `lpstat -v`. Pre-fills the CUPS name field so
+                // they never have to know macOS's auto-naming convention.
+                const ip = e.target.value.trim();
+                if (!ip || settings[nameKey]) return;
+                try {
+                  const r = await cupsQueueForIp(ip);
+                  if (r && r.queue) {
+                    setSettings(s => ({ ...s, [nameKey]: r.queue }));
+                  }
+                } catch (err) { /* silent — operator can fill manually */ }
+              }}
               placeholder="192.168.1.100"
               style={inputStyle}
             />
@@ -501,11 +515,62 @@ export default function SettingsSection() {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    getSettings().then(s => {
+    getSettings().then(async (s) => {
       // Support both old key (service_charge_percent) and new key (service_charge_rate)
       const rate = s.service_charge_rate || s.service_charge_percent || '12.5';
       setSettings(prev => ({ ...prev, ...s, service_charge_rate: rate }));
       if (s.company_logo) setLogoPreview(s.company_logo);
+      // Auto-convert: if a logo data-URL is stored but the thermal-printer
+      // bitmap isn't (e.g. logo was uploaded before bitmap conversion
+      // existed), generate + persist it now so the next receipt print
+      // includes the logo. One-time backfill — silent if already done.
+      if (s.company_logo && !s.company_logo_bitmap) {
+        try {
+          const bmp = await imageToThermalBitmap(s.company_logo, sizeToWidth(s.receipt_logo_size || 'medium'));
+          await updateSettings({
+            company_logo_bitmap:        bmp.b64,
+            company_logo_bitmap_width:  String(bmp.widthBytes),
+            company_logo_bitmap_height: String(bmp.height),
+          });
+          setSettings(prev => ({
+            ...prev,
+            company_logo_bitmap:        bmp.b64,
+            company_logo_bitmap_width:  String(bmp.widthBytes),
+            company_logo_bitmap_height: String(bmp.height),
+          }));
+          setBitmapPreview(bmp.previewDataUrl);
+          setBitmapInkPct(bmp.inkPct);
+          console.log(`[settings] logo bitmap auto-generated for thermal printer (${bmp.inkedDots} inked dots, ${bmp.inkPct.toFixed(1)}%)`);
+        } catch (err) {
+          console.warn('[settings] logo bitmap auto-generate failed:', err);
+        }
+      } else if (s.company_logo_bitmap && s.company_logo_bitmap_width && s.company_logo_bitmap_height) {
+        // Already-saved bitmap — render preview from the existing bytes
+        try {
+          const data = atob(s.company_logo_bitmap);
+          const wBytes = parseInt(s.company_logo_bitmap_width, 10);
+          const hDots  = parseInt(s.company_logo_bitmap_height, 10);
+          const dotsW = wBytes * 8;
+          const pc = document.createElement('canvas');
+          pc.width = dotsW; pc.height = hDots;
+          const pctx = pc.getContext('2d');
+          const imgData = pctx.createImageData(dotsW, hDots);
+          let inked = 0;
+          for (let y = 0; y < hDots; y++) {
+            for (let x = 0; x < dotsW; x++) {
+              const byte = data.charCodeAt(y * wBytes + (x >> 3));
+              const black = (byte & (1 << (7 - (x & 7)))) !== 0;
+              if (black) inked++;
+              const i = (y * dotsW + x) * 4;
+              imgData.data[i] = imgData.data[i + 1] = imgData.data[i + 2] = black ? 0 : 255;
+              imgData.data[i + 3] = 255;
+            }
+          }
+          pctx.putImageData(imgData, 0, 0);
+          setBitmapPreview(pc.toDataURL('image/png'));
+          setBitmapInkPct((inked * 100) / (dotsW * hDots));
+        } catch (err) { console.warn('[settings] preview render failed:', err); }
+      }
     });
     getDiscountReasons().then(setReasons);
   }, []);
@@ -516,25 +581,149 @@ export default function SettingsSection() {
     setTimeout(() => setSaved(false), 2500);
   };
 
+  // Convert a colour image data-URL to a monochrome ESC/POS bitmap
+  // (1 bit per pixel, MSB-first, packed) centered horizontally on the
+  // 384-dot paper width. Returns { b64, widthBytes, height, inkPct,
+  // previewDataUrl } for embedding into receipt prints via GS v 0.
+  //
+  // Robustness measures (after the all-zeros incident on 27 May 2026):
+  //   1. await img.decode() instead of img.onload — large data URLs
+  //      can fire onload before the pixel buffer is ready, leaving
+  //      canvas.drawImage with nothing to read.
+  //   2. Threshold escalation: try 180, 200, 220 in turn until at
+  //      least 100 dots are inked. Most brand logos render at 180;
+  //      pastel / washed-out brands need 200+.
+  //   3. Centered padding to full 384 dots so the printed image sits
+  //      visually centered on the paper (raster GS v 0 ignores the
+  //      ESC a 1 align command on most ESC/POS firmwares).
+  //   4. Returns a preview data-URL so the operator can SEE what'll
+  //      actually print before saving.
+  async function imageToThermalBitmap(dataUrl, contentWidthDots = 288) {
+    const PAPER_DOTS = 384;
+    const img = new Image();
+    img.src = dataUrl;
+    // decode() guarantees the pixel buffer is ready (vs onload which
+    // can fire prematurely on big data URLs in some browsers).
+    if (img.decode) {
+      await img.decode();
+    } else {
+      await new Promise((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Failed to load image'));
+      });
+    }
+    const scale = Math.min(1, contentWidthDots / img.width);
+    const drawW = Math.floor(img.width  * scale);
+    const drawH = Math.floor(img.height * scale);
+    const xOffset = Math.floor((PAPER_DOTS - drawW) / 2);
+    const canvas = document.createElement('canvas');
+    canvas.width  = PAPER_DOTS;
+    canvas.height = drawH;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, PAPER_DOTS, drawH);
+    ctx.drawImage(img, xOffset, 0, drawW, drawH);
+    const pixels = ctx.getImageData(0, 0, PAPER_DOTS, drawH).data;
+    const widthBytes = PAPER_DOTS / 8;
+
+    // Try increasingly aggressive thresholds — first one that produces
+    // enough ink wins. Saves the operator from re-uploading a logo
+    // that's "too light" (we just ink more aggressively).
+    let bytes, inkedDots;
+    for (const threshold of [180, 200, 220, 240]) {
+      bytes = new Uint8Array(widthBytes * drawH);
+      inkedDots = 0;
+      for (let y = 0; y < drawH; y++) {
+        for (let x = 0; x < PAPER_DOTS; x++) {
+          const i = (y * PAPER_DOTS + x) * 4;
+          const a = pixels[i + 3];
+          const grey = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
+          if (a >= 128 && grey < threshold) {
+            bytes[y * widthBytes + (x >> 3)] |= (1 << (7 - (x & 7)));
+            inkedDots++;
+          }
+        }
+      }
+      if (inkedDots >= 100) break;   // good enough — stop escalating
+    }
+    const inkPct = (inkedDots * 100) / (PAPER_DOTS * drawH);
+
+    // Build a preview data-URL (render the 1-bit bitmap back to a
+    // canvas at native size so operator sees the actual ink-or-white
+    // each pixel will produce on paper).
+    const previewCanvas = document.createElement('canvas');
+    previewCanvas.width  = PAPER_DOTS;
+    previewCanvas.height = drawH;
+    const pctx = previewCanvas.getContext('2d');
+    const previewImg = pctx.createImageData(PAPER_DOTS, drawH);
+    for (let y = 0; y < drawH; y++) {
+      for (let x = 0; x < PAPER_DOTS; x++) {
+        const black = (bytes[y * widthBytes + (x >> 3)] & (1 << (7 - (x & 7)))) !== 0;
+        const i = (y * PAPER_DOTS + x) * 4;
+        previewImg.data[i] = previewImg.data[i + 1] = previewImg.data[i + 2] = black ? 0 : 255;
+        previewImg.data[i + 3] = 255;
+      }
+    }
+    pctx.putImageData(previewImg, 0, 0);
+
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return {
+      b64: btoa(bin),
+      widthBytes,
+      height: drawH,
+      inkPct,
+      inkedDots,
+      previewDataUrl: previewCanvas.toDataURL('image/png'),
+    };
+  }
+  const sizeToWidth = (s) => ({ small: 192, medium: 288, large: 384, full: 384 }[s] || 288);
+  const [bitmapPreview, setBitmapPreview] = useState(''); // dataUrl
+  const [bitmapInkPct, setBitmapInkPct] = useState(null);
+
   const handleLogoUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    // Warn if too large (over 200KB uncompressed)
     if (file.size > 500000) {
       alert('Logo file is large. For best results use a PNG under 200KB.');
     }
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const dataUrl = ev.target.result;
       setLogoPreview(dataUrl);
-      setSettings(prev => ({ ...prev, company_logo: dataUrl }));
+      try {
+        const bmp = await imageToThermalBitmap(dataUrl, sizeToWidth(settings.receipt_logo_size || 'medium'));
+        setSettings(prev => ({
+          ...prev,
+          company_logo: dataUrl,
+          company_logo_bitmap:        bmp.b64,
+          company_logo_bitmap_width:  String(bmp.widthBytes),
+          company_logo_bitmap_height: String(bmp.height),
+        }));
+        setBitmapPreview(bmp.previewDataUrl);
+        setBitmapInkPct(bmp.inkPct);
+        if (bmp.inkedDots < 100) {
+          alert(`Logo conversion produced only ${bmp.inkedDots} inked dots — the print will look very faint. Try uploading a higher-contrast version (dark logo on white background).`);
+        }
+      } catch (err) {
+        alert('Could not convert logo for thermal printer: ' + err.message);
+        setSettings(prev => ({ ...prev, company_logo: dataUrl }));
+      }
     };
     reader.readAsDataURL(file);
   };
 
   const handleRemoveLogo = () => {
     setLogoPreview('');
-    setSettings(prev => ({ ...prev, company_logo: '' }));
+    setBitmapPreview('');
+    setBitmapInkPct(null);
+    setSettings(prev => ({
+      ...prev,
+      company_logo: '',
+      company_logo_bitmap: '',
+      company_logo_bitmap_width: '',
+      company_logo_bitmap_height: '',
+    }));
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -579,12 +768,41 @@ export default function SettingsSection() {
                     🗑 Remove Logo
                   </button>
                 )}
+                {bitmapPreview && (
+                  <div style={{ marginTop:8, padding:'8px 10px', background:'#f5f5f5', borderRadius:8, border:'1px solid #ddd' }}>
+                    <div style={{ fontSize:10, color:'#666', fontWeight:700, marginBottom:4, textTransform:'uppercase', letterSpacing:0.5 }}>
+                      🖨 Thermal printer preview {bitmapInkPct != null && `(${bitmapInkPct.toFixed(1)}% inked)`}
+                    </div>
+                    <img src={bitmapPreview} alt="Logo as it will print" style={{ display:'block', maxWidth:'100%', maxHeight:120, imageRendering:'pixelated', background:'white', border:'1px solid #ccc' }}/>
+                    <div style={{ fontSize:10, color:'#888', marginTop:4 }}>
+                      {bitmapInkPct == null ? '' :
+                       bitmapInkPct < 1 ? '⚠️ very faint — try a darker / higher-contrast logo' :
+                       bitmapInkPct < 5 ? 'looks light — that is what will print' :
+                       'looks good ✓'}
+                    </div>
+                  </div>
+                )}
                 {logoPreview && (
                   <div>
                     <div style={{ fontSize:11, color:'#666', fontWeight:700, marginBottom:5 }}>Logo size on receipt</div>
                     <div style={{ display:'flex', gap:6 }}>
                       {[['small','S'],['medium','M'],['large','L'],['full','Full']].map(([val, label]) => (
-                        <button key={val} onClick={() => setSettings(s => ({ ...s, receipt_logo_size: val }))}
+                        <button key={val} onClick={async () => {
+                          setSettings(s => ({ ...s, receipt_logo_size: val }));
+                          if (!settings.company_logo) return;
+                          try {
+                            const bmp = await imageToThermalBitmap(settings.company_logo, sizeToWidth(val));
+                            setSettings(s => ({
+                              ...s,
+                              receipt_logo_size: val,
+                              company_logo_bitmap:        bmp.b64,
+                              company_logo_bitmap_width:  String(bmp.widthBytes),
+                              company_logo_bitmap_height: String(bmp.height),
+                            }));
+                            setBitmapPreview(bmp.previewDataUrl);
+                            setBitmapInkPct(bmp.inkPct);
+                          } catch (err) { console.warn('size change conversion failed:', err); }
+                        }}
                           style={{ padding:'6px 12px', borderRadius:7, border:'2px solid', cursor:'pointer', fontWeight:700, fontSize:12,
                             borderColor: settings.receipt_logo_size === val ? '#1a1a2e' : '#ddd',
                             background:  settings.receipt_logo_size === val ? '#1a1a2e' : 'white',

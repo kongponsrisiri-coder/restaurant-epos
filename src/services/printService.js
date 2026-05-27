@@ -117,8 +117,39 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
   const method        = paymentDetails.method || '';
 
   const activeItems = (items || []).filter(i => !i.voided);
+  // Group identical lines into one — if the same menu item was added 3
+  // times as 3 rows (each quantity=1), the receipt shows "3x Pad Thai"
+  // not three separate "1x Pad Thai" lines. Two rows merge when their
+  // menu_item_id + notes + discount + unit_price all match (different
+  // notes / modifiers / mid-shift price changes keep them separate so
+  // the receipt remains accurate). Kitchen tickets still print line by
+  // line because the chef needs to see each customisation.
+  // Notes are intentionally excluded from the grouping key so the
+  // receipt collapses "1x Pad Thai (extra spicy)" + "1x Pad Thai" into
+  // a single "2x Pad Thai" line — the customer doesn't need to see
+  // kitchen instructions on their bill. Notes still appear on the
+  // kitchen ticket where the chef needs them.
+  const groupKey = (i) => [
+    i.menu_item_id ?? i.id,
+    i.discount_type || '',
+    Number(i.discount_value || 0),
+    Number(i.unit_price || 0),
+    i.course || 1,
+  ].join('|');
+  const groups = new Map();
+  for (const it of activeItems) {
+    const k = groupKey(it);
+    if (groups.has(k)) {
+      const g = groups.get(k);
+      g.quantity = Number(g.quantity || 0) + Number(it.quantity || 0);
+    } else {
+      groups.set(k, { ...it, quantity: Number(it.quantity || 0) });
+    }
+  }
+  const groupedItems = Array.from(groups.values());
+
   const byCourse    = {};
-  activeItems.forEach(i => {
+  groupedItems.forEach(i => {
     const c = i.course || 1;
     if (!byCourse[c]) byCourse[c] = [];
     byCourse[c].push(i);
@@ -127,15 +158,58 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
   // Restaurant name: large if short, tall if long
   const nameSize = name.length <= 14 ? [CMD.SIZE_BIG] : [CMD.SIZE_TALL];
 
+  // Optional logo — client-side converts the upload to a monochrome
+  // bitmap (1 bit per dot, MSB-first) and stores it in 3 settings:
+  //   company_logo_bitmap         — base64 of the raw bytes
+  //   company_logo_bitmap_width   — width in BYTES (= dots / 8)
+  //   company_logo_bitmap_height  — height in DOTS
+  // We wrap the bytes in ESC/POS `GS v 0` (raster image) and emit at
+  // the top of the receipt. If any of the three settings is missing
+  // or sizes don't match, we skip silently — no error, no blank space.
+  let logoBlock = [];
+  if (settings.company_logo_bitmap && settings.company_logo_bitmap_width && settings.company_logo_bitmap_height) {
+    try {
+      const data   = Buffer.from(String(settings.company_logo_bitmap), 'base64');
+      const wBytes = parseInt(settings.company_logo_bitmap_width, 10);
+      const hDots  = parseInt(settings.company_logo_bitmap_height, 10);
+      if (data.length === wBytes * hDots) {
+        // Send the whole logo as a single GS v 0 command. ESC/POS spec
+        // allows up to 65535 dots tall via the 2-byte yL/yH field;
+        // cnfujun POS80 happily renders ~300 dots in one go. Chunking
+        // was an earlier defensive measure but produced PARTIAL prints
+        // (some chunks dropped). Single command is more reliable.
+        logoBlock.push(CMD.ALIGN_CENTER);
+        const header = Buffer.from([
+          GS, 0x76, 0x30, 0x00,
+          wBytes & 0xFF, (wBytes >> 8) & 0xFF,
+          hDots  & 0xFF, (hDots  >> 8) & 0xFF,
+        ]);
+        logoBlock.push(header, data, lf());
+      } else {
+        console.warn(`[print] logo bitmap size mismatch — expected ${wBytes * hDots} bytes, got ${data.length} (skipping)`);
+      }
+    } catch (err) {
+      console.warn('[print] logo emit failed (skipping):', err.message);
+    }
+  }
+
   const parts = [
     CMD.INIT,
+    ...logoBlock,
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, ...nameSize, txt(name), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     addr   ? [txt(addr),            lf()] : [],
     phone  ? [txt('Tel: ' + phone), lf()] : [],
     vatNo  ? [txt('VAT: ' + vatNo), lf()] : [],
     lf(),
-    CMD.ALIGN_LEFT,
+    // Keep the rest of the receipt centered too — at LINE_WIDTH=42 on an
+    // 80mm printer (~48 native cols), left-align leaves a visibly bigger
+    // margin on the right than the left. ALIGN_CENTER puts the same gap
+    // on both sides so the whole receipt sits visually centered on the
+    // paper. col2 lines still have their label-on-left / value-on-right
+    // shape — just the whole 42-char block is centered within the
+    // printable area.
+    CMD.ALIGN_CENTER,
     rule(), lf(),
 
     // Order header
@@ -152,9 +226,10 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
     col2('Order #', String(order.id)), lf(),
     rule(), lf(),
 
-    // Items grouped by course — slightly larger for readability
+    // Items sorted by course (starters → mains → desserts → extras)
+    // but no course headers — the customer doesn't need food-category
+    // labels on their bill, just the items + prices.
     ...Object.keys(byCourse).sort().flatMap(course => [
-      CMD.BOLD_ON, CMD.SIZE_WIDE, txt(COURSES_EN[course] || 'ITEMS'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
       ...byCourse[course].flatMap(item => {
         const p   = item.unit_price * item.quantity;
         const d   = item.discount_value > 0
@@ -163,7 +238,10 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
         const net = p - d;
         return [
           CMD.BOLD_ON, col2(`${item.quantity}x ${item.name || item.item_name || ('Item #' + item.menu_item_id)}`, '£' + net.toFixed(2)), CMD.BOLD_OFF, lf(),
-          item.notes ? [txt('  > ' + item.notes), lf()] : [],
+          // Per-item notes are intentionally omitted from the receipt —
+          // kitchen instructions ("no peanuts", "extra spicy") don't
+          // belong on the customer's bill. Notes still print on the
+          // kitchen ticket where the chef needs them.
         ];
       }),
     ]),
@@ -381,6 +459,39 @@ function _sendTcp(ip, port, buf, timeoutMs = 6000) {
   });
 }
 
+// Auto-discovery: shell out to `lpstat -v` and find the macOS print
+// queue whose device URI matches the printer's IP. Means operators
+// never have to type the queue name (which macOS auto-generates from
+// the IP, e.g. _192_168_68_57 for a printer at 192.168.68.57).
+// Returns the queue name, or null if no match.
+async function findCupsQueueForIp(ip) {
+  if (!ip) return null;
+  return new Promise((resolve) => {
+    exec('lpstat -v', { timeout: 3000 }, (err, stdout) => {
+      if (err || !stdout) return resolve(null);
+      // Lines look like: `device for QUEUENAME: lpd://1.2.3.4/`
+      //                  `device for OTHER:     socket://1.2.3.4:9100`
+      const lines = String(stdout).split('\n');
+      for (const line of lines) {
+        const m = line.match(/device for (\S+):\s+\S+:\/\/([0-9.]+)/);
+        if (m && m[2] === ip) return resolve(m[1]);
+      }
+      resolve(null);
+    });
+  });
+}
+
+// Module-level cache so we only run lpstat once per (ip) per process.
+const _cupsQueueCache = new Map();
+async function getOrAutoDetectCupsQueue(ip, explicitName) {
+  if (explicitName) return explicitName;
+  if (_cupsQueueCache.has(ip)) return _cupsQueueCache.get(ip);
+  const detected = await findCupsQueueForIp(ip);
+  _cupsQueueCache.set(ip, detected);
+  if (detected) console.log(`[print] auto-detected CUPS queue '${detected}' for IP ${ip}`);
+  return detected;
+}
+
 async function _sendCups(printerName, buf) {
   // Write the raw bytes to a tmp file because `lpr` needs a path. Inline
   // stdin would work too but tmp file is more debuggable.
@@ -403,11 +514,10 @@ async function _sendCups(printerName, buf) {
 }
 
 function sendRaw(ip, port, buf, options = {}) {
-  const printerName = (options.printerName || '').trim();
+  const explicitName = (options.printerName || '').trim();
   const hasTcp  = !!ip;
-  const hasCups = !!printerName;
 
-  if (!hasTcp && !hasCups) {
+  if (!hasTcp && !explicitName) {
     return Promise.reject(new Error('NO_IP and no printer_name configured'));
   }
 
@@ -415,17 +525,19 @@ function sendRaw(ip, port, buf, options = {}) {
     if (hasTcp) {
       try { return await _sendTcp(ip, port, buf); }
       catch (err) {
-        if (hasCups) {
-          console.warn(`[print] TCP ${ip}:${port} failed (${err.message}) — falling back to CUPS '${printerName}'`);
-          return _sendCups(printerName, buf);
+        // TCP failed — try CUPS. If the operator didn't configure a
+        // queue name, auto-detect from `lpstat -v` (cached per IP).
+        const queueName = await getOrAutoDetectCupsQueue(ip, explicitName);
+        if (queueName) {
+          console.warn(`[print] TCP ${ip}:${port} failed (${err.message}) — falling back to CUPS '${queueName}'`);
+          return _sendCups(queueName, buf);
         }
-        throw err;
+        throw new Error(`TCP failed and no CUPS queue found for ${ip}: ${err.message}`);
       }
     }
-    return _sendCups(printerName, buf);
+    return _sendCups(explicitName, buf);
   };
 
-  // Enqueue — jobs run sequentially, never concurrently
   _printQueue = _printQueue.catch(() => {}).then(job);
   return _printQueue;
 }
@@ -509,4 +621,13 @@ async function testPrint(ip, port = 9100, printerName = '') {
   await sendRaw(ip, parseInt(port, 10) || 9100, buildTestPage(), { printerName });
 }
 
-module.exports = { printReceipt, printFireNotice, printKitchenTicket, printFullKitchenTicket, printBarTicket, testPrint };
+module.exports = {
+  printReceipt,
+  printFireNotice,
+  printKitchenTicket,
+  printFullKitchenTicket,
+  printBarTicket,
+  testPrint,
+  findCupsQueueForIp,
+  buildReceipt,           // exported for mock-receipt test print
+};

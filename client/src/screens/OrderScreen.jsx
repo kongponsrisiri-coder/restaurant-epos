@@ -263,10 +263,16 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     const cartAsItems   = cart.map(c => ({
       name: c.name, name_alt: c.name_alt || '', quantity: c.quantity, course: c.course || 1, notes: c.notes || '', is_bar: !!c.is_bar,
     }));
-    const existingItems = (order?.items || []).filter(i => i && !i.voided);
-    const allNewItems   = cartAsItems.length > 0 ? [...existingItems, ...cartAsItems] : existingItems;
-    const hasKitchen    = allNewItems.some(i => !i.is_bar);
-    const hasBar        = allNewItems.some(i => i.is_bar);
+    // Print ONLY what was just added — not the entire order. When a
+    // table has 3 dishes already cooking and the waiter adds a 4th,
+    // the kitchen ticket should show just the new dish (otherwise the
+    // chef sees 4 dishes including 3 they're already working on).
+    // Previously this was `[...existingItems, ...cartAsItems]` which
+    // re-printed already-fired items each time. The full-order view
+    // is still available via Bill / Receipt; kitchen sees only deltas.
+    const justAdded     = cartAsItems;
+    const hasKitchen    = justAdded.some(i => !i.is_bar);
+    const hasBar        = justAdded.some(i => i.is_bar);
 
     // ── Pre-open ONE popup window SYNCHRONOUSLY (user gesture is fresh here). ───
     // Chrome allows only ONE window.open() per user gesture. Kitchen always uses
@@ -286,8 +292,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
       // gap in printService). sendOrder doesn't await these — UI is unblocked.
       const orderSnap = order; // capture before any async state changes
       Promise.resolve()
-        .then(() => hasKitchen ? printFullOrderTicket({ order: orderSnap, items: allNewItems, popupWin: null }) : null)
-        .then(() => hasBar     ? printBarOrderTicket({ order: orderSnap, items: allNewItems, popupWin: barWin }) : null)
+        .then(() => hasKitchen ? printFullOrderTicket({ order: orderSnap, items: justAdded, popupWin: null }) : null)
+        .then(() => hasBar     ? printBarOrderTicket({ order: orderSnap, items: justAdded, popupWin: barWin }) : null)
         .catch(e => console.error('[sendOrder] print chain error:', e));
 
       if (isMobile) setMobileTab('order');

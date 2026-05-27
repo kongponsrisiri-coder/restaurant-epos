@@ -4500,20 +4500,69 @@ async function loadSettings() {
   return s;
 }
 
-// Test any printer by IP and/or CUPS printer name.
+// Test any printer by printing a REALISTIC mock receipt. Exercises the
+// full receipt build path (logo, header, £ symbol, table number, items,
+// totals, alignment) so operators see at setup time exactly what real
+// receipts will look like — instead of finding bugs at first service.
 // Either ip OR printer_name (or both) must be supplied.
-// If both, TCP is tried first and CUPS is used as fallback on failure.
 app.post('/api/print/test', async (req, res) => {
   const { ip, port, printer_name } = req.body;
   if (!ip && !printer_name) {
     return res.status(400).json({ success: false, error: 'ip or printer_name required' });
   }
   try {
-    await printService.testPrint(ip || '', port || 9100, printer_name || '');
+    const settings = await loadSettings();
+    // Override the configured receipt printer with what the operator
+    // just typed in the Test field — so they can test BEFORE saving.
+    const testSettings = {
+      ...settings,
+      printer_receipt_ip:    ip || settings.printer_receipt_ip,
+      printer_receipt_port:  port || settings.printer_receipt_port || 9100,
+      printer_receipt_name:  printer_name || settings.printer_receipt_name || '',
+    };
+    const mockOrder = {
+      id: 'TEST',
+      order_type: 'dine_in',
+      table_number: 5,
+      covers: 2,
+      discount_value: 0,
+    };
+    const mockItems = [
+      { quantity: 2, name: 'Spring Rolls',  unit_price: 4.95, course: 1, voided: 0 },
+      { quantity: 1, name: 'Pad Thai',      unit_price: 9.50, course: 2, voided: 0 },
+      { quantity: 1, name: 'Mango Sticky Rice', unit_price: 5.50, course: 3, voided: 0 },
+    ];
+    const subtotal     = 24.90;
+    const service      = +(subtotal * 0.125).toFixed(2);
+    const billTotal    = +(subtotal + service).toFixed(2);
+    const mockPayment  = {
+      subtotal,
+      discountAmount: 0,
+      serviceCharge: service,
+      billTotal,
+      amountPaid: billTotal,
+      tip: 0,
+      change: 0,
+      method: 'Cash',
+    };
+    await printService.printReceipt(testSettings, mockOrder, mockItems, mockPayment);
     res.json({ success: true });
   } catch (err) {
     res.json({ success: false, error: err.message });
   }
+});
+
+// Auto-detect the macOS CUPS queue name for a given printer IP.
+// Used by Settings → Network Printers to pre-fill the CUPS name field
+// after the operator types the IP, so they never have to look up the
+// (auto-generated) queue name themselves.
+app.get('/api/print/cups-queue-for-ip', async (req, res) => {
+  try {
+    const ip = String(req.query.ip || '').trim();
+    if (!ip) return res.status(400).json({ error: 'ip required' });
+    const queue = await printService.findCupsQueueForIp(ip);
+    res.json({ queue });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // Print a receipt for a given order

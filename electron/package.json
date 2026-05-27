@@ -1,6 +1,6 @@
 {
   "name": "siamepos-electron",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "SiamEPOS Pro desktop shell — offline-capable EPOS for Thai restaurants",
   "main": "main.js",
   "private": true,
@@ -15,7 +15,7 @@
   "build": {
     "appId": "uk.co.siamepos.pro",
     "productName": "SiamEPOS",
-    "artifactName": "${productName} Setup.${ext}",
+    "artifactName": "${productName}-${version}-Setup.${ext}",
     "asar": true,
     "directories": {
       "output": "dist-electron",

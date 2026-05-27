@@ -138,27 +138,33 @@ Owner: Korakot Kongponsrisiri | info@siamepos.co.uk
 - Per-install config lives at electron/config.json (dev) or
   userData/config.json (packaged) — created by the first-launch wizard.
   Fields: restaurant_name, cloud_api_url, restaurant_id, sync_secret
-- **EXACT packaged-app config paths** (verified 2026-05-27 on v1.6.2):
-  - macOS: `~/Library/Application Support/SiamEPOS/config.json`
-  - Windows: `%APPDATA%/SiamEPOS/config.json`
-  - Linux: `~/.config/SiamEPOS/config.json`
-  - The folder name is **`SiamEPOS`** because that's the app's
-    `CFBundleName` (set from `productName` in `electron/package.json`'s
-    `build` block). **NOT** `siamepos-electron` — that folder may exist
-    on developer machines because it's what `app.getPath('userData')`
-    resolves to when running `npm start` (dev mode, where `name` from
-    package.json is used). Dev mode also short-circuits to
-    `electron/config.json` in the repo, so the `siamepos-electron/`
-    userData folder is rarely the source of truth for anything.
+- **EXACT packaged-app config paths** (verified 2026-05-27 on v1.6.2 — gotcha!):
+  - macOS: `~/Library/Application Support/siamepos-electron/config.json`
+  - Windows: `%APPDATA%/siamepos-electron/config.json`
+  - Linux: `~/.config/siamepos-electron/config.json`
+  - **The folder name is `siamepos-electron`, NOT `SiamEPOS`**, even
+    though the .app is named `SiamEPOS.app` with `CFBundleName=SiamEPOS`.
+    Why: `app.getPath('userData')` resolves using Electron's runtime
+    `app.name`, which defaults to the **`name` field in
+    `electron/package.json`** (currently `"siamepos-electron"`).
+    `productName` only affects the .app bundle name + Info.plist's
+    CFBundleName for Finder display — it does NOT change `app.name` at
+    runtime. To make the userData folder match the brand we'd need to
+    call `app.setName('SiamEPOS')` early in main.js + ship a migration
+    that moves existing `siamepos-electron/` data to `SiamEPOS/` on
+    first launch after the rename. Logged for a future ticket.
+  - The folder is shared between dev (`npm start`) and packaged installs
+    when both run on the same machine — be careful when developing
+    against a live install's data.
 - **Switching an existing install between clients** (e.g. main siamepos
   → baan-siam): (1) quit SiamEPOS, (2) overwrite
-  `~/Library/Application Support/SiamEPOS/config.json` with new
-  `restaurant_name` / `cloud_api_url` / `restaurant_id` / `sync_secret`,
-  (3) delete `~/Library/Application Support/SiamEPOS/siamepos-local.db*`
+  `~/Library/Application Support/siamepos-electron/config.json` with
+  new `restaurant_name` / `cloud_api_url` / `restaurant_id` /
+  `sync_secret`, (3) delete `~/Library/Application Support/siamepos-electron/siamepos-local.db*`
   so the next sync starts fresh against the new cloud, (4) relaunch.
-  All four config fields are required for full sync; without `sync_secret`
-  the menu / staff / settings still sync but closed-orders + active-orders
-  silently skip with HTTP 401 (header is `x-sync-secret`).
+  All four config fields are required for full sync; without
+  `sync_secret` the menu / staff / settings still sync but closed-orders
+  + active-orders silently skip with HTTP 401 (header is `x-sync-secret`).
 
 ## AdminScreen Structure (refactored 8 May 2026)
 AdminScreen.jsx is a shell only. Always edit the specific section file:

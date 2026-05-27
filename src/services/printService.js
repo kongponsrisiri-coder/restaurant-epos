@@ -25,7 +25,13 @@ const GS  = 0x1d;
 const CAN = Buffer.from([0x18]);   // Cancel — discards any buffered data since last LF
 
 const CMD = {
-  INIT:         Buffer.from([ESC, 0x40]),
+  // INIT = ESC @ (reset to defaults), then ESC t 19 (select codepage CP858 —
+  // Western European with £ at byte 0x9C and € at 0xD5). Without this the
+  // printer defaults to CP437 / CP1252 / whatever, which renders the £ in
+  // strings like '£40.95' as garbage (was showing as 'Тú40.95' on the
+  // cnfujun POS80). With CP858 active, txt() pre-maps £ → byte 0x9C and
+  // the printer renders a proper £.
+  INIT:         Buffer.from([ESC, 0x40, ESC, 0x74, 0x13]),
   ALIGN_LEFT:   Buffer.from([ESC, 0x61, 0x00]),
   ALIGN_CENTER: Buffer.from([ESC, 0x61, 0x01]),
   ALIGN_RIGHT:  Buffer.from([ESC, 0x61, 0x02]),
@@ -47,12 +53,24 @@ const COURSES_TH = { 1:'กับแกล้ม', 2:'อาหารหลั�
 
 // ── Buffer helpers ────────────────────────────────────────────────────────────
 
-// Strip any codepoint > 0xFF before sending to the printer. Most UK thermal
-// printers ship without Thai / CJK glyphs, so multi-byte UTF-8 sequences
-// render as garbage (e.g. "ดูดัดดูดัน" instead of the intended Thai name).
-// Keeping Latin-1 preserves £, é, ñ, etc. — drops everything beyond that.
-const stripUnsupported = (s) => String(s ?? '').replace(/[^\x00-\xFF]/g, '');
-const txt  = (s)       => Buffer.from(stripUnsupported(s), 'utf8');
+// Transform strings before sending to the printer. Two passes:
+//   1. Remap symbols whose Unicode codepoint doesn't match the active
+//      printer codepage (CP858, set by CMD.INIT). £ in JS is U+00A3 but
+//      in CP858 it's byte 0x9C — remap so latin1 encoding produces the
+//      right byte. Em / en dash collapse to ASCII '-' for the same reason.
+//   2. Strip any codepoint > 0xFF (Thai / CJK / emoji) — CP858 has no
+//      glyphs for those, so they'd render as garbage on a UK thermal
+//      printer.
+// Then encode with 'latin1' (one codepoint → one byte) so the printer
+// sees what we intended.
+const stripUnsupported = (s) => String(s ?? '')
+  .replace(/£/g, '\x9C')     // CP858 £ byte
+  .replace(/€/g, '\xD5')     // CP858 € byte
+  .replace(/[—–]/g, '-')     // em / en dash → ASCII dash
+  .replace(/[‘’]/g, "'")     // smart single quotes → ASCII
+  .replace(/[“”]/g, '"')     // smart double quotes → ASCII
+  .replace(/[^\x00-\xFF]/g, '');
+const txt  = (s)       => Buffer.from(stripUnsupported(s), 'latin1');
 const lf   = (n = 1)   => Buffer.alloc(n, 0x0a);
 const rule = (c = '-') => txt(c.repeat(LINE_WIDTH));
 
@@ -144,7 +162,7 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
           : 0;
         const net = p - d;
         return [
-          CMD.BOLD_ON, col2(`${item.quantity}x ${item.name}`, '£' + net.toFixed(2)), CMD.BOLD_OFF, lf(),
+          CMD.BOLD_ON, col2(`${item.quantity}x ${item.name || item.item_name || ('Item #' + item.menu_item_id)}`, '£' + net.toFixed(2)), CMD.BOLD_OFF, lf(),
           item.notes ? [txt('  > ' + item.notes), lf()] : [],
         ];
       }),

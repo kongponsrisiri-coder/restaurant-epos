@@ -4528,7 +4528,12 @@ app.post('/api/print/receipt', async (req, res) => {
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
     const order = orderRes.rows[0];
-    const itemsRes = await pool.query('SELECT * FROM order_items WHERE order_id = $1', [order_id]);
+    // JOIN menu_items so item.name is populated (order_items only carries
+    // item_name as a denormalised snapshot — old data may have it blank).
+    const itemsRes = await pool.query(
+      `SELECT order_items.*, menu_items.name, menu_items.name_alt
+       FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
+       WHERE order_items.order_id = $1`, [order_id]);
     await printService.printReceipt(settings, order, itemsRes.rows, payment_details || {});
     res.json({ success: true });
   } catch (err) {

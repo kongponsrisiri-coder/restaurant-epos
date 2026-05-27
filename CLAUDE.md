@@ -138,6 +138,27 @@ Owner: Korakot Kongponsrisiri | info@siamepos.co.uk
 - Per-install config lives at electron/config.json (dev) or
   userData/config.json (packaged) — created by the first-launch wizard.
   Fields: restaurant_name, cloud_api_url, restaurant_id, sync_secret
+- **EXACT packaged-app config paths** (verified 2026-05-27 on v1.6.2):
+  - macOS: `~/Library/Application Support/SiamEPOS/config.json`
+  - Windows: `%APPDATA%/SiamEPOS/config.json`
+  - Linux: `~/.config/SiamEPOS/config.json`
+  - The folder name is **`SiamEPOS`** because that's the app's
+    `CFBundleName` (set from `productName` in `electron/package.json`'s
+    `build` block). **NOT** `siamepos-electron` — that folder may exist
+    on developer machines because it's what `app.getPath('userData')`
+    resolves to when running `npm start` (dev mode, where `name` from
+    package.json is used). Dev mode also short-circuits to
+    `electron/config.json` in the repo, so the `siamepos-electron/`
+    userData folder is rarely the source of truth for anything.
+- **Switching an existing install between clients** (e.g. main siamepos
+  → baan-siam): (1) quit SiamEPOS, (2) overwrite
+  `~/Library/Application Support/SiamEPOS/config.json` with new
+  `restaurant_name` / `cloud_api_url` / `restaurant_id` / `sync_secret`,
+  (3) delete `~/Library/Application Support/SiamEPOS/siamepos-local.db*`
+  so the next sync starts fresh against the new cloud, (4) relaunch.
+  All four config fields are required for full sync; without `sync_secret`
+  the menu / staff / settings still sync but closed-orders + active-orders
+  silently skip with HTTP 401 (header is `x-sync-secret`).
 
 ## AdminScreen Structure (refactored 8 May 2026)
 AdminScreen.jsx is a shell only. Always edit the specific section file:

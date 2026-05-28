@@ -351,12 +351,17 @@ function TransactionTable({ transactions, loading, days, onDaysChange }) {
         </div>
       ) : transactions.length === 0 ? (
         <div style={{ color: C.textFaint, fontSize: 15, padding: 24, textAlign: 'center' }}>
-          No settled transactions in the last {days} days.
+          No transactions in the last {days} days.
         </div>
       ) : (
         <>
           <div style={{ fontSize: 13, color: C.textFaint, marginBottom: 10 }}>
             Showing {transactions.length} transaction{transactions.length !== 1 ? 's' : ''}
+            {transactions.some(t => t.status === 'PENDING') && (
+              <span style={{ marginLeft: 10, background: '#fef3c7', color: '#92400e', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999, border: '1px solid #fde68a' }}>
+                ⏳ includes pending
+              </span>
+            )}
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
@@ -385,9 +390,14 @@ function TransactionTable({ transactions, loading, days, onDaysChange }) {
                     <td style={{ padding: '10px 12px', color: C.textFaint, fontSize: 13 }}>{fmtCategory(tx.category)}</td>
                     <td style={{
                       padding: '10px 12px', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap',
-                      color: tx.direction === 'IN' ? '#166534' : '#991b1b',
+                      color: tx.status === 'PENDING' ? '#92400e' : tx.direction === 'IN' ? '#166534' : '#991b1b',
                     }}>
                       {tx.direction === 'IN' ? '+' : '-'}{fmtGBP(tx.amount)}
+                      {tx.status === 'PENDING' && (
+                        <span style={{ display: 'block', fontSize: 10, fontWeight: 600, color: '#92400e', opacity: 0.75 }}>
+                          pending
+                        </span>
+                      )}
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                       <AttachmentCell

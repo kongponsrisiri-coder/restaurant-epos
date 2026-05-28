@@ -139,7 +139,7 @@ router.get('/transactions', authRequired, async (req, res) => {
     );
 
     const items = (data.feedItems || [])
-      .filter(item => item.status === 'SETTLED')
+      .filter(item => item.status === 'SETTLED' || item.status === 'PENDING')
       .map(item => ({
         id:            item.feedItemUid,
         date:          item.transactionTime,
@@ -149,6 +149,7 @@ router.get('/transactions', authRequired, async (req, res) => {
         amount:        (item.amount?.minorUnits || 0) / 100,
         currency:      item.amount?.currency || 'GBP',
         reference:     item.reference || '',
+        status:        item.status, // 'SETTLED' | 'PENDING'
       }))
       .sort((a, b) => new Date(b.date) - new Date(a.date));
 

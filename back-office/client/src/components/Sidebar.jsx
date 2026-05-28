@@ -1,9 +1,9 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { C, initials } from '../theme.js';
 
-function Item({ to, icon, label, badge, active }) {
+function Item({ to, icon, label, badge, active, onClick }) {
   return (
-    <Link to={to} style={{
+    <Link to={to} onClick={onClick} style={{
       display: 'flex', alignItems: 'center', gap: 12,
       padding: '10px 14px', margin: '2px 10px', borderRadius: 8,
       color: active ? C.gold : 'rgba(255,255,255,0.78)',
@@ -24,7 +24,7 @@ function Item({ to, icon, label, badge, active }) {
   );
 }
 
-export default function Sidebar({ user, clientCount }) {
+export default function Sidebar({ user, clientCount, isMobile, isOpen, onClose }) {
   const loc = useLocation();
   const nav = useNavigate();
   const isActive = (path) =>
@@ -34,35 +34,84 @@ export default function Sidebar({ user, clientCount }) {
     localStorage.removeItem('ops_token');
     localStorage.removeItem('ops_user');
     nav('/login');
+    if (onClose) onClose();
+  };
+
+  // Close drawer when a nav item is tapped on mobile
+  const handleNavClick = () => {
+    if (isMobile && onClose) onClose();
+  };
+
+  const asideStyle = isMobile ? {
+    // Mobile: fixed overlay sliding in from left
+    position: 'fixed',
+    top: 0, left: 0, bottom: 0,
+    width: 260,
+    zIndex: 200,
+    transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
+    transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+    background: C.navy,
+    color: 'white',
+    display: 'flex',
+    flexDirection: 'column',
+    boxShadow: isOpen ? '4px 0 32px rgba(0,0,0,0.35)' : 'none',
+    overflowY: 'auto',
+  } : {
+    // Desktop: static sidebar
+    width: 240,
+    minHeight: '100vh',
+    background: C.navy,
+    color: 'white',
+    display: 'flex',
+    flexDirection: 'column',
+    flexShrink: 0,
+    borderRight: '1px solid rgba(255,255,255,0.06)',
   };
 
   return (
-    <aside style={{
-      width: 240, minHeight: '100vh', background: C.navy, color: 'white',
-      display: 'flex', flexDirection: 'column', flexShrink: 0,
-      borderRight: '1px solid rgba(255,255,255,0.06)',
-    }}>
-      {/* Brand */}
-      <div style={{ padding: '22px 22px 18px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-        <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, fontWeight: 800, letterSpacing: 0.5 }}>
-          <span style={{ color: 'white' }}>Siam</span>
-          <span style={{ color: C.gold }}>EPOS</span>
+    <aside style={asideStyle}>
+      {/* Brand + optional close button */}
+      <div style={{
+        padding: '22px 22px 18px',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+      }}>
+        <div>
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, fontWeight: 800, letterSpacing: 0.5 }}>
+            <span style={{ color: 'white' }}>Siam</span>
+            <span style={{ color: C.gold }}>EPOS</span>
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 4, letterSpacing: 1.5, textTransform: 'uppercase' }}>
+            Back Office
+          </div>
         </div>
-        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 4, letterSpacing: 1.5, textTransform: 'uppercase' }}>
-          Back Office
-        </div>
+        {/* Close button — mobile only */}
+        {isMobile && (
+          <button
+            onClick={onClose}
+            aria-label="Close menu"
+            style={{
+              background: 'transparent', border: 'none',
+              color: 'rgba(255,255,255,0.6)', fontSize: 22,
+              cursor: 'pointer', padding: '2px 4px', lineHeight: 1,
+              marginTop: -2,
+            }}
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {/* Nav */}
       <nav style={{ padding: '14px 0', flex: 1 }}>
-        <Item to="/" icon="🏠" label="Clients" badge={clientCount} active={isActive('/')} />
-        <Item to="/website" icon="🌐" label="Website" active={isActive('/website')} />
-        <Item to="/tickets" icon="🎟" label="Tickets" active={isActive('/tickets')} />
+        <Item to="/"        icon="🏠" label="Clients"  badge={clientCount} active={isActive('/')}        onClick={handleNavClick} />
+        <Item to="/website" icon="🌐" label="Website"                      active={isActive('/website')} onClick={handleNavClick} />
+        <Item to="/tickets" icon="🎟" label="Tickets"                      active={isActive('/tickets')} onClick={handleNavClick} />
         {user?.role === 'admin' && (
-          <Item to="/team" icon="👥" label="Team" active={isActive('/team')} />
+          <Item to="/team"    icon="👥" label="Team"    active={isActive('/team')}    onClick={handleNavClick} />
         )}
         {user?.role === 'admin' && (
-          <Item to="/finance" icon="💰" label="Finance" active={isActive('/finance')} />
+          <Item to="/finance" icon="💰" label="Finance" active={isActive('/finance')} onClick={handleNavClick} />
         )}
       </nav>
 
@@ -73,6 +122,7 @@ export default function Sidebar({ user, clientCount }) {
             width: 36, height: 36, borderRadius: 36,
             background: C.gold, color: C.navy, fontWeight: 800, fontSize: 14,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
           }}>{initials(user?.name)}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

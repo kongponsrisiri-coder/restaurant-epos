@@ -26,9 +26,22 @@ function useAuth() {
   return user;
 }
 
+function useMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return isMobile;
+}
+
 function Shell({ children }) {
   const user = useAuth();
+  const isMobile = useMobile();
   const [clientCount, setClientCount] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   useEffect(() => {
     let stop = false;
     const load = async () => {
@@ -38,10 +51,79 @@ function Shell({ children }) {
     const id = setInterval(load, 30000);
     return () => { stop = true; clearInterval(id); };
   }, []);
+
+  // Auto-close sidebar when screen grows to desktop
+  useEffect(() => {
+    if (!isMobile) setSidebarOpen(false);
+  }, [isMobile]);
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg }}>
-      <Sidebar user={user} clientCount={clientCount} />
-      <main style={{ flex: 1, padding: '32px 40px', overflowX: 'hidden' }}>{children}</main>
+
+      {/* ── Mobile backdrop ── */}
+      {isMobile && sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(15,23,42,0.6)',
+            backdropFilter: 'blur(2px)',
+            zIndex: 150,
+          }}
+        />
+      )}
+
+      <Sidebar
+        user={user}
+        clientCount={clientCount}
+        isMobile={isMobile}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
+
+      {/* ── Content column ── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+
+        {/* Mobile top bar */}
+        {isMobile && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '0 16px', height: 56, flexShrink: 0,
+            background: C.navy,
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+          }}>
+            <button
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open menu"
+              style={{
+                background: 'transparent', border: 'none',
+                color: 'white', fontSize: 24, cursor: 'pointer',
+                padding: '4px 6px', borderRadius: 6, lineHeight: 1,
+              }}
+            >
+              ☰
+            </button>
+            <div style={{ fontFamily: 'Georgia, serif', fontSize: 19, fontWeight: 800, lineHeight: 1 }}>
+              <span style={{ color: 'white' }}>Siam</span>
+              <span style={{ color: C.gold }}>EPOS</span>
+            </div>
+            <div style={{
+              fontSize: 10, color: 'rgba(255,255,255,0.5)',
+              letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 2,
+            }}>
+              Back Office
+            </div>
+          </div>
+        )}
+
+        <main style={{
+          flex: 1,
+          padding: isMobile ? '20px 16px 32px' : '32px 40px',
+          overflowX: 'hidden',
+        }}>
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

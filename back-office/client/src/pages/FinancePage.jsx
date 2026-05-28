@@ -23,6 +23,19 @@ function fmtCategory(raw) {
   return raw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
+// ── mobile hook ──────────────────────────────────────────────────────────
+function useMobile() {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 640
+  );
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return isMobile;
+}
+
 // ── skeleton block ───────────────────────────────────────────────────────
 function Skeleton({ width = '100%', height = 20, style = {} }) {
   return (
@@ -160,11 +173,12 @@ function SettingsPanel({ onSaved }) {
 
 // ── Balance card ─────────────────────────────────────────────────────────
 function BalanceCard({ balance, loading, error }) {
+  const isMobile = useMobile();
   return (
     <div style={{
       background: `linear-gradient(135deg, ${C.navy} 0%, #1a2744 100%)`,
       border: `1px solid ${C.gold}55`,
-      borderRadius: 14, padding: '28px 32px', marginBottom: 24,
+      borderRadius: 14, padding: isMobile ? '20px 20px' : '28px 32px', marginBottom: 24,
     }}>
       <div style={{
         fontSize: 11, color: 'rgba(255,255,255,0.55)', fontWeight: 700,
@@ -179,7 +193,7 @@ function BalanceCard({ balance, loading, error }) {
         <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 15 }}>{error}</div>
       ) : balance ? (
         <>
-          <div style={{ fontSize: 48, fontWeight: 800, color: 'white', letterSpacing: -1, lineHeight: 1 }}>
+          <div style={{ fontSize: isMobile ? 36 : 48, fontWeight: 800, color: 'white', letterSpacing: -1, lineHeight: 1 }}>
             {fmtGBP(balance.amount)}
           </div>
           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginTop: 10 }}>
@@ -235,9 +249,10 @@ function PLSummary({ transactions }) {
 
 // ── Attachment button ─────────────────────────────────────────────────────
 function AttachmentCell({ tx, attachments, onAttachmentsChange }) {
-  const att       = attachments[tx.id];
+  const att        = attachments[tx.id];
   const [busy, setBusy] = useState(false);
-  const inputRef  = useRef();
+  const inputRef   = useRef();
+  const cameraRef  = useRef();
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
@@ -294,19 +309,27 @@ function AttachmentCell({ tx, attachments, onAttachmentsChange }) {
   );
 
   return (
-    <>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      {/* File picker — PDFs and images from storage */}
       <input ref={inputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style={{ display: 'none' }} onChange={handleFileChange} />
-      <button onClick={() => inputRef.current?.click()} title="Attach invoice"
+      <button onClick={() => inputRef.current?.click()} title="Attach file"
         style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, opacity: 0.45, padding: 0 }}>
         📎
       </button>
-    </>
+      {/* Camera — opens rear camera directly on mobile for scanning invoices */}
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleFileChange} />
+      <button onClick={() => cameraRef.current?.click()} title="Scan invoice with camera"
+        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, opacity: 0.45, padding: 0 }}>
+        📷
+      </button>
+    </div>
   );
 }
 
 // ── Transactions table ───────────────────────────────────────────────────
 function TransactionTable({ transactions, loading, days, onDaysChange }) {
   const DAYS = [30, 60, 90];
+  const isMobile = useMobile();
   const [attachments, setAttachments] = useState({});
 
   // Load attachment metadata whenever the transaction list changes
@@ -363,54 +386,98 @@ function TransactionTable({ transactions, loading, days, onDaysChange }) {
               </span>
             )}
           </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-              <thead>
-                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  {['Date', 'Description', 'Category', 'Amount', ''].map((h, i) => (
-                    <th key={i} style={{
-                      textAlign: h === 'Amount' ? 'right' : 'left',
-                      padding: '8px 12px', color: C.textMuted,
-                      fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.7,
-                      width: h === '' ? 60 : 'auto',
-                    }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {transactions.map((tx, i) => (
-                  <tr key={tx.id || i} style={{
-                    borderBottom: `1px solid ${C.borderSoft}`,
-                    background: i % 2 === 0 ? 'transparent' : C.surfaceAlt,
+
+          {isMobile ? (
+            /* ── Mobile card list ── */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {transactions.map((tx, i) => {
+                const isPending = tx.status === 'PENDING';
+                const amountColor = isPending ? '#92400e' : tx.direction === 'IN' ? '#166534' : '#991b1b';
+                return (
+                  <div key={tx.id || i} style={{
+                    background: isPending ? '#fffbeb' : C.surfaceAlt,
+                    border: `1px solid ${isPending ? '#fde68a' : C.borderSoft}`,
+                    borderRadius: 10, padding: '12px 14px',
                   }}>
-                    <td style={{ padding: '10px 12px', color: C.textMuted, whiteSpace: 'nowrap', fontSize: 13 }}>{fmtDate(tx.date)}</td>
-                    <td style={{ padding: '10px 12px', color: C.text, fontWeight: 500, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description || '—'}</td>
-                    <td style={{ padding: '10px 12px', color: C.textFaint, fontSize: 13 }}>{fmtCategory(tx.category)}</td>
-                    <td style={{
-                      padding: '10px 12px', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap',
-                      color: tx.status === 'PENDING' ? '#92400e' : tx.direction === 'IN' ? '#166534' : '#991b1b',
-                    }}>
-                      {tx.direction === 'IN' ? '+' : '-'}{fmtGBP(tx.amount)}
-                      {tx.status === 'PENDING' && (
-                        <span style={{ display: 'block', fontSize: 10, fontWeight: 600, color: '#92400e', opacity: 0.75 }}>
-                          pending
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                      <AttachmentCell
-                        tx={tx}
-                        attachments={attachments}
-                        onAttachmentsChange={handleAttachmentsChange}
-                      />
-                    </td>
+                    {/* Top row: description + amount */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {tx.description || '—'}
+                        </div>
+                        <div style={{ fontSize: 12, color: C.textFaint, marginTop: 2 }}>
+                          {fmtDate(tx.date)}
+                          {tx.category ? ` · ${fmtCategory(tx.category)}` : ''}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: amountColor }}>
+                          {tx.direction === 'IN' ? '+' : '-'}{fmtGBP(tx.amount)}
+                        </div>
+                        {isPending && (
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#92400e', marginTop: 1 }}>⏳ pending</div>
+                        )}
+                      </div>
+                    </div>
+                    {/* Bottom row: attachment */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <AttachmentCell tx={tx} attachments={attachments} onAttachmentsChange={handleAttachmentsChange} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* ── Desktop table ── */
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                    {['Date', 'Description', 'Category', 'Amount', ''].map((h, i) => (
+                      <th key={i} style={{
+                        textAlign: h === 'Amount' ? 'right' : 'left',
+                        padding: '8px 12px', color: C.textMuted,
+                        fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.7,
+                        width: h === '' ? 80 : 'auto',
+                      }}>
+                        {h}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {transactions.map((tx, i) => (
+                    <tr key={tx.id || i} style={{
+                      borderBottom: `1px solid ${C.borderSoft}`,
+                      background: i % 2 === 0 ? 'transparent' : C.surfaceAlt,
+                    }}>
+                      <td style={{ padding: '10px 12px', color: C.textMuted, whiteSpace: 'nowrap', fontSize: 13 }}>{fmtDate(tx.date)}</td>
+                      <td style={{ padding: '10px 12px', color: C.text, fontWeight: 500, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description || '—'}</td>
+                      <td style={{ padding: '10px 12px', color: C.textFaint, fontSize: 13 }}>{fmtCategory(tx.category)}</td>
+                      <td style={{
+                        padding: '10px 12px', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap',
+                        color: tx.status === 'PENDING' ? '#92400e' : tx.direction === 'IN' ? '#166634' : '#991b1b',
+                      }}>
+                        {tx.direction === 'IN' ? '+' : '-'}{fmtGBP(tx.amount)}
+                        {tx.status === 'PENDING' && (
+                          <span style={{ display: 'block', fontSize: 10, fontWeight: 600, color: '#92400e', opacity: 0.75 }}>
+                            pending
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        <AttachmentCell
+                          tx={tx}
+                          attachments={attachments}
+                          onAttachmentsChange={handleAttachmentsChange}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -549,6 +616,8 @@ export default function FinancePage() {
     loadData(days);
   };
 
+  const isMobile = useMobile();
+
   return (
     <>
       <style>{`
@@ -561,9 +630,9 @@ export default function FinancePage() {
         }
       `}</style>
 
-      <div style={{ maxWidth: 900 }}>
+      <div style={{ maxWidth: 900, padding: isMobile ? '0 4px' : 0 }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28, flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? 18 : 28, flexWrap: 'wrap', gap: 12 }}>
           <div>
             <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: C.text }}>
               💰 Company Finance

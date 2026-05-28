@@ -1,0 +1,53 @@
+<svg viewBox="0 0 520 140" xmlns="http://www.w3.org/2000/svg" width="1040" height="280">
+  <!-- White background -->
+  <rect width="520" height="140" fill="#FFFFFF"/>
+
+  <!-- ═══ LOTUS BADGE ═══ -->
+  <!-- Outer ring -->
+  <circle cx="70" cy="70" r="58" fill="none" stroke="#C9A84C" stroke-width="2"/>
+  <!-- Inner ring (faint) -->
+  <circle cx="70" cy="70" r="51" fill="none" stroke="#C9A84C" stroke-width="0.7" opacity="0.35"/>
+
+  <!-- 5-petal lotus — petals in Thai Gold, centre hollow on white -->
+  <g transform="translate(70,70)">
+    <!-- Petal 1 — top (100% opacity) -->
+    <path d="M 0,6 C -13,-10 -11,-48 0,-56 C 11,-48 13,-10 0,6 Z" fill="#C9A84C"/>
+    <!-- Petal 2 — 72° (82%) -->
+    <path d="M 0,6 C -13,-10 -11,-48 0,-56 C 11,-48 13,-10 0,6 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/>
+    <!-- Petal 3 — 144° (62%) -->
+    <path d="M 0,6 C -13,-10 -11,-48 0,-56 C 11,-48 13,-10 0,6 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/>
+    <!-- Petal 4 — 216° (62%) -->
+    <path d="M 0,6 C -13,-10 -11,-48 0,-56 C 11,-48 13,-10 0,6 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/>
+    <!-- Petal 5 — 288° (82%) -->
+    <path d="M 0,6 C -13,-10 -11,-48 0,-56 C 11,-48 13,-10 0,6 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/>
+    <!-- Centre hollow (white background) -->
+    <circle cx="0" cy="0" r="12" fill="#FFFFFF"/>
+    <!-- Centre dot (gold) -->
+    <circle cx="0" cy="0" r="6.5" fill="#C9A84C"/>
+  </g>
+
+  <!-- ═══ DIVIDER ═══ -->
+  <line x1="147" y1="24" x2="147" y2="116" stroke="#C9A84C" stroke-width="1" opacity="0.4"/>
+
+  <!-- ═══ WORDMARK ═══ -->
+  <!-- "Siam" in Deep Navy -->
+  <text
+    x="170" y="88"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="54"
+    font-weight="700"
+    letter-spacing="-1.5"
+    fill="#0D1B3E"
+  >Siam</text>
+  <!-- "EPOS" in Thai Gold -->
+  <text
+    x="330" y="88"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="54"
+    font-weight="700"
+    letter-spacing="-1.5"
+    fill="#C9A84C"
+  >EPOS</text>
+
+  <!-- Registration marker placeholder (remove before filing — add ™ until registered) -->
+</svg>

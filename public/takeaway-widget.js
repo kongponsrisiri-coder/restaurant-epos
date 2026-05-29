@@ -359,8 +359,8 @@
 
   // Module-level Stripe SDK references (persisted across renders so
   // Elements aren't destroyed + re-created on every re-render).
+  // _elements + _paymentElement live in mountStripeCard's scope below.
   let _stripe = null;
-  let _cardElement = null;
 
   function $(id) { return document.getElementById(id); }
   function fmt(n) { return '£' + Number(n || 0).toFixed(2); }
@@ -904,9 +904,17 @@
     });
   }
 
-  // Mount the Stripe Card Element into #tw-card-element after render().
-  // Called once per step-4 view; the module-level _stripe + _cardElement
-  // refs survive re-renders so we don't double-mount.
+  // Module-level elements ref so PaymentElement survives re-renders.
+  let _elements = null;
+  let _paymentElement = null;
+
+  // Mount Stripe's PaymentElement into #tw-card-element after render.
+  // PaymentElement is the modern unified UI — auto-shows Apple Pay on
+  // iOS Safari, Google Pay on Android Chrome, Link on any supported
+  // device, and falls back to card form everywhere else. To unlock
+  // those non-card methods the elements is initialised in "deferred
+  // intent" mode (mode + amount + currency, no clientSecret yet) —
+  // the PaymentIntent is created server-side just before confirm.
   async function mountStripeCard() {
     if (!state.stripeConfigured || !state.stripePublishableKey) return;
     const container = document.getElementById('tw-card-element');
@@ -918,17 +926,31 @@
     if (!_stripe) {
       _stripe = window.Stripe(state.stripePublishableKey);
     }
-    if (!_cardElement) {
-      const elements = _stripe.elements();
-      _cardElement = elements.create('card', {
-        style: {
-          base: { fontSize: '16px', color: '#1a1a2e', fontFamily: 'system-ui,-apple-system,sans-serif', '::placeholder': { color: '#aaa' } },
-          invalid: { color: '#dc2626' },
+    // Recreate elements + PaymentElement when amount changes (e.g. cart
+    // edited between Step 3 and Step 4). PaymentElement caches the
+    // amount internally and won't update the displayed Apple Pay /
+    // Google Pay button if we just mount the same instance again.
+    const amountPence = Math.round(cartTotal() * 100);
+    if (!_elements || _elements._cachedAmount !== amountPence) {
+      _elements = _stripe.elements({
+        mode:     'payment',
+        amount:   amountPence,
+        currency: 'gbp',
+        appearance: {
+          theme: 'stripe',
+          variables: {
+            colorPrimary:    '#C9A84C',
+            colorBackground: '#ffffff',
+            fontFamily:      'system-ui,-apple-system,sans-serif',
+          },
         },
       });
+      _elements._cachedAmount = amountPence;
+      _paymentElement = _elements.create('payment', {
+        layout: { type: 'tabs', defaultCollapsed: false },
+      });
     }
-    // Always (re-)mount — the DOM node is fresh after each render().
-    _cardElement.mount('#tw-card-element');
+    _paymentElement.mount('#tw-card-element');
   }
 
   // ── Data + submit ────────────────────────────────────────────────
@@ -987,21 +1009,32 @@
     if (btn) { btn.disabled = true; btn.textContent = state.stripeConfigured ? 'Processing payment…' : 'Placing order…'; }
     state.error = '';
 
-    // SEPOS-040 — Stripe payment flow.
+    // SEPOS-040 — Stripe payment flow (PaymentElement → Apple Pay /
+    // Google Pay / card depending on device).
     let paymentIntentId = null;
     if (state.stripeConfigured) {
-      if (!_stripe || !_cardElement) {
+      if (!_stripe || !_elements || !_paymentElement) {
         state.error = 'Payment not ready — please wait a moment and try again.';
         render(); return;
       }
-      // 1. Create a PaymentIntent on the server.
+
+      // 1. Validate + submit the PaymentElement first. This catches
+      // missing fields / unsupported chosen method BEFORE we create a
+      // PaymentIntent — saves a wasted Stripe API call.
+      const { error: submitError } = await _elements.submit();
+      if (submitError) {
+        state.error = submitError.message || 'Please check your payment details.';
+        render(); return;
+      }
+
+      // 2. Create a PaymentIntent on the server.
       let clientSecret;
       try {
         const piRes = await fetch(API + '/api/takeaway/payment-intent', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            amount_pence: Math.round(cartTotal() * 100),
+            amount_pence:      Math.round(cartTotal() * 100),
             order_description: 'Takeaway order',
           }),
         });
@@ -1017,12 +1050,20 @@
         render(); return;
       }
 
-      // 2. Confirm the card payment client-side.
-      const { error: stripeError, paymentIntent } = await _stripe.confirmCardPayment(clientSecret, {
-        payment_method: { card: _cardElement },
+      // 3. Confirm — PaymentElement handles Apple Pay / Google Pay /
+      // card internally. `redirect: 'if_required'` keeps the customer
+      // on the page for card (no 3DS) and returns a Promise; for 3DS
+      // / Klarna / similar that need a redirect, the SDK navigates
+      // away and we never reach the next step (Stripe redirects back
+      // to return_url after the customer completes the off-site flow).
+      const { error: stripeError, paymentIntent } = await _stripe.confirmPayment({
+        elements: _elements,
+        clientSecret,
+        redirect: 'if_required',
+        confirmParams: { return_url: window.location.href },
       });
       if (stripeError) {
-        state.error = stripeError.message || 'Payment failed — please check your card details.';
+        state.error = stripeError.message || 'Payment failed — please check your details.';
         render(); return;
       }
       if (!paymentIntent || paymentIntent.status !== 'succeeded') {
@@ -1070,7 +1111,8 @@
       }
       // Clean up Stripe refs for next order.
       _stripe = null;
-      _cardElement = null;
+      _elements = null;
+      _paymentElement = null;
       state.orderResult = data;
       state.step = 5;
       render();
@@ -1097,7 +1139,8 @@
     };
     // Reset module-level Stripe refs for a fresh payment each time.
     _stripe = null;
-    _cardElement = null;
+    _elements = null;
+    _paymentElement = null;
     injectStyles();
     const overlay = document.createElement('div');
     overlay.className = 'tw-overlay';

@@ -1077,6 +1077,32 @@ app.post('/api/stripe/webhook', async (req, res) => {
         }
         break;
       }
+      case 'payment_intent.succeeded': {
+        // SEPOS-040 — takeaway order has been paid. Look up the order
+        // by payment_intent_id and flip payment_status to 'paid'.
+        // Vouchers also use payment_intents, but they're verified
+        // synchronously in /api/widget/voucher/confirm — so the webhook
+        // is belt-and-braces, not the primary path. Only takeaway uses
+        // the metadata.product='siamepos_takeaway' tag.
+        const pi = event.data.object;
+        if (pi.metadata?.product === 'siamepos_takeaway') {
+          const r = await pool.query(
+            `UPDATE orders
+                SET payment_status = 'paid'
+              WHERE payment_intent_id = $1
+                AND COALESCE(payment_status, '') != 'paid'`,
+            [pi.id]
+          );
+          if (r.rowCount > 0) {
+            console.log(`[stripe] takeaway paid: pi=${pi.id} → order flipped to paid`);
+            // Notify kitchen view so the order moves to the paid lane
+            // without waiting for the next poll. Same socket pattern the
+            // existing takeaway flow uses.
+            try { io.emit('takeaway_status', { payment_intent_id: pi.id, payment_status: 'paid' }); } catch {}
+          }
+        }
+        break;
+      }
       default:
         // Other event types are acknowledged so Stripe stops retrying.
         break;
@@ -3088,6 +3114,76 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+// ── SEPOS-040 — Stripe payment on the takeaway widget ──────────────
+// The widget calls /api/takeaway/stripe-config on open to learn whether
+// real Stripe is available (sets state.stripeConfigured + caches the
+// publishable key). If yes, the widget mounts Stripe's PaymentElement —
+// which auto-includes Apple Pay (iOS Safari) and Google Pay (Android
+// Chrome) when the customer's device supports them, plus card form as
+// fallback. The widget creates a PaymentIntent server-side just before
+// confirm, then confirms client-side, then posts the order with the
+// verified payment_intent_id.
+
+app.get('/api/takeaway/stripe-config', widgetCors, (req, res) => {
+  res.json({
+    configured:      !!process.env.STRIPE_PUBLISHABLE_KEY && !!process.env.STRIPE_SECRET_KEY,
+    publishable_key: process.env.STRIPE_PUBLISHABLE_KEY || null,
+  });
+});
+
+app.post('/api/takeaway/payment-intent', widgetCors, async (req, res) => {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return res.status(503).json({ error: 'Stripe not configured on this restaurant. Please ask the restaurant to switch to demo mode.' });
+  }
+  const amountPence = Number(req.body?.amount_pence);
+  const description = String(req.body?.order_description || 'Takeaway order').slice(0, 200);
+  if (!Number.isInteger(amountPence) || amountPence < 50) {
+    return res.status(400).json({ error: 'Invalid amount (minimum 50p)' });
+  }
+  if (amountPence > 50000) {
+    // £500 sanity cap — defends against widget tampering before customer
+    // checks out. Real maximum is the restaurant's menu price total.
+    return res.status(400).json({ error: 'Amount too large for online takeaway' });
+  }
+  try {
+    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    const pi = await stripe.paymentIntents.create({
+      amount:   amountPence,
+      currency: 'gbp',
+      description,
+      // automatic_payment_methods is what unlocks Apple Pay + Google Pay
+      // (and Klarna / Link / whatever else the restaurant enabled in
+      // their Stripe dashboard) — alongside card.
+      automatic_payment_methods: { enabled: true },
+      metadata: {
+        product:       'siamepos_takeaway',
+        restaurant_id: resolveRestaurantId(req),
+      },
+    });
+    res.json({
+      client_secret:     pi.client_secret,
+      payment_intent_id: pi.id,
+    });
+  } catch (err) {
+    console.error('[stripe] takeaway payment-intent', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Apple Pay domain verification — Stripe gives the restaurant a
+// specific file content when they register their domain in the Stripe
+// dashboard. We serve it from the env var so each per-client Railway
+// deployment can set its own value (verification is per-domain).
+// Without this, Apple Pay button never appears on iOS Safari even
+// though the device supports it.
+app.get('/.well-known/apple-developer-merchantid-domain-association', (req, res) => {
+  const content = process.env.STRIPE_APPLE_PAY_DOMAIN_FILE;
+  if (!content) {
+    return res.status(404).type('text/plain').send('Apple Pay not configured for this domain');
+  }
+  res.type('text/plain').send(content);
 });
 
 // Active takeaway orders — for kitchen view + Mac sync pull.

@@ -19,7 +19,13 @@ jobs:
   # ── Mac ────────────────────────────────────────────────────────────
   build-mac:
     runs-on: macos-latest
-    timeout-minutes: 30
+    # 60 min (up from 30). Apple's notary service round-trip takes
+    # ~20-30 minutes per build (verified on the v1.6.4 attempt where
+    # notarization itself took 29 of 30 allotted minutes, leaving
+    # 17 seconds for DMG packaging before the timeout hit). 60
+    # minutes gives 25-30 min of headroom even on slow notarization
+    # days.
+    timeout-minutes: 60
     # SEPOS-NOTARIZE-001 — derive a boolean at job level (where the
     # `secrets` context IS accessible) so the conditional step below
     # can reference `env.HAS_MAC_CERT`. GitHub doesn't allow secrets

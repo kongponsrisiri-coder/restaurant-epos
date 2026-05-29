@@ -1,5 +1,5 @@
 /*
- * SiamEPOS Takeaway Widget — SEPOS-034
+ * SiamEPOS Takeaway Widget — SEPOS-034 / SEPOS-040
  * Public ordering widget for embedding on the restaurant's website.
  *
  *   <script src="https://app.siamepos.co.uk/takeaway-widget.js"></script>
@@ -9,8 +9,12 @@
  *   1. Pickup time   (ASAP or scheduled)
  *   2. Menu + cart
  *   3. Customer details
- *   4. Mock payment  (no Stripe yet — SEPOS-040)
+ *   4. Payment       (Stripe card input if configured; demo banner otherwise)
  *   5. Success       (order number + confirmation note)
+ *
+ * SEPOS-040: Each restaurant provides their own STRIPE_PUBLISHABLE_KEY +
+ * STRIPE_SECRET_KEY in Railway env. If not set, widget gracefully falls
+ * back to demo/mock mode — no breakage for clients not yet on Stripe.
  */
 (function () {
   'use strict';
@@ -307,6 +311,15 @@
       padding-top:12px; margin-top:4px;
     }
 
+    /* ── Step 4: Stripe card input ── */
+    #tw-card-element {
+      padding:14px 16px; border-radius:12px; border:1.5px solid #ddd;
+      background:white; margin-top:14px; margin-bottom:6px;
+    }
+    .tw-stripe-badge {
+      font-size:11px; color:#aaa; text-align:right; margin-top:4px; margin-bottom:10px;
+    }
+
     /* ── Success ── */
     .tw-success { text-align:center; padding:40px 24px 32px; }
     .tw-success-tick { font-size:72px; margin-bottom:12px; }
@@ -339,7 +352,15 @@
     customer: { name:'', phone:'', email:'', order_subtype:'collection', delivery_postcode:'', delivery_address:'', delivery_notes:'', marketing_consent:false, delivery_check:null },
     error: '',
     orderResult: null,
+    // SEPOS-040 — Stripe state. Populated on widget open by loadStripeConfig().
+    stripeConfigured: false,
+    stripePublishableKey: null,
   };
+
+  // Module-level Stripe SDK references (persisted across renders so
+  // Elements aren't destroyed + re-created on every re-render).
+  let _stripe = null;
+  let _cardElement = null;
 
   function $(id) { return document.getElementById(id); }
   function fmt(n) { return '£' + Number(n || 0).toFixed(2); }
@@ -611,8 +632,17 @@
 
   function renderStep4() {
     const pTime = new Date(computePickupISO()).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+    const payBlock = state.stripeConfigured
+      ? `<div style="margin-top:4px;">
+           <label class="tw-label" style="margin-top:0;">Card details</label>
+           <div id="tw-card-element"></div>
+           <div class="tw-stripe-badge">Secured by Stripe</div>
+         </div>`
+      : `<div style="background:#fef9eb;border:1.5px solid #f0d070;border-radius:12px;padding:14px 16px;font-size:13px;color:#92400e;line-height:1.5;">
+           🧪 <strong>Demo mode</strong> — No card details collected. Clicking Pay sends the order straight to the kitchen.
+         </div>`;
     return `
-      <h2 class="tw-h2">Review your order</h2>
+      <h2 class="tw-h2">Review &amp; pay</h2>
       <div style="background:#f8f8f8;border-radius:14px;padding:16px;margin-bottom:16px;">
         ${state.cart.map(c => `
           <div class="tw-review-row">
@@ -634,9 +664,7 @@
         </div>
       </div>
 
-      <div style="background:#fef9eb;border:1.5px solid #f0d070;border-radius:12px;padding:14px 16px;font-size:13px;color:#92400e;line-height:1.5;">
-        🧪 <strong>Demo mode</strong> — No card details collected. Clicking Pay sends the order straight to the kitchen.
-      </div>
+      ${payBlock}
       ${state.error ? `<div class="tw-error">${esc(state.error)}</div>` : ''}
     `;
   }
@@ -681,7 +709,9 @@
     } else if (state.step === 3) {
       nextLabel = 'Review order →';
     } else if (state.step === 4) {
-      nextLabel = `✓ Place order · ${fmt(cartTotal())}`;
+      nextLabel = state.stripeConfigured
+        ? `Pay ${fmt(cartTotal())}`
+        : `✓ Place order · ${fmt(cartTotal())}`;
     }
     const cls = state.step === 4 ? 'tw-btn-gold' : 'tw-btn-primary';
     // On mobile step 2, the cart bar handles checkout — hide the footer next button
@@ -733,6 +763,11 @@
     }
 
     bindHandlers();
+
+    // SEPOS-040 — mount Stripe card element after step-4 DOM is ready.
+    if (state.step === 4 && state.stripeConfigured) {
+      mountStripeCard();
+    }
   }
 
   function bindHandlers() {
@@ -858,12 +893,67 @@
     $('tw-done')?.addEventListener('click', closeWidget);
   }
 
+  // ── Stripe helpers ───────────────────────────────────────────────
+
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      if (document.querySelector('script[src="' + src + '"]')) { resolve(); return; }
+      const s = document.createElement('script');
+      s.src = src; s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+
+  // Mount the Stripe Card Element into #tw-card-element after render().
+  // Called once per step-4 view; the module-level _stripe + _cardElement
+  // refs survive re-renders so we don't double-mount.
+  async function mountStripeCard() {
+    if (!state.stripeConfigured || !state.stripePublishableKey) return;
+    const container = document.getElementById('tw-card-element');
+    if (!container) return;
+    if (!window.Stripe) {
+      try { await loadScript('https://js.stripe.com/v3/'); }
+      catch (e) { state.error = 'Could not load payment library. Please refresh and try again.'; render(); return; }
+    }
+    if (!_stripe) {
+      _stripe = window.Stripe(state.stripePublishableKey);
+    }
+    if (!_cardElement) {
+      const elements = _stripe.elements();
+      _cardElement = elements.create('card', {
+        style: {
+          base: { fontSize: '16px', color: '#1a1a2e', fontFamily: 'system-ui,-apple-system,sans-serif', '::placeholder': { color: '#aaa' } },
+          invalid: { color: '#dc2626' },
+        },
+      });
+    }
+    // Always (re-)mount — the DOM node is fresh after each render().
+    _cardElement.mount('#tw-card-element');
+  }
+
   // ── Data + submit ────────────────────────────────────────────────
   async function loadSettings() {
     try {
       const r = await fetch(API + '/api/takeaway/settings?restaurant_id=' + encodeURIComponent(RESTAURANT_ID));
       if (r.ok) state.settings = await r.json();
     } catch (e) {}
+  }
+
+  // SEPOS-040 — check whether the server has Stripe configured.
+  // We do this once on widget open and cache the result in state so
+  // renderStep4() can immediately show the right UI.
+  async function loadStripeConfig() {
+    try {
+      const r = await fetch(API + '/api/takeaway/stripe-config');
+      if (r.ok) {
+        const data = await r.json();
+        state.stripeConfigured    = !!data.configured;
+        state.stripePublishableKey = data.publishable_key || null;
+      }
+    } catch (e) {
+      // Fail open — stays in mock mode
+      state.stripeConfigured = false;
+    }
   }
   async function loadMenu() {
     try {
@@ -894,7 +984,54 @@
 
   async function submitOrder() {
     const btn = $('tw-next');
-    if (btn) { btn.disabled = true; btn.textContent = 'Placing order…'; }
+    if (btn) { btn.disabled = true; btn.textContent = state.stripeConfigured ? 'Processing payment…' : 'Placing order…'; }
+    state.error = '';
+
+    // SEPOS-040 — Stripe payment flow.
+    let paymentIntentId = null;
+    if (state.stripeConfigured) {
+      if (!_stripe || !_cardElement) {
+        state.error = 'Payment not ready — please wait a moment and try again.';
+        render(); return;
+      }
+      // 1. Create a PaymentIntent on the server.
+      let clientSecret;
+      try {
+        const piRes = await fetch(API + '/api/takeaway/payment-intent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount_pence: Math.round(cartTotal() * 100),
+            order_description: 'Takeaway order',
+          }),
+        });
+        const piData = await piRes.json();
+        if (!piRes.ok || !piData.client_secret) {
+          state.error = piData.error || 'Could not start payment — please try again.';
+          render(); return;
+        }
+        clientSecret    = piData.client_secret;
+        paymentIntentId = piData.payment_intent_id;
+      } catch (e) {
+        state.error = 'Connection error — could not start payment.';
+        render(); return;
+      }
+
+      // 2. Confirm the card payment client-side.
+      const { error: stripeError, paymentIntent } = await _stripe.confirmCardPayment(clientSecret, {
+        payment_method: { card: _cardElement },
+      });
+      if (stripeError) {
+        state.error = stripeError.message || 'Payment failed — please check your card details.';
+        render(); return;
+      }
+      if (!paymentIntent || paymentIntent.status !== 'succeeded') {
+        state.error = 'Payment not completed — please try again.';
+        render(); return;
+      }
+    }
+
+    // 3. Submit the order to the backend (with payment_intent_id when Stripe paid).
     try {
       const r = await fetch(API + '/api/takeaway/orders', {
         method: 'POST',
@@ -916,6 +1053,8 @@
             ? (state.customer.delivery_notes || null)
             : null,
           marketing_consent: !!state.customer.marketing_consent,
+          // SEPOS-040 — include the verified PI id (null in mock mode).
+          payment_intent_id: paymentIntentId || null,
           items: state.cart.map(c => ({
             menu_item_id: c.menu_item_id,
             quantity:     c.quantity,
@@ -929,6 +1068,9 @@
         state.error = data.error || 'Something went wrong — please try again.';
         render(); return;
       }
+      // Clean up Stripe refs for next order.
+      _stripe = null;
+      _cardElement = null;
       state.orderResult = data;
       state.step = 5;
       render();
@@ -940,12 +1082,22 @@
 
   // ── Open / close ─────────────────────────────────────────────────
   function openWidget() {
+    // Preserve stripe config across opens (avoid re-fetching on every open).
+    const prevStripeConfigured    = state.stripeConfigured;
+    const prevStripePublishableKey = state.stripePublishableKey;
+    const prevSettings = state.settings;
+    const prevMenu     = state.menu;
     state = {
-      step: 1, settings: state.settings, menu: state.menu, activeCategory: null,
+      step: 1, settings: prevSettings, menu: prevMenu, activeCategory: null,
       cart: [], pickupKind: 'asap', pickupISO: null,
       customer: { name:'', phone:'', email:'', order_subtype:'collection', delivery_postcode:'', delivery_address:'', delivery_notes:'', marketing_consent:false, delivery_check:null },
       error: '', orderResult: null,
+      stripeConfigured:    prevStripeConfigured,
+      stripePublishableKey: prevStripePublishableKey,
     };
+    // Reset module-level Stripe refs for a fresh payment each time.
+    _stripe = null;
+    _cardElement = null;
     injectStyles();
     const overlay = document.createElement('div');
     overlay.className = 'tw-overlay';
@@ -955,6 +1107,8 @@
     // Close on backdrop tap
     overlay.addEventListener('click', (e) => { if (e.target === overlay) closeWidget(); });
     if (!state.settings) loadSettings();
+    // SEPOS-040 — fetch Stripe config on first open (subsequent opens reuse cached value).
+    if (!prevStripePublishableKey) loadStripeConfig();
     render();
   }
   function closeWidget() {
@@ -974,6 +1128,8 @@
       fab.addEventListener('click', openWidget);
       document.body.appendChild(fab);
     }
+    // SEPOS-040 — pre-fetch Stripe config so step 4 renders correctly on first open.
+    loadStripeConfig();
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

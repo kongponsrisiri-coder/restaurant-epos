@@ -2783,9 +2783,9 @@ app.get('/api/network-info', (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// SEPOS-034 — Online takeaway ordering
-// Public widget posts here. Mock payment for the sales demo;
-// Stripe wiring deferred to SEPOS-040.
+// SEPOS-034 / SEPOS-040 — Online takeaway ordering + real Stripe payment
+// Each restaurant's own STRIPE_SECRET_KEY / STRIPE_PUBLISHABLE_KEY go in
+// their Railway env. If not set the widget falls back to demo/mock mode.
 // ─────────────────────────────────────────────────────────────────────
 
 // Public settings the widget needs — opening hours + restaurant name —
@@ -2813,6 +2813,41 @@ app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
       delivery_radius_miles: deliveryEnabled ? Number(cfg.delivery_radius_miles) : 0,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-040 — returns whether Stripe is configured + the publishable key.
+// Widget uses this on init to decide between real-pay and demo-mode UI.
+app.get('/api/takeaway/stripe-config', widgetCors, (req, res) => {
+  const key = process.env.STRIPE_PUBLISHABLE_KEY;
+  res.json({ configured: !!key, publishable_key: key || null });
+});
+
+// SEPOS-040 — create a Stripe PaymentIntent for the takeaway order.
+// Returns { client_secret } which the widget passes to stripe.confirmCardPayment().
+// If Stripe is not configured, returns 503 so the widget knows to stay in mock mode.
+app.post('/api/takeaway/payment-intent', widgetCors, async (req, res) => {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return res.status(503).json({ error: 'Stripe not configured on this deployment' });
+  }
+  try {
+    const { amount_pence, order_description } = req.body || {};
+    const pence = Math.round(Number(amount_pence));
+    if (!Number.isFinite(pence) || pence < 30) {
+      return res.status(400).json({ error: 'Invalid amount' });
+    }
+    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    const intent = await stripe.paymentIntents.create({
+      amount: pence,
+      currency: 'gbp',
+      automatic_payment_methods: { enabled: true },
+      description: order_description || 'Takeaway order',
+      metadata: { product: 'siamepos_takeaway' },
+    });
+    res.json({ client_secret: intent.client_secret, payment_intent_id: intent.id });
+  } catch (err) {
+    console.error('[takeaway] payment-intent error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // SEPOS-DELIVERY-002 — postcode radius check for the takeaway widget.
@@ -2906,6 +2941,8 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
       order_subtype = 'collection',
       delivery_address,
       delivery_notes,
+      // SEPOS-040 — real Stripe payment. Absent in demo/mock mode.
+      payment_intent_id,
     } = req.body;
 
     if (!customer_name || !customer_name.trim()) return res.status(400).json({ error: 'Name is required' });
@@ -2916,6 +2953,29 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
     const subtype = order_subtype === 'delivery' ? 'delivery' : 'collection';
     if (subtype === 'delivery' && (!delivery_address || !delivery_address.trim())) {
       return res.status(400).json({ error: 'Delivery address is required for delivery orders' });
+    }
+
+    // SEPOS-040 — if a payment_intent_id was submitted, verify with Stripe
+    // before touching the DB. This prevents orders being created for failed
+    // or tampered payments.
+    let paymentStatus = 'mock';
+    let verifiedPaymentIntentId = null;
+    if (payment_intent_id) {
+      if (!process.env.STRIPE_SECRET_KEY) {
+        return res.status(400).json({ error: 'Stripe not configured — cannot verify payment' });
+      }
+      try {
+        const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+        const pi = await stripe.paymentIntents.retrieve(payment_intent_id);
+        if (pi.status !== 'succeeded') {
+          return res.status(402).json({ error: `Payment not completed (${pi.status})` });
+        }
+        paymentStatus = 'paid';
+        verifiedPaymentIntentId = pi.id;
+      } catch (stripeErr) {
+        console.error('[takeaway] Stripe verify error:', stripeErr.message);
+        return res.status(402).json({ error: 'Could not verify payment — please try again.' });
+      }
     }
 
     // Closed-hours check — pickup_time must fall within the restaurant's
@@ -2946,16 +3006,16 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
       `INSERT INTO orders
          (table_id, status, covers, total, opened_at,
           order_type, customer_name, customer_phone, customer_email,
-          pickup_time, takeaway_status, payment_status, discount_reason,
+          pickup_time, takeaway_status, payment_status, payment_intent_id, discount_reason,
           order_subtype, delivery_address, delivery_notes, marketing_consent,
           restaurant_id)
        VALUES (NULL, 'open', 1, $1, NOW(),
                'takeaway', $2, $3, $4,
-               $5, 'pending', 'mock', $6,
-               $7, $8, $9, $10, $11)
+               $5, 'pending', $6, $7, $8,
+               $9, $10, $11, $12, $13)
        RETURNING id`,
       [total, customer_name.trim(), customer_phone.trim(), (customer_email || '').trim() || null,
-       pickup_time, notes || null,
+       pickup_time, paymentStatus, verifiedPaymentIntentId, notes || null,
        subtype,
        subtype === 'delivery' ? delivery_address.trim() : null,
        subtype === 'delivery' ? (delivery_notes || '').trim() || null : null,

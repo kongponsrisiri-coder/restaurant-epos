@@ -20,6 +20,12 @@ const RESTAURANT_NAME    = process.env.RESTAURANT_NAME    || 'SiamEPOS Restauran
 const RESTAURANT_EMAIL   = process.env.RESTAURANT_EMAIL   || 'info@siamepos.co.uk';
 const RESTAURANT_ADDRESS = process.env.RESTAURANT_ADDRESS || '';
 const RESTAURANT_SITE    = process.env.RESTAURANT_SITE    || ''; // optional
+// SEPOS-WALLET-001 — absolute base URL for the .pkpass download link
+// included in the gift email's "Add to Apple Wallet" CTA. Falls back to
+// the company production API so the link is at least clickable; for
+// per-restaurant deployments set PUBLIC_API_URL to that restaurant's
+// own backend host.
+const PUBLIC_API_URL     = (process.env.PUBLIC_API_URL || 'https://api.siamepos.co.uk').replace(/\/$/, '');
 
 // ── Code generation ───────────────────────────────────────────────
 // 8 chars, no I/O/0/1 ambiguity. Prefix GIFT- so codes are scannable
@@ -152,7 +158,16 @@ async function sendVoucherGiftEmail(voucher) {
         </div>
 
         <p style="color:#888;font-size:13px;margin:24px 0 4px">Valid until <strong>${expiry}</strong></p>
-        ${RESTAURANT_SITE ? `<p style="margin:14px 0 0"><a href="${RESTAURANT_SITE}" style="display:inline-block;padding:11px 24px;background:#C9A84C;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;letter-spacing:0.5px">Book a table →</a></p>` : ''}
+
+        <p style="margin:18px 0 0">
+          <a href="${PUBLIC_API_URL}/api/widget/voucher/${encodeURIComponent(code)}/wallet-pass"
+             style="display:inline-block;padding:12px 22px;background:#000000;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:600;font-size:14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.2px">
+            &#127968;&nbsp; Add to Apple Wallet
+          </a>
+        </p>
+        <p style="color:#aaa;font-size:11px;margin:8px 0 0">Open this email on your iPhone to save the voucher to Wallet</p>
+
+        ${RESTAURANT_SITE ? `<p style="margin:18px 0 0"><a href="${RESTAURANT_SITE}" style="display:inline-block;padding:11px 24px;background:#C9A84C;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;letter-spacing:0.5px">Book a table →</a></p>` : ''}
       </div>
 
       <div style="background:#fafaf7;padding:18px 24px;text-align:center;border-top:1px solid #eee;color:#888;font-size:11px">

@@ -3321,6 +3321,42 @@ app.get('/api/widget/voucher/:code', widgetCors, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-WALLET-001 — Apple Wallet pass download. Returns a signed
+// .pkpass for the voucher; the recipient's iPhone (or Mac Safari)
+// recognises the MIME type and offers "Add to Wallet". Open to anyone
+// holding the code — guessing it is computationally infeasible
+// (32^8 ≈ 1.1 × 10^12 combinations).
+const voucherWalletPass = require('./services/voucherWalletPass');
+app.get('/api/widget/voucher/:code/wallet-pass', widgetCors, async (req, res) => {
+  try {
+    if (!voucherWalletPass.isConfigured()) {
+      return res.status(503).json({ error: 'Wallet pass not configured on server' });
+    }
+    const code = String(req.params.code || '').trim().toUpperCase();
+    if (!code) return res.status(400).json({ error: 'code required' });
+
+    const r = await pool.query('SELECT * FROM vouchers WHERE code = $1', [code]);
+    const v = r.rows[0];
+    if (!v) return res.status(404).json({ error: 'Voucher not found' });
+    if (v.status === 'active' && voucherSvc.isExpired(v.expires_at)) {
+      await pool.query("UPDATE vouchers SET status = 'expired' WHERE id = $1", [v.id]);
+      v.status = 'expired';
+    }
+    if (v.status !== 'active') {
+      return res.status(410).json({ error: `Voucher is ${v.status}` });
+    }
+
+    const buf = await voucherWalletPass.buildVoucherPass(v);
+    res.set('Content-Type', 'application/vnd.apple.pkpass');
+    res.set('Content-Disposition', `attachment; filename="${code}.pkpass"`);
+    res.set('Cache-Control', 'private, no-store');
+    res.send(buf);
+  } catch (err) {
+    console.error('[voucher] wallet-pass', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // EPOS — redeem against a bill. Atomic decrement under FOR UPDATE so two
 // terminals can't double-spend the same voucher. Returns the new balance
 // + amount_used so the caller can compose the discount line.

@@ -62,7 +62,13 @@
           ]
         }
       ],
-      "category": "public.app-category.business"
+      "category": "public.app-category.business",
+      "identity": null,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "notarize": false,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist"
     },
     "dmg": {
       "title": "SiamEPOS Setup"

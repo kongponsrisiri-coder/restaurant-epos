@@ -45,10 +45,30 @@ jobs:
           npm install
           npm run rebuild:native
 
+      # ── SEPOS-NOTARIZE-001 — import Developer ID cert (skipped silently
+      # if MAC_CERT_P12_BASE64 secret isn't set; build stays unsigned). ──
+      - name: Import Apple Developer ID certificate
+        if: ${{ secrets.MAC_CERT_P12_BASE64 != '' }}
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          p12-password:    ${{ secrets.MAC_CERT_PASSWORD }}
+
       - name: Build Mac DMG
         run: |
           cd electron
           npm run build:mac
+        env:
+          # Signing — empty when secrets unset; electron-builder skips
+          # signing and produces an unsigned DMG (current behaviour).
+          # When set, signs with Developer ID via the imported cert.
+          CSC_LINK:         ${{ secrets.MAC_CERT_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          # Notarization — electron-builder calls notarytool with these
+          # when all three are set. Without them, notarize step skipped.
+          APPLE_ID:                   ${{ secrets.MAC_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.MAC_APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID:              ${{ secrets.MAC_TEAM_ID }}
 
       - name: Show build output (debug)
         run: ls -la electron/dist-electron

@@ -20,6 +20,12 @@ jobs:
   build-mac:
     runs-on: macos-latest
     timeout-minutes: 30
+    # SEPOS-NOTARIZE-001 — derive a boolean at job level (where the
+    # `secrets` context IS accessible) so the conditional step below
+    # can reference `env.HAS_MAC_CERT`. GitHub doesn't allow secrets
+    # directly inside step-level `if:` for security reasons.
+    env:
+      HAS_MAC_CERT: ${{ secrets.MAC_CERT_P12_BASE64 != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -48,7 +54,7 @@ jobs:
       # ── SEPOS-NOTARIZE-001 — import Developer ID cert (skipped silently
       # if MAC_CERT_P12_BASE64 secret isn't set; build stays unsigned). ──
       - name: Import Apple Developer ID certificate
-        if: ${{ secrets.MAC_CERT_P12_BASE64 != '' }}
+        if: env.HAS_MAC_CERT == 'true'
         uses: apple-actions/import-codesign-certs@v7
         with:
           p12-file-base64: ${{ secrets.MAC_CERT_P12_BASE64 }}

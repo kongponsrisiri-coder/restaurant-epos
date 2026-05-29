@@ -9,6 +9,15 @@ restaurant-local.db-shm
 # Client provisioning secrets — never commit
 scripts/.secrets-*.txt
 
+# Apple Developer ID signing cert + private key — never commit (used for
+# notarization via GitHub Actions secrets, not from the working tree).
+# Files exported from Keychain end up as .p12 with cert + key bundled
+# inside; leaking one means anyone can sign installers AS SiamEPOS.
+*.p12
+*.cer
+*.mobileprovision
+SiamEPOS-DevID/
+
 # Built frontend — Netlify builds from source, no need to track in git
 client/dist/
 

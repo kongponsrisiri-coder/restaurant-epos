@@ -16,6 +16,7 @@ import StaffPerformanceSection from './admin/StaffPerformanceSection';
 import VATReportSection from './admin/VATReportSection';
 import AllergenSection  from './admin/AllergenSection';
 import SettingsSection  from './admin/SettingsSection';
+import PrintersSection  from './admin/PrintersSection';
 import InventorySection from './admin/inventory/InventorySection';
 import ReservationSettingsSection from './admin/ReservationSettingsSection';
 
@@ -38,6 +39,7 @@ export default function AdminScreen({ plan }) {
     { id: 'vat',          label: '🧾 VAT Report' },
     { id: 'inventory',    label: '🥬 Inventory' },
     { id: 'allergens',    label: '🌿 Allergens' },
+    { id: 'printers',     label: '🖨️ Printers' },
     { id: 'settings',     label: '⚙️ Settings' },
     { id: 'reservations', label: '📅 Reservations' },
   ];
@@ -94,6 +96,7 @@ export default function AdminScreen({ plan }) {
             {section === 'vat'          && <VATReportSection />}
             {section === 'inventory'    && <InventorySection />}
             {section === 'allergens'    && <AllergenSection />}
+            {section === 'printers'     && <PrintersSection />}
             {section === 'settings'     && <SettingsSection />}
             {section === 'reservations' && <ReservationSettingsSection />}
           </>

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { getBill, markBillPrinted, getVoucher, redeemVoucher, payOrder, applyDiscount } from '../api';
+import { useState, useEffect, useRef } from 'react';
+import { getBill, markBillPrinted, getVoucher, redeemVoucher, payOrder, applyDiscount, removeVoucherFromBill } from '../api';
 import { printReceipt } from './ReceiptPrinter';
 import { orderShortLabelPlain, orderSubLabel, isTakeaway } from '../utils/orderLabel';
 
@@ -24,6 +24,11 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const [voucherLoading, setVoucherLoading] = useState(false);
   const [voucherDetails, setVoucherDetails] = useState(null); // {code, balance, status, ...}
   const [voucherErr,     setVoucherErr]     = useState('');
+  // SEPOS-VOUCHER-SCAN-001 — camera QR scanner for Apple Wallet passes
+  const [scanning,       setScanning]       = useState(false);
+  const scannerRef = useRef(null);
+  // SEPOS-VOUCHER-REMOVE-001 — remove-voucher button loading state
+  const [removingVoucher, setRemovingVoucher] = useState(false);
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -37,6 +42,60 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     return () => window.removeEventListener('resize', fn);
   }, []);
 
+  // SEPOS-VOUCHER-SCAN-001 — mount the QR scanner when `scanning` flips
+  // true. Dynamic-import keeps html5-qrcode (~250 KB) out of the main
+  // bundle so cashiers who never use Scan don't pay for it. Rear camera
+  // by default; falls back to whatever the device offers if rear isn't
+  // available (older iPads).
+  useEffect(() => {
+    if (!scanning) return;
+    let scanner;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { Html5Qrcode } = await import('html5-qrcode');
+        if (cancelled) return;
+        // Give the React tree one tick to mount #voucher-qr-reader.
+        await new Promise(r => setTimeout(r, 50));
+        if (cancelled) return;
+        scanner = new Html5Qrcode('voucher-qr-reader');
+        scannerRef.current = scanner;
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 240, height: 240 } },
+          async (decoded) => {
+            // Stop immediately so the camera releases before we re-render.
+            try { await scanner.stop(); } catch {}
+            const code = String(decoded || '').trim().toUpperCase();
+            if (!code) return;
+            setVoucherCode(code);
+            setScanning(false);
+            // Auto-lookup so cashier doesn't have to press "Look up" too.
+            setVoucherLoading(true); setVoucherErr(''); setVoucherDetails(null);
+            try {
+              const v = await getVoucher(code);
+              if (v.error)                      setVoucherErr(v.error);
+              else if (v.status !== 'active')   setVoucherErr(`Voucher is ${v.status}`);
+              else if (Number(v.balance) <= 0)  setVoucherErr('Voucher has no balance left');
+              else                              setVoucherDetails(v);
+            } catch (e) { setVoucherErr(e.message || 'Lookup failed'); }
+            finally     { setVoucherLoading(false); }
+          },
+          () => { /* swallow per-frame decode errors */ }
+        );
+      } catch (e) {
+        if (!cancelled) {
+          setVoucherErr(e?.message || 'Camera unavailable — type the code instead');
+          setScanning(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (scanner) { try { scanner.stop().catch(() => {}); } catch {} }
+    };
+  }, [scanning]);
+
   if (loading) return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999 }}>
       <div style={{ color:'white', fontSize:18 }}>Loading bill...</div>
@@ -45,6 +104,8 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   if (!bill || !bill.order) return null;
 
   const { order, settings } = bill;
+  // SEPOS-VOUCHER-REMOVE-001 — flag for showing the "Remove voucher" banner
+  const hasVoucherDiscount = order.status === 'open' && order.discount_reason && order.discount_reason.startsWith('Voucher ');
   const serviceChargePercent = parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5) / 100;
   const serviceChargeEnabled = settings.service_charge_enabled !== '0' && settings.service_charge_enabled !== 'false';
   const billItems = order.items?.filter(i => !i.voided) || [];
@@ -157,6 +218,28 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     finally     { setVoucherLoading(false); }
   };
 
+  // SEPOS-VOUCHER-SCAN-001 — operator pressed cancel on the scanner sheet
+  const handleStopScan = () => {
+    const s = scannerRef.current;
+    if (s) { try { s.stop().catch(() => {}); } catch {} }
+    setScanning(false);
+  };
+
+  // SEPOS-VOUCHER-REMOVE-001 — undo a partial voucher discount on an
+  // open bill. Customer changed their mind and wants to pay the full
+  // amount instead. Restores voucher balance + clears the discount row.
+  const handleRemoveVoucher = async () => {
+    if (!window.confirm('Remove voucher from this bill? Voucher balance will be restored.')) return;
+    setRemovingVoucher(true);
+    try {
+      const r = await removeVoucherFromBill(orderId);
+      if (r.error) { alert('Could not remove: ' + r.error); return; }
+      const fresh = await getBill(orderId);
+      setBill(fresh);
+    } catch (e) { alert(e.message || 'Remove failed'); }
+    finally     { setRemovingVoucher(false); }
+  };
+
   const handleVoucherApply = async () => {
     if (!voucherDetails) return;
     const code      = voucherDetails.code;
@@ -249,6 +332,18 @@ export default function BillScreen({ orderId, onClose, onPay }) {
 
   return (
     <div style={overlay}>
+      {/* SEPOS-VOUCHER-SCAN-001 — camera scanner overlay */}
+      {scanning && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.95)', zIndex:10001, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:20 }}>
+          <div style={{ color:'white', fontSize:18, fontWeight:700, marginBottom:6, textAlign:'center' }}>Scan voucher QR</div>
+          <div style={{ color:'#ccc', fontSize:13, marginBottom:18, textAlign:'center', maxWidth:340 }}>Point the camera at the QR on the customer's Apple Wallet pass</div>
+          <div id="voucher-qr-reader" style={{ width:'min(90vw, 360px)', background:'black', borderRadius:14, overflow:'hidden', border:'2px solid #C9A84C' }} />
+          <button onClick={handleStopScan}
+            style={{ marginTop:22, padding:'14px 28px', borderRadius:10, border:'none', background:'#dc2626', color:'white', fontWeight:700, fontSize:16, cursor:'pointer' }}>
+            ✕ Cancel
+          </button>
+        </div>
+      )}
       <div style={card}>
 
         {/* ═══════════════ BILL ═══════════════ */}
@@ -486,6 +581,18 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 <div style={{ fontSize:42, fontWeight:800, color:'#1a1a2e' }}>£{billTotal.toFixed(2)}</div>
                 {serviceChargeEnabled&&serviceCharge>0 && <div style={{ fontSize:13, color:'#888', marginTop:4 }}>Incl. service charge £{serviceCharge.toFixed(2)}</div>}
               </div>
+              {hasVoucherDiscount && (
+                <div style={{ background:'#fdf6ec', border:'2px solid #C9A84C', borderRadius:12, padding:'12px 16px', marginBottom:16, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:11, color:'#5b4a2a', textTransform:'uppercase', letterSpacing:0.5, fontWeight:700 }}>🎁 Voucher applied</div>
+                    <div style={{ fontSize:14, color:'#5b4a2a', fontFamily:'Menlo,Consolas,monospace', fontWeight:700, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{order.discount_reason}</div>
+                  </div>
+                  <button onClick={handleRemoveVoucher} disabled={removingVoucher}
+                    style={{ padding:'10px 14px', borderRadius:8, border:'1px solid #dc2626', background:'white', color:'#dc2626', fontWeight:700, fontSize:13, cursor:'pointer', whiteSpace:'nowrap', opacity:removingVoucher?0.5:1 }}>
+                    {removingVoucher ? '…' : '✕ Remove'}
+                  </button>
+                </div>
+              )}
               <div style={{ fontSize:16, fontWeight:700, color:'#555', marginBottom:16, textAlign:'center' }}>Select payment method</div>
               <div style={{ display:'flex', flexDirection:'column', gap:12, marginBottom:16 }}>
                 {[{method:'Cash',icon:'💵'},{method:'Card',icon:'💳'},{method:'Other',icon:'🔄'}].map(({method,icon}) => (
@@ -516,11 +623,16 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                     onKeyDown={(e) => { if (e.key === 'Enter') handleVoucherLookup(); }}
                     placeholder="GIFT-XXXXXXXX"
                     style={{ flex: 1, padding: '14px', border: '1px solid #C9A84C', borderRadius: 8, fontFamily: 'Menlo,Consolas,monospace', fontSize: 18, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', background: 'white' }} />
+                  <button onClick={() => { setVoucherErr(''); setScanning(true); }} title="Scan QR from customer's Apple Wallet pass"
+                    style={{ padding: '14px 16px', borderRadius: 8, border: '2px solid #1e3a6e', background: 'white', color: '#1e3a6e', fontWeight: 700, fontSize: 18, cursor: 'pointer' }}>
+                    📷
+                  </button>
                   <button onClick={handleVoucherLookup} disabled={voucherLoading || !voucherCode}
                     style={{ padding: '14px 20px', borderRadius: 8, border: 'none', background: '#1e3a6e', color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: voucherLoading || !voucherCode ? 0.5 : 1 }}>
                     {voucherLoading ? '…' : 'Look up'}
                   </button>
                 </div>
+                <div style={{ fontSize: 11, color: '#888', marginTop: 6, textAlign: 'center' }}>📷 scan customer's Apple Wallet QR, or type the code</div>
               </div>
 
               {voucherErr && (

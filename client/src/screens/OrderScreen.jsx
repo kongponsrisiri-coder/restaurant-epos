@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, SERVER_URL } from '../api';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, SERVER_URL } from '../api';
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
 import DeleteOrderModal from '../components/DeleteOrderModal';
@@ -968,8 +968,21 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                     {order.discount_type === 'percent' ? `${order.discount_value}%` : `£${order.discount_value}`} off — {order.discount_reason}
                   </div>
                   <button onClick={async () => {
-                    if (!window.confirm('Remove discount?')) return;
-                    await applyDiscount(orderId, null, 0, null);
+                    // SEPOS-VOUCHER-REMOVE-001 — if the discount is a voucher
+                    // we must call the voucher-aware endpoint so the balance
+                    // is restored on the voucher itself, not just cleared
+                    // from the bill.
+                    const isVoucher = order?.discount_reason && order.discount_reason.startsWith('Voucher ');
+                    const msg = isVoucher
+                      ? 'Remove voucher? Voucher balance will be restored.'
+                      : 'Remove discount?';
+                    if (!window.confirm(msg)) return;
+                    if (isVoucher) {
+                      const r = await removeVoucherFromBill(orderId);
+                      if (r?.error) { alert('Could not remove: ' + r.error); return; }
+                    } else {
+                      await applyDiscount(orderId, null, 0, null);
+                    }
                     await fetchOrder();
                   }} style={{
                     padding: '8px 12px', borderRadius: 8, border: 'none',

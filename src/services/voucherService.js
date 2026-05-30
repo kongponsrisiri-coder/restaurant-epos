@@ -21,11 +21,14 @@ const RESTAURANT_EMAIL   = process.env.RESTAURANT_EMAIL   || 'info@siamepos.co.u
 const RESTAURANT_ADDRESS = process.env.RESTAURANT_ADDRESS || '';
 const RESTAURANT_SITE    = process.env.RESTAURANT_SITE    || ''; // optional
 // SEPOS-WALLET-001 — absolute base URL for the .pkpass download link
-// included in the gift email's "Add to Apple Wallet" CTA. Falls back to
-// the company production API so the link is at least clickable; for
-// per-restaurant deployments set PUBLIC_API_URL to that restaurant's
-// own backend host.
-const PUBLIC_API_URL     = (process.env.PUBLIC_API_URL || 'https://api.siamepos.co.uk').replace(/\/$/, '');
+// included in the gift email's "Add to Apple Wallet" CTA. Resolution order:
+//   1. options.baseUrl passed in by the caller (req-derived — always correct)
+//   2. PUBLIC_API_URL env var (override for custom domains / CDNs)
+//   3. The main Railway production host (last-resort default)
+// The first option means the email link always points back to whichever
+// backend actually processed the purchase, so the cert that signed the
+// .pkpass is also the cert at the URL — no domain mismatch possible.
+const PUBLIC_API_URL_DEFAULT = (process.env.PUBLIC_API_URL || 'https://restaurant-epos-production.up.railway.app').replace(/\/$/, '');
 
 // ── Code generation ───────────────────────────────────────────────
 // 8 chars, no I/O/0/1 ambiguity. Prefix GIFT- so codes are scannable
@@ -125,8 +128,11 @@ async function verifyPaymentIntent(piId, expectedAmountGbp) {
 // delivery_date if it's in the future (scheduling is handled by the
 // caller; this function just composes + dispatches). Returns the
 // Brevo result; caller is responsible for stamping email_sent_at.
-async function sendVoucherGiftEmail(voucher) {
+async function sendVoucherGiftEmail(voucher, options = {}) {
   if (!voucher.recipient_email) return { skipped: true, reason: 'no recipient' };
+  // SEPOS-WALLET-001 — prefer the caller-derived host so the Add-to-Wallet
+  // link always points back to the same backend that processed the sale.
+  const PUBLIC_API_URL = (options.baseUrl || PUBLIC_API_URL_DEFAULT).replace(/\/$/, '');
   const code      = voucher.code;
   const amount    = Number(voucher.original_amount || 0).toFixed(2);
   const fromName  = voucher.sender_name    || 'A friend';

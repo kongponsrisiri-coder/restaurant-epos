@@ -69,6 +69,8 @@ export const voidItem = (itemId, reason, quantity, void_type) => {
   return put(`/api/order-items/${itemId}/void`, body);
 };
 export const applyDiscount = (orderId, discount_type, discount_value, discount_reason) => put(`/api/orders/${orderId}/discount`, { discount_type, discount_value, discount_reason });
+// SEPOS-VOUCHER-REMOVE-001 — undo a partial voucher redemption while bill is open
+export const removeVoucherFromBill = (orderId) => post(`/api/orders/${orderId}/voucher-remove`, {});
 export const getSettings = () => get('/api/settings');
 export const updateSettings = (settings) => put('/api/settings', settings);
 // SEPOS-LITE-001 — restaurant record incl. subscription plan.

@@ -3278,7 +3278,7 @@ app.post('/api/widget/voucher/confirm', widgetCors, async (req, res) => {
     // now; future dates are also sent immediately for v1 (no scheduler
     // yet — recipient can read it now and use it any time before expiry).
     if (voucher.recipient_email) {
-      voucherSvc.sendVoucherGiftEmail(voucher)
+      voucherSvc.sendVoucherGiftEmail(voucher, { baseUrl: `${req.protocol}://${req.get('host')}` })
         .then(async (r) => {
           if (r && r.ok) {
             await pool.query('UPDATE vouchers SET email_sent_at = NOW() WHERE id = $1', [voucher.id]);
@@ -3408,6 +3408,67 @@ app.post('/api/vouchers/:code/redeem', async (req, res) => {
   }
 });
 
+// SEPOS-VOUCHER-REMOVE-001 — undo a partial voucher redemption while the
+// bill is still open. Restores voucher balance + clears the discount row
+// on the order. Refuses to act on closed bills (those need a proper
+// refund/reverse flow which v1 leaves to admin).
+app.post('/api/orders/:id/voucher-remove', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const orderId = req.params.id;
+
+    // Bill must still be open — undoing a closed bill needs a different
+    // flow (refund payment + reopen) so we punt that to admin.
+    const ord = await client.query('SELECT id, status, discount_reason FROM orders WHERE id = $1 FOR UPDATE', [orderId]);
+    const order = ord.rows[0];
+    if (!order)             { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Order not found' }); }
+    if (order.status !== 'open') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Bill is already closed — use refund flow' }); }
+
+    // Find the most recent voucher redemption for this bill.
+    const r = await client.query(
+      `SELECT vr.id, vr.voucher_id, vr.amount_used, v.code, v.status AS voucher_status
+       FROM voucher_redemptions vr
+       JOIN vouchers v ON v.id = vr.voucher_id
+       WHERE vr.bill_id = $1
+       ORDER BY vr.used_at DESC LIMIT 1`,
+      [orderId]
+    );
+    const vr = r.rows[0];
+    if (!vr) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'No voucher on this bill' }); }
+
+    // Restore voucher balance + bring it back from depleted if needed.
+    await client.query(
+      `UPDATE vouchers
+         SET balance = balance + $1,
+             status  = CASE WHEN status = 'depleted' THEN 'active' ELSE status END
+       WHERE id = $2`,
+      [vr.amount_used, vr.voucher_id]
+    );
+
+    // Drop the redemption row.
+    await client.query('DELETE FROM voucher_redemptions WHERE id = $1', [vr.id]);
+
+    // Clear the discount on the order — but only if it's THIS voucher's
+    // discount (defends against a stray non-voucher discount being wiped).
+    if (order.discount_reason && order.discount_reason.startsWith(`Voucher ${vr.code}`)) {
+      await client.query(
+        `UPDATE orders SET discount_type = NULL, discount_value = NULL, discount_reason = NULL WHERE id = $1`,
+        [orderId]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true, restored: Number(vr.amount_used), voucher_code: vr.code });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[voucher] remove', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // Admin — list (auto-expires any active+past while reading)
 app.get('/api/vouchers', async (req, res) => {
   try {
@@ -3501,7 +3562,7 @@ app.post('/api/vouchers/sell', async (req, res) => {
     );
     const voucher = result.rows[0];
     if (voucher.recipient_email) {
-      voucherSvc.sendVoucherGiftEmail(voucher)
+      voucherSvc.sendVoucherGiftEmail(voucher, { baseUrl: `${req.protocol}://${req.get('host')}` })
         .then(async (r) => {
           if (r && r.ok) await pool.query('UPDATE vouchers SET email_sent_at = NOW() WHERE id = $1', [voucher.id]);
         })
@@ -3523,7 +3584,7 @@ app.post('/api/vouchers/:id/resend-email', async (req, res) => {
     const v = r.rows[0];
     if (!v) return res.status(404).json({ error: 'not found' });
     if (!v.recipient_email) return res.status(400).json({ error: 'no recipient email on file' });
-    const out = await voucherSvc.sendVoucherGiftEmail(v);
+    const out = await voucherSvc.sendVoucherGiftEmail(v, { baseUrl: `${req.protocol}://${req.get('host')}` });
     if (out.ok) await pool.query('UPDATE vouchers SET email_sent_at = NOW() WHERE id = $1', [v.id]);
     res.json(out);
   } catch (err) { res.status(500).json({ error: err.message }); }

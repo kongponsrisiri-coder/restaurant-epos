@@ -31,7 +31,24 @@ const CMD = {
   // strings like '£40.95' as garbage (was showing as 'Тú40.95' on the
   // cnfujun POS80). With CP858 active, txt() pre-maps £ → byte 0x9C and
   // the printer renders a proper £.
-  INIT:         Buffer.from([ESC, 0x40, ESC, 0x74, 0x13]),
+  //
+  // Extra cancellations after the reset because cnfujun POS80 sometimes
+  // boots with sticky state (user-defined characters from a prior session,
+  // italic/double-strike modes) that ESC @ doesn't always clear. Without
+  // these, kitchen tickets printed in a stylised italic font that's hard
+  // to read ("Summer Rolls" rendered as "Summer Ro11s" — confusable l/1).
+  //   ESC % 0 — cancel user-defined character set (back to internal ROM)
+  //   ESC ! 0 — cancel all print modes (bold, double-height, italic …)
+  //   ESC M 0 — select Font A (12×24 dot, the readable monospace one)
+  //   ESC G 0 — cancel double-strike (some firmwares default it ON)
+  INIT:         Buffer.from([
+    ESC, 0x40,         // reset
+    ESC, 0x74, 0x13,   // CP858 codepage
+    ESC, 0x25, 0x00,   // ESC % 0 — disable user-defined characters
+    ESC, 0x21, 0x00,   // ESC ! 0 — cancel print modes
+    ESC, 0x4D, 0x00,   // ESC M 0 — Font A
+    ESC, 0x47, 0x00,   // ESC G 0 — cancel double-strike
+  ]),
   ALIGN_LEFT:   Buffer.from([ESC, 0x61, 0x00]),
   ALIGN_CENTER: Buffer.from([ESC, 0x61, 0x01]),
   ALIGN_RIGHT:  Buffer.from([ESC, 0x61, 0x02]),

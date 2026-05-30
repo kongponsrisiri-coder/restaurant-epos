@@ -4805,6 +4805,35 @@ app.post('/api/print/test', async (req, res) => {
   }
 });
 
+// SEPOS-PRINT-HEALTH-001 — TCP reachability + latency probe.
+// Opens a connect-only socket to ip:port with a 2.5s timeout, measures
+// time-to-connect, closes immediately. Used by Settings → Network
+// Printers to surface "🟢 12ms / 🟡 350ms / 🔴 offline" badges so the
+// operator can see signal health BEFORE they fire a print and wait 30s
+// for a stuck job. Doesn't send any ESC/POS bytes, so safe to spam.
+app.get('/api/print/health', (req, res) => {
+  const ip   = String(req.query.ip || '').trim();
+  const port = parseInt(req.query.port || '9100', 10) || 9100;
+  if (!ip) return res.status(400).json({ error: 'ip required' });
+
+  const net = require('net');
+  const TIMEOUT_MS = 2500;
+  const start = Date.now();
+  const sock  = new net.Socket();
+  let done = false;
+  const finish = (payload) => {
+    if (done) return; done = true;
+    try { sock.destroy(); } catch {}
+    res.json(payload);
+  };
+
+  sock.setTimeout(TIMEOUT_MS);
+  sock.once('connect', () => finish({ ok: true,  latency_ms: Date.now() - start }));
+  sock.once('timeout', () => finish({ ok: false, error: 'timeout', latency_ms: TIMEOUT_MS }));
+  sock.once('error',   (err) => finish({ ok: false, error: err.code || err.message || 'error', latency_ms: Date.now() - start }));
+  sock.connect(port, ip);
+});
+
 // Auto-detect the macOS CUPS queue name for a given printer IP.
 // Used by Settings → Network Printers to pre-fill the CUPS name field
 // after the operator types the IP, so they never have to look up the

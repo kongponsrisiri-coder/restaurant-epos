@@ -476,6 +476,77 @@ function _sendTcp(ip, port, buf, timeoutMs = 6000) {
   });
 }
 
+// LPR / LPD (RFC 1179) — port 515.
+//
+// Older USB print servers (WAVLINK, TP-Link TL-PS110U, many no-brand
+// units) only expose port 515 because the LPR/LPD spec predates the
+// RAW 9100 convention by ~15 years. Same idea but with a tiny ack-based
+// handshake: client says "receive job", server acks 0x00; client says
+// "receive control file (size N, name cf...)", sends body + terminator,
+// server acks; same for the data file ("df..."), then close.
+//
+// Default queue name is 'lp' — the de facto LPR default. WAVLINK USB
+// print servers typically accept 'lp' OR 'p1'. If 'lp' is wrong on a
+// given device, set `printer_*_lpr_queue` in settings.
+function _sendLpr(ip, port, buf, queueName = 'lp', timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    const sock = new net.Socket();
+    let stage = 0;
+    let settled = false;
+    const done = (err) => {
+      if (settled) return;
+      settled = true;
+      sock.destroy();
+      setTimeout(() => err ? reject(err) : resolve(), 1500);
+    };
+
+    const host = 'siamepos';
+    const user = 'siamepos';
+    const job  = 'SiamEPOS print';
+    const stamp = String(Date.now()).slice(-3);
+    const dfn  = `dfA${stamp}${host}`;
+    const cfn  = `cfA${stamp}${host}`;
+    // Control file — RFC 1179 §7.2. Order matters on some firmwares.
+    //   H = host name           P = user name           J = job name
+    //   l = print data file     U = unlink after print  N = source name
+    const ctrl = `H${host}\nP${user}\nJ${job}\nl${dfn}\nU${dfn}\nN${dfn}\n`;
+
+    sock.setTimeout(timeoutMs);
+    sock.on('error',   (e) => done(e));
+    sock.on('timeout', ()  => done(new Error(`LPR timeout to ${ip}:${port}`)));
+
+    sock.connect(parseInt(port, 10) || 515, ip, () => {
+      // Stage 0 → 1: 0x02 <queueName> \n  — "receive job for this queue"
+      sock.write(Buffer.concat([Buffer.from([0x02]), Buffer.from(`${queueName}\n`)]));
+    });
+
+    sock.on('data', (chunk) => {
+      for (const byte of chunk) {
+        if (byte !== 0x00) {
+          return done(new Error(`LPR rejected at stage ${stage} (byte 0x${byte.toString(16).padStart(2, '0')}) — queue '${queueName}' may be wrong`));
+        }
+        stage += 1;
+        if (stage === 1) {
+          // Stage 1 → 2: 0x02 <ctrl-len> <space> <cfname> \n
+          sock.write(Buffer.concat([Buffer.from([0x02]), Buffer.from(`${ctrl.length} ${cfn}\n`)]));
+        } else if (stage === 2) {
+          // Stage 2 → 3: control file body + 0x00 terminator
+          sock.write(Buffer.concat([Buffer.from(ctrl), Buffer.from([0x00])]));
+        } else if (stage === 3) {
+          // Stage 3 → 4: 0x03 <data-len> <space> <dfname> \n
+          sock.write(Buffer.concat([Buffer.from([0x03]), Buffer.from(`${buf.length} ${dfn}\n`)]));
+        } else if (stage === 4) {
+          // Stage 4 → 5: data body + 0x00 terminator
+          sock.write(Buffer.concat([buf, Buffer.from([0x00])]));
+        } else if (stage === 5) {
+          // All five acks received — print job accepted by server.
+          done(null);
+        }
+      }
+    });
+  });
+}
+
 // Auto-discovery: shell out to `lpstat -v` and find the macOS print
 // queue whose device URI matches the printer's IP. Means operators
 // never have to type the queue name (which macOS auto-generates from
@@ -532,6 +603,7 @@ async function _sendCups(printerName, buf) {
 
 function sendRaw(ip, port, buf, options = {}) {
   const explicitName = (options.printerName || '').trim();
+  const lprQueue     = (options.lprQueue    || 'lp').trim();
   const hasTcp  = !!ip;
 
   if (!hasTcp && !explicitName) {
@@ -540,16 +612,25 @@ function sendRaw(ip, port, buf, options = {}) {
 
   const job = async () => {
     if (hasTcp) {
+      // 1) RAW 9100 — fast path, works for most modern printers.
       try { return await _sendTcp(ip, port, buf); }
-      catch (err) {
-        // TCP failed — try CUPS. If the operator didn't configure a
-        // queue name, auto-detect from `lpstat -v` (cached per IP).
-        const queueName = await getOrAutoDetectCupsQueue(ip, explicitName);
-        if (queueName) {
-          console.warn(`[print] TCP ${ip}:${port} failed (${err.message}) — falling back to CUPS '${queueName}'`);
-          return _sendCups(queueName, buf);
+      catch (rawErr) {
+        // 2) LPR 515 — older WAVLINK / TP-Link / no-brand USB print
+        //    servers only expose this. Same data, structured handshake.
+        try {
+          console.warn(`[print] RAW ${ip}:${port} failed (${rawErr.message}) — trying LPR on 515 (queue '${lprQueue}')`);
+          return await _sendLpr(ip, 515, buf, lprQueue);
+        } catch (lprErr) {
+          // 3) CUPS — last resort, requires the printer to be installed
+          //    in the local print queue. Only works when the backend is
+          //    running on the Mac (Electron mode), not on Railway cloud.
+          const queueName = await getOrAutoDetectCupsQueue(ip, explicitName);
+          if (queueName) {
+            console.warn(`[print] LPR ${ip}:515 also failed (${lprErr.message}) — falling back to CUPS '${queueName}'`);
+            return _sendCups(queueName, buf);
+          }
+          throw new Error(`All print methods failed for ${ip}. RAW: ${rawErr.message}. LPR: ${lprErr.message}. No CUPS queue found.`);
         }
-        throw new Error(`TCP failed and no CUPS queue found for ${ip}: ${err.message}`);
       }
     }
     return _sendCups(explicitName, buf);
@@ -569,14 +650,16 @@ async function printReceipt(settings, order, items, paymentDetails) {
   const ip   = settings.printer_receipt_ip;
   const port = settings.printer_receipt_port || 9100;
   const printerName = settings.printer_receipt_name || '';
+  const lprQueue    = settings.printer_receipt_lpr_queue || 'lp';
   if (!ip && !printerName) throw new Error('NO_IP');
-  await sendRaw(ip, port, buildReceipt({ order, items, settings, paymentDetails }), { printerName });
+  await sendRaw(ip, port, buildReceipt({ order, items, settings, paymentDetails }), { printerName, lprQueue });
 }
 
 async function printFireNotice(settings, order, course) {
   const ip       = settings.printer_kitchen_ip;
   const port     = settings.printer_kitchen_port || 9100;
   const printerName = settings.printer_kitchen_name || '';
+  const lprQueue    = settings.printer_kitchen_lpr_queue || 'lp';
   const copies   = Math.max(1, Math.min(5, parseInt(settings.printer_kitchen_copies || 1, 10) || 1));
   // Opt-in: bilingual Thai labels only print if the operator explicitly
   // sets kitchen_language='en_th' AND has a Thai-capable printer. Default
@@ -585,13 +668,14 @@ async function printFireNotice(settings, order, course) {
   const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
   const buf = buildFireNotice({ order, course, bilingual });
-  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName });
+  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName, lprQueue });
 }
 
 async function printKitchenTicket(settings, order, items, course) {
   const ip       = settings.printer_kitchen_ip;
   const port     = settings.printer_kitchen_port || 9100;
   const printerName = settings.printer_kitchen_name || '';
+  const lprQueue    = settings.printer_kitchen_lpr_queue || 'lp';
   const copies   = Math.max(1, Math.min(5, parseInt(settings.printer_kitchen_copies || 1, 10) || 1));
   // Opt-in: bilingual Thai labels only print if the operator explicitly
   // sets kitchen_language='en_th' AND has a Thai-capable printer. Default
@@ -600,13 +684,14 @@ async function printKitchenTicket(settings, order, items, course) {
   const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
   const buf = buildKitchenTicket({ order, items, course, bilingual });
-  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName });
+  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName, lprQueue });
 }
 
 async function printFullKitchenTicket(settings, order, items) {
   const ip       = settings.printer_kitchen_ip;
   const port     = settings.printer_kitchen_port || 9100;
   const printerName = settings.printer_kitchen_name || '';
+  const lprQueue    = settings.printer_kitchen_lpr_queue || 'lp';
   const copies   = Math.max(1, Math.min(5, parseInt(settings.printer_kitchen_copies || 1, 10) || 1));
   // Opt-in: bilingual Thai labels only print if the operator explicitly
   // sets kitchen_language='en_th' AND has a Thai-capable printer. Default
@@ -615,20 +700,21 @@ async function printFullKitchenTicket(settings, order, items) {
   const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
   const buf = buildFullKitchenTicket({ order, items, bilingual });
-  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName });
+  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName, lprQueue });
 }
 
 async function printBarTicket(settings, order, items) {
   const ip       = settings.printer_bar_ip;
   const port     = settings.printer_bar_port || 9100;
   const printerName = settings.printer_bar_name || '';
+  const lprQueue    = settings.printer_bar_lpr_queue || 'lp';
   // Opt-in: bilingual Thai labels only print if the operator explicitly
   // sets kitchen_language='en_th' AND has a Thai-capable printer. Default
   // is English-only, since most UK thermal printers can't render Thai
   // glyphs and the bilingual line just renders as garbage.
   const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
-  await sendRaw(ip, port, buildKitchenTicket({ order, items, course: 4, bilingual }), { printerName });
+  await sendRaw(ip, port, buildKitchenTicket({ order, items, course: 4, bilingual }), { printerName, lprQueue });
 }
 
 // testPrint accepts an optional printer_name so the admin Test button can

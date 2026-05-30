@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
-import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, testNetworkPrinter, cupsQueueForIp } from '../../api';
+import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, testNetworkPrinter, cupsQueueForIp, printerHealth } from '../../api';
 import DiningDurationSettings from './DiningDurationSettings';
 
 // Network setup panel — shows the desktop's LAN URL + a scannable QR so
@@ -158,8 +158,50 @@ function BarCategoryManager() {
 // devices know where to print.
 function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
   const [testStates, setTestStates] = useState({});  // { receipt|kitchen|bar: idle|testing|ok|fail }
+  // SEPOS-PRINT-HEALTH-001 — per-printer reachability cache. Auto-checks
+  // on settings load + on manual refresh, so the operator sees online /
+  // slow / offline status BEFORE firing a test print.
+  // shape: { receipt: { status: 'checking'|'online'|'slow'|'offline', latency_ms, error } }
+  const [healthStates, setHealthStates] = useState({});
+  const setHealth = (key, payload) => setHealthStates(prev => ({ ...prev, [key]: payload }));
 
   const setTest = (key, state) => setTestStates(prev => ({ ...prev, [key]: state }));
+
+  // SEPOS-PRINT-HEALTH-001 — TCP probe (no ESC/POS bytes sent).
+  // Thresholds: <100 ms green, 100-800 ms amber, 800+ ms or no
+  // response = red. 800 ms is the "you'll wait so long for a job
+  // that operators will assume it's broken" empirical cutoff.
+  const checkHealth = async (key, ipKey, portKey) => {
+    const ip   = settings[ipKey];
+    const port = settings[portKey] || 9100;
+    if (!ip) { setHealth(key, null); return; }
+    setHealth(key, { status: 'checking' });
+    try {
+      const r = await printerHealth(ip, port);
+      if (!r || r.ok !== true) {
+        setHealth(key, { status: 'offline', latency_ms: r?.latency_ms, error: r?.error });
+      } else if (r.latency_ms < 100) {
+        setHealth(key, { status: 'online', latency_ms: r.latency_ms });
+      } else if (r.latency_ms < 800) {
+        setHealth(key, { status: 'slow', latency_ms: r.latency_ms });
+      } else {
+        setHealth(key, { status: 'offline', latency_ms: r.latency_ms, error: 'very slow' });
+      }
+    } catch (e) {
+      setHealth(key, { status: 'offline', error: e?.message || 'error' });
+    }
+  };
+
+  // Auto-check all configured printers once settings have loaded.
+  useEffect(() => {
+    if (!settings || Object.keys(settings).length === 0) return;
+    [['receipt', 'printer_receipt_ip', 'printer_receipt_port'],
+     ['kitchen', 'printer_kitchen_ip', 'printer_kitchen_port'],
+     ['bar',     'printer_bar_ip',     'printer_bar_port']].forEach(([k, ipK, portK]) => {
+      if (settings[ipK]) checkHealth(k, ipK, portK);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.printer_receipt_ip, settings.printer_kitchen_ip, settings.printer_bar_ip]);
 
   const testPrinter = async (key, ipKey, portKey, nameKey) => {
     const ip   = settings[ipKey];
@@ -186,9 +228,32 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
     const testBg = state === 'ok' ? '#22c55e' : state === 'fail' ? '#ef4444' : '#f0f0f0';
     const testColor = state === 'ok' || state === 'fail' ? 'white' : '#555';
 
+    // SEPOS-PRINT-HEALTH-001 — health badge next to the printer label.
+    const h = healthStates[testKey];
+    const badge = (() => {
+      if (!settings[ipKey]) return null;
+      if (!h)                    return { color:'#888', bg:'#f0f0f0', text:'…' };
+      if (h.status === 'checking') return { color:'#888', bg:'#f0f0f0', text:'Checking…' };
+      if (h.status === 'online')   return { color:'#15803d', bg:'#dcfce7', text:`🟢 Online (${h.latency_ms} ms)` };
+      if (h.status === 'slow')     return { color:'#92400e', bg:'#fef3c7', text:`🟡 Slow (${h.latency_ms} ms)` };
+      return { color:'#991b1b', bg:'#fee2e2', text:`🔴 Offline${h.error ? ' — ' + h.error : ''}` };
+    })();
+
     return (
       <div style={{ marginBottom:20 }}>
-        <label style={{ fontSize:14, fontWeight:600, color:'#555', display:'block', marginBottom:8 }}>{label}</label>
+        <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:8 }}>
+          <label style={{ fontSize:14, fontWeight:600, color:'#555' }}>{label}</label>
+          {badge && (
+            <>
+              <span style={{ fontSize:12, fontWeight:700, color:badge.color, background:badge.bg, padding:'4px 10px', borderRadius:12 }}>{badge.text}</span>
+              <button onClick={() => checkHealth(testKey, ipKey, portKey)}
+                title="Re-check printer reachability"
+                style={{ padding:'4px 8px', borderRadius:6, border:'1px solid #ddd', background:'white', cursor:'pointer', fontSize:12 }}>
+                ↻
+              </button>
+            </>
+          )}
+        </div>
         <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
           <div>
             <div style={{ fontSize:11, color:'#aaa', marginBottom:4 }}>IP Address</div>

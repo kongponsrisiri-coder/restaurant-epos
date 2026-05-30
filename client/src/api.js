@@ -79,6 +79,8 @@ export const getRestaurant = () => get('/api/restaurant');
 // SEPOS-025/026 — Network printing (server-side ESC/POS to TCP port 9100)
 export const testNetworkPrinter   = (ip, port, printer_name) => post('/api/print/test',    { ip, port, printer_name });
 export const cupsQueueForIp       = (ip) => get(`/api/print/cups-queue-for-ip?ip=${encodeURIComponent(ip)}`);
+// SEPOS-PRINT-HEALTH-001 — TCP reachability check, returns { ok, latency_ms, error? }
+export const printerHealth        = (ip, port) => get(`/api/print/health?ip=${encodeURIComponent(ip)}&port=${port || 9100}`);
 export const serverPrintReceipt   = (order_id, payment_details) => post('/api/print/receipt', { order_id, payment_details });
 export const serverPrintKitchen   = (order_id, items, course)   => post('/api/print/kitchen', { order_id, items, course });
 export const serverPrintBar           = (order_id, items)         => post('/api/print/bar',          { order_id, items });

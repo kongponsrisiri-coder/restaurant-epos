@@ -640,6 +640,7 @@ async function upsertClosedOrders(orders, order_items, payments) {
     return f;
   };
 
+  let skipped = 0;
   for (const cloudOrder of orders) {
     const cloudId = cloudOrder.id;
     if (!cloudId) continue;
@@ -648,14 +649,16 @@ async function upsertClosedOrders(orders, order_items, payments) {
     const fields = pickFields(cloudOrder, orderCols, { cloud_id: cloudId });
 
     if (localId) {
-      const setCols = Object.keys(fields).filter(k => k !== 'cloud_id');
-      if (setCols.length > 0) {
-        const sets = setCols.map((c, i) => `${c} = $${i + 1}`).join(',');
-        await pool.query(
-          `UPDATE orders SET ${sets} WHERE id = $${setCols.length + 1}`,
-          [...setCols.map(c => fields[c]), localId]
-        );
-      }
+      // SEPOS-LOCAL-001 Phase 2 — Mac is the source of truth. If we
+      // already have this cloud_id locally, the order was either created
+      // here (and we pushed it up) or pulled in an earlier tick. Either
+      // way the local row is authoritative — skip the UPDATE rather
+      // than clobber local state with Railway's (possibly stale) echo
+      // of our own data. Saves CPU + DB writes on every 5s sync tick.
+      // If we ever need cloud-edits-to-closed-bills, gate this skip on
+      // a cloud updated_at being newer than local updated_at.
+      skipped++;
+      continue;
     } else {
       const cols = Object.keys(fields);
       const ph = cols.map((_, i) => `$${i + 1}`).join(',');
@@ -689,6 +692,7 @@ async function upsertClosedOrders(orders, order_items, payments) {
       } catch (err) { console.warn('[sync] closed-order payment insert failed:', err.message); }
     }
   }
+  if (skipped > 0) console.log(`[sync] closed-orders: ${skipped} skipped (already local — Phase 2)`);
 }
 
 async function pullClosedOrders() {

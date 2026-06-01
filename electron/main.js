@@ -711,6 +711,25 @@ app.whenReady().then(async () => {
   startStatusPoll();
   if (app.isPackaged) setupAutoUpdater();
 
+  // SEPOS-LOCAL-001 Phase 6 — Cloudflare Tunnel for owner remote access.
+  // If the install's config.json specifies `cloudflare_tunnel_credentials_path`
+  // we spawn `cloudflared` against those creds so the owner can reach
+  // `remote.{slug}.siamepos.co.uk` from anywhere. Skipped if no creds.
+  if (config.cloudflare_tunnel_credentials_path) {
+    try {
+      const tunnelService = require('./tunnelService');
+      tunnelService.start({
+        userDataDir:     app.getPath('userData'),
+        credentialsPath: config.cloudflare_tunnel_credentials_path,
+        remoteUrl:       config.cloudflare_tunnel_url || '',
+      }).then(r => {
+        if (r?.skipped) console.log('[tunnel] skipped —', r.reason);
+        else if (r?.ok) console.log('[tunnel] started');
+        else            console.warn('[tunnel] failed:', r?.error);
+      });
+    } catch (err) { console.warn('[tunnel] init failed:', err.message); }
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -719,6 +738,8 @@ app.whenReady().then(async () => {
 app.on('before-quit', () => {
   stopStatusPoll();
   stopLocalServer();
+  // SEPOS-LOCAL-001 P6 — stop tunnel cleanly so cloudflared doesn't leak.
+  try { require('./tunnelService').stop(); } catch {}
 });
 
 // Don't quit on window-close — keep alive in tray (user quits via tray menu).

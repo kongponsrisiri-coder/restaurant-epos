@@ -86,6 +86,13 @@ export const printerHealth        = (ip, port) => get(`/api/print/health?ip=${en
 export const getArchiveStatus     = () => get('/api/local/archive-status');
 export const openArchiveFolder    = () => post('/api/local/archive-open-folder', {});
 export const runArchive           = (date, force = false) => post('/api/local/archive-run', { date, force });
+
+// SEPOS-LOCAL-001 P3/P5 — migration status + combined storage stats
+export const getMigrationStatus   = () => get('/api/local/migration-status');
+export const getStorageStats      = () => get('/api/local/storage-stats');
+
+// SEPOS-LOCAL-001 P6 — Cloudflare Tunnel status (returns {enabled, status, remote_url})
+export const getTunnelStatus      = () => get('/api/local/tunnel-status');
 export const serverPrintReceipt   = (order_id, payment_details) => post('/api/print/receipt', { order_id, payment_details });
 export const serverPrintKitchen   = (order_id, items, course)   => post('/api/print/kitchen', { order_id, items, course });
 export const serverPrintBar           = (order_id, items)         => post('/api/print/bar',          { order_id, items });

@@ -1,7 +1,169 @@
 import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
-import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, getArchiveStatus, openArchiveFolder, runArchive } from '../../api';
+import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, getArchiveStatus, openArchiveFolder, runArchive, getMigrationStatus, getStorageStats, getTunnelStatus } from '../../api';
 import DiningDurationSettings from './DiningDurationSettings';
+
+// ── SEPOS-LOCAL-001 Phase 3 — first-boot migration banner ───────────
+// Polls /api/local/migration-status; renders a fixed gold banner across
+// the top of Settings while imported < target, and a green "✓ done"
+// confirmation for ~10s once finished.
+function MigrationBanner() {
+  const [state, setState] = useState(null);
+  const [hideDone, setHideDone] = useState(false);
+  useEffect(() => {
+    let stopped = false;
+    const tick = async () => {
+      try { const s = await getMigrationStatus(); if (!stopped) setState(s); } catch {}
+    };
+    tick();
+    const iv = setInterval(tick, 2000);
+    return () => { stopped = true; clearInterval(iv); };
+  }, []);
+  if (!state) return null;
+  if (state.skipped) return null;
+  if (state.status === 'idle') return null;
+  if (state.status === 'done' && hideDone) return null;
+
+  const isRunning = state.running || state.status === 'running' || state.status === 'archiving';
+  const bg = state.status === 'error' ? '#fee2e2' : state.status === 'done' ? '#dcfce7' : '#fef3c7';
+  const fg = state.status === 'error' ? '#991b1b' : state.status === 'done' ? '#15803d' : '#92400e';
+  return (
+    <div style={{ background:bg, color:fg, padding:'12px 18px', borderRadius:10, marginBottom:16, display:'flex', alignItems:'center', justifyContent:'space-between', gap:14, flexWrap:'wrap' }}>
+      <div style={{ flex:1, minWidth:200 }}>
+        <strong style={{ fontSize:13 }}>
+          {state.status === 'running'   && `🔄 Importing your history from the cloud… ${state.imported} records done`}
+          {state.status === 'archiving' && `📂 Generating HMRC archive for ${state.archived_months || ''} month${state.archived_months === 1 ? '' : 's'}…`}
+          {state.status === 'done'      && `✓ History imported (${state.imported} records). Archive complete.`}
+          {state.status === 'error'     && `⚠ Migration error: ${state.error || 'unknown'}`}
+        </strong>
+        <div style={{ fontSize:11, marginTop:3, opacity:0.85 }}>
+          {isRunning && 'You can keep using SiamEPOS while this runs. Operations are unaffected.'}
+          {state.status === 'done'  && 'Your Mac now holds the full history. Future syncs are incremental.'}
+          {state.status === 'error' && 'Migration will retry on next restart. Cloud data is unchanged.'}
+        </div>
+      </div>
+      {state.status === 'done' && (
+        <button onClick={() => setHideDone(true)}
+          style={{ padding:'7px 13px', borderRadius:7, border:'1px solid #15803d', background:'white', color:'#15803d', fontWeight:700, fontSize:12, cursor:'pointer' }}>
+          Dismiss
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── SEPOS-LOCAL-001 Phase 5 — Data Storage card ─────────────────────
+// Side-by-side counts (local vs cloud) so the operator can verify their
+// Mac actually holds the records, plus a mode badge that shows whether
+// this restaurant is on device-first (Mac is authoritative + Railway
+// trimmed to 30 days) or cloud-first (legacy).
+function DataStorageCard({ cardStyle }) {
+  const [stats, setStats] = useState(null);
+  useEffect(() => {
+    let stopped = false;
+    const tick = async () => { try { const s = await getStorageStats(); if (!stopped) setStats(s); } catch {} };
+    tick();
+    const iv = setInterval(tick, 30000);
+    return () => { stopped = true; clearInterval(iv); };
+  }, []);
+  if (!stats) {
+    return (
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:8 }}>📊 Data Storage</h2>
+        <p style={{ fontSize:13, color:'#888' }}>Loading…</p>
+      </div>
+    );
+  }
+  const modeLabel = stats.local_install && stats.device_first_mode ? 'Device-first'
+                  : stats.local_install                            ? 'Device-first (Mac storage active)'
+                  : stats.device_first_mode                        ? 'Cloud (30-day relay)'
+                  :                                                  'Cloud-first (legacy)';
+  const modeColor = stats.local_install || stats.device_first_mode ? '#15803d' : '#92400e';
+  const row = (label, l, c) => (
+    <div key={label} style={{ display:'grid', gridTemplateColumns:'1.2fr 1fr 1fr', alignItems:'center', padding:'8px 12px', borderBottom:'1px solid #f0f0f0', fontSize:13 }}>
+      <span style={{ color:'#555' }}>{label}</span>
+      <span style={{ color:'#1a1a2e', fontFamily:'Menlo,Consolas,monospace', textAlign:'right' }}>{l ?? '—'}</span>
+      <span style={{ color:'#888',     fontFamily:'Menlo,Consolas,monospace', textAlign:'right' }}>{c ?? '—'}</span>
+    </div>
+  );
+  return (
+    <div style={cardStyle}>
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>📊 Data Storage</h2>
+        <span style={{ fontSize:11, fontWeight:700, color:modeColor, background:modeColor === '#15803d' ? '#dcfce7' : '#fef3c7', padding:'3px 9px', borderRadius:12 }}>
+          {modeLabel}
+        </span>
+      </div>
+      <p style={{ fontSize:13, color:'#888', marginBottom:14, lineHeight:1.5 }}>
+        Record counts on your Mac vs the Railway cloud relay. Side-by-side helps verify your history is genuinely stored locally.
+      </p>
+      <div style={{ background:'white', border:'1px solid #f0f0f0', borderRadius:8, marginBottom:8 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1fr 1fr', padding:'8px 12px', borderBottom:'1px solid #e7e3da', fontSize:11, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:0.5 }}>
+          <span>Type</span>
+          <span style={{ textAlign:'right' }}>This Mac</span>
+          <span style={{ textAlign:'right' }}>Cloud (30d)</span>
+        </div>
+        {row('Closed orders',  stats.local?.closed_orders, stats.cloud?.closed_orders)}
+        {row('Open orders',    stats.local?.open_orders,   stats.cloud?.open_orders)}
+        {row('Payments',       stats.local?.payments,      stats.cloud?.payments)}
+        {row('Vouchers',       stats.local?.vouchers,      stats.cloud?.vouchers)}
+        {row('Reservations',   stats.local?.reservations,  stats.cloud?.reservations)}
+      </div>
+      {!stats.local_install && (
+        <div style={{ background:'#f0f9ff', border:'1px solid #bae6fd', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#0369a1' }}>
+          💡 You're viewing this in a browser. The "This Mac" column is empty because the local SQLite copy only exists inside the SiamEPOS desktop app on the restaurant's till machine.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── SEPOS-LOCAL-001 Phase 6 — Remote Access (Cloudflare Tunnel) ─────
+function RemoteAccessCard({ cardStyle }) {
+  const [info, setInfo] = useState(null);
+  useEffect(() => {
+    let stopped = false;
+    const tick = async () => { try { const s = await getTunnelStatus(); if (!stopped) setInfo(s); } catch { if (!stopped) setInfo({ error: true }); } };
+    tick();
+    const iv = setInterval(tick, 10000);
+    return () => { stopped = true; clearInterval(iv); };
+  }, []);
+  if (!info) return null;
+  const enabled = !!info.enabled;
+  const running = info.status === 'running';
+  const url     = info.remote_url || '';
+  return (
+    <div style={cardStyle}>
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>🌐 Remote Access</h2>
+        <span style={{ fontSize:11, fontWeight:700, color: running ? '#15803d' : '#888', background: running ? '#dcfce7' : '#f0f0f0', padding:'3px 9px', borderRadius:12 }}>
+          {running ? '🟢 Tunnel active' : enabled ? '🟡 Starting…' : '⚫ Disabled'}
+        </span>
+      </div>
+      <p style={{ fontSize:13, color:'#888', marginBottom:14, lineHeight:1.5 }}>
+        Owner can log in from anywhere and see live data direct from this Mac. Protected by a Cloudflare Access email gate — no data leaves the device.
+      </p>
+      {!enabled && (
+        <div style={{ background:'#f0f9ff', border:'1px solid #bae6fd', borderRadius:8, padding:'12px 14px', fontSize:13, color:'#0369a1', lineHeight:1.5 }}>
+          Remote access is provisioned per-restaurant by SiamEPOS. Contact <strong>info@siamepos.co.uk</strong> to enable it for this install — Korakot will add a Cloudflare Tunnel credentials file to your config and the tunnel will come online on the next launch.
+        </div>
+      )}
+      {enabled && (
+        <div style={{ background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:10, padding:14 }}>
+          <div style={{ fontSize:12, color:'#888', marginBottom:4 }}>Your remote URL</div>
+          <div style={{ fontSize:14, fontFamily:'Menlo,Consolas,monospace', color:'#1a1a2e', wordBreak:'break-all' }}>{url || '—'}</div>
+          {url && (
+            <button onClick={() => navigator.clipboard?.writeText(url)}
+              style={{ marginTop:10, padding:'8px 14px', borderRadius:8, border:'1px solid #1a1a2e', background:'white', color:'#1a1a2e', fontWeight:700, fontSize:12, cursor:'pointer' }}>
+              🔗 Copy link
+            </button>
+          )}
+          {info.error && <div style={{ fontSize:12, color:'#991b1b', marginTop:8 }}>⚠ {info.error}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── SEPOS-LOCAL-001 Phase 1 — Local HMRC Archive card ───────────────
 // Shows where archive files are saved + last archive timestamp + a
@@ -777,11 +939,20 @@ export default function SettingsSection() {
         <DiningDurationSettings />
       </div>
 
+      {/* SEPOS-LOCAL-001 P3 — first-boot migration banner */}
+      <MigrationBanner />
+
       {/* ── Network Setup (QR for iPads) ── */}
       <NetworkSetupCard cardStyle={cardStyle} />
 
+      {/* SEPOS-LOCAL-001 P5 — Mac vs cloud record counts */}
+      <DataStorageCard cardStyle={cardStyle} />
+
       {/* SEPOS-LOCAL-001 P1 — HMRC nightly archive on this Mac */}
       <LocalArchiveCard cardStyle={cardStyle} />
+
+      {/* SEPOS-LOCAL-001 P6 — Cloudflare Tunnel for owner remote access */}
+      <RemoteAccessCard cardStyle={cardStyle} />
 
       {/* SEPOS-PRINT-TAB-001 — printer config moved to its own admin tab.
           See client/src/screens/admin/PrintersSection.jsx */}

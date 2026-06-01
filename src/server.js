@@ -1735,6 +1735,112 @@ app.post('/api/local/archive-open-folder', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-LOCAL-001 Phase 3 — first-boot migration progress for the UI
+// banner. Polled every ~2s by the Settings card; returns {status,
+// imported, total, started_at, finished_at, error} so the operator
+// sees a live count while history flows in from the cloud.
+app.get('/api/local/migration-status', (req, res) => {
+  try {
+    const migrationService = require('./services/migrationService');
+    res.json(migrationService.getState());
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-LOCAL-001 Phase 5 — combined storage stats for the Data Storage
+// card. Counts local SQLite rows + reaches into the cloud for the same
+// counts. Used by the operator to verify "Yes, all my history is
+// actually on this Mac" before relying on the local archive.
+app.get('/api/local/storage-stats', async (req, res) => {
+  try {
+    const archiveService = require('./services/archiveService');
+    const isLocal = archiveService.isLocalInstall();
+
+    const local = { closed_orders: 0, open_orders: 0, payments: 0, vouchers: 0, reservations: 0 };
+    if (isLocal) {
+      const q = async (sql) => { try { const r = await pool.query(sql); return Number(r.rows[0]?.n || 0); } catch { return 0; } };
+      local.closed_orders = await q(`SELECT COUNT(*) AS n FROM orders WHERE status='closed'`);
+      local.open_orders   = await q(`SELECT COUNT(*) AS n FROM orders WHERE status='open'`);
+      local.payments      = await q(`SELECT COUNT(*) AS n FROM payments`);
+      local.vouchers      = await q(`SELECT COUNT(*) AS n FROM vouchers`);
+      local.reservations  = await q(`SELECT COUNT(*) AS n FROM reservations`);
+    }
+
+    let cloud = null;
+    if (isLocal && process.env.CLOUD_API_URL && process.env.SYNC_SECRET) {
+      try {
+        const r = await fetch(`${process.env.CLOUD_API_URL}/api/local/storage-stats-cloud`, {
+          headers: { 'x-sync-secret': process.env.SYNC_SECRET },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (r.ok) cloud = await r.json();
+      } catch { /* cloud unreachable — leave null */ }
+    } else if (!isLocal) {
+      // Cloud-side request — we ARE the cloud. Return counts directly.
+      const q = async (sql) => { try { const r = await pool.query(sql); return Number(r.rows[0]?.n || 0); } catch { return 0; } };
+      cloud = {
+        closed_orders: await q(`SELECT COUNT(*) AS n FROM orders WHERE status='closed'`),
+        open_orders:   await q(`SELECT COUNT(*) AS n FROM orders WHERE status='open'`),
+        payments:      await q(`SELECT COUNT(*) AS n FROM payments`),
+        vouchers:      await q(`SELECT COUNT(*) AS n FROM vouchers`),
+        reservations:  await q(`SELECT COUNT(*) AS n FROM reservations`),
+        device_first_mode: process.env.DEVICE_FIRST_MODE === 'true',
+      };
+    }
+
+    let archive = null;
+    try { archive = archiveService.getArchiveStatus(); } catch { /* ignore */ }
+
+    res.json({
+      local_install:    isLocal,
+      device_first_mode: process.env.DEVICE_FIRST_MODE === 'true',
+      local, cloud, archive,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-LOCAL-001 Phase 6 — Cloudflare Tunnel status read from the
+// status file the Electron main process writes whenever it spawns,
+// observes log output, or sees cloudflared exit. Used by the Settings
+// Remote Access card to render 🟢 active / 🟡 starting / 🔴 error.
+app.get('/api/local/tunnel-status', (req, res) => {
+  try {
+    // The status file lives in Electron's userData dir. We can't import
+    // electron from this spawned Node process, so we resolve the dir by
+    // mirroring what app.getPath('userData') would return per-platform.
+    const home = require('os').homedir();
+    const userDataDir = process.platform === 'darwin'
+      ? path.join(home, 'Library', 'Application Support', 'siamepos-electron')
+      : process.platform === 'win32'
+        ? path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'siamepos-electron')
+        : path.join(home, '.config', 'siamepos-electron');
+    const statePath = path.join(userDataDir, 'tunnel-status.json');
+    if (!require('fs').existsSync(statePath)) {
+      return res.json({ enabled: false, status: 'disabled', remote_url: '', last_error: null });
+    }
+    const raw = require('fs').readFileSync(statePath, 'utf8');
+    res.json(JSON.parse(raw));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-LOCAL-001 Phase 5 — cloud-side stats fetched by local installs
+// via /storage-stats. Same SYNC_SECRET gate as the closed-orders feed.
+app.get('/api/local/storage-stats-cloud', async (req, res) => {
+  if (!process.env.SYNC_SECRET || req.headers['x-sync-secret'] !== process.env.SYNC_SECRET) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  try {
+    const q = async (sql) => { try { const r = await pool.query(sql); return Number(r.rows[0]?.n || 0); } catch { return 0; } };
+    res.json({
+      closed_orders: await q(`SELECT COUNT(*) AS n FROM orders WHERE status='closed'`),
+      open_orders:   await q(`SELECT COUNT(*) AS n FROM orders WHERE status='open'`),
+      payments:      await q(`SELECT COUNT(*) AS n FROM payments`),
+      vouchers:      await q(`SELECT COUNT(*) AS n FROM vouchers`),
+      reservations:  await q(`SELECT COUNT(*) AS n FROM reservations`),
+      device_first_mode: process.env.DEVICE_FIRST_MODE === 'true',
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // SEPOS-LOCAL-001 Phase 1 — manual re-archive for a given date. Used by
 // the Settings card "Re-archive today" / "Re-archive yesterday" buttons
 // and by Nook's QA test pass.
@@ -5046,4 +5152,41 @@ httpServer.listen(PORT, '0.0.0.0', () => {
         .catch(err => console.warn('[archive] catchup failed:', err.message));
     } catch (e) { console.warn('[archive] catchup boot error:', e.message); }
   }, 5000);
+
+  // SEPOS-LOCAL-001 Phase 3 — first-boot history migration. Imports
+  // ALL closed orders from cloud into local SQLite, then generates
+  // archive files for every historical month. Idempotent — gated by
+  // sync_state.device_first_migration_done. Skipped on Railway and on
+  // re-runs. Wait 8s after listen so the initial menu/staff/settings
+  // sync has had a tick.
+  setTimeout(() => {
+    try {
+      const migrationService = require('./services/migrationService');
+      migrationService.runIfNeeded()
+        .then(r => { if (r?.skipped) return; console.log('[migration] kickoff →', r.status); })
+        .catch(err => console.warn('[migration] kickoff failed:', err.message));
+    } catch (e) { console.warn('[migration] boot error:', e.message); }
+  }, 8000);
+
+  // SEPOS-LOCAL-001 Phase 4 — daily Railway slim cleanup. Deletes closed
+  // orders older than 30 days. Gated on DEVICE_FIRST_MODE=true so
+  // Korakot must explicitly opt-in per Railway service AFTER the client's
+  // Mac has completed Phase 3 migration (otherwise cleanup would wipe
+  // history before the Mac fetched it).
+  if (process.env.DEVICE_FIRST_MODE === 'true' && process.env.DB_MODE !== 'local') {
+    const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
+    const runCleanup = async () => {
+      try {
+        const r = await pool.query(
+          `DELETE FROM orders
+            WHERE status = 'closed'
+              AND closed_at < NOW() - INTERVAL '30 days'`
+        );
+        if (r.rowCount > 0) console.log(`[cleanup] removed ${r.rowCount} closed orders older than 30 days`);
+      } catch (err) { console.warn('[cleanup] failed:', err.message); }
+    };
+    setInterval(runCleanup, CLEANUP_INTERVAL_MS);
+    setTimeout(runCleanup, 30 * 1000); // first run 30s after boot
+    console.log('[cleanup] DEVICE_FIRST_MODE=true — Railway 30-day cleanup armed');
+  }
 });

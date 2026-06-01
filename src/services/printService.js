@@ -379,7 +379,11 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
         txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}`),
         CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
         nameAlt    ? [txtTh('    ' + nameAlt, thaiCodepage), lf()] : [],
-        item.notes ? [txt('    > ' + item.notes), lf()] : [],
+        // Modifier / option choice line — bumped to SIZE_TALL + BOLD so
+        // the chef reads "no MSG", "extra spicy", "Chicken" etc. as
+        // clearly as the item name itself. Was SIZE_NORMAL (Korakot
+        // 2026-06-02: "increase the size of option choice").
+        item.notes ? [CMD.BOLD_ON, CMD.SIZE_TALL, txt('  > ' + item.notes), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
       ];
     }),
     rule('='), lf(),
@@ -421,7 +425,11 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
         txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}`),
         CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
         nameAlt    ? [txtTh('    ' + nameAlt, thaiCodepage), lf()] : [],
-        item.notes ? [txt('    > ' + item.notes), lf()] : [],
+        // Modifier / option choice line — bumped to SIZE_TALL + BOLD so
+        // the chef reads "no MSG", "extra spicy", "Chicken" etc. as
+        // clearly as the item name itself. Was SIZE_NORMAL (Korakot
+        // 2026-06-02: "increase the size of option choice").
+        item.notes ? [CMD.BOLD_ON, CMD.SIZE_TALL, txt('  > ' + item.notes), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
       ];
     }),
     idx < arr.length - 1 ? [rule('-'), lf()] : [],

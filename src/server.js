@@ -5123,13 +5123,19 @@ function _normalizeMac(m) {
 }
 
 function _parseArpTable(stdout) {
-  // Mac/BSD format: `? (192.168.68.57) at 96:3b:d7:f8:f9:89 on en0 ifscope`
-  // Linux format:   `192.168.68.57 dev en0 lladdr 96:3b:d7:f8:f9:89 REACHABLE`
+  // Three platform formats — all from a single `arp -a` invocation:
+  //   Mac/BSD format: `? (192.168.68.57) at 96:3b:d7:f8:f9:89 on en0 ifscope`
+  //   Linux format:   `192.168.68.57 dev en0 lladdr 96:3b:d7:f8:f9:89 REACHABLE`
+  //   Windows format: `  192.168.68.57          96-3b-d7-f8-f9-89     dynamic`
+  // Windows uses hyphens in the MAC (normalised to colons downstream).
   const out = [];
   for (const line of String(stdout || '').split('\n')) {
     let m = line.match(/\(([0-9.]+)\) at ([0-9a-f:]+)/i);
     if (m) { out.push({ ip: m[1], mac: _normalizeMac(m[2]) }); continue; }
     m = line.match(/^([0-9.]+)\s+.*lladdr\s+([0-9a-f:]+)/i);
+    if (m) { out.push({ ip: m[1], mac: _normalizeMac(m[2]) }); continue; }
+    // Windows: leading whitespace, then IP, whitespace, MAC with hyphens (exactly 17 chars).
+    m = line.match(/^\s+([0-9.]+)\s+([0-9a-f]{2}(?:-[0-9a-f]{2}){5})\s+/i);
     if (m) { out.push({ ip: m[1], mac: _normalizeMac(m[2]) }); continue; }
   }
   return out;

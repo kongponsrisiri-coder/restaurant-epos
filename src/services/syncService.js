@@ -126,7 +126,7 @@ async function itemsWithPendingPush() {
   try {
     const r = await pool.query(
       `SELECT payload FROM sync_queue WHERE synced = 0
-       AND action_type IN ('add_items','void_item')`
+       AND action_type IN ('add_items','void_item','update_item_status')`
     );
     const itemIds = new Set();
     for (const row of r.rows) {
@@ -235,6 +235,18 @@ async function applyToCloud(actionType, payload) {
         method: 'PUT', ...json({ reason: payload.reason }),
       });
       if (!r.ok) throw new Error(`void_item ${r.status}`);
+      return r.json();
+    }
+    case 'update_item_status': {
+      // Pass tap "Done" / chef tap "Cooked" on a local-mode install.
+      // Mirror the change to cloud so the next pullActiveOrders doesn't
+      // revert it. Falls back to local id if cloud_id isn't bound yet
+      // (item created here this tick, push not yet completed).
+      const cloudItemId = (await getItemCloudId(payload.localItemId)) || payload.localItemId;
+      const r = await fetch(url(`/api/order-items/${cloudItemId}/status`), {
+        method: 'PUT', ...json({ status: payload.status }),
+      });
+      if (!r.ok) throw new Error(`update_item_status ${r.status}`);
       return r.json();
     }
     case 'delete_order': {

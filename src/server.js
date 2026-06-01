@@ -597,6 +597,17 @@ app.put('/api/order-items/:id/status', async (req, res) => {
     const served_at = status === 'served' ? now : item.served_at;
     await pool.query('UPDATE order_items SET status=$1, cooking_started_at=$2, served_at=$3 WHERE id=$4', [status, cooking_started_at, served_at, req.params.id]);
     io.emit('item_status_changed', { item_id: req.params.id, status });
+    // SEPOS-LOCAL-001 — push to cloud so the next active-orders pull
+    // doesn't revert this local change. Without this enqueue the pass
+    // tap "Done" worked for ~5s, then the cloud pull (still showing
+    // status='cooked') overwrote it and the order popped back to the
+    // chef's screen. No-op in cloud mode.
+    await offlineQueue.enqueue('update_item_status', {
+      localItemId: Number(req.params.id),
+      status,
+      served_at,
+      cooking_started_at,
+    });
 
     // SEPOS-034 — when the last non-voided item on a takeaway order goes
     // to 'served', auto-flip takeaway_status='collected' so the order

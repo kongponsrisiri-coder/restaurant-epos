@@ -2,7 +2,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, SERVER_URL } from '../api';
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
-import DeleteOrderModal from '../components/DeleteOrderModal';
+// SEPOS — DeleteOrderModal removed from OrderScreen 2026-06-01 (Korakot's
+// call). Order screen / kitchen screen no longer expose a delete button;
+// closed-bill delete still lives in Admin → Bills for managers.
 import AllergenChips from '../components/AllergenChips';
 import { parseAllergens } from '../utils/allergens';
 
@@ -25,7 +27,6 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const [voidPopup, setVoidPopup] = useState(null);
   const [resendPopup, setResendPopup] = useState(null);
   const [showBill, setShowBill] = useState(false);
-  const [showDelete, setShowDelete] = useState(false);   // SEPOS-042 — manager-gated order delete
   const [serviceChargeRemoved, setServiceChargeRemoved] = useState(false);
   const [activeCourse, setActiveCourse] = useState(1);
   const [firingCourse, setFiringCourse] = useState(null);
@@ -468,26 +469,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 Send Order
               </button>
             )}
-            {/* SEPOS-042 — manager-PIN-gated delete for open orders.
-                Useful for test rings, mis-keyed tables, etc. */}
-            <button
-              onClick={() => setShowDelete(true)}
-              title="Delete this order (manager PIN required)"
-              style={{
-                background: 'transparent', border: '1px solid #fecaca', color: '#dc2626',
-                borderRadius: 10, padding: '10px 14px', cursor: 'pointer',
-                fontWeight: 700, fontSize: 14,
-              }}
-            >🗑️ Delete</button>
           </div>
-
-          {showDelete && (
-            <DeleteOrderModal
-              order={order ? { ...order, id: orderId } : { id: orderId }}
-              onClose={() => setShowDelete(false)}
-              onDeleted={() => { setShowDelete(false); onClose(); }}
-            />
-          )}
 
           {/* Course selector */}
           {!activeCatIsBar && (

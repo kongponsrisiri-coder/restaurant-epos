@@ -75,10 +75,11 @@ function closeWin(win) { try { if (win && !win.closed) win.close(); } catch {} }
 // popupWin: a pre-opened window (opened synchronously before any awaits in
 // the calling code). Closed when server/Electron handles print; used for popup
 // fallback so the window.open() bypass is preserved.
-async function dispatchPrint({ settings, serverFn, html, popupWin = null }) {
+async function dispatchPrint({ settings, serverFn, html, copies = 1, popupWin = null }) {
   if (!shouldPrint(settings)) { closeWin(popupWin); return; }
 
-  // 1. Server-side network print
+  // 1. Server-side network print — backend reads settings.printer_kitchen_copies
+  // and loops by itself, so we don't need to pass copies on this branch.
   try {
     if (settings && settings.printer_kitchen_ip) {
       const r = await serverFn();
@@ -89,20 +90,40 @@ async function dispatchPrint({ settings, serverFn, html, popupWin = null }) {
     console.warn('[kitchen-ticket] server print error, falling back:', e);
   }
 
-  // 2. Electron silent print
+  // 2. Electron silent print — must pass copies; Electron's printHtml
+  // accepts { copies } and loops internally. Without this the operator
+  // sets "2" in Settings but Electron only ever prints once. (Bug found
+  // 2026-06-01.)
   const deviceName = (typeof localStorage !== 'undefined' && localStorage.getItem('kitchen_printer_name')) || '';
   const autoOn     = typeof localStorage === 'undefined' || localStorage.getItem('kitchen_auto_print') !== '0';
   if (deviceName && autoOn && window.siamepos?.isElectron && window.siamepos.printHtml) {
     closeWin(popupWin); // Electron prints — no popup needed
-    window.siamepos.printHtml({ html, deviceName })
+    window.siamepos.printHtml({ html, deviceName, copies })
       .then(r => { if (!r || !r.success) console.error('[kitchen-ticket] print failed:', r?.error); })
       .catch(e => console.error('[kitchen-ticket] print error:', e));
     return;
   }
 
-  // 3. Browser popup fallback — use pre-opened window if available
+  // 3. Browser popup fallback — copies via successive openings, since the
+  // browser print dialog only fires once per window. Stagger to give each
+  // window time to render before triggering its own print.
   if (!autoOn) { closeWin(popupWin); return; }
   openPrintPopup(html, popupWin);
+  for (let i = 1; i < copies; i++) {
+    setTimeout(() => openPrintPopup(html, null), i * 800);
+  }
+}
+
+// Resolve the effective number of copies. Network Printers card (new,
+// shared via settings table) wins over the legacy "Printer (this device)"
+// card (per-device localStorage). Both are clamped to 1-5 to defend
+// against an operator hammering "9" in dev tools.
+function resolveKitchenCopies(settings) {
+  const fromSettings = settings && parseInt(settings.printer_kitchen_copies, 10);
+  if (fromSettings && fromSettings > 0) return Math.max(1, Math.min(5, fromSettings));
+  if (typeof localStorage === 'undefined') return 1;
+  const fromLocal = parseInt(localStorage.getItem('kitchen_print_copies') || '1', 10);
+  return Math.max(1, Math.min(5, fromLocal || 1));
 }
 
 // ── Public: print ALL courses on one ticket (called on Send Order) ────────────
@@ -112,15 +133,14 @@ export async function printFullOrderTicket({ order, items, popupWin = null }) {
   if (active.length === 0) { closeWin(popupWin); return; }
 
   const settings = await getCachedSettings();
-  const copies   = Math.max(1, Math.min(5,
-    parseInt((typeof localStorage !== 'undefined' && localStorage.getItem('kitchen_print_copies')) || '1', 10) || 1
-  ));
+  const copies   = resolveKitchenCopies(settings);
   const bilingual = isBilingual(settings);
 
   await dispatchPrint({
     settings,
     serverFn: () => serverPrintKitchenFull(order.id, active),
     html:     buildFullOrderTicketHTML({ order, items: active, copies, bilingual }),
+    copies,
     popupWin,
   });
 }
@@ -132,15 +152,14 @@ export async function printKitchenTicket({ order, items, course, popupWin = null
   if (active.length === 0) { closeWin(popupWin); return; }
 
   const settings = await getCachedSettings();
-  const copies   = Math.max(1, Math.min(5,
-    parseInt((typeof localStorage !== 'undefined' && localStorage.getItem('kitchen_print_copies')) || '1', 10) || 1
-  ));
+  const copies   = resolveKitchenCopies(settings);
   const bilingual = isBilingual(settings);
 
   await dispatchPrint({
     settings,
     serverFn: () => serverPrintKitchen(order.id, active, course),
     html:     buildKitchenTicketHTML({ order, items: active, course, copies, bilingual }),
+    copies,
     popupWin,
   });
 }

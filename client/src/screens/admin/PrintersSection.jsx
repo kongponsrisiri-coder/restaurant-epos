@@ -10,7 +10,7 @@
 // to persist changes.
 
 import { useState, useEffect } from 'react';
-import { getSettings, updateSettings, testNetworkPrinter, cupsQueueForIp, printerHealth } from '../../api';
+import { getSettings, updateSettings, testNetworkPrinter, cupsQueueForIp, printerHealth, printerGetMac, printerDiscover } from '../../api';
 
 // ── Network Printers card (IP-based, RAW + LPR + CUPS fallback chain) ──
 function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
@@ -21,6 +21,9 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
   // shape: { receipt: { status: 'checking'|'online'|'slow'|'offline', latency_ms, error } }
   const [healthStates, setHealthStates] = useState({});
   const setHealth = (key, payload) => setHealthStates(prev => ({ ...prev, [key]: payload }));
+  // SEPOS-PRINT-MAC-001 — surface a brief toast in the corner when an
+  // auto-rediscovery moves a printer to a new IP. Cleared after 6s.
+  const [discoverToast, setDiscoverToast] = useState('');
 
   const setTest = (key, state) => setTestStates(prev => ({ ...prev, [key]: state }));
 
@@ -28,21 +31,55 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
   // Thresholds: <100 ms green, 100-800 ms amber, 800+ ms or no
   // response = red. 800 ms is the "you'll wait so long for a job
   // that operators will assume it's broken" empirical cutoff.
-  const checkHealth = async (key, ipKey, portKey) => {
+  //
+  // SEPOS-PRINT-MAC-001 — on success, silently capture and store the
+  // printer's MAC (one-shot, if not already stored) so we have an
+  // anchor for future rediscovery. On failure, if a MAC is stored,
+  // try to rediscover the printer at a new IP via the server's ARP
+  // cache and silently update settings.printer_*_ip.
+  const checkHealth = async (key, ipKey, portKey, macKey) => {
     const ip   = settings[ipKey];
     const port = settings[portKey] || 9100;
+    const mac  = settings[macKey];
     if (!ip) { setHealth(key, null); return; }
     setHealth(key, { status: 'checking' });
     try {
       const r = await printerHealth(ip, port);
       if (!r || r.ok !== true) {
+        // Offline at the stored IP — try MAC-based rediscovery if we
+        // know one. If we find the printer at a new IP, update settings
+        // and re-probe.
+        if (mac) {
+          try {
+            const d = await printerDiscover(mac);
+            if (d?.ok && d.ip && d.ip !== ip) {
+              setSettings(s => ({ ...s, [ipKey]: d.ip }));
+              setDiscoverToast(`Printer moved to ${d.ip} — settings auto-updated`);
+              setTimeout(() => setDiscoverToast(''), 6000);
+              // re-probe at the new IP; state will be updated by the
+              // effect that watches settings[ipKey].
+              return;
+            }
+          } catch { /* no-op — fall through to offline */ }
+        }
         setHealth(key, { status: 'offline', latency_ms: r?.latency_ms, error: r?.error });
-      } else if (r.latency_ms < 100) {
-        setHealth(key, { status: 'online', latency_ms: r.latency_ms });
-      } else if (r.latency_ms < 800) {
-        setHealth(key, { status: 'slow', latency_ms: r.latency_ms });
-      } else {
-        setHealth(key, { status: 'offline', latency_ms: r.latency_ms, error: 'very slow' });
+        return;
+      }
+      // Online — bucket by latency.
+      if (r.latency_ms < 100)      setHealth(key, { status: 'online', latency_ms: r.latency_ms });
+      else if (r.latency_ms < 800) setHealth(key, { status: 'slow',   latency_ms: r.latency_ms });
+      else                         setHealth(key, { status: 'offline', latency_ms: r.latency_ms, error: 'very slow' });
+
+      // Capture MAC once (silent — operator never sees it). Stored
+      // alongside IP in settings so the next "where did it go?" probe
+      // has an anchor.
+      if (!mac && macKey) {
+        try {
+          const m = await printerGetMac(ip);
+          if (m?.ok && m.mac) {
+            setSettings(s => ({ ...s, [macKey]: m.mac }));
+          }
+        } catch { /* no-op */ }
       }
     } catch (e) {
       setHealth(key, { status: 'offline', error: e?.message || 'error' });
@@ -52,10 +89,10 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
   // Auto-check all configured printers once settings have loaded.
   useEffect(() => {
     if (!settings || Object.keys(settings).length === 0) return;
-    [['receipt', 'printer_receipt_ip', 'printer_receipt_port'],
-     ['kitchen', 'printer_kitchen_ip', 'printer_kitchen_port'],
-     ['bar',     'printer_bar_ip',     'printer_bar_port']].forEach(([k, ipK, portK]) => {
-      if (settings[ipK]) checkHealth(k, ipK, portK);
+    [['receipt', 'printer_receipt_ip', 'printer_receipt_port', 'printer_receipt_mac'],
+     ['kitchen', 'printer_kitchen_ip', 'printer_kitchen_port', 'printer_kitchen_mac'],
+     ['bar',     'printer_bar_ip',     'printer_bar_port',     'printer_bar_mac']].forEach(([k, ipK, portK, macK]) => {
+      if (settings[ipK]) checkHealth(k, ipK, portK, macK);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.printer_receipt_ip, settings.printer_kitchen_ip, settings.printer_bar_ip]);
@@ -76,7 +113,7 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
   const inputStyle = { width:160, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 };
   const portStyle  = { width:80,  padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 };
 
-  const printerRow = (label, ipKey, portKey, testKey, nameKey) => {
+  const printerRow = (label, ipKey, portKey, testKey, nameKey, macKey) => {
     const state = testStates[testKey] || 'idle';
     const testLabel = state === 'testing' ? 'Testing…'
                     : state === 'ok'      ? '✓ OK'
@@ -103,11 +140,17 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
           {badge && (
             <>
               <span style={{ fontSize:12, fontWeight:700, color:badge.color, background:badge.bg, padding:'4px 10px', borderRadius:12 }}>{badge.text}</span>
-              <button onClick={() => checkHealth(testKey, ipKey, portKey)}
-                title="Re-check printer reachability"
+              <button onClick={() => checkHealth(testKey, ipKey, portKey, macKey)}
+                title="Re-check printer reachability (+ auto-rediscover by MAC if stored)"
                 style={{ padding:'4px 8px', borderRadius:6, border:'1px solid #ddd', background:'white', cursor:'pointer', fontSize:12 }}>
                 ↻
               </button>
+              {macKey && settings[macKey] && (
+                <span title={`Anchored MAC: ${settings[macKey]} — IP will auto-update if this printer moves`}
+                  style={{ fontSize:10, color:'#94a3b8', fontFamily:'Menlo,Consolas,monospace' }}>
+                  🔗 {settings[macKey]}
+                </span>
+              )}
             </>
           )}
         </div>
@@ -176,11 +219,19 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
         Once set, <strong>all devices on the same Wi-Fi</strong> — including iPads — print
         silently with no dialog. Default RAW port 9100; older WAVLINK-style servers will
         auto-fall-back to LPR port 515. <strong>Save</strong> after entering IPs.
+        Once a printer responds, its MAC is captured silently — if it later gets a
+        new IP from DHCP, the EPOS auto-finds it without operator help.
       </p>
 
-      {printerRow('🧾 Receipt Printer', 'printer_receipt_ip', 'printer_receipt_port', 'receipt', 'printer_receipt_name')}
-      {printerRow('🍳 Kitchen Printer', 'printer_kitchen_ip', 'printer_kitchen_port', 'kitchen', 'printer_kitchen_name')}
-      {printerRow('🍹 Bar Printer',     'printer_bar_ip',     'printer_bar_port',     'bar',     'printer_bar_name')}
+      {discoverToast && (
+        <div style={{ background:'#dcfce7', color:'#15803d', padding:'10px 14px', borderRadius:8, fontSize:13, marginBottom:14, fontWeight:600 }}>
+          ↻ {discoverToast}
+        </div>
+      )}
+
+      {printerRow('🧾 Receipt Printer', 'printer_receipt_ip', 'printer_receipt_port', 'receipt', 'printer_receipt_name', 'printer_receipt_mac')}
+      {printerRow('🍳 Kitchen Printer', 'printer_kitchen_ip', 'printer_kitchen_port', 'kitchen', 'printer_kitchen_name', 'printer_kitchen_mac')}
+      {printerRow('🍹 Bar Printer',     'printer_bar_ip',     'printer_bar_port',     'bar',     'printer_bar_name',     'printer_bar_mac')}
 
       {settings.printer_kitchen_ip && (
         <div style={{ marginTop:-8, marginBottom:16 }}>

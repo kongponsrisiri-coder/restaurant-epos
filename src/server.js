@@ -5108,6 +5108,65 @@ app.get('/api/print/health', (req, res) => {
   sock.connect(port, ip);
 });
 
+// SEPOS-PRINT-MAC-001 — MAC ↔ IP lookups via the local ARP cache. Used
+// by the Settings Printers card to:
+//   1) capture the printer's MAC once after operator types its IP, then
+//   2) on every health-probe failure, look up where the MAC has moved
+//      to and silently auto-update settings.printer_*_ip.
+// Only meaningful when the backend is on the same LAN as the printer
+// (Electron-local install). On Railway the ARP cache contains only
+// containers/load-balancers and returns nothing useful.
+function _normalizeMac(m) {
+  return String(m || '').toLowerCase()
+    .replace(/-/g, ':')
+    .split(':').map(p => p.padStart(2, '0')).join(':');
+}
+
+function _parseArpTable(stdout) {
+  // Mac/BSD format: `? (192.168.68.57) at 96:3b:d7:f8:f9:89 on en0 ifscope`
+  // Linux format:   `192.168.68.57 dev en0 lladdr 96:3b:d7:f8:f9:89 REACHABLE`
+  const out = [];
+  for (const line of String(stdout || '').split('\n')) {
+    let m = line.match(/\(([0-9.]+)\) at ([0-9a-f:]+)/i);
+    if (m) { out.push({ ip: m[1], mac: _normalizeMac(m[2]) }); continue; }
+    m = line.match(/^([0-9.]+)\s+.*lladdr\s+([0-9a-f:]+)/i);
+    if (m) { out.push({ ip: m[1], mac: _normalizeMac(m[2]) }); continue; }
+  }
+  return out;
+}
+
+function _arpTable() {
+  return new Promise((resolve) => {
+    const { exec } = require('child_process');
+    exec('arp -a', { timeout: 5000 }, (err, stdout) => {
+      if (err || !stdout) return resolve([]);
+      resolve(_parseArpTable(stdout));
+    });
+  });
+}
+
+app.get('/api/print/get-mac', async (req, res) => {
+  const ip = String(req.query.ip || '').trim();
+  if (!ip) return res.status(400).json({ error: 'ip required' });
+  const rows = await _arpTable();
+  const row = rows.find(r => r.ip === ip);
+  if (!row) return res.json({ ok: false, error: 'IP not in ARP cache' });
+  res.json({ ok: true, ip, mac: row.mac });
+});
+
+app.get('/api/print/discover', async (req, res) => {
+  const mac = _normalizeMac(req.query.mac);
+  if (!/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(mac)) {
+    return res.status(400).json({ error: 'valid MAC required' });
+  }
+  const rows = await _arpTable();
+  const row = rows.find(r => r.mac === mac);
+  if (!row) {
+    return res.json({ ok: false, error: 'MAC not in ARP cache — try pinging the printer or wait 30s' });
+  }
+  res.json({ ok: true, mac, ip: row.ip });
+});
+
 // Auto-detect the macOS CUPS queue name for a given printer IP.
 // Used by Settings → Network Printers to pre-fill the CUPS name field
 // after the operator types the IP, so they never have to look up the

@@ -81,6 +81,9 @@ export const testNetworkPrinter   = (ip, port, printer_name) => post('/api/print
 export const cupsQueueForIp       = (ip) => get(`/api/print/cups-queue-for-ip?ip=${encodeURIComponent(ip)}`);
 // SEPOS-PRINT-HEALTH-001 — TCP reachability check, returns { ok, latency_ms, error? }
 export const printerHealth        = (ip, port) => get(`/api/print/health?ip=${encodeURIComponent(ip)}&port=${port || 9100}`);
+// SEPOS-PRINT-MAC-001 — MAC ↔ IP discovery via ARP cache
+export const printerGetMac        = (ip)  => get(`/api/print/get-mac?ip=${encodeURIComponent(ip)}`);
+export const printerDiscover      = (mac) => get(`/api/print/discover?mac=${encodeURIComponent(mac)}`);
 
 // SEPOS-LOCAL-001 P1 — local HMRC archive status + manual triggers
 export const getArchiveStatus     = () => get('/api/local/archive-status');

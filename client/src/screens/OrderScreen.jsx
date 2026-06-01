@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, SERVER_URL } from '../api';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, SERVER_URL } from '../api';
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
 // SEPOS — DeleteOrderModal removed from OrderScreen 2026-06-01 (Korakot's
@@ -1102,7 +1102,26 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               </span>
             </div>
 
-            {(orderTotal > 0 || existingItems.some(i => !i.voided)) && (
+            {/* SEPOS-CLOSE-ZERO 2026-06-02 — if there's at least one item on
+                the order and the live bill total is £0 (everything voided OR
+                fully discounted), surface a green "Close at £0" button so
+                the operator can release the table without payment. */}
+            {orderTotal <= 0.01 && existingItems.length > 0 && cart.length === 0 ? (
+              <button onClick={async () => {
+                if (!window.confirm('Close this table at £0?\n\nAll items are voided or fully discounted. The order will be closed and the table marked available.')) return;
+                try {
+                  const r = await closeOrderZero(orderId);
+                  if (r && r.success) { onClose(); }
+                  else                { alert('Could not close: ' + (r?.error || 'unknown error')); }
+                } catch (e) { alert('Could not close: ' + (e?.message || 'unknown error')); }
+              }} style={{
+                width: '100%', padding: '14px', borderRadius: 12, border: 'none',
+                background: '#22c55e', color: 'white', fontSize: 16,
+                fontWeight: 800, cursor: 'pointer'
+              }}>
+                ✓ Close at £0 — Mark table done
+              </button>
+            ) : (orderTotal > 0 || existingItems.some(i => !i.voided)) && (
               <button onClick={() => setShowBill(true)} style={{
                 width: '100%', padding: '14px', borderRadius: 12, border: 'none',
                 background: '#e94560', color: 'white', fontSize: 16,

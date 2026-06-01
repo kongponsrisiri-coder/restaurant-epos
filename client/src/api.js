@@ -71,6 +71,8 @@ export const voidItem = (itemId, reason, quantity, void_type) => {
 export const applyDiscount = (orderId, discount_type, discount_value, discount_reason) => put(`/api/orders/${orderId}/discount`, { discount_type, discount_value, discount_reason });
 // SEPOS-VOUCHER-REMOVE-001 — undo a partial voucher redemption while bill is open
 export const removeVoucherFromBill = (orderId) => post(`/api/orders/${orderId}/voucher-remove`, {});
+// SEPOS-CLOSE-ZERO — close an order that's at £0 (all voided / fully discounted)
+export const closeOrderZero       = (orderId) => post(`/api/orders/${orderId}/close-zero`, {});
 export const getSettings = () => get('/api/settings');
 export const updateSettings = (settings) => put('/api/settings', settings);
 // SEPOS-LITE-001 — restaurant record incl. subscription plan.

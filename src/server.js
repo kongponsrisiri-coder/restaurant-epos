@@ -690,6 +690,69 @@ app.put('/api/orders/:id/discount', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-CLOSE-ZERO — close an order that's at £0 (everything voided OR
+// fully discounted by manager). Operators were stuck after voiding every
+// item because the "View Bill & Pay" button hid itself at £0 and there
+// was no way to mark the table available again without re-opening the
+// last voided item or hitting an admin force-close.
+//
+// Defended by:
+//   1. Order must be status='open' (409 otherwise)
+//   2. Live bill total (non-voided items minus discounts) must be ≤ £0.01
+//      so an accidental tap on this endpoint with a real bill outstanding
+//      bounces with a clear error rather than silently writing off the
+//      revenue.
+// Records a £0 payment with method='zero' so the row still appears in
+// reports (avoids an order with status='closed' but no payment which
+// would break joins on the closed-orders endpoint).
+app.post('/api/orders/:id/close-zero', async (req, res) => {
+  const orderId = req.params.id;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const ord = await client.query('SELECT id, status, discount_type, discount_value FROM orders WHERE id=$1 FOR UPDATE', [orderId]);
+    const order = ord.rows[0];
+    if (!order)                  { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Order not found' }); }
+    if (order.status !== 'open') { await client.query('ROLLBACK'); return res.status(409).json({ error: `Order is ${order.status}` }); }
+
+    const itemsRes = await client.query(
+      `SELECT unit_price, quantity, discount_type, discount_value, voided FROM order_items WHERE order_id=$1`,
+      [orderId]
+    );
+    let subtotal = 0;
+    for (const it of itemsRes.rows) {
+      if (it.voided) continue;
+      let p = Number(it.unit_price || 0) * Number(it.quantity || 0);
+      if (it.discount_value > 0) {
+        if (it.discount_type === 'percent') p *= (1 - Number(it.discount_value) / 100);
+        else p = Math.max(0, p - Number(it.discount_value));
+      }
+      subtotal += p;
+    }
+    let total = subtotal;
+    if (order.discount_value > 0) {
+      if (order.discount_type === 'percent') total *= (1 - Number(order.discount_value) / 100);
+      else total = Math.max(0, total - Number(order.discount_value));
+    }
+    if (total > 0.01) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: `Bill total is £${total.toFixed(2)}, not £0 — use the normal pay flow` });
+    }
+
+    await client.query('INSERT INTO payments (order_id, amount, method) VALUES ($1, 0, $2)', [orderId, 'zero']);
+    await client.query("UPDATE orders SET status='closed', closed_at=NOW(), total=0 WHERE id=$1", [orderId]);
+    await client.query('COMMIT');
+    io.emit('order_closed', { order_id: Number(orderId) });
+    res.json({ success: true, total: 0 });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[close-zero]', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 app.post('/api/orders/:id/pay', async (req, res) => {
   try {
     const { amount, method } = req.body;

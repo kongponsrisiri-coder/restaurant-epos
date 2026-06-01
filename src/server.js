@@ -1678,7 +1678,76 @@ app.post('/api/z-report/save', async (req, res) => {
       `INSERT INTO z_reports (type, opened_at, closed_at, total_sales, total_cash, total_card, total_other, total_covers, total_orders, discounts, voids, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, report_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
       [type, from, to, data.total_sales, data.total_cash, data.total_card, data.total_other, data.total_covers, data.total_orders, data.total_discounts, data.void_count, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, JSON.stringify(data)]
     );
-    res.json({ id: result.rows[0].id, success: true });
+
+    // SEPOS-LOCAL-001 Phase 1 — Z-report close is the natural end-of-day
+    // moment, so write today's HMRC archive (bills CSV + branded PDF) to
+    // ~/Documents/SiamEPOS-Records/ now. Idempotent. Silent skip on
+    // Railway (DB_MODE != 'local'). Errors don't fail the save — the
+    // operator's primary action (saving the Z-report) must always
+    // succeed regardless of disk problems.
+    let archive_path = null;
+    try {
+      const archiveService = require('./services/archiveService');
+      if (archiveService.isLocalInstall()) {
+        const r = await archiveService.archiveForDate(pool, archiveService.todayStr(), { force: true });
+        if (r?.ok) archive_path = r.pdf?.path || null;
+      }
+    } catch (e) {
+      console.warn('[archive] z-report-close trigger failed:', e.message);
+    }
+
+    res.json({ id: result.rows[0].id, success: true, archive_path });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-LOCAL-001 Phase 1 — archive status for the Settings card. Tells
+// the operator where files are saved + the last archive timestamp + a
+// short list of recent files so they can sanity-check that records are
+// landing on disk as expected.
+app.get('/api/local/archive-status', (req, res) => {
+  try {
+    const archiveService = require('./services/archiveService');
+    const status = archiveService.getArchiveStatus();
+    res.json({
+      local_install: archiveService.isLocalInstall(),
+      ...status,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-LOCAL-001 Phase 1 — operator clicks "📂 Open folder" in Settings;
+// frontend posts here, backend shells out to `open` / `explorer` to bring
+// up the archive root in Finder/Explorer. Local-install only — no-op on
+// Railway since there's no GUI.
+app.post('/api/local/archive-open-folder', async (req, res) => {
+  try {
+    const archiveService = require('./services/archiveService');
+    if (!archiveService.isLocalInstall()) {
+      return res.status(400).json({ error: 'not a local install' });
+    }
+    const dir = archiveService.getRootDir();
+    require('fs').mkdirSync(dir, { recursive: true });
+    const cmd = process.platform === 'darwin' ? `open "${dir}"`
+              : process.platform === 'win32'  ? `start "" "${dir}"`
+              : `xdg-open "${dir}"`;
+    require('child_process').exec(cmd);
+    res.json({ ok: true, dir });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-LOCAL-001 Phase 1 — manual re-archive for a given date. Used by
+// the Settings card "Re-archive today" / "Re-archive yesterday" buttons
+// and by Nook's QA test pass.
+app.post('/api/local/archive-run', async (req, res) => {
+  try {
+    const archiveService = require('./services/archiveService');
+    if (!archiveService.isLocalInstall()) {
+      return res.status(400).json({ error: 'not a local install' });
+    }
+    const date  = (req.body?.date  || archiveService.todayStr()).trim();
+    const force = !!req.body?.force;
+    const r = await archiveService.archiveForDate(pool, date, { force });
+    res.json(r);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -4959,4 +5028,22 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   // every cloud event lands on the Mac in real time. No-op in cloud mode.
   cloudRelay.start(io, syncService);
   makeWebhooks.start();
+  // SEPOS-LOCAL-001 Phase 1 — morning catchup. If yesterday's archive
+  // wasn't run (Mac was off after service, Z-report not closed cleanly,
+  // first launch after install, etc.) generate it silently now.
+  // Skipped on Railway (DB_MODE != 'local'). Wrapped in setTimeout so
+  // the listen callback returns immediately and the catchup runs after
+  // syncService has had a tick to settle.
+  setTimeout(() => {
+    try {
+      const archiveService = require('./services/archiveService');
+      if (!archiveService.isLocalInstall()) return;
+      archiveService.archiveForDate(pool, archiveService.yesterdayStr())
+        .then(r => {
+          if (r?.ok && !r.pdf_skipped) console.log('[archive] catchup ✓', r.date, r.pdf?.path);
+          else if (r?.pdf_skipped)     console.log('[archive] catchup —', r.date, 'already done');
+        })
+        .catch(err => console.warn('[archive] catchup failed:', err.message));
+    } catch (e) { console.warn('[archive] catchup boot error:', e.message); }
+  }, 5000);
 });

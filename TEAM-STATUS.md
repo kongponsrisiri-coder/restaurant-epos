@@ -10,6 +10,7 @@
 
 | Agent | Working On | Ticket | Started |
 |-------|-----------|--------|---------|
+| Krit  | **SEPOS-LOCAL-001 Phase 2+ — stop circular closed-order pull, migration script, Railway slim, Cloudflare Tunnel.** Phase 1 (nightly archive) shipped today. Next: Phase 2 idempotent pull in syncService.js. | SEPOS-LOCAL-001 | 2026-06-01 |
 
 ---
 

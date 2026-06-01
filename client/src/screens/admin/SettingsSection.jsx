@@ -1,7 +1,120 @@
 import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
-import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo } from '../../api';
+import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, getArchiveStatus, openArchiveFolder, runArchive } from '../../api';
 import DiningDurationSettings from './DiningDurationSettings';
+
+// ── SEPOS-LOCAL-001 Phase 1 — Local HMRC Archive card ───────────────
+// Shows where archive files are saved + last archive timestamp + a
+// short list of recent PDFs so the operator can sanity-check that
+// records are landing on disk. Three actions: open the folder in
+// Finder, re-archive today, re-archive yesterday.
+function LocalArchiveCard({ cardStyle }) {
+  const [status, setStatus] = useState(null);
+  const [busy, setBusy]     = useState(false);
+  const [toast, setToast]   = useState('');
+
+  const refresh = async () => {
+    try { setStatus(await getArchiveStatus()); } catch { setStatus({ error: true }); }
+  };
+  useEffect(() => { refresh(); }, []);
+
+  if (!status) {
+    return (
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:8 }}>🗄️ Local Archive</h2>
+        <p style={{ fontSize:13, color:'#888' }}>Checking…</p>
+      </div>
+    );
+  }
+
+  const isLocal = status.local_install;
+  const lastIso = status.last_archived ? new Date(status.last_archived) : null;
+  const lastStr = lastIso ? lastIso.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'No archives yet';
+
+  const doRun = async (label, dateOffset) => {
+    setBusy(true); setToast('');
+    try {
+      const d = new Date(); d.setDate(d.getDate() - dateOffset);
+      const date = d.toISOString().slice(0, 10);
+      const r = await runArchive(date, true);
+      if (r?.ok) setToast(`✓ ${label} archived — ${r.pdf?.path?.split('/').slice(-2).join('/') || ''}`);
+      else      setToast(`⚠ ${label} skipped — ${r?.reason || 'unknown'}`);
+      await refresh();
+    } catch (e) { setToast(`✗ ${label} failed — ${e.message}`); }
+    finally { setBusy(false); setTimeout(() => setToast(''), 5000); }
+  };
+
+  return (
+    <div style={cardStyle}>
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>🗄️ Local Archive</h2>
+        <span style={{ fontSize:11, fontWeight:700, color:'#15803d', background:'#dcfce7', padding:'3px 9px', borderRadius:12 }}>
+          {isLocal ? 'Auto-archive: ON' : 'Cloud install'}
+        </span>
+      </div>
+      <p style={{ fontSize:13, color:'#888', marginBottom:16, lineHeight:1.5 }}>
+        Bills CSV and branded Z-report PDF are saved to your Mac after every Z-report close + on app startup.
+        Keep for <strong>6 years</strong> for HMRC compliance.
+      </p>
+
+      {!isLocal ? (
+        <div style={{ background:'#fef3c7', color:'#92400e', padding:'10px 14px', borderRadius:8, fontSize:13 }}>
+          This install runs against the cloud database, not a local SQLite. Archive is only generated on Mac/PC installs of the SiamEPOS desktop app.
+        </div>
+      ) : (
+        <>
+          <div style={{ background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:10, padding:14, marginBottom:14 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
+              <span style={{ fontSize:12, color:'#888' }}>Last archived</span>
+              <span style={{ fontSize:13, fontWeight:600, color:'#1a1a2e' }}>{lastStr}</span>
+            </div>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+              <span style={{ fontSize:12, color:'#888' }}>Folder</span>
+              <span style={{ fontSize:12, fontFamily:'Menlo,Consolas,monospace', color:'#555', textAlign:'right', maxWidth:'70%', wordBreak:'break-all' }}>{status.dir}</span>
+            </div>
+          </div>
+
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:12 }}>
+            <button onClick={async () => { try { await openArchiveFolder(); } catch {} }}
+              style={{ padding:'9px 16px', borderRadius:8, border:'1px solid #1a1a2e', background:'#1a1a2e', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              📂 Open Folder
+            </button>
+            <button onClick={() => doRun('Today', 0)} disabled={busy}
+              style={{ padding:'9px 16px', borderRadius:8, border:'1px solid #C9A84C', background:'white', color:'#5b4a2a', fontWeight:700, fontSize:13, cursor:'pointer', opacity: busy ? 0.5 : 1 }}>
+              🗄️ Re-archive Today
+            </button>
+            <button onClick={() => doRun('Yesterday', 1)} disabled={busy}
+              style={{ padding:'9px 16px', borderRadius:8, border:'1px solid #ddd', background:'white', color:'#555', fontWeight:700, fontSize:13, cursor:'pointer', opacity: busy ? 0.5 : 1 }}>
+              ↺ Re-archive Yesterday
+            </button>
+          </div>
+
+          {toast && (
+            <div style={{ background:toast.startsWith('✓')?'#dcfce7':toast.startsWith('✗')?'#fee2e2':'#fef3c7',
+                          color:toast.startsWith('✓')?'#15803d':toast.startsWith('✗')?'#991b1b':'#92400e',
+                          padding:'10px 12px', borderRadius:8, fontSize:13, marginBottom:12 }}>
+              {toast}
+            </div>
+          )}
+
+          {status.recent && status.recent.length > 0 && (
+            <div>
+              <div style={{ fontSize:12, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:0.5, marginBottom:6 }}>Recent files</div>
+              <div style={{ background:'white', border:'1px solid #f0f0f0', borderRadius:8 }}>
+                {status.recent.slice(0, 6).map((f, i) => (
+                  <div key={f.path} style={{ padding:'9px 12px', borderBottom: i < Math.min(status.recent.length, 6) - 1 ? '1px solid #f0f0f0' : 'none', fontSize:13, display:'flex', justifyContent:'space-between' }}>
+                    <span style={{ color:'#1a1a2e', fontFamily:'Menlo,Consolas,monospace' }}>{f.file}</span>
+                    <span style={{ color:'#888', fontSize:11 }}>{new Date(f.mtime).toLocaleDateString('en-GB', { day:'numeric', month:'short' })}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 // Network setup panel — shows the desktop's LAN URL + a scannable QR so
 // kitchen / bar tablets can be pointed at this server without typing.
@@ -666,6 +779,9 @@ export default function SettingsSection() {
 
       {/* ── Network Setup (QR for iPads) ── */}
       <NetworkSetupCard cardStyle={cardStyle} />
+
+      {/* SEPOS-LOCAL-001 P1 — HMRC nightly archive on this Mac */}
+      <LocalArchiveCard cardStyle={cardStyle} />
 
       {/* SEPOS-PRINT-TAB-001 — printer config moved to its own admin tab.
           See client/src/screens/admin/PrintersSection.jsx */}

@@ -91,6 +91,28 @@ const txt  = (s)       => Buffer.from(stripUnsupported(s), 'latin1');
 const lf   = (n = 1)   => Buffer.alloc(n, 0x0a);
 const rule = (c = '-') => txt(c.repeat(LINE_WIDTH));
 
+// ── Thai (CP874 / TIS-620) support — wraps a Thai string in codepage
+// switch commands so the printer renders Thai glyphs for that segment,
+// then switches back to CP858 so subsequent English text + £ keep
+// working. Thai code points U+0E01..U+0E5B map to TIS-620 bytes
+// 0xA1..0xFB (the table-wide offset is U+0D60).
+//
+// CP874 is usually codepage ID 30 on Epson TM, Star TSP, and most
+// Chinese clones (cnfujun POS80 confirmed). If the operator's printer
+// happens to use a different ID for Thai, override per-install via
+// settings.kitchen_thai_codepage. Falls back to ID 30 silently.
+const THAI_OFFSET = 0x0D60;
+function txtTh(s, cpid = 30) {
+  if (!s) return Buffer.alloc(0);
+  const switchOn  = Buffer.from([ESC, 0x74, cpid]);
+  const switchOff = Buffer.from([ESC, 0x74, 0x13]);    // back to CP858
+  const mapped = String(s).replace(/[ก-๛]/g,
+    c => String.fromCharCode(c.charCodeAt(0) - THAI_OFFSET))
+    .replace(/[^\x00-\xFF]/g, '');
+  const bytes = Buffer.from(mapped, 'latin1');
+  return Buffer.concat([switchOn, bytes, switchOff]);
+}
+
 function pad(str, len, align = 'left') {
   const s = String(str ?? '').slice(0, len);
   const spaces = ' '.repeat(len - s.length);
@@ -328,7 +350,7 @@ function buildFireNotice({ order, course, bilingual = true }) {
 // ── Kitchen ticket formatter (single course, full item list) ──────────────────
 // Used for Send-to-Bar and any other case where a full item list is needed.
 
-function buildKitchenTicket({ order, items, course, bilingual = true }) {
+function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepage = 30 }) {
   const heading = order.order_type === 'takeaway'
     ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : `TAKEAWAY #${order.id}`)
     : `TABLE ${order.table_number != null ? order.table_number : '?'}`;
@@ -342,17 +364,21 @@ function buildKitchenTicket({ order, items, course, bilingual = true }) {
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(courseEN), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-    courseTH ? [txt(courseTH), lf()] : [],
+    courseTH ? [CMD.BOLD_ON, CMD.SIZE_TALL, txtTh(courseTH, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
     order.customer_name ? [txt(order.customer_name), lf()] : [],
     rule('='), lf(),
     CMD.ALIGN_LEFT,
     ...items.flatMap(item => {
       const nameAlt = bilingual ? (item.name_alt || item.name_th || '') : '';
       return [
-        CMD.BOLD_ON, CMD.SIZE_TALL,
+        // Item line — SIZE_BIG (2× width, 2× height) so the chef
+        // reads names from across the kitchen. Bumped from SIZE_TALL
+        // 2026-06-02 per Korakot's request: "letters need to be a
+        // little bit wider".
+        CMD.BOLD_ON, CMD.SIZE_BIG,
         txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}`),
         CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-        nameAlt   ? [txt('    ' + nameAlt), lf()] : [],
+        nameAlt    ? [txtTh('    ' + nameAlt, thaiCodepage), lf()] : [],
         item.notes ? [txt('    > ' + item.notes), lf()] : [],
       ];
     }),
@@ -367,7 +393,7 @@ function buildKitchenTicket({ order, items, course, bilingual = true }) {
 
 // ── Full order ticket (all courses combined) ──────────────────────────────────
 
-function buildFullKitchenTicket({ order, items, bilingual = true }) {
+function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage = 30 }) {
   const heading = order.order_type === 'takeaway'
     ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : `TAKEAWAY #${order.id}`)
     : `TABLE ${order.table_number != null ? order.table_number : '?'}`;
@@ -384,15 +410,17 @@ function buildFullKitchenTicket({ order, items, bilingual = true }) {
 
   const courseBlocks = Object.keys(byCourse).sort().flatMap((course, idx, arr) => [
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(COURSES_EN[course] || 'ITEMS'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-    bilingual && COURSES_TH[course] ? [txt(COURSES_TH[course]), lf()] : [],
+    bilingual && COURSES_TH[course] ? [CMD.BOLD_ON, CMD.SIZE_TALL, txtTh(COURSES_TH[course], thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
     rule('-'), lf(),
     ...byCourse[course].flatMap(item => {
       const nameAlt = bilingual ? (item.name_alt || item.name_th || '') : '';
       return [
-        CMD.BOLD_ON, CMD.SIZE_TALL,
+        // SIZE_BIG (2× width, 2× height) — bumped from SIZE_TALL
+        // 2026-06-02 per Korakot's "letters need to be wider".
+        CMD.BOLD_ON, CMD.SIZE_BIG,
         txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}`),
         CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-        nameAlt    ? [txt('    ' + nameAlt), lf()] : [],
+        nameAlt    ? [txtTh('    ' + nameAlt, thaiCodepage), lf()] : [],
         item.notes ? [txt('    > ' + item.notes), lf()] : [],
       ];
     }),
@@ -733,7 +761,8 @@ async function printKitchenTicket(settings, order, items, course) {
   // glyphs and the bilingual line just renders as garbage.
   const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
-  const buf = buildKitchenTicket({ order, items, course, bilingual });
+  const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
+  const buf = buildKitchenTicket({ order, items, course, bilingual, thaiCodepage });
   for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName, lprQueue });
 }
 
@@ -749,7 +778,8 @@ async function printFullKitchenTicket(settings, order, items) {
   // glyphs and the bilingual line just renders as garbage.
   const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
-  const buf = buildFullKitchenTicket({ order, items, bilingual });
+  const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
+  const buf = buildFullKitchenTicket({ order, items, bilingual, thaiCodepage });
   for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName, lprQueue });
 }
 
@@ -764,7 +794,8 @@ async function printBarTicket(settings, order, items) {
   // glyphs and the bilingual line just renders as garbage.
   const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
-  await sendRaw(ip, port, buildKitchenTicket({ order, items, course: 4, bilingual }), { printerName, lprQueue });
+  const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
+  await sendRaw(ip, port, buildKitchenTicket({ order, items, course: 4, bilingual, thaiCodepage }), { printerName, lprQueue });
 }
 
 // testPrint accepts an optional printer_name so the admin Test button can

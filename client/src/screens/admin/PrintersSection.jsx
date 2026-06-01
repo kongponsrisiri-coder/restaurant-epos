@@ -331,6 +331,19 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
             />
             <button
               onClick={async () => {
+                const cp = (settings.kitchen_thai_codepage || '').toString().trim();
+                if (!cp) return alert('Type a codepage number first');
+                try {
+                  const r = await printerThaiTest(Number(cp));
+                  if (!r?.success) alert('Print failed: ' + (r?.error || r?.reason || 'unknown'));
+                } catch (e) { alert('Print failed: ' + e?.message); }
+              }}
+              style={{ padding:'8px 14px', borderRadius:8, border:'1px solid #92400e', background:'white', color:'#92400e', fontWeight:700, fontSize:13, cursor:'pointer' }}
+            >
+              🎯 Test this codepage
+            </button>
+            <button
+              onClick={async () => {
                 try {
                   const r = await printerThaiTest();
                   if (!r?.success) alert('Print failed: ' + (r?.error || r?.reason || 'unknown'));
@@ -338,11 +351,13 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
               }}
               style={{ padding:'8px 14px', borderRadius:8, border:'none', background:'#92400e', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}
             >
-              🖨️ Print Thai test
+              🖨️ Sweep all codepages
             </button>
           </div>
-          <div style={{ fontSize:11, color:'#92400e', marginTop:8, opacity:0.85 }}>
-            Common IDs: <strong>30</strong> Epson/Star CP874 · <strong>21</strong> Star alt · <strong>17</strong> some clones · <strong>50-52</strong> cnfujun variants
+          <div style={{ fontSize:11, color:'#92400e', marginTop:8, opacity:0.85, lineHeight:1.5 }}>
+            Common IDs: <strong>30</strong> Epson/Star CP874 · <strong>21</strong> Star alt · <strong>17</strong> some clones · <strong>50-52</strong> cnfujun mid · <strong>244, 250, 252, 255</strong> cnfujun high range.
+            <br />
+            Sweep prints all ~28 candidates on one ticket; Test prints just the one you typed (big, easy to read).
           </div>
         </div>
       )}

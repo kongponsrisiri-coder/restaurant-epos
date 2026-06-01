@@ -824,10 +824,18 @@ async function testPrint(ip, port = 9100, printerName = '') {
 // We send the same bytes after switching to each codepage; whichever
 // row renders the Thai word correctly is the right ID. Operator then
 // sets settings.kitchen_thai_codepage to that value.
-function buildThaiCodepageTest() {
+function buildThaiCodepageTest(customCp = null) {
   // "ทดสอบ" as TIS-620 bytes
   const THAI_BYTES = Buffer.from([0xb7, 0xb4, 0xca, 0xcd, 0xba]);
-  const candidates = [11, 14, 16, 17, 18, 20, 21, 22, 26, 30, 33, 50, 51, 52];
+  // If the operator specified one codepage to focus on, just probe that.
+  // Otherwise sweep across known Thai-capable codepage IDs from various
+  // vendors: 11-33 (Epson/Star CP874 range), 50-52 (some cnfujun
+  // variants), 100/200 (uncommon), 244-255 (high-range slots most
+  // Chinese 80mm clones — including the cnfujun POS80 — use for Thai).
+  const candidates = customCp != null
+    ? [Number(customCp)]
+    : [11, 14, 16, 17, 18, 20, 21, 22, 26, 30, 33, 50, 51, 52,
+       100, 200, 210, 220, 230, 240, 244, 246, 248, 250, 252, 253, 254, 255];
 
   const parts = [
     CAN, CMD.INIT, lf(),
@@ -865,13 +873,13 @@ function buildThaiCodepageTest() {
   return flatten(parts);
 }
 
-async function printThaiTest(settings) {
+async function printThaiTest(settings, customCp = null) {
   const ip          = settings.printer_kitchen_ip || settings.printer_receipt_ip;
   const port        = settings.printer_kitchen_port || settings.printer_receipt_port || 9100;
   const printerName = settings.printer_kitchen_name || settings.printer_receipt_name || '';
   const lprQueue    = settings.printer_kitchen_lpr_queue || settings.printer_receipt_lpr_queue || 'lp';
   if (!ip && !printerName) throw new Error('NO_IP');
-  await sendRaw(ip, port, buildThaiCodepageTest(), { printerName, lprQueue });
+  await sendRaw(ip, port, buildThaiCodepageTest(customCp), { printerName, lprQueue });
 }
 
 module.exports = {

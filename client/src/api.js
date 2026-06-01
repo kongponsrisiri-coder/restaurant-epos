@@ -87,7 +87,8 @@ export const printerHealth        = (ip, port) => get(`/api/print/health?ip=${en
 export const printerGetMac        = (ip)  => get(`/api/print/get-mac?ip=${encodeURIComponent(ip)}`);
 export const printerDiscover      = (mac) => get(`/api/print/discover?mac=${encodeURIComponent(mac)}`);
 // SEPOS-PRINT-THAI-PROBE — visual codepage probe ticket
-export const printerThaiTest      = () => post('/api/print/thai-test', {});
+// Pass a cp number to test that specific codepage only; omit to sweep all.
+export const printerThaiTest      = (cp = null) => post('/api/print/thai-test', cp ? { cp } : {});
 
 // SEPOS-LOCAL-001 P1 — local HMRC archive status + manual triggers
 export const getArchiveStatus     = () => get('/api/local/archive-status');

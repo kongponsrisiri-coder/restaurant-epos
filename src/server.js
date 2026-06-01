@@ -5101,8 +5101,12 @@ async function loadSettings() {
 app.post('/api/print/thai-test', async (req, res) => {
   try {
     const settings = await loadSettings();
-    await printService.printThaiTest(settings);
-    res.json({ success: true });
+    // Optional ?cp=255 OR { cp: 255 } in body → focus the test on a
+    // single codepage instead of sweeping the full candidate list.
+    // Useful when an operator already knows the printer's spec value.
+    const customCp = req.body?.cp || req.query?.cp || null;
+    await printService.printThaiTest(settings, customCp ? Number(customCp) : null);
+    res.json({ success: true, codepage: customCp || 'sweep' });
   } catch (err) {
     console.error('[print/thai-test]', err.message);
     res.json({ success: false, error: err.message });

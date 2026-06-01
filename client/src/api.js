@@ -93,6 +93,13 @@ export const getStorageStats      = () => get('/api/local/storage-stats');
 
 // SEPOS-LOCAL-001 P6 — Cloudflare Tunnel status (returns {enabled, status, remote_url})
 export const getTunnelStatus      = () => get('/api/local/tunnel-status');
+
+// SEPOS-KITCHEN-MSG-001 — pre-canned kitchen-message templates + send
+export const getKitchenTemplates  = () => get('/api/kitchen-templates');
+export const createKitchenTemplate = (body) => post('/api/kitchen-templates', body);
+export const updateKitchenTemplate = (id, body) => put(`/api/kitchen-templates/${id}`, body);
+export const deleteKitchenTemplate = (id) => del(`/api/kitchen-templates/${id}`);
+export const sendKitchenMessage   = (body) => post('/api/print/kitchen-message', body);
 export const serverPrintReceipt   = (order_id, payment_details) => post('/api/print/receipt', { order_id, payment_details });
 export const serverPrintKitchen   = (order_id, items, course)   => post('/api/print/kitchen', { order_id, items, course });
 export const serverPrintBar           = (order_id, items)         => post('/api/print/bar',          { order_id, items });

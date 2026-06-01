@@ -272,6 +272,40 @@ async function initDB() {
       )
     `);
 
+    // SEPOS-KITCHEN-MSG-001 — pre-canned messages waiters can one-tap to
+    // send to the kitchen (allergies, holds, VIP, birthday, etc.). Admin
+    // can add/edit/delete in Settings → Kitchen Templates.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS kitchen_message_templates (
+        id SERIAL PRIMARY KEY,
+        label       VARCHAR(80)  NOT NULL,
+        message     TEXT         NOT NULL,
+        icon        VARCHAR(20),
+        sort_order  INTEGER      DEFAULT 100,
+        is_active   INTEGER      DEFAULT 1,
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos'
+      )
+    `);
+
+    // Seed common templates on first boot. Restaurant can edit / delete
+    // any of these; new ones go above via Settings.
+    const seedRes = await pool.query('SELECT COUNT(*) AS n FROM kitchen_message_templates');
+    if (Number(seedRes.rows[0]?.n || 0) === 0) {
+      await pool.query(`
+        INSERT INTO kitchen_message_templates (label, message, icon, sort_order) VALUES
+          ('Allergy: nuts',   'ALLERGY: NUTS — prepare with care',     '⚠️', 10),
+          ('Allergy: gluten', 'GLUTEN-FREE for entire order',          '🌾', 20),
+          ('Allergy: shellfish', 'ALLERGY: SHELLFISH — separate prep', '🦐', 30),
+          ('Vegetarian',      'VEGETARIAN for entire order',           '🥬', 40),
+          ('Vegan',           'VEGAN for entire order',                '🌱', 50),
+          ('Hold mains',      'HOLD MAINS — wait for signal',          '⏸',  60),
+          ('Fire mains',      'FIRE MAINS NOW',                        '🔥', 70),
+          ('Birthday cake',   'BIRTHDAY CAKE — bring after mains',     '🎂', 80),
+          ('VIP table',       'VIP — extra care please',               '⭐', 90),
+          ('No spice',        'NO SPICE — sensitive customer',         '🌶️', 100)
+      `);
+    }
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS z_reports (
         id SERIAL PRIMARY KEY,

@@ -1,7 +1,116 @@
 import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
-import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, getArchiveStatus, openArchiveFolder, runArchive, getMigrationStatus, getStorageStats, getTunnelStatus } from '../../api';
+import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, getArchiveStatus, openArchiveFolder, runArchive, getMigrationStatus, getStorageStats, getTunnelStatus, getKitchenTemplates, createKitchenTemplate, updateKitchenTemplate, deleteKitchenTemplate } from '../../api';
 import DiningDurationSettings from './DiningDurationSettings';
+
+// ── SEPOS-KITCHEN-MSG-001 — pre-canned kitchen message templates ────
+// Waiter taps a pill in the order screen → one-tap send. Admin manages
+// the list here: label (waiter-facing button text), icon emoji,
+// message (the full text the kitchen receives), sort order.
+function KitchenTemplatesCard({ cardStyle }) {
+  const [templates, setTemplates] = useState([]);
+  const [editing, setEditing]     = useState(null); // null | { id?, label, icon, message, sort_order }
+  const [saving, setSaving]       = useState(false);
+
+  const refresh = async () => {
+    try { setTemplates(await getKitchenTemplates() || []); } catch { setTemplates([]); }
+  };
+  useEffect(() => { refresh(); }, []);
+
+  const startNew = () => setEditing({ label: '', icon: '', message: '', sort_order: 100 });
+
+  const save = async () => {
+    if (!editing.label.trim() || !editing.message.trim()) { alert('Label + message required'); return; }
+    setSaving(true);
+    try {
+      if (editing.id) await updateKitchenTemplate(editing.id, editing);
+      else            await createKitchenTemplate(editing);
+      setEditing(null);
+      await refresh();
+    } catch (e) { alert(e?.message || 'Save failed'); }
+    finally { setSaving(false); }
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm('Delete this template?')) return;
+    try { await deleteKitchenTemplate(id); await refresh(); }
+    catch (e) { alert(e?.message || 'Delete failed'); }
+  };
+
+  return (
+    <div style={cardStyle}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>📢 Kitchen Message Templates</h2>
+        <button onClick={startNew} style={{ padding:'8px 14px', borderRadius:8, border:'1px solid #0D1B3E', background:'#0D1B3E', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>+ New</button>
+      </div>
+      <p style={{ fontSize:13, color:'#888', marginBottom:14, lineHeight:1.5 }}>
+        One-tap pills for waiters to send common messages to the kitchen — allergies, holds, VIP, birthdays.
+        Waiters can still type free text alongside any template.
+      </p>
+
+      <div style={{ background:'white', border:'1px solid #f0f0f0', borderRadius:8 }}>
+        {templates.length === 0 && (
+          <div style={{ padding:'14px 16px', fontSize:13, color:'#888' }}>No templates yet.</div>
+        )}
+        {templates.map(t => (
+          <div key={t.id} style={{ padding:'10px 14px', borderBottom:'1px solid #f0f0f0', display:'flex', alignItems:'center', gap:12 }}>
+            <span style={{ fontSize:20, width:28, textAlign:'center' }}>{t.icon || '·'}</span>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:14, fontWeight:700, color:'#1a1a2e' }}>{t.label}</div>
+              <div style={{ fontSize:12, color:'#666', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.message}</div>
+            </div>
+            <button onClick={() => setEditing({ ...t })} style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #ddd', background:'white', fontSize:12, fontWeight:600, cursor:'pointer' }}>Edit</button>
+            <button onClick={() => remove(t.id)} style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #fecaca', background:'white', color:'#dc2626', fontSize:12, fontWeight:600, cursor:'pointer' }}>✕</button>
+          </div>
+        ))}
+      </div>
+
+      {editing && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+          <div style={{ background:'white', borderRadius:14, maxWidth:480, width:'100%', padding:'20px 22px' }}>
+            <h3 style={{ fontSize:17, fontWeight:800, margin:'0 0 14px', color:'#1a1a2e' }}>{editing.id ? 'Edit template' : 'New template'}</h3>
+            <div style={{ display:'grid', gap:12 }}>
+              <label style={{ fontSize:12, fontWeight:700, color:'#555' }}>
+                Label (waiter sees this)
+                <input value={editing.label} onChange={e => setEditing({ ...editing, label: e.target.value })}
+                  placeholder="Allergy: nuts"
+                  style={{ marginTop:5, width:'100%', padding:10, borderRadius:8, border:'1px solid #ddd', fontSize:14, boxSizing:'border-box' }} />
+              </label>
+              <label style={{ fontSize:12, fontWeight:700, color:'#555' }}>
+                Icon (emoji, optional)
+                <input value={editing.icon || ''} onChange={e => setEditing({ ...editing, icon: e.target.value })}
+                  placeholder="⚠️"
+                  maxLength={4}
+                  style={{ marginTop:5, width:80, padding:10, borderRadius:8, border:'1px solid #ddd', fontSize:18, textAlign:'center', boxSizing:'border-box' }} />
+              </label>
+              <label style={{ fontSize:12, fontWeight:700, color:'#555' }}>
+                Message (kitchen receives this)
+                <textarea value={editing.message} onChange={e => setEditing({ ...editing, message: e.target.value })}
+                  placeholder="ALLERGY: NUTS — please prepare carefully"
+                  rows={3}
+                  style={{ marginTop:5, width:'100%', padding:10, borderRadius:8, border:'1px solid #ddd', fontSize:14, fontFamily:'inherit', boxSizing:'border-box', resize:'vertical' }} />
+              </label>
+              <label style={{ fontSize:12, fontWeight:700, color:'#555' }}>
+                Sort order (lower = appears first)
+                <input value={editing.sort_order || 100} type="number"
+                  onChange={e => setEditing({ ...editing, sort_order: Number(e.target.value) || 100 })}
+                  style={{ marginTop:5, width:120, padding:10, borderRadius:8, border:'1px solid #ddd', fontSize:14, boxSizing:'border-box' }} />
+              </label>
+            </div>
+            <div style={{ display:'flex', gap:10, marginTop:18 }}>
+              <button onClick={() => setEditing(null)} disabled={saving}
+                style={{ flex:1, padding:12, borderRadius:8, border:'none', background:'#f0f0f0', fontWeight:700, fontSize:14, cursor:'pointer' }}>Cancel</button>
+              <button onClick={save} disabled={saving}
+                style={{ flex:2, padding:12, borderRadius:8, border:'none', background:'#0D1B3E', color:'white', fontWeight:800, fontSize:14, cursor:'pointer', opacity: saving ? 0.5 : 1 }}>
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── SEPOS-LOCAL-001 Phase 3 — first-boot migration banner ───────────
 // Polls /api/local/migration-status; renders a fixed gold banner across
@@ -950,6 +1059,9 @@ export default function SettingsSection() {
 
       {/* SEPOS-LOCAL-001 P1 — HMRC nightly archive on this Mac */}
       <LocalArchiveCard cardStyle={cardStyle} />
+
+      {/* SEPOS-KITCHEN-MSG-001 — admin manages kitchen message templates */}
+      <KitchenTemplatesCard cardStyle={cardStyle} />
 
       {/* SEPOS-LOCAL-001 P6 — Cloudflare Tunnel for owner remote access */}
       <RemoteAccessCard cardStyle={cardStyle} />

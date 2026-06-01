@@ -418,6 +418,56 @@ function buildFullKitchenTicket({ order, items, bilingual = true }) {
 
 // ── Test page ─────────────────────────────────────────────────────────────────
 
+// ── SEPOS-KITCHEN-MSG-001 — kitchen message ticket ──────────────────
+// Distinctive layout (📢 banner, large heading, big-text message body)
+// so the chef notices immediately. Different from a regular kitchen
+// ticket — no items, no course header, just the waiter's message.
+function buildKitchenMessage({ order_id, table_number, order_type, customer_name, message, waiter_name }) {
+  const heading = table_number ? `TABLE ${table_number}`
+                : order_type === 'takeaway' ? `TAKEAWAY${order_id ? ' #' + order_id : ''}`
+                : 'KITCHEN MESSAGE';
+  const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+  // Wrap long messages onto multiple lines without breaking words.
+  const wrapped = String(message || '').split(/\s+/).reduce((acc, w) => {
+    if (!acc.length) return [w];
+    const last = acc[acc.length - 1];
+    // Big-text consumes ~2x width, so wrap at half LINE_WIDTH.
+    if ((last + ' ' + w).length > Math.floor(LINE_WIDTH / 2)) acc.push(w);
+    else acc[acc.length - 1] = last + ' ' + w;
+    return acc;
+  }, []);
+
+  const parts = [
+    CAN, CMD.INIT, lf(),
+    CMD.ALIGN_CENTER,
+    CMD.BOLD_ON, CMD.SIZE_BIG, txt('** MESSAGE **'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    rule('='), lf(),
+    CMD.BOLD_ON, CMD.SIZE_TALL, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    customer_name ? [txt(customer_name), lf()] : [],
+    rule('-'), lf(),
+    CMD.ALIGN_CENTER,
+    CMD.BOLD_ON, CMD.SIZE_TALL,
+    ...wrapped.flatMap(line => [txt(line), lf()]),
+    CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    rule('='), lf(),
+    txt(`${now}${waiter_name ? '  ·  ' + waiter_name : ''}${order_id ? '  ·  Order #' + order_id : ''}`), lf(2),
+    CMD.CUT,
+  ];
+  return flatten(parts);
+}
+
+// Sends a kitchen message to the kitchen printer (and skips silently if
+// no kitchen printer configured — the KDS banner still shows it).
+async function printKitchenMessage(settings, payload) {
+  const ip          = settings.printer_kitchen_ip;
+  const port        = settings.printer_kitchen_port || 9100;
+  const printerName = settings.printer_kitchen_name || '';
+  const lprQueue    = settings.printer_kitchen_lpr_queue || 'lp';
+  if (!ip && !printerName) return; // no printer — KDS handles it
+  await sendRaw(ip, port, buildKitchenMessage(payload), { printerName, lprQueue });
+}
+
 function buildTestPage() {
   const now = new Date().toLocaleString('en-GB');
   return flatten([
@@ -730,6 +780,7 @@ module.exports = {
   printKitchenTicket,
   printFullKitchenTicket,
   printBarTicket,
+  printKitchenMessage,    // SEPOS-KITCHEN-MSG-001
   testPrint,
   findCupsQueueForIp,
   buildReceipt,           // exported for mock-receipt test print

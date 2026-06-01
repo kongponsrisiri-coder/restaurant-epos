@@ -216,6 +216,10 @@ export default function KitchenScreen() {
   const [tab, setTab] = useState('kitchen');
   const [filter, setFilter] = useState('all');
   const [notification, setNotification] = useState(null);
+  // SEPOS-KITCHEN-MSG-001 — incoming kitchen messages stay pinned at the
+  // top of the screen until the chef dismisses each one. Persistent
+  // banners (not auto-clearing toasts) because allergies/holds matter.
+  const [kitchenMessages, setKitchenMessages] = useState([]);
   const [showAlt, setShowAlt] = useState(false);
   const [altLang, setAltLang] = useState('ภาษาไทย');
   // SEPOS — Direct Mode: cooked items stay on the Kitchen tab with a tick
@@ -276,6 +280,12 @@ export default function KitchenScreen() {
     socket.on('new_order_items', () => fetchOrders());
     socket.on('item_status_changed', () => { fetchOrders(); fetchCompleted(); });
     socket.on('order_closed', () => { fetchOrders(); fetchCompleted(); });
+    socket.on('kitchen_message', (data) => {
+      // Newest first, capped at 8 visible so the screen doesn't get
+      // taken over by stale messages. Chef dismisses each one with ✕.
+      setKitchenMessages(prev => [{ ...data, _id: Date.now() + Math.random() }, ...prev].slice(0, 8));
+      playSound('default');
+    });
     socket.on('course_fired', (data) => {
       fetchOrders();
       if (data.order) {
@@ -353,6 +363,29 @@ export default function KitchenScreen() {
           50% { transform: scale(1.03); }
         }
       `}</style>
+
+      {/* SEPOS-KITCHEN-MSG-001 — kitchen message banners (persistent) */}
+      {kitchenMessages.length > 0 && (
+        <div style={{ position:'sticky', top:0, zIndex:50, display:'flex', flexDirection:'column', gap:8, padding:'10px 12px', background:'rgba(15,23,42,0.95)', borderBottom:'2px solid #f59e0b' }}>
+          {kitchenMessages.map((m) => (
+            <div key={m._id} style={{ background:'#fef3c7', color:'#7c2d12', borderLeft:'6px solid #f59e0b', borderRadius:8, padding:'10px 14px', display:'flex', alignItems:'flex-start', gap:12 }}>
+              <div style={{ fontSize:24 }}>📢</div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:800, marginBottom:2, display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+                  <span>{m.table_number ? `TABLE ${m.table_number}` : (m.order_type === 'takeaway' ? `TAKEAWAY${m.order_id ? ' #' + m.order_id : ''}` : 'KITCHEN')}</span>
+                  {m.customer_name && <span style={{ fontWeight:600, color:'#92400e' }}>· {m.customer_name}</span>}
+                  {m.waiter_name && <span style={{ fontWeight:500, color:'#92400e', fontSize:11 }}>· from {m.waiter_name}</span>}
+                </div>
+                <div style={{ fontSize:18, fontWeight:700, whiteSpace:'pre-wrap', lineHeight:1.3 }}>{m.message}</div>
+              </div>
+              <button onClick={() => setKitchenMessages(prev => prev.filter(x => x._id !== m._id))}
+                style={{ background:'transparent', border:'none', color:'#92400e', cursor:'pointer', fontSize:20, fontWeight:700, padding:'0 4px' }}>
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Notification */}
       {notification && (

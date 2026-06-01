@@ -1240,6 +1240,105 @@ app.delete('/api/discount-reasons/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── SEPOS-KITCHEN-MSG-001 — kitchen-message templates + send ─────────
+app.get('/api/kitchen-templates', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM kitchen_message_templates WHERE is_active=1 ORDER BY sort_order ASC, id ASC'
+    );
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/kitchen-templates', async (req, res) => {
+  try {
+    const { label, message, icon, sort_order } = req.body || {};
+    if (!label || !message) return res.status(400).json({ error: 'label and message required' });
+    const result = await pool.query(
+      'INSERT INTO kitchen_message_templates (label, message, icon, sort_order) VALUES ($1,$2,$3,$4) RETURNING id',
+      [label, message, icon || null, Number(sort_order) || 100]
+    );
+    res.json({ id: result.rows[0].id, success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/kitchen-templates/:id', async (req, res) => {
+  try {
+    const { label, message, icon, sort_order } = req.body || {};
+    await pool.query(
+      'UPDATE kitchen_message_templates SET label=$1, message=$2, icon=$3, sort_order=$4 WHERE id=$5',
+      [label, message, icon || null, Number(sort_order) || 100, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/kitchen-templates/:id', async (req, res) => {
+  try {
+    await pool.query('UPDATE kitchen_message_templates SET is_active=0 WHERE id=$1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-KITCHEN-MSG-001 — send a kitchen message: prints the distinctive
+// 📢 ticket to the kitchen printer (if configured) AND emits a
+// `kitchen_message` socket event so the KDS shows a banner. Optional
+// order_id ties the message to a specific bill so the chef knows which
+// table it's for; otherwise it's a generic floor-wide announcement.
+app.post('/api/print/kitchen-message', async (req, res) => {
+  try {
+    const { order_id, table_number, customer_name, message, waiter_name } = req.body || {};
+    const text = String(message || '').trim();
+    if (!text) return res.status(400).json({ error: 'message required' });
+
+    let resolvedTable = table_number || '';
+    let resolvedType  = 'dine_in';
+    let resolvedCustomer = customer_name || '';
+    if (order_id && !resolvedTable) {
+      const r = await pool.query(
+        `SELECT o.id, o.order_type, o.customer_name, t.table_number
+         FROM orders o LEFT JOIN tables t ON t.id = o.table_id
+         WHERE o.id = $1`, [order_id]
+      ).catch(() => ({ rows: [] }));
+      const o = r.rows[0];
+      if (o) {
+        resolvedTable    = o.table_number || '';
+        resolvedType     = o.order_type || 'dine_in';
+        resolvedCustomer = o.customer_name || customer_name || '';
+      }
+    }
+
+    // Try to print — failure is non-fatal because the KDS banner still
+    // gets the message and the chef will see it.
+    const settings = await loadSettings();
+    let printed = false;
+    try {
+      await printService.printKitchenMessage(settings, {
+        order_id, table_number: resolvedTable, order_type: resolvedType,
+        customer_name: resolvedCustomer, message: text, waiter_name: waiter_name || '',
+      });
+      printed = true;
+    } catch (err) {
+      console.warn('[kitchen-message] print failed:', err.message);
+    }
+
+    io.emit('kitchen_message', {
+      order_id,
+      table_number: resolvedTable,
+      order_type:   resolvedType,
+      customer_name: resolvedCustomer,
+      message: text,
+      waiter_name: waiter_name || '',
+      at: new Date().toISOString(),
+    });
+
+    res.json({ success: true, printed });
+  } catch (err) {
+    console.error('[kitchen-message]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Helper: split a list of closed-order rows into dine-in vs takeaway
 // totals so every reports endpoint exposes the same shape.
 function splitByOrderType(rows) {

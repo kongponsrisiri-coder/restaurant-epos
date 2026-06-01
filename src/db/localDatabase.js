@@ -198,6 +198,18 @@ function initSchema() {
       is_active INTEGER DEFAULT 1
     );
 
+    -- SEPOS-KITCHEN-MSG-001 — pre-canned messages waiters one-tap to send
+    -- to the kitchen (allergies, holds, VIP, birthday). Mirrors PG schema.
+    CREATE TABLE IF NOT EXISTS kitchen_message_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label       TEXT NOT NULL,
+      message     TEXT NOT NULL,
+      icon        TEXT,
+      sort_order  INTEGER DEFAULT 100,
+      is_active   INTEGER DEFAULT 1,
+      restaurant_id TEXT DEFAULT 'siamepos'
+    );
+
     CREATE TABLE IF NOT EXISTS z_reports (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT,

@@ -5,6 +5,7 @@ import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFir
 // SEPOS — DeleteOrderModal removed from OrderScreen 2026-06-01 (Korakot's
 // call). Order screen / kitchen screen no longer expose a delete button;
 // closed-bill delete still lives in Admin → Bills for managers.
+import KitchenMessageModal from '../components/KitchenMessageModal';
 import AllergenChips from '../components/AllergenChips';
 import { parseAllergens } from '../utils/allergens';
 
@@ -22,6 +23,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const [activeSubcat, setActiveSubcat] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modifierPopup, setModifierPopup] = useState(null);
+  const [showKitchenMsg, setShowKitchenMsg] = useState(false); // SEPOS-KITCHEN-MSG-001
   const [selectedModifiers, setSelectedModifiers] = useState({});
   const [notePopup, setNotePopup] = useState(null);
   const [voidPopup, setVoidPopup] = useState(null);
@@ -460,6 +462,14 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 </span>
               )}
             </h2>
+            {/* SEPOS-KITCHEN-MSG-001 — one-tap kitchen message */}
+            <button onClick={() => setShowKitchenMsg(true)} style={{
+              background: 'white', color: '#0D1B3E', border: '1px solid #0D1B3E',
+              borderRadius: 10, padding: '10px 14px', cursor: 'pointer',
+              fontWeight: 700, fontSize: 14
+            }}>
+              📢 Message
+            </button>
             {cart.length > 0 && (
               <button onClick={sendOrder} style={{
                 background: '#1a1a2e', color: 'white', border: 'none',
@@ -470,6 +480,17 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               </button>
             )}
           </div>
+
+          {showKitchenMsg && (
+            <KitchenMessageModal
+              orderId={orderId}
+              tableNumber={order?.table_number}
+              customerName={order?.customer_name}
+              waiterName={order?.staff_name || ''}
+              onClose={() => setShowKitchenMsg(false)}
+              onSent={() => {}}
+            />
+          )}
 
           {/* Course selector */}
           {!activeCatIsBar && (

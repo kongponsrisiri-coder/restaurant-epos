@@ -86,6 +86,8 @@ export const printerHealth        = (ip, port) => get(`/api/print/health?ip=${en
 // SEPOS-PRINT-MAC-001 — MAC ↔ IP discovery via ARP cache
 export const printerGetMac        = (ip)  => get(`/api/print/get-mac?ip=${encodeURIComponent(ip)}`);
 export const printerDiscover      = (mac) => get(`/api/print/discover?mac=${encodeURIComponent(mac)}`);
+// SEPOS-PRINT-THAI-PROBE — visual codepage probe ticket
+export const printerThaiTest      = () => post('/api/print/thai-test', {});
 
 // SEPOS-LOCAL-001 P1 — local HMRC archive status + manual triggers
 export const getArchiveStatus     = () => get('/api/local/archive-status');

@@ -5095,6 +5095,20 @@ async function loadSettings() {
 // totals, alignment) so operators see at setup time exactly what real
 // receipts will look like — instead of finding bugs at first service.
 // Either ip OR printer_name (or both) must be supplied.
+// SEPOS-PRINT-THAI-PROBE — print a single test ticket with "ทดสอบ" under
+// each common Thai codepage. The operator visually picks the one that
+// rendered correctly and sets settings.kitchen_thai_codepage to its ID.
+app.post('/api/print/thai-test', async (req, res) => {
+  try {
+    const settings = await loadSettings();
+    await printService.printThaiTest(settings);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[print/thai-test]', err.message);
+    res.json({ success: false, error: err.message });
+  }
+});
+
 app.post('/api/print/test', async (req, res) => {
   const { ip, port, printer_name } = req.body;
   if (!ip && !printer_name) {

@@ -10,7 +10,7 @@
 // to persist changes.
 
 import { useState, useEffect } from 'react';
-import { getSettings, updateSettings, testNetworkPrinter, cupsQueueForIp, printerHealth, printerGetMac, printerDiscover } from '../../api';
+import { getSettings, updateSettings, testNetworkPrinter, cupsQueueForIp, printerHealth, printerGetMac, printerDiscover, printerThaiTest } from '../../api';
 
 // ── Network Printers card (IP-based, RAW + LPR + CUPS fallback chain) ──
 function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
@@ -308,6 +308,44 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
           <strong>English only</strong> — English course names only. Use this if Thai characters appear garbled on your printer.
         </div>
       </div>
+
+      {/* SEPOS-PRINT-THAI-PROBE 2026-06-02 — when Thai bilingual is on but
+          nothing prints, the printer's codepage ID for Thai is different
+          from the default 30. This test prints "ทดสอบ" under every common
+          codepage so the operator can visually pick the right one. */}
+      {(settings.kitchen_language || 'en_th') === 'en_th' && (
+        <div style={{ marginBottom:16, padding:14, background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:10 }}>
+          <label style={{ fontSize:13, fontWeight:700, color:'#92400e', display:'block', marginBottom:4 }}>
+            🌶️ Thai Codepage
+          </label>
+          <p style={{ fontSize:12, color:'#92400e', margin:'0 0 10px', lineHeight:1.4 }}>
+            If Thai prints as blank or garbage, your printer uses a different codepage ID than the default (30). Tap below to print a test ticket showing "ทดสอบ" (test) under each common codepage. Find the row that prints correctly, then enter that number here.
+          </p>
+          <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+            <input
+              type="number"
+              value={settings.kitchen_thai_codepage || ''}
+              onChange={e => setSettings(s => ({ ...s, kitchen_thai_codepage: e.target.value }))}
+              placeholder="30 (default)"
+              style={{ width:120, padding:'8px 12px', borderRadius:8, border:'1px solid #fcd34d', fontSize:14, background:'white' }}
+            />
+            <button
+              onClick={async () => {
+                try {
+                  const r = await printerThaiTest();
+                  if (!r?.success) alert('Print failed: ' + (r?.error || r?.reason || 'unknown'));
+                } catch (e) { alert('Print failed: ' + e?.message); }
+              }}
+              style={{ padding:'8px 14px', borderRadius:8, border:'none', background:'#92400e', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}
+            >
+              🖨️ Print Thai test
+            </button>
+          </div>
+          <div style={{ fontSize:11, color:'#92400e', marginTop:8, opacity:0.85 }}>
+            Common IDs: <strong>30</strong> Epson/Star CP874 · <strong>21</strong> Star alt · <strong>17</strong> some clones · <strong>50-52</strong> cnfujun variants
+          </div>
+        </div>
+      )}
 
       <div style={{ background:'#f0f9ff', border:'1px solid #bae6fd', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#0369a1' }}>
         💡 <strong>How to find your printer's IP:</strong> Log into your router admin page (usually 192.168.1.1) and look for the WAVLINK print server in the connected devices list. Give it a fixed/static IP so it never changes.

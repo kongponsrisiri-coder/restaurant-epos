@@ -805,6 +805,67 @@ async function testPrint(ip, port = 9100, printerName = '') {
   await sendRaw(ip, parseInt(port, 10) || 9100, buildTestPage(), { printerName });
 }
 
+// ── Thai codepage probe ─────────────────────────────────────────────
+// Prints "ทดสอบ" (Thai for "test") under every common ESC/POS Thai
+// codepage ID so the operator can visually identify which one their
+// specific printer recognises. The cnfujun POS80 + various Chinese
+// clones don't always follow the Epson/Star convention of CP874 at
+// index 30 — some use 21, some 17, some don't support Thai at all.
+//
+// Bytes for "ทดสอบ" in CP874 / TIS-620: 0xB7 0xB4 0xCA 0xCD 0xBA.
+// We send the same bytes after switching to each codepage; whichever
+// row renders the Thai word correctly is the right ID. Operator then
+// sets settings.kitchen_thai_codepage to that value.
+function buildThaiCodepageTest() {
+  // "ทดสอบ" as TIS-620 bytes
+  const THAI_BYTES = Buffer.from([0xb7, 0xb4, 0xca, 0xcd, 0xba]);
+  const candidates = [11, 14, 16, 17, 18, 20, 21, 22, 26, 30, 33, 50, 51, 52];
+
+  const parts = [
+    CAN, CMD.INIT, lf(),
+    CMD.ALIGN_CENTER, CMD.BOLD_ON, CMD.SIZE_TALL,
+    txt('THAI CODEPAGE TEST'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    rule('='), lf(),
+    CMD.ALIGN_LEFT,
+    txt('Expected: ทดสอบ  ("test" in Thai)'), lf(),
+    txt('Whichever line below shows the'), lf(),
+    txt('correct Thai word is the codepage'), lf(),
+    txt('this printer supports.'), lf(),
+    txt('Set kitchen_thai_codepage to that'), lf(),
+    txt('number in Admin -> Printers.'), lf(),
+    rule('-'), lf(),
+  ];
+
+  for (const cp of candidates) {
+    parts.push(
+      // Pad the label so all rows align: "CP 11:  ", "CP 30:  "
+      txt(`CP ${String(cp).padStart(2)}:  `),
+      // Switch codepage, write Thai bytes, switch back to CP858
+      Buffer.from([ESC, 0x74, cp]),
+      THAI_BYTES,
+      Buffer.from([ESC, 0x74, 0x13]),
+      lf(),
+    );
+  }
+
+  parts.push(
+    rule('='), lf(),
+    CMD.ALIGN_CENTER,
+    txt(new Date().toLocaleString('en-GB')), lf(2),
+    CMD.CUT,
+  );
+  return flatten(parts);
+}
+
+async function printThaiTest(settings) {
+  const ip          = settings.printer_kitchen_ip || settings.printer_receipt_ip;
+  const port        = settings.printer_kitchen_port || settings.printer_receipt_port || 9100;
+  const printerName = settings.printer_kitchen_name || settings.printer_receipt_name || '';
+  const lprQueue    = settings.printer_kitchen_lpr_queue || settings.printer_receipt_lpr_queue || 'lp';
+  if (!ip && !printerName) throw new Error('NO_IP');
+  await sendRaw(ip, port, buildThaiCodepageTest(), { printerName, lprQueue });
+}
+
 module.exports = {
   printReceipt,
   printFireNotice,
@@ -812,6 +873,7 @@ module.exports = {
   printFullKitchenTicket,
   printBarTicket,
   printKitchenMessage,    // SEPOS-KITCHEN-MSG-001
+  printThaiTest,          // SEPOS-PRINT-THAI-PROBE
   testPrint,
   findCupsQueueForIp,
   buildReceipt,           // exported for mock-receipt test print

@@ -353,7 +353,23 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   };
 
   const cartTotal = cart.reduce((sum, i) => sum + i.unit_price * i.quantity, 0);
-  const subtotal = (order?.total || 0) + cartTotal;
+  // Compute the existing-items subtotal LIVE from order.items, filtering
+  // voids and applying per-item discounts. Was previously using
+  // `order.total` directly — the persisted column set at order-create
+  // time which the void endpoint never recalculates, so voiding every
+  // item left £X.XX in the subtotal. (Bug fix 2026-06-02 — Korakot
+  // surfaced via "I voided all items, why total still has amount".)
+  // BillScreen.jsx uses the same pattern for closed-bill totals.
+  const existingItemsTotal = (order?.items || [])
+    .filter(i => !i.voided)
+    .reduce((sum, i) => {
+      const p = (Number(i.unit_price) || 0) * (Number(i.quantity) || 0);
+      const d = i.discount_value > 0
+        ? (i.discount_type === 'percent' ? p * (Number(i.discount_value) / 100) : Math.min(Number(i.discount_value), p))
+        : 0;
+      return sum + p - d;
+    }, 0);
+  const subtotal = existingItemsTotal + cartTotal;
   const discountAmount = order?.discount_value > 0
     ? order.discount_type === 'percent' ? subtotal * (order.discount_value / 100) : order.discount_value
     : 0;

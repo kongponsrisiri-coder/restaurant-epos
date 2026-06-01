@@ -531,6 +531,14 @@ function preTranslate(sql) {
   let out = sql;
   // PG `NOW()` → SQLite `CURRENT_TIMESTAMP`
   out = out.replace(/\bNOW\s*\(\s*\)/gi, 'CURRENT_TIMESTAMP');
+  // PG `FOR UPDATE` row-level lock → SQLite has no row locks; the
+  // enclosing BEGIN/COMMIT transaction already serialises access
+  // (SQLite uses a whole-DB lock, not row locks). Strip it so SQLite
+  // doesn't choke on syntax it doesn't recognise. Without this fix
+  // every endpoint that uses SELECT … FOR UPDATE for atomic mutations
+  // (voucher redeem, voucher-remove, close-zero, batch make/discard)
+  // returns a syntax error on Mac installs running the local backend.
+  out = out.replace(/\s+FOR\s+UPDATE(?=\s*$|\s|;)/gi, '');
   // `expr::date` → `date(expr)` (works for column refs and $N placeholders)
   out = out.replace(/([\w.]+|\$\d+)\s*::\s*date\b/gi, 'date($1)');
   // `expr::timestamp` → `datetime(expr)`

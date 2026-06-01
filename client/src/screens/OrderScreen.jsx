@@ -254,7 +254,28 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     if (!resendPopup) return;
     const { item } = resendPopup;
     setResendPopup(null);
-    await resendToKitchen(orderId, [item.id], reason);
+    // Open the popup window BEFORE awaits so the browser doesn't block it
+    // (popup blocker requires user-gesture context, lost across awaits).
+    const popupWin = window.open('', '_blank', 'width=400,height=600,scrollbars=yes');
+    try {
+      await resendToKitchen(orderId, [item.id], reason);
+      // SEPOS-024 follow-up 2026-06-02: also dispatch a kitchen print so
+      // the chef sees the resend on paper. The /resend endpoint only
+      // updates DB + emits the KDS socket event — restaurants with no
+      // KDS had no visible signal that a resend happened. Prepend the
+      // reason to the item notes so it shows up prominently on the
+      // ticket alongside any existing dish note.
+      const noteWithReason = `🔄 RESEND [${reason}]${item.notes ? ' | ' + item.notes : ''}`;
+      await printKitchenTicket({
+        order: order ? { ...order } : { id: orderId },
+        items: [{ ...item, notes: noteWithReason }],
+        course: item.course || 0,
+        popupWin,
+      });
+    } catch (e) {
+      console.warn('[resend] print failed:', e?.message);
+      try { popupWin?.close(); } catch {}
+    }
     await fetchOrder();
   };
 

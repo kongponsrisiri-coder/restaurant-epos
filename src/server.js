@@ -1240,6 +1240,90 @@ app.delete('/api/discount-reasons/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── SEPOS — One-shot tenant-data wipe ────────────────────────────────
+// Factory-reset endpoint requested by Korakot 2026-06-01 to clean
+// Baan Siam after testing. Deletes operational data (orders, payments,
+// vouchers, customers, reservations, z-reports, sync queue, etc.)
+// while preserving menu, staff, tables, settings, allergen matrix,
+// recipes, ingredients, and kitchen message templates.
+//
+// Defended by two checks: SYNC_SECRET (so random callers can't hit it)
+// + the request body must include `confirm` matching the value of
+// `settings.restaurant_name` on the target DB — so if you accidentally
+// hit the wrong Railway service the names won't match and the wipe
+// refuses. Designed to be removed in a follow-up commit once used.
+app.post('/api/admin/wipe-tenant-data', async (req, res) => {
+  const auth = req.headers['x-sync-secret'];
+  if (!process.env.SYNC_SECRET || auth !== process.env.SYNC_SECRET) {
+    return res.status(401).json({ error: 'unauthorized — SYNC_SECRET required' });
+  }
+
+  // Read the target restaurant's name from settings; require operator
+  // to echo it back so curl typos can't wipe the wrong tenant.
+  const nameRes = await pool.query(`SELECT value FROM settings WHERE key = 'restaurant_name'`).catch(() => ({ rows: [] }));
+  const restaurantName = nameRes.rows[0]?.value || 'unknown';
+  if (!req.body || req.body.confirm !== restaurantName) {
+    return res.status(400).json({
+      error: `confirm must equal the restaurant_name in settings (expected "${restaurantName}")`,
+    });
+  }
+
+  // FK-safe delete order: children first, then parents. Each wrapped in
+  // its own try so a missing table on a slim install doesn't abort the
+  // whole wipe (different installs have different inventory schemas).
+  const TABLES = [
+    // Order-related children
+    'order_item_modifiers',
+    'order_items',
+    'payments',
+    'payment_amendments',
+    'order_deletions',
+    'voucher_redemptions',
+    // Order + voucher roots
+    'orders',
+    'vouchers',
+    // CRM + bookings
+    'customer_visit_history',
+    'customers',
+    'reservations',
+    'campaign_sends',
+    // Day-end records
+    'z_reports',
+    'clock_records',
+    // Inventory operational data (recipes themselves stay)
+    'batch_made',
+    'stock_movements',
+    'batches',
+    'supplier_invoice_items',
+    'supplier_invoices',
+    // Sync state — clear stuck queue + reset cursors
+    'sync_queue',
+    'sync_state',
+  ];
+
+  const client = await pool.connect();
+  const results = [];
+  try {
+    await client.query('BEGIN');
+    for (const t of TABLES) {
+      try {
+        const r = await client.query(`DELETE FROM ${t}`);
+        results.push({ table: t, deleted: r.rowCount });
+      } catch (err) {
+        results.push({ table: t, skipped: err.message });
+      }
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true, restaurant: restaurantName, results });
+    console.warn(`[WIPE] tenant '${restaurantName}' factory-reset by SYNC_SECRET caller. Results:`, results);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // ── SEPOS-KITCHEN-MSG-001 — kitchen-message templates + send ─────────
 app.get('/api/kitchen-templates', async (req, res) => {
   try {

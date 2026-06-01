@@ -10,6 +10,7 @@
 
 | Agent | Working On | Ticket | Started |
 |-------|-----------|--------|---------|
+| Krit  | **SEPOS-PAY-AMEND-001 — Amend payment method on a closed bill. NEW TICKET, ready to start.** Restaurant EPOS lacks the "amend method on closed bill" function that spa-epos already has (Nook's QA confirmed it ✅). When cashier mis-keys Cash for Card on close-out, Z-report split is wrong with no recourse short of deleting the bill. Half-day port. Full spec: `~/Documents/Claude/Projects/SiamEpos/SEPOS-PAY-AMEND-001-Krit-Ticket.md`. **Backend:** new `PUT /api/bills/:id/amend-method` endpoint, manager-PIN gate, UPDATE `payments` row + INSERT audit row in new `payment_amendments` table. **Frontend:** 🔄 Change method button per row in Admin → Bills, AmendPaymentModal with method picker + reason + PIN. Z-report preview reflects new method live; saved Z-report snapshots stay as historical record. Vouchers explicitly blocked from amend (would double-spend) — points operator at the void flow instead. Split bills only amend the latest payment row in v1; doc limitation for future SEPOS-PAY-AMEND-002. | SEPOS-PAY-AMEND-001 | scoped 2026-06-01 |
 
 ---
 

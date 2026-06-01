@@ -1301,27 +1301,21 @@ app.post('/api/admin/wipe-tenant-data', async (req, res) => {
     'sync_state',
   ];
 
-  const client = await pool.connect();
+  // No transaction wrapper — each DELETE auto-commits so a missing
+  // optional table (e.g. payment_amendments on an install without
+  // SEPOS-PAY-AMEND-001 yet) doesn't abort the whole wipe. Trade-off:
+  // no atomicity, but a partial wipe is recoverable by re-firing.
   const results = [];
-  try {
-    await client.query('BEGIN');
-    for (const t of TABLES) {
-      try {
-        const r = await client.query(`DELETE FROM ${t}`);
-        results.push({ table: t, deleted: r.rowCount });
-      } catch (err) {
-        results.push({ table: t, skipped: err.message });
-      }
+  for (const t of TABLES) {
+    try {
+      const r = await pool.query(`DELETE FROM ${t}`);
+      results.push({ table: t, deleted: r.rowCount });
+    } catch (err) {
+      results.push({ table: t, skipped: err.message });
     }
-    await client.query('COMMIT');
-    res.json({ ok: true, restaurant: restaurantName, results });
-    console.warn(`[WIPE] tenant '${restaurantName}' factory-reset by SYNC_SECRET caller. Results:`, results);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
-  } finally {
-    client.release();
   }
+  res.json({ ok: true, restaurant: restaurantName, results });
+  console.warn(`[WIPE] tenant '${restaurantName}' factory-reset by SYNC_SECRET caller. Results:`, results);
 });
 
 // ── SEPOS-KITCHEN-MSG-001 — kitchen-message templates + send ─────────

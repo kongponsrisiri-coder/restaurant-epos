@@ -326,7 +326,7 @@ function buildFireNotice({ order, course, bilingual = true }) {
     ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : `TAKEAWAY #${order.id}`)
     : `TABLE ${order.table_number != null ? order.table_number : '?'}`;
   const courseEN = COURSES_EN[course] || 'ITEMS';
-  const courseTH = bilingual ? (COURSES_TH[course] || '') : '';
+  // Korakot 2026-06-02: no Thai on the category — English label only.
   const now      = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
   const headSize = heading.length <= 10 ? CMD.SIZE_BIG : CMD.SIZE_TALL;
 
@@ -337,7 +337,6 @@ function buildFireNotice({ order, course, bilingual = true }) {
     rule('='), lf(),
     CMD.BOLD_ON, CMD.SIZE_BIG, txt('FIRE'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(courseEN), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-    courseTH ? [txt(courseTH), lf()] : [],
     rule('='), lf(),
     CMD.ALIGN_CENTER,
     txt(`${now}  ·  Order #${order.id}`), lf(2),
@@ -355,7 +354,9 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
     ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : `TAKEAWAY #${order.id}`)
     : `TABLE ${order.table_number != null ? order.table_number : '?'}`;
   const courseEN = COURSES_EN[course] || 'ITEMS';
-  const courseTH = bilingual ? (COURSES_TH[course] || '') : '';
+  // Korakot 2026-06-02: don't print Thai on the category (course)
+  // header — STARTERS/MAINS in English is enough. Thai stays only on
+  // the item name_alt line where it actually helps the chef.
   const now = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
   const headSize = heading.length <= 10 ? CMD.SIZE_BIG : CMD.SIZE_TALL;
 
@@ -364,7 +365,6 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(courseEN), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-    courseTH ? [CMD.BOLD_ON, CMD.SIZE_TALL, txtTh(courseTH, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
     order.customer_name ? [txt(order.customer_name), lf()] : [],
     rule('='), lf(),
     CMD.ALIGN_LEFT,
@@ -378,7 +378,11 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
         CMD.BOLD_ON, CMD.SIZE_BIG,
         txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}`),
         CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-        nameAlt    ? [txtTh('    ' + nameAlt, thaiCodepage), lf()] : [],
+        // Thai item name — bumped to SIZE_TALL + BOLD so it's clearly
+        // legible next to the SIZE_BIG English line above. Was
+        // SIZE_NORMAL which looked tiny in comparison. Korakot
+        // 2026-06-02: "increase the size of Thai language".
+        nameAlt    ? [CMD.BOLD_ON, CMD.SIZE_TALL, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
         // Modifier / option choice line — bumped to SIZE_TALL + BOLD so
         // the chef reads "no MSG", "extra spicy", "Chicken" etc. as
         // clearly as the item name itself. Was SIZE_NORMAL (Korakot
@@ -413,8 +417,9 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
   });
 
   const courseBlocks = Object.keys(byCourse).sort().flatMap((course, idx, arr) => [
+    // English course header only. Korakot 2026-06-02: don't print
+    // Thai on the category — STARTERS / MAINS in English is enough.
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(COURSES_EN[course] || 'ITEMS'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-    bilingual && COURSES_TH[course] ? [CMD.BOLD_ON, CMD.SIZE_TALL, txtTh(COURSES_TH[course], thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
     rule('-'), lf(),
     ...byCourse[course].flatMap(item => {
       const nameAlt = bilingual ? (item.name_alt || item.name_th || '') : '';
@@ -424,7 +429,10 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
         CMD.BOLD_ON, CMD.SIZE_BIG,
         txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}`),
         CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-        nameAlt    ? [txtTh('    ' + nameAlt, thaiCodepage), lf()] : [],
+        // Thai item name — SIZE_TALL + BOLD so it's clearly legible
+        // next to the SIZE_BIG English line above. Korakot
+        // 2026-06-02: "increase the size of Thai language".
+        nameAlt    ? [CMD.BOLD_ON, CMD.SIZE_TALL, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
         // Modifier / option choice line — bumped to SIZE_TALL + BOLD so
         // the chef reads "no MSG", "extra spicy", "Chicken" etc. as
         // clearly as the item name itself. Was SIZE_NORMAL (Korakot

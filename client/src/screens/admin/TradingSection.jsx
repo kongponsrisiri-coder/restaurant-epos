@@ -85,9 +85,12 @@ export default function TradingSection() {
             <div style={{ background: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
               <div style={{ fontWeight: 700, marginBottom: 12, color: '#1a1a2e' }}>Recent Orders</div>
               {data.orders.slice(0, 10).map(order => (
+                // Korakot 2026-06-02: dropped the · #{order.id} segment so
+                // the Trading summary's Recent Orders list matches Bills /
+                // Reports — operators reference by Table + time, not bill #.
                 <div key={order.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0', fontSize: 14 }}>
-                  <span style={{ color: '#555' }}>Table {order.table_number} · #{order.id} · {order.method}</span>
-                  <span style={{ fontWeight: 700, color: '#1a1a2e' }}>£{Number(order.total || 0).toFixed(2)}</span>
+                  <span style={{ color: '#555' }}>Table {order.table_number} · {order.method}</span>
+                  <span style={{ fontWeight: 700, color: '#1a1a2e' }}>£{Number(order.paid_amount ?? order.total ?? 0).toFixed(2)}</span>
                 </div>
               ))}
             </div>

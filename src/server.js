@@ -1447,11 +1447,31 @@ app.get('/api/reports/daily', async (req, res) => {
 app.get('/api/reports/summary', async (req, res) => {
   try {
     const { from, to } = req.query;
-    const [result, voucherSoldRes, voucherRedeemedRes] = await Promise.all([
+    const [result, foodDrinkRes, voucherSoldRes, voucherRedeemedRes] = await Promise.all([
       // Korakot 2026-06-02: pull payments.amount as paid_amount so the
       // Reports tab can show what was actually collected (incl. service
       // charge) instead of the bare subtotal.
       pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date ORDER BY orders.closed_at DESC`, [from, to]),
+      // Korakot 2026-06-02: food vs drink split based on categories.is_bar.
+      // Per-item discounts applied. Service charge + bill-level discounts
+      // are handled separately above.
+      pool.query(`
+        SELECT COALESCE(c.is_bar, 0) AS is_bar,
+               SUM(
+                 CASE
+                   WHEN oi.discount_type = 'percent' THEN oi.quantity * oi.unit_price * (1 - COALESCE(oi.discount_value,0)/100.0)
+                   WHEN oi.discount_type = 'fixed'   THEN GREATEST(0, oi.quantity * oi.unit_price - COALESCE(oi.discount_value,0))
+                   ELSE oi.quantity * oi.unit_price
+                 END
+               ) AS subtotal
+        FROM order_items oi
+        LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+        LEFT JOIN categories  c  ON c.id  = mi.category_id
+        LEFT JOIN orders      o  ON o.id  = oi.order_id
+        WHERE o.status='closed' AND oi.voided=0
+          AND o.closed_at::date >= $1::date AND o.closed_at::date <= $2::date
+        GROUP BY COALESCE(c.is_bar, 0)
+      `, [from, to]),
       // SEPOS-VOUCHER-001 — vouchers sold in the date range, split by method
       pool.query(`SELECT payment_method, COUNT(*)::int AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at::date >= $1::date AND created_at::date <= $2::date GROUP BY payment_method`, [from, to]).catch(() => ({ rows: [] })),
       pool.query(`SELECT COUNT(*)::int AS count, COALESCE(SUM(amount_used), 0) AS total FROM voucher_redemptions WHERE used_at::date >= $1::date AND used_at::date <= $2::date`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
@@ -1483,8 +1503,15 @@ app.get('/api/reports/summary', async (req, res) => {
     }
     const vRedeemed = voucherRedeemedRes.rows[0] || { count: 0, total: 0 };
 
+    let total_food = 0, total_drink = 0;
+    for (const r of foodDrinkRes.rows) {
+      if (Number(r.is_bar) === 1) total_drink += Number(r.subtotal || 0);
+      else                        total_food  += Number(r.subtotal || 0);
+    }
+
     res.json({
       orders: rows, total_sales, total_subtotal, total_service,
+      total_food, total_drink,
       order_count: rows.length, total_covers, by_method,
       vouchers_sold: {
         count: voucherCount,
@@ -1813,7 +1840,7 @@ app.post('/api/sync/delete-order', async (req, res) => {
 app.get('/api/z-report/preview', async (req, res) => {
   try {
     const { from, to } = req.query;
-    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, vouchersSoldRes, vouchersRedeemedRes] = await Promise.all([
+    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, foodDrinkRes, vouchersSoldRes, vouchersRedeemedRes] = await Promise.all([
       pool.query(`SELECT orders.*, tables.table_number, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp ORDER BY orders.closed_at DESC`, [from, to]),
       pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='open'`),
       pool.query(`SELECT COUNT(*) as void_count, SUM(order_items.unit_price * order_items.quantity) as void_value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp`, [from, to]),
@@ -1821,6 +1848,24 @@ app.get('/api/z-report/preview', async (req, res) => {
       pool.query(`SELECT COALESCE(order_items.void_type, 'Uncategorised') AS void_type, COUNT(*) AS count, COALESCE(SUM(order_items.unit_price * order_items.quantity), 0) AS value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp GROUP BY order_items.void_type ORDER BY value DESC`, [from, to]),
       // SEPOS-021: rows for VAT breakdown (aggregated in JS)
       pool.query(`SELECT COALESCE(mi.vat_rate, 20) AS vat_rate, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id LEFT JOIN orders o ON o.id = oi.order_id WHERE o.status='closed' AND oi.voided=0 AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp`, [from, to]),
+      // Korakot 2026-06-02: food vs drink split via categories.is_bar.
+      pool.query(`
+        SELECT COALESCE(c.is_bar, 0) AS is_bar,
+               SUM(
+                 CASE
+                   WHEN oi.discount_type = 'percent' THEN oi.quantity * oi.unit_price * (1 - COALESCE(oi.discount_value,0)/100.0)
+                   WHEN oi.discount_type = 'fixed'   THEN GREATEST(0, oi.quantity * oi.unit_price - COALESCE(oi.discount_value,0))
+                   ELSE oi.quantity * oi.unit_price
+                 END
+               ) AS subtotal
+        FROM order_items oi
+        LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+        LEFT JOIN categories  c  ON c.id  = mi.category_id
+        LEFT JOIN orders      o  ON o.id  = oi.order_id
+        WHERE o.status='closed' AND oi.voided=0
+          AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
+        GROUP BY COALESCE(c.is_bar, 0)
+      `, [from, to]),
       // SEPOS-VOUCHER-001: vouchers sold in the range (Stripe — off till)
       pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at >= $1::timestamp AND created_at <= $2::timestamp AND payment_method != 'mock'`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
       // SEPOS-VOUCHER-001: vouchers redeemed in the range (off till — already paid for at sale time)
@@ -1857,9 +1902,14 @@ app.get('/api/z-report/preview', async (req, res) => {
     const totalOther     = orders.filter(o => o.method !== 'Cash' && o.method !== 'Card').reduce((s, o) => s + Number(o.paid_amount ?? o.total ?? 0), 0);
     const totalDiscounts = orders.reduce((s, o) => { if (!o.discount_value) return s; return s + (o.discount_type === 'percent' ? (o.total || 0) * (o.discount_value / 100) : o.discount_value); }, 0);
     const orderTypeSplit = splitByOrderType(orders);
+    let totalFood = 0, totalDrink = 0;
+    for (const r of foodDrinkRes.rows) {
+      if (Number(r.is_bar) === 1) totalDrink += Number(r.subtotal || 0);
+      else                        totalFood  += Number(r.subtotal || 0);
+    }
     const vouchersSold     = vouchersSoldRes.rows[0]     || { count: 0, total: 0 };
     const vouchersRedeemed = vouchersRedeemedRes.rows[0] || { count: 0, total: 0 };
-    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_subtotal: totalSubtotal, total_service: totalService, total_covers: totalCovers, total_orders: orders.length, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: orders.length > 0 ? totalSales / orders.length : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0) }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, ...orderTypeSplit });
+    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_subtotal: totalSubtotal, total_service: totalService, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: orders.length, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: orders.length > 0 ? totalSales / orders.length : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0) }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, ...orderTypeSplit });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -4872,17 +4922,24 @@ app.get('/api/reports/vat', async (req, res) => {
     const { from, to } = req.query;
     const fromTs = from || '1970-01-01';
     const toTs   = to   || '2999-12-31';
+    // Korakot 2026-06-02: extended to surface is_bar (food vs drink) per
+    // line so we can render the breakdown split by category type on the
+    // VAT report. Per-item discount still applied; bill-level discount
+    // still out of scope (rare on a VAT-inclusive UK menu).
     const r = await pool.query(`
       SELECT COALESCE(mi.vat_rate, 20) AS vat_rate,
+             COALESCE(c.is_bar, 0) AS is_bar,
              oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value
       FROM order_items oi
       LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
-      LEFT JOIN orders o ON o.id = oi.order_id
+      LEFT JOIN categories  c  ON c.id  = mi.category_id
+      LEFT JOIN orders      o  ON o.id  = oi.order_id
       WHERE o.status='closed' AND oi.voided=0
         AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
     `, [fromTs, toTs]);
 
     const byRate = new Map();
+    const byKind = { food: { net: 0, vat: 0, gross: 0, items: 0 }, drink: { net: 0, vat: 0, gross: 0, items: 0 } };
     for (const row of r.rows) {
       const rate = Number(row.vat_rate ?? 20);
       let gross = Number(row.quantity || 0) * Number(row.unit_price || 0);
@@ -4890,19 +4947,26 @@ app.get('/api/reports/vat', async (req, res) => {
       else if (row.discount_type === 'fixed') gross = Math.max(0, gross - Number(row.discount_value || 0));
       const net = rate > 0 ? gross * (100 / (100 + rate)) : gross;
       const vat = gross - net;
+      const qty = Number(row.quantity || 0);
       const bucket = byRate.get(rate) || { rate, net: 0, vat: 0, gross: 0, items: 0 };
       bucket.net   += net;
       bucket.vat   += vat;
       bucket.gross += gross;
-      bucket.items += Number(row.quantity || 0);
+      bucket.items += qty;
       byRate.set(rate, bucket);
+
+      const kind = Number(row.is_bar) === 1 ? 'drink' : 'food';
+      byKind[kind].net   += net;
+      byKind[kind].vat   += vat;
+      byKind[kind].gross += gross;
+      byKind[kind].items += qty;
     }
     const breakdown = [...byRate.values()].sort((a, b) => a.rate - b.rate);
     const total = breakdown.reduce(
       (a, b) => ({ net: a.net + b.net, vat: a.vat + b.vat, gross: a.gross + b.gross, items: a.items + b.items }),
       { net: 0, vat: 0, gross: 0, items: 0 }
     );
-    res.json({ from: fromTs, to: toTs, breakdown, total });
+    res.json({ from: fromTs, to: toTs, breakdown, total, by_kind: byKind });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

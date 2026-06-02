@@ -37,7 +37,8 @@ export default function ReportsSection() {
         ]);
       });
       rows.push([]);
-      rows.push(['', '', '', '', 'Subtotal',             Number(data.total_subtotal || 0).toFixed(2)]);
+      rows.push(['', '', '', '', 'Food',                 Number(data.total_food     || 0).toFixed(2)]);
+      rows.push(['', '', '', '', 'Drink',                Number(data.total_drink    || 0).toFixed(2)]);
       rows.push(['', '', '', '', 'Service charge',       Number(data.total_service  || 0).toFixed(2)]);
       rows.push(['', '', '', '', `TOTAL (${data.order_count || 0} orders · ${data.total_covers || 0} covers)`, Number(data.total_sales || 0).toFixed(2)]);
       // SEPOS-VOUCHER-001 — append voucher activity for the period
@@ -111,13 +112,19 @@ export default function ReportsSection() {
                       </div>
                     </div>
                   )}
-                  {/* Korakot 2026-06-02: explicit Subtotal + Service Charge
-                      stack so the operator can see WHERE the gap between
-                      "items billed" and "money collected" comes from. */}
+                  {/* Korakot 2026-06-02: Food / Drink / Service charge
+                      breakdown so the operator can see kitchen vs bar
+                      contribution at a glance. Food vs Drink split is
+                      driven by categories.is_bar; service charge is
+                      paid_amount − items subtotal. */}
                   <div style={{ padding: '10px 20px', background: '#fafafa', display:'flex', flexDirection:'column', gap:4, fontSize:13 }}>
                     <div style={{ display:'flex', justifyContent:'space-between', color:'#555' }}>
-                      <span>Subtotal (food + drink)</span>
-                      <span>£{Number(data.total_subtotal || 0).toFixed(2)}</span>
+                      <span>🍽️ Food</span>
+                      <span>£{Number(data.total_food || 0).toFixed(2)}</span>
+                    </div>
+                    <div style={{ display:'flex', justifyContent:'space-between', color:'#555' }}>
+                      <span>🍺 Drink</span>
+                      <span>£{Number(data.total_drink || 0).toFixed(2)}</span>
                     </div>
                     <div style={{ display:'flex', justifyContent:'space-between', color:'#0D1B3E', fontWeight:600 }}>
                       <span>Service charge (12.5%)</span>

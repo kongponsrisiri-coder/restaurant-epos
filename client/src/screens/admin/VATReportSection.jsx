@@ -51,6 +51,15 @@ export default function VATReportSection() {
       ]);
     }
     rows.push(['TOTAL', Number(data.total.net).toFixed(2), Number(data.total.vat).toFixed(2), Number(data.total.gross).toFixed(2), data.total.items || 0]);
+    // Korakot 2026-06-02: also dump the Food vs Drink split so the
+    // accountant can see at a glance how much of the period's gross is
+    // kitchen vs bar.
+    if (data.by_kind) {
+      rows.push([]);
+      rows.push(['By category', 'Net £', 'VAT £', 'Gross £', 'Items']);
+      rows.push(['Food',  Number(data.by_kind.food.net  || 0).toFixed(2), Number(data.by_kind.food.vat  || 0).toFixed(2), Number(data.by_kind.food.gross  || 0).toFixed(2), data.by_kind.food.items  || 0]);
+      rows.push(['Drink', Number(data.by_kind.drink.net || 0).toFixed(2), Number(data.by_kind.drink.vat || 0).toFixed(2), Number(data.by_kind.drink.gross || 0).toFixed(2), data.by_kind.drink.items || 0]);
+    }
     downloadCsv(`vat-report_${from}_to_${to}.csv`, rows);
   };
 
@@ -117,9 +126,43 @@ export default function VATReportSection() {
                 </tr>
               </tbody>
             </table>
+            {/* Korakot 2026-06-02: Food / Drink split — same numbers
+                broken down by categories.is_bar so the operator can sanity
+                check the VAT against till receipts (e.g. drink should be
+                100% 20% rated; food can be 20% / 5% / 0% depending on
+                what's sold). */}
+            {data.by_kind && (
+              <div style={{ marginTop:18, display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                {[
+                  { key:'food',  label:'🍽️ Food',  tone:'#0D1B3E' },
+                  { key:'drink', label:'🍺 Drink', tone:'#0D1B3E' },
+                ].map(k => {
+                  const b = data.by_kind[k.key] || { net:0, vat:0, gross:0, items:0 };
+                  return (
+                    <div key={k.key} style={{ background:'#fafafa', border:'1px solid #eee', borderRadius:10, padding:14 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:k.tone, marginBottom:8 }}>{k.label}</div>
+                      <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0' }}>
+                        <span style={{ color:'#888' }}>Net</span>
+                        <span style={{ fontWeight:700 }}>£{Number(b.net || 0).toFixed(2)}</span>
+                      </div>
+                      <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0' }}>
+                        <span style={{ color:'#888' }}>VAT</span>
+                        <span style={{ fontWeight:700, color:'#1e40af' }}>£{Number(b.vat || 0).toFixed(2)}</span>
+                      </div>
+                      <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0', borderTop:'1px solid #eee', marginTop:4, paddingTop:6 }}>
+                        <span>Gross</span>
+                        <span style={{ fontWeight:800 }}>£{Number(b.gross || 0).toFixed(2)}</span>
+                      </div>
+                      <div style={{ fontSize:11, color:'#aaa', marginTop:6 }}>{b.items || 0} items</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             <div style={{ fontSize:11, color:'#aaa', marginTop:14, lineHeight:1.5 }}>
               Prices are VAT-inclusive (UK hospitality convention): net = gross × 100 / (100 + rate).
-              Service charge and bill-level discounts are out of scope of this report.
+              Per-item discounts are applied before the split; the optional 12.5% service charge
+              and any bill-level discounts sit outside this report.
             </div>
           </>
         )}

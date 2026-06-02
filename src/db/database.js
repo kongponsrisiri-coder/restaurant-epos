@@ -275,6 +275,26 @@ async function initDB() {
     // SEPOS-KITCHEN-MSG-001 — pre-canned messages waiters can one-tap to
     // send to the kitchen (allergies, holds, VIP, birthday, etc.). Admin
     // can add/edit/delete in Settings → Kitchen Templates.
+    // SEPOS-PAY-AMEND-001 — payments gain audit columns; full history
+    // of every method change lives in payment_amendments (immutable).
+    await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS amended_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS amended_by INTEGER REFERENCES staff(id)`);
+    await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS amend_reason TEXT`);
+    await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS amended_from VARCHAR(50)`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS payment_amendments (
+        id SERIAL PRIMARY KEY,
+        payment_id    INTEGER NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+        order_id      INTEGER NOT NULL,
+        from_method   VARCHAR(50) NOT NULL,
+        to_method     VARCHAR(50) NOT NULL,
+        reason        TEXT,
+        amended_by    INTEGER REFERENCES staff(id),
+        amended_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos'
+      )
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS kitchen_message_templates (
         id SERIAL PRIMARY KEY,

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { getBills, getBillItems, loginStaff } from '../../api';
+import { getBills, getBillItems, loginStaff, getBillAmendments } from '../../api';
 import DeleteOrderModal from '../../components/DeleteOrderModal';
+import AmendPaymentModal from '../../components/AmendPaymentModal';
 import { downloadCsv } from '../../utils/csv';
 
 // Manager-unlock window. After this many ms with no fresh PIN entry the
@@ -19,6 +20,8 @@ export default function BillsSection() {
   const [billItems, setBillItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);  // SEPOS-042 — bill awaiting manager-PIN confirmation
+  const [amendTarget, setAmendTarget]   = useState(null);  // SEPOS-PAY-AMEND-001 — bill awaiting method change
+  const [amendToast, setAmendToast]     = useState('');    // brief success banner after amend
 
   // Manager unlock state. The entry point is a hidden gesture: 5 rapid
   // taps on the "🧾 Bill Records" heading within 3 seconds. There is NO
@@ -80,9 +83,16 @@ export default function BillsSection() {
     finally { setLoadingItems(false); }
   };
 
-  const totalSales = bills.reduce((s, b) => s + Number(b.total || 0), 0);
-  const totalCash  = bills.filter(b => b.method === 'Cash').reduce((s, b) => s + Number(b.total || 0), 0);
-  const totalCard  = bills.filter(b => b.method === 'Card').reduce((s, b) => s + Number(b.total || 0), 0);
+  // Korakot 2026-06-02: "no service charge including in the report" —
+  // these totals were summing orders.total (subtotal, excludes service
+  // charge) when the operator's mental model is "how much money came in"
+  // = paid_amount (includes the 12.5% service the customer actually
+  // handed over). Switched to paid_amount so the headline Sales/Cash/Card
+  // figures match the till + the Z-Report's cash/card splits which
+  // already used paid_amount.
+  const totalSales = bills.reduce((s, b) => s + Number(b.paid_amount || b.total || 0), 0);
+  const totalCash  = bills.filter(b => b.method === 'Cash').reduce((s, b) => s + Number(b.paid_amount || b.total || 0), 0);
+  const totalCard  = bills.filter(b => b.method === 'Card').reduce((s, b) => s + Number(b.paid_amount || b.total || 0), 0);
   const formatDateTime = (dt) => dt ? new Date(dt).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
   const itemsByCourse = {};
   billItems.forEach(item => { const c = item.course ?? 0; if (!itemsByCourse[c]) itemsByCourse[c] = []; itemsByCourse[c].push(item); });
@@ -160,26 +170,35 @@ export default function BillsSection() {
       </div>
       {loading ? <div style={{ textAlign: 'center', color: '#888', padding: 40 }}>Loading...</div> : (
         <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '70px 70px 60px 1fr 90px 90px 90px 50px', padding: '12px 20px', background: '#f8f8f8', fontWeight: 700, fontSize: 13, color: '#555' }}>
-            <span>Bill #</span><span>Table</span><span>Cvr</span><span>Date & Time</span><span>Method</span><span style={{ textAlign: 'right' }}>Discount</span><span style={{ textAlign: 'right' }}>Total</span><span style={{ textAlign: 'center' }}></span>
+          {/* Korakot 2026-06-02: dropped the "Bill #" column. Table number + date
+              is the reference operators use day-to-day. */}
+          <div style={{ display: 'grid', gridTemplateColumns: '80px 60px 1fr 110px 100px 100px 90px', padding: '12px 20px', background: '#f8f8f8', fontWeight: 700, fontSize: 13, color: '#555' }}>
+            <span>Table</span><span>Cvr</span><span>Date & Time</span><span>Method</span><span style={{ textAlign: 'right' }}>Discount</span><span style={{ textAlign: 'right' }}>Total</span><span style={{ textAlign: 'center' }}>Actions</span>
           </div>
           {bills.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: '#bbb' }}>No bills found for this period</div>}
           {bills.map(bill => (
             <div key={bill.id}>
-              <div onClick={() => handleSelectBill(bill)} style={{ display: 'grid', gridTemplateColumns: '70px 70px 60px 1fr 90px 90px 90px 50px', padding: '12px 20px', borderBottom: selectedBill?.id === bill.id ? 'none' : '1px solid #f0f0f0', fontSize: 14, cursor: 'pointer', background: selectedBill?.id === bill.id ? '#f0f7ff' : 'white', alignItems: 'center' }}>
-                <span style={{ color: '#888', fontWeight: 600 }}>#{bill.id}</span>
-                <span style={{ fontWeight: 600 }}>T{bill.table_number}</span>
+              <div onClick={() => handleSelectBill(bill)} style={{ display: 'grid', gridTemplateColumns: '80px 60px 1fr 110px 100px 100px 90px', padding: '12px 20px', borderBottom: selectedBill?.id === bill.id ? 'none' : '1px solid #f0f0f0', fontSize: 14, cursor: 'pointer', background: selectedBill?.id === bill.id ? '#f0f7ff' : 'white', alignItems: 'center' }}>
+                <span style={{ fontWeight: 700, color:'#1a1a2e' }}>T{bill.table_number}</span>
                 <span style={{ color: '#555' }}>{bill.covers || '—'}</span>
                 <span style={{ color: '#555' }}>{formatDateTime(bill.closed_at)}</span>
                 <span><span style={{ background: bill.method === 'Cash' ? '#dcfce7' : bill.method === 'Card' ? '#dbeafe' : '#f3f4f6', color: bill.method === 'Cash' ? '#14532d' : bill.method === 'Card' ? '#1e40af' : '#374151', padding: '2px 8px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{bill.method === 'Cash' ? '💵' : bill.method === 'Card' ? '💳' : '🔄'} {bill.method}</span></span>
                 <span style={{ textAlign: 'right', color: bill.discount_value > 0 ? '#22c55e' : '#bbb', fontSize: 13 }}>{bill.discount_value > 0 ? bill.discount_type === 'percent' ? `-${bill.discount_value}%` : `-£${bill.discount_value}` : '—'}</span>
-                <span style={{ textAlign: 'right', fontWeight: 700, color: '#1a1a2e' }}>£{Number(bill.total || 0).toFixed(2)}</span>
-                <span style={{ textAlign: 'center' }}>
-                  {/* Delete buttons hidden until a manager unlocks the
-                      session (top-right 🔒). PIN re-validated at the
-                      modal too — defence in depth.
-                      SEPOS-043: supervisors can unlock but cannot delete
-                      closed bills — hide the button for that role. */}
+                <span style={{ textAlign: 'right', fontWeight: 700, color: '#1a1a2e' }}>£{Number(bill.paid_amount || bill.total || 0).toFixed(2)}</span>
+                <span style={{ textAlign: 'center', display:'flex', justifyContent:'center', alignItems:'center', gap:6 }}>
+                  {/* SEPOS-PAY-AMEND-001 — labelled and always visible per
+                      Korakot 2026-06-02: "i dont want the amend button need
+                      to be in the manager gate, i think it suppose to show
+                      obviously". Manager PIN is taken inside the modal —
+                      server re-validates against staff role. */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setAmendTarget(bill); }}
+                    title="Change payment method"
+                    style={{ background:'#0D1B3E', border:'none', color:'white', cursor:'pointer', fontSize:11, fontWeight:700, padding:'5px 9px', borderRadius:6, whiteSpace:'nowrap' }}
+                  >🔄 Change</button>
+                  {/* Delete still hidden until a manager unlocks (top-right
+                      🔒). Destructive — different gate than the amend.
+                      SEPOS-043: supervisors can unlock but cannot delete. */}
                   {isUnlocked && unlockedRole !== 'supervisor' && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setDeleteTarget(bill); }}
@@ -239,6 +258,24 @@ export default function BillsSection() {
           onClose={() => setDeleteTarget(null)}
           onDeleted={() => { setDeleteTarget(null); setSelectedBill(null); fetchBills(); }}
         />
+      )}
+
+      {amendTarget && (
+        <AmendPaymentModal
+          bill={amendTarget}
+          onClose={() => setAmendTarget(null)}
+          onDone={(r) => {
+            setAmendToast(`✓ Table ${amendTarget.table_number || '?'} changed from ${r.from} → ${r.to}${r.by ? ' by ' + r.by : ''}`);
+            setTimeout(() => setAmendToast(''), 5000);
+            setAmendTarget(null);
+            fetchBills();
+          }}
+        />
+      )}
+      {amendToast && (
+        <div style={{ position:'fixed', bottom:24, right:24, background:'#0D1B3E', color:'white', padding:'12px 18px', borderRadius:10, fontWeight:600, fontSize:13, boxShadow:'0 8px 30px rgba(0,0,0,0.3)', zIndex:9000 }}>
+          {amendToast}
+        </div>
       )}
 
       {showUnlockModal && (

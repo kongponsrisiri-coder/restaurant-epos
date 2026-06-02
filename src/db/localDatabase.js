@@ -200,6 +200,19 @@ function initSchema() {
 
     -- SEPOS-KITCHEN-MSG-001 — pre-canned messages waiters one-tap to send
     -- to the kitchen (allergies, holds, VIP, birthday). Mirrors PG schema.
+    -- SEPOS-PAY-AMEND-001 — mirrors PG schema.
+    CREATE TABLE IF NOT EXISTS payment_amendments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      payment_id    INTEGER NOT NULL,
+      order_id      INTEGER NOT NULL,
+      from_method   TEXT NOT NULL,
+      to_method     TEXT NOT NULL,
+      reason        TEXT,
+      amended_by    INTEGER,
+      amended_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      restaurant_id TEXT DEFAULT 'siamepos'
+    );
+
     CREATE TABLE IF NOT EXISTS kitchen_message_templates (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       label       TEXT NOT NULL,
@@ -415,6 +428,11 @@ function addColumnIfMissing(table, column, definition) {
 function runMigrations() {
   // SEPOS-024: resend reason on order_items
   addColumnIfMissing('order_items', 'resend_reason', 'TEXT');
+  // SEPOS-PAY-AMEND-001: audit columns on the payments row
+  addColumnIfMissing('payments', 'amended_at',     'TIMESTAMP');
+  addColumnIfMissing('payments', 'amended_by',     'INTEGER');
+  addColumnIfMissing('payments', 'amend_reason',   'TEXT');
+  addColumnIfMissing('payments', 'amended_from',   'TEXT');
   // SEPOS-023: void type on order_items
   addColumnIfMissing('order_items', 'void_type', 'TEXT');
   // SEPOS-030: staff attribution on orders

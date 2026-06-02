@@ -2052,6 +2052,123 @@ app.get('/api/bills', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-PAY-AMEND-001 — change the payment method on a closed bill.
+// Cashier mis-keys Cash for Card on close-out → Z-report cash/card
+// split is wrong. Pre-this ticket the only fix was delete + re-create
+// which broke bill numbering continuity. Now: PIN-gated amendment that
+// preserves the original method in payment_amendments + flags the
+// payments row with amended_* columns.
+//
+// Voucher amendments are blocked here because they'd require restoring
+// the voucher balance (double-spend risk) — the operator is routed to
+// Admin → Vouchers → Void if the voucher redemption itself was wrong.
+app.put('/api/bills/:id/amend-method', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const orderId = parseInt(req.params.id, 10);
+    if (!orderId) return res.status(400).json({ error: 'invalid order id' });
+    const { new_method, reason, pin } = req.body || {};
+    if (!new_method) return res.status(400).json({ error: 'new_method required' });
+    if (!pin)        return res.status(400).json({ error: 'Manager PIN required' });
+
+    const allowed = ['Cash', 'Card', 'Other', 'Stripe'];
+    if (!allowed.includes(new_method)) {
+      return res.status(400).json({ error: `new_method must be one of ${allowed.join(', ')}` });
+    }
+
+    // PIN gate — admin / manager / supervisor only (mirrors SEPOS-042).
+    const staffRes = await client.query(
+      `SELECT id, name, role FROM staff
+       WHERE pin = $1 AND is_active = 1
+         AND LOWER(role) IN ('manager','admin','supervisor')
+       LIMIT 1`,
+      [String(pin).trim()]
+    );
+    if (staffRes.rows.length === 0) {
+      return res.status(403).json({ error: 'Invalid manager PIN' });
+    }
+    const staff = staffRes.rows[0];
+
+    await client.query('BEGIN');
+
+    // Order must be closed — amending an open bill makes no sense (operator
+    // should just pay it with the right method instead).
+    const ordRes = await client.query('SELECT id, status FROM orders WHERE id = $1', [orderId]);
+    const order = ordRes.rows[0];
+    if (!order)                  { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Order not found' }); }
+    if (order.status !== 'closed'){ await client.query('ROLLBACK'); return res.status(409).json({ error: 'Bill is not closed — pay with the right method instead' }); }
+
+    // Find the latest non-cancelled payment for this order.
+    const payRes = await client.query(
+      `SELECT id, method, amount FROM payments
+       WHERE order_id = $1 AND COALESCE(method,'') != 'cancelled'
+       ORDER BY id DESC LIMIT 1`,
+      [orderId]
+    );
+    const payment = payRes.rows[0];
+    if (!payment) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'No payment to amend on this bill' }); }
+    const fromMethod = payment.method;
+    if (fromMethod === new_method) { await client.query('ROLLBACK'); return res.status(400).json({ error: `Already ${new_method}` }); }
+    if (fromMethod === 'voucher' || fromMethod === 'Voucher') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Voucher payments cannot be amended — use Admin → Vouchers → Void if the redemption was wrong' });
+    }
+
+    // Audit row first so we never lose the original.
+    await client.query(
+      `INSERT INTO payment_amendments
+         (payment_id, order_id, from_method, to_method, reason, amended_by)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [payment.id, orderId, fromMethod, new_method, reason || null, staff.id]
+    );
+
+    // Update payments row + flag with amended_* columns.
+    await client.query(
+      `UPDATE payments
+         SET method        = $1,
+             amended_at    = CURRENT_TIMESTAMP,
+             amended_by    = $2,
+             amend_reason  = $3,
+             amended_from  = COALESCE(amended_from, $4)
+       WHERE id = $5`,
+      [new_method, staff.id, reason || null, fromMethod, payment.id]
+    );
+
+    await client.query('COMMIT');
+    io.emit('payment_amended', { order_id: orderId, payment_id: payment.id, from: fromMethod, to: new_method, by: staff.name });
+    res.json({
+      ok: true,
+      order_id: orderId,
+      payment_id: payment.id,
+      from_method: fromMethod,
+      to_method: new_method,
+      amended_by: staff.name,
+    });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch {}
+    console.error('[amend-method]', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// SEPOS-PAY-AMEND-001 — history of method changes for a single bill,
+// surfaced in the Bills detail panel as an "amended" pill + tooltip.
+app.get('/api/bills/:id/amendments', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT pa.*, s.name AS amended_by_name
+       FROM payment_amendments pa
+       LEFT JOIN staff s ON s.id = pa.amended_by
+       WHERE pa.order_id = $1
+       ORDER BY pa.amended_at DESC`,
+      [req.params.id]
+    );
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/bills/:id/items', async (req, res) => {
   try {
     const result = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name, 'Deleted item') AS name FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id=$1 AND order_items.voided=0 ORDER BY order_items.course ASC`, [req.params.id]);

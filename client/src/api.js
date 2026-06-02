@@ -73,6 +73,9 @@ export const applyDiscount = (orderId, discount_type, discount_value, discount_r
 export const removeVoucherFromBill = (orderId) => post(`/api/orders/${orderId}/voucher-remove`, {});
 // SEPOS-CLOSE-ZERO — close an order that's at £0 (all voided / fully discounted)
 export const closeOrderZero       = (orderId) => post(`/api/orders/${orderId}/close-zero`, {});
+// SEPOS-PAY-AMEND-001 — change payment method on a closed bill (manager PIN)
+export const amendBillMethod      = (orderId, body) => put(`/api/bills/${orderId}/amend-method`, body);
+export const getBillAmendments    = (orderId) => get(`/api/bills/${orderId}/amendments`);
 export const getSettings = () => get('/api/settings');
 export const updateSettings = (settings) => put('/api/settings', settings);
 // SEPOS-LITE-001 — restaurant record incl. subscription plan.

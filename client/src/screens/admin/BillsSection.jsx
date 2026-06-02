@@ -228,14 +228,34 @@ export default function BillsSection() {
                       </div>
                       <div style={{ flex: 1, minWidth: 200 }}>
                         <div style={{ fontWeight: 700, fontSize: 13, color: '#1e40af', marginBottom: 10 }}>Bill Summary</div>
-                        {[{ label: 'Date', value: formatDateTime(bill.closed_at) }, { label: 'Method', value: bill.method }, { label: 'Covers', value: bill.covers || '—' }, { label: 'Discount', value: bill.discount_value > 0 ? `${bill.discount_type === 'percent' ? bill.discount_value + '%' : '£' + bill.discount_value} (${bill.discount_reason})` : 'None' }, { label: 'Amount Paid', value: `£${Number(bill.paid_amount || 0).toFixed(2)}` }].map(item => (
+                        {[{ label: 'Date', value: formatDateTime(bill.closed_at) }, { label: 'Method', value: bill.method }, { label: 'Covers', value: bill.covers || '—' }, { label: 'Discount', value: bill.discount_value > 0 ? `${bill.discount_type === 'percent' ? bill.discount_value + '%' : '£' + bill.discount_value} (${bill.discount_reason})` : 'None' }].map(item => (
                           <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #e0edff' }}>
                             <span style={{ color: '#888' }}>{item.label}</span><span style={{ fontWeight: 600 }}>{item.value}</span>
                           </div>
                         ))}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 800, paddingTop: 8, borderTop: '2px solid #3b82f6', marginTop: 4 }}>
-                          <span>Total</span><span style={{ color: '#e94560' }}>£{Number(bill.total || 0).toFixed(2)}</span>
-                        </div>
+                        {/* Korakot 2026-06-02: explicit Subtotal + Service
+                            Charge breakdown so the £-difference between
+                            "items billed" and "money taken" is visible. */}
+                        {(() => {
+                          const subtotal     = Number(bill.total || 0);
+                          const paid         = Number(bill.paid_amount || bill.total || 0);
+                          const serviceCharge = Math.max(0, paid - subtotal);
+                          return (
+                            <>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #e0edff', marginTop: 6 }}>
+                                <span style={{ color: '#888' }}>Subtotal</span>
+                                <span style={{ fontWeight: 600 }}>£{subtotal.toFixed(2)}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #e0edff' }}>
+                                <span style={{ color: '#0D1B3E' }}>Service charge (12.5%)</span>
+                                <span style={{ fontWeight: 700, color: '#0D1B3E' }}>£{serviceCharge.toFixed(2)}</span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 800, paddingTop: 8, borderTop: '2px solid #3b82f6', marginTop: 4 }}>
+                                <span>Total Paid</span><span style={{ color: '#e94560' }}>£{paid.toFixed(2)}</span>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                   )}
@@ -244,8 +264,11 @@ export default function BillsSection() {
             </div>
           ))}
           {bills.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: '70px 70px 60px 1fr 90px 90px 90px 50px', padding: '14px 20px', background: '#f8f8f8', fontWeight: 800, fontSize: 15 }}>
-              <span style={{ color: '#555', gridColumn: '1 / 7' }}>Total — {bills.length} bills</span>
+            // Korakot 2026-06-02: grid template matches the new 7-col
+            // header (no Bill # column). Footer total uses paid_amount
+            // via the headline totalSales (already service-charge aware).
+            <div style={{ display: 'grid', gridTemplateColumns: '80px 60px 1fr 110px 100px 100px 90px', padding: '14px 20px', background: '#f8f8f8', fontWeight: 800, fontSize: 15 }}>
+              <span style={{ color: '#555', gridColumn: '1 / 6' }}>Total — {bills.length} bills</span>
               <span style={{ textAlign: 'right', color: '#e94560' }}>£{totalSales.toFixed(2)}</span>
               <span></span>
             </div>

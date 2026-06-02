@@ -99,6 +99,8 @@ export default function ZReportSection() {
     rows.push(['Cash', Number(reportData.total_cash || 0).toFixed(2)]);
     rows.push(['Card', Number(reportData.total_card || 0).toFixed(2)]);
     rows.push(['Other', Number(reportData.total_other || 0).toFixed(2)]);
+    rows.push(['Subtotal',       Number(reportData.total_subtotal || 0).toFixed(2)]);
+    rows.push(['Service charge', Number(reportData.total_service  || 0).toFixed(2)]);
     rows.push(['TOTAL SALES', Number(reportData.total_sales || 0).toFixed(2)]);
     rows.push([]);
     rows.push(['Channel', 'Amount £', 'Orders']);
@@ -214,6 +216,17 @@ export default function ZReportSection() {
               {[{ label: '💵 Cash Sales', value: reportData.total_cash || 0, color: '#22c55e' }, { label: '💳 Card Sales', value: reportData.total_card || 0, color: '#3b82f6' }, { label: '🔄 Other', value: reportData.total_other || 0, color: '#8b5cf6' }].map(p => (
                 <div key={p.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0f0f0', fontSize: 15 }}><span>{p.label}</span><span style={{ fontWeight: 700, color: p.color }}>£{Number(p.value).toFixed(2)}</span></div>
               ))}
+              {/* Korakot 2026-06-02: Subtotal + Service Charge breakdown so
+                  the operator can see what portion of the day's take is the
+                  12.5% optional service vs the food/drink subtotal. */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0f0f0', fontSize: 14, color: '#555' }}>
+                <span>Subtotal (food + drink)</span>
+                <span style={{ fontWeight: 700 }}>£{Number(reportData.total_subtotal || 0).toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0f0f0', fontSize: 14, color: '#0D1B3E' }}>
+                <span style={{ fontWeight: 600 }}>Service charge (12.5%)</span>
+                <span style={{ fontWeight: 800 }}>£{Number(reportData.total_service || 0).toFixed(2)}</span>
+              </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0', fontSize: 20, fontWeight: 800, color: '#e94560' }}><span>TOTAL SALES</span><span>£{Number(reportData.total_sales || 0).toFixed(2)}</span></div>
               {(reportData.takeaway_count > 0 || reportData.dine_in_count > 0) && (
                 <div style={{ marginTop: 4, marginBottom: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

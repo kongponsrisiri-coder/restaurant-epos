@@ -22,17 +22,23 @@ export default function ReportsSection() {
     const today = new Date().toISOString().slice(0,10);
     if (tab === 'sales') {
       if (!data?.orders?.length) return;
-      const rows = [['Order #', 'Type', 'Table / Customer', 'Method', 'Covers', 'Total £']];
+      // Korakot 2026-06-02: dropped Order # from the CSV (matches the UI;
+      // operators reference by table + date), report paid_amount so the
+      // 12.5% service charge is reflected per row + in the total.
+      const rows = [['Type', 'Table / Customer', 'Method', 'Covers', 'Subtotal £', 'Total £']];
       data.orders.forEach(o => {
         rows.push([
-          o.id,
           o.order_type || 'dine_in',
           o.order_type === 'takeaway' ? (o.customer_name || 'Online') : `Table ${o.table_number || '-'}`,
           o.method || (o.order_type === 'takeaway' ? 'Online' : ''),
           o.covers || '',
           Number(o.total || 0).toFixed(2),
+          Number(o.paid_amount ?? o.total ?? 0).toFixed(2),
         ]);
       });
+      rows.push([]);
+      rows.push(['', '', '', '', 'Subtotal',             Number(data.total_subtotal || 0).toFixed(2)]);
+      rows.push(['', '', '', '', 'Service charge',       Number(data.total_service  || 0).toFixed(2)]);
       rows.push(['', '', '', '', `TOTAL (${data.order_count || 0} orders · ${data.total_covers || 0} covers)`, Number(data.total_sales || 0).toFixed(2)]);
       // SEPOS-VOUCHER-001 — append voucher activity for the period
       if (data?.vouchers_sold?.count > 0 || data?.vouchers_redeemed?.count > 0) {
@@ -74,17 +80,21 @@ export default function ReportsSection() {
         <>
           {tab === 'sales' && (
             <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-              <div style={{ padding: '12px 20px', background: '#f8f8f8', display: 'grid', gridTemplateColumns: '80px 1fr 100px 80px 80px', fontWeight: 700, fontSize: 13, color: '#555' }}>
-                <span>Order #</span><span>Table</span><span>Method</span><span>Covers</span><span style={{ textAlign: 'right' }}>Total</span>
+              {/* Korakot 2026-06-02: dropped "Order #" column (consistent with
+                  Bills tab — reference by table + date), added a Subtotal
+                  column so it's obvious where the 12.5% service charge lives
+                  between Subtotal and Total. */}
+              <div style={{ padding: '12px 20px', background: '#f8f8f8', display: 'grid', gridTemplateColumns: '1fr 110px 70px 90px 90px', fontWeight: 700, fontSize: 13, color: '#555' }}>
+                <span>Table / Customer</span><span>Method</span><span>Covers</span><span style={{ textAlign: 'right' }}>Subtotal</span><span style={{ textAlign: 'right' }}>Total</span>
               </div>
               {data?.orders?.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: '#bbb' }}>No orders for this period</div>}
               {data?.orders?.map(order => (
-                <div key={order.id} style={{ padding: '10px 20px', display: 'grid', gridTemplateColumns: '80px 1fr 100px 80px 80px', borderBottom: '1px solid #f0f0f0', fontSize: 14 }}>
-                  <span style={{ color: '#888' }}>#{order.id}</span>
+                <div key={order.id} style={{ padding: '10px 20px', display: 'grid', gridTemplateColumns: '1fr 110px 70px 90px 90px', borderBottom: '1px solid #f0f0f0', fontSize: 14 }}>
                   <span>{order.order_type === 'takeaway' ? `🥡 ${order.customer_name || 'Online'}` : `Table ${order.table_number}`}</span>
                   <span>{order.method || (order.order_type === 'takeaway' ? 'Online' : '-')}</span>
                   <span>{order.covers || '-'}</span>
-                  <span style={{ textAlign: 'right', fontWeight: 700 }}>£{Number(order.total || 0).toFixed(2)}</span>
+                  <span style={{ textAlign: 'right', color: '#888' }}>£{Number(order.total || 0).toFixed(2)}</span>
+                  <span style={{ textAlign: 'right', fontWeight: 700 }}>£{Number(order.paid_amount ?? order.total ?? 0).toFixed(2)}</span>
                 </div>
               ))}
               {data?.orders?.length > 0 && (
@@ -101,6 +111,19 @@ export default function ReportsSection() {
                       </div>
                     </div>
                   )}
+                  {/* Korakot 2026-06-02: explicit Subtotal + Service Charge
+                      stack so the operator can see WHERE the gap between
+                      "items billed" and "money collected" comes from. */}
+                  <div style={{ padding: '10px 20px', background: '#fafafa', display:'flex', flexDirection:'column', gap:4, fontSize:13 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', color:'#555' }}>
+                      <span>Subtotal (food + drink)</span>
+                      <span>£{Number(data.total_subtotal || 0).toFixed(2)}</span>
+                    </div>
+                    <div style={{ display:'flex', justifyContent:'space-between', color:'#0D1B3E', fontWeight:600 }}>
+                      <span>Service charge (12.5%)</span>
+                      <span>£{Number(data.total_service || 0).toFixed(2)}</span>
+                    </div>
+                  </div>
                   <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', background: '#f8f8f8', fontWeight: 700 }}>
                     <span>Total ({data.order_count} orders · {data.total_covers} covers)</span>
                     <span style={{ color: '#e94560' }}>£{Number(data.total_sales || 0).toFixed(2)}</span>

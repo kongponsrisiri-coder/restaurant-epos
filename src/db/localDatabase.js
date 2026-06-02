@@ -7,6 +7,8 @@
 //   col::date  /  $N::date      → date(col)  /  date(?)
 //   col::timestamp / $N::ts     → datetime(col) / datetime(?)
 //   = ANY($N::int[])            → IN (?,?,...) with the array flattened into params
+//   GREATEST(a, b, ...)         → max(a, b, ...)   — SQLite's scalar max
+//   LEAST(a, b, ...)            → min(a, b, ...)   — SQLite's scalar min
 //
 // Known unsupported by the schema below (intentionally — SQLite limitations):
 //   ALTER TABLE ... ALTER COLUMN ... DROP NOT NULL  — caller-side .catch() in server.js
@@ -561,6 +563,14 @@ function preTranslate(sql) {
   out = out.replace(/([\w.]+|\$\d+)\s*::\s*date\b/gi, 'date($1)');
   // `expr::timestamp` → `datetime(expr)`
   out = out.replace(/([\w.]+|\$\d+)\s*::\s*timestamp\b/gi, 'datetime($1)');
+  // Korakot 2026-06-02: PG's GREATEST/LEAST aren't in SQLite, but SQLite's
+  // max()/min() act as scalar comparators when given >1 argument. The
+  // /api/reports/summary + /api/z-report/preview food-vs-drink query
+  // in v1.6.16 was using GREATEST(0, ...) and silently 500ing on Mac
+  // installs, blanking Trading + Reports + Z Report. Translating here
+  // keeps server.js cross-DB.
+  out = out.replace(/\bGREATEST\s*\(/gi, 'max(');
+  out = out.replace(/\bLEAST\s*\(/gi,    'min(');
   // PG `TO_CHAR(col, 'fmt')` → SQLite `strftime('fmt', col)`.
   // Translate the format string (PG uses YYYY/MM/DD/HH24/MI/SS;
   // strftime uses %Y/%m/%d/%H/%M/%S). Common patterns we hit:

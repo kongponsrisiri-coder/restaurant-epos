@@ -13,6 +13,7 @@
 // by 1 day (capped at 3 extensions to prevent indefinite deferral).
 
 import { useEffect, useState, useMemo } from 'react';
+import { confirm } from '../../../utils/confirm';
 import { invAPI, calcLineCost } from '../shared';
 import { downloadCsv } from '../../../utils/csv';
 
@@ -312,7 +313,7 @@ function BatchRecipeModal({ recipe, ingredients, onClose, onSaved }) {
   }
 
   async function doDelete() {
-    if (!window.confirm(`Delete "${recipe.name}"? Existing batches keep their history; the matching ingredient row is removed.`)) return;
+    if (!await confirm(`Delete "${recipe.name}"? Existing batches keep their history; the matching ingredient row is removed.`)) return;
     setBusy(true);
     try {
       const r = await invAPI.deleteBatchRecipe(recipe.id);

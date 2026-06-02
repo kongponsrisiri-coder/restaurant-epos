@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getCustomers, setCustomerConsent } from '../../api';
+import { confirm } from '../../utils/confirm';
 
 // SEPOS-033 Phase 1 — Customer CRM.
 // Aggregates reservations by email, computes status from visits + spend.
@@ -182,7 +183,7 @@ export default function CustomersSection() {
                       {c.unsubscribed ? (
                         <button
                           onClick={async () => {
-                            if (!window.confirm(`Re-opt-in ${c.customer_email}? They previously unsubscribed.`)) return;
+                            if (!await confirm(`Re-opt-in ${c.customer_email}? They previously unsubscribed.`)) return;
                             await setCustomerConsent(c.customer_email, true); load();
                           }}
                           style={{ background:'#fee2e2', color:'#991b1b', padding:'3px 9px', borderRadius:6, fontSize:10, fontWeight:700, border:'none', cursor:'pointer' }}

@@ -9,6 +9,7 @@ import {
   listVouchers, getVoucherDetail, voidVoucher, resendVoucherEmail, sellVoucher,
 } from '../../api';
 import { downloadCsv } from '../../utils/csv';
+import { confirm } from '../../utils/confirm';
 
 const STATUS_PILL = {
   active:   { bg: '#dcfce7', fg: '#15803d', label: '✓ Active' },
@@ -84,7 +85,7 @@ export default function VouchersSection() {
   }
 
   async function handleVoid(id) {
-    if (!window.confirm('Void this voucher? It cannot be redeemed after voiding.')) return;
+    if (!await confirm('Void this voucher? It cannot be redeemed after voiding.')) return;
     setBusy(true);
     try { await voidVoucher(id, null); await load(); if (detailId) openDetail(detailId); }
     catch (e) { alert('Void failed: ' + e.message); }

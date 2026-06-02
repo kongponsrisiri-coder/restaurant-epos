@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SERVER_URL, getTables, updateTablePlan, addTable, deleteTable } from '../../api';
+import { confirm } from '../../utils/confirm';
 
 const apiGet  = url       => fetch(SERVER_URL + url).then(r => r.json());
 const apiPost = (url, d)  => fetch(SERVER_URL + url, { method: 'POST',   headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) }).then(r => r.json());
@@ -188,7 +189,7 @@ export default function TablePlanSection() {
   };
 
   const handleDeleteTable = async (id) => {
-    if (!window.confirm('Delete this table?')) return;
+    if (!await confirm('Delete this table?')) return;
     const related = combos.filter(c => c.table_id_a === id || c.table_id_b === id);
     await Promise.all(related.map(c => apiDel(`/api/table-combinations/${c.id}`)));
     await deleteTable(id);

@@ -5,6 +5,7 @@ import ReservationPlanView from './ReservationPlanView';
 // so per-client Netlify deploys (e.g. Baan Siam) talk to their own
 // backend instead of the main restaurant-epos-production one.
 import { SERVER_URL } from '../api';
+import { confirm } from '../utils/confirm';
 
 const STATUS_CONFIG = {
   pending:   { label: 'Pending',   bg: '#fef9c3', color: '#92400e', dot: '#f59e0b' },
@@ -173,7 +174,7 @@ export default function ReservationsScreen() {
 }
 
   async function handleSeat(r) {
-    if (!window.confirm(`Seat ${r.customer_name} (${r.covers} covers)?`)) return;
+    if (!await confirm(`Seat ${r.customer_name} (${r.covers} covers)?`)) return;
     try { await apiFetch(`/api/reservations/${r.id}/seat`, { method: 'POST' }); showToast(`${r.customer_name} seated ✓`); loadData(); }
     catch { showToast('Seating failed', 'error'); }
   }
@@ -184,13 +185,13 @@ export default function ReservationsScreen() {
   }
 
   async function handleNoShow(r) {
-    if (!window.confirm(`Mark ${r.customer_name} as no-show?`)) return;
+    if (!await confirm(`Mark ${r.customer_name} as no-show?`)) return;
     try { await apiFetch(`/api/reservations/${r.id}`, { method: 'PUT', body: JSON.stringify({ ...r, reservation_date: (r.reservation_date||'').split('T')[0], reservation_time: (r.reservation_time||'').slice(0,5), status: 'no-show' }) }); showToast('Marked as no-show'); loadData(); }
     catch { showToast('Update failed', 'error'); }
   }
 
   async function handleCancel(r) {
-    if (!window.confirm(`Cancel ${r.customer_name}'s booking?`)) return;
+    if (!await confirm(`Cancel ${r.customer_name}'s booking?`)) return;
     try { await apiFetch(`/api/reservations/${r.id}`, { method: 'DELETE' }); showToast('Booking cancelled'); loadData(); }
     catch { showToast('Cancel failed', 'error'); }
   }

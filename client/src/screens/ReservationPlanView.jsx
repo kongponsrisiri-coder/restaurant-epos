@@ -4,6 +4,7 @@ import SeatActionSheet from '../components/SeatActionSheet';
 // so per-client Netlify deploys (e.g. Baan Siam) talk to their own
 // backend instead of the main restaurant-epos-production one.
 import { SERVER_URL } from '../api';
+import { confirm } from '../utils/confirm';
 
 const api = url => fetch(`${SERVER_URL}${url}`).then(r => r.json());
 const put = (url, d) => fetch(`${SERVER_URL}${url}`, {
@@ -601,16 +602,16 @@ function BookingPanel({ res, allReservations, tables, tableGroups, tiers, onAssi
 
   // Tapping a table toggles it in/out of the join; a combo sets the
   // whole group at once. Each change persists immediately.
-  function toggleTable(tableId, warning) {
+  async function toggleTable(tableId, warning) {
     if (selectedIds.includes(tableId)) {
       onAssign(selectedIds.filter(id => id !== tableId));
     } else {
-      if (warning && !window.confirm(warning.msg)) return;
+      if (warning && !await confirm(warning.msg)) return;
       onAssign([...selectedIds, tableId]);
     }
   }
-  function assignCombo(combo, warning) {
-    if (warning && !window.confirm(warning.msg)) return;
+  async function assignCombo(combo, warning) {
+    if (warning && !await confirm(warning.msg)) return;
     onAssign(combo.ids);
   }
 

@@ -7,6 +7,7 @@ import {
   getSubcategories, addSubcategory, deleteSubcategory,
   addCategory, updateCategoryDefaultCourse,
 } from '../../api';
+import { confirm } from '../../utils/confirm';
 
 // ── AI Menu Scanner Modal ─────────────────────────────────────────
 function AIScannerModal({ onClose, onImported }) {
@@ -257,7 +258,7 @@ export default function MenuSection() {
                   <button onClick={e => { e.stopPropagation(); toggleAvailable(item); }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: item.is_available ? '#dcfce7' : '#fee2e2', color: item.is_available ? '#14532d' : '#991b1b' }}>{item.is_available ? 'Available' : 'Off menu'}</button>
                   <button onClick={e => { e.stopPropagation(); openModifiers(item); }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#fef9c3', color: '#713f12', fontWeight: 600, fontSize: 12 }}>Options</button>
                   <button onClick={e => { e.stopPropagation(); openEditForm(item); }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#f0f0f0', fontWeight: 600, fontSize: 12 }}>Edit</button>
-                  <button onClick={async e => { e.stopPropagation(); if (!window.confirm(`Delete "${item.name}" permanently?`)) return; try { const res = await fetch(`${SERVER_URL}/api/menu/items/${item.id}`, { method: 'DELETE' }); const data = await res.json(); if (data.success) fetchMenu(); else alert('Delete failed: ' + (data.error || 'Unknown error')); } catch (err) { alert('Delete error: ' + err.message); } }} style={{ padding: '6px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#fee2e2', color: '#991b1b', fontWeight: 600, fontSize: 12 }}>🗑️</button>
+                  <button onClick={async e => { e.stopPropagation(); if (!await confirm(`Delete "${item.name}" permanently?`)) return; try { const res = await fetch(`${SERVER_URL}/api/menu/items/${item.id}`, { method: 'DELETE' }); const data = await res.json(); if (data.success) fetchMenu(); else alert('Delete failed: ' + (data.error || 'Unknown error')); } catch (err) { alert('Delete error: ' + err.message); } }} style={{ padding: '6px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#fee2e2', color: '#991b1b', fontWeight: 600, fontSize: 12 }}>🗑️</button>
                 </div>
               </div>
             );

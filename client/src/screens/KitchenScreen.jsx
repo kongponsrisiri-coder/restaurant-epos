@@ -3,6 +3,7 @@ import { getOrders, getOrder, updateItemStatus, setTakeawayStatus, dispatchDeliv
 import { io } from 'socket.io-client';
 import { SERVER_URL } from '../api';
 import { orderShortLabel, orderSubLabel, orderShortLabelPlain, isTakeaway } from '../utils/orderLabel';
+import { confirm } from '../utils/confirm';
 // SEPOS — DeleteOrderModal removed from KitchenScreen 2026-06-01 (Korakot's
 // call). Kitchen + Done tabs no longer surface a delete; closed-bill
 // delete still lives in Admin → Bills for managers.
@@ -87,7 +88,7 @@ function CourierControls({ order, onChange }) {
 
   const doDispatch = async () => {
     if (busy) return;
-    if (!window.confirm(`Book a courier to deliver Online Order #${order.id}?`)) return;
+    if (!await confirm(`Book a courier to deliver Online Order #${order.id}?`)) return;
     setBusy(true);
     try {
       const r = await dispatchDelivery(order.id);
@@ -562,7 +563,7 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                         // served, and the order drops off the kitchen.
                         <button
                           onClick={async () => {
-                            if (!window.confirm(`Mark Online Order #${order.id} as collected? This closes the order and counts it as a sale.`)) return;
+                            if (!await confirm(`Mark Online Order #${order.id} as collected? This closes the order and counts it as a sale.`)) return;
                             try {
                               await setTakeawayStatus(order.id, 'collected');
                               await fetchOrders();
@@ -752,7 +753,7 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                     ) : isTakeaway(order) ? (
                       <button
                         onClick={async () => {
-                          if (!window.confirm(`Mark Online Order #${order.id} as collected? This closes the order and counts it as a sale.`)) return;
+                          if (!await confirm(`Mark Online Order #${order.id} as collected? This closes the order and counts it as a sale.`)) return;
                           try {
                             await setTakeawayStatus(order.id, 'collected');
                             await fetchOrders();
@@ -863,7 +864,7 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                     {isTakeaway(group) && group.takeaway_status !== 'collected' && (
                       <button
                         onClick={async () => {
-                          if (!window.confirm(`Mark Online Order #${group.order_id} as collected? This closes the order and counts it as a sale.`)) return;
+                          if (!await confirm(`Mark Online Order #${group.order_id} as collected? This closes the order and counts it as a sale.`)) return;
                           try {
                             await setTakeawayStatus(group.order_id, 'collected');
                             await fetchOrders();

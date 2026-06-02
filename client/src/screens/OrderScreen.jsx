@@ -6,6 +6,7 @@ import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFir
 // call). Order screen / kitchen screen no longer expose a delete button;
 // closed-bill delete still lives in Admin → Bills for managers.
 import KitchenMessageModal from '../components/KitchenMessageModal';
+import { confirm } from '../utils/confirm';
 import AllergenChips from '../components/AllergenChips';
 import { parseAllergens } from '../utils/allergens';
 
@@ -355,7 +356,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
       return;
     }
     if (item.discount_value > 0) {
-      const remove = window.confirm(
+      const remove = await confirm(
         `This item has a discount:\n${item.discount_type === 'percent' ? item.discount_value + '%' : '£' + item.discount_value} off\n\nOK = Remove discount\nCancel = Change discount`
       );
       if (remove) {
@@ -364,7 +365,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         return;
       }
     }
-    const type = window.confirm('OK = percentage %\nCancel = fixed £ amount') ? 'percent' : 'fixed';
+    const type = (await confirm('OK = percentage %\nCancel = fixed £ amount')) ? 'percent' : 'fixed';
     const value = prompt(type === 'percent' ? 'Discount %:' : 'Discount £:', '10');
     if (!value) return;
     const num = parseFloat(value);
@@ -1016,7 +1017,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                     const msg = isVoucher
                       ? 'Remove voucher? Voucher balance will be restored.'
                       : 'Remove discount?';
-                    if (!window.confirm(msg)) return;
+                    if (!await confirm(msg)) return;
                     if (isVoucher) {
                       const r = await removeVoucherFromBill(orderId);
                       if (r?.error) { alert('Could not remove: ' + r.error); return; }
@@ -1039,7 +1040,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                     alert('⛔ Only Admin, Manager or Supervisor can apply discounts!\n\nPlease ask a manager to authorise.');
                     return;
                   }
-                  const type = window.confirm('OK = percentage\nCancel = fixed amount') ? 'percent' : 'fixed';
+                  const type = (await confirm('OK = percentage\nCancel = fixed amount')) ? 'percent' : 'fixed';
                   const value = prompt(type === 'percent' ? 'Enter %:' : 'Enter £:', '10');
                   if (!value) return;
                   const num = parseFloat(value);
@@ -1108,7 +1109,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 the operator can release the table without payment. */}
             {orderTotal <= 0.01 && existingItems.length > 0 && cart.length === 0 ? (
               <button onClick={async () => {
-                if (!window.confirm('Close this table at £0?\n\nAll items are voided or fully discounted. The order will be closed and the table marked available.')) return;
+                if (!await confirm('Close this table at £0?\n\nAll items are voided or fully discounted. The order will be closed and the table marked available.')) return;
                 try {
                   const r = await closeOrderZero(orderId);
                   if (r && r.success) { onClose(); }

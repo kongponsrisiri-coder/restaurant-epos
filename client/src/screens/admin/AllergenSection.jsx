@@ -3,6 +3,7 @@ import { SERVER_URL } from '../../api';
 import { getAllMenu as getMenu } from '../../api';
 import { invAPI } from './shared';
 import { downloadCsv } from '../../utils/csv';
+import { confirm } from '../../utils/confirm';
 
 export default function AllergenSection() {
   const [menu,        setMenu]        = useState([]);
@@ -133,7 +134,7 @@ export default function AllergenSection() {
       });
     });
     if (toSync.length === 0) { alert('No AI-scanned allergens to sync — all items already have a recipe or manual entry.'); return; }
-    if (!window.confirm(`Sync AI-scanned allergens for ${toSync.length} item${toSync.length !== 1 ? 's' : ''}? You can edit them individually afterwards.`)) return;
+    if (!await confirm(`Sync AI-scanned allergens for ${toSync.length} item${toSync.length !== 1 ? 's' : ''}? You can edit them individually afterwards.`)) return;
 
     setSyncing(true);
     try {

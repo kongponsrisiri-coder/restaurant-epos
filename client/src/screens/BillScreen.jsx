@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { getBill, markBillPrinted, getVoucher, redeemVoucher, payOrder, applyDiscount, removeVoucherFromBill } from '../api';
 import { printReceipt } from './ReceiptPrinter';
 import { orderShortLabelPlain, orderSubLabel, isTakeaway } from '../utils/orderLabel';
+import { confirm } from '../utils/confirm';
 
 export default function BillScreen({ orderId, onClose, onPay }) {
 
@@ -229,7 +230,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   // open bill. Customer changed their mind and wants to pay the full
   // amount instead. Restores voucher balance + clears the discount row.
   const handleRemoveVoucher = async () => {
-    if (!window.confirm('Remove voucher from this bill? Voucher balance will be restored.')) return;
+    if (!await confirm('Remove voucher from this bill? Voucher balance will be restored.')) return;
     setRemovingVoucher(true);
     try {
       const r = await removeVoucherFromBill(orderId);

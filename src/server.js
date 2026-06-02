@@ -530,11 +530,17 @@ app.post('/api/orders/:id/items', async (req, res) => {
     for (const item of items) {
       const isBar = item.is_bar ? 1 : 0;
       const firedAt = isBar ? new Date().toISOString() : null;
-      const nameRes = await client.query('SELECT name FROM menu_items WHERE id = $1', [item.menu_item_id]);
-      const itemName = nameRes.rows[0]?.name || item.name || 'Unknown item';
+      // BUG-EPOS-002 (Nook): never trust the client-side unit_price.
+      // Pull the canonical price from menu_items in the same lookup
+      // that already gives us the name. Fall back to client value only
+      // if the menu row is missing (custom / deleted items) so legacy
+      // flows don't 500.
+      const lookup = await client.query('SELECT name, price FROM menu_items WHERE id = $1', [item.menu_item_id]);
+      const itemName  = lookup.rows[0]?.name || item.name || 'Unknown item';
+      const unitPrice = lookup.rows[0]?.price ?? item.unit_price;
       const ins = await client.query(
         `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at, item_name) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
-        [orderId, item.menu_item_id, item.quantity, item.unit_price, item.notes || '', item.course || 1, item.item_note || '', isBar, firedAt, firedAt, itemName]
+        [orderId, item.menu_item_id, item.quantity, unitPrice, item.notes || '', item.course || 1, item.item_note || '', isBar, firedAt, firedAt, itemName]
       );
       const newRowId = ins.rows[0].id;
       if (isBar) firedBarIds.push(newRowId);
@@ -1438,8 +1444,13 @@ function splitByOrderType(rows) {
 app.get('/api/reports/daily', async (req, res) => {
   try {
     const date = req.query.date || new Date().toISOString().split('T')[0];
-    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.order_type, orders.customer_name, payments.method, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date = $1::date ORDER BY orders.closed_at DESC`, [date]);
-    const total = result.rows.reduce((sum, r) => sum + (r.total || 0), 0);
+    // BUG-EPOS-005 (Nook): /reports/daily was reporting orders.total
+    // (the bare subtotal) where /reports/summary was already reporting
+    // payments.amount (the money actually taken, including 12.5%
+    // service charge). Mirror the summary pattern so the two reports
+    // agree to the penny.
+    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date = $1::date ORDER BY orders.closed_at DESC`, [date]);
+    const total = result.rows.reduce((sum, r) => sum + Number(r.paid_amount ?? r.total ?? 0), 0);
     res.json({ date, orders: result.rows, total_sales: total, order_count: result.rows.length, ...splitByOrderType(result.rows) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

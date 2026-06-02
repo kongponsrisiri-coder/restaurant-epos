@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, getArchiveStatus, openArchiveFolder, runArchive, getMigrationStatus, getStorageStats, getTunnelStatus, getKitchenTemplates, createKitchenTemplate, updateKitchenTemplate, deleteKitchenTemplate } from '../../api';
 import DiningDurationSettings from './DiningDurationSettings';
+import { confirm } from '../../utils/confirm';
 
 // ── SEPOS-KITCHEN-MSG-001 — pre-canned kitchen message templates ────
 // Waiter taps a pill in the order screen → one-tap send. Admin manages
@@ -32,7 +33,7 @@ function KitchenTemplatesCard({ cardStyle }) {
   };
 
   const remove = async (id) => {
-    if (!window.confirm('Delete this template?')) return;
+    if (!await confirm('Delete this template?')) return;
     try { await deleteKitchenTemplate(id); await refresh(); }
     catch (e) { alert(e?.message || 'Delete failed'); }
   };

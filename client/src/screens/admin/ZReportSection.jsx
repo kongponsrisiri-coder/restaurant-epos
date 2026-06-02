@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getZReportPreview, saveZReport, getZReportHistory } from '../../api';
 import { downloadCsv } from '../../utils/csv';
+import { confirm } from '../../utils/confirm';
 
 export default function ZReportSection() {
   const [step, setStep]           = useState(1);
@@ -64,7 +65,7 @@ export default function ZReportSection() {
           ? `\n\n🥡 ${openTakeaway.length} takeaway order${openTakeaway.length>1?'s':''} not collected:\n` + openTakeaway.map(o => `#${o.id}${o.customer_name ? ' · '+o.customer_name : ''}`).join(', ')
           : '',
       ].filter(Boolean).join('');
-      if (!window.confirm(msg + '\n\nAre you sure you want to close the report?')) return;
+      if (!await confirm(msg + '\n\nAre you sure you want to close the report?')) return;
     }
     const floatNum = parseFloat(floatAmount) || 0;
     const pettyNum = parseFloat(pettyCash) || 0;

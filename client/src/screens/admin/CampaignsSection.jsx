@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getCampaigns, getRecipientCount, sendCampaign } from '../../api';
+import { confirm } from '../../utils/confirm';
 import { downloadCsv } from '../../utils/csv';
 
 // SEPOS-033 Phase 2 — email campaigns.
@@ -109,7 +110,7 @@ export default function CampaignsSection() {
       setResult({ error: 'No opted-in customers in this segment.' });
       return;
     }
-    if (!window.confirm(`Send this campaign to ${count ?? '?'} ${segment} customer${count === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    if (!await confirm(`Send this campaign to ${count ?? '?'} ${segment} customer${count === 1 ? '' : 's'}? This cannot be undone.`)) return;
     setSending(true);
     setResult(null);
     try {

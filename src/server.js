@@ -1422,22 +1422,26 @@ app.post('/api/print/kitchen-message', async (req, res) => {
 // Helper: split a list of closed-order rows into dine-in vs takeaway
 // totals so every reports endpoint exposes the same shape.
 function splitByOrderType(rows) {
-  // Korakot 2026-06-02: the per-channel splits feed the Reports + Z Report
-  // headline cards. Operators read those as "money taken", so we sum the
-  // payment amount (which includes service charge) and fall back to
-  // orders.total only for legacy rows that pre-date paid_amount being
-  // joined in.
+  // Korakot 2026-06-02: per-channel splits feed Reports + Z Report headline
+  // cards. Totals = money taken (paid_amount, includes service charge),
+  // falling back to orders.total for legacy rows without a joined payment.
+  // 2026-06-02 follow-up: SELECT ... LEFT JOIN payments emits one row per
+  // payment, so a split-pay order appears N times. Per-channel TOTALS stay
+  // right (each payment row is correctly attributed to its order_type), but
+  // counts must dedupe by orders.id.
   let total_takeaway = 0, total_dine_in = 0, total_counter = 0;
-  let takeaway_count = 0, dine_in_count = 0, counter_count = 0;
+  const seenTakeaway = new Set(), seenDineIn = new Set(), seenCounter = new Set();
   for (const r of rows) {
     const t = Number(r.paid_amount ?? r.total ?? 0);
-    if (r.order_type === 'takeaway')      { total_takeaway += t; takeaway_count++; }
-    else if (r.order_type === 'counter')  { total_counter  += t; counter_count++;  }
-    else                                  { total_dine_in  += t; dine_in_count++;  }
+    if (r.order_type === 'takeaway')      { total_takeaway += t; seenTakeaway.add(r.id); }
+    else if (r.order_type === 'counter')  { total_counter  += t; seenCounter.add(r.id);  }
+    else                                  { total_dine_in  += t; seenDineIn.add(r.id);   }
   }
   return {
     total_takeaway, total_dine_in, total_counter,
-    takeaway_count,  dine_in_count,  counter_count,
+    takeaway_count: seenTakeaway.size,
+    dine_in_count:  seenDineIn.size,
+    counter_count:  seenCounter.size,
   };
 }
 
@@ -1451,7 +1455,10 @@ app.get('/api/reports/daily', async (req, res) => {
     // agree to the penny.
     const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date = $1::date ORDER BY orders.closed_at DESC`, [date]);
     const total = result.rows.reduce((sum, r) => sum + Number(r.paid_amount ?? r.total ?? 0), 0);
-    res.json({ date, orders: result.rows, total_sales: total, order_count: result.rows.length, ...splitByOrderType(result.rows) });
+    // Dedupe order_count by orders.id — LEFT JOIN payments multiplies rows
+    // on split-pay orders.
+    const uniqueOrderIds = new Set(result.rows.map(r => r.id));
+    res.json({ date, orders: result.rows, total_sales: total, order_count: uniqueOrderIds.size, ...splitByOrderType(result.rows) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1491,10 +1498,17 @@ app.get('/api/reports/summary', async (req, res) => {
     // paid_amount = subtotal + service charge (12.5% of subtotal when
     // enabled). Falls back to orders.total for any historical row whose
     // payment row was never written.
-    const total_sales      = rows.reduce((sum, r) => sum + Number(r.paid_amount ?? r.total ?? 0), 0);
-    const total_subtotal   = rows.reduce((sum, r) => sum + Number(r.total ?? 0), 0);
-    const total_service    = Math.max(0, total_sales - total_subtotal);
-    const total_covers     = rows.reduce((sum, r) => sum + (r.covers || 0), 0);
+    // 2026-06-02 follow-up: LEFT JOIN payments multiplies orders on
+    // split-pay days. Sums that read PER PAYMENT (total_sales, by_method)
+    // stay on the flat row set; sums that read PER ORDER
+    // (total_subtotal/covers/count) dedupe by orders.id.
+    const total_sales = rows.reduce((sum, r) => sum + Number(r.paid_amount ?? r.total ?? 0), 0);
+    const byOrder = new Map();
+    for (const r of rows) if (!byOrder.has(r.id)) byOrder.set(r.id, r);
+    const uniqueOrders = [...byOrder.values()];
+    const total_subtotal = uniqueOrders.reduce((sum, r) => sum + Number(r.total ?? 0), 0);
+    const total_service  = Math.max(0, total_sales - total_subtotal);
+    const total_covers   = uniqueOrders.reduce((sum, r) => sum + (r.covers || 0), 0);
     const by_method = {};
     rows.forEach(r => { if (r.method) by_method[r.method] = (by_method[r.method] || 0) + Number(r.paid_amount ?? r.total ?? 0); });
 
@@ -1523,7 +1537,7 @@ app.get('/api/reports/summary', async (req, res) => {
     res.json({
       orders: rows, total_sales, total_subtotal, total_service,
       total_food, total_drink,
-      order_count: rows.length, total_covers, by_method,
+      order_count: byOrder.size, total_covers, by_method,
       vouchers_sold: {
         count: voucherCount,
         total: voucherTotal,
@@ -1904,14 +1918,22 @@ app.get('/api/z-report/preview', async (req, res) => {
     // Korakot 2026-06-02: report totals = money actually taken (paid_amount,
     // which includes 12.5% service charge), with subtotal kept separately so
     // we can derive the service-charge line shown in the Sales Summary.
-    const totalSales     = orders.reduce((s, o) => s + Number(o.paid_amount ?? o.total ?? 0), 0);
-    const totalSubtotal  = orders.reduce((s, o) => s + Number(o.total ?? 0), 0);
+    // 2026-06-02 follow-up: LEFT JOIN payments multiplies rows on split-pay
+    // orders. Per-payment sums (totalSales / Cash / Card / Other) stay on
+    // the flat row set; per-order sums (subtotal / covers / discounts /
+    // count) dedupe by orders.id.
+    const totalSales = orders.reduce((s, o) => s + Number(o.paid_amount ?? o.total ?? 0), 0);
+    const byOrder = new Map();
+    for (const o of orders) if (!byOrder.has(o.id)) byOrder.set(o.id, o);
+    const uniqueOrders = [...byOrder.values()];
+    const totalSubtotal  = uniqueOrders.reduce((s, o) => s + Number(o.total ?? 0), 0);
     const totalService   = Math.max(0, totalSales - totalSubtotal);
-    const totalCovers    = orders.reduce((s, o) => s + (o.covers || 0), 0);
+    const totalCovers    = uniqueOrders.reduce((s, o) => s + (o.covers || 0), 0);
     const totalCash      = orders.filter(o => o.method === 'Cash').reduce((s, o) => s + Number(o.paid_amount ?? o.total ?? 0), 0);
     const totalCard      = orders.filter(o => o.method === 'Card').reduce((s, o) => s + Number(o.paid_amount ?? o.total ?? 0), 0);
     const totalOther     = orders.filter(o => o.method !== 'Cash' && o.method !== 'Card').reduce((s, o) => s + Number(o.paid_amount ?? o.total ?? 0), 0);
-    const totalDiscounts = orders.reduce((s, o) => { if (!o.discount_value) return s; return s + (o.discount_type === 'percent' ? (o.total || 0) * (o.discount_value / 100) : o.discount_value); }, 0);
+    const totalDiscounts = uniqueOrders.reduce((s, o) => { if (!o.discount_value) return s; return s + (o.discount_type === 'percent' ? (o.total || 0) * (o.discount_value / 100) : o.discount_value); }, 0);
+    const totalOrders    = byOrder.size;
     const orderTypeSplit = splitByOrderType(orders);
     let totalFood = 0, totalDrink = 0;
     for (const r of foodDrinkRes.rows) {
@@ -1920,7 +1942,7 @@ app.get('/api/z-report/preview', async (req, res) => {
     }
     const vouchersSold     = vouchersSoldRes.rows[0]     || { count: 0, total: 0 };
     const vouchersRedeemed = vouchersRedeemedRes.rows[0] || { count: 0, total: 0 };
-    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_subtotal: totalSubtotal, total_service: totalService, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: orders.length, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: orders.length > 0 ? totalSales / orders.length : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0) }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, ...orderTypeSplit });
+    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_subtotal: totalSubtotal, total_service: totalService, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: totalOrders, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: totalOrders > 0 ? totalSales / totalOrders : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0) }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, ...orderTypeSplit });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

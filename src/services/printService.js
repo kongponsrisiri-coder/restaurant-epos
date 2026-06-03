@@ -903,7 +903,11 @@ async function printThaiTest(settings, customCp = null) {
 //   { kind:'space' }                   — single blank line
 // We add INIT + CUT around the body so every report is a self-contained job.
 function buildReportText({ lines }) {
-  const parts = [CMD.INIT];
+  // Set ALIGN_CENTER once and never switch. Every row is padded to
+  // exactly LINE_WIDTH chars, so the printer auto-centers each line
+  // inside its printable area — content sits in the middle of the
+  // 80mm paper instead of hugging the left edge.
+  const parts = [CMD.INIT, CMD.ALIGN_CENTER];
 
   const W = LINE_WIDTH;
   const lr = (left, right) => {
@@ -912,22 +916,23 @@ function buildReportText({ lines }) {
     const space = Math.max(1, W - l.length - r.length);
     return l + ' '.repeat(space) + r;
   };
-
+  // For h1/h2/small the printer centers a short string itself; but for
+  // rows / dividers we hand it a full-width string so the line is
+  // perfectly balanced on the paper.
   for (const line of lines || []) {
     switch (line.kind) {
       case 'h1':
-        parts.push(CMD.ALIGN_CENTER, CMD.BOLD_ON, CMD.SIZE_TALL,
+        parts.push(CMD.BOLD_ON, CMD.SIZE_TALL,
                    txt(line.text || ''), CMD.SIZE_NORMAL, CMD.BOLD_OFF,
-                   CMD.ALIGN_LEFT, CMD.LF);
+                   CMD.LF);
         break;
       case 'h2':
-        parts.push(CMD.ALIGN_CENTER, CMD.BOLD_ON,
+        parts.push(CMD.BOLD_ON,
                    txt(line.text || ''), CMD.BOLD_OFF,
-                   CMD.ALIGN_LEFT, CMD.LF);
+                   CMD.LF);
         break;
       case 'small':
-        parts.push(CMD.ALIGN_CENTER, txt(line.text || ''),
-                   CMD.ALIGN_LEFT, CMD.LF);
+        parts.push(txt(line.text || ''), CMD.LF);
         break;
       case 'div':
         parts.push(rule('-'), CMD.LF);
@@ -947,7 +952,7 @@ function buildReportText({ lines }) {
         parts.push(CMD.LF);
         break;
       default:
-        // Plain text line — left-aligned, no formatting.
+        // Plain text line — no formatting.
         if (line.text) parts.push(txt(line.text), CMD.LF);
     }
   }

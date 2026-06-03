@@ -4,6 +4,7 @@ import {
   thermalPrint, fullPagePrint, escPosPrint, pageHtml,
   fmt, fmtInt, dateLabel, restaurantName, nowStamp,
 } from '../../utils/reportPrinter';
+import { printReceipt } from '../ReceiptPrinter';
 import { getBills, getBillItems, loginStaff, getBillAmendments } from '../../api';
 import DeleteOrderModal from '../../components/DeleteOrderModal';
 import AmendPaymentModal from '../../components/AmendPaymentModal';
@@ -104,6 +105,39 @@ export default function BillsSection() {
 
   const [settings, setSettings] = useState({});
   useEffect(() => { getSettings().then(s => setSettings(s || {})).catch(() => {}); }, []);
+
+  // Re-print a single closed bill as a receipt — uses the same
+  // pipeline that fires at end-of-meal (server-side ESC/POS to the
+  // receipt printer, Electron silent print fallback, browser popup
+  // last resort). Requires items to be loaded (they are, because the
+  // operator had to expand the bill row to see this button).
+  const doReprintReceipt = (bill) => {
+    if (!bill) return;
+    if (!billItems.length) { alert('Items not loaded yet — try again in a moment.'); return; }
+    const subtotal       = Number(bill.total || 0);
+    const paid           = Number(bill.paid_amount || bill.total || 0);
+    const serviceCharge  = Math.max(0, paid - subtotal);
+    const discountAmount = bill.discount_value > 0
+      ? (bill.discount_type === 'percent'
+          ? subtotal * (bill.discount_value / 100)
+          : Number(bill.discount_value))
+      : 0;
+    printReceipt({
+      order: bill,
+      items: billItems,
+      settings,
+      paymentDetails: {
+        subtotal,
+        discountAmount,
+        serviceCharge,
+        billTotal: paid,
+        amountPaid: paid,
+        change: 0,
+        method: bill.method || '',
+        tip: 0,
+      },
+    });
+  };
 
   const doPrintBills = async (mode) => {
     if (!bills.length) return;
@@ -252,7 +286,14 @@ export default function BillsSection() {
                         ))}
                       </div>
                       <div style={{ flex: 1, minWidth: 200 }}>
-                        <div style={{ fontWeight: 700, fontSize: 13, color: '#1e40af', marginBottom: 10 }}>Bill Summary</div>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 10 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: '#1e40af' }}>Bill Summary</div>
+                          <button onClick={() => doReprintReceipt(bill)} style={{
+                            background:'#0D1B3E', color:'white', border:'none',
+                            padding:'6px 12px', borderRadius:6, fontWeight:700,
+                            fontSize:11, cursor:'pointer', letterSpacing:0.5,
+                          }}>🖨 Re-print receipt</button>
+                        </div>
                         {[{ label: 'Date', value: formatDateTime(bill.closed_at) }, { label: 'Method', value: bill.method }, { label: 'Covers', value: bill.covers || '—' }, { label: 'Discount', value: bill.discount_value > 0 ? `${bill.discount_type === 'percent' ? bill.discount_value + '%' : '£' + bill.discount_value} (${bill.discount_reason})` : 'None' }].map(item => (
                           <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #e0edff' }}>
                             <span style={{ color: '#888' }}>{item.label}</span><span style={{ fontWeight: 600 }}>{item.value}</span>

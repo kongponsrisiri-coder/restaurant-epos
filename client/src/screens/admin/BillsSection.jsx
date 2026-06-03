@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getSettings } from '../../api';
 import {
-  thermalPrint, fullPagePrint, pageHtml,
+  thermalPrint, fullPagePrint, escPosPrint, pageHtml,
   fmt, fmtInt, dateLabel, restaurantName, nowStamp,
 } from '../../utils/reportPrinter';
 import { getBills, getBillItems, loginStaff, getBillAmendments } from '../../api';
@@ -105,12 +105,19 @@ export default function BillsSection() {
   const [settings, setSettings] = useState({});
   useEffect(() => { getSettings().then(s => setSettings(s || {})).catch(() => {}); }, []);
 
-  const doPrintBills = (mode) => {
+  const doPrintBills = async (mode) => {
     if (!bills.length) return;
     const isThermal = (mode === 'thermal');
-    const body = buildBillsBody(bills, from, to, method, { totalSales, totalCash, totalCard }, settings, isThermal);
-    const html = pageHtml('Bills — ' + restaurantName(settings), body, isThermal ? 'thermal' : 'full');
-    if (isThermal) thermalPrint(html); else fullPagePrint(html);
+    if (isThermal) {
+      const lines = buildBillsLines(bills, from, to, method, { totalSales, totalCash, totalCard }, settings);
+      const r = await escPosPrint(lines);
+      if (r && r.success) return;
+      const body = buildBillsBody(bills, from, to, method, { totalSales, totalCash, totalCard }, settings, true);
+      thermalPrint(pageHtml('Bills — ' + restaurantName(settings), body, 'thermal'));
+      return;
+    }
+    const body = buildBillsBody(bills, from, to, method, { totalSales, totalCash, totalCard }, settings, false);
+    fullPagePrint(pageHtml('Bills — ' + restaurantName(settings), body, 'full'));
   };
 
   const exportCsv = () => {
@@ -448,4 +455,25 @@ function buildBillsBody(bills, from, to, method, totals, settings, thermal) {
        </table>`;
 
   return head + summary + list;
+}
+
+// ── ESC/POS line builder ──────────────────────────────────────────
+function buildBillsLines(bills, from, to, method, totals, settings) {
+  const lines = [];
+  lines.push({ kind: 'h1', text: restaurantName(settings) });
+  lines.push({ kind: 'h2', text: 'BILL RECORDS' });
+  lines.push({ kind: 'small', text: `${dateLabel(from)} -> ${dateLabel(to)}${method && method !== 'all' ? '  ' + method : ''}` });
+  lines.push({ kind: 'small', text: nowStamp() });
+  lines.push({ kind: 'div' });
+  lines.push({ kind: 'row', left: 'Bills',  right: fmtInt(bills.length) });
+  lines.push({ kind: 'row', left: 'Cash',   right: fmt(totals.totalCash) });
+  lines.push({ kind: 'row', left: 'Card',   right: fmt(totals.totalCard) });
+  lines.push({ kind: 'div' });
+  for (const b of bills) {
+    const t = b.closed_at ? new Date(b.closed_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+    const label = b.table_number ? `T${b.table_number}` : (b.customer_name || 'TA');
+    lines.push({ kind: 'row', left: `${label}  ${b.method || '-'}  ${t}`, right: fmt(b.paid_amount || b.total) });
+  }
+  lines.push({ kind: 'total', left: `TOTAL (${bills.length})`, right: fmt(totals.totalSales) });
+  return lines;
 }

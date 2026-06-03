@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getVatReport, getSettings } from '../../api';
 import {
-  thermalPrint, fullPagePrint, pageHtml,
+  thermalPrint, fullPagePrint, escPosPrint, pageHtml,
   fmt, fmtInt, dateLabel, restaurantName, nowStamp,
 } from '../../utils/reportPrinter';
 
@@ -45,12 +45,19 @@ export default function VATReportSection() {
   const [settings, setSettings] = useState({});
   useEffect(() => { getSettings().then(s => setSettings(s || {})).catch(() => {}); }, []);
 
-  const doPrintVat = (mode) => {
+  const doPrintVat = async (mode) => {
     if (!data?.breakdown?.length) return;
     const isThermal = (mode === 'thermal');
-    const body = buildVatBody(data, from, to, settings, isThermal);
-    const html = pageHtml('VAT Report — ' + restaurantName(settings), body, isThermal ? 'thermal' : 'full');
-    if (isThermal) thermalPrint(html); else fullPagePrint(html);
+    if (isThermal) {
+      const lines = buildVatLines(data, from, to, settings);
+      const r = await escPosPrint(lines);
+      if (r && r.success) return;
+      const body = buildVatBody(data, from, to, settings, true);
+      thermalPrint(pageHtml('VAT Report — ' + restaurantName(settings), body, 'thermal'));
+      return;
+    }
+    const body = buildVatBody(data, from, to, settings, false);
+    fullPagePrint(pageHtml('VAT Report — ' + restaurantName(settings), body, 'full'));
   };
 
   const exportCsv = () => {
@@ -235,4 +242,28 @@ function buildVatBody(data, from, to, settings, thermal) {
     </table>` : '';
 
   return head + breakdown + byKind;
+}
+
+// ── ESC/POS line builder ──────────────────────────────────────────
+function buildVatLines(data, from, to, settings) {
+  const lines = [];
+  lines.push({ kind: 'h1', text: restaurantName(settings) });
+  lines.push({ kind: 'h2', text: 'VAT REPORT' });
+  lines.push({ kind: 'small', text: `${dateLabel(from)} -> ${dateLabel(to)}` });
+  lines.push({ kind: 'small', text: nowStamp() });
+  lines.push({ kind: 'div' });
+  for (const b of data.breakdown) {
+    lines.push({ kind: 'row',
+      left: `${Number(b.rate).toFixed(0)}%  net ${fmt(b.net)}`,
+      right: fmt(b.vat) });
+  }
+  lines.push({ kind: 'total', left: 'TOTAL VAT', right: fmt(data.total.vat) });
+  lines.push({ kind: 'row', left: 'Gross total', right: fmt(data.total.gross) });
+  if (data.by_kind) {
+    lines.push({ kind: 'div' });
+    lines.push({ kind: 'h2', text: 'BY CATEGORY' });
+    lines.push({ kind: 'row', left: `Food (${fmtInt(data.by_kind.food.items)})`,   right: fmt(data.by_kind.food.gross) });
+    lines.push({ kind: 'row', left: `Drink (${fmtInt(data.by_kind.drink.items)})`, right: fmt(data.by_kind.drink.gross) });
+  }
+  return lines;
 }

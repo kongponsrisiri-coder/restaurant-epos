@@ -890,6 +890,82 @@ async function printThaiTest(settings, customCp = null) {
   await sendRaw(ip, port, buildThaiCodepageTest(customCp), { printerName, lprQueue });
 }
 
+// ── Admin report printer (SEPOS-REPORTS-001) ─────────────────────────────────
+// Generic ESC/POS printer for the admin Sales / Items / Z / VAT / Bills
+// reports. The client builds a simple line DSL — each line is one of:
+//   { kind:'h1', text }                — center, double size, bold
+//   { kind:'h2', text }                — center, bold
+//   { kind:'small', text }             — center, normal
+//   { kind:'div' }                     — dashed rule
+//   { kind:'div-solid' }               — solid rule
+//   { kind:'row', left, right }        — left + right justified on one line
+//   { kind:'total', left, right }      — bold, solid rule above
+//   { kind:'space' }                   — single blank line
+// We add INIT + CUT around the body so every report is a self-contained job.
+function buildReportText({ lines }) {
+  const parts = [CMD.INIT];
+
+  const W = LINE_WIDTH;
+  const lr = (left, right) => {
+    const l = stripUnsupported(left);
+    const r = stripUnsupported(right);
+    const space = Math.max(1, W - l.length - r.length);
+    return l + ' '.repeat(space) + r;
+  };
+
+  for (const line of lines || []) {
+    switch (line.kind) {
+      case 'h1':
+        parts.push(CMD.ALIGN_CENTER, CMD.BOLD_ON, CMD.SIZE_TALL,
+                   txt(line.text || ''), CMD.SIZE_NORMAL, CMD.BOLD_OFF,
+                   CMD.ALIGN_LEFT, CMD.LF);
+        break;
+      case 'h2':
+        parts.push(CMD.ALIGN_CENTER, CMD.BOLD_ON,
+                   txt(line.text || ''), CMD.BOLD_OFF,
+                   CMD.ALIGN_LEFT, CMD.LF);
+        break;
+      case 'small':
+        parts.push(CMD.ALIGN_CENTER, txt(line.text || ''),
+                   CMD.ALIGN_LEFT, CMD.LF);
+        break;
+      case 'div':
+        parts.push(rule('-'), CMD.LF);
+        break;
+      case 'div-solid':
+        parts.push(rule('='), CMD.LF);
+        break;
+      case 'row':
+        parts.push(txt(lr(line.left, line.right)), CMD.LF);
+        break;
+      case 'total':
+        parts.push(rule('='), CMD.LF, CMD.BOLD_ON,
+                   txt(lr(line.left, line.right)),
+                   CMD.BOLD_OFF, CMD.LF);
+        break;
+      case 'space':
+        parts.push(CMD.LF);
+        break;
+      default:
+        // Plain text line — left-aligned, no formatting.
+        if (line.text) parts.push(txt(line.text), CMD.LF);
+    }
+  }
+
+  // Trailing feed + cut so the last line clears the cutter blade.
+  parts.push(CMD.LF, CMD.LF, CMD.LF, CMD.CUT);
+  return Buffer.concat(parts);
+}
+
+async function printReportText(settings, lines) {
+  const ip   = settings.printer_receipt_ip;
+  const port = parseInt(settings.printer_receipt_port || '9100', 10) || 9100;
+  const name = settings.printer_receipt_name || '';
+  if (!ip && !name) throw new Error('no_receipt_printer_configured');
+  const buf = buildReportText({ lines });
+  return sendRaw(ip, port, buf, { printerName: name });
+}
+
 module.exports = {
   printReceipt,
   printFireNotice,
@@ -901,4 +977,5 @@ module.exports = {
   testPrint,
   findCupsQueueForIp,
   buildReceipt,           // exported for mock-receipt test print
+  printReportText,        // SEPOS-REPORTS-001 — admin report ESC/POS
 };

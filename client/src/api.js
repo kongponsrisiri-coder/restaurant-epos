@@ -112,6 +112,9 @@ export const updateKitchenTemplate = (id, body) => put(`/api/kitchen-templates/$
 export const deleteKitchenTemplate = (id) => del(`/api/kitchen-templates/${id}`);
 export const sendKitchenMessage   = (body) => post('/api/print/kitchen-message', body);
 export const serverPrintReceipt   = (order_id, payment_details) => post('/api/print/receipt', { order_id, payment_details });
+// SEPOS-REPORTS-001 — ESC/POS print for admin reports (Sales / Items /
+// Z / VAT / Bills). Takes a line DSL — see printService.buildReportText.
+export const serverPrintReportText = (lines) => post('/api/print/report-text', { lines });
 export const serverPrintKitchen   = (order_id, items, course)   => post('/api/print/kitchen', { order_id, items, course });
 export const serverPrintBar           = (order_id, items)         => post('/api/print/bar',          { order_id, items });
 export const serverPrintKitchenFull   = (order_id, items)         => post('/api/print/kitchen-full', { order_id, items });

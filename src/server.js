@@ -5512,6 +5512,27 @@ app.get('/api/print/cups-queue-for-ip', async (req, res) => {
 });
 
 // Print a receipt for a given order
+// SEPOS-REPORTS-001 — generic admin-report ESC/POS print. Takes a
+// simple line DSL from the client (see printService.buildReportText)
+// and prints to the configured receipt printer via the same RAW → LPR
+// → CUPS fallback chain that bill receipts use.
+app.post('/api/print/report-text', async (req, res) => {
+  const { lines } = req.body || {};
+  if (!Array.isArray(lines) || lines.length === 0) {
+    return res.status(400).json({ success: false, error: 'lines[] required' });
+  }
+  try {
+    const settings = await loadSettings();
+    if (!settings.printer_receipt_ip && !settings.printer_receipt_name) {
+      return res.json({ success: false, reason: 'no_ip' });
+    }
+    await printService.printReportText(settings, lines);
+    res.json({ success: true });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
 app.post('/api/print/receipt', async (req, res) => {
   const { order_id, payment_details } = req.body;
   try {

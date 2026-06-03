@@ -17,16 +17,42 @@
  * surface.
  */
 
-// ── Pipelines ────────────────────────────────────────────────────
-export function thermalPrint(html) {
-  const deviceName = (typeof localStorage !== 'undefined'
-    && localStorage.getItem('receipt_printer_name')) || '';
-  if (deviceName && window.siamepos?.isElectron && window.siamepos.printHtml) {
-    window.siamepos.printHtml({ html, deviceName })
-      .then(r => { if (!r || !r.success) { console.error('[report] silent print failed:', r?.error); openPopup(html, { thermal: true }); } })
-      .catch(e => { console.error('[report] silent print error:', e); openPopup(html, { thermal: true }); });
-    return;
+import { serverPrintReportText } from '../api';
+
+// ── ESC/POS path ──────────────────────────────────────────────────
+// SEPOS-REPORTS-001 — when a receipt printer IP is configured we send
+// the report straight to it as ESC/POS bytes via the server endpoint
+// (same RAW → LPR → CUPS pipeline that bill receipts use). The browser
+// never sees a print dialog, the thermal printer never sees HTML, and
+// the £ + page-cut land correctly.
+//
+// lines is a tiny DSL — each line is one of:
+//   { kind:'h1', text }                 — center, double-size, bold
+//   { kind:'h2', text }                 — center, bold
+//   { kind:'small', text }              — center, normal
+//   { kind:'div' }                      — dashed rule
+//   { kind:'div-solid' }                — solid rule
+//   { kind:'row', left, right }         — left / right justified
+//   { kind:'total', left, right }       — bold, solid rule above
+//   { kind:'space' }                    — blank line
+// Returns a promise that resolves to { success, reason?, error? }.
+export async function escPosPrint(lines) {
+  try {
+    const r = await serverPrintReportText(lines);
+    return r || { success: false };
+  } catch (e) {
+    console.error('[report] ESC/POS print error:', e);
+    return { success: false, error: e.message };
   }
+}
+
+// ── HTML pipelines ───────────────────────────────────────────────
+// Used when no thermal printer is configured (or as fallback). The
+// thermal popup NO LONGER auto-fires print() — instead it shows the
+// formatted preview with a big PRINT button at the top. This prevents
+// the "blank short feed" problem you get when a thermal printer
+// receives HTML it can't render.
+export function thermalPrint(html) {
   openPopup(html, { thermal: true });
 }
 
@@ -35,24 +61,39 @@ export function fullPagePrint(html) {
 }
 
 function openPopup(html, { thermal }) {
-  const w = thermal ? 400 : 900;
-  const h = thermal ? 700 : 900;
+  const w = thermal ? 420 : 900;
+  const h = thermal ? 720 : 900;
   const win = window.open('', '_blank', `width=${w},height=${h},scrollbars=yes`);
   if (!win) {
     alert('Pop-up blocked. Please allow pop-ups for this site to print reports.');
     return;
   }
-  win.document.write(html);
+  // Inject a top-of-page action bar with a Print button so the operator
+  // SEES the rendered content before printing. The bar is hidden during
+  // the actual print job via @media print { display:none; }.
+  const actionBarHtml = `
+    <div id="__rp_bar__" style="position:sticky;top:0;left:0;right:0;z-index:9999;
+      background:#0D1B3E;color:white;padding:10px 14px;display:flex;gap:10px;
+      justify-content:center;align-items:center;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;">
+      <button onclick="window.print()" style="background:#C9A84C;color:#0D1B3E;
+        border:none;padding:8px 16px;border-radius:6px;font-weight:800;cursor:pointer;
+        font-size:13px;">🖨 Print</button>
+      <button onclick="window.close()" style="background:transparent;color:white;
+        border:1px solid rgba(255,255,255,0.35);padding:8px 14px;border-radius:6px;
+        cursor:pointer;font-size:13px;">Close</button>
+      <span style="margin-left:8px;opacity:0.85;font-size:11.5px;">${thermal
+        ? 'Preview · ${THERMAL_HINT}'
+        : 'Preview · A4 — choose your printer or save as PDF'}</span>
+    </div>
+    <style>@media print { #__rp_bar__ { display:none !important; } }</style>
+  `.replace('${THERMAL_HINT}',
+    'select your 80mm thermal printer in the dialog (set Paper to 80mm)');
+  // Inject the bar at the start of <body>.
+  const injected = html.replace(/<body([^>]*)>/i, `<body$1>${actionBarHtml}`);
+  win.document.write(injected);
   win.document.close();
-  win.onload = () => {
-    setTimeout(() => {
-      win.focus();
-      win.print();
-      // Thermal: auto-close after print. Full-page: leave open so the
-      // operator can save-as-PDF or re-print without rebuilding.
-      if (thermal) win.onafterprint = () => win.close();
-    }, 400);
-  };
+  // No auto-print. Operator clicks the PRINT button in the bar when ready.
 }
 
 // ── Formatting helpers shared across builders ─────────────────────

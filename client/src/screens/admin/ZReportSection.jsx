@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getSettings } from '../../api';
 import {
-  thermalPrint, fullPagePrint, pageHtml,
+  thermalPrint, fullPagePrint, escPosPrint, pageHtml,
   fmt, fmtInt, restaurantName, nowStamp,
 } from '../../utils/reportPrinter';
 import { getZReportPreview, saveZReport, getZReportHistory } from '../../api';
@@ -151,14 +151,23 @@ export default function ZReportSection() {
   const [settings, setSettings] = useState({});
   useEffect(() => { getSettings().then(s => setSettings(s || {})).catch(() => {}); }, []);
 
-  const doPrintZ = (mode) => {
+  const doPrintZ = async (mode) => {
     if (!reportData) return;
     const isThermal = (mode === 'thermal');
-    const body = buildZReportBody(reportData, reportType, settings,
-      { floatAmount: floatNum, pettyCash: pettyNum, actualCash: actualNum, difference }, isThermal);
     const title = (reportType === 'day' ? 'End of Day' : 'Shift Close') + ' — ' + restaurantName(settings);
-    const html = pageHtml(title, body, isThermal ? 'thermal' : 'full');
-    if (isThermal) thermalPrint(html); else fullPagePrint(html);
+    if (isThermal) {
+      const lines = buildZReportLines(reportData, reportType, settings,
+        { floatAmount: floatNum, pettyCash: pettyNum, actualCash: actualNum, difference });
+      const r = await escPosPrint(lines);
+      if (r && r.success) return;
+      const fallback = buildZReportBody(reportData, reportType, settings,
+        { floatAmount: floatNum, pettyCash: pettyNum, actualCash: actualNum, difference }, true);
+      thermalPrint(pageHtml(title, fallback, 'thermal'));
+      return;
+    }
+    const body = buildZReportBody(reportData, reportType, settings,
+      { floatAmount: floatNum, pettyCash: pettyNum, actualCash: actualNum, difference }, false);
+    fullPagePrint(pageHtml(title, body, 'full'));
   };
 
   const floatNum     = parseFloat(floatAmount) || 0;
@@ -484,4 +493,61 @@ function buildZReportBody(r, type, settings, cash, thermal) {
     </table>`;
 
   return head + summary + channels + stats + vat + voids + recon;
+}
+
+// ── ESC/POS line builder ──────────────────────────────────────────
+function buildZReportLines(r, type, settings, cash) {
+  const lines = [];
+  lines.push({ kind: 'h1', text: restaurantName(settings) });
+  lines.push({ kind: 'h2', text: type === 'day' ? 'END OF DAY' : 'SHIFT CLOSE' });
+  if (r.from) lines.push({ kind: 'small', text: `${r.from} -> ${r.to}` });
+  lines.push({ kind: 'small', text: nowStamp() });
+  lines.push({ kind: 'div' });
+  lines.push({ kind: 'row', left: 'Cash',                    right: fmt(r.total_cash) });
+  lines.push({ kind: 'row', left: 'Card',                    right: fmt(r.total_card) });
+  lines.push({ kind: 'row', left: 'Other',                   right: fmt(r.total_other) });
+  lines.push({ kind: 'row', left: 'Food',                    right: fmt(r.total_food) });
+  lines.push({ kind: 'row', left: 'Drink',                   right: fmt(r.total_drink) });
+  lines.push({ kind: 'row', left: 'Service charge (12.5%)',  right: fmt(r.total_service) });
+  lines.push({ kind: 'total', left: 'TOTAL SALES',           right: fmt(r.total_sales) });
+
+  lines.push({ kind: 'div' });
+  lines.push({ kind: 'row', left: `Dine-in (${r.dine_in_count || 0})`,   right: fmt(r.total_dine_in) });
+  lines.push({ kind: 'row', left: `Takeaway (${r.takeaway_count || 0})`, right: fmt(r.total_takeaway) });
+
+  lines.push({ kind: 'div' });
+  lines.push({ kind: 'row', left: 'Orders',         right: fmtInt(r.total_orders) });
+  lines.push({ kind: 'row', left: 'Covers',         right: fmtInt(r.total_covers) });
+  lines.push({ kind: 'row', left: 'Avg per cover',  right: fmt(r.avg_per_cover) });
+  lines.push({ kind: 'row', left: 'Discounts',      right: fmt(r.total_discounts) });
+  lines.push({ kind: 'row', left: 'Void items',     right: `${fmtInt(r.void_count)}  ${fmt(r.void_value)}` });
+
+  if (Array.isArray(r.vat_breakdown) && r.vat_breakdown.length) {
+    lines.push({ kind: 'div' });
+    lines.push({ kind: 'h2', text: 'VAT BREAKDOWN' });
+    for (const b of r.vat_breakdown) {
+      lines.push({ kind: 'row', left: `${b.rate}%  net ${fmt(b.net)}`, right: fmt(b.vat) });
+    }
+    lines.push({ kind: 'total', left: 'Total VAT', right: fmt(r.vat_total) });
+  }
+
+  if (Array.isArray(r.voids_by_type) && r.voids_by_type.length) {
+    lines.push({ kind: 'div' });
+    lines.push({ kind: 'h2', text: 'VOIDS BY TYPE' });
+    for (const v of r.voids_by_type) {
+      lines.push({ kind: 'row', left: `${v.void_type}  x${fmtInt(v.count)}`, right: fmt(v.value) });
+    }
+  }
+
+  lines.push({ kind: 'div-solid' });
+  lines.push({ kind: 'h2', text: 'CASH RECONCILIATION' });
+  lines.push({ kind: 'row', left: 'Cash sales',       right: fmt(r.total_cash) });
+  lines.push({ kind: 'row', left: '- Float kept',     right: fmt(cash.floatAmount) });
+  lines.push({ kind: 'row', left: '- Petty cash',     right: fmt(cash.pettyCash) });
+  lines.push({ kind: 'row', left: 'Expected drawer',  right: fmt((r.total_cash || 0) - cash.floatAmount - cash.pettyCash) });
+  lines.push({ kind: 'row', left: 'Actual counted',   right: fmt(cash.actualCash) });
+  const label = cash.difference === 0 ? 'Exact match' : cash.difference > 0 ? 'Over by' : 'Short by';
+  lines.push({ kind: 'total', left: label, right: fmt(Math.abs(cash.difference)) });
+
+  return lines;
 }

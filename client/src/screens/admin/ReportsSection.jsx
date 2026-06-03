@@ -3,7 +3,7 @@ import { getSummaryReport, getItemSalesReport, getSettings } from '../../api';
 import { today, getDateRange } from './shared';
 import { downloadCsv } from '../../utils/csv';
 import {
-  thermalPrint, fullPagePrint, pageHtml,
+  thermalPrint, fullPagePrint, escPosPrint, pageHtml,
   fmt, fmtInt, periodLabel, restaurantName, nowStamp,
 } from '../../utils/reportPrinter';
 
@@ -68,15 +68,31 @@ export default function ReportsSection() {
     }
   };
 
-  const doPrint = (mode) => {
+  const doPrint = async (mode) => {
     if (loading) return;
     const title = tab === 'sales' ? 'Sales Report' : 'Item Sales';
     const isThermal = (mode === 'thermal');
+
+    // Thermal path: try direct ESC/POS to the configured receipt printer.
+    // Falls back to the HTML preview popup if no IP is configured.
+    if (isThermal) {
+      const lines = (tab === 'sales')
+        ? buildSalesLines(data, period, from, to, settings)
+        : buildItemsLines(itemData, period, from, to, settings);
+      const r = await escPosPrint(lines);
+      if (r && r.success) return;
+      // Show fallback popup if there's no printer configured.
+      const fallbackBody = (tab === 'sales')
+        ? buildSalesBody(data, period, from, to, settings, true)
+        : buildItemsBody(itemData, period, from, to, settings, true);
+      thermalPrint(pageHtml(title + ' — ' + restaurantName(settings), fallbackBody, 'thermal'));
+      return;
+    }
+    // Full-page popup: A4 preview, operator prints / saves PDF themselves.
     const body = (tab === 'sales')
-      ? buildSalesBody(data, period, from, to, settings, isThermal)
-      : buildItemsBody(itemData, period, from, to, settings, isThermal);
-    const html = pageHtml(title + ' — ' + restaurantName(settings), body, isThermal ? 'thermal' : 'full');
-    if (isThermal) thermalPrint(html); else fullPagePrint(html);
+      ? buildSalesBody(data, period, from, to, settings, false)
+      : buildItemsBody(itemData, period, from, to, settings, false);
+    fullPagePrint(pageHtml(title + ' — ' + restaurantName(settings), body, 'full'));
   };
 
   const periodBtn = { padding: '6px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, textTransform: 'capitalize' };
@@ -372,4 +388,73 @@ function buildItemsBody(items, period, from, to, settings, thermal) {
 
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+// ── ESC/POS line builders ─────────────────────────────────────────
+// Emit the line DSL consumed by escPosPrint → server printService.
+// 42 chars wide on 80mm. Plain ASCII — emoji + Thai are stripped on
+// the server before bytes hit the printer.
+function buildSalesLines(data, period, from, to, settings) {
+  const lines = [];
+  lines.push({ kind: 'h1', text: restaurantName(settings) });
+  lines.push({ kind: 'h2', text: 'SALES REPORT' });
+  lines.push({ kind: 'small', text: periodLabel(period, from, to) });
+  lines.push({ kind: 'small', text: nowStamp() });
+  lines.push({ kind: 'div' });
+  if (!data?.orders?.length) {
+    lines.push({ kind: 'small', text: 'No orders for this period' });
+    return lines;
+  }
+  // Orders list
+  for (const o of data.orders) {
+    const label = o.order_type === 'takeaway'
+      ? 'TA ' + (o.customer_name || 'Online')
+      : `T${o.table_number || '-'}`;
+    const method = o.method || (o.order_type === 'takeaway' ? 'Online' : '-');
+    const amt = Number(o.paid_amount ?? o.total ?? 0);
+    const lbl = `${label}  ${method}${o.covers ? '  ' + o.covers + 'p' : ''}`;
+    lines.push({ kind: 'row', left: lbl, right: fmt(amt) });
+  }
+  lines.push({ kind: 'div' });
+  lines.push({ kind: 'row', left: `Dine-in (${data.dine_in_count || 0})`, right: fmt(data.total_dine_in) });
+  if (data.takeaway_count > 0)
+    lines.push({ kind: 'row', left: `Takeaway (${data.takeaway_count})`, right: fmt(data.total_takeaway) });
+  lines.push({ kind: 'row', left: 'Food',  right: fmt(data.total_food) });
+  lines.push({ kind: 'row', left: 'Drink', right: fmt(data.total_drink) });
+  lines.push({ kind: 'row', left: 'Service charge (12.5%)', right: fmt(data.total_service) });
+  lines.push({ kind: 'total', left: `TOTAL (${data.order_count || 0} ord)`, right: fmt(data.total_sales) });
+  if (data?.vouchers_sold?.count > 0 || data?.vouchers_redeemed?.count > 0) {
+    lines.push({ kind: 'div' });
+    lines.push({ kind: 'h2', text: 'GIFT VOUCHERS' });
+    lines.push({ kind: 'row', left: `Sold (${data.vouchers_sold?.count || 0})`, right: fmt(data.vouchers_sold?.total) });
+    if (Number(data.vouchers_sold?.till_total) > 0)
+      lines.push({ kind: 'row', left: ' via till', right: fmt(data.vouchers_sold.till_total) });
+    if (Number(data.vouchers_sold?.stripe_total) > 0)
+      lines.push({ kind: 'row', left: ' online',   right: fmt(data.vouchers_sold.stripe_total) });
+    if (data.vouchers_redeemed?.count > 0)
+      lines.push({ kind: 'row', left: `Redeemed (${data.vouchers_redeemed.count})`, right: '-' + fmt(data.vouchers_redeemed.total) });
+  }
+  return lines;
+}
+
+function buildItemsLines(items, period, from, to, settings) {
+  const lines = [];
+  lines.push({ kind: 'h1', text: restaurantName(settings) });
+  lines.push({ kind: 'h2', text: 'ITEM SALES' });
+  lines.push({ kind: 'small', text: periodLabel(period, from, to) });
+  lines.push({ kind: 'small', text: nowStamp() });
+  lines.push({ kind: 'div' });
+  if (!items?.length) {
+    lines.push({ kind: 'small', text: 'No items sold for this period' });
+    return lines;
+  }
+  const totalQty = items.reduce((s, it) => s + Number(it.qty_sold || 0), 0);
+  const totalRev = items.reduce((s, it) => s + Number(it.total_revenue || 0), 0);
+  for (const it of items) {
+    lines.push({ kind: 'row',
+      left: `${fmtInt(it.qty_sold)}x ${String(it.name || '').slice(0, 28)}`,
+      right: fmt(it.total_revenue) });
+  }
+  lines.push({ kind: 'total', left: `TOTAL (${fmtInt(totalQty)} items)`, right: fmt(totalRev) });
+  return lines;
 }

@@ -1,4 +1,9 @@
 import { useState, useEffect } from 'react';
+import { getSettings } from '../../api';
+import {
+  thermalPrint, fullPagePrint, pageHtml,
+  fmt, fmtInt, dateLabel, restaurantName, nowStamp,
+} from '../../utils/reportPrinter';
 import { getBills, getBillItems, loginStaff, getBillAmendments } from '../../api';
 import DeleteOrderModal from '../../components/DeleteOrderModal';
 import AmendPaymentModal from '../../components/AmendPaymentModal';
@@ -97,6 +102,17 @@ export default function BillsSection() {
   const itemsByCourse = {};
   billItems.forEach(item => { const c = item.course ?? 0; if (!itemsByCourse[c]) itemsByCourse[c] = []; itemsByCourse[c].push(item); });
 
+  const [settings, setSettings] = useState({});
+  useEffect(() => { getSettings().then(s => setSettings(s || {})).catch(() => {}); }, []);
+
+  const doPrintBills = (mode) => {
+    if (!bills.length) return;
+    const isThermal = (mode === 'thermal');
+    const body = buildBillsBody(bills, from, to, method, { totalSales, totalCash, totalCard }, settings, isThermal);
+    const html = pageHtml('Bills — ' + restaurantName(settings), body, isThermal ? 'thermal' : 'full');
+    if (isThermal) thermalPrint(html); else fullPagePrint(html);
+  };
+
   const exportCsv = () => {
     if (!bills.length) return;
     const rows = [['Bill #', 'Table', 'Covers', 'Closed at', 'Method', 'Discount', 'Discount reason', 'Total £', 'Paid £']];
@@ -157,7 +173,9 @@ export default function BillsSection() {
               <option value="all">All Methods</option><option value="Cash">Cash</option><option value="Card">Card</option><option value="Other">Other</option>
             </select></div>
           <button onClick={fetchBills} style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Search</button>
-          <button onClick={exportCsv} disabled={!bills.length} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 14, cursor: bills.length ? 'pointer' : 'not-allowed', opacity: bills.length ? 1 : 0.5 }}>⬇ Export CSV</button>
+          <button onClick={() => doPrintBills('thermal')} disabled={!bills.length} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #1a1a2e', background: bills.length ? '#1a1a2e' : '#bbb', color: 'white', fontWeight: 700, fontSize: 14, cursor: bills.length ? 'pointer' : 'not-allowed' }}>🖨 Print</button>
+          <button onClick={() => doPrintBills('full')}    disabled={!bills.length} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 14, cursor: bills.length ? 'pointer' : 'not-allowed', opacity: bills.length ? 1 : 0.5 }}>📄 Export</button>
+          <button onClick={exportCsv} disabled={!bills.length} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 14, cursor: bills.length ? 'pointer' : 'not-allowed', opacity: bills.length ? 1 : 0.5 }}>⬇ CSV</button>
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
@@ -373,4 +391,61 @@ function UnlockModal({ onClose, onUnlocked }) {
       </div>
     </div>
   );
+}
+
+// ── Print body builder ────────────────────────────────────────────
+function buildBillsBody(bills, from, to, method, totals, settings, thermal) {
+  const head = thermal
+    ? `<div class="center" style="font-size:13px;font-weight:900;letter-spacing:1px;">${restaurantName(settings)}</div>
+       <div class="center small">BILL RECORDS</div>
+       <div class="center small muted">${dateLabel(from)} → ${dateLabel(to)}${method && method !== 'all' ? ' · ' + method : ''}</div>
+       <div class="center small muted">${nowStamp()}</div>
+       <hr class="divider"/>`
+    : `<h1>${restaurantName(settings)} — Bill Records</h1>
+       <div class="sub"><span class="pill">PERIOD</span> &nbsp; ${dateLabel(from)} → ${dateLabel(to)}${method && method !== 'all' ? ' &nbsp; · &nbsp; ' + method : ''}</div>`;
+
+  const summary = thermal
+    ? `<table>
+         <tr><td>Bills</td><td class="right">${fmtInt(bills.length)}</td></tr>
+         <tr><td>Cash</td><td class="right">${fmt(totals.totalCash)}</td></tr>
+         <tr><td>Card</td><td class="right">${fmt(totals.totalCard)}</td></tr>
+         <tr class="total-row"><td>TOTAL</td><td class="right">${fmt(totals.totalSales)}</td></tr>
+       </table>`
+    : `<div class="grid-3" style="margin-top:8px;">
+         <div class="card"><div class="lbl">Bills</div><div class="val">${fmtInt(bills.length)}</div></div>
+         <div class="card"><div class="lbl">Total sales</div><div class="val">${fmt(totals.totalSales)}</div></div>
+         <div class="card"><div class="lbl">Cash / Card</div><div class="val" style="font-size:16px;">${fmt(totals.totalCash)} / ${fmt(totals.totalCard)}</div></div>
+       </div>`;
+
+  const list = thermal
+    ? `<hr class="divider"/>
+       <div class="section-head">Bills</div>
+       <table>
+         ${bills.map(b => {
+           const t = b.closed_at ? new Date(b.closed_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+           const lbl = b.table_number ? `T${b.table_number}` : (b.customer_name || '🥡');
+           return `<tr><td>${lbl} · ${b.method || '-'} · ${t}</td><td class="right">${fmt(b.paid_amount || b.total)}</td></tr>`;
+         }).join('')}
+       </table>`
+    : `<h2>Bills (${bills.length})</h2>
+       <table>
+         <thead><tr><th>Closed at</th><th>Table / Customer</th><th>Method</th><th class="right">Covers</th><th class="right">Subtotal</th><th class="right">Paid</th></tr></thead>
+         <tbody>
+           ${bills.map(b => {
+             const t = b.closed_at ? new Date(b.closed_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+             const lbl = b.table_number ? `Table ${b.table_number}` : (b.customer_name || '🥡 Online');
+             return `<tr>
+               <td>${t}</td>
+               <td>${lbl}</td>
+               <td>${b.method || '-'}</td>
+               <td class="right">${b.covers || '-'}</td>
+               <td class="right muted">${fmt(b.total)}</td>
+               <td class="right" style="font-weight:700;">${fmt(b.paid_amount || b.total)}</td>
+             </tr>`;
+           }).join('')}
+           <tr class="total-row"><td colspan="5">Total</td><td class="right">${fmt(totals.totalSales)}</td></tr>
+         </tbody>
+       </table>`;
+
+  return head + summary + list;
 }

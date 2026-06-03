@@ -1,4 +1,9 @@
 import { useState, useEffect } from 'react';
+import { getSettings } from '../../api';
+import {
+  thermalPrint, fullPagePrint, pageHtml,
+  fmt, fmtInt, restaurantName, nowStamp,
+} from '../../utils/reportPrinter';
 import { getZReportPreview, saveZReport, getZReportHistory } from '../../api';
 import { downloadCsv } from '../../utils/csv';
 import { confirm } from '../../utils/confirm';
@@ -143,6 +148,19 @@ export default function ZReportSection() {
     const dt = (reportData.from || new Date().toISOString()).slice(0, 10);
     downloadCsv(`z-report_${reportType || 'shift'}_${dt}.csv`, rows);
   };
+  const [settings, setSettings] = useState({});
+  useEffect(() => { getSettings().then(s => setSettings(s || {})).catch(() => {}); }, []);
+
+  const doPrintZ = (mode) => {
+    if (!reportData) return;
+    const isThermal = (mode === 'thermal');
+    const body = buildZReportBody(reportData, reportType, settings,
+      { floatAmount: floatNum, pettyCash: pettyNum, actualCash: actualNum, difference }, isThermal);
+    const title = (reportType === 'day' ? 'End of Day' : 'Shift Close') + ' — ' + restaurantName(settings);
+    const html = pageHtml(title, body, isThermal ? 'thermal' : 'full');
+    if (isThermal) thermalPrint(html); else fullPagePrint(html);
+  };
+
   const floatNum     = parseFloat(floatAmount) || 0;
   const pettyNum     = parseFloat(pettyCash) || 0;
   const actualNum    = parseFloat(actualCash) || 0;
@@ -388,13 +406,82 @@ export default function ZReportSection() {
               <div style={{ fontSize: 24, fontWeight: 800, color: difference === 0 ? '#22c55e' : difference > 0 ? '#3b82f6' : '#ef4444' }}>{difference === 0 ? '✅ Exact Match!' : difference > 0 ? `📈 Over by £${difference.toFixed(2)}` : `📉 Short by £${Math.abs(difference).toFixed(2)}`}</div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => window.print()} style={{ flex: 2, padding: '16px', borderRadius: 12, border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>🖨️ Print Z Report</button>
-            <button onClick={exportReportCsv} style={{ flex: 1, padding: '16px', borderRadius: 12, border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>⬇ CSV</button>
-            <button onClick={() => { setStep(1); setReportData(null); setSaved(false); setFloatAmount(''); setPettyCash(''); setPettyCashReason(''); setActualCash(''); }} style={{ flex: 1, padding: '16px', borderRadius: 12, border: 'none', background: '#f0f0f0', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Done</button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button onClick={() => doPrintZ('thermal')} style={{ flex: 2, minWidth: 180, padding: '16px', borderRadius: 12, border: '2px solid #1a1a2e', background: '#1a1a2e', color: 'white', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>🖨 Print (80mm)</button>
+            <button onClick={() => doPrintZ('full')}    style={{ flex: 1, minWidth: 110, padding: '16px', borderRadius: 12, border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>📄 Export</button>
+            <button onClick={exportReportCsv}            style={{ flex: 1, minWidth: 90, padding: '16px', borderRadius: 12, border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>⬇ CSV</button>
+            <button onClick={() => { setStep(1); setReportData(null); setSaved(false); setFloatAmount(''); setPettyCash(''); setPettyCashReason(''); setActualCash(''); }} style={{ flex: 1, minWidth: 90, padding: '16px', borderRadius: 12, border: 'none', background: '#f0f0f0', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Done</button>
           </div>
         </div>
       )}
     </div>
   );
+}
+
+// ── Print body builder ────────────────────────────────────────────
+function buildZReportBody(r, type, settings, cash, thermal) {
+  const head = thermal
+    ? `<div class="center" style="font-size:13px;font-weight:900;letter-spacing:1px;">${restaurantName(settings)}</div>
+       <div class="center small">${type === 'day' ? 'END OF DAY' : 'SHIFT CLOSE'}</div>
+       <div class="center small muted">${r.from || ''} → ${r.to || ''}</div>
+       <div class="center small muted">${nowStamp()}</div>
+       <hr class="divider"/>`
+    : `<h1>${restaurantName(settings)} — ${type === 'day' ? 'End of Day Z Report' : 'Shift Close Z Report'}</h1>
+       <div class="sub"><span class="pill">PERIOD</span> &nbsp; ${r.from || ''} → ${r.to || ''}</div>`;
+
+  const total = Number(r.total_sales || 0);
+  const summary = `
+    <table>
+      <tr><td>💵 Cash</td><td class="right">${fmt(r.total_cash)}</td></tr>
+      <tr><td>💳 Card</td><td class="right">${fmt(r.total_card)}</td></tr>
+      <tr><td>🔄 Other</td><td class="right">${fmt(r.total_other)}</td></tr>
+      <tr><td>🍽️ Food</td><td class="right">${fmt(r.total_food)}</td></tr>
+      <tr><td>🍺 Drink</td><td class="right">${fmt(r.total_drink)}</td></tr>
+      <tr><td>Service charge (12.5%)</td><td class="right">${fmt(r.total_service)}</td></tr>
+      <tr class="total-row"><td>TOTAL SALES</td><td class="right">${fmt(total)}</td></tr>
+    </table>`;
+
+  const channels = `
+    ${thermal ? '<hr class="divider"/>' : '<h2>Channels</h2>'}
+    <table>
+      <tr><td>Dine-in (${r.dine_in_count || 0})</td><td class="right">${fmt(r.total_dine_in)}</td></tr>
+      <tr><td>🥡 Takeaway (${r.takeaway_count || 0})</td><td class="right">${fmt(r.total_takeaway)}</td></tr>
+    </table>`;
+
+  const stats = `
+    ${thermal ? '<hr class="divider"/>' : '<h2>Operations</h2>'}
+    <table>
+      <tr><td>Orders</td><td class="right">${fmtInt(r.total_orders)}</td></tr>
+      <tr><td>Covers</td><td class="right">${fmtInt(r.total_covers)}</td></tr>
+      <tr><td>Avg per cover</td><td class="right">${fmt(r.avg_per_cover)}</td></tr>
+      <tr><td>Discounts</td><td class="right">${fmt(r.total_discounts)}</td></tr>
+      <tr><td>Void items</td><td class="right">${fmtInt(r.void_count)} · ${fmt(r.void_value)}</td></tr>
+    </table>`;
+
+  const vat = (Array.isArray(r.vat_breakdown) && r.vat_breakdown.length) ? `
+    ${thermal ? '<hr class="divider"/><div class="section-head">VAT Breakdown</div>' : '<h2>VAT Breakdown</h2>'}
+    <table>
+      <tr><td>Rate</td><td class="right">Net</td><td class="right">VAT</td></tr>
+      ${r.vat_breakdown.map(b => `<tr><td>${b.rate}%</td><td class="right">${fmt(b.net)}</td><td class="right">${fmt(b.vat)}</td></tr>`).join('')}
+      <tr class="total-row"><td colspan="2">Total VAT</td><td class="right">${fmt(r.vat_total)}</td></tr>
+    </table>` : '';
+
+  const voids = (Array.isArray(r.voids_by_type) && r.voids_by_type.length) ? `
+    ${thermal ? '<hr class="divider"/><div class="section-head">Voids by Type</div>' : '<h2>Voids by Type</h2>'}
+    <table>
+      ${r.voids_by_type.map(v => `<tr><td>${v.void_type}</td><td class="right">${fmtInt(v.count)}</td><td class="right">${fmt(v.value)}</td></tr>`).join('')}
+    </table>` : '';
+
+  const recon = `
+    ${thermal ? '<hr class="divider-solid"/><div class="section-head">Cash Reconciliation</div>' : '<h2>Cash Reconciliation</h2>'}
+    <table>
+      <tr><td>Cash sales</td><td class="right">${fmt(r.total_cash)}</td></tr>
+      <tr><td>– Float kept</td><td class="right">${fmt(cash.floatAmount)}</td></tr>
+      <tr><td>– Petty cash</td><td class="right">${fmt(cash.pettyCash)}</td></tr>
+      <tr><td>Expected in drawer</td><td class="right">${fmt((r.total_cash || 0) - cash.floatAmount - cash.pettyCash)}</td></tr>
+      <tr><td>Actual counted</td><td class="right">${fmt(cash.actualCash)}</td></tr>
+      <tr class="total-row"><td>${cash.difference === 0 ? '✅ Exact match' : cash.difference > 0 ? '📈 Over' : '📉 Short'}</td><td class="right">${fmt(Math.abs(cash.difference))}</td></tr>
+    </table>`;
+
+  return head + summary + channels + stats + vat + voids + recon;
 }

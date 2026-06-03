@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
-import { getVatReport } from '../../api';
+import { getVatReport, getSettings } from '../../api';
+import {
+  thermalPrint, fullPagePrint, pageHtml,
+  fmt, fmtInt, dateLabel, restaurantName, nowStamp,
+} from '../../utils/reportPrinter';
 
 // SEPOS-021 — VAT report (date range).
 // Groups closed-order items by vat_rate over the chosen window and shows
@@ -37,6 +41,17 @@ export default function VATReportSection() {
     } finally { setLoading(false); }
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  const [settings, setSettings] = useState({});
+  useEffect(() => { getSettings().then(s => setSettings(s || {})).catch(() => {}); }, []);
+
+  const doPrintVat = (mode) => {
+    if (!data?.breakdown?.length) return;
+    const isThermal = (mode === 'thermal');
+    const body = buildVatBody(data, from, to, settings, isThermal);
+    const html = pageHtml('VAT Report — ' + restaurantName(settings), body, isThermal ? 'thermal' : 'full');
+    if (isThermal) thermalPrint(html); else fullPagePrint(html);
+  };
 
   const exportCsv = () => {
     if (!data?.breakdown) return;
@@ -84,12 +99,24 @@ export default function VATReportSection() {
           background:'#1a1a2e', color:'white', fontWeight:700, fontSize:13,
           cursor: loading ? 'wait' : 'pointer'
         }}>{loading ? 'Loading…' : 'Refresh'}</button>
+        <button onClick={() => doPrintVat('thermal')} disabled={!data?.breakdown?.length} style={{
+          padding:'10px 18px', borderRadius:8, border:'none',
+          background: data?.breakdown?.length ? '#1a1a2e' : '#bbb',
+          color:'white', fontWeight:700, fontSize:13,
+          cursor: data?.breakdown?.length ? 'pointer' : 'not-allowed'
+        }}>🖨 Print</button>
+        <button onClick={() => doPrintVat('full')} disabled={!data?.breakdown?.length} style={{
+          padding:'10px 18px', borderRadius:8, border:'1px solid #1a1a2e',
+          background: 'white', color:'#1a1a2e', fontWeight:700, fontSize:13,
+          cursor: data?.breakdown?.length ? 'pointer' : 'not-allowed',
+          opacity: data?.breakdown?.length ? 1 : 0.5,
+        }}>📄 Export</button>
         <button onClick={exportCsv} disabled={!data || !data.breakdown?.length} style={{
           padding:'10px 18px', borderRadius:8, border:'none',
           background: data?.breakdown?.length ? '#C9A84C' : '#e5d9b2',
           color:'#0D1B3E', fontWeight:700, fontSize:13,
           cursor: data?.breakdown?.length ? 'pointer' : 'not-allowed'
-        }}>⬇ Export CSV</button>
+        }}>⬇ CSV</button>
       </div>
 
       <div style={cardStyle}>
@@ -169,4 +196,43 @@ export default function VATReportSection() {
       </div>
     </div>
   );
+}
+
+// ── Print body builder ────────────────────────────────────────────
+function buildVatBody(data, from, to, settings, thermal) {
+  const head = thermal
+    ? `<div class="center" style="font-size:13px;font-weight:900;letter-spacing:1px;">${restaurantName(settings)}</div>
+       <div class="center small">VAT REPORT</div>
+       <div class="center small muted">${dateLabel(from)} → ${dateLabel(to)}</div>
+       <div class="center small muted">${nowStamp()}</div>
+       <hr class="divider"/>`
+    : `<h1>${restaurantName(settings)} — VAT Report</h1>
+       <div class="sub"><span class="pill">PERIOD</span> &nbsp; ${dateLabel(from)} → ${dateLabel(to)}</div>`;
+
+  const breakdown = `
+    ${thermal ? '<div class="section-head">By Rate</div>' : '<h2>By Rate</h2>'}
+    <table>
+      <tr><td>Rate</td><td class="right">Net</td><td class="right">VAT</td><td class="right">Gross</td></tr>
+      ${data.breakdown.map(b => `<tr>
+        <td>${Number(b.rate).toFixed(0)}%</td>
+        <td class="right">${fmt(b.net)}</td>
+        <td class="right">${fmt(b.vat)}</td>
+        <td class="right">${fmt(b.gross)}</td>
+      </tr>`).join('')}
+      <tr class="total-row">
+        <td>TOTAL</td>
+        <td class="right">${fmt(data.total.net)}</td>
+        <td class="right">${fmt(data.total.vat)}</td>
+        <td class="right">${fmt(data.total.gross)}</td>
+      </tr>
+    </table>`;
+
+  const byKind = data.by_kind ? `
+    ${thermal ? '<hr class="divider"/><div class="section-head">By Category</div>' : '<h2>By Category</h2>'}
+    <table>
+      <tr><td>🍽️ Food (${fmtInt(data.by_kind.food.items)} items)</td><td class="right">${fmt(data.by_kind.food.gross)}</td></tr>
+      <tr><td>🍺 Drink (${fmtInt(data.by_kind.drink.items)} items)</td><td class="right">${fmt(data.by_kind.drink.gross)}</td></tr>
+    </table>` : '';
+
+  return head + breakdown + byKind;
 }

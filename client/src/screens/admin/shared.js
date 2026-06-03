@@ -3,8 +3,15 @@ import { SERVER_URL } from '../../api';
 // ── Date helpers ──────────────────────────────
 export const today = new Date().toISOString().split('T')[0];
 
-export const getDateRange = (type) => {
+export const getDateRange = (type, customFrom, customTo) => {
   const now = new Date();
+  // Custom range — operator picked specific dates from the date picker.
+  // 'to' falls back to 'from' so a single-day pick is a one-day range.
+  if (type === 'custom') {
+    const from = customFrom || today;
+    const to   = customTo   || customFrom || today;
+    return { from, to };
+  }
   if (type === 'today') return { from: today, to: today };
   if (type === 'weekly') {
     const from = new Date(now); from.setDate(now.getDate() - 7);

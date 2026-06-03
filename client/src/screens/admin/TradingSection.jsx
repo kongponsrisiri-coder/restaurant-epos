@@ -4,14 +4,16 @@ import { today, getDateRange } from './shared';
 
 export default function TradingSection() {
   const [period, setPeriod] = useState('today');
+  const [customFrom, setCustomFrom] = useState(today);
+  const [customTo, setCustomTo] = useState(today);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { from, to } = getDateRange(period);
+    const { from, to } = getDateRange(period, customFrom, customTo);
     setLoading(true);
     getSummaryReport(from, to).then(d => { setData(d); setLoading(false); });
-  }, [period]);
+  }, [period, customFrom, customTo]);
 
   const avgPerHead  = data?.total_covers > 0 ? data.total_sales / data.total_covers : 0;
   const avgPerCover = data?.order_count  > 0 ? data.total_sales / data.order_count  : 0;
@@ -19,10 +21,19 @@ export default function TradingSection() {
   return (
     <div style={{ padding: 24 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 20 }}>Trading Summary</h1>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-        {['today', 'weekly', 'monthly'].map(p => (
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+        {['today', 'weekly', 'monthly', 'custom'].map(p => (
           <button key={p} onClick={() => setPeriod(p)} style={{ padding: '8px 20px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, textTransform: 'capitalize', background: period === p ? '#1a1a2e' : '#e0e0e0', color: period === p ? 'white' : '#555' }}>{p}</button>
         ))}
+        {period === 'custom' && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 6 }}>
+            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+              style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
+            <span style={{ color: '#666', fontSize: 13 }}>→</span>
+            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+              style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
+          </div>
+        )}
       </div>
       {loading ? <div style={{ color: '#888' }}>Loading...</div> : (
         <>

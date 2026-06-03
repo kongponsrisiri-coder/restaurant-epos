@@ -382,7 +382,7 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
         // legible next to the SIZE_BIG English line above. Was
         // SIZE_NORMAL which looked tiny in comparison. Korakot
         // 2026-06-02: "increase the size of Thai language".
-        nameAlt    ? [CMD.BOLD_ON, CMD.SIZE_TALL, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
+        nameAlt    ? [CMD.BOLD_ON, CMD.SIZE_BIG, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
         // Modifier / option choice line — bumped to SIZE_TALL + BOLD so
         // the chef reads "no MSG", "extra spicy", "Chicken" etc. as
         // clearly as the item name itself. Was SIZE_NORMAL (Korakot
@@ -432,7 +432,7 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
         // Thai item name — SIZE_TALL + BOLD so it's clearly legible
         // next to the SIZE_BIG English line above. Korakot
         // 2026-06-02: "increase the size of Thai language".
-        nameAlt    ? [CMD.BOLD_ON, CMD.SIZE_TALL, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
+        nameAlt    ? [CMD.BOLD_ON, CMD.SIZE_BIG, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
         // Modifier / option choice line — bumped to SIZE_TALL + BOLD so
         // the chef reads "no MSG", "extra spicy", "Chicken" etc. as
         // clearly as the item name itself. Was SIZE_NORMAL (Korakot

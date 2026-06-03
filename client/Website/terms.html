@@ -10,6 +10,7 @@
   gtag('config', 'G-R0E872VB21');
 </script>
 <meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='50' fill='%230D1B3E'/%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%23C9A84C' stroke-width='1.8'/%3E%3Cg transform='translate(50,50)'%3E%3Cpath d='M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z' fill='%23C9A84C'/%3E%3Ccircle cx='0' cy='0' r='5' fill='%23C9A84C'/%3E%3C/g%3E%3C/svg%3E">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Terms of Service — SiamEPOS</title>
 <meta name="description" content="SiamEPOS Terms of Service — the terms and conditions governing your use of the SiamEPOS restaurant management platform.">
@@ -19,86 +20,418 @@
 <meta property="og:url" content="https://siamepos.co.uk/terms.html">
 <meta property="og:title" content="Terms of Service — SiamEPOS">
 <meta property="og:description" content="Terms and conditions governing your use of the SiamEPOS restaurant management platform.">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='50' fill='%230D1B3E'/%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%23C9A84C' stroke-width='1.8'/%3E%3Cg transform='translate(50,50)'%3E%3Cpath d='M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z' fill='%23C9A84C'/%3E%3Ccircle cx='0' cy='0' r='5' fill='%23C9A84C'/%3E%3C/g%3E%3C/svg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
-:root { --gold: #C9A84C; --navy: #0D1B3E; --white: #FDFAF4; }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Sarabun', sans-serif; background: var(--white); color: #2a2a2a; line-height: 1.8; }
-nav { background: var(--navy); padding: 18px 40px; display: flex; align-items: center; justify-content: space-between; }
-nav a { color: var(--gold); text-decoration: none; font-weight: 700; font-size: 18px; letter-spacing: 1px; }
-nav .back { color: rgba(255,255,255,0.7); font-size: 14px; font-weight: 400; }
-nav .back:hover { color: white; }
-.container { max-width: 780px; margin: 60px auto; padding: 0 24px 80px; }
-h1 { font-family: 'Cormorant Garamond', serif; font-size: 42px; font-weight: 700; color: var(--navy); margin-bottom: 8px; }
-.updated { color: #888; font-size: 14px; margin-bottom: 40px; }
-h2 { font-family: 'Cormorant Garamond', serif; font-size: 24px; font-weight: 700; color: var(--navy); margin: 36px 0 12px; }
-p { margin-bottom: 16px; color: #444; }
-ul { margin: 12px 0 16px 24px; color: #444; }
-li { margin-bottom: 8px; }
-a { color: var(--gold); }
-footer { background: var(--navy); color: rgba(255,255,255,0.5); text-align: center; padding: 24px; font-size: 13px; }
-footer a { color: var(--gold); text-decoration: none; }
+:root {
+  --gold: #C9A84C; --gold-light: #E8C96A;
+  --navy: #0D1B3E; --navy-mid: #1A2F6B;
+  --white: #FDFAF4; --text-muted: #6B7A9F;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body { font-family:'Sarabun',sans-serif; background:var(--white); color:var(--navy); overflow-x:hidden; }
+body.thai .lang-en { display:none; }
+body:not(.thai) .lang-th { display:none; }
+
+/* NAV */
+nav { position:fixed; top:0; left:0; right:0; z-index:100; display:flex; justify-content:space-between; align-items:center; padding:18px 60px; background:rgba(13,27,62,0.96); backdrop-filter:blur(12px); border-bottom:1px solid rgba(201,168,76,0.2); }
+.nav-logo { display:flex; align-items:center; gap:10px; text-decoration:none; }
+.nav-links { display:flex; align-items:center; gap:24px; list-style:none; }
+.nav-links a { color:rgba(255,255,255,0.75); text-decoration:none; font-size:14px; font-weight:600; transition:color 0.2s; }
+.nav-links a:hover { color:var(--gold); }
+.nav-cta { background:linear-gradient(135deg,var(--gold),var(--gold-light)); color:var(--navy)!important; padding:9px 20px; border-radius:8px; font-weight:700!important; }
+.lang-toggle { background:rgba(201,168,76,0.12); border:1px solid rgba(201,168,76,0.35); color:var(--gold); padding:6px 12px; border-radius:20px; cursor:pointer; font-size:12px; font-weight:700; font-family:'Sarabun',sans-serif; }
+.nav-burger { display:none; background:none; border:none; color:white; font-size:24px; cursor:pointer; padding:4px 6px; margin-left:6px; }
+.nav-burger:hover { color:var(--gold); }
+
+/* WHATSAPP FLOAT */
+.wa-float { position:fixed; bottom:28px; right:28px; z-index:98; }
+.wa-btn { display:flex; align-items:center; gap:10px; background:#25D366; color:white; padding:13px 20px; border-radius:50px; font-size:14px; font-weight:700; text-decoration:none; box-shadow:0 8px 24px rgba(37,211,102,0.4); transition:transform 0.2s,box-shadow 0.2s; font-family:'Sarabun',sans-serif; }
+.wa-btn:hover { transform:translateY(-2px); box-shadow:0 12px 32px rgba(37,211,102,0.5); }
+
+/* PAGE HERO BAND */
+.page-hero {
+  background:linear-gradient(160deg,var(--navy) 0%,var(--navy-mid) 100%);
+  padding:140px 60px 60px;
+  position:relative;
+  overflow:hidden;
+}
+.page-hero::before {
+  content:'';
+  position:absolute;
+  inset:0;
+  background-image:
+    repeating-linear-gradient(0deg,rgba(201,168,76,0.04) 0px,rgba(201,168,76,0.04) 1px,transparent 1px,transparent 48px),
+    repeating-linear-gradient(90deg,rgba(201,168,76,0.04) 0px,rgba(201,168,76,0.04) 1px,transparent 1px,transparent 48px);
+}
+.page-hero-inner { position:relative; z-index:1; max-width:780px; }
+.page-label { display:inline-block; color:var(--gold); font-size:11px; font-weight:700; letter-spacing:3px; text-transform:uppercase; margin-bottom:14px; }
+.page-hero h1 { font-family:'Cormorant Garamond',serif; font-size:52px; font-weight:700; color:white; line-height:1.1; margin-bottom:16px; }
+.page-hero p { font-size:16px; color:rgba(255,255,255,0.6); line-height:1.7; }
+
+/* CONTENT */
+.content-wrap { max-width:780px; margin:0 auto; padding:64px 24px 100px; }
+
+.toc { background:#F0EDE4; border-left:3px solid var(--gold); border-radius:0 12px 12px 0; padding:24px 28px; margin-bottom:48px; }
+.toc-title { font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--gold); margin-bottom:14px; }
+.toc ol { padding-left:20px; }
+.toc li { margin-bottom:6px; }
+.toc a { color:var(--navy); font-size:14px; font-weight:600; text-decoration:none; }
+.toc a:hover { color:var(--gold); }
+
+.section { margin-bottom:48px; scroll-margin-top:100px; }
+.section h2 {
+  font-family:'Cormorant Garamond',serif;
+  font-size:28px;
+  font-weight:700;
+  color:var(--navy);
+  margin-bottom:16px;
+  padding-bottom:10px;
+  border-bottom:1px solid rgba(13,27,62,0.1);
+}
+.section p { font-size:15px; color:#444; line-height:1.8; margin-bottom:14px; }
+.section ul, .section ol { margin:0 0 14px 22px; }
+.section li { font-size:15px; color:#444; line-height:1.8; margin-bottom:6px; }
+.section a { color:var(--gold); font-weight:600; }
+.highlight-box {
+  background:rgba(201,168,76,0.08);
+  border:1px solid rgba(201,168,76,0.25);
+  border-radius:12px;
+  padding:18px 22px;
+  margin:16px 0;
+  font-size:14px;
+  color:var(--navy);
+  line-height:1.7;
+}
+.highlight-box strong { color:var(--gold); }
+.updated-note { font-size:13px; color:var(--text-muted); margin-bottom:32px; }
+
+/* FOOTER */
+footer { background:#070F24; padding:56px 60px; display:grid; grid-template-columns:2fr 1fr 1fr 1fr; gap:48px; }
+.footer-brand {}
+.footer-logo { font-family:'Cormorant Garamond',serif; font-size:26px; font-weight:700; color:var(--gold); margin-bottom:12px; }
+.footer-logo span { color:white; }
+.footer-tagline { color:rgba(255,255,255,0.4); font-size:13px; line-height:1.7; max-width:240px; margin-bottom:20px; }
+.footer-col h4 { color:white; font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:16px; }
+.footer-col ul { list-style:none; display:flex; flex-direction:column; gap:9px; }
+.footer-col ul a { color:rgba(255,255,255,0.4); font-size:13px; text-decoration:none; transition:color 0.2s; }
+.footer-col ul a:hover { color:var(--gold); }
+.footer-bottom { background:#040A18; padding:18px 60px; display:flex; justify-content:space-between; align-items:center; }
+.footer-bottom p { color:rgba(255,255,255,0.22); font-size:12px; }
+.footer-bottom a { color:var(--gold); text-decoration:none; }
+
+/* RESPONSIVE */
+@media(max-width:1100px) {
+  nav { padding:14px 24px; }
+  .nav-links { gap:14px; }
+  footer { grid-template-columns:1fr 1fr; gap:32px; padding:44px 24px; }
+  .footer-bottom { padding:16px 24px; flex-direction:column; gap:6px; text-align:center; }
+  .page-hero { padding:120px 28px 48px; }
+  .content-wrap { padding:48px 24px 80px; }
+}
+@media(max-width:640px) {
+  .nav-burger { display:inline-block!important; }
+  .lang-toggle { font-size:11px; padding:6px 10px; }
+  nav { padding:14px 18px; }
+  .nav-logo svg { width:140px; height:42px; }
+  .nav-links { display:none!important; position:fixed; top:62px; left:0; right:0; background:var(--navy); border-top:1px solid rgba(201,168,76,0.2); flex-direction:column; gap:0; padding:8px 0; z-index:200; }
+  body.menu-open .nav-links { display:flex!important; }
+  body.menu-open { overflow:hidden; }
+  .nav-links li { width:100%; }
+  .nav-links li a { display:block; padding:14px 24px; border-bottom:1px solid rgba(255,255,255,0.06); font-size:15px; }
+  .nav-links li:last-child a { border-bottom:none; }
+  .page-hero h1 { font-size:34px; }
+  footer { grid-template-columns:1fr; }
+  .wa-float { bottom:16px; right:16px; }
+  .toc { padding:18px 20px; }
+}
 </style>
 </head>
 <body>
-<nav>
-  <a href="index.html">SiamEPOS</a>
-  <a href="index.html" class="back">← Back to Home</a>
-</nav>
 
-<div class="container">
-  <h1>Terms of Service</h1>
-  <p class="updated">Last updated: 15 May 2026</p>
-
-  <p>These Terms of Service ("Terms") govern your use of SiamEPOS, operated by Korakot Kongponsrisiri ("SiamEPOS", "we", "us"). By using SiamEPOS, you agree to these Terms.</p>
-
-  <h2>1. The Service</h2>
-  <p>SiamEPOS is a cloud-based restaurant management system including point-of-sale, table management, kitchen display, reservations, inventory, and related features. Access is provided via web browser and desktop application.</p>
-
-  <h2>2. Subscription and Payment</h2>
-  <p>SiamEPOS is offered on a monthly subscription basis. Fees are charged in advance. You may cancel at any time; cancellation takes effect at the end of your current billing period. We reserve the right to change pricing with 30 days' notice.</p>
-
-  <h2>3. Acceptable Use</h2>
-  <p>You agree to use SiamEPOS only for lawful purposes and in accordance with these Terms. You must not:</p>
-  <ul>
-    <li>Use the service for any unlawful purpose or in violation of any regulations</li>
-    <li>Attempt to gain unauthorised access to any part of the service</li>
-    <li>Interfere with or disrupt the service or its infrastructure</li>
-    <li>Resell or sublicense the service without our written consent</li>
-  </ul>
-
-  <h2>4. Your Data</h2>
-  <p>You own your restaurant data. We process it on your behalf as a data processor. We will not share your data with third parties except as necessary to provide the service or as required by law. See our <a href="privacy-policy.html">Privacy Policy</a> for details.</p>
-
-  <h2>5. Uptime and Support</h2>
-  <p>We aim for maximum uptime but do not guarantee uninterrupted service. We provide support via email and WhatsApp in English and Thai during UK business hours.</p>
-
-  <h2>6. Intellectual Property</h2>
-  <p>SiamEPOS and all its content, features, and functionality are owned by SiamEPOS and protected by UK and international copyright, trademark, and other intellectual property laws.</p>
-
-  <h2>7. Limitation of Liability</h2>
-  <p>To the maximum extent permitted by law, SiamEPOS shall not be liable for any indirect, incidental, special, or consequential damages arising from your use of the service. Our total liability shall not exceed the fees paid by you in the 3 months preceding the claim.</p>
-
-  <h2>8. Termination</h2>
-  <p>We may suspend or terminate your access if you breach these Terms. You may cancel your subscription at any time from your account settings. Upon termination, you may export your data within 30 days.</p>
-
-  <h2>9. Governing Law</h2>
-  <p>These Terms are governed by the laws of England and Wales. Any disputes shall be subject to the exclusive jurisdiction of the courts of England and Wales.</p>
-
-  <h2>10. Changes to These Terms</h2>
-  <p>We may update these Terms from time to time. Continued use of the service after changes constitutes acceptance of the new Terms.</p>
-
-  <h2>11. Contact</h2>
-  <p>For any questions regarding these Terms, contact us at <a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a>.</p>
+<!-- WHATSAPP FLOAT -->
+<div class="wa-float">
+  <a href="https://wa.me/447896036386?text=Hello%2C%20I%27m%20interested%20in%20SiamEPOS" target="_blank" class="wa-btn">
+    <span>💬</span>
+    <span class="lang-en">WhatsApp Us</span>
+    <span class="lang-th">ส่งข้อความ</span>
+  </a>
 </div>
 
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="index.html">
+    <svg width="170" height="50" viewBox="0 0 340 100" xmlns="http://www.w3.org/2000/svg"><circle cx="52" cy="50" r="44" fill="none" stroke="#C9A84C" stroke-width="1.5"/><circle cx="52" cy="50" r="38" fill="none" stroke="#C9A84C" stroke-width="0.5" opacity="0.28"/><g transform="translate(52,50)"><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/><circle cx="0" cy="0" r="8" fill="#0D1B3E"/><circle cx="0" cy="0" r="4.5" fill="#C9A84C"/></g><line x1="110" y1="16" x2="110" y2="84" stroke="#C9A84C" stroke-width="0.8" opacity="0.32"/><text x="126" y="58" font-family="Georgia, serif" font-size="40" font-weight="700" letter-spacing="-1"><tspan fill="white">Siam</tspan><tspan fill="#C9A84C">EPOS</tspan></text></svg>
+  </a>
+  <ul class="nav-links">
+    <li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li>
+    <li><a href="pricing.html" class="lang-en">SiamPRO</a><a href="pricing.html" class="lang-th">SiamPRO</a></li>
+    <li><a href="lite.html" class="lang-en">SiamLite</a><a href="lite.html" class="lang-th">SiamLite</a></li>
+    <li><a href="spa.html" class="lang-en">SiamSpa</a><a href="spa.html" class="lang-th">SiamSpa</a></li>
+    <li><a href="why-siamepos.html" class="lang-en">Why Us</a><a href="why-siamepos.html" class="lang-th">ทำไมเรา</a></li>
+    <li><a href="website-design.html" class="lang-en">Website Design</a><a href="website-design.html" class="lang-th">&#x0E2d;&#x0E2d;&#x0E01;&#x0E41;&#x0E1a;&#x0E1a;&#x0E40;&#x0E27;&#x0E47;&#x0E1a;</a></li>
+    <li><a href="book-demo.html" class="nav-cta lang-en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th">ทดลองใช้ฟรี</a></li>
+  </ul>
+  <button class="nav-burger" aria-label="Open menu">☰</button>
+  <button class="lang-toggle" onclick="document.body.classList.toggle('thai');this.textContent=document.body.classList.contains('thai')?'EN':'ภาษาไทย'">ภาษาไทย</button>
+</nav>
+
+<!-- PAGE HERO -->
+<div class="page-hero">
+  <div class="page-hero-inner">
+    <div class="page-label">Legal</div>
+    <h1>Terms of Service</h1>
+    <p>The terms and conditions that govern your use of SiamEPOS. Plain English — no legalese where we can help it.</p>
+  </div>
+</div>
+
+<!-- CONTENT -->
+<div class="content-wrap">
+
+  <p class="updated-note">Last updated: 4 June 2026 &nbsp;·&nbsp; Operated by Korakot Kongponsrisiri, trading as SiamEPOS · <a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></p>
+
+  <!-- TABLE OF CONTENTS -->
+  <div class="toc">
+    <div class="toc-title">Contents</div>
+    <ol>
+      <li><a href="#service">The Service</a></li>
+      <li><a href="#subscription">Subscription &amp; Payment</a></li>
+      <li><a href="#trial">Free Trial</a></li>
+      <li><a href="#cancellation">Cancellation &amp; Refunds</a></li>
+      <li><a href="#acceptable-use">Acceptable Use</a></li>
+      <li><a href="#data">Your Data &amp; GDPR</a></li>
+      <li><a href="#third-party">Third-Party Services</a></li>
+      <li><a href="#allergen">Allergen Compliance Tools</a></li>
+      <li><a href="#uptime">Uptime &amp; Support</a></li>
+      <li><a href="#ip">Intellectual Property</a></li>
+      <li><a href="#liability">Limitation of Liability</a></li>
+      <li><a href="#termination">Termination &amp; Data Export</a></li>
+      <li><a href="#governing-law">Governing Law</a></li>
+      <li><a href="#changes">Changes to These Terms</a></li>
+      <li><a href="#contact">Contact</a></li>
+    </ol>
+  </div>
+
+  <div class="highlight-box">
+    By activating a SiamEPOS account or continuing to use the service, you confirm that you have read and agree to these Terms. If you are signing up on behalf of a business, you confirm you have authority to bind that business.
+  </div>
+
+  <!-- 1 -->
+  <div class="section" id="service">
+    <h2>1. The Service</h2>
+    <p>SiamEPOS is a cloud-based restaurant and hospitality management platform operated by Korakot Kongponsrisiri, trading as SiamEPOS ("SiamEPOS", "we", "us", "our"). The service includes, depending on your plan:</p>
+    <ul>
+      <li>Point-of-sale (EPOS) and table management</li>
+      <li>Kitchen Display System (KDS) and order routing</li>
+      <li>Online reservation widget and guest management</li>
+      <li>Zero-commission online takeaway ordering widget</li>
+      <li>Inventory management, AI invoice scanning, and cost-vs-sales analytics</li>
+      <li>Customer CRM and email marketing via Brevo</li>
+      <li>Allergen management tools (UK 14-allergen / Natasha's Law)</li>
+      <li>Staff management, clock-in/out, and payroll summaries</li>
+      <li>Offline-capable desktop application (SiamEPOS Pro for Mac and Windows)</li>
+      <li>Bilingual Thai and English interface</li>
+      <li>SiamSpa appointment management (where subscribed)</li>
+    </ul>
+    <p>Feature availability depends on your subscription plan. We reserve the right to add, modify, or discontinue features with reasonable notice.</p>
+  </div>
+
+  <!-- 2 -->
+  <div class="section" id="subscription">
+    <h2>2. Subscription &amp; Payment</h2>
+    <p>SiamEPOS is offered on a monthly subscription basis. All prices are in pounds sterling (GBP) and are exclusive of VAT where applicable.</p>
+    <ul>
+      <li><strong>Billing cycle:</strong> Subscriptions are billed monthly in advance on the date you first subscribed.</li>
+      <li><strong>Payment method:</strong> We accept payment via Stripe (debit card, credit card). By providing payment details you authorise us to charge your card on each billing date.</li>
+      <li><strong>Auto-renewal:</strong> Subscriptions renew automatically unless you cancel before the next billing date.</li>
+      <li><strong>Price changes:</strong> We will give at least 30 days' written notice (by email) of any price increase before it takes effect. Continued use after the notice period constitutes acceptance.</li>
+      <li><strong>Failed payments:</strong> If a payment fails, we will retry up to three times over 7 days and notify you by email. Access may be suspended if payment is not received.</li>
+      <li><strong>VAT:</strong> VAT will be added where required by UK law. Your invoices are available from your account settings.</li>
+    </ul>
+    <div class="highlight-box">
+      <strong>No hidden fees.</strong> SiamEPOS charges a flat monthly subscription. We take <strong>£0 commission</strong> on reservations and <strong>0%</strong> on takeaway orders processed through our widgets. The only fees are your subscription and, where you choose to accept card payments, the card processor's standard rates (charged by Stripe directly to you).
+    </div>
+  </div>
+
+  <!-- 3 -->
+  <div class="section" id="trial">
+    <h2>3. Free Trial</h2>
+    <p>We may offer a free trial period at our discretion. During a free trial you have access to the features of the plan being trialled. At the end of the trial your account will either convert to a paid subscription (if you have provided payment details) or be deactivated. We reserve the right to modify or end free trial offers at any time.</p>
+  </div>
+
+  <!-- 4 -->
+  <div class="section" id="cancellation">
+    <h2>4. Cancellation &amp; Refunds</h2>
+    <p>You may cancel your subscription at any time. Cancellation takes effect at the end of your current billing period — you will not be charged again after that date and you retain full access until then.</p>
+    <p>We do not offer partial refunds for unused days in a billing period. If you believe a charge was made in error, contact us within 14 days at <a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a> and we will investigate promptly.</p>
+    <p>To cancel, contact us via email or WhatsApp. We do not require you to jump through hoops — a simple message is enough.</p>
+  </div>
+
+  <!-- 5 -->
+  <div class="section" id="acceptable-use">
+    <h2>5. Acceptable Use</h2>
+    <p>You agree to use SiamEPOS only for lawful business purposes in connection with your restaurant or hospitality operation. You must not:</p>
+    <ul>
+      <li>Use the service for any unlawful purpose or in violation of UK law or regulations</li>
+      <li>Attempt to gain unauthorised access to any part of the service, its servers, or databases</li>
+      <li>Introduce malware, viruses, or any malicious code</li>
+      <li>Resell, sublicense, or white-label the service without our written consent</li>
+      <li>Use the service in a way that impairs its operation or degrades performance for other users</li>
+      <li>Scrape or extract data from the service by automated means without authorisation</li>
+      <li>Impersonate SiamEPOS, our staff, or any other person or entity</li>
+    </ul>
+    <p>Breach of acceptable use may result in immediate suspension or termination of your account.</p>
+  </div>
+
+  <!-- 6 -->
+  <div class="section" id="data">
+    <h2>6. Your Data &amp; GDPR</h2>
+    <p><strong>You own your data.</strong> All restaurant data, customer records, menu items, and transaction history you create within SiamEPOS remain yours. We process that data on your behalf as a data processor under UK GDPR.</p>
+    <ul>
+      <li><strong>Data processing:</strong> We process your data solely to provide the service. We will not sell your data or share it with third parties for marketing purposes.</li>
+      <li><strong>Data location:</strong> Data is stored on Railway infrastructure (Postgres databases) hosted in EU/UK regions. Desktop app data is also stored locally on your device via SQLite.</li>
+      <li><strong>Your obligations:</strong> As the data controller for your customers' personal data, you are responsible for obtaining appropriate consents, providing privacy notices, and handling subject access requests under UK GDPR. SiamEPOS provides tools (consent checkboxes on booking widgets, HMAC-signed unsubscribe links, marketing consent toggles) to assist you — but you remain the controller.</li>
+      <li><strong>Data processing agreement:</strong> By accepting these Terms you enter into a data processing agreement with us as required by UK GDPR Article 28. Our processing activities are limited to those described in our <a href="privacy-policy.html">Privacy Policy</a>.</li>
+      <li><strong>Security:</strong> We implement industry-standard security measures including encrypted connections (HTTPS), hashed passwords, and access controls. We will notify you without undue delay if we become aware of a personal data breach affecting your data.</li>
+    </ul>
+    <p>For full details of how we handle personal data, see our <a href="privacy-policy.html">Privacy Policy</a>.</p>
+  </div>
+
+  <!-- 7 -->
+  <div class="section" id="third-party">
+    <h2>7. Third-Party Services</h2>
+    <p>SiamEPOS integrates with third-party services to deliver the platform. Your use of SiamEPOS constitutes acceptance of these providers' terms where relevant:</p>
+    <ul>
+      <li><strong>Stripe</strong> — payment processing for online takeaway orders and gift vouchers. Card data is handled entirely by Stripe and never stored on SiamEPOS servers.</li>
+      <li><strong>Brevo (Sendinblue)</strong> — transactional and marketing emails (booking confirmations, campaign sends).</li>
+      <li><strong>Railway</strong> — cloud infrastructure for the SiamEPOS backend and database.</li>
+      <li><strong>Anthropic Claude API</strong> — AI invoice scanning feature. Invoice images are sent to Anthropic for OCR processing and are not used to train Anthropic's models.</li>
+      <li><strong>Netlify</strong> — hosting for the SiamEPOS web application.</li>
+      <li><strong>Cloudflare</strong> — optional secure remote access tunnels for desktop installations.</li>
+    </ul>
+    <p>We are not liable for any outage, data loss, or other failure of these third-party services, though we will take reasonable steps to mitigate the impact on you.</p>
+  </div>
+
+  <!-- 8 -->
+  <div class="section" id="allergen">
+    <h2>8. Allergen Compliance Tools</h2>
+    <p>SiamEPOS includes tools to help you manage the 14 UK-regulated allergens as required by Natasha's Law (Food Information (Amendment) (England) Regulations 2019) and equivalent UK legislation.</p>
+    <div class="highlight-box">
+      <strong>Important:</strong> SiamEPOS allergen tools are an aid to compliance — they do not constitute legal advice or guarantee compliance with food labelling law. <strong>You remain solely responsible</strong> for the accuracy of allergen information displayed to your customers, for maintaining correct recipe records, and for any legal obligations under food safety legislation. Always verify allergen data with your kitchen team and consult a food safety professional if in doubt.
+    </div>
+    <p>We will not be liable for any regulatory penalty, customer injury, or loss arising from inaccurate allergen information entered into the system or displayed to customers.</p>
+  </div>
+
+  <!-- 9 -->
+  <div class="section" id="uptime">
+    <h2>9. Uptime &amp; Support</h2>
+    <p>We aim to maintain high availability of the SiamEPOS cloud service but we do not guarantee uninterrupted access. Planned maintenance will be communicated in advance where possible. The SiamEPOS Pro desktop application includes offline capability so your restaurant can continue to operate during internet outages.</p>
+    <p>Support is provided via email (<a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a>) and WhatsApp in <strong>both English and Thai</strong> during UK business hours (Monday–Friday, 9 am–6 pm GMT/BST). We aim to respond to all queries within one business day.</p>
+  </div>
+
+  <!-- 10 -->
+  <div class="section" id="ip">
+    <h2>10. Intellectual Property</h2>
+    <p>SiamEPOS, its software, branding, design, and all associated content are the intellectual property of Korakot Kongponsrisiri. "SiamEPOS" is a registered UK trademark (UK00004385501, Classes 9 and 42).</p>
+    <p>You are granted a limited, non-exclusive, non-transferable licence to access and use the service for the duration of your subscription. This licence does not include the right to copy, modify, distribute, or create derivative works from any part of the service.</p>
+    <p>Your restaurant data (menus, customer records, orders, etc.) remains your intellectual property at all times.</p>
+  </div>
+
+  <!-- 11 -->
+  <div class="section" id="liability">
+    <h2>11. Limitation of Liability</h2>
+    <p>To the maximum extent permitted by applicable law:</p>
+    <ul>
+      <li>SiamEPOS is provided "as is" without warranty of any kind, express or implied, including fitness for a particular purpose.</li>
+      <li>We shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including loss of revenue, loss of data, or loss of goodwill, arising out of or in connection with your use of the service.</li>
+      <li>Our total aggregate liability for any claim arising under or in connection with these Terms shall not exceed the total fees paid by you in the three months preceding the event giving rise to the claim.</li>
+    </ul>
+    <p>Nothing in these Terms limits or excludes liability for death or personal injury caused by negligence, fraud or fraudulent misrepresentation, or any other liability that cannot be excluded under English law.</p>
+  </div>
+
+  <!-- 12 -->
+  <div class="section" id="termination">
+    <h2>12. Termination &amp; Data Export</h2>
+    <p><strong>By you:</strong> You may cancel at any time as set out in Section 4. Your data remains accessible until your subscription ends.</p>
+    <p><strong>By us:</strong> We may suspend or terminate your access immediately if you materially breach these Terms and (where the breach is capable of remedy) fail to remedy it within 14 days of notice. We may terminate with 30 days' notice for any other reason.</p>
+    <p><strong>Data export:</strong> After termination you have 30 days to request an export of your data in CSV or JSON format. After 30 days we may delete your data from our servers, though data archived locally on your desktop device (SiamEPOS Pro SQLite records) remains on your machine.</p>
+    <p>The SiamEPOS Pro desktop application includes automatic nightly HMRC-compliant archiving of Z-reports and bill records to your local Documents folder, independent of cloud connectivity.</p>
+  </div>
+
+  <!-- 13 -->
+  <div class="section" id="governing-law">
+    <h2>13. Governing Law</h2>
+    <p>These Terms are governed by and construed in accordance with the laws of England and Wales. Any dispute arising out of or in connection with these Terms shall be subject to the exclusive jurisdiction of the courts of England and Wales.</p>
+    <p>If you are a consumer (rather than a business), you may also have rights under the law of the country where you are resident, which these Terms do not affect.</p>
+  </div>
+
+  <!-- 14 -->
+  <div class="section" id="changes">
+    <h2>14. Changes to These Terms</h2>
+    <p>We may update these Terms from time to time. When we make material changes, we will notify you by email and update the "Last updated" date at the top of this page. We will give at least 14 days' notice of material changes.</p>
+    <p>Continued use of the service after the effective date of any changes constitutes your acceptance of the updated Terms. If you do not agree to the updated Terms, you may cancel your subscription before the changes take effect.</p>
+  </div>
+
+  <!-- 15 -->
+  <div class="section" id="contact">
+    <h2>15. Contact</h2>
+    <p>For any questions, concerns, or requests regarding these Terms, please contact us:</p>
+    <ul>
+      <li><strong>Email:</strong> <a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></li>
+      <li><strong>WhatsApp:</strong> <a href="https://wa.me/447896036386">+44 7896 036 386</a></li>
+      <li><strong>Language:</strong> We respond in both English and Thai</li>
+    </ul>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
 <footer>
-  <p>© 2026 SiamEPOS. All rights reserved. &nbsp;|&nbsp;
-    <a href="privacy-policy.html">Privacy Policy</a> &nbsp;|&nbsp;
-    <a href="terms.html">Terms of Service</a> &nbsp;|&nbsp;
-    <a href="cookie-policy.html">Cookie Policy</a>
-  </p>
+  <div class="footer-brand">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><svg width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="none" stroke="#C9A84C" stroke-width="1.8"/><circle cx="50" cy="50" r="39" fill="none" stroke="#C9A84C" stroke-width="0.6" opacity="0.28"/><g transform="translate(50,50)"><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/><circle cx="0" cy="0" r="9" fill="#0D1B3E"/><circle cx="0" cy="0" r="5" fill="#C9A84C"/></g></svg><span style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:#C9A84C;">Siam<span style="color:white;">EPOS</span></span></div>
+    <p class="footer-tagline lang-en">The Thai Restaurant Management System. Built for Thai restaurants in the UK.</p>
+    <p class="footer-tagline lang-th">ระบบปฏิบัติการธุรกิจสมบูรณ์สำหรับร้านอาหารไทยในสหราชอาณาจักร</p>
+    <a href="https://wa.me/447896036386" target="_blank" style="display:inline-flex;align-items:center;gap:8px;background:#25D366;color:white;padding:10px 18px;border-radius:50px;font-size:13px;font-weight:700;text-decoration:none;margin-top:4px;">💬 <span class="lang-en">WhatsApp / LINE</span><span class="lang-th">WhatsApp / LINE</span></a>
+  </div>
+  <div class="footer-col">
+    <h4 class="lang-en">Product</h4><h4 class="lang-th">ผลิตภัณฑ์</h4>
+    <ul>
+      <li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li>
+      <li><a href="pricing.html" class="lang-en">Pricing</a><a href="pricing.html" class="lang-th">ราคา</a></li>
+      <li><a href="spa.html" class="lang-en">SiamSpa</a><a href="spa.html" class="lang-th">SiamSpa</a></li>
+      <li><a href="why-siamepos.html" class="lang-en">Why SiamEPOS</a><a href="why-siamepos.html" class="lang-th">ทำไมต้อง SiamEPOS</a></li>
+      <li><a href="book-demo.html" class="lang-en">Book Demo</a><a href="book-demo.html" class="lang-th">จองสาธิต</a></li>
+    </ul>
+  </div>
+  <div class="footer-col">
+    <h4 class="lang-en">Support</h4><h4 class="lang-th">ซัพพอร์ต</h4>
+    <ul>
+      <li><a href="https://wa.me/447896036386" class="lang-en">WhatsApp Support</a><a href="https://wa.me/447896036386" class="lang-th">WhatsApp ซัพพอร์ต</a></li>
+      <li><a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></li>
+      <li><a href="book-demo.html" class="lang-en">Thai support available</a><a href="book-demo.html" class="lang-th">ซัพพอร์ตภาษาไทย</a></li>
+    </ul>
+  </div>
+  <div class="footer-col">
+    <h4 class="lang-en">Legal</h4><h4 class="lang-th">กฎหมาย</h4>
+    <ul>
+      <li><a href="privacy-policy.html" class="lang-en">Privacy Policy</a><a href="privacy-policy.html" class="lang-th">นโยบายความเป็นส่วนตัว</a></li>
+      <li><a href="terms.html" class="lang-en">Terms of Service</a><a href="terms.html" class="lang-th">เงื่อนไขการใช้บริการ</a></li>
+      <li><a href="cookie-policy.html" class="lang-en">Cookie Policy</a><a href="cookie-policy.html" class="lang-th">นโยบายคุกกี้</a></li>
+    </ul>
+  </div>
 </footer>
+<div class="footer-bottom">
+  <p>© 2026 SiamEPOS. <span class="lang-en">All rights reserved. SiamEPOS™ UK00004385501</span><span class="lang-th">สงวนลิขสิทธิ์</span></p>
+  <p><a href="why-siamepos.html" class="lang-en">Why SiamEPOS?</a><a href="why-siamepos.html" class="lang-th">ทำไมต้อง SiamEPOS?</a></p>
+</div>
+
+<script>
+document.querySelectorAll('.nav-burger').forEach(function(b){
+  b.addEventListener('click',function(){ document.body.classList.toggle('menu-open'); });
+});
+document.querySelectorAll('.nav-links a').forEach(function(a){
+  a.addEventListener('click',function(){ document.body.classList.remove('menu-open'); });
+});
+</script>
 </body>
 </html>

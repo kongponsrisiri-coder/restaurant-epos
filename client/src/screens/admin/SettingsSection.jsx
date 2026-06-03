@@ -565,27 +565,35 @@ export default function SettingsSection() {
       const rate = s.service_charge_rate || s.service_charge_percent || '12.5';
       setSettings(prev => ({ ...prev, ...s, service_charge_rate: rate }));
       if (s.company_logo) setLogoPreview(s.company_logo);
-      // Auto-convert: if a logo data-URL is stored but the thermal-printer
-      // bitmap isn't (e.g. logo was uploaded before bitmap conversion
-      // existed), generate + persist it now so the next receipt print
-      // includes the logo. One-time backfill — silent if already done.
-      if (s.company_logo && !s.company_logo_bitmap) {
+      // Auto-convert / auto-rebuild:
+      //   • If the bitmap is MISSING — first-time backfill from the
+      //     stored data-URL.
+      //   • If the bitmap is PRESENT but stamped with the OLD threshold
+      //     algorithm (v1.6.21 and earlier), rebuild so the new "ink
+      //     the faded bottom too" logic takes effect. We mark the new
+      //     algorithm by setting company_logo_bitmap_rev='2' on save.
+      const isOldRev = s.company_logo_bitmap && s.company_logo_bitmap_rev !== '2';
+      const needsRebuild = s.company_logo
+        && (!s.company_logo_bitmap || isOldRev);
+      if (needsRebuild) {
         try {
           const bmp = await imageToThermalBitmap(s.company_logo, sizeToWidth(s.receipt_logo_size || 'medium'));
           await updateSettings({
             company_logo_bitmap:        bmp.b64,
             company_logo_bitmap_width:  String(bmp.widthBytes),
             company_logo_bitmap_height: String(bmp.height),
+            company_logo_bitmap_rev:    '2',
           });
           setSettings(prev => ({
             ...prev,
             company_logo_bitmap:        bmp.b64,
             company_logo_bitmap_width:  String(bmp.widthBytes),
             company_logo_bitmap_height: String(bmp.height),
+            company_logo_bitmap_rev:    '2',
           }));
           setBitmapPreview(bmp.previewDataUrl);
           setBitmapInkPct(bmp.inkPct);
-          console.log(`[settings] logo bitmap auto-generated for thermal printer (${bmp.inkedDots} inked dots, ${bmp.inkPct.toFixed(1)}%)`);
+          console.log(`[settings] logo bitmap ${isOldRev ? 'rebuilt with v2 threshold algorithm' : 'auto-generated'} (${bmp.inkedDots} inked dots, ${bmp.inkPct.toFixed(1)}%)`);
         } catch (err) {
           console.warn('[settings] logo bitmap auto-generate failed:', err);
         }
@@ -671,26 +679,52 @@ export default function SettingsSection() {
     const pixels = ctx.getImageData(0, 0, PAPER_DOTS, drawH).data;
     const widthBytes = PAPER_DOTS / 8;
 
-    // Try increasingly aggressive thresholds — first one that produces
-    // enough ink wins. Saves the operator from re-uploading a logo
-    // that's "too light" (we just ink more aggressively).
-    let bytes, inkedDots;
-    for (const threshold of [180, 200, 220, 240]) {
-      bytes = new Uint8Array(widthBytes * drawH);
-      inkedDots = 0;
+    // Threshold escalation — try a series of cutoffs and pick the most
+    // aggressive one that still keeps the receipt readable. v1.6.22 fix:
+    // the old loop stopped at 180 as soon as ≥100 dots were inked, so a
+    // logo whose TOP is dark but BOTTOM fades to grey (like Baan Siam's
+    // lotus) printed only the top half — the faded lower rows had grey
+    // values >180 and were never inked. New rules:
+    //   • Keep escalating while the bottom 25% of rows still have less
+    //     than ~30% of their rows showing ink.
+    //   • Stop early if total ink crosses 45% (we'd flood the paper).
+    //   • Cap at 252 (anything above is pure white background).
+    let bytes = null, inkedDots = 0;
+    let chosenThreshold = 180;
+    const bottomStart = Math.floor(drawH * 0.75);
+    for (const threshold of [180, 200, 220, 235, 245, 252]) {
+      const tryBytes = new Uint8Array(widthBytes * drawH);
+      let tryInked = 0;
+      let bottomRowsWithInk = 0;
       for (let y = 0; y < drawH; y++) {
+        let rowInked = false;
         for (let x = 0; x < PAPER_DOTS; x++) {
           const i = (y * PAPER_DOTS + x) * 4;
           const a = pixels[i + 3];
           const grey = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
           if (a >= 128 && grey < threshold) {
-            bytes[y * widthBytes + (x >> 3)] |= (1 << (7 - (x & 7)));
-            inkedDots++;
+            tryBytes[y * widthBytes + (x >> 3)] |= (1 << (7 - (x & 7)));
+            tryInked++;
+            rowInked = true;
           }
         }
+        if (y >= bottomStart && rowInked) bottomRowsWithInk++;
       }
-      if (inkedDots >= 100) break;   // good enough — stop escalating
+      const tryPct = tryInked / (drawH * PAPER_DOTS);
+      // If we'd flood the paper, keep the last good attempt.
+      if (tryPct > 0.45 && bytes) break;
+      bytes = tryBytes;
+      inkedDots = tryInked;
+      chosenThreshold = threshold;
+      const bottomDenom = Math.max(1, drawH - bottomStart);
+      const bottomCoverage = bottomRowsWithInk / bottomDenom;
+      // Done when the bottom rows are visibly inked AND we have enough
+      // total ink. If the bottom is still blank, escalate.
+      if (inkedDots >= 100 && bottomCoverage >= 0.3) break;
     }
+    // Fallback safety: if no iteration produced anything (impossible
+    // unless the image is fully transparent), zero-out the bitmap.
+    if (!bytes) bytes = new Uint8Array(widthBytes * drawH);
     const inkPct = (inkedDots * 100) / (PAPER_DOTS * drawH);
 
     // Build a preview data-URL (render the 1-bit bitmap back to a

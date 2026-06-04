@@ -20,11 +20,61 @@ function formatTime(timeStr) {
   return timeStr ? String(timeStr).slice(0, 5) : '';
 }
 
+// Cloud-relay path used by Mac / Windows desktop installs that don't
+// hold BREVO_API_KEY locally. Forwards { to, subject, html } to the
+// Railway backend's `/api/local/send-email` endpoint, which signs with
+// SYNC_SECRET and actually calls Brevo with the cloud-side key.
+function _relayEmailViaCloud(to, subject, html) {
+  return new Promise((resolve, reject) => {
+    const cloudUrl = process.env.CLOUD_API_URL;
+    const secret   = process.env.SYNC_SECRET;
+    if (!cloudUrl || !secret) {
+      console.log('ℹ️  BREVO_API_KEY not set and no cloud relay configured — skipping email to ' + to);
+      return resolve();
+    }
+    const u = new URL('/api/local/send-email', cloudUrl);
+    const body = JSON.stringify({ to, subject, html });
+    const opts = {
+      hostname: u.hostname,
+      port:     u.port || (u.protocol === 'https:' ? 443 : 80),
+      path:     u.pathname,
+      method:   'POST',
+      headers: {
+        'Content-Type':   'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        'x-sync-secret':  secret,
+      },
+    };
+    const transport = u.protocol === 'https:' ? https : require('http');
+    const req = transport.request(opts, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          console.log('✅ Email relayed via cloud to ' + to);
+          resolve();
+        } else {
+          console.error('❌ Cloud email relay error ' + res.statusCode + ':', data);
+          reject(new Error('Cloud relay error: ' + data));
+        }
+      });
+    });
+    req.on('error', err => {
+      console.error('❌ Cloud relay request error:', err.message);
+      reject(err);
+    });
+    req.write(body);
+    req.end();
+  });
+}
+
 function sendBrevoEmail(to, subject, html) {
   return new Promise((resolve, reject) => {
     if (!process.env.BREVO_API_KEY) {
-      console.log('ℹ️  BREVO_API_KEY not set — skipping email to ' + to);
-      return resolve();
+      // No local key — try the cloud relay (desktop installs in
+      // cloud-relay mode). If that's not configured either, the relay
+      // logs + resolves silently (same behaviour as before).
+      return _relayEmailViaCloud(to, subject, html).then(resolve, reject);
     }
 
     const body = JSON.stringify({

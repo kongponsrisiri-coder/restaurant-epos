@@ -2103,6 +2103,32 @@ app.get('/api/local/tunnel-status', (req, res) => {
 
 // SEPOS-LOCAL-001 Phase 5 — cloud-side stats fetched by local installs
 // via /storage-stats. Same SYNC_SECRET gate as the closed-orders feed.
+// Cloud-relay endpoint for desktop installs that don't hold
+// BREVO_API_KEY locally. Forwards { to, subject, html } through the
+// cloud-side BREVO_API_KEY. SYNC_SECRET-gated so only known restaurants
+// can use the relay (caps abuse to the same trust boundary as
+// active-order sync).
+app.post('/api/local/send-email', async (req, res) => {
+  if (!process.env.SYNC_SECRET || req.headers['x-sync-secret'] !== process.env.SYNC_SECRET) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  if (!process.env.BREVO_API_KEY) {
+    return res.status(500).json({ error: 'cloud BREVO_API_KEY not set' });
+  }
+  const { to, subject, html } = req.body || {};
+  if (!to || !subject || !html) {
+    return res.status(400).json({ error: 'to, subject and html are required' });
+  }
+  try {
+    const { sendBrevoEmail } = require('./services/emailService');
+    await sendBrevoEmail(to, subject, html);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[local/send-email] relay failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/local/storage-stats-cloud', async (req, res) => {
   if (!process.env.SYNC_SECRET || req.headers['x-sync-secret'] !== process.env.SYNC_SECRET) {
     return res.status(401).json({ error: 'unauthorized' });
@@ -4675,7 +4701,15 @@ app.post('/api/campaigns/send', async (req, res) => {
     const { subject, body, segment } = req.body;
     if (!subject || !subject.trim()) return res.status(400).json({ error: 'Subject is required' });
     if (!body    || !body.trim())    return res.status(400).json({ error: 'Body is required' });
-    if (!process.env.BREVO_API_KEY)  return res.status(500).json({ error: 'BREVO_API_KEY is not set on the server' });
+    // Email config check — accept either a local BREVO_API_KEY OR
+    // a configured cloud relay (CLOUD_API_URL + SYNC_SECRET). Desktop
+    // installs typically have the relay; cloud installs have the key
+    // directly. If neither is available, email genuinely can't fire.
+    const _brevoLocal = !!process.env.BREVO_API_KEY;
+    const _brevoRelay = !!(process.env.CLOUD_API_URL && process.env.SYNC_SECRET);
+    if (!_brevoLocal && !_brevoRelay) {
+      return res.status(500).json({ error: 'Email is not configured. Set BREVO_API_KEY on the server, or configure CLOUD_API_URL + SYNC_SECRET for cloud-relay (desktop installs).' });
+    }
     const recipients = await fetchCustomersForSegment(segment || 'All');
     if (recipients.length === 0)     return res.status(400).json({ error: 'No opted-in customers in this segment' });
 

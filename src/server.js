@@ -5687,6 +5687,108 @@ setInterval(() => {
   }
 }, 30 * 60 * 1000);
 
+// Manual-handover mute table — userId → expiresAt timestamp. While a
+// customer is muted, Claude doesn't auto-reply (Korakot is handling
+// the conversation directly via LINE OA Manager). Korakot toggles
+// this by DMing the bot /handover <userId> [duration].
+const lineMuted = new Map();
+function _isMuted(userId) {
+  const exp = lineMuted.get(userId);
+  if (!exp) return false;
+  if (exp <= Date.now()) { lineMuted.delete(userId); return false; }
+  return true;
+}
+function _parseDuration(s) {
+  // "2h" → 7200000ms, "30m" → 1800000ms, "1d" → 86400000ms. Default 24h.
+  const m = String(s || '').match(/^(\d+)([hmd])$/);
+  if (!m) return 24 * 60 * 60 * 1000;
+  const n = parseInt(m[1], 10);
+  return n * { m: 60_000, h: 3_600_000, d: 86_400_000 }[m[2]];
+}
+function _fmtDuration(ms) {
+  const m = Math.round(ms / 60_000);
+  if (m < 60)   return `${m}m`;
+  if (m < 1440) return `${Math.round(m/60)}h`;
+  return `${Math.round(m/1440)}d`;
+}
+
+// Admin commands DMed to the bot from Korakot's LINE account. Returns
+// the reply text (or null if the message wasn't a command).
+function _handleAdminCommand(text) {
+  const trimmed = String(text || '').trim();
+  if (!trimmed.startsWith('/')) return null;
+  const [cmd, ...args] = trimmed.split(/\s+/);
+
+  if (cmd === '/help') {
+    return [
+      'SiamEPOS bot admin commands:',
+      '',
+      '/list — show recent customer conversations',
+      '/handover <userId> [duration] — mute bot for that customer',
+      '    duration default 24h, e.g. 2h, 30m, 1d',
+      '/release <userId> — un-mute (or /release all)',
+      '/status — show how many users are muted right now',
+      '/help — this help',
+    ].join('\n');
+  }
+
+  if (cmd === '/status') {
+    const active = [...lineMuted.entries()].filter(([, exp]) => exp > Date.now());
+    if (!active.length) return 'No customers currently in handover mode.';
+    return [
+      `${active.length} customer(s) in handover mode:`,
+      ...active.map(([id, exp]) =>
+        `  ${id.slice(0, 10)}… releases in ${_fmtDuration(exp - Date.now())}`),
+    ].join('\n');
+  }
+
+  if (cmd === '/list') {
+    // Active conversations within the last hour, newest first.
+    const now = Date.now();
+    const rows = [...lineConvos.entries()]
+      .filter(([, s]) => now - s.lastActive < 60 * 60 * 1000)
+      .sort((a, b) => b[1].lastActive - a[1].lastActive)
+      .slice(0, 10);
+    if (!rows.length) return 'No active customer conversations in the last hour.';
+    return [
+      `${rows.length} active conversation(s):`,
+      '',
+      ...rows.map(([id, s]) => {
+        const muted = _isMuted(id) ? ' 🔇' : '';
+        const mins  = Math.round((now - s.lastActive) / 60_000);
+        const last  = s.history[s.history.length - 1]?.content?.slice(0, 40) || '';
+        return `${id}${muted}\n  ${mins}m ago — "${last}"`;
+      }),
+    ].join('\n');
+  }
+
+  if (cmd === '/handover') {
+    const targetId = args[0];
+    if (!targetId || !targetId.startsWith('U')) {
+      return 'Usage: /handover <userId> [duration]\nuserId starts with U.';
+    }
+    const dur = _parseDuration(args[1]);
+    lineMuted.set(targetId, Date.now() + dur);
+    return `✓ Bot muted for ${targetId.slice(0, 10)}… for ${_fmtDuration(dur)}.\nReply to them directly in LINE OA Manager. /release ${targetId} to un-mute.`;
+  }
+
+  if (cmd === '/release') {
+    if (args[0] === 'all') {
+      const n = lineMuted.size;
+      lineMuted.clear();
+      return `✓ Released all ${n} muted conversation(s).`;
+    }
+    const targetId = args[0];
+    if (!targetId) return 'Usage: /release <userId>  or  /release all';
+    const had = lineMuted.delete(targetId);
+    return had
+      ? `✓ Released ${targetId.slice(0, 10)}… — bot will auto-reply again.`
+      : `${targetId.slice(0, 10)}… was not muted.`;
+  }
+
+  return `Unknown command: ${cmd}\nType /help for the command list.`;
+}
+
 const LINE_SYSTEM_PROMPT = `You are the SiamEPOS support assistant on LINE.
 You help Thai restaurant owners who use SiamEPOS fix problems with their system.
 Be friendly, patient, and concise — this is a LINE chat, not an email. Use
@@ -5706,11 +5808,21 @@ Config file location is identical structure on both:
 (Folder is "siamepos-electron" on both, NOT "SiamEPOS".)
 
 ## When to escalate (set escalate: true)
+- **Customer explicitly asks to speak with Korakot, the owner, or a human
+  agent** (English: "talk to a human", "speak to owner", "real person",
+  "I want Korakot"; Thai: "ขอคุยกับโคราคต", "อยากคุยกับคน", "เจ้าของ",
+  "พนักงานจริง"). Escalate IMMEDIATELY, don't try to fix anything first.
 - Fix needs a code change, Railway env var, deployment, or DB access
 - Payment is genuinely stuck or money is missing
 - Customer reports possible data loss
 - You've tried twice and the problem is still not resolved
 - You don't know the answer (don't guess)
+
+## When you escalate, your reply MUST tell the customer
+Always include a sentence like:
+- English: "I've let Korakot know — he'll message you here shortly."
+- Thai: "ส่งต่อให้คุณโคราคตแล้วครับ/ค่ะ เดี๋ยวเขาจะตอบกลับใน LINE นี้เร็วๆ นี้นะคะ"
+Don't leave the customer wondering whether anyone is coming.
 
 ## Knowledge base
 
@@ -6043,12 +6155,13 @@ async function _notifyKorakotLine(userId, history, latestMessage) {
     .map(m => `${m.role === 'user' ? '👤' : '🤖'} ${m.content}`)
     .join('\n');
   try {
-    // v11 signature: { to, messages: [...] }
     await lineClient.pushMessage({
       to: korakotId,
       messages: [{
         type: 'text',
-        text: `⚠️ Support escalation\n\n👤 ${clientName}\n💬 "${latestMessage}"\n\n${recap}\n\nPlease follow up directly.`,
+        // Include a ready-to-copy /handover line so Korakot can mute
+        // the bot for this customer with one tap before he takes over.
+        text: `⚠️ Support escalation\n\n👤 ${clientName}\n💬 "${latestMessage}"\n\n${recap}\n\nTo take over:  /handover ${userId}\nTo see the chat: open LINE OA Manager.`,
       }],
     });
   } catch (err) {
@@ -6056,35 +6169,60 @@ async function _notifyKorakotLine(userId, history, latestMessage) {
   }
 }
 
-async function _handleLineMessage(event) {
-  const userId = event.source?.userId;
-  if (!userId) return;
-  const userText = event.message.text;
-  const session = _lineSession(userId);
-  session.history.push({ role: 'user', content: userText });
-  const recent = session.history.slice(-10);
-
-  const reply = await _callLineClaude(recent);
-  session.history.push({ role: 'assistant', content: reply.reply });
-
+// Reply directly to a message (used for admin command responses).
+async function _replyLine(replyToken, text) {
+  if (!lineClient) return;
   try {
-    // v11 signature: { replyToken, messages: [...] }
     await lineClient.replyMessage({
-      replyToken: event.replyToken,
-      messages: [{ type: 'text', text: reply.reply }],
+      replyToken,
+      messages: [{ type: 'text', text }],
     });
   } catch (err) {
     console.error('[line] reply failed:', err.message);
   }
+}
 
-  // Escalate either if Claude explicitly flagged it, or after 2 turns
-  // without resolution (we don't have a "did this fix it" signal so we
-  // count turns conservatively — Claude self-flags far more reliably).
+async function _handleLineMessage(event) {
+  const userId = event.source?.userId;
+  if (!userId) return;
+  const userText = event.message.text;
+
+  // (1) If this message is from Korakot AND starts with "/", treat it
+  //     as an admin command — don't run Claude on it.
+  if (userId === process.env.LINE_KORAKOT_USER_ID && userText.trim().startsWith('/')) {
+    const adminReply = _handleAdminCommand(userText);
+    if (adminReply !== null) {
+      await _replyLine(event.replyToken, adminReply);
+      return;
+    }
+  }
+
+  const session = _lineSession(userId);
+  session.history.push({ role: 'user', content: userText });
+
+  // (2) If this customer is in handover mode, do NOT auto-reply —
+  //     Korakot is handling them directly via LINE OA Manager. Keep
+  //     tracking history so when /release fires, context resumes.
+  if (_isMuted(userId)) {
+    console.log(`[line] ${userId.slice(0,10)}… muted — skipping auto-reply`);
+    return;
+  }
+
+  const recent = session.history.slice(-10);
+  const reply = await _callLineClaude(recent);
+  session.history.push({ role: 'assistant', content: reply.reply });
+
+  await _replyLine(event.replyToken, reply.reply);
+
+  // (3) Escalate when Claude self-flags. Auto-mute the customer for
+  //     2h so the bot stops chiming in while Korakot takes over — he
+  //     can extend with /handover or release early with /release.
   if (reply.escalate) {
     session.unresolvedTurns += 1;
     if (session.unresolvedTurns >= 1) {
       await _notifyKorakotLine(userId, session.history, userText);
-      session.unresolvedTurns = 0;    // reset so we don't spam Korakot
+      lineMuted.set(userId, Date.now() + 2 * 60 * 60 * 1000);
+      session.unresolvedTurns = 0;
     }
   } else {
     session.unresolvedTurns = 0;

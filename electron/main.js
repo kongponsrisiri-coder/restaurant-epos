@@ -704,6 +704,21 @@ app.whenReady().then(async () => {
   if (config.sync_secret && !process.env.SYNC_SECRET) {
     process.env.SYNC_SECRET = config.sync_secret;
   }
+  // RESTAURANT_NAME / EMAIL / ADDRESS — used as branding in email
+  // templates (booking confirmation, voucher gift, takeaway confirm,
+  // campaigns). On the desktop install these aren't set in the OS
+  // env so the templates were falling back to "SiamEPOS Restaurant" —
+  // injecting them from config.json so emails carry the actual
+  // restaurant branding even when the cloud relay forwards.
+  if (config.restaurant_name && !process.env.RESTAURANT_NAME) {
+    process.env.RESTAURANT_NAME = config.restaurant_name;
+  }
+  if (config.restaurant_email && !process.env.RESTAURANT_EMAIL) {
+    process.env.RESTAURANT_EMAIL = config.restaurant_email;
+  }
+  if (config.restaurant_address && !process.env.RESTAURANT_ADDRESS) {
+    process.env.RESTAURANT_ADDRESS = config.restaurant_address;
+  }
 
   startLocalServer();
   createWindow();

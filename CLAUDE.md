@@ -48,6 +48,25 @@ Owner: Korakot Kongponsrisiri | info@siamepos.co.uk
 - **Demo restaurant site** (Baan Siam mockup): client/MockUp Website/ — Netlify-deployed at www.siamepos.net. English-only, live menu fetched from /api/menu, embedded takeaway + booking widgets, allergen chips. Used for sales demos showing the full website→EPOS→kitchen→CRM loop.
 - Release notes: RELEASE_NOTES_2026-05.md (May 2026 feature update memo for team handoff)
 
+## 📁 Manuals & QA reports — `~/Documents/SiamEPOS-Docs/`
+Customer-facing manuals and all internal QA / stress-test reports live
+OUTSIDE the repo, in a single consolidated folder:
+```
+~/Documents/SiamEPOS-Docs/
+├── README.md       (index — read this first)
+├── manuals/        (client onboarding, printer setup, spa user manuals
+│                    EN+TH, back-office ops, T&Cs, Windows install)
+└── qa-reports/     (Nook's test plans + dated QA reports +
+                     stress test PDFs)
+```
+**Rules every agent must follow:**
+1. **New manual or QA report** — write/save it in `~/Documents/SiamEPOS-Docs/{manuals,qa-reports}/`. Do NOT drop new manuals or QA reports anywhere else (not `~/Documents/Claude/Projects/SiamEpos/`, not the repo root).
+2. **Updating an existing manual or QA report** — edit it in place inside `~/Documents/SiamEPOS-Docs/`. If you find one outside, move it in (see README for what belongs).
+3. **Reference a manual in a PR / handoff / TEAM-STATUS entry** — quote the absolute path so it's unambiguous, e.g. `~/Documents/SiamEPOS-Docs/manuals/SiamEPOS-Printer-Setup-Guide.docx`.
+4. **NOT this folder** — ticket specs (SEPOS-* / SPA-* / BO-*) stay in `~/Documents/Claude/Projects/SiamEpos/`. Release notes + agent context files (KRIT/KAI/MAYA/NICK/SANDY.md) stay in the repo root. Code (`test-*.js`) stays in the repo root.
+
+Index of what's in there is in `~/Documents/SiamEPOS-Docs/README.md`. Read it before adding a new file so you pick the right subfolder and don't duplicate an existing report.
+
 ## Deployment
 - `git push` → Railway auto-deploys backend, Netlify auto-deploys frontend
 - Desktop installers: `git tag vX.Y.Z && git push origin vX.Y.Z` triggers

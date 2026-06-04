@@ -5669,9 +5669,6 @@ if (lineEnabled) {
 // Conversation memory keyed by LINE userId. Resets after 1h of inactivity
 // to keep the support history fresh without persisting anything to DB.
 const lineConvos = new Map();
-// Last LINE userId to hit the webhook — used by the one-off setup
-// endpoint so Korakot can find his own user ID, then delete this.
-let lineLastUserId = null;
 // Per-user escalation counter so we only DM Korakot after 2 unresolved
 // turns (or immediately if Claude self-flags escalate=true).
 function _lineSession(userId) {
@@ -5835,7 +5832,6 @@ async function _notifyKorakotLine(userId, history, latestMessage) {
 async function _handleLineMessage(event) {
   const userId = event.source?.userId;
   if (!userId) return;
-  lineLastUserId = userId;            // captured for the one-off setup endpoint
   const userText = event.message.text;
   const session = _lineSession(userId);
   session.history.push({ role: 'user', content: userText });
@@ -5884,13 +5880,6 @@ app.post('/api/line/webhook', (req, res, next) => {
       catch (err) { console.error('[line] handler error:', err.message); }
     }
   }
-});
-
-// One-off setup helper: Korakot messages the bot, then opens this URL
-// to grab his own LINE userId for the LINE_KORAKOT_USER_ID env var.
-// Remove this endpoint after setup is complete.
-app.get('/api/line/last-user-id', (_req, res) => {
-  res.json({ userId: lineLastUserId, enabled: lineEnabled });
 });
 
 const PORT = process.env.PORT || 3001;

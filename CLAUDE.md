@@ -85,6 +85,13 @@ Index of what's in there is in `~/Documents/SiamEPOS-Docs/README.md`. Read it be
 - Always commit with a clear message referencing the ticket number
 
 ## Critical Coding Rules
+- **OS-AGNOSTIC by default — SiamEPOS Pro runs on Mac DMG AND Windows EXE.** Every customer-facing string, error message, system prompt (LINE bot), email template, manual, web page copy, and admin UI label MUST work for both platforms. Specifically:
+  - ❌ NEVER write "your Mac" / "this Mac" / "on the Mac" as the default term
+  - ✅ Use "your device" / "this device" / "your till" / "the desktop app"
+  - When the fix legitimately differs by OS (config paths, keyboard shortcuts, system menus), give BOTH labelled — e.g. *"Mac: Cmd+Shift+R · Windows: Ctrl+Shift+R"* or *"Mac: `~/Library/Application Support/siamepos-electron/` · Windows: `%APPDATA%\siamepos-electron\`"*
+  - Browser support: don't assume Safari (Mac default) — Chrome works on both, Edge on Windows
+  - Code comments referencing Mac are fine (developer-facing). UI strings, error messages, anything a restaurant owner reads — must be OS-neutral.
+  - Same rule applies to iPad / Android tablet front-of-house terminology — say "tablet" not "iPad" when both work.
 - PostgreSQL syntax: $1 $2 params, pool.query() — adapter translates for SQLite
 - New DB column needs THREE edits:
   - PG (src/db/database.js): `ALTER TABLE x ADD COLUMN IF NOT EXISTS …`

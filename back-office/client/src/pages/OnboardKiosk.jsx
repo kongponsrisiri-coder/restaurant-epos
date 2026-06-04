@@ -373,8 +373,8 @@ function StepPayment({ form, noStripe, onBack, onDone }) {
     setPaying(true); setErr('');
 
     try {
-      // 1. Create Stripe subscription
-      const { clientSecret, subscriptionId } = await api.kioskStartPayment({
+      // 1. Create payment intent for first month
+      const { clientSecret, subscriptionId, paymentIntentId } = await api.kioskStartPayment({
         email: form.email,
         name:  form.businessName,
         plan:  form.plan,
@@ -393,8 +393,8 @@ function StepPayment({ form, noStripe, onBack, onDone }) {
 
       if (stripeErr) { setErr(stripeErr.message); return; }
 
-      // 3. Complete — creates client record + emails Korakot
-      const result = await api.kioskComplete({ subscriptionId, formData: form });
+      // 3. Complete — verifies payment, creates client record + emails Korakot
+      const result = await api.kioskComplete({ subscriptionId: paymentIntentId || subscriptionId, formData: form });
       onDone(result.clientName);
     } catch (e) {
       setErr(e.message || 'Payment failed — please try again.');

@@ -57,39 +57,27 @@ router.post('/start-payment', async (req, res) => {
     const customer = await s.customers.create({ email, name });
 
     // Create subscription (incomplete until payment confirmed)
-    const subscription = await s.subscriptions.create({
-      customer:           customer.id,
-      items:              [{ price: priceId }],
-      payment_behavior:   'default_incomplete',
-      collection_method:  'charge_automatically',   // ensures a payment intent is created
-      payment_settings:   { save_default_payment_method: 'on_subscription' },
-      expand:             ['latest_invoice.payment_intent'],
+    // Get the price amount directly — create a PaymentIntent for the first month.
+    // This is more reliable than the subscription→invoice→payment_intent chain,
+    // which breaks when the price is configured for manual invoicing.
+    const price = await s.prices.retrieve(priceId);
+    const amount = price.unit_amount; // in pence
+    const currency = price.currency || 'gbp';
+
+    console.log('[onboard] price:', priceId, 'amount:', amount, currency);
+
+    const paymentIntent = await s.paymentIntents.create({
+      amount,
+      currency,
+      customer:             customer.id,
+      payment_method_types: ['card'],
+      description:          `SiamEPOS ${plan} — first month`,
+      metadata:             { plan, email, name },
+      setup_future_usage:   'off_session', // saves card for recurring billing
     });
 
-    console.log('[onboard] sub status:', subscription.status,
-      '| invoice status:', subscription.latest_invoice?.status,
-      '| pi status:', subscription.latest_invoice?.payment_intent?.status,
-      '| has secret:', !!subscription.latest_invoice?.payment_intent?.client_secret);
-
-    // Get the client secret — retrieve fresh if not already expanded
-    let clientSecret = subscription.latest_invoice?.payment_intent?.client_secret;
-
-    if (!clientSecret) {
-      const invoiceId = typeof subscription.latest_invoice === 'string'
-        ? subscription.latest_invoice
-        : subscription.latest_invoice?.id;
-
-      if (invoiceId) {
-        let invoice = await s.invoices.retrieve(invoiceId, { expand: ['payment_intent'] });
-        console.log('[onboard] retrieved invoice status:', invoice.status,
-          '| pi:', invoice.payment_intent?.id, '| secret:', !!invoice.payment_intent?.client_secret);
-
-        if (invoice.status === 'draft') {
-          invoice = await s.invoices.finalizeInvoice(invoiceId, { expand: ['payment_intent'] });
-        }
-        clientSecret = invoice.payment_intent?.client_secret;
-      }
-    }
+    const clientSecret = paymentIntent.client_secret;
+    console.log('[onboard] PI created:', paymentIntent.id, 'amount:', amount);
 
     if (!clientSecret) {
       return res.status(500).json({ error: 'Stripe did not return a payment intent client secret' });
@@ -97,8 +85,8 @@ router.post('/start-payment', async (req, res) => {
 
     res.json({
       clientSecret,
-      subscriptionId: subscription.id,
-      customerId:     customer.id,
+      paymentIntentId: paymentIntent.id,
+      customerId:      customer.id,
     });
   } catch (err) {
     console.error('[onboard] start-payment error', err.message);
@@ -118,25 +106,34 @@ router.post('/complete', async (req, res) => {
       return res.status(400).json({ error: 'subscriptionId and formData are required' });
     }
 
-    // Derive plan — either from Stripe (real payment) or directly from formData (test/no-stripe mode)
+    // Derive plan from formData (payment intent approach — plan is passed directly)
     let plan = formData.plan || 'pro';
 
-    // Only verify with Stripe when we have a real subscription ID
+    // Verify payment with Stripe when we have a real payment intent ID
     if (subscriptionId !== 'test') {
       const s = stripe();
-      const sub = await s.subscriptions.retrieve(subscriptionId);
+      const pi = await s.paymentIntents.retrieve(subscriptionId); // subscriptionId now holds the PI id
 
-      if (!['active', 'trialing'].includes(sub.status)) {
+      if (pi.status !== 'succeeded') {
         return res.status(402).json({
-          error: `Subscription status is "${sub.status}" — payment may not have completed yet.`,
+          error: `Payment status is "${pi.status}" — payment may not have completed.`,
         });
       }
 
-      // Derive plan from the Stripe price ID
-      plan = Object.keys(PLAN_PRICE).find(k => {
-        const item = sub.items.data[0];
-        return item && PLAN_PRICE[k] === item.price.id;
-      }) || formData.plan || 'pro';
+      // Now create the recurring subscription (first month already paid via PI above)
+      const priceId = PLAN_PRICE[plan];
+      if (priceId) {
+        await s.subscriptions.create({
+          customer:          pi.customer,
+          items:             [{ price: priceId }],
+          collection_method: 'charge_automatically',
+          // Bill from 1 month from now — first month already charged via PaymentIntent
+          billing_cycle_anchor: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+          proration_behavior: 'none',
+          default_payment_method: pi.payment_method,
+          metadata: { onboarded_via: 'kiosk' },
+        }).catch(e => console.warn('[onboard] subscription create warning:', e.message));
+      }
     }
 
     // Build metadata from form data

@@ -138,11 +138,10 @@ router.post('/complete', async (req, res) => {
 
     // Build metadata from form data
     const metadata = {
-      stripe_customer_id:    sub.customer,
-      stripe_subscription_id: subscriptionId,
-      address:               formData.address || null,
-      signed_up_via:         'kiosk',
-      signed_up_at:          new Date().toISOString(),
+      stripe_payment_intent_id: subscriptionId !== 'test' ? subscriptionId : null,
+      address:                  formData.address || null,
+      signed_up_via:            'kiosk',
+      signed_up_at:             new Date().toISOString(),
     };
 
     // Insert client record

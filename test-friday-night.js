@@ -21,8 +21,8 @@
  *   Block 8 — Cleanup
  */
 
-const BASE = 'https://restaurant-epos-production.up.railway.app';
-const FRIDAY = '2026-05-16'; // Friday
+const BASE = process.env.BASE || 'https://restaurant-epos-production.up.railway.app';
+const FRIDAY = '2026-06-05'; // Friday 5 June 2026
 
 // ── Counters ──────────────────────────────────────────────────────────────────
 let passed = 0;
@@ -530,7 +530,7 @@ async function block6Chaos(tables, menuItems, staff) {
         customer_name:  `__TEST__ Chaos Guest ${i}`,
         customer_phone: `0788800${String(i).padStart(4, '0')}`,
         customer_email: `chaos_${i}@siamepos-test.invalid`,
-        reservation_date: '2026-05-17', // Saturday — not filled by block 2
+        reservation_date: '2026-06-06', // Saturday — not filled by block 2
         reservation_time: '19:00',
         covers:  2,
         status:  'confirmed',
@@ -714,7 +714,7 @@ async function block7EdgeCases(tables, menuItems, staff) {
   console.log('\n  7G — Saturday booking should not appear on Friday list');
   const { status: satStatus, data: satBooking } = await post('/api/reservations', {
     customer_name: '__TEST__ Saturday Guest', customer_phone: '07999888001',
-    reservation_date: '2026-05-17', reservation_time: '19:00', covers: 2, status: 'confirmed',
+    reservation_date: '2026-06-06', reservation_time: '19:00', covers: 2, status: 'confirmed',
   });
   if (satStatus === 200 || satStatus === 201) {
     if (satBooking.id) cleanup.reservationIds.push(satBooking.id);
@@ -767,7 +767,7 @@ async function main() {
   console.log('');
   console.log('╔══════════════════════════════════════════════════════════════╗');
   console.log('║  SiamEPOS — Friday Night Extreme Stress Test                 ║');
-  console.log('║  Nook (QA Agent) | 2026-05-15                                ║');
+  console.log('║  Nook (QA Agent) | 2026-06-03                                ║');
   console.log('║  Simulating: 100 covers, concurrent orders, edge cases       ║');
   console.log('╚══════════════════════════════════════════════════════════════╝');
   console.log(`  Backend: ${BASE}`);

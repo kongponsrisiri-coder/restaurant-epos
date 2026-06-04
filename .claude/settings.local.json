@@ -31,7 +31,8 @@
       "mcp__claude_ai_Google_Drive__get_file_permissions",
       "Bash(git commit TEAM-STATUS.md -m ' *)",
       "Bash(git push *)",
-      "Bash(curl -s https://baan-siam.siamepos.co.uk/ --max-time 10)"
+      "Bash(curl -s https://baan-siam.siamepos.co.uk/ --max-time 10)",
+      "Bash(pbcopy)"
     ]
   }
 }

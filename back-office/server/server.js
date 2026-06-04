@@ -14,6 +14,7 @@ const teamRoutes    = require('./routes/team');
 const ticketsRoutes = require('./routes/tickets');
 const websiteRoutes  = require('./routes/website');
 const financeRoutes  = require('./routes/finance');
+const onboardRoutes  = require('./routes/onboard');
 const healthCron     = require('./services/healthCheck');
 
 const PORT = parseInt(process.env.PORT || '3002', 10);
@@ -67,6 +68,7 @@ app.use('/api/team',    teamRoutes);
 app.use('/api/tickets', ticketsRoutes);
 app.use('/api/website-configs', websiteRoutes);
 app.use('/api/finance', financeRoutes);
+app.use('/api/onboard', onboardRoutes);  // BO-ONBOARD-001 — public kiosk signup
 
 app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path }));
 

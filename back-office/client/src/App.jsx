@@ -9,6 +9,7 @@ import TicketsPage from './pages/TicketsPage.jsx';
 import WebsitePage from './pages/WebsitePage.jsx';
 import NewClientWizard from './pages/NewClientWizard.jsx';
 import FinancePage from './pages/FinancePage.jsx';
+import OnboardKiosk from './pages/OnboardKiosk.jsx';
 import { C } from './theme.js';
 import { api } from './api.js';
 
@@ -135,6 +136,15 @@ function RequireAuth({ children }) {
   return <Shell>{children}</Shell>;
 }
 
+// Kiosk wrapper — auth still required (Korakot is logged in on his tablet)
+// but no shell at all. Clean full-page layout for client-facing signup.
+function RequireAuthKiosk({ children }) {
+  const token = localStorage.getItem('ops_token');
+  const loc = useLocation();
+  if (!token) return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
+  return children;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -147,6 +157,8 @@ export default function App() {
       <Route path="/tickets/:id" element={<RequireAuth><TicketsPage /></RequireAuth>} />
       <Route path="/website" element={<RequireAuth><WebsitePage /></RequireAuth>} />
       <Route path="/finance" element={<RequireAuth><FinancePage /></RequireAuth>} />
+      {/* BO-ONBOARD-001 — clean kiosk, no sidebar, no nav */}
+      <Route path="/onboard" element={<RequireAuthKiosk><OnboardKiosk /></RequireAuthKiosk>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

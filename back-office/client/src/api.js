@@ -233,4 +233,22 @@ export const api = {
     fetch(`${API}/api/finance/transactions/${txId}/attachment`, {
       method: 'DELETE', headers: tokenHeader(),
     }).then(handle),
+
+  // ── BO-ONBOARD-001 kiosk (no auth token needed) ──────────────
+  kioskGetStripeKey: () =>
+    fetch(`${API}/api/onboard/stripe-key`).then(handle),
+
+  kioskStartPayment: (body) =>
+    fetch(`${API}/api/onboard/start-payment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(handle),
+
+  kioskComplete: (body) =>
+    fetch(`${API}/api/onboard/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(handle),
 };

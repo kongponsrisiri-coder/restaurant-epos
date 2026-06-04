@@ -421,6 +421,7 @@ function StepPayment({ form, noStripe, onBack, onDone }) {
           <label style={lbl}>Card details</label>
           <div style={{ border: `1.5px solid ${C.border}`, borderRadius: 10, padding: '14px 16px', background: '#fff' }}>
             <CardElement options={{
+              hidePostalCode: true,
               style: {
                 base: { fontSize: '16px', color: C.text, fontFamily: 'inherit', '::placeholder': { color: '#94a3b8' } },
                 invalid: { color: '#ef4444' },

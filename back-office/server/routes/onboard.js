@@ -5,6 +5,7 @@
 const express = require('express');
 const router  = express.Router();
 const { pool } = require('../db/pool');
+const { sendWelcomeEmail } = require('../services/welcomeEmail');
 
 // Lazy-init Stripe so missing key doesn't crash the whole server.
 let _stripe = null;
@@ -64,7 +65,9 @@ router.post('/start-payment', async (req, res) => {
       expand: ['latest_invoice.payment_intent'],
     });
 
-    // Get the client secret — may need to finalize the invoice first if it's in draft
+    // Get the client secret from the invoice's payment intent.
+    // Retrieve the invoice fresh (with payment_intent expanded) so we always
+    // have the full object regardless of whether the expand in create() worked.
     let clientSecret = subscription.latest_invoice?.payment_intent?.client_secret;
 
     if (!clientSecret) {
@@ -73,9 +76,18 @@ router.post('/start-payment', async (req, res) => {
         : subscription.latest_invoice?.id;
 
       if (invoiceId) {
-        const invoice = await s.invoices.finalizeInvoice(invoiceId, {
+        // Retrieve the invoice with payment_intent expanded
+        let invoice = await s.invoices.retrieve(invoiceId, {
           expand: ['payment_intent'],
         });
+
+        // If still draft, finalize it first to generate the payment intent
+        if (invoice.status === 'draft') {
+          invoice = await s.invoices.finalizeInvoice(invoiceId, {
+            expand: ['payment_intent'],
+          });
+        }
+
         clientSecret = invoice.payment_intent?.client_secret;
       }
     }
@@ -158,6 +170,14 @@ router.post('/complete', async (req, res) => {
     );
 
     const client = rows[0];
+
+    // Email the client — branded welcome email + Quick Start PDF
+    await sendWelcomeEmail({
+      ...client,
+      owner_name:      formData.ownerName || null,
+      restaurant_name: formData.businessName,
+      metadata:        metadata,
+    }).catch(e => console.error('[onboard] welcome email failed (non-fatal)', e.message));
 
     // Email Korakot
     await notifyKorakot(client, plan, formData).catch(e =>

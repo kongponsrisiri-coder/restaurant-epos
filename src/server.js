@@ -33,6 +33,10 @@ app.options(/.*/, cors());
 // body for signature verification, so its raw parser must be registered
 // before the global express.json() (which would otherwise consume it).
 app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
+// SEPOS-SUPPORT-LINE-001 — LINE webhook signature verification needs the
+// raw, unparsed body. Same constraint as Stripe — register before
+// express.json so the global JSON parser doesn't consume it first.
+app.use('/api/line/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
 
@@ -5632,6 +5636,241 @@ app.post('/api/print/kitchen-full', async (req, res) => {
     console.error('[print/kitchen-full]', err.message);
     res.json({ success: false, error: err.message });
   }
+});
+
+// ── SEPOS-SUPPORT-LINE-001 — LINE AI support bot ─────────────────────
+// Restaurant owners message the SiamEPOS LINE Official Account → this
+// handler replies via Claude using the support knowledge base. After 2
+// failed attempts (or any hard-fail case Claude flags) the conversation
+// is escalated to Korakot via a LINE DM.
+//
+// Stays dormant until LINE_CHANNEL_SECRET + LINE_CHANNEL_ACCESS_TOKEN
+// are set on Railway — without them the route logs and 200s so LINE
+// doesn't keep retrying the webhook.
+const line = require('@line/bot-sdk');
+const lineConfig = {
+  channelSecret:      process.env.LINE_CHANNEL_SECRET,
+  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
+};
+const lineEnabled  = Boolean(lineConfig.channelSecret && lineConfig.channelAccessToken);
+const lineClient   = lineEnabled ? new line.Client(lineConfig) : null;
+// Conversation memory keyed by LINE userId. Resets after 1h of inactivity
+// to keep the support history fresh without persisting anything to DB.
+const lineConvos = new Map();
+// Last LINE userId to hit the webhook — used by the one-off setup
+// endpoint so Korakot can find his own user ID, then delete this.
+let lineLastUserId = null;
+// Per-user escalation counter so we only DM Korakot after 2 unresolved
+// turns (or immediately if Claude self-flags escalate=true).
+function _lineSession(userId) {
+  if (!lineConvos.has(userId)) {
+    lineConvos.set(userId, { history: [], lastActive: Date.now(), unresolvedTurns: 0 });
+  }
+  const s = lineConvos.get(userId);
+  s.lastActive = Date.now();
+  return s;
+}
+// Garbage-collect inactive sessions every 30 min.
+setInterval(() => {
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  for (const [id, s] of lineConvos.entries()) {
+    if (s.lastActive < cutoff) lineConvos.delete(id);
+  }
+}, 30 * 60 * 1000);
+
+const LINE_SYSTEM_PROMPT = `You are the SiamEPOS support assistant on LINE.
+You help Thai restaurant owners who use SiamEPOS fix problems with their system.
+Keep replies short and clear — this is a LINE chat, not an email.
+Use numbered steps for instructions. Be friendly and patient.
+If the client writes in Thai, reply in Thai.
+
+## When to escalate (set escalate: true)
+- You have tried to help twice and the problem is still not resolved
+- It needs a code fix or Railway deployment change
+- It is a payment or billing issue
+- You genuinely do not know the answer
+
+## Common issues and fixes
+
+### Printer printing raw code / gibberish
+1. Open System Settings → Printers & Scanners on the Mac
+2. Find the printer → right-click → Edit Printer
+3. Change the driver to POS-80 (NOT Generic PostScript)
+4. Check in Terminal: lpoptions -p <printer-name> — should show POS-80
+
+### App blank screen or not loading
+1. Hard refresh: Cmd+Shift+R on Mac, Ctrl+Shift+R on Windows
+2. On iPad: Settings → Safari → Clear History and Website Data
+3. Try in a private/incognito window
+4. If still blank, check Railway is running at railway.app dashboard
+
+### Bookings not showing in admin
+1. Check RESTAURANT_ID env var is set correctly in Railway (e.g. baan-siam)
+2. Check booking widget URL is pointing at the right backend
+
+### Staff can't log in / forgotten PIN
+1. Go to Admin → Staff → find the staff member → Edit → reset PIN
+2. PINs must be 4 digits
+3. If the admin PIN itself is forgotten, Korakot needs to reset it via the database
+
+### Menu not updating after changes
+1. Hard refresh: Cmd+Shift+R
+2. On iPad: clear Safari cache
+3. If still not updating, the PWA cache needs bumping — contact Korakot
+
+### Desktop app not syncing / showing old data
+1. Check Mac is connected to the internet
+2. Check ~/Library/Application Support/siamepos-electron/config.json
+   - cloud_api_url must be correct
+   - sync_secret must match SYNC_SECRET in Railway
+3. Quit and reopen the app
+
+### Kitchen screen blank / Pass tab empty
+1. Hard refresh the kitchen screen
+2. Try Chrome instead of Safari (Safari had a known issue with the Pass tab)
+
+### Z-report showing wrong totals
+1. Make sure date range is correct
+2. Check all orders are closed — open orders don't appear in Z-report
+3. Takeaway orders need to be marked Collected first
+
+### Online booking widget not working
+1. Check the widget script tag is correctly pasted on the restaurant website
+2. The API URL in the widget must point to the correct Railway backend
+
+Respond in JSON format only:
+{"reply": "your reply to the client here", "escalate": false}`;
+
+// Calls Anthropic via the same raw-https pattern already used elsewhere
+// in server.js (InvoiceScanner) so no new SDK dependency is needed.
+function _callLineClaude(history) {
+  return new Promise((resolve) => {
+    const https = require('https');
+    const body = JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      system: LINE_SYSTEM_PROMPT,
+      messages: history,
+    });
+    const opts = {
+      hostname: 'api.anthropic.com',
+      path: '/v1/messages',
+      method: 'POST',
+      headers: {
+        'Content-Type':      'application/json',
+        'Content-Length':    Buffer.byteLength(body),
+        'x-api-key':         process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+    };
+    const req = https.request(opts, (res) => {
+      let chunks = '';
+      res.on('data', d => chunks += d);
+      res.on('end', () => {
+        try {
+          const data = JSON.parse(chunks);
+          const text = data?.content?.[0]?.text || '';
+          // Strip any markdown fence Claude sometimes wraps JSON in.
+          const cleaned = text.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
+          try {
+            const parsed = JSON.parse(cleaned);
+            if (typeof parsed.reply === 'string') {
+              return resolve({ reply: parsed.reply, escalate: !!parsed.escalate });
+            }
+          } catch {}
+          // Fallback: hand back the raw text, don't escalate.
+          resolve({ reply: text || 'Sorry, I had trouble processing that. Could you rephrase?', escalate: false });
+        } catch (err) {
+          console.error('[line] Claude parse failed:', err.message);
+          resolve({ reply: 'Sorry, I had a technical problem. I will flag this to Korakot.', escalate: true });
+        }
+      });
+    });
+    req.on('error', (err) => {
+      console.error('[line] Claude request failed:', err.message);
+      resolve({ reply: 'Sorry, I had a technical problem. I will flag this to Korakot.', escalate: true });
+    });
+    req.write(body);
+    req.end();
+  });
+}
+
+async function _notifyKorakotLine(userId, history, latestMessage) {
+  const korakotId = process.env.LINE_KORAKOT_USER_ID;
+  if (!korakotId || !lineClient) return;
+  let clientName = 'A client';
+  try {
+    const profile = await lineClient.getProfile(userId);
+    clientName = profile.displayName || clientName;
+  } catch {}
+  const recap = history.slice(-6)
+    .map(m => `${m.role === 'user' ? '👤' : '🤖'} ${m.content}`)
+    .join('\n');
+  try {
+    await lineClient.pushMessage(korakotId, {
+      type: 'text',
+      text: `⚠️ Support escalation\n\n👤 ${clientName}\n💬 "${latestMessage}"\n\n${recap}\n\nPlease follow up directly.`,
+    });
+  } catch (err) {
+    console.error('[line] escalation push failed:', err.message);
+  }
+}
+
+async function _handleLineMessage(event) {
+  const userId = event.source?.userId;
+  if (!userId) return;
+  lineLastUserId = userId;            // captured for the one-off setup endpoint
+  const userText = event.message.text;
+  const session = _lineSession(userId);
+  session.history.push({ role: 'user', content: userText });
+  const recent = session.history.slice(-10);
+
+  const reply = await _callLineClaude(recent);
+  session.history.push({ role: 'assistant', content: reply.reply });
+
+  try {
+    await lineClient.replyMessage(event.replyToken, { type: 'text', text: reply.reply });
+  } catch (err) {
+    console.error('[line] reply failed:', err.message);
+  }
+
+  // Escalate either if Claude explicitly flagged it, or after 2 turns
+  // without resolution (we don't have a "did this fix it" signal so we
+  // count turns conservatively — Claude self-flags far more reliably).
+  if (reply.escalate) {
+    session.unresolvedTurns += 1;
+    if (session.unresolvedTurns >= 1) {
+      await _notifyKorakotLine(userId, session.history, userText);
+      session.unresolvedTurns = 0;    // reset so we don't spam Korakot
+    }
+  } else {
+    session.unresolvedTurns = 0;
+  }
+}
+
+app.post('/api/line/webhook', (req, res, next) => {
+  if (!lineEnabled) {
+    // Dormant until env vars are set. Acknowledge so LINE doesn't retry.
+    console.log('[line] webhook hit but LINE_CHANNEL_* env vars not set — skipping');
+    return res.sendStatus(200);
+  }
+  return line.middleware(lineConfig)(req, res, next);
+}, async (req, res) => {
+  // Always 200 immediately — handlers run async, LINE will retry if 5xx.
+  res.sendStatus(200);
+  for (const event of (req.body.events || [])) {
+    if (event.type === 'message' && event.message?.type === 'text') {
+      try { await _handleLineMessage(event); }
+      catch (err) { console.error('[line] handler error:', err.message); }
+    }
+  }
+});
+
+// One-off setup helper: Korakot messages the bot, then opens this URL
+// to grab his own LINE userId for the LINE_KORAKOT_USER_ID env var.
+// Remove this endpoint after setup is complete.
+app.get('/api/line/last-user-id', (_req, res) => {
+  res.json({ userId: lineLastUserId, enabled: lineEnabled });
 });
 
 const PORT = process.env.PORT || 3001;

@@ -10,7 +10,7 @@
 
 | Agent | Working On | Ticket | Started |
 |-------|-----------|--------|---------|
-| _(team between tickets — see backlog at the bottom of the file)_ | | | |
+| Krit (Cowork) | 🤖 SEPOS-SUPPORT-LINE-001 — LINE AI support bot. @line/bot-sdk + webhook + Claude handler + escalation DM to Korakot. Code-only; no DB changes. | SEPOS-SUPPORT-LINE-001 | 2026-06-04 |
 
 ---
 

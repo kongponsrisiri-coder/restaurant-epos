@@ -58,16 +58,20 @@ router.post('/start-payment', async (req, res) => {
 
     // Create subscription (incomplete until payment confirmed)
     const subscription = await s.subscriptions.create({
-      customer: customer.id,
-      items:    [{ price: priceId }],
-      payment_behavior: 'default_incomplete',
-      payment_settings: { save_default_payment_method: 'on_subscription' },
-      expand: ['latest_invoice.payment_intent'],
+      customer:           customer.id,
+      items:              [{ price: priceId }],
+      payment_behavior:   'default_incomplete',
+      collection_method:  'charge_automatically',   // ensures a payment intent is created
+      payment_settings:   { save_default_payment_method: 'on_subscription' },
+      expand:             ['latest_invoice.payment_intent'],
     });
 
-    // Get the client secret from the invoice's payment intent.
-    // Retrieve the invoice fresh (with payment_intent expanded) so we always
-    // have the full object regardless of whether the expand in create() worked.
+    console.log('[onboard] sub status:', subscription.status,
+      '| invoice status:', subscription.latest_invoice?.status,
+      '| pi status:', subscription.latest_invoice?.payment_intent?.status,
+      '| has secret:', !!subscription.latest_invoice?.payment_intent?.client_secret);
+
+    // Get the client secret — retrieve fresh if not already expanded
     let clientSecret = subscription.latest_invoice?.payment_intent?.client_secret;
 
     if (!clientSecret) {
@@ -76,18 +80,13 @@ router.post('/start-payment', async (req, res) => {
         : subscription.latest_invoice?.id;
 
       if (invoiceId) {
-        // Retrieve the invoice with payment_intent expanded
-        let invoice = await s.invoices.retrieve(invoiceId, {
-          expand: ['payment_intent'],
-        });
+        let invoice = await s.invoices.retrieve(invoiceId, { expand: ['payment_intent'] });
+        console.log('[onboard] retrieved invoice status:', invoice.status,
+          '| pi:', invoice.payment_intent?.id, '| secret:', !!invoice.payment_intent?.client_secret);
 
-        // If still draft, finalize it first to generate the payment intent
         if (invoice.status === 'draft') {
-          invoice = await s.invoices.finalizeInvoice(invoiceId, {
-            expand: ['payment_intent'],
-          });
+          invoice = await s.invoices.finalizeInvoice(invoiceId, { expand: ['payment_intent'] });
         }
-
         clientSecret = invoice.payment_intent?.client_secret;
       }
     }

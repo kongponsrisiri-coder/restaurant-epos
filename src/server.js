@@ -1822,7 +1822,7 @@ app.post('/api/sync/delete-order', async (req, res) => {
     if (!orderId) return res.status(400).json({ error: 'order_id required' });
     const staffName = String(req.body?.staff_name || 'unknown').trim();
     const staffRole = String(req.body?.staff_role || '').trim();
-    const reason    = String(req.body?.reason || '').trim() || '(synced from Mac)';
+    const reason    = String(req.body?.reason || '').trim() || '(synced from desktop app)';
 
     // SEPOS-043 — supervisor cannot delete closed bills via sync either.
     if (staffRole.toLowerCase() === 'supervisor') {
@@ -5882,8 +5882,8 @@ Don't leave the customer wondering whether anyone is coming.
   LPR 515 (older WAVLINK USB print servers only expose LPR). System
   auto-falls-back; check 🟢/🟡/🔴 health badge in Admin → Printers.
   From a browser on Railway cloud, the badge always shows 🔴 because
-  Railway can't reach your private LAN — use the Mac desktop app to
-  check reachability properly.
+  Railway can't reach your private LAN — use the SiamEPOS desktop app
+  to check reachability properly.
 - **Line wraps awkwardly:** default width 42 chars. Adjust per-printer
   in Admin → Printers if your paper is wider/narrower.
 - **Items print twice on kitchen ticket after adding to existing order:**
@@ -5892,8 +5892,12 @@ Don't leave the customer wondering whether anyone is coming.
 ### B. Desktop app (Electron, Mac + Windows)
 - **First-launch "Developer cannot be verified" (Mac):** only on builds
   older than v1.6.4. Download latest DMG from siamepos.co.uk/downloads.
-- **App won't start after macOS update:** quit, remove from Login Items
-  (System Settings → General → Login Items), relaunch manually.
+- **App won't start after an OS update:**
+  - **Mac:** quit, remove from System Settings → General → Login Items,
+    relaunch manually.
+  - **Windows:** quit, right-click the tray icon → Exit (if running),
+    relaunch from Start menu. If it still won't start, reinstall the
+    latest EXE from siamepos.co.uk/downloads.
 - **Updates not arriving:** the FIRST install on a machine needs a
   manual reinstall to get on the publish-config build. After that,
   auto-update is silent — quit + relaunch downloads new versions; quit
@@ -5912,15 +5916,15 @@ Don't leave the customer wondering whether anyone is coming.
   Customer should verify the four config.json fields (restaurant_name,
   cloud_api_url, restaurant_id, sync_secret) match what was provided
   at install. Escalate if values look right but error persists.
-- **Old bills/closed orders not syncing to Mac:** that pull is gated by
-  sync_secret. Check config.json has it set — without it menu/staff/
-  settings still sync, but closed-orders silently skip.
-- **Orders appear then vanish ("rollback-flash"):** rare — Mac pulled
-  cloud state while a local change was still pending. Wait 5–10s for
-  push, refresh; order returns.
-- **iPad / browser shows different orders than Mac:** wait 5–10s and
-  refresh both; sync tick is 5s. If still diverged after 30s, sync is
-  genuinely broken — check Sync Status.
+- **Old bills/closed orders not syncing to the desktop app:** that pull
+  is gated by sync_secret. Check config.json has it set — without it
+  menu/staff/settings still sync, but closed-orders silently skip.
+- **Orders appear then vanish ("rollback-flash"):** rare — the desktop
+  app pulled cloud state while a local change was still pending. Wait
+  5–10s for push, refresh; order returns.
+- **iPad / browser shows different orders than the desktop app:** wait
+  5–10s and refresh both; sync tick is 5s. If still diverged after 30s,
+  sync is genuinely broken — check Sync Status.
 - **First sync taking 30–60s:** normal — pulling full menu/orders/
   reservations history. Subsequent syncs are sub-second.
 

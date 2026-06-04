@@ -179,7 +179,7 @@ async function generateHistoricalArchives(touchedMonths) {
 async function runIfNeeded() {
   if (_running) return getState();
   if (!offlineQueue.isLocal) {
-    return { skipped: true, reason: 'cloud install — migration is a Mac-only step' };
+    return { skipped: true, reason: 'cloud install — migration is a desktop-only step' };
   }
   const done = await readFlag('device_first_migration_done');
   if (done === 'true' || done === true) {

@@ -6,6 +6,7 @@ const express = require('express');
 const router  = express.Router();
 const { pool } = require('../db/pool');
 const { sendWelcomeEmail } = require('../services/welcomeEmail');
+const { generateSlug, uniqueSlug } = require('./clients'); // re-use slug helpers
 
 // Lazy-init Stripe so missing key doesn't crash the whole server.
 let _stripe = null;
@@ -145,14 +146,19 @@ router.post('/complete', async (req, res) => {
       signed_up_at:             new Date().toISOString(),
     };
 
+    // Generate unique slug from business name
+    const slug = await uniqueSlug(
+      formData.slug || generateSlug(formData.businessName)
+    );
+
     // Insert client record
     const { rows } = await pool.query(
       `INSERT INTO clients
          (restaurant_name, owner_name, email, phone, plan, status,
-          monthly_fee, sub_start, next_billing, product, metadata)
+          monthly_fee, sub_start, next_billing, product, metadata, slug)
        VALUES ($1,$2,$3,$4,$5,'in_setup',$6,CURRENT_DATE,
-               (CURRENT_DATE + INTERVAL '1 month'), $7, $8)
-       RETURNING id, restaurant_name, email`,
+               (CURRENT_DATE + INTERVAL '1 month'), $7, $8, $9)
+       RETURNING id, restaurant_name, email, account_ref, slug`,
       [
         formData.businessName,
         formData.ownerName   || null,
@@ -162,6 +168,7 @@ router.post('/complete', async (req, res) => {
         PLAN_FEE[plan] || null,
         formData.product     || 'restaurant',
         JSON.stringify(metadata),
+        slug,
       ]
     );
 
@@ -247,7 +254,7 @@ async function sendInvoiceEmail(client, plan, formData) {
 <div class="wrap"><div class="card">
   <div class="header">
     <div class="brand">Siam<span>EPOS</span></div>
-    <div class="inv-num">Invoice <strong>${invoiceNumber}</strong>${date}</div>
+    <div class="inv-num">Invoice <strong>${invoiceNumber}</strong>${date}<br>Account: <strong>${client.account_ref || ''}</strong></div>
   </div>
   <div class="to">
     <div class="label">Billed to</div>

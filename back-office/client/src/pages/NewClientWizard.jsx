@@ -43,8 +43,19 @@ const BLANK = {
   waiter_pin: '2222',
 };
 
+const STOP_WORDS = new Set(['the','and','restaurant','thai','kitchen',
+  'london','takeaway','cafe','bar','house','garden','uk','ltd','limited']);
+
 function autoSlug(name) {
-  return (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const slug = (name || '')
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(w => w && !STOP_WORDS.has(w))
+    .slice(0, 2)
+    .join('-')
+    .replace(/[^a-z0-9-]/g, '')
+    .slice(0, 20);
+  return slug || (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20);
 }
 
 export default function NewClientWizard() {
@@ -278,6 +289,17 @@ function Step1({ f, set, errors }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Field label={nameLbl}>
           <input value={f.restaurant_name} onChange={(e) => set('restaurant_name', e.target.value)} style={input} />
+          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0 }}>Client ID</span>
+            <input
+              value={f.subdomain_slug}
+              onChange={(e) => set('subdomain_slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 20))}
+              style={{ ...input, padding: '6px 10px', fontSize: 12, fontFamily: 'ui-monospace, monospace', flex: 1 }}
+              placeholder="auto-generated"
+              maxLength={20}
+            />
+            <span style={{ fontSize: 11, color: C.textFaint, flexShrink: 0 }}>.siamepos.co.uk</span>
+          </div>
         </Field>
         <Field label="Plan">
           <select value={f.plan} onChange={(e) => set('plan', e.target.value)} style={input} disabled={isSpa}>

@@ -26,6 +26,31 @@ CREATE TABLE IF NOT EXISTS clients (
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
 -- BO-SPA-001 — multi-product support: 'restaurant' | 'spa'
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS product TEXT DEFAULT 'restaurant';
+-- BO-ONBOARD-001 — human-readable account reference (SE-0001, SE-0002…)
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS account_ref TEXT UNIQUE;
+-- BO-SLUG-001 — short unique slug for subdomain + Railway service name
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS slug VARCHAR(20) UNIQUE;
+-- Backfill existing rows using a slugified version of restaurant_name
+UPDATE clients SET slug = LOWER(REGEXP_REPLACE(
+  SUBSTRING(TRIM(restaurant_name) FROM 1 FOR 20), '[^a-z0-9]+', '-', 'g'))
+WHERE slug IS NULL;
+
+-- Trigger: auto-set account_ref = SE-XXXX after every INSERT if not already set.
+CREATE OR REPLACE FUNCTION set_account_ref() RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE clients SET account_ref = 'SE-' || LPAD(NEW.id::text, 4, '0')
+  WHERE id = NEW.id AND account_ref IS NULL;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS tr_clients_account_ref ON clients;
+CREATE TRIGGER tr_clients_account_ref
+  AFTER INSERT ON clients
+  FOR EACH ROW EXECUTE FUNCTION set_account_ref();
+
+-- Backfill any existing rows that don't have a ref yet.
+UPDATE clients SET account_ref = 'SE-' || LPAD(id::text, 4, '0') WHERE account_ref IS NULL;
 
 CREATE TABLE IF NOT EXISTS health_checks (
   id              SERIAL PRIMARY KEY,

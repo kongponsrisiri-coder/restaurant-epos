@@ -18,6 +18,37 @@ const {
 const router = express.Router();
 router.use(authRequired);
 
+// ── BO-SLUG-001 helpers ───────────────────────────────────────────────────
+
+const STOP_WORDS = new Set(['the','and','&','restaurant','thai','kitchen',
+  'london','takeaway','cafe','bar','house','garden','uk','ltd','limited']);
+
+function generateSlug(name) {
+  return (name || '')
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(w => w && !STOP_WORDS.has(w))
+    .slice(0, 2)
+    .join('-')
+    .replace(/[^a-z0-9-]/g, '')
+    .slice(0, 20) || 'client';
+}
+
+// Returns a slug that's unique in the DB — appends -2/-3 etc. if needed.
+// Optionally exclude a specific client id (for PUT updates).
+async function uniqueSlug(base, excludeId = null) {
+  let candidate = base;
+  let n = 2;
+  while (true) {
+    const q = excludeId
+      ? await pool.query('SELECT id FROM clients WHERE slug=$1 AND id!=$2', [candidate, excludeId])
+      : await pool.query('SELECT id FROM clients WHERE slug=$1', [candidate]);
+    if (q.rows.length === 0) return candidate;
+    candidate = `${base.slice(0, 17)}-${n++}`;
+    if (n > 99) return `${base.slice(0, 14)}-${Date.now().toString().slice(-4)}`; // fallback
+  }
+}
+
 // SEPOS-029 — the manual-step checklist the operator works through
 // after the wizard. Each item maps to a real-world action that can't
 // (yet) be fully automated in Phase 1.
@@ -80,17 +111,18 @@ router.post('/', async (req, res) => {
     const {
       restaurant_name, owner_name, email, phone, railway_url,
       plan, status, monthly_fee, trial_start, sub_start, next_billing,
-      product,
+      product, slug: slugInput,
     } = req.body || {};
     if (!restaurant_name) return res.status(400).json({ error: 'restaurant_name required' });
+    const slug = await uniqueSlug(slugInput || generateSlug(restaurant_name));
     const r = await pool.query(
       `INSERT INTO clients (restaurant_name, owner_name, email, phone, railway_url,
-                            plan, status, monthly_fee, trial_start, sub_start, next_billing, product)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+                            plan, status, monthly_fee, trial_start, sub_start, next_billing, product, slug)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [restaurant_name, owner_name || null, email || null, phone || null, railway_url || null,
        plan || 'trial', status || 'setup', monthly_fee || null,
        trial_start || null, sub_start || null, next_billing || null,
-       product || 'restaurant']
+       product || 'restaurant', slug]
     );
     res.json(r.rows[0]);
   } catch (err) {
@@ -129,6 +161,7 @@ router.put('/:id', async (req, res) => {
       'plan', 'status', 'monthly_fee', 'trial_start', 'sub_start', 'next_billing',
       'metadata',  // SEPOS-WEB-002 — flexible setup / credentials bag.
       'product',   // BO-SPA-001 — 'restaurant' | 'spa'
+      'slug',      // BO-SLUG-001 — subdomain slug
     ];
     const sets = [];
     const params = [];
@@ -217,10 +250,12 @@ router.post('/onboard', async (req, res) => {
       onboarding:         defaultOnboardingState(),
     };
 
+    const slug = await uniqueSlug(b.subdomain_slug || generateSlug(b.restaurant_name));
+
     const r = await pool.query(
       `INSERT INTO clients
-         (restaurant_name, owner_name, email, phone, plan, status, monthly_fee, trial_start, metadata, product)
-       VALUES ($1,$2,$3,$4,$5,'setup',$6,$7,$8,$9)
+         (restaurant_name, owner_name, email, phone, plan, status, monthly_fee, trial_start, metadata, product, slug)
+       VALUES ($1,$2,$3,$4,$5,'setup',$6,$7,$8,$9,$10)
        RETURNING *`,
       [
         b.restaurant_name.trim(),
@@ -232,6 +267,7 @@ router.post('/onboard', async (req, res) => {
         b.trial_start_date || null,
         JSON.stringify(metadata),
         b.product || 'restaurant',
+        slug,
       ]
     );
     const client = r.rows[0];
@@ -578,3 +614,5 @@ router.post('/:id/notes', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.generateSlug = generateSlug;
+module.exports.uniqueSlug   = uniqueSlug;

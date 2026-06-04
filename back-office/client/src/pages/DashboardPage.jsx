@@ -158,7 +158,19 @@ function ClientCard({ client, onClick }) {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.textFaint, paddingTop: 10, borderTop: `1px solid ${C.borderSoft}` }}>
         <span>{client.owner_name || '—'}</span>
-        <span>Pinged {fmtRelTime(lastChecked)}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {client.account_ref && (
+            <span style={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 4, padding: '1px 6px', fontFamily: 'ui-monospace, monospace', fontSize: 10, fontWeight: 700, color: C.textMuted }}>
+              {client.account_ref}
+            </span>
+          )}
+          {client.slug && (
+            <span style={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 4, padding: '1px 6px', fontFamily: 'ui-monospace, monospace', fontSize: 10, color: C.textFaint }}>
+              {client.slug}
+            </span>
+          )}
+          <span>Pinged {fmtRelTime(lastChecked)}</span>
+        </div>
       </div>
     </div>
   );

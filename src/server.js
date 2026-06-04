@@ -5653,7 +5653,19 @@ const lineConfig = {
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
 };
 const lineEnabled  = Boolean(lineConfig.channelSecret && lineConfig.channelAccessToken);
-const lineClient   = lineEnabled ? new line.Client(lineConfig) : null;
+// @line/bot-sdk v11 replaced the old `line.Client(...)` constructor with
+// the `messagingApi.MessagingApiClient(...)` class. Wrap in try/catch as
+// defence so a bad token shape never takes down the server boot.
+let lineClient = null;
+if (lineEnabled) {
+  try {
+    lineClient = new line.messagingApi.MessagingApiClient({
+      channelAccessToken: lineConfig.channelAccessToken,
+    });
+  } catch (err) {
+    console.error('[line] failed to init MessagingApiClient:', err.message);
+  }
+}
 // Conversation memory keyed by LINE userId. Resets after 1h of inactivity
 // to keep the support history fresh without persisting anything to DB.
 const lineConvos = new Map();
@@ -5807,9 +5819,13 @@ async function _notifyKorakotLine(userId, history, latestMessage) {
     .map(m => `${m.role === 'user' ? '👤' : '🤖'} ${m.content}`)
     .join('\n');
   try {
-    await lineClient.pushMessage(korakotId, {
-      type: 'text',
-      text: `⚠️ Support escalation\n\n👤 ${clientName}\n💬 "${latestMessage}"\n\n${recap}\n\nPlease follow up directly.`,
+    // v11 signature: { to, messages: [...] }
+    await lineClient.pushMessage({
+      to: korakotId,
+      messages: [{
+        type: 'text',
+        text: `⚠️ Support escalation\n\n👤 ${clientName}\n💬 "${latestMessage}"\n\n${recap}\n\nPlease follow up directly.`,
+      }],
     });
   } catch (err) {
     console.error('[line] escalation push failed:', err.message);
@@ -5829,7 +5845,11 @@ async function _handleLineMessage(event) {
   session.history.push({ role: 'assistant', content: reply.reply });
 
   try {
-    await lineClient.replyMessage(event.replyToken, { type: 'text', text: reply.reply });
+    // v11 signature: { replyToken, messages: [...] }
+    await lineClient.replyMessage({
+      replyToken: event.replyToken,
+      messages: [{ type: 'text', text: reply.reply }],
+    });
   } catch (err) {
     console.error('[line] reply failed:', err.message);
   }

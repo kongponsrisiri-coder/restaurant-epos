@@ -92,20 +92,26 @@ router.post('/complete', async (req, res) => {
       return res.status(400).json({ error: 'subscriptionId and formData are required' });
     }
 
-    // Verify Stripe says payment is good
-    const s = stripe();
-    const sub = await s.subscriptions.retrieve(subscriptionId);
+    // Derive plan — either from Stripe (real payment) or directly from formData (test/no-stripe mode)
+    let plan = formData.plan || 'pro';
 
-    if (!['active', 'trialing'].includes(sub.status)) {
-      return res.status(402).json({
-        error: `Subscription status is "${sub.status}" — payment may not have completed yet.`,
-      });
+    // Only verify with Stripe when we have a real subscription ID
+    if (subscriptionId !== 'test') {
+      const s = stripe();
+      const sub = await s.subscriptions.retrieve(subscriptionId);
+
+      if (!['active', 'trialing'].includes(sub.status)) {
+        return res.status(402).json({
+          error: `Subscription status is "${sub.status}" — payment may not have completed yet.`,
+        });
+      }
+
+      // Derive plan from the Stripe price ID
+      plan = Object.keys(PLAN_PRICE).find(k => {
+        const item = sub.items.data[0];
+        return item && PLAN_PRICE[k] === item.price.id;
+      }) || formData.plan || 'pro';
     }
-
-    const plan = Object.keys(PLAN_PRICE).find(k => {
-      const item = sub.items.data[0];
-      return item && PLAN_PRICE[k] === item.price.id;
-    }) || 'pro';
 
     // Build metadata from form data
     const metadata = {

@@ -112,11 +112,12 @@ const TOTAL_STEPS = 5; // 0:product 1:details 2:address 3:plan 4:payment
 
 export default function OnboardKiosk() {
   const [stripePromise, setStripePromise] = useState(null);
+  const [noStripe, setNoStripe] = useState(false);
 
   useEffect(() => {
     api.kioskGetStripeKey()
       .then(({ publishableKey }) => setStripePromise(loadStripe(publishableKey)))
-      .catch(() => setStripePromise(null));
+      .catch(() => setNoStripe(true)); // key not configured — kiosk still works without payment
   }, []);
 
   return (
@@ -133,14 +134,12 @@ export default function OnboardKiosk() {
       </div>
 
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
-        {stripePromise ? (
-          <Elements stripe={stripePromise} options={{ appearance: { theme: 'stripe' } }}>
-            <Wizard />
-          </Elements>
-        ) : (
-          // Stripe key not configured — still show wizard but skip payment
-          <Wizard noStripe />
-        )}
+        {/* Always wrap in Elements — null stripe is valid and just means "not loaded yet".
+            This prevents useStripe()/useElements() from throwing when step 4 renders
+            before the key API call has resolved. */}
+        <Elements stripe={stripePromise}>
+          <Wizard noStripe={noStripe} />
+        </Elements>
       </div>
     </div>
   );

@@ -71,9 +71,10 @@ router.post('/start-payment', async (req, res) => {
       currency,
       customer:             customer.id,
       payment_method_types: ['card'],
-      description:          `SiamEPOS ${plan} — first month`,
+      description:          `SiamEPOS ${PLAN_LABEL[plan] || plan}`,
+      receipt_email:        email,          // Stripe emails PDF receipt automatically
       metadata:             { plan, email, name },
-      setup_future_usage:   'off_session', // saves card for recurring billing
+      setup_future_usage:   'off_session',  // saves card for recurring monthly billing
     });
 
     const clientSecret = paymentIntent.client_secret;
@@ -166,6 +167,11 @@ router.post('/complete', async (req, res) => {
 
     const client = rows[0];
 
+    // Send branded invoice email for the first payment
+    await sendInvoiceEmail(client, plan, formData).catch(e =>
+      console.error('[onboard] invoice email failed (non-fatal)', e.message)
+    );
+
     // Email the client — branded welcome email + Quick Start PDF
     await sendWelcomeEmail({
       ...client,
@@ -204,6 +210,88 @@ const PLAN_LABEL = {
   lite_bundle: 'SiamEPOS Lite — Bundle £49/mo',
   spa: 'SiamSpa £49/mo',
 };
+
+async function sendInvoiceEmail(client, plan, formData) {
+  const brevoKey = process.env.BREVO_API_KEY;
+  if (!brevoKey) return;
+
+  const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`;
+  const planLabel     = PLAN_LABEL[plan] || plan;
+  const amount        = PLAN_FEE[plan] || 0;
+  const date          = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+  const nextDate      = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    .toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  const html = `<!doctype html><html><head><meta charset="utf-8">
+<style>
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f6f7fb;color:#0f172a;}
+  .wrap{max-width:560px;margin:0 auto;padding:32px 16px;}
+  .card{background:#fff;border-radius:14px;padding:32px 28px;box-shadow:0 1px 3px rgba(15,23,42,0.06);}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:20px;border-bottom:2px solid #f1f5f9;}
+  .brand{font-family:Georgia,serif;font-size:24px;font-weight:800;color:#0D1B3E;}
+  .brand span{color:#C9A84C;}
+  .inv-num{font-size:12px;color:#64748b;font-weight:700;text-align:right;}
+  .inv-num strong{display:block;font-size:16px;color:#0D1B3E;margin-top:2px;}
+  .to{margin-bottom:24px;}
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;font-weight:700;margin-bottom:4px;}
+  .to p{margin:2px 0;font-size:14px;}
+  table{width:100%;border-collapse:collapse;margin-bottom:24px;}
+  th{text-align:left;padding:8px 12px;background:#f8fafc;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;font-weight:700;}
+  td{padding:14px 12px;border-bottom:1px solid #f1f5f9;font-size:14px;}
+  .amount{text-align:right;font-weight:700;}
+  .total-row td{font-weight:800;font-size:15px;border-bottom:none;padding-top:16px;}
+  .paid{display:inline-block;background:#dcfce7;color:#166534;font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px;margin-left:8px;vertical-align:middle;}
+  .next{background:#fef9ec;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;font-size:13px;color:#92400e;margin-top:20px;}
+  .footer{text-align:center;color:#94a3b8;font-size:12px;margin-top:24px;}
+</style></head><body>
+<div class="wrap"><div class="card">
+  <div class="header">
+    <div class="brand">Siam<span>EPOS</span></div>
+    <div class="inv-num">Invoice <strong>${invoiceNumber}</strong>${date}</div>
+  </div>
+  <div class="to">
+    <div class="label">Billed to</div>
+    <p><strong>${escapeHtml(formData.businessName)}</strong></p>
+    ${formData.ownerName ? `<p>${escapeHtml(formData.ownerName)}</p>` : ''}
+    ${formData.address ? `<p style="white-space:pre-line">${escapeHtml(formData.address)}</p>` : ''}
+    <p>${escapeHtml(formData.email)}</p>
+  </div>
+  <table>
+    <thead><tr><th>Description</th><th style="text-align:right">Amount</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>${escapeHtml(planLabel)}<br><span style="font-size:12px;color:#64748b">Monthly subscription — ${date}</span></td>
+        <td class="amount">£${amount.toFixed(2)}</td>
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr class="total-row">
+        <td>Total <span class="paid">✓ PAID</span></td>
+        <td class="amount">£${amount.toFixed(2)}</td>
+      </tr>
+    </tfoot>
+  </table>
+  <div class="next">🔄 Your subscription renews on <strong>${nextDate}</strong>. We'll send an invoice each month when payment is taken.</div>
+</div>
+<p class="footer">SiamEPOS Ltd · info@siamepos.co.uk · siamepos.co.uk</p>
+</div></body></html>`;
+
+  await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'api-key': brevoKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sender:      { name: 'SiamEPOS', email: 'info@siamepos.co.uk' },
+      to:          [{ email: client.email, name: formData.ownerName || formData.businessName }],
+      subject:     `Invoice ${invoiceNumber} — SiamEPOS ${planLabel} — £${amount.toFixed(2)}`,
+      htmlContent: html,
+    }),
+  });
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, m =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+}
 
 async function notifyKorakot(client, plan, formData) {
   const brevoKey = process.env.BREVO_API_KEY;

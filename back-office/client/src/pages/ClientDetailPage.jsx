@@ -622,9 +622,9 @@ const SETUP_FIELDS = [
   // SEPOS-029 Phase 2 — connection strings the back-office uses to
   // automate seed SQL + future provisioning.
   { group: 'Tenant infrastructure', fields: [
-    { key: 'tenant_railway_url',  label: 'Railway service URL',    placeholder: 'https://restaurant-epos-bangkok.up.railway.app' },
-    { key: 'tenant_database_url', label: 'Tenant database URL', secret: true, placeholder: 'postgresql://postgres:…@…railway.app:5432/railway' },
-    { key: 'tenant_netlify_url',  label: 'Netlify site URL',       placeholder: 'https://bangkok.siamepos.co.uk' },
+    { key: 'tenant_railway_url',  label: 'Railway service URL',    placeholder: 'Railway dashboard → service → Settings → Domains (e.g. https://baan-siam.up.railway.app)' },
+    { key: 'tenant_database_url', label: 'Tenant database URL (DATABASE_URL)', secret: true, placeholder: 'Railway dashboard → Postgres service → Variables → DATABASE_URL' },
+    { key: 'tenant_netlify_url',  label: 'Netlify site URL',       placeholder: 'Netlify dashboard → site → Domain settings (e.g. https://app.baan-siam.siamepos.co.uk)' },
   ]},
   { group: 'Online takeaway / payments', fields: [
     { key: 'stripe_account_id', label: 'Stripe Connect account ID', placeholder: 'acct_…' },
@@ -633,8 +633,8 @@ const SETUP_FIELDS = [
     { key: 'payment_notes',     label: 'Payment notes', type: 'textarea' },
   ]},
   { group: 'Marketing / email', fields: [
-    { key: 'brevo_api_key',  label: 'Brevo API key',  secret: true },
-    { key: 'mail_from',      label: '"From" address for campaigns', placeholder: 'hello@baansiam.co.uk' },
+    { key: 'brevo_api_key',  label: 'Brevo API key — use SiamEPOS master key', secret: true, placeholder: 'Paste the SiamEPOS master Brevo key (brevo.com → SMTP & API → API Keys)' },
+    { key: 'mail_from',      label: '"From" address — client\'s own email', placeholder: 'hello@baansiam.co.uk — add as verified sender in SiamEPOS Brevo account first' },
     { key: 'make_webhook',   label: 'Make.com webhook URL',         secret: true },
   ]},
   { group: 'Banking (for direct debit)', fields: [

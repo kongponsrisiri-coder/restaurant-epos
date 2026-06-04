@@ -6232,11 +6232,20 @@ async function _handleLineMessage(event) {
   // (3) Escalate when Claude self-flags. Auto-mute the customer for
   //     2h so the bot stops chiming in while Korakot takes over — he
   //     can extend with /handover or release early with /release.
+  //
+  //     SKIP both when Korakot is testing from his own LINE account
+  //     (userId === LINE_KORAKOT_USER_ID). Otherwise the "DM Korakot"
+  //     push lands in the same chat thread he's testing from, and the
+  //     auto-mute would silence the bot on his own LINE for 2h.
   if (reply.escalate) {
     session.unresolvedTurns += 1;
     if (session.unresolvedTurns >= 1) {
-      await _notifyKorakotLine(userId, session.history, userText);
-      lineMuted.set(userId, Date.now() + 2 * 60 * 60 * 1000);
+      if (userId !== process.env.LINE_KORAKOT_USER_ID) {
+        await _notifyKorakotLine(userId, session.history, userText);
+        lineMuted.set(userId, Date.now() + 2 * 60 * 60 * 1000);
+      } else {
+        console.log('[line] escalation skipped — self-test from Korakot');
+      }
       session.unresolvedTurns = 0;
     }
   } else {

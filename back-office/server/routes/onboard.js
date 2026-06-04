@@ -64,7 +64,22 @@ router.post('/start-payment', async (req, res) => {
       expand: ['latest_invoice.payment_intent'],
     });
 
-    const clientSecret = subscription.latest_invoice?.payment_intent?.client_secret;
+    // Get the client secret — may need to finalize the invoice first if it's in draft
+    let clientSecret = subscription.latest_invoice?.payment_intent?.client_secret;
+
+    if (!clientSecret) {
+      const invoiceId = typeof subscription.latest_invoice === 'string'
+        ? subscription.latest_invoice
+        : subscription.latest_invoice?.id;
+
+      if (invoiceId) {
+        const invoice = await s.invoices.finalizeInvoice(invoiceId, {
+          expand: ['payment_intent'],
+        });
+        clientSecret = invoice.payment_intent?.client_secret;
+      }
+    }
+
     if (!clientSecret) {
       return res.status(500).json({ error: 'Stripe did not return a payment intent client secret' });
     }

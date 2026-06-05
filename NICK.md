@@ -71,15 +71,16 @@ This distinction is critical and must be maintained in every document, ticket, a
 | Trademark | UK00004385501 — Filed 11/05/2026 |
 | Trademark type | Figurative mark (lotus badge + SiamEPOS text) |
 | Classes | Class 9 (downloadable software) + Class 42 (SaaS) |
+| Company No. (CRN) | 17215576 — incorporated 12 May 2026 |
 | Owner | Korakot Kongponsrisiri (transfer to SiamEPOS Ltd pending) |
 | Bank | Starling Business Account |
-| ICO Registration | PENDING — £40/year — ico.org.uk |
-| Corporation Tax | PENDING — gov.uk/register-for-corporation-tax |
+| ICO Registration | ✅ DONE 2026-06-05 — Tier 1, app no. C1951827, £52/yr (£47 by DD). Awaiting ZB/Z ref. |
+| Corporation Tax | ✅ DONE — registered with HMRC |
 | Accountant | NOT YET — find one familiar with tech startups |
 
 **Document footer (use everywhere):**
 ```
-SiamEPOS Ltd | Registered in England & Wales | No. [CRN]
+SiamEPOS Ltd | Registered in England & Wales | No. 17215576
 Registered office: 100 North End Road, London W14 9EX
 SiamEPOS™ UK00004385501
 ```
@@ -220,10 +221,6 @@ SiamEPOS™ UK00004385501
 
 | Ticket | What | Priority |
 |--------|------|---------|
-| SEPOS-040 | Real Stripe on takeaway (schema ready, widget swap only) | 🔴 HIGHEST |
-| ANTHROPIC_API_KEY on back-office Railway | Unlocks Website Builder AI | 🔴 THIS WEEK |
-| ICO Registration | Legal requirement — ico.org.uk — £40 | 🔴 THIS WEEK |
-| Corporation Tax registration | Legal requirement — 3 months from incorporation | 🔴 THIS WEEK |
 | SEPOS-043 | Role-based access hierarchy (waiter/supervisor/manager) | 🟡 MEDIUM |
 | Mac reservations push to cloud | Currently pull-only | 🟡 MEDIUM |
 | Trademark transfer to SiamEPOS Ltd | Email information@ipo.gov.uk | 🟡 THIS MONTH |

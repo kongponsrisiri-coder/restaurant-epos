@@ -219,16 +219,23 @@ export default function BillsSection() {
           <button onClick={exportCsv} disabled={!bills.length} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 14, cursor: bills.length ? 'pointer' : 'not-allowed', opacity: bills.length ? 1 : 0.5 }}>⬇ CSV</button>
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
+      {/* Summary cards — minmax(140px) so 2 cards fit on phones; clamp
+          font so big numbers don't blow out the card on narrow widths. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginBottom: 16 }}>
         {[{ label: 'Total Bills', value: bills.length, color: '#3b82f6' }, { label: 'Total Sales', value: `£${totalSales.toFixed(2)}`, color: '#e94560' }, { label: 'Cash', value: `£${totalCash.toFixed(2)}`, color: '#22c55e' }, { label: 'Card', value: `£${totalCard.toFixed(2)}`, color: '#8b5cf6' }].map(s => (
           <div key={s.label} style={{ background: 'white', borderRadius: 12, padding: '14px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: 'clamp(18px, 5vw, 22px)', fontWeight: 800, color: s.color, lineHeight: 1.15 }}>{s.value}</div>
             <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{s.label}</div>
           </div>
         ))}
       </div>
       {loading ? <div style={{ textAlign: 'center', color: '#888', padding: 40 }}>Loading...</div> : (
-        <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+        // Horizontal-scroll wrapper so the 7-column bills table doesn't
+        // overflow the viewport on mobile — desktop still renders
+        // edge-to-edge because the table is wider than 768px below the
+        // wrapper minWidth.
+        <div style={{ background: 'white', borderRadius: 12, overflowX: 'auto', overflowY: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', WebkitOverflowScrolling: 'touch' }}>
+          <div style={{ minWidth: 720 }}>
           {/* Korakot 2026-06-02: dropped the "Bill #" column. Table number + date
               is the reference operators use day-to-day. */}
           <div style={{ display: 'grid', gridTemplateColumns: '80px 60px 1fr 110px 100px 100px 90px', padding: '12px 20px', background: '#f8f8f8', fontWeight: 700, fontSize: 13, color: '#555' }}>
@@ -339,6 +346,7 @@ export default function BillsSection() {
               <span></span>
             </div>
           )}
+          </div>
         </div>
       )}
       {deleteTarget && (

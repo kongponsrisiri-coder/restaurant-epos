@@ -19,14 +19,17 @@ export default function TradingSection() {
   const avgPerCover = data?.order_count  > 0 ? data.total_sales / data.order_count  : 0;
 
   return (
-    <div style={{ padding: 24 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 20 }}>Trading Summary</h1>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+    <div style={{ padding: 'clamp(14px, 4vw, 24px)' }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 16 }}>Trading Summary</h1>
+      {/* Period chips — horizontal-scroll strip on narrow screens so
+          Today / Weekly / Monthly / Custom always sit on one line and
+          the user can swipe instead of stacking vertically. */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {['today', 'weekly', 'monthly', 'custom'].map(p => (
-          <button key={p} onClick={() => setPeriod(p)} style={{ padding: '8px 20px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, textTransform: 'capitalize', background: period === p ? '#1a1a2e' : '#e0e0e0', color: period === p ? 'white' : '#555' }}>{p}</button>
+          <button key={p} onClick={() => setPeriod(p)} style={{ padding: '8px 18px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, textTransform: 'capitalize', whiteSpace: 'nowrap', flexShrink: 0, background: period === p ? '#1a1a2e' : '#e0e0e0', color: period === p ? 'white' : '#555' }}>{p}</button>
         ))}
         {period === 'custom' && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 6 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 6, flexShrink: 0 }}>
             <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
               style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
             <span style={{ color: '#666', fontSize: 13 }}>→</span>
@@ -37,7 +40,9 @@ export default function TradingSection() {
       </div>
       {loading ? <div style={{ color: '#888' }}>Loading...</div> : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 16, marginBottom: 24 }}>
+          {/* Stat grid — minmax(140px) so 2 columns fit on phones
+              (≥320px viewport) and grows to 3+ on desktop. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
             {[
               { label: 'Total Sales',   value: `£${Number(data?.total_sales || 0).toFixed(2)}`, color: '#e94560' },
               { label: 'Orders',        value: data?.order_count || 0,                    color: '#3b82f6' },
@@ -45,9 +50,9 @@ export default function TradingSection() {
               { label: 'Avg per Cover', value: `£${avgPerHead.toFixed(2)}`,               color: '#eab308' },
               { label: 'Avg Order',     value: `£${avgPerCover.toFixed(2)}`,              color: '#8b5cf6' },
             ].map(stat => (
-              <div key={stat.label} style={{ background: 'white', borderRadius: 12, padding: '16px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-                <div style={{ fontSize: 26, fontWeight: 800, color: stat.color }}>{stat.value}</div>
-                <div style={{ fontSize: 13, color: '#888', marginTop: 4 }}>{stat.label}</div>
+              <div key={stat.label} style={{ background: 'white', borderRadius: 12, padding: '14px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+                <div style={{ fontSize: 'clamp(20px, 5.5vw, 26px)', fontWeight: 800, color: stat.color, lineHeight: 1.15 }}>{stat.value}</div>
+                <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>{stat.label}</div>
               </div>
             ))}
           </div>

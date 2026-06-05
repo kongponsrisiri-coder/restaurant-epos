@@ -100,9 +100,11 @@ export default function ReportsSection() {
   const actionBtn = { padding: '8px 14px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 13, cursor: 'pointer' };
 
   return (
-    <div style={{ padding: 24 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 20 }}>Reports</h1>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+    <div style={{ padding: 'clamp(14px, 4vw, 24px)' }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 16 }}>Reports</h1>
+      {/* Period strip — horizontal scroll on narrow viewports (same
+          pattern as TradingSection). */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {['today', 'weekly', 'monthly', 'custom'].map(p => (
           <button key={p} onClick={() => setPeriod(p)}
             style={{ ...periodBtn, background: period === p ? '#1a1a2e' : '#e0e0e0', color: period === p ? 'white' : '#555' }}>
@@ -135,7 +137,10 @@ export default function ReportsSection() {
       {loading ? <div style={{ color: '#888' }}>Loading...</div> : (
         <>
           {tab === 'sales' && (
-            <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            // Horizontal-scroll wrapper for the 5-column sales table so
+            // mobile users can swipe; desktop renders edge-to-edge.
+            <div style={{ background: 'white', borderRadius: 12, overflowX: 'auto', overflowY: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', WebkitOverflowScrolling: 'touch' }}>
+              <div style={{ minWidth: 580 }}>
               <div style={{ padding: '12px 20px', background: '#f8f8f8', display: 'grid', gridTemplateColumns: '1fr 110px 70px 90px 90px', fontWeight: 700, fontSize: 13, color: '#555' }}>
                 <span>Table / Customer</span><span>Method</span><span>Covers</span><span style={{ textAlign: 'right' }}>Subtotal</span><span style={{ textAlign: 'right' }}>Total</span>
               </div>
@@ -174,6 +179,7 @@ export default function ReportsSection() {
                   </div>
                 </>
               )}
+              </div>
             </div>
           )}
 
@@ -206,7 +212,9 @@ export default function ReportsSection() {
             </div>
           )}
           {tab === 'items' && (
-            <div style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            // Horizontal scroll wrapper, same pattern as sales table.
+            <div style={{ background: 'white', borderRadius: 12, overflowX: 'auto', overflowY: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', WebkitOverflowScrolling: 'touch' }}>
+              <div style={{ minWidth: 480 }}>
               <div style={{ padding: '12px 20px', background: '#f8f8f8', display: 'grid', gridTemplateColumns: '1fr 80px 80px 100px', fontWeight: 700, fontSize: 13, color: '#555' }}>
                 <span>Item</span><span>Price</span><span>Qty Sold</span><span style={{ textAlign: 'right' }}>Revenue</span>
               </div>
@@ -218,6 +226,7 @@ export default function ReportsSection() {
                   <span style={{ textAlign: 'right', fontWeight: 700, color: '#e94560' }}>£{Number(item.total_revenue).toFixed(2)}</span>
                 </div>
               ))}
+              </div>
             </div>
           )}
         </>

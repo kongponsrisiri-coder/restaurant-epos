@@ -594,8 +594,16 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             </div>
           )}
 
-          {/* Menu items grid */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: 16, background: '#f5f5f5' }}>
+          {/* Menu items grid — extra bottom padding on mobile so the
+              last row isn't hidden behind the fixed Menu/Order tab bar
+              (with iOS safe-area inset added). */}
+          <div style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: 16,
+            paddingBottom: isMobile ? 'calc(58px + env(safe-area-inset-bottom, 0px) + 16px)' : 16,
+            background: '#f5f5f5'
+          }}>
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))',
@@ -721,7 +729,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
           </div>
 
           {/* Scrollable order items */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
+          <div style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '12px 16px',
+            // Same fixed-tab-bar offset as the menu side on mobile.
+            paddingBottom: isMobile ? 'calc(58px + env(safe-area-inset-bottom, 0px) + 12px)' : '12px'
+          }}>
 
             {/* Bar items in cart */}
             {cartBar.length > 0 && (
@@ -1148,7 +1162,17 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             borderTop: '1px solid #e0e0e0',
             background: 'white',
             flexShrink: 0,
-            height: 58
+            height: 58,
+            // Pin to viewport bottom so the Menu/Order toggle is always
+            // a thumb-reach away — no scrolling required to find it.
+            // env(safe-area-inset-bottom) keeps it above the iOS home
+            // indicator / Android nav gesture bar.
+            position: 'fixed',
+            bottom: 0, left: 0, right: 0,
+            zIndex: 100,
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+            boxSizing: 'content-box',
+            boxShadow: '0 -2px 8px rgba(0,0,0,0.06)'
           }}>
 
             {/* Menu tab */}

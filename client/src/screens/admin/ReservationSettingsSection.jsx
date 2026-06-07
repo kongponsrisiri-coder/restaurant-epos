@@ -264,16 +264,16 @@ export default function ReservationSettingsSection() {
         <div style={{ background: '#f8f8f8', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: '#555', lineHeight: 1.6, marginBottom: 16 }}>
           The takeaway widget shows customers a live wait time based on how busy
           the kitchen is right now — no pickup slot picker, no over-promising.
-          "Busy" is measured by how many items the kitchen is currently cooking
-          across all open orders (dine-in + takeaway).
+          "Busy" is measured by how many open orders (tickets) the kitchen is
+          working on across dine-in + takeaway.
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <Field label="🟢 Quiet wait (min)" hint="Shown when fewer items are cooking than the Busy threshold">
+          <Field label="🟢 Quiet wait (min)" hint="Shown when fewer open orders than the Busy threshold">
             <input type="number" min={1} max={180} value={settings.takeaway_wait_quiet}
               onChange={e => set('takeaway_wait_quiet', parseInt(e.target.value) || 1)} style={inp} />
           </Field>
-          <Field label="Busy threshold" hint="Items cooking ≥ this → flips to Busy">
+          <Field label="Busy threshold" hint="Open orders ≥ this → flips to Busy">
             <input type="number" min={1} max={100} value={settings.takeaway_busy_threshold}
               onChange={e => set('takeaway_busy_threshold', parseInt(e.target.value) || 1)} style={inp} />
           </Field>
@@ -281,7 +281,7 @@ export default function ReservationSettingsSection() {
             <input type="number" min={1} max={180} value={settings.takeaway_wait_busy}
               onChange={e => set('takeaway_wait_busy', parseInt(e.target.value) || 1)} style={inp} />
           </Field>
-          <Field label="Very busy threshold" hint="Items cooking ≥ this → flips to Very busy">
+          <Field label="Very busy threshold" hint="Open orders ≥ this → flips to Very busy">
             <input type="number" min={1} max={100} value={settings.takeaway_very_busy_threshold}
               onChange={e => set('takeaway_very_busy_threshold', parseInt(e.target.value) || 1)} style={inp} />
           </Field>

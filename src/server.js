@@ -2359,6 +2359,25 @@ function toMins(t) {
   return h * 60 + m;
 }
 
+// SEPOS-048 — minutes-of-day in a given IANA timezone. Replaces raw
+// new Date().getHours() math which used the Node process's timezone
+// (Railway defaults to UTC, so was off by 1h in BST). All restaurant
+// time-of-day checks must use this so the cloud server's locale
+// can't poison restaurant-local validation.
+function minutesInZone(date, timeZone) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: timeZone || 'Europe/London',
+      hour12: false, hour: '2-digit', minute: '2-digit',
+    }).formatToParts(date);
+    const hh = Number(parts.find(p => p.type === 'hour')?.value || 0);
+    const mm = Number(parts.find(p => p.type === 'minute')?.value || 0);
+    return hh * 60 + mm;
+  } catch {
+    return date.getHours() * 60 + date.getMinutes();
+  }
+}
+
 // ── Availability — supports all_day and split (lunch/dinner) service ──
 app.get('/api/reservations/availability', widgetCors, async (req, res) => {
   try {
@@ -2449,7 +2468,10 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
 
     const maxCovers = s.max_covers_per_slot || 20;
     const isToday   = requestedDate.toDateString() === new Date().toDateString();
-    const nowMins   = isToday ? (new Date().getHours() * 60 + new Date().getMinutes() + (s.booking_lead_hours || 1) * 60) : -1;
+    // SEPOS-048 — use restaurant's timezone for "now" so the slot generator
+    // doesn't skip valid slots because the server's wall clock is UTC.
+    const tz = s.timezone || 'Europe/London';
+    const nowMins   = isToday ? (minutesInZone(new Date(), tz) + (s.booking_lead_hours || 1) * 60) : -1;
 
     const result = slots.map(time => {
       const slotMins = toMins(time);
@@ -2491,7 +2513,8 @@ app.get('/api/reservations/settings', async (req, res) => {
               restaurant_phone,
               booking_lead_hours, booking_advance_days, is_active,
               takeaway_busy_threshold, takeaway_very_busy_threshold,
-              takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy
+              takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
+              timezone
        FROM restaurant_settings WHERE restaurant_id = $1`, [rid]
     );
     const s = result.rows[0] || { restaurant_id: rid, is_active: true };
@@ -2515,7 +2538,8 @@ app.get('/api/reservations/settings/:restaurantId', widgetCors, async (req, res)
               restaurant_phone,
               booking_lead_hours, booking_advance_days, is_active,
               takeaway_busy_threshold, takeaway_very_busy_threshold,
-              takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy
+              takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
+              timezone
        FROM restaurant_settings WHERE restaurant_id = $1`,
       [req.params.restaurantId]
     );
@@ -2744,7 +2768,8 @@ app.get('/api/restaurant-settings', async (req, res) => {
               restaurant_phone,
               booking_lead_hours, booking_advance_days, is_active,
               takeaway_busy_threshold, takeaway_very_busy_threshold,
-              takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy
+              takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
+              timezone
          FROM restaurant_settings`
     );
     res.json(r.rows);
@@ -2765,6 +2790,8 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
       booking_lead_hours, booking_advance_days, is_active,
       takeaway_busy_threshold, takeaway_very_busy_threshold,
       takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
+      // SEPOS-048 — IANA timezone (e.g. 'Europe/London', 'Asia/Bangkok')
+      timezone,
     } = req.body;
     await pool.query(
       `INSERT INTO restaurant_settings
@@ -2774,8 +2801,8 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
           slot_interval_mins, max_covers_per_slot, max_party_size, restaurant_phone,
           booking_lead_hours, booking_advance_days, is_active,
           takeaway_busy_threshold, takeaway_very_busy_threshold,
-          takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+          takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy, timezone)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
        ON CONFLICT (restaurant_id) DO UPDATE SET
          restaurant_name      = EXCLUDED.restaurant_name,
          brand_colour         = EXCLUDED.brand_colour,
@@ -2797,7 +2824,8 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
          takeaway_very_busy_threshold = EXCLUDED.takeaway_very_busy_threshold,
          takeaway_wait_quiet          = EXCLUDED.takeaway_wait_quiet,
          takeaway_wait_busy           = EXCLUDED.takeaway_wait_busy,
-         takeaway_wait_very_busy      = EXCLUDED.takeaway_wait_very_busy`,
+         takeaway_wait_very_busy      = EXCLUDED.takeaway_wait_very_busy,
+         timezone                     = EXCLUDED.timezone`,
       [req.params.restaurantId, restaurant_name, brand_colour, opening_time, last_booking_time,
        service_type || 'all_day', lunch_service_start || '11:00', lunch_service_end || '14:30',
        dinner_service_start || '17:30', dinner_service_end || '21:30',
@@ -2807,7 +2835,8 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
        takeaway_very_busy_threshold ?? 10,
        takeaway_wait_quiet          ?? 20,
        takeaway_wait_busy           ?? 35,
-       takeaway_wait_very_busy      ?? 50]
+       takeaway_wait_very_busy      ?? 50,
+       timezone || 'Europe/London']
     );
 
     // SEPOS-049 + SEPOS-050 — durable write-through to cloud. On a desktop
@@ -3752,7 +3781,8 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
               lunch_service_start, lunch_service_end,
               dinner_service_start, dinner_service_end,
               takeaway_busy_threshold, takeaway_very_busy_threshold,
-              takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy
+              takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
+              timezone
          FROM restaurant_settings WHERE restaurant_id = $1`,
       [restaurantId]
     );
@@ -3781,7 +3811,11 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
     if (settings) {
       const pickupDate = new Date(pickup_time);
       if (isNaN(pickupDate.getTime())) return res.status(400).json({ error: 'Invalid pickup time' });
-      const mins = pickupDate.getHours() * 60 + pickupDate.getMinutes();
+      // SEPOS-048 — compare pickup against opening hours in the RESTAURANT's
+      // timezone, not the Node process's. Otherwise Railway-UTC sees London
+      // 02:00 BST as 01:00 and silently flips the dinner-window check.
+      const tz = settings.timezone || 'Europe/London';
+      const mins = minutesInZone(pickupDate, tz);
       const hhmm = (t) => String(t || '').slice(0, 5);
       const inWindow = (start, end) => {
         const s = toMins(start);

@@ -407,6 +407,9 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS dinne
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS dinner_service_end TIME DEFAULT '21:30'`);
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS max_party_size INTEGER DEFAULT 8`);
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS restaurant_phone VARCHAR(30)`);
+// SEPOS-048 — per-restaurant timezone so cloud validators don't depend on Railway's
+// process TZ (defaults to Europe/London since current customers are UK).
+await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) DEFAULT 'Europe/London'`);
 // SEPOS-047 — kitchen-load wait time for the takeaway widget
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takeaway_busy_threshold      INTEGER DEFAULT 5`);
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takeaway_very_busy_threshold INTEGER DEFAULT 10`);

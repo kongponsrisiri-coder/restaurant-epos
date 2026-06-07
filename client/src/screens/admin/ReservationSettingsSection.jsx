@@ -67,6 +67,9 @@ export default function ReservationSettingsSection() {
     takeaway_wait_quiet:          20,
     takeaway_wait_busy:           35,
     takeaway_wait_very_busy:      50,
+    // SEPOS-048 — IANA timezone. Auto-detected from the operator's
+    // browser/iPad on first form load; can be overridden in the dropdown.
+    timezone:             (typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone) || 'Europe/London',
   });
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
@@ -257,6 +260,33 @@ export default function ReservationSettingsSection() {
               onChange={e => set('booking_advance_days', parseInt(e.target.value) || 1)} style={inp} />
           </Field>
         </div>
+      </Card>
+
+      {/* SEPOS-048 — restaurant timezone. Auto-detected from the device
+          on form load. Operator can override if running headless on a
+          device whose OS clock isn't in restaurant-local time. */}
+      <Card title="Restaurant Time Zone" emoji="🌍">
+        <Field label="Time zone" hint="Auto-detected from this device. All opening hours, wait times, and bookings are interpreted in this zone.">
+          <select value={settings.timezone || 'Europe/London'} onChange={e => set('timezone', e.target.value)} style={inp}>
+            <option value="Europe/London">Europe/London (UK)</option>
+            <option value="Europe/Paris">Europe/Paris</option>
+            <option value="Europe/Amsterdam">Europe/Amsterdam</option>
+            <option value="Europe/Madrid">Europe/Madrid</option>
+            <option value="Europe/Rome">Europe/Rome</option>
+            <option value="Europe/Berlin">Europe/Berlin</option>
+            <option value="Asia/Bangkok">Asia/Bangkok</option>
+            <option value="Asia/Singapore">Asia/Singapore</option>
+            <option value="Asia/Tokyo">Asia/Tokyo</option>
+            <option value="Asia/Hong_Kong">Asia/Hong_Kong</option>
+            <option value="Australia/Sydney">Australia/Sydney</option>
+            <option value="America/New_York">America/New_York</option>
+            <option value="America/Los_Angeles">America/Los_Angeles</option>
+            <option value="UTC">UTC</option>
+            {settings.timezone && !['Europe/London','Europe/Paris','Europe/Amsterdam','Europe/Madrid','Europe/Rome','Europe/Berlin','Asia/Bangkok','Asia/Singapore','Asia/Tokyo','Asia/Hong_Kong','Australia/Sydney','America/New_York','America/Los_Angeles','UTC'].includes(settings.timezone) && (
+              <option value={settings.timezone}>{settings.timezone}</option>
+            )}
+          </select>
+        </Field>
       </Card>
 
       {/* SEPOS-047 — Online Takeaway wait time tuning. */}

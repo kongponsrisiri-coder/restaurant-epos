@@ -77,7 +77,13 @@ export default function ReservationSettingsSection() {
   const [error,   setError]   = useState(null);
 
   useEffect(() => {
-    fetch(`${SERVER_URL}/api/reservations/settings/${RESTAURANT_ID}`)
+    // SEPOS-049 follow-up — RESTAURANT_ID used to be hardcoded to 'siamepos'
+    // here, so Baan Siam saves UPSERTed a phantom 'siamepos' row on Baan
+    // Siam's cloud DB while the widget read from 'baan-siam'. Discover the
+    // real id via the no-param GET (uses server-side resolveRestaurantId
+    // → reads process.env.RESTAURANT_ID, which Electron injects from
+    // config.json).
+    fetch(`${SERVER_URL}/api/reservations/settings`)
       .then(r => r.json())
       .then(data => {
         if (data.error) return;
@@ -92,7 +98,8 @@ export default function ReservationSettingsSection() {
   const handleSave = async () => {
     setSaving(true); setError(null);
     try {
-      const res = await fetch(`${SERVER_URL}/api/reservations/settings/${RESTAURANT_ID}`, {
+      const targetId = settings.restaurant_id || RESTAURANT_ID;
+      const res = await fetch(`${SERVER_URL}/api/reservations/settings/${targetId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),

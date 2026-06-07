@@ -2850,14 +2850,20 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
     //   4. On failure (offline, 5xx), leave it in the queue — syncService's
     //      drainQueue will retry it on the next tick.
     const archiveService = require('./services/archiveService');
-    if (archiveService.isLocalInstall()) {
+    const isLocal = archiveService.isLocalInstall();
+    const cloudUrl = process.env.CLOUD_API_URL;
+    console.log(`[sync] settings PUT received for ${req.params.restaurantId} · isLocal=${isLocal} · cloudUrl=${cloudUrl ? 'set' : 'unset'}`);
+    if (isLocal) {
       const offlineQueue = require('./services/offlineQueue');
       const queueId = await offlineQueue.enqueue('update_restaurant_settings', {
         restaurantId: req.params.restaurantId,
         body: req.body,
       });
-      if (queueId && process.env.CLOUD_API_URL) {
-        fetch(`${process.env.CLOUD_API_URL}/api/reservations/settings/${encodeURIComponent(req.params.restaurantId)}`, {
+      console.log(`[sync] settings enqueued as queueId=${queueId}`);
+      if (queueId && cloudUrl) {
+        const pushUrl = `${cloudUrl}/api/reservations/settings/${encodeURIComponent(req.params.restaurantId)}`;
+        console.log(`[sync] immediate push → ${pushUrl}`);
+        fetch(pushUrl, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(req.body),
@@ -2865,12 +2871,15 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
           .then(async r => {
             if (r.ok) {
               await offlineQueue.markSynced(queueId);
-              console.log(`[sync] settings pushed to cloud for ${req.params.restaurantId}`);
+              console.log(`[sync] ✓ settings pushed to cloud for ${req.params.restaurantId}`);
             } else {
-              console.warn(`[sync] settings push ${r.status} — left in queue for retry`);
+              const body = await r.text().catch(() => '');
+              console.warn(`[sync] ✗ settings push ${r.status} — body: ${body.slice(0, 200)}`);
             }
           })
           .catch(err => console.warn('[sync] settings push failed, queued for retry:', err.message));
+      } else if (!cloudUrl) {
+        console.warn('[sync] CLOUD_API_URL is unset — settings stuck in local DB only. Check electron/main.js env injection.');
       }
     }
 

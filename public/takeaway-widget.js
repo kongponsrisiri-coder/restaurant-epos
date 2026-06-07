@@ -396,20 +396,17 @@
     d.setMinutes(d.getMinutes() + 20);
     return d.toISOString();
   }
-  function tierLabel(tier) {
-    if (tier === 'very_busy') return { emoji: '🔴', text: 'Very busy', bg: '#fef2f2', border: '#fca5a5', color: '#991b1b' };
-    if (tier === 'busy')      return { emoji: '🟡', text: 'Busy',      bg: '#fef9eb', border: '#fcd34d', color: '#92400e' };
-    return                           { emoji: '🟢', text: 'Quiet',     bg: '#f0f7ee', border: '#86efac', color: '#166534' };
-  }
   function renderBusyChip() {
     if (!state.availability) return '';
-    const t = tierLabel(state.availability.tier);
+    // SEPOS-047 v2 — customer-facing: just the wait time, always green.
+    // Korakot 2026-06-07: don't surface "busy/very busy" framing to the
+    // customer; just commit to a number.
     const mins = state.availability.wait_minutes;
     return `
-      <div style="display:flex;align-items:center;gap:10px;background:${t.bg};border:1.5px solid ${t.border};border-radius:12px;padding:10px 14px;margin-bottom:14px;">
-        <span style="font-size:18px;">${t.emoji}</span>
+      <div style="display:flex;align-items:center;gap:10px;background:#f0f7ee;border:1.5px solid #86efac;border-radius:12px;padding:10px 14px;margin-bottom:14px;">
+        <span style="font-size:18px;">🟢</span>
         <div style="flex:1;">
-          <div style="font-weight:800;color:${t.color};font-size:14px;">${t.text} kitchen · ready in ~${mins} min</div>
+          <div style="font-weight:800;color:#166534;font-size:14px;">Ready in ~${mins} min</div>
           <div style="font-size:11px;color:#666;margin-top:1px;">No need to choose a time — we'll have it ready when you arrive.</div>
         </div>
       </div>

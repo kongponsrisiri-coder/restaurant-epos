@@ -18,8 +18,86 @@
 
 const { io: ioClient } = require('socket.io-client');
 const offlineQueue = require('./offlineQueue');
+const printService = require('./printService');
+const pool = require('../db/dbAdapter');
 
 const CLOUD_API_URL = process.env.CLOUD_API_URL;
+
+// SEPOS-046b — when a takeaway order arrives via the public widget on the
+// CLOUD, the cloud's own auto-print can't reach the restaurant's LAN
+// printer (Railway → 192.168.x.x will never resolve). The desktop install
+// IS on the LAN, so the print belongs here on the cloud-relay path.
+async function autoPrintIncomingTakeaway(payload) {
+  try {
+    // Load local settings (KV) — same shape src/server.js loadSettings uses.
+    const sRes = await pool.query('SELECT key, value FROM settings');
+    const settings = {};
+    sRes.rows.forEach(r => { settings[r.key] = r.value; });
+    const mode = settings.kitchen_print_mode || 'print';
+    if (mode === 'kds') return;
+    if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name &&
+        !settings.printer_bar_ip) return;
+
+    // Fetch full order + items from cloud. We can't trust the local DB
+    // yet — the SQLite pull is racing this print and may not have items
+    // populated for sub-second prints.
+    const orderRes = await fetch(`${CLOUD_API_URL}/api/orders/${payload.id}`);
+    if (!orderRes.ok) {
+      console.warn('[cloud-relay] auto-print: order fetch', orderRes.status);
+      return;
+    }
+    const orderData = await orderRes.json();
+    const items = orderData.items || [];
+    if (items.length === 0) return;
+
+    // Look up is_bar per menu_item via the existing /api/menu/all (cats
+    // with is_bar flag, nested items). Fall back to kitchen-only routing
+    // if the menu fetch fails.
+    const barIdSet = new Set();
+    try {
+      const menuRes = await fetch(`${CLOUD_API_URL}/api/menu/all`);
+      if (menuRes.ok) {
+        const cats = await menuRes.json();
+        (Array.isArray(cats) ? cats : []).forEach(c => {
+          if (Number(c.is_bar) === 1 && Array.isArray(c.items)) {
+            c.items.forEach(i => barIdSet.add(i.id));
+          }
+        });
+      }
+    } catch {}
+
+    const toPrintItem = (it) => ({
+      course: 1,
+      quantity: it.quantity || 1,
+      name: it.name || it.item_name || 'Item',
+      notes: it.notes || (Array.isArray(it.modifiers) ? it.modifiers.map(m => m.name).join(', ') : ''),
+    });
+    const kitchenItems = items.filter(it => !barIdSet.has(it.menu_item_id)).map(toPrintItem);
+    const barItems     = items.filter(it =>  barIdSet.has(it.menu_item_id)).map(toPrintItem);
+
+    const printOrder = {
+      id: payload.id,
+      order_type: 'takeaway',
+      order_subtype: payload.order_subtype || 'collection',
+      customer_name: payload.customer_name || '',
+      table_number: null,
+    };
+
+    if (mode !== 'kds' && kitchenItems.length &&
+        (settings.printer_kitchen_ip || settings.printer_kitchen_name)) {
+      printService.printFullKitchenTicket(settings, printOrder, kitchenItems)
+        .then(() => console.log(`🖨️ [cloud-relay] kitchen ticket auto-printed for takeaway #${payload.id}`))
+        .catch(err => console.error('[cloud-relay] kitchen print failed:', err.message));
+    }
+    if (barItems.length && settings.printer_bar_ip) {
+      printService.printBarTicket(settings, printOrder, barItems)
+        .then(() => console.log(`🍹 [cloud-relay] bar ticket auto-printed for takeaway #${payload.id}`))
+        .catch(err => console.error('[cloud-relay] bar print failed:', err.message));
+    }
+  } catch (err) {
+    console.error('[cloud-relay] auto-print error:', err.message);
+  }
+}
 
 // Every io.emit() call on the cloud side is mirrored here. Adding a new
 // event upstream? Add its name to this list to relay it.
@@ -99,6 +177,12 @@ function start(localIo, syncService) {
         localIo.emit(event, payload);
       } catch (err) {
         console.warn(`[cloud-relay] forward ${event} failed:`, err.message);
+      }
+      // SEPOS-046b — auto-print takeaway orders placed via the public
+      // widget. Only the local install can reach the LAN printer; cloud's
+      // own auto-print is a silent no-op in that case.
+      if (event === 'new_takeaway_order' && payload && payload.id) {
+        autoPrintIncomingTakeaway(payload);
       }
     });
   }

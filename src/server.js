@@ -3830,10 +3830,15 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
       const tz = settings.timezone || 'Europe/London';
       const mins = minutesInZone(pickupDate, tz);
       const hhmm = (t) => String(t || '').slice(0, 5);
+      // Handle windows that wrap past midnight (e.g. 17:30–07:30 for
+      // late-night service). Normal window: end >= start, simple range.
+      // Wrapped window: end < start, match anywhere from start onward
+      // OR up to end the following morning.
       const inWindow = (start, end) => {
         const s = toMins(start);
         const e = toMins(end);
-        return mins >= s && mins <= e;
+        if (e >= s) return mins >= s && mins <= e;
+        return mins >= s || mins <= e;
       };
       if (settings.service_type === 'split') {
         const okLunch  = inWindow(settings.lunch_service_start  || '11:00', settings.lunch_service_end  || '14:30');

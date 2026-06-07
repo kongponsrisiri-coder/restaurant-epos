@@ -585,6 +585,96 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_voucher_redemptions_voucher ON voucher_redemptions (voucher_id)`);
 
+    // ── Inventory schema (SEPOS-031 / SEPOS-032 / SEPOS-046) ──
+    // These tables were previously created manually via psql on the main
+    // siamepos Railway and never codified — new tenant Railways (e.g.
+    // baan-siam) couldn't run any inventory feature until someone ran
+    // CREATE TABLE manually. Also caused sync-delete-order to fail on
+    // those tenants because the stock_movements DELETE blew up before
+    // the order rows got cleaned up (see SEPOS-046i).
+    //
+    // Adding CREATE TABLE IF NOT EXISTS so any future tenant
+    // self-provisions on first server boot. Main siamepos's existing
+    // tables are unaffected (IF NOT EXISTS guards each one).
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ingredients (
+        id SERIAL PRIMARY KEY,
+        name_en VARCHAR(255) NOT NULL,
+        name_th VARCHAR(255) DEFAULT '',
+        unit VARCHAR(20) DEFAULT 'kg',
+        cost_per_unit NUMERIC(10,4) DEFAULT 0,
+        yield_percentage NUMERIC(5,2) DEFAULT 100,
+        category VARCHAR(50) DEFAULT 'Other',
+        current_stock NUMERIC(12,3) DEFAULT 0,
+        par_level NUMERIC(12,3),
+        supplier_name VARCHAR(255) DEFAULT '',
+        allergens TEXT DEFAULT '[]',
+        updated_at TIMESTAMP DEFAULT NOW(),
+        created_at TIMESTAMP DEFAULT NOW(),
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos'
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_ingredients_category ON ingredients(category)`);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS stock_movements (
+        id SERIAL PRIMARY KEY,
+        ingredient_id INTEGER NOT NULL,
+        movement_type VARCHAR(20) NOT NULL,
+        quantity NUMERIC(12,3) NOT NULL,
+        cost_at_time NUMERIC(10,4) DEFAULT 0,
+        note TEXT,
+        reference VARCHAR(100),
+        order_item_id INTEGER,
+        created_at TIMESTAMP DEFAULT NOW(),
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos'
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_stock_movements_ingredient ON stock_movements(ingredient_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_stock_movements_order_item ON stock_movements(order_item_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_stock_movements_created    ON stock_movements(created_at DESC)`);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS recipes (
+        id SERIAL PRIMARY KEY,
+        menu_item_id INTEGER NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        serves INTEGER DEFAULT 1,
+        total_cost NUMERIC(10,2) DEFAULT 0,
+        cost_per_portion NUMERIC(10,4) DEFAULT 0,
+        last_calculated TIMESTAMP DEFAULT NOW(),
+        created_at TIMESTAMP DEFAULT NOW(),
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos'
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_recipes_menu_item ON recipes(menu_item_id)`);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS recipe_lines (
+        id SERIAL PRIMARY KEY,
+        recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+        ingredient_id INTEGER NOT NULL,
+        quantity_used NUMERIC(10,4) NOT NULL,
+        unit VARCHAR(20),
+        line_cost NUMERIC(10,2) DEFAULT 0
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_recipe_lines_recipe ON recipe_lines(recipe_id)`);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS supplier_invoices (
+        id SERIAL PRIMARY KEY,
+        supplier_name VARCHAR(255),
+        invoice_date DATE,
+        invoice_number VARCHAR(100),
+        total_amount NUMERIC(10,2) DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'processed',
+        created_at TIMESTAMP DEFAULT NOW(),
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos'
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_supplier_invoices_date ON supplier_invoices(invoice_date DESC)`);
+
     // ── SEPOS-BATCH-001 — kitchen batch prep ───────────────────────────
     // batch_recipes is the make-template (e.g. "Red Curry Paste: 5kg from
     // ingredients X+Y+Z, shelf life 5 days"). Creating a batch_recipe

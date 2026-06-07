@@ -253,6 +253,18 @@ async function applyToCloud(actionType, payload) {
       if (!r.ok) throw new Error(`update_item_status ${r.status}`);
       return r.json();
     }
+    case 'update_restaurant_settings': {
+      // SEPOS-050 — durable settings push. Forwards the PUT body that
+      // the operator saved on the desktop. Idempotent: PG ON CONFLICT
+      // overwrites, so a duplicate replay (immediate-push succeeded then
+      // drain replays) is harmless. URL-encodes the restaurant id since
+      // it's user-tunable text, not a numeric.
+      const r = await fetch(url(`/api/reservations/settings/${encodeURIComponent(payload.restaurantId)}`), {
+        method: 'PUT', ...json(payload.body),
+      });
+      if (!r.ok) throw new Error(`update_restaurant_settings ${r.status}`);
+      return r.json();
+    }
     case 'delete_order': {
       // The local row is already gone (delete happened before enqueue),
       // so we use the cloudOrderId captured in the payload. Cloud-side

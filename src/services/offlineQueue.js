@@ -9,14 +9,16 @@ const pool = require('../db/dbAdapter');
 const isLocal = (process.env.DB_MODE || 'cloud').toLowerCase() === 'local';
 
 async function enqueue(actionType, payload) {
-  if (!isLocal) return;
+  if (!isLocal) return null;
   try {
-    await pool.query(
-      'INSERT INTO sync_queue (action_type, payload) VALUES ($1, $2)',
+    const r = await pool.query(
+      'INSERT INTO sync_queue (action_type, payload) VALUES ($1, $2) RETURNING id',
       [actionType, JSON.stringify(payload)]
     );
+    return r.rows[0]?.id ?? null;
   } catch (err) {
     console.error('[offlineQueue] enqueue failed:', actionType, err.message);
+    return null;
   }
 }
 

@@ -2810,24 +2810,39 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
        takeaway_wait_very_busy      ?? 50]
     );
 
-    // SEPOS-049 — write-through to cloud. On a desktop install (DB_MODE=local),
-    // the line above wrote to local SQLite. Forward the same payload to
-    // CLOUD_API_URL so the public takeaway widget — which hits the cloud
-    // Railway — sees the change immediately. Fire-and-forget: if the cloud
-    // is unreachable, the desktop edit still stuck locally and the next
-    // sync tick will eventually reconcile when connectivity returns.
+    // SEPOS-049 + SEPOS-050 — durable write-through to cloud. On a desktop
+    // install (DB_MODE=local), the local SQLite write happened above. We
+    // ALSO need the cloud Railway to learn about it (so the public takeaway
+    // widget sees the change). Pattern:
+    //   1. Enqueue first so an offline save can't be silently lost on the
+    //      next pull tick.
+    //   2. Try the cloud PUT immediately for instant reflection when online.
+    //   3. On success, markSynced so the queue drain doesn't double-push.
+    //   4. On failure (offline, 5xx), leave it in the queue — syncService's
+    //      drainQueue will retry it on the next tick.
     const archiveService = require('./services/archiveService');
-    if (archiveService.isLocalInstall() && process.env.CLOUD_API_URL) {
-      fetch(`${process.env.CLOUD_API_URL}/api/reservations/settings/${encodeURIComponent(req.params.restaurantId)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req.body),
-      })
-        .then(r => {
-          if (!r.ok) console.warn(`[sync] settings write-through ${r.status}`);
-          else console.log(`[sync] settings pushed to cloud for ${req.params.restaurantId}`);
+    if (archiveService.isLocalInstall()) {
+      const offlineQueue = require('./services/offlineQueue');
+      const queueId = await offlineQueue.enqueue('update_restaurant_settings', {
+        restaurantId: req.params.restaurantId,
+        body: req.body,
+      });
+      if (queueId && process.env.CLOUD_API_URL) {
+        fetch(`${process.env.CLOUD_API_URL}/api/reservations/settings/${encodeURIComponent(req.params.restaurantId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(req.body),
         })
-        .catch(err => console.warn('[sync] settings write-through failed:', err.message));
+          .then(async r => {
+            if (r.ok) {
+              await offlineQueue.markSynced(queueId);
+              console.log(`[sync] settings pushed to cloud for ${req.params.restaurantId}`);
+            } else {
+              console.warn(`[sync] settings push ${r.status} — left in queue for retry`);
+            }
+          })
+          .catch(err => console.warn('[sync] settings push failed, queued for retry:', err.message));
+      }
     }
 
     res.json({ success: true });

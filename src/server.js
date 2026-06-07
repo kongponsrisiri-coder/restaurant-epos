@@ -3605,11 +3605,17 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
     }
 
     // Closed-hours check — pickup_time must fall within the restaurant's
-    // opening_time .. last_booking_time window. Soft validation: if
-    // restaurant_settings is missing we let it through.
+    // operating windows. Honours service_type: all-day restaurants validate
+    // against opening_time..last_booking_time, split-service restaurants
+    // require pickup inside either the lunch window OR the dinner window
+    // (so the 14:30-17:30 closure gap rejects orders, not silently accepts).
+    // Soft validation: if restaurant_settings is missing we let it through.
     const restaurantId = resolveRestaurantId(req);
     const settingsRes = await client.query(
-      `SELECT opening_time, last_booking_time FROM restaurant_settings WHERE restaurant_id = $1`,
+      `SELECT service_type, opening_time, last_booking_time,
+              lunch_service_start, lunch_service_end,
+              dinner_service_start, dinner_service_end
+         FROM restaurant_settings WHERE restaurant_id = $1`,
       [restaurantId]
     );
     const settings = settingsRes.rows[0];
@@ -3617,10 +3623,26 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
       const pickupDate = new Date(pickup_time);
       if (isNaN(pickupDate.getTime())) return res.status(400).json({ error: 'Invalid pickup time' });
       const mins = pickupDate.getHours() * 60 + pickupDate.getMinutes();
-      const openMins  = toMins(settings.opening_time      || '11:00');
-      const closeMins = toMins(settings.last_booking_time || '21:30');
-      if (mins < openMins || mins > closeMins) {
-        return res.status(400).json({ error: `Pickup time must be between ${String(settings.opening_time).slice(0,5)} and ${String(settings.last_booking_time).slice(0,5)}.` });
+      const hhmm = (t) => String(t || '').slice(0, 5);
+      const inWindow = (start, end) => {
+        const s = toMins(start);
+        const e = toMins(end);
+        return mins >= s && mins <= e;
+      };
+      if (settings.service_type === 'split') {
+        const okLunch  = inWindow(settings.lunch_service_start  || '11:00', settings.lunch_service_end  || '14:30');
+        const okDinner = inWindow(settings.dinner_service_start || '17:30', settings.dinner_service_end || '21:30');
+        if (!okLunch && !okDinner) {
+          return res.status(400).json({
+            error: `Pickup time must be ${hhmm(settings.lunch_service_start)}–${hhmm(settings.lunch_service_end)} or ${hhmm(settings.dinner_service_start)}–${hhmm(settings.dinner_service_end)}.`,
+          });
+        }
+      } else {
+        if (!inWindow(settings.opening_time || '11:00', settings.last_booking_time || '21:30')) {
+          return res.status(400).json({
+            error: `Pickup time must be between ${hhmm(settings.opening_time)} and ${hhmm(settings.last_booking_time)}.`,
+          });
+        }
       }
     }
 

@@ -2830,7 +2830,11 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
        service_type || 'all_day', lunch_service_start || '11:00', lunch_service_end || '14:30',
        dinner_service_start || '17:30', dinner_service_end || '21:30',
        slot_interval_mins, max_covers_per_slot, max_party_size || 8, restaurant_phone || null,
-       booking_lead_hours, booking_advance_days, is_active,
+       booking_lead_hours, booking_advance_days,
+       // SQLite better-sqlite3 rejects JS booleans as bind params (cloud PG
+       // accepts them transparently). Coerce 1/0 so the same payload works
+       // on both backends.
+       is_active ? 1 : 0,
        takeaway_busy_threshold      ?? 5,
        takeaway_very_busy_threshold ?? 10,
        takeaway_wait_quiet          ?? 20,

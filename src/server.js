@@ -2726,6 +2726,34 @@ app.delete('/api/reservations/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-049 — bulk GET for the sync engine. Returns ALL restaurant_settings
+// rows as an array so the Mac sync engine can pull and upsert by
+// restaurant_id. Single-tenant installs see one row.
+app.get('/api/restaurant-settings', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT restaurant_id, restaurant_name, brand_colour,
+              TO_CHAR(opening_time, 'HH24:MI')         AS opening_time,
+              TO_CHAR(last_booking_time, 'HH24:MI')    AS last_booking_time,
+              service_type,
+              TO_CHAR(lunch_service_start, 'HH24:MI')  AS lunch_service_start,
+              TO_CHAR(lunch_service_end, 'HH24:MI')    AS lunch_service_end,
+              TO_CHAR(dinner_service_start, 'HH24:MI') AS dinner_service_start,
+              TO_CHAR(dinner_service_end, 'HH24:MI')   AS dinner_service_end,
+              slot_interval_mins, max_covers_per_slot, max_party_size,
+              restaurant_phone,
+              booking_lead_hours, booking_advance_days, is_active,
+              takeaway_busy_threshold, takeaway_very_busy_threshold,
+              takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy
+         FROM restaurant_settings`
+    );
+    res.json(r.rows);
+  } catch (err) {
+    console.error('GET /api/restaurant-settings error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── PUT reservation settings — saves all fields including lunch/dinner ──
 app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
   try {
@@ -2781,6 +2809,27 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
        takeaway_wait_busy           ?? 35,
        takeaway_wait_very_busy      ?? 50]
     );
+
+    // SEPOS-049 — write-through to cloud. On a desktop install (DB_MODE=local),
+    // the line above wrote to local SQLite. Forward the same payload to
+    // CLOUD_API_URL so the public takeaway widget — which hits the cloud
+    // Railway — sees the change immediately. Fire-and-forget: if the cloud
+    // is unreachable, the desktop edit still stuck locally and the next
+    // sync tick will eventually reconcile when connectivity returns.
+    const archiveService = require('./services/archiveService');
+    if (archiveService.isLocalInstall() && process.env.CLOUD_API_URL) {
+      fetch(`${process.env.CLOUD_API_URL}/api/reservations/settings/${encodeURIComponent(req.params.restaurantId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req.body),
+      })
+        .then(r => {
+          if (!r.ok) console.warn(`[sync] settings write-through ${r.status}`);
+          else console.log(`[sync] settings pushed to cloud for ${req.params.restaurantId}`);
+        })
+        .catch(err => console.warn('[sync] settings write-through failed:', err.message));
+    }
+
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

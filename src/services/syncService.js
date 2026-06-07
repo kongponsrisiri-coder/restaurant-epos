@@ -34,6 +34,10 @@ const PULL_TABLES = [
   { path: '/api/table-combinations',     table: 'table_combinations',     pk: 'id' },
   { path: '/api/dining-duration-tiers',  table: 'dining_duration_tiers',  pk: 'id' },
   { path: '/api/reservations',           table: 'reservations',           pk: 'id' },
+  // SEPOS-049 — reservation/takeaway hours, party limits, wait-time tiers
+  // and brand colour all live here. Without pull, desktop saves never see
+  // cloud edits (and vice versa via the write-through on the PUT endpoint).
+  { path: '/api/restaurant-settings',    table: 'restaurant_settings',    pk: 'restaurant_id' },
 ];
 
 let initialSyncDone = false;

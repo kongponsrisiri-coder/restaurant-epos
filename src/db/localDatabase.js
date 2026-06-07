@@ -66,6 +66,7 @@ function initSchema() {
       description TEXT,
       price REAL NOT NULL,
       is_available INTEGER DEFAULT 1,
+      is_online INTEGER DEFAULT 1,
       allergens TEXT DEFAULT NULL,
       sort_order INTEGER DEFAULT 0,
       vat_rate REAL DEFAULT 20.0
@@ -441,6 +442,7 @@ function runMigrations() {
   addColumnIfMissing('orders', 'staff_id', 'INTEGER');
   // SEPOS-021: VAT rate per menu item
   addColumnIfMissing('menu_items', 'vat_rate', 'REAL DEFAULT 20.0');
+  addColumnIfMissing('menu_items', 'is_online', 'INTEGER DEFAULT 1');
   // SEPOS-033: marketing consent + unsubscribe (GDPR)
   addColumnIfMissing('reservations', 'marketing_consent', 'INTEGER DEFAULT 0');
   addColumnIfMissing('reservations', 'unsubscribed_at', 'TIMESTAMP');

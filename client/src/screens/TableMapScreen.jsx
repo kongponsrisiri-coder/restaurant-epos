@@ -285,8 +285,14 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
       {/* SEPOS-044 follow-up — surfaces SYNC_SECRET-missing or stuck-queue state. */}
       <SyncHealthBanner />
 
-      {/* SEPOS-044 — Active takeaway strip (auto-hides if none). */}
-      <TakeawayStrip onPeek={(orderId) => setBillPeekOrderId(orderId)} />
+      {/* SEPOS-044 — Active takeaway strip (auto-hides if none).
+          Tapping a card opens the full bill screen so staff close the
+          order via the same Close & Pay flow as dine-in (no BillPeek). */}
+      <TakeawayStrip onPeek={(orderId) => {
+        const order = openOrders.find(o => o.id === orderId);
+        if (order) onOpenOrder(order.id, order.table_id);
+        else setBillPeekOrderId(orderId); // fallback if not in cached list yet
+      }} />
 
       {/* ════════════════════════════════════════
           MOVE / MERGE MODE BANNER

@@ -403,9 +403,27 @@ export default function BillScreen({ orderId, onClose, onPay }) {
               <div style={{ textAlign:'center', fontSize:12, color:'#888', borderTop:'1px dashed #ccc', paddingTop:12 }}>{settings.receipt_footer||'Thank you for dining with us!'}</div>
             </div>
             <div style={{ padding:isMobile?'0 16px 32px':'0 24px 24px', display:'flex', flexDirection:'column', gap:10 }}>
-              <button onClick={() => setStage('method')} style={{ padding:'18px', borderRadius:12, border:'none', background:'#1a1a2e', color:'white', fontSize:18, fontWeight:800, cursor:'pointer' }}>💳 Take Payment — £{billTotal.toFixed(2)}</button>
-              <button onClick={() => { setSplitPaid([]); setStage('split_equal'); }} style={{ padding:'14px', borderRadius:12, border:'2px solid #C9A84C', background:'white', color:'#C9A84C', fontSize:15, fontWeight:700, cursor:'pointer' }}>✂️ Split Equally</button>
-              <button onClick={() => { setItemAssignments({}); setSplitItemPaid([]); setActivePerson(0); setStage('split_items'); }} style={{ padding:'14px', borderRadius:12, border:'2px solid #3b82f6', background:'white', color:'#3b82f6', fontSize:15, fontWeight:700, cursor:'pointer' }}>🍽️ Split by Item</button>
+              {isTakeaway(order) && (order.payment_status === 'paid' || order.payment_status === 'mock') ? (
+                // Online takeaway already paid via the widget. One-tap close
+                // records the payment row so it lands in Reports / Z-Report /
+                // VAT / Bills the same way Cash + Card orders do.
+                <button
+                  onClick={() => {
+                    const method = order.payment_status === 'paid' ? 'Online (Stripe)' : 'Online (mock)';
+                    setPaymentDetails({ method, amountPaid: billTotal, tip: 0, change: 0 });
+                    setStage('receipt');
+                  }}
+                  style={{ padding:'18px', borderRadius:12, border:'none', background:'#16a34a', color:'white', fontSize:18, fontWeight:800, cursor:'pointer' }}
+                >
+                  ✓ Confirm Collection — Already Paid Online (£{billTotal.toFixed(2)})
+                </button>
+              ) : (
+                <>
+                  <button onClick={() => setStage('method')} style={{ padding:'18px', borderRadius:12, border:'none', background:'#1a1a2e', color:'white', fontSize:18, fontWeight:800, cursor:'pointer' }}>💳 Take Payment — £{billTotal.toFixed(2)}</button>
+                  <button onClick={() => { setSplitPaid([]); setStage('split_equal'); }} style={{ padding:'14px', borderRadius:12, border:'2px solid #C9A84C', background:'white', color:'#C9A84C', fontSize:15, fontWeight:700, cursor:'pointer' }}>✂️ Split Equally</button>
+                  <button onClick={() => { setItemAssignments({}); setSplitItemPaid([]); setActivePerson(0); setStage('split_items'); }} style={{ padding:'14px', borderRadius:12, border:'2px solid #3b82f6', background:'white', color:'#3b82f6', fontSize:15, fontWeight:700, cursor:'pointer' }}>🍽️ Split by Item</button>
+                </>
+              )}
               <button onClick={handlePrintBill} style={{ padding:'12px', borderRadius:10, border:'2px solid #1a1a2e', background:'white', color:'#1a1a2e', fontSize:14, fontWeight:600, cursor:'pointer' }}>🖨️ Print Bill</button>
               {!isMobile && <button onClick={onClose} style={{ padding:'12px', borderRadius:10, border:'none', background:'#f0f0f0', color:'#555', fontSize:14, cursor:'pointer' }}>Close</button>}
             </div>

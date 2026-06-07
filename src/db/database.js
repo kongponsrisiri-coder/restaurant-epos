@@ -61,12 +61,14 @@ async function initDB() {
         description TEXT,
         price DECIMAL(10,2) NOT NULL,
         is_available INTEGER DEFAULT 1,
+        is_online INTEGER DEFAULT 1,
         allergens TEXT DEFAULT NULL,
         sort_order INTEGER DEFAULT 0
       )
     `);
 
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS allergens TEXT DEFAULT NULL`);
+    await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS is_online INTEGER DEFAULT 1`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS name_alt VARCHAR(255)`);
 

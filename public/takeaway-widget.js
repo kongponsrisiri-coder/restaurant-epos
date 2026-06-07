@@ -508,7 +508,7 @@
             `).join('')}
           </div>
           <div class="tw-items">
-            ${(active.items || []).filter(i => i.is_available).map(i => `
+            ${(active.items || []).filter(i => i.is_available && i.is_online !== 0).map(i => `
               <div class="tw-item" data-add="${i.id}">
                 <div class="tw-item-name">${esc(i.name)}</div>
                 ${i.description ? `<div class="tw-item-desc">${esc(i.description)}</div>` : ''}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getOrders, getOrder, updateItemStatus, setTakeawayStatus, dispatchDelivery } from '../api';
+import { getOrders, getOrder, updateItemStatus, dispatchDelivery } from '../api';
 import { io } from 'socket.io-client';
 import { SERVER_URL } from '../api';
 import { orderShortLabel, orderSubLabel, orderShortLabelPlain, isTakeaway } from '../utils/orderLabel';
@@ -534,17 +534,12 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                       {allReadyForOff && (
                         <button
                           onClick={async () => {
-                            // Mark every ready item as served — one shot.
+                            // Mark every ready item as served — one shot. The
+                            // server flips takeaway_status to 'ready' once the
+                            // last item is served; staff close the bill from
+                            // the TakeawayStrip.
                             for (const it of ready) {
                               try { await updateItemStatus(it.id, 'served'); } catch {}
-                            }
-                            // For takeaway orders, also collapse the lifecycle to
-                            // 'collected' so the order closes and lands in reports
-                            // even if the auto-collect path missed any items.
-                            // Collection orders collapse to 'collected'; delivery
-                            // orders stay open until the courier delivers them.
-                            if (isTakeaway(order) && !isDelivery(order)) {
-                              try { await setTakeawayStatus(order.id, 'collected'); } catch {}
                             }
                             fetchOrders();
                           }}
@@ -555,29 +550,8 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                           }}
                         >✓ Off Kitchen ({ready.length})</button>
                       )}
-                      {isTakeaway(order) && !isDelivery(order) && !allReadyForOff && (
-                        // Explicit Collected button for takeaway orders on the
-                        // Kitchen tab — always reachable in Pass mode AND Direct
-                        // mode, even before every item is served. Closes the
-                        // order, stamps closed_at, marks any unserved items
-                        // served, and the order drops off the kitchen.
-                        <button
-                          onClick={async () => {
-                            if (!await confirm(`Mark Online Order #${order.id} as collected? This closes the order and counts it as a sale.`)) return;
-                            try {
-                              await setTakeawayStatus(order.id, 'collected');
-                              await fetchOrders();
-                            } catch (err) {
-                              window.alert('Could not mark collected: ' + (err?.message || 'unknown error'));
-                            }
-                          }}
-                          style={{
-                            background: '#22c55e', color: 'white', border: 'none', borderRadius: 8,
-                            padding: '8px 14px', fontWeight: 800, fontSize: 13, cursor: 'pointer',
-                            whiteSpace: 'nowrap', flexShrink: 0,
-                          }}
-                        >🥡 Collected</button>
-                      )}
+                      {/* Online takeaway: staff close from TakeawayStrip → Bill flow,
+                          not the kitchen screen. Collected button removed. */}
                       {isDelivery(order) && (
                         <CourierControls order={order} onChange={fetchOrders} />
                       )}
@@ -750,24 +724,9 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                     <KitchenCardHeading order={order} />
                     {isDelivery(order) ? (
                       <CourierControls order={order} onChange={fetchOrders} />
-                    ) : isTakeaway(order) ? (
-                      <button
-                        onClick={async () => {
-                          if (!await confirm(`Mark Online Order #${order.id} as collected? This closes the order and counts it as a sale.`)) return;
-                          try {
-                            await setTakeawayStatus(order.id, 'collected');
-                            await fetchOrders();
-                          } catch (err) {
-                            window.alert('Could not mark collected: ' + (err?.message || 'unknown error'));
-                          }
-                        }}
-                        style={{
-                          background: '#22c55e', color: 'white', border: 'none', borderRadius: 8,
-                          padding: '8px 14px', fontWeight: 800, fontSize: 13, cursor: 'pointer',
-                          whiteSpace: 'nowrap', flexShrink: 0,
-                        }}
-                      >🥡 Collected</button>
                     ) : (
+                      // Online takeaway: closed from the Bill screen via TakeawayStrip;
+                      // Pass tab now just shows the order ref number.
                       <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>#{order.id}</div>
                     )}
                   </div>
@@ -850,10 +809,9 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
               {Object.values(completedByOrder).map(group => {
-                // The Done tab pulls FROM order_items (status='served'), so a
-                // takeaway order showing here either hasn't been collected
-                // yet (auto-collect failed) or the chef wants to close it
-                // explicitly. Either way, expose the Collected button.
+                // Done tab pulls served items. Takeaway orders here stay
+                // visible until staff close them from the TakeawayStrip
+                // → Bill flow. Collected button removed.
                 const orderForLabel = { ...group, id: group.order_id };
                 return (
                 <div key={group.order_id} style={{ background: '#1a1a1a', borderRadius: 16, overflow: 'hidden' }}>
@@ -861,25 +819,6 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                     <div style={{ color: 'white', fontWeight: 800, fontSize: 18, flex: 1, minWidth: 0 }}>
                       <OrderHeading order={orderForLabel} />
                     </div>
-                    {isTakeaway(group) && group.takeaway_status !== 'collected' && (
-                      <button
-                        onClick={async () => {
-                          if (!await confirm(`Mark Online Order #${group.order_id} as collected? This closes the order and counts it as a sale.`)) return;
-                          try {
-                            await setTakeawayStatus(group.order_id, 'collected');
-                            await fetchOrders();
-                            await fetchCompleted();
-                          } catch (err) {
-                            window.alert('Could not mark collected: ' + (err?.message || 'unknown error'));
-                          }
-                        }}
-                        style={{
-                          background: '#22c55e', color: 'white', border: 'none', borderRadius: 8,
-                          padding: '6px 12px', fontWeight: 800, fontSize: 12, cursor: 'pointer',
-                          whiteSpace: 'nowrap', flexShrink: 0,
-                        }}
-                      >🥡 Collected</button>
-                    )}
                     <div style={{ color: '#aaa', fontSize: 13 }}>#{group.order_id}</div>
                   </div>
                   <div style={{ padding: 12 }}>

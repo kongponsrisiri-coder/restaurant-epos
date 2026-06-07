@@ -369,10 +369,10 @@ app.put('/api/menu/items/sort-order', async (req, res) => {
 
 app.put('/api/menu/items/:id', async (req, res) => {
   try {
-    const { name, name_alt, description, price, is_available, subcategory_id, category_id, vat_rate } = req.body;
+    const { name, name_alt, description, price, is_available, is_online, subcategory_id, category_id, vat_rate } = req.body;
     await pool.query(
-      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, subcategory_id=$6, category_id=$7, vat_rate=COALESCE($8, vat_rate) WHERE id=$9',
-      [name, name_alt || null, description, price, is_available, subcategory_id || null, category_id, vat_rate ?? null, req.params.id]
+      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, is_online=COALESCE($6, is_online), subcategory_id=$7, category_id=$8, vat_rate=COALESCE($9, vat_rate) WHERE id=$10',
+      [name, name_alt || null, description, price, is_available, is_online ?? null, subcategory_id || null, category_id, vat_rate ?? null, req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -630,11 +630,14 @@ app.put('/api/order-items/:id/status', async (req, res) => {
         [item.order_id]
       );
       const order = orderRes.rows[0];
-      // Collection takeaway orders auto-close once every item is served.
-      // Delivery orders must NOT — they stay open until the courier
-      // webhook reports the parcel delivered (SEPOS-DELIVERY-001).
+      // Collection takeaway orders flip to 'ready' once every item is
+      // served — staff close the bill manually from the TakeawayStrip
+      // to keep takeaway in the same close-and-pay flow as dine-in.
+      // Delivery orders stay open until the courier webhook reports
+      // delivered (SEPOS-DELIVERY-001) — untouched here.
       if (order && order.order_type === 'takeaway' && order.order_subtype !== 'delivery'
-          && order.status === 'open' && order.takeaway_status !== 'collected') {
+          && order.status === 'open' && order.takeaway_status !== 'collected'
+          && order.takeaway_status !== 'ready') {
         const remainingRes = await pool.query(
           `SELECT COUNT(*) AS n FROM order_items
            WHERE order_id = $1 AND voided = 0 AND status <> 'served'`,
@@ -642,11 +645,11 @@ app.put('/api/order-items/:id/status', async (req, res) => {
         );
         if (parseInt(remainingRes.rows[0].n, 10) === 0) {
           await pool.query(
-            `UPDATE orders SET takeaway_status='collected', status='closed', closed_at=NOW() WHERE id = $1`,
+            `UPDATE orders SET takeaway_status='ready' WHERE id = $1`,
             [item.order_id]
           );
-          io.emit('takeaway_status', { order_id: Number(item.order_id), status: 'collected' });
-          console.log(`🥡 auto-collected takeaway order #${item.order_id} (all items served)`);
+          io.emit('takeaway_status', { order_id: Number(item.order_id), status: 'ready' });
+          console.log(`🥡 takeaway #${item.order_id} ready (all items served — awaiting staff close)`);
         }
       }
     }
@@ -3685,6 +3688,74 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
       order_subtype: subtype,
       delivery_address: subtype === 'delivery' ? delivery_address.trim() : null,
     });
+
+    // Fire-and-forget auto kitchen + bar print. Runs server-side (not
+    // from the browser) so one print fires per order regardless of how
+    // many tablets / Macs are open. Items are split by their category's
+    // is_bar flag so drinks go to the bar printer and food to the
+    // kitchen printer — matches the dine-in routing. Each printer call
+    // honours its own copies setting (printer_kitchen_copies /
+    // printer_bar_copies) inside printService.
+    (async () => {
+      try {
+        const printSettings = await loadSettings();
+        const mode = printSettings.kitchen_print_mode || 'print';
+
+        // Look up is_bar per menu_item via category
+        const menuIds = items.map(it => it.menu_item_id).filter(Boolean);
+        const barIdSet = new Set();
+        if (menuIds.length) {
+          const rows = await pool.query(
+            `SELECT mi.id, COALESCE(c.is_bar, 0) AS is_bar
+               FROM menu_items mi
+               LEFT JOIN categories c ON mi.category_id = c.id
+              WHERE mi.id = ANY($1)`,
+            [menuIds]
+          );
+          rows.rows.forEach(r => { if (Number(r.is_bar) === 1) barIdSet.add(r.id); });
+        }
+
+        const toPrintItem = (it) => ({
+          course: 1,
+          quantity: it.quantity || 1,
+          name: it.name || 'Item',
+          notes: it.modifiers
+            ? (Array.isArray(it.modifiers) ? it.modifiers.map(m => m.name).join(', ') : String(it.modifiers))
+            : '',
+        });
+
+        const kitchenItems = items.filter(it => !barIdSet.has(it.menu_item_id)).map(toPrintItem);
+        const barItems     = items.filter(it =>  barIdSet.has(it.menu_item_id)).map(toPrintItem);
+
+        const printOrder = {
+          id: orderId,
+          order_type: 'takeaway',
+          order_subtype: subtype,
+          customer_name: customer_name.trim(),
+          table_number: null,
+        };
+
+        // Kitchen ticket — gated by kitchen_print_mode
+        if (mode !== 'kds'
+            && kitchenItems.length
+            && (printSettings.printer_kitchen_ip || printSettings.printer_kitchen_name)) {
+          printService.printFullKitchenTicket(printSettings, printOrder, kitchenItems)
+            .then(() => console.log(`🖨️ Kitchen ticket auto-printed for takeaway #${orderId}`))
+            .catch(err => console.error('[takeaway] kitchen print failed:', err.message));
+        }
+
+        // Bar ticket — no separate mode toggle today, prints whenever
+        // the bar IP is set (printer_bar_name is per-device localStorage,
+        // not available server-side, so we gate on IP only).
+        if (barItems.length && printSettings.printer_bar_ip) {
+          printService.printBarTicket(printSettings, printOrder, barItems)
+            .then(() => console.log(`🍹 Bar ticket auto-printed for takeaway #${orderId}`))
+            .catch(err => console.error('[takeaway] bar print failed:', err.message));
+        }
+      } catch (err) {
+        console.error('[takeaway] auto print setup failed:', err.message);
+      }
+    })();
 
     // Fire-and-forget email confirmation via Brevo.
     if (customer_email) {

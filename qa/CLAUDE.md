@@ -60,10 +60,13 @@ All scripts run with `node <script> [--api=URL]`. Default API is the live Railwa
 | `test-delivery.js` | root | Delivery radius + courier dispatch | — |
 | `test-courier-dispatch.js` | root | Stuart courier dispatch end-to-end | — |
 | `test-reservations.js` | root | Reservations (single + multi-table) | — |
-| `test-friday-night.js` | root | Stress test — concurrent orders, burst load | — |
+| `test-friday-night.js` | root | Stress test — concurrent orders, burst load | 36/36 ✅ (2026-06-03) |
+| `test-stress.js` | root | Concurrent load ramp — 1→5→10→20→50 users | ✅ 0% errors all levels (2026-06-03) |
+| `test-sepos-040.js` | root | SEPOS-040 — Stripe takeaway payment | 17/18 ✅ (2026-05-29, 1 test-script issue only) |
 | `test-sepos-043.js` | root | Role-based access (admin/manager/supervisor/waiter) | — |
 | `test-spa.js` | spa-epos/ | Spa full suite — auth, booking, treatments, billing | 55/55 ✅ |
 | `test-spa-online-booking.js` | spa-epos/ | SPA-PAY-001 — Stripe deposit, self-service portal | 33/33 ✅ (2026-05-22) |
+| `test-spa-payments.js` | spa-epos/ | All 10 spa payment methods full E2E | 65/65 ✅ (2026-05-29) |
 | `test-treatwell.js` | spa-epos/ | Treatwell webhook — 11 blocks, 31 checks | 31/31 ✅ (2026-05-25) |
 | `test-treatwell-runner.js` | spa-epos/ | pg-mem harness for Treatwell (no live DB needed) | — |
 | `test-spa-stress.js` | spa-epos/ | Spa concurrent booking stress test | — |
@@ -84,6 +87,9 @@ Saved in `~/Documents/Claude/Projects/SiamEpos/`:
 | `SiamEPOS-Delivery-QA-Report-May2026.docx` | Delivery widget + radius |
 | `SiamEPOS-CourierDispatch-QA-Report-May2026.docx` | Stuart courier dispatch |
 | `SiamEPOS-Reservations-QA-Report-May2026.docx` | Reservations + multi-table |
+| `SiamEPOS-SPA-PAYMENTS-QA-Report.docx` | All 10 spa payment methods — 65/65 ✅ |
+| `SiamEPOS-FridayNight-StressTest-v1-2026-06-03.pdf` | Friday Night stress test — 36/36 clean first run |
+| `SiamEPOS-ConcurrentLoad-StressTest-2026-06-03.pdf` | Concurrent load — 248 req/s, 0% errors to 50 users |
 
 ---
 
@@ -102,6 +108,10 @@ Saved in `~/Documents/Claude/Projects/SiamEpos/`:
 | 2026-05-16 | SEPOS-025/026 | Desktop app silent printing — receipt + kitchen ticket | QA assigned |
 | 2026-05-19 | SPA-002 | Public booking widget + therapist selection + 10 edge cases | QA assigned |
 | 2026-05-19 | Reservations | Multi-table join + floor-plan date navigation | QA assigned |
+| 2026-05-29 | SEPOS-040 | Stripe takeaway payment — 11 blocks, 18 checks | 17/18 ✅ — 1 test-script issue (pickup time OOH), no product bugs |
+| 2026-05-29 | SPA-PAYMENTS | All 10 spa payment methods — 13 blocks, 65 checks | 65/65 ✅ — zero bugs, 2 test-script fixes (wrong GET endpoint + wrong DELETE suffix) |
+| 2026-06-03 | STRESS-TEST | Friday Night stress — 8 blocks, 36 checks, 98 reservations, 361 covers | 36/36 ✅ — clean first run, zero bugs, zero warnings |
+| 2026-06-03 | STRESS-TEST | Concurrent load ramp — 5 levels, 1→50 users, 4,272 requests total | ✅ 0% errors all levels — 248 req/s peak, p95 220ms, ceiling not found |
 
 ---
 
@@ -112,7 +122,8 @@ Saved in `~/Documents/Claude/Projects/SiamEpos/`:
 | **BUG-EPOS-001** — `GET /api/reservations/settings` 500 (deprecated column names) | Fixed by Krit | Krit |
 | **SECURITY** — PIN "0000" accepted on production | Reported to Korakot | Korakot |
 | **CLEANUP** — Test order #243 left open in production | Reported to Korakot | Korakot |
-| **PERF-001** — 5/10 Railway requests timeout under burst (connection pool exhaustion) | Low priority | Krit |
+| **PERF-001** — 5/10 Railway requests timeout under burst (connection pool exhaustion) | Did NOT surface in 2026-06-03 stress test — monitor when 10+ restaurants | Krit |
+| **OBS-001** — POST /api/auth/login returns 404 on production (admin PIN or endpoint changed) | Open | Korakot |
 | **BUG-SPA-001** — Medical questionnaire COALESCE bug on NOT NULL columns | Fixed by Sam | Sam |
 
 ---

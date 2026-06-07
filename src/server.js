@@ -1883,10 +1883,23 @@ app.post('/api/sync/delete-order', async (req, res) => {
       [order.id, `${staffName} (sync)`, reason, order.total, order.order_type, order.opened_at, order.closed_at]
     );
 
-    await pool.query(`DELETE FROM payments      WHERE order_id = $1`, [orderId]);
-    await pool.query(`DELETE FROM stock_movements WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = $1)`, [orderId]);
-    await pool.query(`DELETE FROM order_items   WHERE order_id = $1`, [orderId]);
-    await pool.query(`DELETE FROM orders        WHERE id = $1`, [orderId]);
+    // SEPOS-046i — per-step try/catch so a missing table (e.g. tenant
+    // never had stock_movements migrated) doesn't strand the order in a
+    // zombie state with payments deleted but order + order_items still
+    // present. Matches the PIN-gated /api/orders/:id pattern.
+    const safeStep = async (label, sql) => {
+      try { const r = await pool.query(sql, [orderId]); return { ok: true, deleted: r.rowCount }; }
+      catch (err) {
+        console.warn(`[sync-delete-order ${orderId}] ${label} failed:`, err.message);
+        return { ok: false, error: err.message };
+      }
+    };
+    const steps = {
+      payments:        await safeStep('payments',        `DELETE FROM payments WHERE order_id = $1`),
+      stock_movements: await safeStep('stock_movements', `DELETE FROM stock_movements WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = $1)`),
+      order_items:     await safeStep('order_items',     `DELETE FROM order_items WHERE order_id = $1`),
+      order:           await safeStep('order',           `DELETE FROM orders WHERE id = $1`),
+    };
 
     if (order.table_id) {
       try { await pool.query("UPDATE tables SET status='available' WHERE id = $1", [order.table_id]); } catch {}
@@ -1894,7 +1907,7 @@ app.post('/api/sync/delete-order', async (req, res) => {
 
     console.log(`[sync-delete-order] order #${orderId} deleted via sync from ${staffName} — reason: "${reason}"`);
     io.emit('order_deleted', { order_id: orderId, by: `${staffName} (sync)` });
-    res.json({ success: true, order_id: orderId });
+    res.json({ success: steps.order.ok, order_id: orderId, steps });
   } catch (err) {
     console.error('POST /api/sync/delete-order error:', err);
     res.status(500).json({ error: err.message });

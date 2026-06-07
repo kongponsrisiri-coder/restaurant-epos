@@ -257,8 +257,10 @@ function ticketCSS() {
     .item   { display:flex; gap:8px; align-items:baseline; margin:7px 0; }
     .qty    { font-size:22px; font-weight:900; min-width:42px; }
     .name   { font-size:20px; font-weight:800; line-height:1.2; }
-    .note     { font-size:14px; font-weight:700; margin:-2px 0 6px 50px; }
-    .note-alt { font-size:15px; font-weight:700; margin:-4px 0 4px 50px; color:#333; }
+    /* Modifier line + second-language line print at the same size as
+       the primary item name (Korakot 2026-06-07). */
+    .note     { font-size:20px; font-weight:800; margin:-2px 0 6px 50px; line-height:1.2; }
+    .note-alt { font-size:20px; font-weight:800; margin:-4px 0 4px 50px; line-height:1.2; color:#333; }
     .foot   { text-align:center; font-size:13px; font-weight:700; margin-top:6px; }
   `;
 }

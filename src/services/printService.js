@@ -383,11 +383,10 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
         // SIZE_NORMAL which looked tiny in comparison. Korakot
         // 2026-06-02: "increase the size of Thai language".
         nameAlt    ? [CMD.BOLD_ON, CMD.SIZE_BIG, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
-        // Modifier / option choice line — bumped to SIZE_TALL + BOLD so
-        // the chef reads "no MSG", "extra spicy", "Chicken" etc. as
-        // clearly as the item name itself. Was SIZE_NORMAL (Korakot
-        // 2026-06-02: "increase the size of option choice").
-        item.notes ? [CMD.BOLD_ON, CMD.SIZE_TALL, txt('  > ' + item.notes), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
+        // Modifier / option choice line — SIZE_BIG so it matches the
+        // English item line exactly. Korakot 2026-06-07: second language,
+        // options, and messages must print at primary-language size.
+        item.notes ? [CMD.BOLD_ON, CMD.SIZE_BIG, txt('  > ' + item.notes), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
       ];
     }),
     rule('='), lf(),
@@ -433,11 +432,10 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
         // next to the SIZE_BIG English line above. Korakot
         // 2026-06-02: "increase the size of Thai language".
         nameAlt    ? [CMD.BOLD_ON, CMD.SIZE_BIG, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
-        // Modifier / option choice line — bumped to SIZE_TALL + BOLD so
-        // the chef reads "no MSG", "extra spicy", "Chicken" etc. as
-        // clearly as the item name itself. Was SIZE_NORMAL (Korakot
-        // 2026-06-02: "increase the size of option choice").
-        item.notes ? [CMD.BOLD_ON, CMD.SIZE_TALL, txt('  > ' + item.notes), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
+        // Modifier / option choice line — SIZE_BIG so it matches the
+        // English item line exactly. Korakot 2026-06-07: second language,
+        // options, and messages must print at primary-language size.
+        item.notes ? [CMD.BOLD_ON, CMD.SIZE_BIG, txt('  > ' + item.notes), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
       ];
     }),
     idx < arr.length - 1 ? [rule('-'), lf()] : [],
@@ -491,7 +489,11 @@ function buildKitchenMessage({ order_id, table_number, order_type, customer_name
     customer_name ? [txt(customer_name), lf()] : [],
     rule('-'), lf(),
     CMD.ALIGN_CENTER,
-    CMD.BOLD_ON, CMD.SIZE_TALL,
+    // Kitchen-message body — SIZE_BIG so the chef reads "no peanut",
+    // "allergy: shellfish", etc. at the same size as the item names on
+    // a regular ticket. The wrap calc above already uses LINE_WIDTH/2
+    // for double-width characters, so no extra adjustment needed.
+    CMD.BOLD_ON, CMD.SIZE_BIG,
     ...wrapped.flatMap(line => [txt(line), lf()]),
     CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     rule('='), lf(),

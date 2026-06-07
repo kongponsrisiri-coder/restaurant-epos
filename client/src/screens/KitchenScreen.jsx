@@ -567,6 +567,17 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                       </div>
                     )}
 
+                    {/* SEPOS-046h — order-level customer note ("allergic to shellfish",
+                        "no peanut"). Was only on the printed ticket; KDS-only /
+                        Kitchen-Direct-Mode restaurants never saw it. Always-visible
+                        amber strip so the chef can't miss an allergy note on screen. */}
+                    {(order.customer_note || order.notes) && (
+                      <div style={{ background: '#7c2d12', padding: '6px 14px', fontSize: 14, fontWeight: 800, color: '#fde68a', borderBottom: '1px solid #b45309', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ flexShrink: 0 }}>⚠️ Note:</span>
+                        <span style={{ minWidth: 0, wordBreak: 'break-word' }}>{order.customer_note || order.notes}</span>
+                      </div>
+                    )}
+
                     <div style={{ padding: 10 }}>
 
   {/* ── READY (Direct Mode only — cooked items waiting to go out) ── */}

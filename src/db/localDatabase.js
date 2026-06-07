@@ -472,6 +472,8 @@ function runMigrations() {
   addColumnIfMissing('orders', 'delivery_address', 'TEXT');
   addColumnIfMissing('orders', 'delivery_notes', 'TEXT');
   addColumnIfMissing('orders', 'marketing_consent', 'INTEGER DEFAULT 0');
+  // SEPOS-046g — proper home for the widget's customer-level note.
+  addColumnIfMissing('orders', 'customer_note', 'TEXT');
   // SEPOS-DELIVERY-001 — courier auto-dispatch fields
   addColumnIfMissing('orders', 'courier_name', 'TEXT');
   addColumnIfMissing('orders', 'courier_job_id', 'TEXT');

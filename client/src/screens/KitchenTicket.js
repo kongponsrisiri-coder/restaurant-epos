@@ -317,9 +317,12 @@ function buildFullOrderBody({ order, items, bilingual = true }) {
             .map(line => `<div>${esc(line)}</div>`).join('')}
        </div>`
     : '';
-  // SEPOS-046d — customer's order-level note in big bold so the chef notices.
-  const orderNote = order?.notes
-    ? `<div class="cust-note">** ${esc(String(order.notes).slice(0, 80))} **</div>`
+  // SEPOS-046d/g — customer's order-level note in big bold so the chef
+  // notices. Reads `notes` (real-time socket payload) or `customer_note`
+  // (DB on reprint).
+  const noteText = order?.notes || order?.customer_note;
+  const orderNote = noteText
+    ? `<div class="cust-note">** ${esc(String(noteText).slice(0, 80))} **</div>`
     : '';
 
   // Group by course

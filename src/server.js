@@ -2959,6 +2959,37 @@ app.post('/api/menu/import-batch', async (req, res) => {
   finally { client.release(); }
 });
 
+// SEPOS-046h — translate Anthropic upstream error into an operator-friendly
+// message. The previous code returned a generic "Anthropic API error" with
+// no clue what went wrong (auth fail vs overloaded vs bad image), which
+// burned an entire pitch demo. Pattern-match on status code + body to
+// surface the most useful first line.
+function anthropicErrorMessage(status, body) {
+  const txt = String(body || '').toLowerCase();
+  if (status === 401 || txt.includes('authentication_error') || txt.includes('invalid x-api-key')) {
+    return 'Anthropic key rejected (401) — set or rotate ANTHROPIC_API_KEY on Railway.';
+  }
+  if (status === 403 || txt.includes('permission_error')) {
+    return 'Anthropic permission denied (403) — your key may not have access to this model.';
+  }
+  if (status === 404 || txt.includes('not_found_error')) {
+    return 'Anthropic model not found (404) — the model name may have been retired. Update the model id in the handler.';
+  }
+  if (status === 429 || txt.includes('rate_limit')) {
+    return 'Anthropic rate limit hit (429) — wait a minute and retry, or upgrade your plan.';
+  }
+  if (status === 529 || txt.includes('overloaded')) {
+    return 'Anthropic overloaded (529) — usually transient. Retry in a minute.';
+  }
+  if (status >= 500) {
+    return `Anthropic upstream error (${status}) — typically transient, retry shortly.`;
+  }
+  if (status === 400 && txt.includes('image')) {
+    return 'Anthropic rejected the image (400) — try a larger / clearer / different-format file.';
+  }
+  return `Anthropic error (${status}) — see upstream_body field for details.`;
+}
+
 // SEPOS-046f — desktop installs don't hold ANTHROPIC_API_KEY (kept on
 // Railway only). When the local server gets an AI request and has no key,
 // forward the same body to the cloud's equivalent endpoint, which DOES
@@ -2998,7 +3029,17 @@ app.post('/api/ai/scan-menu', async (req, res) => {
       const apiReq = https.request(options, (apiRes) => { let data = ''; apiRes.on('data', chunk => { data += chunk; }); apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: data })); });
       apiReq.on('error', reject); apiReq.write(requestBody); apiReq.end();
     });
-    if (result.status !== 200) { console.error('Anthropic error:', result.body); return res.status(502).json({ error: 'Anthropic API error' }); }
+    if (result.status !== 200) {
+      console.error('Anthropic error:', result.status, result.body);
+      // SEPOS-046h — pass the upstream error through so operators see
+      // "401 invalid x-api-key" / "404 model not found" / "529 overloaded"
+      // in the admin UI instead of "Anthropic API error" with no clue.
+      return res.status(502).json({
+        error: anthropicErrorMessage(result.status, result.body),
+        upstream_status: result.status,
+        upstream_body: String(result.body || '').slice(0, 500),
+      });
+    }
     const data = JSON.parse(result.body);
     const raw = data.content.map(b => b.text || '').join('');
     const clean = raw.replace(/```json|```/g, '').trim();
@@ -3026,7 +3067,15 @@ app.post('/api/ai/scan-invoice', async (req, res) => {
       const apiReq = https.request(options, (apiRes) => { let data = ''; apiRes.on('data', chunk => { data += chunk; }); apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: data })); });
       apiReq.on('error', reject); apiReq.write(requestBody); apiReq.end();
     });
-    if (result.status !== 200) throw new Error(`Anthropic API error: ${result.body}`);
+    if (result.status !== 200) {
+      console.error('Anthropic error:', result.status, result.body);
+      return res.status(502).json({
+        success: false,
+        error: anthropicErrorMessage(result.status, result.body),
+        upstream_status: result.status,
+        upstream_body: String(result.body || '').slice(0, 500),
+      });
+    }
     const aiData = JSON.parse(result.body);
     const invoice = JSON.parse(aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}');
     return res.json({ success: true, invoice });
@@ -3050,7 +3099,15 @@ app.post('/api/ai/scan-expense', async (req, res) => {
       const apiReq = https.request(options, (apiRes) => { let data = ''; apiRes.on('data', chunk => { data += chunk; }); apiRes.on('end', () => resolve({ status: apiRes.statusCode, body: data })); });
       apiReq.on('error', reject); apiReq.write(requestBody); apiReq.end();
     });
-    if (result.status !== 200) throw new Error(`Anthropic API error: ${result.body}`);
+    if (result.status !== 200) {
+      console.error('Anthropic error:', result.status, result.body);
+      return res.status(502).json({
+        success: false,
+        error: anthropicErrorMessage(result.status, result.body),
+        upstream_status: result.status,
+        upstream_body: String(result.body || '').slice(0, 500),
+      });
+    }
     const aiData = JSON.parse(result.body);
     const expense = JSON.parse(aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}');
     return res.json({ success: true, expense });
@@ -3928,11 +3985,15 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
     const total = items.reduce((s, i) => s + Number(i.unit_price || 0) * Number(i.quantity || 0), 0);
 
     await client.query('BEGIN');
+    // SEPOS-046g — customer_note column replaces the discount_reason
+    // misuse that polluted Z / Trading reports. Legacy data in existing
+    // discount_reason cells is left intact; only new orders go in the
+    // right place.
     const orderRes = await client.query(
       `INSERT INTO orders
          (table_id, status, covers, total, opened_at,
           order_type, customer_name, customer_phone, customer_email,
-          pickup_time, takeaway_status, payment_status, payment_intent_id, discount_reason,
+          pickup_time, takeaway_status, payment_status, payment_intent_id, customer_note,
           order_subtype, delivery_address, delivery_notes, marketing_consent,
           restaurant_id)
        VALUES (NULL, 'open', 1, $1, NOW(),

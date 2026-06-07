@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { SERVER_URL } from '../../api';
 
-const RESTAURANT_ID = 'siamepos';
+// SEPOS-049 follow-up — restaurant_id is discovered server-side via the
+// no-param GET below, NOT hardcoded. A hardcoded fallback would silently
+// regress to the phantom-row bug if the GET ever fails. Save is gated
+// on a known restaurant_id instead.
 
 const inp = {
   width: '100%', padding: '10px 12px', borderRadius: 8,
@@ -98,7 +101,14 @@ export default function ReservationSettingsSection() {
   const handleSave = async () => {
     setSaving(true); setError(null);
     try {
-      const targetId = settings.restaurant_id || RESTAURANT_ID;
+      // SEPOS-049 follow-up — refuse to save if we never discovered the
+      // restaurant_id. Old code fell back to the literal 'siamepos',
+      // which on Baan Siam install silently wrote to a phantom row that
+      // the widget never reads. Fail loud instead.
+      const targetId = settings.restaurant_id;
+      if (!targetId) {
+        throw new Error('Restaurant ID not loaded — refresh the page and try again. (If this keeps happening, the server may be unreachable.)');
+      }
       const res = await fetch(`${SERVER_URL}/api/reservations/settings/${targetId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

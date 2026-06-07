@@ -48,7 +48,14 @@ function AIScannerModal({ onClose, onImported }) {
       const res = await fetch(`${SERVER_URL}/api/ai/scan-menu`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image_base64: base64, media_type }) });
       clearInterval(interval); setScanStep(SCAN_STEPS.length);
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || 'Scan failed');
+      if (!res.ok || !data.success) {
+        // SEPOS-046h — surface upstream Anthropic diagnostic so the operator
+        // knows whether to rotate the key, retry, or report a model change.
+        const detail = data.upstream_status
+          ? ` (upstream ${data.upstream_status})`
+          : '';
+        throw new Error((data.error || 'Scan failed') + detail);
+      }
       await new Promise(r => setTimeout(r, 600));
       setScannedMenu(data.menu); setStage('results');
     } catch (err) { clearInterval(interval); setError(err.message || 'Scan failed — try again'); setStage('upload'); }

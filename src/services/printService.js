@@ -454,11 +454,13 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
     order.order_subtype === 'delivery' && order.delivery_address
       ? wrapDeliveryAddress(order.delivery_address)
       : [],
-    // SEPOS-046d — customer's order-level note ("no peanut", "allergies",
-    // "extra spicy") in big bold text so the chef can't miss it.
-    order.notes ? [
+    // SEPOS-046d/g — customer's order-level note ("no peanut",
+    // "allergies", "extra spicy") in big bold text so the chef can't
+    // miss it. Reads `notes` (from real-time socket payload at order
+    // submission) or `customer_note` (from DB on later reprints).
+    (order.notes || order.customer_note) ? [
       lf(),
-      CMD.BOLD_ON, CMD.SIZE_TALL, txt('** ' + String(order.notes).slice(0, 80) + ' **'),
+      CMD.BOLD_ON, CMD.SIZE_TALL, txt('** ' + String(order.notes || order.customer_note).slice(0, 80) + ' **'),
       CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     ] : [],
     rule('='), lf(),

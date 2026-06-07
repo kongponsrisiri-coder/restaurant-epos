@@ -151,6 +151,10 @@ async function initDB() {
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_notes TEXT`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS marketing_consent INTEGER DEFAULT 0`);
+    // SEPOS-046g — proper home for the widget's customer-level note
+    // ("PEANUT ALLERGY", "extra spicy"). Used to be misfiled into
+    // discount_reason, which polluted reports that expected discount text.
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_note TEXT`);
     // SEPOS-DELIVERY-001 — courier auto-dispatch (Stuart / Uber Direct)
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS courier_name VARCHAR(50)`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS courier_job_id VARCHAR(255)`);

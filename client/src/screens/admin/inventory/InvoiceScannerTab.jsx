@@ -218,7 +218,10 @@ export default function InvoiceScannerTab() {
       const endpoint = mode === 'invoice' ? '/api/ai/scan-invoice' : '/api/ai/scan-expense';
       const res  = await fetch(`${SERVER_URL}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image_base64: base64, media_type }) });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || 'Scan failed');
+      if (!res.ok || !data.success) {
+        const detail = data.upstream_status ? ` (upstream ${data.upstream_status})` : '';
+        throw new Error((data.error || 'Scan failed') + detail);
+      }
       if (mode === 'invoice') {
         const inv = data.invoice;
         setInvoiceData({ supplier_name: inv.supplier_name || '', invoice_date: inv.invoice_date || '', invoice_number: inv.invoice_number || '', total_amount: inv.total_amount || 0 });

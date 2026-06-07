@@ -351,7 +351,7 @@
     // Populated by loadAvailability() and refreshed on every step transition
     // so the busy chip stays accurate as the kitchen empties / fills.
     availability: null, // { tier, wait_minutes, pickup_iso }
-    customer: { name:'', phone:'', email:'', order_subtype:'collection', delivery_postcode:'', delivery_address:'', delivery_notes:'', marketing_consent:false, delivery_check:null },
+    customer: { name:'', phone:'', email:'', order_subtype:'collection', delivery_postcode:'', delivery_address:'', delivery_notes:'', order_notes:'', marketing_consent:false, delivery_check:null },
     error: '',
     orderResult: null,
     // SEPOS-040 — Stripe state. Populated on widget open by loadStripeConfig().
@@ -396,6 +396,27 @@
     d.setMinutes(d.getMinutes() + 20);
     return d.toISOString();
   }
+  // SEPOS-046e — allergens beside each menu item so customers don't
+  // have to ask. `allergens` is a JSON-stringified array on the menu_item
+  // row (e.g. '["Fish","Gluten","Soybeans"]'). Defensive parsing — invalid
+  // / empty values fall through to nothing.
+  function renderAllergens(raw) {
+    if (!raw) return '';
+    let list = [];
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      list = Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+    } catch { return ''; }
+    if (list.length === 0) return '';
+    return `
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">
+        ${list.map(a => `
+          <span style="font-size:10px;font-weight:700;color:#7a4a00;background:#fef3c7;border:1px solid #fcd34d;border-radius:4px;padding:1px 6px;text-transform:uppercase;letter-spacing:0.04em;">${esc(a)}</span>
+        `).join('')}
+      </div>
+    `;
+  }
+
   function renderBusyChip() {
     if (!state.availability) return '';
     // SEPOS-047 v2 — customer-facing: just the wait time, always green.
@@ -532,6 +553,7 @@
               <div class="tw-item" data-add="${i.id}">
                 <div class="tw-item-name">${esc(i.name)}</div>
                 ${i.description ? `<div class="tw-item-desc">${esc(i.description)}</div>` : ''}
+                ${renderAllergens(i.allergens)}
                 <div class="tw-item-foot">
                   <span class="tw-item-price">${fmt(i.price)}</span>
                   <button class="tw-item-add" aria-label="Add ${esc(i.name)}">+</button>
@@ -640,6 +662,11 @@
         <input class="tw-input" id="tw-delivery-notes" type="text"
           value="${esc(state.customer.delivery_notes)}" placeholder="e.g. ring buzzer 12, leave at door" />
       ` : ''}
+
+      <label class="tw-label">Anything we should know? (optional)</label>
+      <textarea class="tw-input" id="tw-order-notes" rows="2"
+        placeholder="e.g. allergic to peanuts, extra spicy, no coriander"
+        style="resize:vertical;">${esc(state.customer.order_notes || '')}</textarea>
 
       <label style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;font-size:13px;color:#555;cursor:pointer;">
         <input type="checkbox" id="tw-consent" ${state.customer.marketing_consent ? 'checked' : ''}
@@ -1040,6 +1067,7 @@
     if ($('tw-email'))            c.email            = $('tw-email').value.trim();
     if ($('tw-delivery-address')) c.delivery_address = $('tw-delivery-address').value.trim();
     if ($('tw-delivery-notes'))   c.delivery_notes   = $('tw-delivery-notes').value.trim();
+    if ($('tw-order-notes'))      c.order_notes      = $('tw-order-notes').value.trim();
     if ($('tw-consent'))          c.marketing_consent = $('tw-consent').checked;
   }
 
@@ -1134,6 +1162,10 @@
           delivery_notes:    state.customer.order_subtype === 'delivery'
             ? (state.customer.delivery_notes || null)
             : null,
+          // SEPOS-046d — single order-level note for both collection and
+          // delivery. Server stores it on the order; print path renders
+          // it prominently on the kitchen ticket.
+          notes:             state.customer.order_notes || null,
           marketing_consent: !!state.customer.marketing_consent,
           // SEPOS-040 — include the verified PI id (null in mock mode).
           payment_intent_id: paymentIntentId || null,
@@ -1173,7 +1205,7 @@
     state = {
       step: 1, settings: prevSettings, menu: prevMenu, activeCategory: null,
       cart: [], pickupKind: 'asap', pickupISO: null,
-      customer: { name:'', phone:'', email:'', order_subtype:'collection', delivery_postcode:'', delivery_address:'', delivery_notes:'', marketing_consent:false, delivery_check:null },
+      customer: { name:'', phone:'', email:'', order_subtype:'collection', delivery_postcode:'', delivery_address:'', delivery_notes:'', order_notes:'', marketing_consent:false, delivery_check:null },
       error: '', orderResult: null,
       stripeConfigured:    prevStripeConfigured,
       stripePublishableKey: prevStripePublishableKey,

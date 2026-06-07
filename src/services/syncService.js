@@ -253,6 +253,17 @@ async function applyToCloud(actionType, payload) {
       if (!r.ok) throw new Error(`update_item_status ${r.status}`);
       return r.json();
     }
+    case 'update_kv_settings': {
+      // SEPOS-049 part-2 — drain KV settings push (printer_*, delivery_*,
+      // kitchen_print_mode, service_charge_*, etc). Idempotent: server
+      // upserts by key, so replay after a successful immediate-push is
+      // harmless.
+      const r = await fetch(url('/api/settings'), {
+        method: 'PUT', ...json(payload.updates || {}),
+      });
+      if (!r.ok) throw new Error(`update_kv_settings ${r.status}`);
+      return r.json();
+    }
     case 'update_restaurant_settings': {
       // SEPOS-050 — durable settings push. Forwards the PUT body that
       // the operator saved on the desktop. Idempotent: PG ON CONFLICT

@@ -446,6 +446,21 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     order.customer_name ? [txt(order.customer_name), lf()] : [],
+    order.customer_phone ? [txt(order.customer_phone), lf()] : [],
+    // SEPOS-046c — delivery orders carry the customer address so the
+    // driver (or chef bagging the order) sees where it's going. Wrap
+    // long addresses across multiple lines so they don't overflow the
+    // 80mm roll.
+    order.order_subtype === 'delivery' && order.delivery_address
+      ? wrapDeliveryAddress(order.delivery_address)
+      : [],
+    // SEPOS-046d — customer's order-level note ("no peanut", "allergies",
+    // "extra spicy") in big bold text so the chef can't miss it.
+    order.notes ? [
+      lf(),
+      CMD.BOLD_ON, CMD.SIZE_TALL, txt('** ' + String(order.notes).slice(0, 80) + ' **'),
+      CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    ] : [],
     rule('='), lf(),
     CMD.ALIGN_LEFT,
     ...courseBlocks,
@@ -456,6 +471,19 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
   ];
 
   return flatten(parts);
+}
+
+// Wrap a delivery address onto the receipt roll. Bold, normal size,
+// each comma-separated line on its own row so the driver can scan it
+// without squinting.
+function wrapDeliveryAddress(address) {
+  const lines = String(address || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (lines.length === 0) return [];
+  return [
+    lf(),
+    CMD.BOLD_ON, txt('-- DELIVERY --'), CMD.BOLD_OFF, lf(),
+    ...lines.flatMap(line => [CMD.BOLD_ON, txt(line), CMD.BOLD_OFF, lf()]),
+  ];
 }
 
 // ── Test page ─────────────────────────────────────────────────────────────────

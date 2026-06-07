@@ -261,6 +261,10 @@ function ticketCSS() {
        the primary item name (Korakot 2026-06-07). */
     .note     { font-size:20px; font-weight:800; margin:-2px 0 6px 50px; line-height:1.2; }
     .note-alt { font-size:20px; font-weight:800; margin:-4px 0 4px 50px; line-height:1.2; color:#333; }
+    .delivery { margin:6px 0; padding:6px 4px; border-top:1px dashed #000; border-bottom:1px dashed #000; }
+    .delivery-label { font-size:14px; font-weight:800; text-align:center; margin-bottom:4px; letter-spacing:1px; }
+    .delivery div   { font-size:16px; font-weight:800; line-height:1.3; }
+    .cust-note { font-size:18px; font-weight:800; text-align:center; margin:6px 0; padding:4px 0; line-height:1.3; }
     .foot   { text-align:center; font-size:13px; font-weight:700; margin-top:6px; }
   `;
 }
@@ -304,6 +308,19 @@ function buildFullOrderBody({ order, items, bilingual = true }) {
   const heading  = orderHeading(order);
   const now      = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const customer = order?.customer_name ? `<div class="sub">${esc(order.customer_name)}</div>` : '';
+  const phone    = order?.customer_phone ? `<div class="sub">${esc(order.customer_phone)}</div>` : '';
+  // SEPOS-046c — delivery orders show the address in bold under the customer name.
+  const delivery = (order?.order_subtype === 'delivery' && order?.delivery_address)
+    ? `<div class="delivery">
+         <div class="delivery-label">— DELIVERY —</div>
+         ${String(order.delivery_address).split(',').map(s => s.trim()).filter(Boolean)
+            .map(line => `<div>${esc(line)}</div>`).join('')}
+       </div>`
+    : '';
+  // SEPOS-046d — customer's order-level note in big bold so the chef notices.
+  const orderNote = order?.notes
+    ? `<div class="cust-note">** ${esc(String(order.notes).slice(0, 80))} **</div>`
+    : '';
 
   // Group by course
   const byCourse = {};
@@ -325,6 +342,9 @@ function buildFullOrderBody({ order, items, bilingual = true }) {
   return `
     <div class="head">${esc(heading)}</div>
     ${customer}
+    ${phone}
+    ${delivery}
+    ${orderNote}
     <div class="rule"></div>
     ${courseBlocks}
     <div class="rule"></div>

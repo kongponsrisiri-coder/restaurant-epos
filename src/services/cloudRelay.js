@@ -70,7 +70,13 @@ async function autoPrintIncomingTakeaway(payload) {
       course: 1,
       quantity: it.quantity || 1,
       name: it.name || it.item_name || 'Item',
+      // Pass the Thai (or second-language) name through so the kitchen
+      // ticket prints bilingual for widget orders. /api/orders/:id
+      // already joins menu_items.name_alt — we were just dropping it.
+      name_alt: it.name_alt || null,
       notes: it.notes || (Array.isArray(it.modifiers) ? it.modifiers.map(m => m.name).join(', ') : ''),
+      // Customer per-item note (textarea on the widget, if used).
+      item_note: it.item_note || null,
     });
     const kitchenItems = items.filter(it => !barIdSet.has(it.menu_item_id)).map(toPrintItem);
     const barItems     = items.filter(it =>  barIdSet.has(it.menu_item_id)).map(toPrintItem);
@@ -80,6 +86,9 @@ async function autoPrintIncomingTakeaway(payload) {
       order_type: 'takeaway',
       order_subtype: payload.order_subtype || 'collection',
       customer_name: payload.customer_name || '',
+      customer_phone: payload.customer_phone || '',
+      delivery_address: payload.delivery_address || null,
+      notes: payload.notes || null,
       table_number: null,
     };
 

@@ -1281,6 +1281,38 @@ app.put('/api/settings', async (req, res) => {
     for (const [key, value] of Object.entries(updates)) {
       await pool.query('INSERT INTO settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', [key, value]);
     }
+
+    // SEPOS-049 part-2 — same write-through pattern for the KV settings
+    // table. Without this, desktop saves to e.g. printer_kitchen_ip,
+    // restaurant_postcode, delivery_radius_miles, kitchen_print_mode,
+    // service_charge_rate land in local SQLite and get overwritten on
+    // the next pull tick (cloud is authoritative). Enqueue first so
+    // offline saves can't be silently lost, then immediate push.
+    const archiveService = require('./services/archiveService');
+    const isLocal = archiveService.isLocalInstall();
+    const cloudUrl = process.env.CLOUD_API_URL;
+    if (isLocal) {
+      const offlineQueue = require('./services/offlineQueue');
+      const queueId = await offlineQueue.enqueue('update_kv_settings', { updates });
+      console.log(`[sync] KV settings PUT enqueued as queueId=${queueId} (${Object.keys(updates).length} keys)`);
+      if (queueId && cloudUrl) {
+        fetch(`${cloudUrl}/api/settings`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        })
+          .then(async r => {
+            if (r.ok) {
+              await offlineQueue.markSynced(queueId);
+              console.log(`[sync] ✓ KV settings pushed to cloud (${Object.keys(updates).length} keys)`);
+            } else {
+              console.warn(`[sync] ✗ KV settings push ${r.status} — left in queue for retry`);
+            }
+          })
+          .catch(err => console.warn('[sync] KV settings push failed, queued for retry:', err.message));
+      }
+    }
+
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -3920,6 +3952,10 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
       item_count: items.length,
       order_subtype: subtype,
       delivery_address: subtype === 'delivery' ? delivery_address.trim() : null,
+      // SEPOS-046d — single order-level customer note ("no peanut",
+      // "allergies: shellfish", "leave at door"). Surfaced on the
+      // kitchen ticket so the chef sees it immediately.
+      notes: notes || null,
     });
 
     // Fire-and-forget auto kitchen + bar print. Runs server-side (not
@@ -3965,6 +4001,9 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
           order_type: 'takeaway',
           order_subtype: subtype,
           customer_name: customer_name.trim(),
+          customer_phone: (customer_phone || '').trim(),
+          delivery_address: subtype === 'delivery' ? (delivery_address || '').trim() : null,
+          notes: notes || null,
           table_number: null,
         };
 

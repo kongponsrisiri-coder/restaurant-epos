@@ -2959,11 +2959,36 @@ app.post('/api/menu/import-batch', async (req, res) => {
   finally { client.release(); }
 });
 
+// SEPOS-046f — desktop installs don't hold ANTHROPIC_API_KEY (kept on
+// Railway only). When the local server gets an AI request and has no key,
+// forward the same body to the cloud's equivalent endpoint, which DOES
+// have the key. Returns the cloud's response verbatim. Falls back to the
+// old "not set" error only if cloud isn't reachable either.
+async function relayAiToCloud(path, body) {
+  const cloudUrl = process.env.CLOUD_API_URL;
+  if (!cloudUrl) return null;
+  try {
+    const r = await fetch(`${cloudUrl}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return { status: r.status, json: await r.json() };
+  } catch (err) {
+    console.warn(`[ai-relay] ${path} failed:`, err.message);
+    return null;
+  }
+}
+
 app.post('/api/ai/scan-menu', async (req, res) => {
   try {
     const { image_base64, media_type } = req.body;
     if (!image_base64) return res.status(400).json({ error: 'image_base64 is required' });
-    if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set on Railway' });
+    if (!process.env.ANTHROPIC_API_KEY) {
+      const relayed = await relayAiToCloud('/api/ai/scan-menu', req.body);
+      if (relayed) return res.status(relayed.status).json(relayed.json);
+      return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set locally and no cloud relay configured' });
+    }
     const isImage = media_type && media_type.startsWith('image/');
     const contentItem = isImage ? { type: 'image', source: { type: 'base64', media_type, data: image_base64 } } : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: image_base64 } };
     const requestBody = JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 4000, messages: [{ role: 'user', content: [contentItem, { type: 'text', text: `You are an expert restaurant menu reader and UK food safety specialist.\n\nAnalyse this menu image/document and extract ALL dishes. For each dish provide:\n1. English name\n2. Thai name (transliterate or translate)\n3. Short appetising description (1-2 sentences)\n4. Price in GBP — exact if visible, estimated if not. Mark assumed prices.\n5. UK 14 allergens — gluten, crustaceans, eggs, fish, peanuts, soybeans, milk, nuts, celery, mustard, sesame, sulphites, lupin, molluscs. Fish sauce is in almost all Thai food.\n6. Category (Starters, Mains, Curries, Noodles, Rice Dishes, Salads, Desserts, Drinks, Sides)\n7. Confidence score 0-100\n\nReturn ONLY valid JSON, no markdown, no explanation:\n{\n  "restaurant_type": "Thai Restaurant",\n  "total_dishes": 0,\n  "categories": [\n    {\n      "name": "Category Name",\n      "dishes": [\n        {\n          "name_en": "English Name",\n          "name_th": "ชื่อภาษาไทย",\n          "description": "Description",\n          "price": 12.50,\n          "price_assumed": false,\n          "allergens": ["Fish","Soybeans"],\n          "confidence": 95\n        }\n      ]\n    }\n  ]\n}` }] }] });
@@ -2988,6 +3013,11 @@ app.post('/api/ai/scan-invoice', async (req, res) => {
   try {
     const { image_base64, media_type } = req.body;
     if (!image_base64) return res.status(400).json({ success: false, error: 'No image provided' });
+    if (!process.env.ANTHROPIC_API_KEY) {
+      const relayed = await relayAiToCloud('/api/ai/scan-invoice', req.body);
+      if (relayed) return res.status(relayed.status).json(relayed.json);
+      return res.status(500).json({ success: false, error: 'ANTHROPIC_API_KEY not set locally and no cloud relay configured' });
+    }
     const INVOICE_PROMPT = `You are reading a supplier invoice or delivery note for a restaurant.\nExtract all information and return ONLY a valid JSON object — no other text, no markdown, no explanation.\n\nRequired JSON structure:\n{\n  "supplier_name": "string",\n  "invoice_date": "YYYY-MM-DD",\n  "invoice_number": "string",\n  "total_amount": number,\n  "line_items": [\n    { "name": "string", "quantity": number, "unit": "string", "unit_price": number, "line_total": number }\n  ]\n}\n\nRules: If a value is missing use null for strings and 0 for numbers. Convert prices to GBP. Return ONLY the JSON object.`;
     const https = require('https');
     const requestBody = JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2000, messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: media_type || 'image/jpeg', data: image_base64 } }, { type: 'text', text: INVOICE_PROMPT }] }] });
@@ -3007,6 +3037,11 @@ app.post('/api/ai/scan-expense', async (req, res) => {
   try {
     const { image_base64, media_type } = req.body;
     if (!image_base64) return res.status(400).json({ success: false, error: 'No image provided' });
+    if (!process.env.ANTHROPIC_API_KEY) {
+      const relayed = await relayAiToCloud('/api/ai/scan-expense', req.body);
+      if (relayed) return res.status(relayed.status).json(relayed.json);
+      return res.status(500).json({ success: false, error: 'ANTHROPIC_API_KEY not set locally and no cloud relay configured' });
+    }
     const EXPENSE_PROMPT = `You are reading a receipt, bill or expense document for a restaurant.\nExtract the key information and return ONLY a valid JSON object — no other text, no markdown.\n\nRequired JSON structure:\n{\n  "vendor": "string", "date": "YYYY-MM-DD", "total_amount": number,\n  "description": "string", "category": "overhead|labour|other",\n  "line_items": [{ "description": "string", "amount": number }]\n}\n\nCategory: overhead=rent/utilities/insurance/repairs, labour=wages/staff, other=equipment/misc. Return ONLY JSON.`;
     const https = require('https');
     const requestBody = JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: media_type || 'image/jpeg', data: image_base64 } }, { type: 'text', text: EXPENSE_PROMPT }] }] });

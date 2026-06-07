@@ -450,6 +450,11 @@ function runMigrations() {
   // SEPOS-050: per-restaurant online-booking party-size cap + contact phone
   addColumnIfMissing('restaurant_settings', 'max_party_size', 'INTEGER DEFAULT 8');
   addColumnIfMissing('restaurant_settings', 'restaurant_phone', 'TEXT');
+  addColumnIfMissing('restaurant_settings', 'takeaway_busy_threshold',      'INTEGER DEFAULT 5');
+  addColumnIfMissing('restaurant_settings', 'takeaway_very_busy_threshold', 'INTEGER DEFAULT 10');
+  addColumnIfMissing('restaurant_settings', 'takeaway_wait_quiet',          'INTEGER DEFAULT 20');
+  addColumnIfMissing('restaurant_settings', 'takeaway_wait_busy',           'INTEGER DEFAULT 35');
+  addColumnIfMissing('restaurant_settings', 'takeaway_wait_very_busy',      'INTEGER DEFAULT 50');
   // SEPOS-STRIPE-001: Stripe webhook payment-failure flag
   addColumnIfMissing('restaurants', 'payment_failed_at', 'TIMESTAMP');
   // SEPOS-034: takeaway / delivery online ordering

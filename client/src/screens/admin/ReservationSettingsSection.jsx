@@ -61,6 +61,12 @@ export default function ReservationSettingsSection() {
     booking_lead_hours:   1,
     booking_advance_days: 60,
     is_active:            true,
+    // SEPOS-047 — kitchen-load wait time for the takeaway widget.
+    takeaway_busy_threshold:      5,
+    takeaway_very_busy_threshold: 10,
+    takeaway_wait_quiet:          20,
+    takeaway_wait_busy:           35,
+    takeaway_wait_very_busy:      50,
   });
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
@@ -249,6 +255,39 @@ export default function ReservationSettingsSection() {
           <Field label="Advance booking (days)" hint="How far ahead customers can book — e.g. 60 = 2 months">
             <input type="number" min={1} max={365} value={settings.booking_advance_days}
               onChange={e => set('booking_advance_days', parseInt(e.target.value) || 1)} style={inp} />
+          </Field>
+        </div>
+      </Card>
+
+      {/* SEPOS-047 — Online Takeaway wait time tuning. */}
+      <Card title="Online Takeaway — Wait Time" emoji="🥡">
+        <div style={{ background: '#f8f8f8', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: '#555', lineHeight: 1.6, marginBottom: 16 }}>
+          The takeaway widget shows customers a live wait time based on how busy
+          the kitchen is right now — no pickup slot picker, no over-promising.
+          "Busy" is measured by how many items the kitchen is currently cooking
+          across all open orders (dine-in + takeaway).
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <Field label="🟢 Quiet wait (min)" hint="Shown when fewer items are cooking than the Busy threshold">
+            <input type="number" min={1} max={180} value={settings.takeaway_wait_quiet}
+              onChange={e => set('takeaway_wait_quiet', parseInt(e.target.value) || 1)} style={inp} />
+          </Field>
+          <Field label="Busy threshold" hint="Items cooking ≥ this → flips to Busy">
+            <input type="number" min={1} max={100} value={settings.takeaway_busy_threshold}
+              onChange={e => set('takeaway_busy_threshold', parseInt(e.target.value) || 1)} style={inp} />
+          </Field>
+          <Field label="🟡 Busy wait (min)" hint="Quoted when in the Busy tier">
+            <input type="number" min={1} max={180} value={settings.takeaway_wait_busy}
+              onChange={e => set('takeaway_wait_busy', parseInt(e.target.value) || 1)} style={inp} />
+          </Field>
+          <Field label="Very busy threshold" hint="Items cooking ≥ this → flips to Very busy">
+            <input type="number" min={1} max={100} value={settings.takeaway_very_busy_threshold}
+              onChange={e => set('takeaway_very_busy_threshold', parseInt(e.target.value) || 1)} style={inp} />
+          </Field>
+          <Field label="🔴 Very busy wait (min)" hint="Quoted when in the Very busy tier">
+            <input type="number" min={1} max={180} value={settings.takeaway_wait_very_busy}
+              onChange={e => set('takeaway_wait_very_busy', parseInt(e.target.value) || 1)} style={inp} />
           </Field>
         </div>
       </Card>

@@ -2489,7 +2489,9 @@ app.get('/api/reservations/settings', async (req, res) => {
               TO_CHAR(dinner_service_end, 'HH24:MI')   AS dinner_service_end,
               slot_interval_mins, max_covers_per_slot, max_party_size,
               restaurant_phone,
-              booking_lead_hours, booking_advance_days, is_active
+              booking_lead_hours, booking_advance_days, is_active,
+              takeaway_busy_threshold, takeaway_very_busy_threshold,
+              takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy
        FROM restaurant_settings WHERE restaurant_id = $1`, [rid]
     );
     const s = result.rows[0] || { restaurant_id: rid, is_active: true };
@@ -2511,7 +2513,9 @@ app.get('/api/reservations/settings/:restaurantId', widgetCors, async (req, res)
               TO_CHAR(dinner_service_end, 'HH24:MI')   AS dinner_service_end,
               slot_interval_mins, max_covers_per_slot, max_party_size,
               restaurant_phone,
-              booking_lead_hours, booking_advance_days, is_active
+              booking_lead_hours, booking_advance_days, is_active,
+              takeaway_busy_threshold, takeaway_very_busy_threshold,
+              takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy
        FROM restaurant_settings WHERE restaurant_id = $1`,
       [req.params.restaurantId]
     );
@@ -2731,6 +2735,8 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
       dinner_service_start, dinner_service_end,
       slot_interval_mins, max_covers_per_slot, max_party_size, restaurant_phone,
       booking_lead_hours, booking_advance_days, is_active,
+      takeaway_busy_threshold, takeaway_very_busy_threshold,
+      takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
     } = req.body;
     await pool.query(
       `INSERT INTO restaurant_settings
@@ -2738,8 +2744,10 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
           service_type, lunch_service_start, lunch_service_end,
           dinner_service_start, dinner_service_end,
           slot_interval_mins, max_covers_per_slot, max_party_size, restaurant_phone,
-          booking_lead_hours, booking_advance_days, is_active)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+          booking_lead_hours, booking_advance_days, is_active,
+          takeaway_busy_threshold, takeaway_very_busy_threshold,
+          takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
        ON CONFLICT (restaurant_id) DO UPDATE SET
          restaurant_name      = EXCLUDED.restaurant_name,
          brand_colour         = EXCLUDED.brand_colour,
@@ -2756,12 +2764,22 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
          restaurant_phone     = EXCLUDED.restaurant_phone,
          booking_lead_hours   = EXCLUDED.booking_lead_hours,
          booking_advance_days = EXCLUDED.booking_advance_days,
-         is_active            = EXCLUDED.is_active`,
+         is_active            = EXCLUDED.is_active,
+         takeaway_busy_threshold      = EXCLUDED.takeaway_busy_threshold,
+         takeaway_very_busy_threshold = EXCLUDED.takeaway_very_busy_threshold,
+         takeaway_wait_quiet          = EXCLUDED.takeaway_wait_quiet,
+         takeaway_wait_busy           = EXCLUDED.takeaway_wait_busy,
+         takeaway_wait_very_busy      = EXCLUDED.takeaway_wait_very_busy`,
       [req.params.restaurantId, restaurant_name, brand_colour, opening_time, last_booking_time,
        service_type || 'all_day', lunch_service_start || '11:00', lunch_service_end || '14:30',
        dinner_service_start || '17:30', dinner_service_end || '21:30',
        slot_interval_mins, max_covers_per_slot, max_party_size || 8, restaurant_phone || null,
-       booking_lead_hours, booking_advance_days, is_active]
+       booking_lead_hours, booking_advance_days, is_active,
+       takeaway_busy_threshold      ?? 5,
+       takeaway_very_busy_threshold ?? 10,
+       takeaway_wait_quiet          ?? 20,
+       takeaway_wait_busy           ?? 35,
+       takeaway_wait_very_busy      ?? 50]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -3416,6 +3434,57 @@ app.get('/api/network-info', (req, res) => {
 
 // Public settings the widget needs — opening hours + restaurant name —
 // without leaking the rest of restaurant_settings.
+// SEPOS-047 — kitchen-load wait time. Widget hits this on load to show
+// the busy chip ("🟢 Quiet · 20 min") and to learn what pickup_time to
+// stamp when the customer hits Place Order (no picker on the widget).
+//
+// Backlog = order_items currently 'cooking' (fired but not served) across
+// all open orders for this restaurant. Both dine-in and takeaway cooking
+// share the same kitchen, so both count toward the backlog.
+//
+// Tiers: backlog < busy_threshold → 'quiet'
+//        backlog < very_busy_threshold → 'busy'
+//        otherwise → 'very_busy'
+app.get('/api/takeaway/availability', widgetCors, async (req, res) => {
+  try {
+    const restaurantId = resolveRestaurantId(req);
+    const [settingsRes, backlogRes] = await Promise.all([
+      pool.query(
+        `SELECT takeaway_busy_threshold, takeaway_very_busy_threshold,
+                takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy
+           FROM restaurant_settings WHERE restaurant_id = $1`,
+        [restaurantId]
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS n
+           FROM order_items oi
+           JOIN orders o ON o.id = oi.order_id
+          WHERE o.restaurant_id = $1
+            AND o.status = 'open'
+            AND oi.status = 'cooking'
+            AND oi.voided = 0`,
+        [restaurantId]
+      ),
+    ]);
+    const s = settingsRes.rows[0] || {};
+    const busyN     = Number(s.takeaway_busy_threshold      ?? 5);
+    const veryBusyN = Number(s.takeaway_very_busy_threshold ?? 10);
+    const waitQ     = Number(s.takeaway_wait_quiet          ?? 20);
+    const waitB     = Number(s.takeaway_wait_busy           ?? 35);
+    const waitV     = Number(s.takeaway_wait_very_busy      ?? 50);
+    const backlog   = Number(backlogRes.rows[0]?.n || 0);
+    let tier, wait_minutes;
+    if      (backlog < busyN)     { tier = 'quiet';     wait_minutes = waitQ; }
+    else if (backlog < veryBusyN) { tier = 'busy';      wait_minutes = waitB; }
+    else                          { tier = 'very_busy'; wait_minutes = waitV; }
+    const pickup_iso = new Date(Date.now() + wait_minutes * 60000).toISOString();
+    res.json({ tier, wait_minutes, pickup_iso, backlog });
+  } catch (err) {
+    console.error('GET /api/takeaway/availability', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
   try {
     const r = await pool.query(`
@@ -3559,7 +3628,12 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
   try {
     const {
       customer_name, customer_phone, customer_email,
-      pickup_time,    // ISO timestamp
+      // SEPOS-047 — pickup_time is now optional. When missing, the server
+      // computes it from current kitchen backlog (same logic as the
+      // /api/takeaway/availability endpoint). Keeping the optional input
+      // means staff / admin tools can still place a takeaway at a chosen
+      // time without going through the load-aware widget flow.
+      pickup_time: pickup_time_input,
       items = [],     // [{ menu_item_id, quantity, unit_price, name, item_note }]
       notes,
       marketing_consent,
@@ -3570,11 +3644,13 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
       // SEPOS-040 — real Stripe payment. Absent in demo/mock mode.
       payment_intent_id,
     } = req.body;
+    let pickup_time = pickup_time_input;
 
     if (!customer_name || !customer_name.trim()) return res.status(400).json({ error: 'Name is required' });
     if (!customer_phone || !customer_phone.trim()) return res.status(400).json({ error: 'Phone is required' });
     if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Cart is empty' });
-    if (!pickup_time) return res.status(400).json({ error: 'Pickup time is required' });
+    // pickup_time is optional — server-side computation happens after
+    // restaurant_id is resolved below.
     // Normalise + validate the subtype. Delivery requires an address.
     const subtype = order_subtype === 'delivery' ? 'delivery' : 'collection';
     if (subtype === 'delivery' && (!delivery_address || !delivery_address.trim())) {
@@ -3614,10 +3690,37 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
     const settingsRes = await client.query(
       `SELECT service_type, opening_time, last_booking_time,
               lunch_service_start, lunch_service_end,
-              dinner_service_start, dinner_service_end
+              dinner_service_start, dinner_service_end,
+              takeaway_busy_threshold, takeaway_very_busy_threshold,
+              takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy
          FROM restaurant_settings WHERE restaurant_id = $1`,
       [restaurantId]
     );
+
+    // SEPOS-047 — load-aware pickup_time. If the widget didn't send one
+    // (new flow), compute it from current kitchen backlog. Keeps the
+    // server as the source of truth so a stale widget can't underquote.
+    if (!pickup_time) {
+      const s = settingsRes.rows[0] || {};
+      const busyN     = Number(s.takeaway_busy_threshold      ?? 5);
+      const veryBusyN = Number(s.takeaway_very_busy_threshold ?? 10);
+      const waitQ     = Number(s.takeaway_wait_quiet          ?? 20);
+      const waitB     = Number(s.takeaway_wait_busy           ?? 35);
+      const waitV     = Number(s.takeaway_wait_very_busy      ?? 50);
+      const backlogRes = await client.query(
+        `SELECT COUNT(*)::int AS n
+           FROM order_items oi
+           JOIN orders o ON o.id = oi.order_id
+          WHERE o.restaurant_id = $1
+            AND o.status = 'open'
+            AND oi.status = 'cooking'
+            AND oi.voided = 0`,
+        [restaurantId]
+      );
+      const backlog = Number(backlogRes.rows[0]?.n || 0);
+      const waitMinutes = backlog < busyN ? waitQ : backlog < veryBusyN ? waitB : waitV;
+      pickup_time = new Date(Date.now() + waitMinutes * 60000).toISOString();
+    }
     const settings = settingsRes.rows[0];
     if (settings) {
       const pickupDate = new Date(pickup_time);
@@ -3796,6 +3899,9 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
       // so the customer has something to quote when collecting.
       order_number: 'T' + String(orderId).padStart(4, '0'),
       total,
+      // SEPOS-047 — return the canonical pickup_time so the widget shows
+      // the server-computed wait, not whatever it had cached.
+      pickup_time,
     });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});

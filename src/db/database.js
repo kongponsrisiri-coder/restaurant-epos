@@ -407,6 +407,12 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS dinne
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS dinner_service_end TIME DEFAULT '21:30'`);
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS max_party_size INTEGER DEFAULT 8`);
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS restaurant_phone VARCHAR(30)`);
+// SEPOS-047 — kitchen-load wait time for the takeaway widget
+await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takeaway_busy_threshold      INTEGER DEFAULT 5`);
+await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takeaway_very_busy_threshold INTEGER DEFAULT 10`);
+await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takeaway_wait_quiet          INTEGER DEFAULT 20`);
+await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takeaway_wait_busy           INTEGER DEFAULT 35`);
+await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takeaway_wait_very_busy      INTEGER DEFAULT 50`);
     await pool.query(`
       INSERT INTO restaurant_settings (restaurant_id, restaurant_name)
       VALUES ('siamepos', 'SiamEPOS Restaurant')

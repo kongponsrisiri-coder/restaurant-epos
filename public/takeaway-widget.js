@@ -347,8 +347,10 @@
     menu: [],
     activeCategory: null,
     cart: [],
-    pickupKind: 'asap',
-    pickupISO: null,
+    // SEPOS-047 — kitchen-load-aware wait time. No customer-facing picker.
+    // Populated by loadAvailability() and refreshed on every step transition
+    // so the busy chip stays accurate as the kitchen empties / fills.
+    availability: null, // { tier, wait_minutes, pickup_iso }
     customer: { name:'', phone:'', email:'', order_subtype:'collection', delivery_postcode:'', delivery_address:'', delivery_notes:'', marketing_consent:false, delivery_check:null },
     error: '',
     orderResult: null,
@@ -386,12 +388,32 @@
     render();
   }
   function computePickupISO() {
-    if (state.pickupKind === 'asap') {
-      const d = new Date();
-      d.setMinutes(d.getMinutes() + 25);
-      return d.toISOString();
-    }
-    return state.pickupISO;
+    // SEPOS-047 — pickup is now derived from the server's load-aware
+    // availability quote. If we don't have one yet (first paint), fall
+    // back to now + 20 min so the chip doesn't flash empty.
+    if (state.availability?.pickup_iso) return state.availability.pickup_iso;
+    const d = new Date();
+    d.setMinutes(d.getMinutes() + 20);
+    return d.toISOString();
+  }
+  function tierLabel(tier) {
+    if (tier === 'very_busy') return { emoji: '🔴', text: 'Very busy', bg: '#fef2f2', border: '#fca5a5', color: '#991b1b' };
+    if (tier === 'busy')      return { emoji: '🟡', text: 'Busy',      bg: '#fef9eb', border: '#fcd34d', color: '#92400e' };
+    return                           { emoji: '🟢', text: 'Quiet',     bg: '#f0f7ee', border: '#86efac', color: '#166534' };
+  }
+  function renderBusyChip() {
+    if (!state.availability) return '';
+    const t = tierLabel(state.availability.tier);
+    const mins = state.availability.wait_minutes;
+    return `
+      <div style="display:flex;align-items:center;gap:10px;background:${t.bg};border:1.5px solid ${t.border};border-radius:12px;padding:10px 14px;margin-bottom:14px;">
+        <span style="font-size:18px;">${t.emoji}</span>
+        <div style="flex:1;">
+          <div style="font-weight:800;color:${t.color};font-size:14px;">${t.text} kitchen · ready in ~${mins} min</div>
+          <div style="font-size:11px;color:#666;margin-top:1px;">No need to choose a time — we'll have it ready when you arrive.</div>
+        </div>
+      </div>
+    `;
   }
 
   // ── Step renderers ───────────────────────────────────────────────
@@ -500,6 +522,7 @@
     state.activeCategory = active.id;
     const count = cartCount();
     return `
+      ${renderBusyChip()}
       <div class="tw-split">
         <div class="tw-menu-col">
           <div class="tw-cats">
@@ -631,6 +654,9 @@
   }
 
   function renderStep4() {
+    // SEPOS-047 — show the load-aware quote as a relative time, not a clock,
+    // so the customer reads it as a promise rather than a slot they picked.
+    const mins = state.availability?.wait_minutes ?? 20;
     const pTime = new Date(computePickupISO()).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
     const payBlock = state.stripeConfigured
       ? `<div style="margin-top:4px;">
@@ -659,8 +685,8 @@
       <div style="display:flex;align-items:center;gap:12px;background:#f0f7ee;border:1.5px solid #86efac;border-radius:12px;padding:14px 16px;margin-bottom:16px;">
         <span style="font-size:24px;">🕐</span>
         <div>
-          <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.05em;">Pickup time</div>
-          <div style="font-weight:800;color:#166534;font-size:16px;">${pTime} today</div>
+          <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.05em;">Ready in</div>
+          <div style="font-weight:800;color:#166534;font-size:16px;">~${mins} min · ${pTime}</div>
         </div>
       </div>
 
@@ -671,6 +697,9 @@
 
   function renderStep5() {
     const r = state.orderResult || {};
+    // Server returns the canonical pickup_time on submit (SEPOS-047) —
+    // use it if present, fall back to the cached availability quote.
+    const pickupIso = r.pickup_time || computePickupISO();
     return `
       <div class="tw-success">
         <div class="tw-success-tick">🥡</div>
@@ -682,7 +711,7 @@
           ${state.customer.email ? '<br>A confirmation email is on its way.' : ''}
         </p>
         <p style="color:#aaa;font-size:12px;">
-          Pickup: <strong style="color:#1a1a2e;">${new Date(computePickupISO()).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</strong>
+          Ready around: <strong style="color:#1a1a2e;">${new Date(pickupIso).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</strong>
         </p>
       </div>
     `;
@@ -961,6 +990,19 @@
     } catch (e) {}
   }
 
+  // SEPOS-047 — fetch the live wait-time quote. Called on widget open and
+  // re-called whenever the customer transitions steps so the chip stays
+  // current as the kitchen fills/empties during the ordering flow.
+  async function loadAvailability() {
+    try {
+      const r = await fetch(API + '/api/takeaway/availability?restaurant_id=' + encodeURIComponent(RESTAURANT_ID));
+      if (r.ok) {
+        state.availability = await r.json();
+        render();
+      }
+    } catch (e) {}
+  }
+
   // SEPOS-040 — check whether the server has Stripe configured.
   // We do this once on widget open and cache the result in state so
   // renderStep4() can immediately show the right UI.
@@ -1082,7 +1124,9 @@
           customer_name:  state.customer.name,
           customer_phone: state.customer.phone,
           customer_email: state.customer.email || null,
-          pickup_time:    computePickupISO(),
+          // SEPOS-047 — omit pickup_time so the server recomputes from
+          // the live kitchen backlog at submit time (no stale quote).
+          pickup_time:    null,
           // SEPOS-DELIVERY-002 — collection/delivery + CRM consent.
           // Postcode is folded into the address so the kitchen/driver
           // sees one complete line.
@@ -1152,6 +1196,8 @@
     if (!state.settings) loadSettings();
     // SEPOS-040 — fetch Stripe config on first open (subsequent opens reuse cached value).
     if (!prevStripePublishableKey) loadStripeConfig();
+    // SEPOS-047 — always refresh the wait-time chip on open.
+    loadAvailability();
     render();
   }
   function closeWidget() {

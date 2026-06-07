@@ -3438,9 +3438,9 @@ app.get('/api/network-info', (req, res) => {
 // the busy chip ("🟢 Quiet · 20 min") and to learn what pickup_time to
 // stamp when the customer hits Place Order (no picker on the widget).
 //
-// Backlog = order_items currently 'cooking' (fired but not served) across
-// all open orders for this restaurant. Both dine-in and takeaway cooking
-// share the same kitchen, so both count toward the backlog.
+// Backlog = count of OPEN orders (one ticket per order, not per item) —
+// matches operator mental model of "how many tickets is the kitchen
+// working on right now". Dine-in tables + takeaway count equally.
 //
 // Tiers: backlog < busy_threshold → 'quiet'
 //        backlog < very_busy_threshold → 'busy'
@@ -3457,12 +3457,8 @@ app.get('/api/takeaway/availability', widgetCors, async (req, res) => {
       ),
       pool.query(
         `SELECT COUNT(*)::int AS n
-           FROM order_items oi
-           JOIN orders o ON o.id = oi.order_id
-          WHERE o.restaurant_id = $1
-            AND o.status = 'open'
-            AND oi.status = 'cooking'
-            AND oi.voided = 0`,
+           FROM orders
+          WHERE restaurant_id = $1 AND status = 'open'`,
         [restaurantId]
       ),
     ]);
@@ -3709,12 +3705,8 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
       const waitV     = Number(s.takeaway_wait_very_busy      ?? 50);
       const backlogRes = await client.query(
         `SELECT COUNT(*)::int AS n
-           FROM order_items oi
-           JOIN orders o ON o.id = oi.order_id
-          WHERE o.restaurant_id = $1
-            AND o.status = 'open'
-            AND oi.status = 'cooking'
-            AND oi.voided = 0`,
+           FROM orders
+          WHERE restaurant_id = $1 AND status = 'open'`,
         [restaurantId]
       );
       const backlog = Number(backlogRes.rows[0]?.n || 0);

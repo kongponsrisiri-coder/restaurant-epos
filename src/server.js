@@ -3230,6 +3230,25 @@ app.post('/api/supplier-invoices', async (req, res) => {
   }
 });
 
+// SEPOS-046k — flat list endpoints for the sync engine. /api/recipes and
+// /api/batch-recipes return parent rows with their lines nested for the
+// admin UI; the syncService PULL_TABLES upsert needs a separate flat list
+// per child table. Restaurant_id filter is honoured implicitly by the
+// existing single-tenant convention (pool isn't restaurant-scoped here).
+app.get('/api/recipe-lines', async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT * FROM recipe_lines`);
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/batch-recipe-lines', async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT * FROM batch_recipe_lines`);
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/supplier-invoices', async (req, res) => {
   try { const result = await pool.query(`SELECT * FROM supplier_invoices ORDER BY created_at DESC LIMIT 100`); res.json(result.rows); }
   catch (err) { res.status(500).json({ error: err.message }); }

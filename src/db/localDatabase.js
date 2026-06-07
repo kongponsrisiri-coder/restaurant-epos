@@ -412,6 +412,129 @@ function initSchema() {
       restaurant_id TEXT DEFAULT 'siamepos'
     );
     CREATE INDEX IF NOT EXISTS idx_voucher_redemptions_voucher ON voucher_redemptions (voucher_id);
+
+    -- ── SEPOS-046k — Inventory + Batch Prep schema (SQLite parity) ──
+    -- These 8 tables exist in Postgres (src/db/database.js) but were
+    -- absent from the offline SQLite layer until v1.6.39. Without them
+    -- every Inventory and Batch-Prep endpoint on a DB_MODE=local install
+    -- threw "no such table". Schema validated by Nook's mock test before
+    -- being landed here.
+    CREATE TABLE IF NOT EXISTS ingredients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name_en TEXT NOT NULL,
+      name_th TEXT DEFAULT '',
+      unit TEXT DEFAULT 'kg',
+      cost_per_unit REAL DEFAULT 0,
+      yield_percentage REAL DEFAULT 100,
+      category TEXT DEFAULT 'Other',
+      current_stock REAL DEFAULT 0,
+      par_level REAL,
+      supplier_name TEXT DEFAULT '',
+      allergens TEXT DEFAULT '[]',
+      is_batch INTEGER DEFAULT 0,
+      batch_recipe_id INTEGER,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      restaurant_id TEXT DEFAULT 'siamepos'
+    );
+    CREATE INDEX IF NOT EXISTS idx_ingredients_category ON ingredients (category);
+
+    CREATE TABLE IF NOT EXISTS stock_movements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ingredient_id INTEGER NOT NULL,
+      movement_type TEXT NOT NULL,
+      quantity REAL NOT NULL,
+      cost_at_time REAL DEFAULT 0,
+      note TEXT,
+      reference TEXT,
+      order_item_id INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      restaurant_id TEXT DEFAULT 'siamepos'
+    );
+    CREATE INDEX IF NOT EXISTS idx_stock_movements_ingredient ON stock_movements (ingredient_id);
+    CREATE INDEX IF NOT EXISTS idx_stock_movements_order_item ON stock_movements (order_item_id);
+    CREATE INDEX IF NOT EXISTS idx_stock_movements_created    ON stock_movements (created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS recipes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      menu_item_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      serves INTEGER DEFAULT 1,
+      total_cost REAL DEFAULT 0,
+      cost_per_portion REAL DEFAULT 0,
+      last_calculated TEXT DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      restaurant_id TEXT DEFAULT 'siamepos'
+    );
+    CREATE INDEX IF NOT EXISTS idx_recipes_menu_item ON recipes (menu_item_id);
+
+    CREATE TABLE IF NOT EXISTS recipe_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+      ingredient_id INTEGER NOT NULL,
+      quantity_used REAL NOT NULL,
+      unit TEXT,
+      line_cost REAL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_recipe_lines_recipe ON recipe_lines (recipe_id);
+
+    CREATE TABLE IF NOT EXISTS supplier_invoices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      supplier_name TEXT,
+      invoice_date TEXT,
+      invoice_number TEXT,
+      total_amount REAL DEFAULT 0,
+      status TEXT DEFAULT 'processed',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      restaurant_id TEXT DEFAULT 'siamepos'
+    );
+    CREATE INDEX IF NOT EXISTS idx_supplier_invoices_date ON supplier_invoices (invoice_date DESC);
+
+    CREATE TABLE IF NOT EXISTS batch_recipes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      output_quantity REAL NOT NULL,
+      output_unit TEXT NOT NULL,
+      shelf_life_days INTEGER NOT NULL DEFAULT 3,
+      total_cost REAL DEFAULT 0,
+      cost_per_unit REAL DEFAULT 0,
+      notes TEXT,
+      last_calculated TEXT DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      restaurant_id TEXT DEFAULT 'siamepos'
+    );
+
+    CREATE TABLE IF NOT EXISTS batch_recipe_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      batch_recipe_id INTEGER NOT NULL REFERENCES batch_recipes(id) ON DELETE CASCADE,
+      ingredient_id INTEGER NOT NULL,
+      quantity_used REAL NOT NULL,
+      unit TEXT,
+      line_cost REAL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_batch_recipe_lines_recipe ON batch_recipe_lines (batch_recipe_id);
+
+    CREATE TABLE IF NOT EXISTS batches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      batch_recipe_id INTEGER REFERENCES batch_recipes(id) ON DELETE SET NULL,
+      ingredient_id INTEGER NOT NULL,
+      made_on TEXT NOT NULL DEFAULT CURRENT_DATE,
+      expires_on TEXT NOT NULL,
+      original_quantity REAL NOT NULL,
+      locked_cost_per_unit REAL NOT NULL,
+      status TEXT DEFAULT 'active',
+      made_by INTEGER,
+      notes TEXT,
+      discarded_qty REAL,
+      discarded_at TEXT,
+      discarded_by INTEGER,
+      extended_count INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      restaurant_id TEXT DEFAULT 'siamepos'
+    );
+    CREATE INDEX IF NOT EXISTS idx_batches_recipe     ON batches (batch_recipe_id);
+    CREATE INDEX IF NOT EXISTS idx_batches_ingredient ON batches (ingredient_id);
+    CREATE INDEX IF NOT EXISTS idx_batches_status_exp ON batches (status, expires_on);
   `);
 }
 
@@ -458,6 +581,11 @@ function runMigrations() {
   addColumnIfMissing('restaurant_settings', 'takeaway_wait_very_busy',      'INTEGER DEFAULT 50');
   // SEPOS-STRIPE-001: Stripe webhook payment-failure flag
   addColumnIfMissing('restaurants', 'payment_failed_at', 'TIMESTAMP');
+  // SEPOS-046k: inventory column upgrades for installs that pre-date
+  // the inventory CREATE TABLE block. Safe no-ops on fresh installs.
+  addColumnIfMissing('ingredients', 'is_batch',        'INTEGER DEFAULT 0');
+  addColumnIfMissing('ingredients', 'batch_recipe_id', 'INTEGER');
+  addColumnIfMissing('stock_movements', 'order_item_id', 'INTEGER');
   // SEPOS-034: takeaway / delivery online ordering
   addColumnIfMissing('orders', 'order_type', "TEXT DEFAULT 'dine_in'");
   addColumnIfMissing('orders', 'customer_name', 'TEXT');

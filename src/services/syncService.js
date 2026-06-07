@@ -38,6 +38,20 @@ const PULL_TABLES = [
   // and brand colour all live here. Without pull, desktop saves never see
   // cloud edits (and vice versa via the write-through on the PUT endpoint).
   { path: '/api/restaurant-settings',    table: 'restaurant_settings',    pk: 'restaurant_id' },
+  // SEPOS-046k — Inventory + Batch-Prep config/state. Cloud is authoritative
+  // for editing (operator works in web admin); desktop pulls read-only so
+  // the till can show ingredients, recipes, and active batches. Ordered
+  // parents-first so SQLite FK constraints (when enforced) don't reject
+  // children before their parent row lands. Stock_movements is intentionally
+  // NOT here — high-volume log; bidirectional push for desktop-side sales
+  // depletion deferred to SEPOS-046l.
+  { path: '/api/ingredients',            table: 'ingredients',            pk: 'id' },
+  { path: '/api/supplier-invoices',      table: 'supplier_invoices',      pk: 'id' },
+  { path: '/api/batch-recipes',          table: 'batch_recipes',          pk: 'id' },
+  { path: '/api/batch-recipe-lines',     table: 'batch_recipe_lines',     pk: 'id' },
+  { path: '/api/batches',                table: 'batches',                pk: 'id' },
+  { path: '/api/recipes',                table: 'recipes',                pk: 'id' },
+  { path: '/api/recipe-lines',           table: 'recipe_lines',           pk: 'id' },
 ];
 
 let initialSyncDone = false;

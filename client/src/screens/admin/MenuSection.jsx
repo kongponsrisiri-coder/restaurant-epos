@@ -4,7 +4,7 @@ import {
   getAllMenu as getMenu, addMenuItem, updateMenuItem, deleteMenuItem,
   getItemModifiers, addModifierGroup, addModifierOption,
   deleteModifierGroup, deleteModifier,
-  getSubcategories, addSubcategory, deleteSubcategory, deleteCategory,
+  getSubcategories, addSubcategory, deleteSubcategory, updateCategory, deleteCategory,
   addCategory, updateCategoryDefaultCourse,
 } from '../../api';
 import { confirm } from '../../utils/confirm';
@@ -147,6 +147,9 @@ export default function MenuSection() {
   const [newSubcatName, setNewSubcatName]   = useState('');
   const [newCatName, setNewCatName]         = useState('');
   const [showAddCat, setShowAddCat]         = useState(false);
+  // SEPOS-046n — inline rename state for the active category chip
+  const [editingCatId, setEditingCatId]     = useState(null);
+  const [editingCatName, setEditingCatName] = useState('');
   const [dragIndex, setDragIndex]           = useState(null);
   const [dragOverIndex, setDragOverIndex]   = useState(null);
   const [localItems, setLocalItems]         = useState([]);
@@ -201,27 +204,62 @@ export default function MenuSection() {
         {menu.map(cat => {
           const itemCount = cat.items?.length || 0;
           const isActive  = activeCategory === cat.id;
-          const canDelete = isActive && itemCount === 0;
+          const isEditing = editingCatId === cat.id;
+          const canDelete = isActive && itemCount === 0 && !isEditing;
+          const canEdit   = isActive && !isEditing;
+          const saveRename = async () => {
+            const trimmed = editingCatName.trim();
+            if (!trimmed || trimmed === cat.name) { setEditingCatId(null); return; }
+            try {
+              const res = await updateCategory(cat.id, trimmed);
+              if (res?.error) { alert(res.error); return; }
+              setEditingCatId(null);
+              fetchMenu();
+            } catch (err) {
+              alert('Could not rename: ' + (err?.message || 'unknown error'));
+            }
+          };
           return (
           <div key={cat.id} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
             <div style={{ display: 'inline-flex', alignItems: 'stretch', borderRadius: 20, overflow: 'hidden' }}>
-              <button onClick={() => setActiveCategory(cat.id)} style={{ padding: '8px 20px', border: 'none', cursor: 'pointer', fontWeight: 600, background: isActive ? '#1a1a2e' : '#e0e0e0', color: isActive ? 'white' : '#555', borderRadius: canDelete ? '20px 0 0 20px' : 20 }}>{cat.name} ({itemCount})</button>
-              {canDelete && (
-                <button
-                  onClick={async () => {
-                    if (!await confirm(`Delete category "${cat.name}"? It has no items, so this is safe.`)) return;
-                    try {
-                      const res = await deleteCategory(cat.id);
-                      if (res?.error) { alert(res.error); return; }
-                      setActiveCategory(menu.find(c => c.id !== cat.id)?.id || null);
-                      fetchMenu();
-                    } catch (err) {
-                      alert('Could not delete: ' + (err?.message || 'unknown error'));
-                    }
-                  }}
-                  title="Delete this empty category"
-                  style={{ padding: '0 12px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: '#991b1b', color: 'white', borderRadius: '0 20px 20px 0', fontSize: 14 }}
-                >🗑️</button>
+              {isEditing ? (
+                <>
+                  <input
+                    autoFocus value={editingCatName}
+                    onChange={e => setEditingCatName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveRename(); if (e.key === 'Escape') setEditingCatId(null); }}
+                    onBlur={saveRename}
+                    style={{ padding: '8px 16px', border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 600, fontSize: 14, borderRadius: 20, outline: 'none', width: 140 }}
+                  />
+                </>
+              ) : (
+                <>
+                  <button onClick={() => setActiveCategory(cat.id)} style={{ padding: '8px 20px', border: 'none', cursor: 'pointer', fontWeight: 600, background: isActive ? '#1a1a2e' : '#e0e0e0', color: isActive ? 'white' : '#555', borderRadius: (canEdit || canDelete) ? '20px 0 0 20px' : 20 }}>{cat.name} ({itemCount})</button>
+                  {canEdit && (
+                    <button
+                      onClick={() => { setEditingCatName(cat.name); setEditingCatId(cat.id); }}
+                      title="Rename this category"
+                      style={{ padding: '0 10px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: '#1a1a2e', color: '#C9A84C', borderRadius: canDelete ? 0 : '0 20px 20px 0', fontSize: 13 }}
+                    >✎</button>
+                  )}
+                  {canDelete && (
+                    <button
+                      onClick={async () => {
+                        if (!await confirm(`Delete category "${cat.name}"? It has no items, so this is safe.`)) return;
+                        try {
+                          const res = await deleteCategory(cat.id);
+                          if (res?.error) { alert(res.error); return; }
+                          setActiveCategory(menu.find(c => c.id !== cat.id)?.id || null);
+                          fetchMenu();
+                        } catch (err) {
+                          alert('Could not delete: ' + (err?.message || 'unknown error'));
+                        }
+                      }}
+                      title="Delete this empty category"
+                      style={{ padding: '0 12px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: '#991b1b', color: 'white', borderRadius: '0 20px 20px 0', fontSize: 14 }}
+                    >🗑️</button>
+                  )}
+                </>
               )}
             </div>
             <select

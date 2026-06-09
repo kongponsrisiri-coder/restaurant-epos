@@ -280,6 +280,18 @@ app.post('/api/categories', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-046n — rename a category. Pair with the SEPOS-046m delete so
+// the Menu Manager finally has full CRUD on categories. Trims + rejects
+// empty names so the chip never collapses to blank.
+app.put('/api/categories/:id', async (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim();
+    if (!name) return res.status(400).json({ error: 'Category name is required' });
+    await pool.query('UPDATE categories SET name = $1 WHERE id = $2', [name, req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.put('/api/categories/:id/bar', async (req, res) => {
   try {
     const { is_bar } = req.body;

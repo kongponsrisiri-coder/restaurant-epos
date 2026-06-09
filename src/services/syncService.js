@@ -366,6 +366,31 @@ async function upsertRows(table, pk, rows) {
   return n;
 }
 
+// SEPOS-046p — given a flat table and the set of IDs that exist on the
+// cloud, delete every local row whose id is NOT in that set. Used by
+// pullMenuTree() to keep local menu in sync with cloud deletions.
+// Returns the count of rows deleted.
+async function deleteOrphans(table, cloudIds) {
+  try {
+    const localRes = await pool.query(`SELECT id FROM ${table}`);
+    const cloudSet = new Set(cloudIds.map(Number));
+    const localIds = localRes.rows.map(r => Number(r.id));
+    const orphanIds = localIds.filter(id => !cloudSet.has(id));
+    if (orphanIds.length === 0) return 0;
+    for (const id of orphanIds) {
+      try {
+        await pool.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
+      } catch (err) {
+        console.warn(`[sync] delete orphan ${table}#${id} failed:`, err.message);
+      }
+    }
+    return orphanIds.length;
+  } catch (err) {
+    console.warn(`[sync] deleteOrphans ${table} failed:`, err.message);
+    return 0;
+  }
+}
+
 async function pullMenuTree() {
   // /api/menu/all → categories with nested subcategories[] and items[].
   // Flatten into three local tables.
@@ -398,7 +423,18 @@ async function pullMenuTree() {
     const nCat   = await upsertRows('categories', 'id', flatCategories);
     const nSub   = await upsertRows('subcategories', 'id', flatSubcategories);
     const nItems = await upsertRows('menu_items', 'id', flatItems);
-    console.log(`[sync] pull menu tree: ${nCat} cats, ${nSub} subs, ${nItems} items`);
+
+    // SEPOS-046p — propagate cloud-side deletions. Pull was upsert-only
+    // before, so deleting an item / subcategory / category on the web
+    // admin left orphan rows in local SQLite forever. Now: anything
+    // present locally but missing from the cloud snapshot is removed.
+    // Safe because we only reach this branch after a successful cloud
+    // fetch with a non-empty top-level array — no risk of wiping
+    // local data due to a transient network blip.
+    const nItemsDel = await deleteOrphans('menu_items',   flatItems.map(i => i.id));
+    const nSubDel   = await deleteOrphans('subcategories', flatSubcategories.map(s => s.id));
+    const nCatDel   = await deleteOrphans('categories',    flatCategories.map(c => c.id));
+    console.log(`[sync] pull menu tree: ${nCat}/${nSub}/${nItems} upserts (cats/subs/items), ${nCatDel}/${nSubDel}/${nItemsDel} deletes`);
 
     return flatItems.map((i) => i.id);
   } catch (err) {

@@ -7,6 +7,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   listVouchers, getVoucherDetail, voidVoucher, resendVoucherEmail, sellVoucher,
+  assertOk,
 } from '../../api';
 import { downloadCsv } from '../../utils/csv';
 import { confirm } from '../../utils/confirm';
@@ -84,12 +85,27 @@ export default function VouchersSection() {
     try { setDetail(await getVoucherDetail(id)); } catch (e) { console.error(e); }
   }
 
+  // SEPOS-046y — optimistic void. Pill flips to ✕ Voided instantly in both
+  // the table and the open detail modal; the POST runs in background and
+  // the server's returned row (with voided_at) is patched in as canonical.
+  // No load() reconcile on success. Rollback to true state only on error.
   async function handleVoid(id) {
     if (!await confirm('Void this voucher? It cannot be redeemed after voiding.')) return;
-    setBusy(true);
-    try { await voidVoucher(id, null); await load(); if (detailId) openDetail(detailId); }
-    catch (e) { alert('Void failed: ' + e.message); }
-    finally   { setBusy(false); }
+    setRows(prev => prev.map(v => v.id === id ? { ...v, status: 'voided' } : v));
+    setDetail(prev => prev?.voucher?.id === id
+      ? { ...prev, voucher: { ...prev.voucher, status: 'voided' } }
+      : prev);
+    try {
+      const r = assertOk(await voidVoucher(id, null));
+      if (r?.voucher) {
+        setRows(prev => prev.map(v => v.id === id ? { ...v, ...r.voucher } : v));
+        setDetail(prev => prev?.voucher?.id === id ? { ...prev, voucher: { ...prev.voucher, ...r.voucher } } : prev);
+      }
+    } catch (e) {
+      alert('Void failed: ' + e.message);
+      load();
+      if (detailId) openDetail(detailId);
+    }
   }
 
   async function handleResend(id) {
@@ -187,7 +203,12 @@ export default function VouchersSection() {
       {sellOpen && (
         <SellVoucherModal
           onClose={() => setSellOpen(false)}
-          onSold={(voucher) => { setSellOpen(false); setSold(voucher); load(); }}
+          onSold={(voucher) => {
+            setSellOpen(false); setSold(voucher);
+            // SEPOS-046y — the sell response IS the full canonical row;
+            // prepend it instead of a load() round-trip.
+            setRows(prev => [voucher, ...prev]);
+          }}
         />
       )}
 

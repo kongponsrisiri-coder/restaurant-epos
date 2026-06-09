@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
-import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, getArchiveStatus, openArchiveFolder, runArchive, getMigrationStatus, getStorageStats, getTunnelStatus, getKitchenTemplates, createKitchenTemplate, updateKitchenTemplate, deleteKitchenTemplate } from '../../api';
+import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, getArchiveStatus, openArchiveFolder, runArchive, getMigrationStatus, getStorageStats, getTunnelStatus, getKitchenTemplates, createKitchenTemplate, updateKitchenTemplate, deleteKitchenTemplate, assertOk } from '../../api';
 import DiningDurationSettings from './DiningDurationSettings';
 import { confirm } from '../../utils/confirm';
 
@@ -11,8 +11,8 @@ import { confirm } from '../../utils/confirm';
 function KitchenTemplatesCard({ cardStyle }) {
   const [templates, setTemplates] = useState([]);
   const [editing, setEditing]     = useState(null); // null | { id?, label, icon, message, sort_order }
-  const [saving, setSaving]       = useState(false);
 
+  const bySort = (a, b) => (Number(a.sort_order) || 100) - (Number(b.sort_order) || 100);
   const refresh = async () => {
     try { setTemplates(await getKitchenTemplates() || []); } catch { setTemplates([]); }
   };
@@ -20,22 +20,36 @@ function KitchenTemplatesCard({ cardStyle }) {
 
   const startNew = () => setEditing({ label: '', icon: '', message: '', sort_order: 100 });
 
+  // SEPOS-046y — optimistic save/delete (MenuSection pattern). Modal closes
+  // and the list updates instantly; the network call runs in background.
+  // No refresh() on success — desktop SQLite lags cloud by up to 5s and a
+  // refetch would overwrite fresh state. Refetch only on error rollback.
   const save = async () => {
     if (!editing.label.trim() || !editing.message.trim()) { alert('Label + message required'); return; }
-    setSaving(true);
-    try {
-      if (editing.id) await updateKitchenTemplate(editing.id, editing);
-      else            await createKitchenTemplate(editing);
-      setEditing(null);
-      await refresh();
-    } catch (e) { alert(e?.message || 'Save failed'); }
-    finally { setSaving(false); }
+    const draft = { ...editing };
+    setEditing(null);
+    if (draft.id) {
+      setTemplates(prev => prev.map(t => t.id === draft.id ? { ...t, ...draft } : t).sort(bySort));
+      try { assertOk(await updateKitchenTemplate(draft.id, draft)); }
+      catch (e) { alert(e?.message || 'Save failed'); refresh(); }
+    } else {
+      const tempId = -Date.now();
+      setTemplates(prev => [...prev, { ...draft, id: tempId }].sort(bySort));
+      try {
+        const res = assertOk(await createKitchenTemplate(draft));
+        if (res?.id) setTemplates(prev => prev.map(t => t.id === tempId ? { ...t, id: res.id } : t));
+      } catch (e) {
+        alert(e?.message || 'Save failed');
+        setTemplates(prev => prev.filter(t => t.id !== tempId));
+      }
+    }
   };
 
   const remove = async (id) => {
     if (!await confirm('Delete this template?')) return;
-    try { await deleteKitchenTemplate(id); await refresh(); }
-    catch (e) { alert(e?.message || 'Delete failed'); }
+    setTemplates(prev => prev.filter(t => t.id !== id));
+    try { assertOk(await deleteKitchenTemplate(id)); }
+    catch (e) { alert(e?.message || 'Delete failed'); refresh(); }
   };
 
   return (
@@ -99,11 +113,11 @@ function KitchenTemplatesCard({ cardStyle }) {
               </label>
             </div>
             <div style={{ display:'flex', gap:10, marginTop:18 }}>
-              <button onClick={() => setEditing(null)} disabled={saving}
+              <button onClick={() => setEditing(null)}
                 style={{ flex:1, padding:12, borderRadius:8, border:'none', background:'#f0f0f0', fontWeight:700, fontSize:14, cursor:'pointer' }}>Cancel</button>
-              <button onClick={save} disabled={saving}
-                style={{ flex:2, padding:12, borderRadius:8, border:'none', background:'#0D1B3E', color:'white', fontWeight:800, fontSize:14, cursor:'pointer', opacity: saving ? 0.5 : 1 }}>
-                {saving ? 'Saving…' : 'Save'}
+              <button onClick={save}
+                style={{ flex:2, padding:12, borderRadius:8, border:'none', background:'#0D1B3E', color:'white', fontWeight:800, fontSize:14, cursor:'pointer' }}>
+                Save
               </button>
             </div>
           </div>
@@ -507,8 +521,18 @@ function BarCategoryManager() {
   const [categories, setCategories] = useState([]);
   useEffect(() => { getCategories().then(setCategories); }, []);
 
-  const toggleBar = async (cat) => { await updateCategoryBar(cat.id, cat.is_bar ? 0 : 1); getCategories().then(setCategories); };
-  const setDefaultCourse = async (cat, course) => { await updateCategoryDefaultCourse(cat.id, course); getCategories().then(setCategories); };
+  // SEPOS-046y — optimistic toggles, refetch only on error rollback
+  const toggleBar = async (cat) => {
+    const next = cat.is_bar ? 0 : 1;
+    setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, is_bar: next } : c));
+    try { assertOk(await updateCategoryBar(cat.id, next)); }
+    catch { alert('Could not update — check connection.'); getCategories().then(setCategories); }
+  };
+  const setDefaultCourse = async (cat, course) => {
+    setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, default_course: course } : c));
+    try { assertOk(await updateCategoryDefaultCourse(cat.id, course)); }
+    catch { alert('Could not update — check connection.'); getCategories().then(setCategories); }
+  };
   const courseColors = { 1:'#3b82f6', 2:'#e94560', 3:'#8b5cf6', 4:'#22c55e' };
   const courseLabels = { 1:'Starters', 2:'Mains', 3:'Desserts', 4:'Extra' };
 
@@ -628,10 +652,17 @@ export default function SettingsSection() {
     getDiscountReasons().then(setReasons);
   }, []);
 
-  const handleSave = async () => {
-    await updateSettings(settings);
+  // SEPOS-046y — optimistic save. The form state already IS the desired
+  // state, so flip the button to ✓ Saved immediately and let the PUT run
+  // in background (SEPOS-050's enqueue-then-push makes it durable on
+  // desktop). Surface an alert only if the request fails outright.
+  const handleSave = () => {
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
+    updateSettings(settings).then(assertOk).catch(err => {
+      setSaved(false);
+      alert('Save failed: ' + (err?.message || 'unknown') + ' — please try again.');
+    });
   };
 
   // Convert a colour image data-URL to a monochrome ESC/POS bitmap
@@ -759,6 +790,24 @@ export default function SettingsSection() {
   const sizeToWidth = (s) => ({ small: 192, medium: 288, large: 384, full: 384 }[s] || 288);
   const [bitmapPreview, setBitmapPreview] = useState(''); // dataUrl
   const [bitmapInkPct, setBitmapInkPct] = useState(null);
+
+  // SEPOS-046y — optimistic add with the temp-id pattern: chip appears
+  // instantly, server id patched in from the POST response, removed on error.
+  const handleAddReason = async () => {
+    const trimmed = newReason.trim();
+    if (!trimmed) return;
+    setNewReason('');
+    const tempId = -Date.now();
+    setReasons(prev => [...prev, { id: tempId, reason: trimmed }]);
+    try {
+      const res = assertOk(await addDiscountReason(trimmed));
+      if (res?.id) setReasons(prev => prev.map(x => x.id === tempId ? { ...x, id: res.id } : x));
+    } catch {
+      alert('Could not add — check connection.');
+      setNewReason(trimmed);
+      setReasons(prev => prev.filter(x => x.id !== tempId));
+    }
+  };
 
   const handleLogoUpload = (e) => {
     const file = e.target.files[0];
@@ -1061,13 +1110,17 @@ export default function SettingsSection() {
           {reasons.map(r => (
             <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', background:'#f8f8f8', borderRadius:8 }}>
               <span style={{ fontSize:14 }}>{r.reason}</span>
-              <button onClick={async () => { await deleteDiscountReason(r.id); getDiscountReasons().then(setReasons); }} style={{ background:'#fee2e2', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer', color:'#ef4444', fontSize:12, fontWeight:600 }}>Remove</button>
+              <button onClick={async () => {
+                setReasons(prev => prev.filter(x => x.id !== r.id));
+                try { assertOk(await deleteDiscountReason(r.id)); }
+                catch { alert('Could not remove — check connection.'); getDiscountReasons().then(setReasons); }
+              }} style={{ background:'#fee2e2', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer', color:'#ef4444', fontSize:12, fontWeight:600 }}>Remove</button>
             </div>
           ))}
         </div>
         <div style={{ display:'flex', gap:8 }}>
-          <input value={newReason} onChange={e => setNewReason(e.target.value)} onKeyDown={e => { if(e.key==='Enter'&&newReason){addDiscountReason(newReason).then(()=>{setNewReason('');getDiscountReasons().then(setReasons);}); }}} placeholder="Add new discount reason..." style={{ flex:1, padding:'10px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }} />
-          <button onClick={async () => { if(!newReason) return; await addDiscountReason(newReason); setNewReason(''); getDiscountReasons().then(setReasons); }} style={{ padding:'10px 20px', borderRadius:8, border:'none', background:'#e94560', color:'white', cursor:'pointer', fontWeight:600 }}>Add</button>
+          <input value={newReason} onChange={e => setNewReason(e.target.value)} onKeyDown={e => { if(e.key==='Enter') handleAddReason(); }} placeholder="Add new discount reason..." style={{ flex:1, padding:'10px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }} />
+          <button onClick={handleAddReason} style={{ padding:'10px 20px', borderRadius:8, border:'none', background:'#e94560', color:'white', cursor:'pointer', fontWeight:600 }}>Add</button>
         </div>
       </div>
 

@@ -38,6 +38,15 @@ const put = (url, data) => fetch(SERVER_URL + url, {
 }).then(r => r.json());
 const del = (url) => fetch(SERVER_URL + url, { method: 'DELETE' }).then(r => r.json());
 
+// SEPOS-046y — the helpers above resolve (not reject) on HTTP 4xx/5xx, so a
+// try/catch around them only sees network failures. Optimistic-UI handlers
+// must run their response through assertOk so a server-side {error} also
+// lands in the catch block and triggers the rollback + operator alert.
+export const assertOk = (res) => {
+  if (res && res.error) throw new Error(res.error);
+  return res;
+};
+
 export const getTables = () => get('/api/tables');
 export const updateTableStatus = (id, status) => put(`/api/tables/${id}`, { status });
 export const getMenu = () => get('/api/menu');

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getCustomers, setCustomerConsent } from '../../api';
+import { getCustomers, setCustomerConsent, assertOk } from '../../api';
 import { confirm } from '../../utils/confirm';
 
 // SEPOS-033 Phase 1 — Customer CRM.
@@ -38,6 +38,22 @@ export default function CustomersSection() {
     } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);
+
+  // SEPOS-046y — optimistic consent toggle. Badge flips instantly; the PUT
+  // runs in background. Mirrors the server: opt-in also clears unsubscribed.
+  // No load() on success — on desktop it reads SQLite that lags cloud by up
+  // to 5s and would revert the badge. Rollback to true state only on error.
+  async function applyConsent(c, consent) {
+    setCustomers(prev => prev.map(x => x.customer_email === c.customer_email
+      ? { ...x, marketing_consent: consent ? 1 : 0, ...(consent ? { unsubscribed: 0 } : {}) }
+      : x));
+    try {
+      assertOk(await setCustomerConsent(c.customer_email, consent));
+    } catch (err) {
+      alert('Could not update consent: ' + (err?.message || 'unknown'));
+      load();
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -184,20 +200,20 @@ export default function CustomersSection() {
                         <button
                           onClick={async () => {
                             if (!await confirm(`Re-opt-in ${c.customer_email}? They previously unsubscribed.`)) return;
-                            await setCustomerConsent(c.customer_email, true); load();
+                            applyConsent(c, true);
                           }}
                           style={{ background:'#fee2e2', color:'#991b1b', padding:'3px 9px', borderRadius:6, fontSize:10, fontWeight:700, border:'none', cursor:'pointer' }}
                           title="Click to re-opt-in (requires operator to have fresh consent)"
                         >OPTED OUT</button>
                       ) : c.marketing_consent ? (
                         <button
-                          onClick={async () => { await setCustomerConsent(c.customer_email, false); load(); }}
+                          onClick={() => applyConsent(c, false)}
                           style={{ background:'#dcfce7', color:'#166534', padding:'3px 9px', borderRadius:6, fontSize:10, fontWeight:700, border:'none', cursor:'pointer' }}
                           title="Click to opt out"
                         >OPTED IN</button>
                       ) : (
                         <button
-                          onClick={async () => { await setCustomerConsent(c.customer_email, true); load(); }}
+                          onClick={() => applyConsent(c, true)}
                           style={{ background:'#0D1B3E', color:'#C9A84C', padding:'3px 9px', borderRadius:6, fontSize:10, fontWeight:700, border:'none', cursor:'pointer' }}
                           title="Only opt in when you have legitimate consent (verbal, signed, etc.)"
                         >+ Opt in</button>

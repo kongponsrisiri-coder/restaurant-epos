@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { SERVER_URL } from '../../api';
-import { getStaff, addStaff, updateStaff } from '../../api';
+import { getStaff, addStaff, updateStaff, assertOk } from '../../api';
 
 export default function StaffSection() {
   const [staff, setStaff]           = useState([]);
@@ -15,22 +15,50 @@ export default function StaffSection() {
   const roleColors = { admin: '#e94560', manager: '#8b5cf6', supervisor: '#3b82f6', waiter: '#22c55e', kitchen: '#f97316', bar: '#eab308' };
   const filteredStaff = staff.filter(s => filterStatus === 'active' ? s.is_active : filterStatus === 'inactive' ? !s.is_active : true);
 
+  // SEPOS-046y — optimistic saves, same pattern as MenuSection. State is
+  // patched immediately and the network call runs in background. No refetch
+  // on the success path (desktop SQLite lags cloud by up to 5s — a refetch
+  // would overwrite fresh state with stale data). Refetch only on error.
   const handleSave = async () => {
     if (!form.name || (!editStaff && !form.pin)) return alert('Name and PIN are required!');
     if (form.pin && form.pin.length !== 4) return alert('PIN must be 4 digits!');
-    try {
-      if (editStaff) await updateStaff(editStaff.id, form);
-      else await addStaff(form);
-      setShowForm(false); setEditStaff(null); getStaff().then(setStaff);
-    } catch { alert('Save failed!'); }
+    if (editStaff) {
+      const { pin, ...fields } = form; // PIN never lives in row state
+      setStaff(prev => prev.map(s => s.id === editStaff.id ? { ...s, ...fields } : s));
+      setShowForm(false); setEditStaff(null);
+      try { assertOk(await updateStaff(editStaff.id, form)); }
+      catch { alert('Save failed!'); getStaff().then(setStaff); }
+    } else {
+      const tempId = -Date.now();
+      const { pin, ...fields } = form;
+      setStaff(prev => [...prev, { id: tempId, ...fields, is_active: 1 }]);
+      setShowForm(false);
+      try {
+        const res = assertOk(await addStaff(form));
+        if (res?.id) setStaff(prev => prev.map(s => s.id === tempId ? { ...s, id: res.id } : s));
+      } catch {
+        alert('Save failed!');
+        setStaff(prev => prev.filter(s => s.id !== tempId));
+      }
+    }
   };
 
-  const toggleActive = async (s) => { await updateStaff(s.id, { ...s, is_active: s.is_active ? 0 : 1 }); getStaff().then(setStaff); };
+  const toggleActive = async (s) => {
+    const next = s.is_active ? 0 : 1;
+    setStaff(prev => prev.map(x => x.id === s.id ? { ...x, is_active: next } : x));
+    try { assertOk(await updateStaff(s.id, { ...s, is_active: next })); }
+    catch { alert('Could not update — check connection.'); getStaff().then(setStaff); }
+  };
 
   const handleDelete = async (s) => {
     if (!confirm(`Permanently delete ${s.name}? This cannot be undone.`)) return;
-    try { await fetch(`${SERVER_URL}/api/staff/${s.id}`, { method: 'DELETE' }); setSelectedStaff(null); getStaff().then(setStaff); }
-    catch { alert('Delete failed!'); }
+    setSelectedStaff(null);
+    setStaff(prev => prev.filter(x => x.id !== s.id));
+    try {
+      const r = await fetch(`${SERVER_URL}/api/staff/${s.id}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+    }
+    catch { alert('Delete failed!'); getStaff().then(setStaff); }
   };
 
   return (

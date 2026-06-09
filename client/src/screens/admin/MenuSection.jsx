@@ -7,6 +7,7 @@ import {
   getSubcategories, addSubcategory, deleteSubcategory, updateCategory, deleteCategory,
   updateCategoryBar, updateCategorySortOrder,
   addCategory, updateCategoryDefaultCourse,
+  assertOk,
 } from '../../api';
 import { confirm } from '../../utils/confirm';
 
@@ -197,7 +198,7 @@ export default function MenuSection() {
         return { ...cat, items: [...without, patched] };
       }));
       setShowForm(false);
-      try { await updateMenuItem(editItem.id, { ...form, is_available: 1 }); }
+      try { assertOk(await updateMenuItem(editItem.id, { ...form, is_available: 1 })); }
       catch (err) { alert('Save failed: ' + (err?.message || 'unknown')); fetchMenu(); }
     } else {
       // ADD: insert with a temp negative id, then patch the id with the
@@ -210,7 +211,7 @@ export default function MenuSection() {
         : cat));
       setShowForm(false);
       try {
-        const res = await addMenuItem(form);
+        const res = assertOk(await addMenuItem(form));
         if (res?.id) {
           setMenu(prev => prev.map(cat => ({
             ...cat,
@@ -230,8 +231,8 @@ export default function MenuSection() {
       ...cat,
       items: (cat.items || []).map(it => it.id === item.id ? { ...it, is_available: next } : it),
     })));
-    try { await updateMenuItem(item.id, { ...item, is_available: next }); }
-    catch (err) { fetchMenu(); }
+    try { assertOk(await updateMenuItem(item.id, { ...item, is_available: next })); }
+    catch (err) { alert('Could not update — check connection.'); fetchMenu(); }
   };
 
   const toggleOnline = async (item) => {
@@ -240,8 +241,8 @@ export default function MenuSection() {
       ...cat,
       items: (cat.items || []).map(it => it.id === item.id ? { ...it, is_online: next } : it),
     })));
-    try { await updateMenuItem(item.id, { ...item, is_online: next }); }
-    catch (err) { fetchMenu(); }
+    try { assertOk(await updateMenuItem(item.id, { ...item, is_online: next })); }
+    catch (err) { alert('Could not update — check connection.'); fetchMenu(); }
   };
   const openModifiers   = async (item) => { setModifierItem(item); setActiveGroup(null); const data = await getItemModifiers(item.id); setModifiers(data); };
   const handleAddGroup  = async () => { if (!newGroup.name) return alert('Group name is required!'); await addModifierGroup(modifierItem.id, newGroup); setNewGroup({ name: '', required: true, multi_select: false }); setModifiers(await getItemModifiers(modifierItem.id)); };
@@ -411,7 +412,7 @@ export default function MenuSection() {
                   // canonical id. NO fetchMenu reconcile — that read from
                   // local SQLite which lags behind cloud by up to 5s, so
                   // it kept wiping the optimistic chip with stale data.
-                  const res = await addSubcategory(activeCategory, trimmed);
+                  const res = assertOk(await addSubcategory(activeCategory, trimmed));
                   if (res?.id) {
                     setSubcategories(prev => prev.map(s => s.id === tempId ? { ...s, id: res.id } : s));
                   }
@@ -441,7 +442,7 @@ export default function MenuSection() {
                   // SEPOS-046u — server returns the canonical id; we patch
                   // it onto the optimistic chip in place. No fetchMenu
                   // reconcile (it would read stale local SQLite).
-                  const res = await addSubcategory(activeCategory, trimmed);
+                  const res = assertOk(await addSubcategory(activeCategory, trimmed));
                   if (res?.id) {
                     setSubcategories(prev => prev.map(s => s.id === tempId ? { ...s, id: res.id } : s));
                   }
@@ -465,7 +466,7 @@ export default function MenuSection() {
               // rolls back to true state.
               setSubcategories(prev => prev.filter(s => s.id !== sub.id));
               try {
-                await deleteSubcategory(sub.id);
+                assertOk(await deleteSubcategory(sub.id));
               } catch (err) {
                 alert('Could not delete: ' + (err?.message || 'unknown error'));
                 fetchMenu(); // rollback only on error

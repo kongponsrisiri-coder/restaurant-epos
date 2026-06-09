@@ -82,9 +82,13 @@ export default function AllergenSection() {
       return { allergens: set, source: 'recipe' };
     }
 
-    // 2. Manually set in allergen screen (dish_allergens table)
+    // 2. Manually set in allergen screen (dish_allergens table).
+    // An EXISTING manual record takes priority even when empty — the
+    // operator may have deliberately removed every allergen from an
+    // AI-scanned dish; falling through to the scanned set would make
+    // the removed ticks reappear (and print on the allergen sheet).
     const manual = manualMap[menuItemId];
-    if (manual && manual.size > 0) {
+    if (manual) {
       return { allergens: manual, source: 'manual' };
     }
 
@@ -109,14 +113,29 @@ export default function AllergenSection() {
     if (current.has(allergenName)) current.delete(allergenName);
     else current.add(allergenName);
 
+    // SEPOS-046y — already optimistic, but a failed save used to only
+    // console.error, leaving the screen showing an allergen state that never
+    // persisted. On an allergen sheet that's a food-safety hazard: roll the
+    // tick back to its pre-toggle state and tell the operator.
+    const prevManual = manualMap[menuItemId];
     setManualMap(prev => ({ ...prev, [menuItemId]: current }));
     setSaving(prev => ({ ...prev, [menuItemId]: true }));
     try {
-      await fetch(`${SERVER_URL}/api/dish-allergens/${menuItemId}`, {
+      const res = await fetch(`${SERVER_URL}/api/dish-allergens/${menuItemId}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ allergens: JSON.stringify([...current]) }),
       });
-    } catch (e) { console.error('Allergen save failed', e); }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+    } catch (e) {
+      console.error('Allergen save failed', e);
+      alert('Allergen change did NOT save — check connection and try again.');
+      setManualMap(prev => {
+        const next = { ...prev };
+        if (prevManual === undefined) delete next[menuItemId];
+        else next[menuItemId] = prevManual;
+        return next;
+      });
+    }
     finally { setSaving(prev => ({ ...prev, [menuItemId]: false })); }
   };
 
@@ -138,17 +157,22 @@ export default function AllergenSection() {
 
     setSyncing(true);
     try {
-      await Promise.all(toSync.map(({ id, allergens }) =>
+      const results = await Promise.all(toSync.map(({ id, allergens }) =>
         fetch(`${SERVER_URL}/api/dish-allergens/${id}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ allergens: JSON.stringify([...allergens]) }),
         })
       ));
-      // Update local manualMap
+      const failed = results.filter(r => !r.ok).length;
+      if (failed > 0) alert(`${failed} of ${toSync.length} items failed to save — re-run Confirm AI Allergens to retry.`);
+      // Update local manualMap for the ones that saved
       const newMap = { ...manualMap };
-      toSync.forEach(({ id, allergens }) => { newMap[id] = allergens; });
+      toSync.forEach(({ id, allergens }, i) => { if (results[i].ok) newMap[id] = allergens; });
       setManualMap(newMap);
-    } catch (e) { console.error('Sync failed', e); }
+    } catch (e) {
+      console.error('Sync failed', e);
+      alert('Sync failed — check connection and try again.');
+    }
     finally { setSyncing(false); }
   };
 

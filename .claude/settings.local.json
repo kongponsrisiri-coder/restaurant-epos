@@ -32,7 +32,8 @@
       "Bash(git commit TEAM-STATUS.md -m ' *)",
       "Bash(git push *)",
       "Bash(curl -s https://baan-siam.siamepos.co.uk/ --max-time 10)",
-      "Bash(pbcopy)"
+      "Bash(pbcopy)",
+      "Skill(code-review)"
     ]
   }
 }

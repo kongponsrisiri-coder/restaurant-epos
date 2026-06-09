@@ -344,7 +344,16 @@ export default function MenuSection() {
                 setNewSubcatName('');
                 const tempId = -Date.now();
                 setSubcategories(prev => [...prev, { id: tempId, category_id: activeCategory, name: trimmed }]);
-                try { await addSubcategory(activeCategory, trimmed); fetchMenu(); }
+                try {
+                  // SEPOS-046u — replace the temp id with the server-returned
+                  // canonical id. NO fetchMenu reconcile — that read from
+                  // local SQLite which lags behind cloud by up to 5s, so
+                  // it kept wiping the optimistic chip with stale data.
+                  const res = await addSubcategory(activeCategory, trimmed);
+                  if (res?.id) {
+                    setSubcategories(prev => prev.map(s => s.id === tempId ? { ...s, id: res.id } : s));
+                  }
+                }
                 catch (err) {
                   alert('Could not add: ' + (err?.message || 'unknown'));
                   setNewSubcatName(trimmed);
@@ -364,14 +373,16 @@ export default function MenuSection() {
                 if (!trimmed) return;
                 setSubcatBusy(true);
                 setNewSubcatName('');
-                // SEPOS-046t — optimistic add: drop a placeholder chip
-                // into local state with a temporary negative id. After
-                // the POST returns, fetchMenu reconciles with the real id.
                 const tempId = -Date.now();
                 setSubcategories(prev => [...prev, { id: tempId, category_id: activeCategory, name: trimmed }]);
                 try {
-                  await addSubcategory(activeCategory, trimmed);
-                  fetchMenu(); // background reconcile
+                  // SEPOS-046u — server returns the canonical id; we patch
+                  // it onto the optimistic chip in place. No fetchMenu
+                  // reconcile (it would read stale local SQLite).
+                  const res = await addSubcategory(activeCategory, trimmed);
+                  if (res?.id) {
+                    setSubcategories(prev => prev.map(s => s.id === tempId ? { ...s, id: res.id } : s));
+                  }
                 }
                 catch (err) {
                   alert('Could not add: ' + (err?.message || 'unknown'));
@@ -386,16 +397,16 @@ export default function MenuSection() {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {activeCatSubs.map(sub => (<div key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'white', borderRadius: 20, padding: '4px 12px', border: '1px solid #bfdbfe' }}><span style={{ fontSize: 13, color: '#1e40af', fontWeight: 500 }}>{sub.name}</span><button onClick={async () => {
               if (!await confirm(`Delete "${sub.name}"?`)) return;
-              // SEPOS-046t — optimistic delete: drop chip from local state
-              // immediately so the UI feels instant. Network request fires
-              // in background; rollback + refetch on failure.
+              // SEPOS-046t/u — optimistic delete. Chip already gone from
+              // state — no fetchMenu reconcile (it'd read stale local
+              // SQLite and could revive the chip). On failure, fetchMenu
+              // rolls back to true state.
               setSubcategories(prev => prev.filter(s => s.id !== sub.id));
               try {
                 await deleteSubcategory(sub.id);
-                fetchMenu(); // background reconcile; no await
               } catch (err) {
                 alert('Could not delete: ' + (err?.message || 'unknown error'));
-                fetchMenu(); // rollback to true state
+                fetchMenu(); // rollback only on error
               }
             }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 16 }}>×</button></div>))}
             {activeCatSubs.length === 0 && <span style={{ color: '#94a3b8', fontSize: 13 }}>No sub-categories yet</span>}

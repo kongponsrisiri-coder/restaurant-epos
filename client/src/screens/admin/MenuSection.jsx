@@ -341,10 +341,15 @@ export default function MenuSection() {
                 const trimmed = newSubcatName.trim();
                 if (!trimmed) return;
                 setSubcatBusy(true);
-                // Optimistic: clear input first so user feels instant response
                 setNewSubcatName('');
-                try { await addSubcategory(activeCategory, trimmed); await fetchMenu(); }
-                catch (err) { alert('Could not add: ' + (err?.message || 'unknown')); setNewSubcatName(trimmed); }
+                const tempId = -Date.now();
+                setSubcategories(prev => [...prev, { id: tempId, category_id: activeCategory, name: trimmed }]);
+                try { await addSubcategory(activeCategory, trimmed); fetchMenu(); }
+                catch (err) {
+                  alert('Could not add: ' + (err?.message || 'unknown'));
+                  setNewSubcatName(trimmed);
+                  setSubcategories(prev => prev.filter(s => s.id !== tempId));
+                }
                 finally { setSubcatBusy(false); }
               }}
               placeholder="e.g. Wine, Curry, Stir-fried..."
@@ -359,15 +364,40 @@ export default function MenuSection() {
                 if (!trimmed) return;
                 setSubcatBusy(true);
                 setNewSubcatName('');
-                try { await addSubcategory(activeCategory, trimmed); await fetchMenu(); }
-                catch (err) { alert('Could not add: ' + (err?.message || 'unknown')); setNewSubcatName(trimmed); }
+                // SEPOS-046t — optimistic add: drop a placeholder chip
+                // into local state with a temporary negative id. After
+                // the POST returns, fetchMenu reconciles with the real id.
+                const tempId = -Date.now();
+                setSubcategories(prev => [...prev, { id: tempId, category_id: activeCategory, name: trimmed }]);
+                try {
+                  await addSubcategory(activeCategory, trimmed);
+                  fetchMenu(); // background reconcile
+                }
+                catch (err) {
+                  alert('Could not add: ' + (err?.message || 'unknown'));
+                  setNewSubcatName(trimmed);
+                  setSubcategories(prev => prev.filter(s => s.id !== tempId));
+                }
                 finally { setSubcatBusy(false); }
               }}
               style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: subcatBusy ? '#94a3b8' : '#3b82f6', color: 'white', cursor: subcatBusy ? 'wait' : 'pointer', fontWeight: 600, opacity: (subcatBusy || !newSubcatName.trim()) ? 0.6 : 1 }}
             >{subcatBusy ? '…' : 'Add'}</button>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {activeCatSubs.map(sub => (<div key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'white', borderRadius: 20, padding: '4px 12px', border: '1px solid #bfdbfe' }}><span style={{ fontSize: 13, color: '#1e40af', fontWeight: 500 }}>{sub.name}</span><button onClick={async () => { if (!await confirm(`Delete "${sub.name}"?`)) return; await deleteSubcategory(sub.id); fetchMenu(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 16 }}>×</button></div>))}
+            {activeCatSubs.map(sub => (<div key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'white', borderRadius: 20, padding: '4px 12px', border: '1px solid #bfdbfe' }}><span style={{ fontSize: 13, color: '#1e40af', fontWeight: 500 }}>{sub.name}</span><button onClick={async () => {
+              if (!await confirm(`Delete "${sub.name}"?`)) return;
+              // SEPOS-046t — optimistic delete: drop chip from local state
+              // immediately so the UI feels instant. Network request fires
+              // in background; rollback + refetch on failure.
+              setSubcategories(prev => prev.filter(s => s.id !== sub.id));
+              try {
+                await deleteSubcategory(sub.id);
+                fetchMenu(); // background reconcile; no await
+              } catch (err) {
+                alert('Could not delete: ' + (err?.message || 'unknown error'));
+                fetchMenu(); // rollback to true state
+              }
+            }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 16 }}>×</button></div>))}
             {activeCatSubs.length === 0 && <span style={{ color: '#94a3b8', fontSize: 13 }}>No sub-categories yet</span>}
           </div>
         </div>

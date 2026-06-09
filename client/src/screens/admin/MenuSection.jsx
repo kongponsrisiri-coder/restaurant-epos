@@ -146,6 +146,11 @@ export default function MenuSection() {
   const [activeGroup, setActiveGroup]       = useState(null);
   const [showSubcatManager, setShowSubcatManager] = useState(false);
   const [newSubcatName, setNewSubcatName]   = useState('');
+  // SEPOS-046s — in-flight guard for the Add Sub-category button so a slow
+  // POST can't be double-fired into a duplicate row. Same pattern would
+  // help the per-chip delete + add-category buttons but Add Sub is where
+  // Korakot kept hitting it.
+  const [subcatBusy, setSubcatBusy]         = useState(false);
   const [newCatName, setNewCatName]         = useState('');
   const [showAddCat, setShowAddCat]         = useState(false);
   // SEPOS-046n — inline rename state for the active category chip
@@ -327,11 +332,42 @@ export default function MenuSection() {
           <div style={{ fontWeight: 700, fontSize: 14, color: '#1e40af', marginBottom: 12 }}>Manage Sub-categories</div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
             <select value={activeCategory} onChange={e => setActiveCategory(Number(e.target.value))} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}>{menu.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select>
-            <input value={newSubcatName} onChange={e => setNewSubcatName(e.target.value)} placeholder="e.g. Wine, Curry, Stir-fried..." style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }} />
-            <button onClick={async () => { if (!newSubcatName) return; await addSubcategory(activeCategory, newSubcatName); setNewSubcatName(''); fetchMenu(); }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#3b82f6', color: 'white', cursor: 'pointer', fontWeight: 600 }}>Add</button>
+            <input
+              value={newSubcatName}
+              onChange={e => setNewSubcatName(e.target.value)}
+              onKeyDown={async e => {
+                if (e.key !== 'Enter') return;
+                if (subcatBusy) return;
+                const trimmed = newSubcatName.trim();
+                if (!trimmed) return;
+                setSubcatBusy(true);
+                // Optimistic: clear input first so user feels instant response
+                setNewSubcatName('');
+                try { await addSubcategory(activeCategory, trimmed); await fetchMenu(); }
+                catch (err) { alert('Could not add: ' + (err?.message || 'unknown')); setNewSubcatName(trimmed); }
+                finally { setSubcatBusy(false); }
+              }}
+              placeholder="e.g. Wine, Curry, Stir-fried..."
+              disabled={subcatBusy}
+              style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, opacity: subcatBusy ? 0.6 : 1 }}
+            />
+            <button
+              disabled={subcatBusy || !newSubcatName.trim()}
+              onClick={async () => {
+                if (subcatBusy) return;
+                const trimmed = newSubcatName.trim();
+                if (!trimmed) return;
+                setSubcatBusy(true);
+                setNewSubcatName('');
+                try { await addSubcategory(activeCategory, trimmed); await fetchMenu(); }
+                catch (err) { alert('Could not add: ' + (err?.message || 'unknown')); setNewSubcatName(trimmed); }
+                finally { setSubcatBusy(false); }
+              }}
+              style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: subcatBusy ? '#94a3b8' : '#3b82f6', color: 'white', cursor: subcatBusy ? 'wait' : 'pointer', fontWeight: 600, opacity: (subcatBusy || !newSubcatName.trim()) ? 0.6 : 1 }}
+            >{subcatBusy ? '…' : 'Add'}</button>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {activeCatSubs.map(sub => (<div key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'white', borderRadius: 20, padding: '4px 12px', border: '1px solid #bfdbfe' }}><span style={{ fontSize: 13, color: '#1e40af', fontWeight: 500 }}>{sub.name}</span><button onClick={async () => { if (!confirm(`Delete "${sub.name}"?`)) return; await deleteSubcategory(sub.id); fetchMenu(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 16 }}>×</button></div>))}
+            {activeCatSubs.map(sub => (<div key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'white', borderRadius: 20, padding: '4px 12px', border: '1px solid #bfdbfe' }}><span style={{ fontSize: 13, color: '#1e40af', fontWeight: 500 }}>{sub.name}</span><button onClick={async () => { if (!await confirm(`Delete "${sub.name}"?`)) return; await deleteSubcategory(sub.id); fetchMenu(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 16 }}>×</button></div>))}
             {activeCatSubs.length === 0 && <span style={{ color: '#94a3b8', fontSize: 13 }}>No sub-categories yet</span>}
           </div>
         </div>

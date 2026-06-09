@@ -266,7 +266,38 @@ app.get('/api/categories', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-046q — desktop installs forward menu admin writes to cloud so the
+// operator's edits become the new cloud truth (instead of being silently
+// erased by the next pull tick). On success, the next 5s pull brings the
+// cloud-acknowledged shape into local SQLite. On failure, the request falls
+// back to the local handler so the operator's UI still updates — the
+// caveat (logged) is that the change is local-only and will be reverted
+// on next pull. Phase 2 (offline-capable menu queue) is a separate
+// SEPOS-046r if connectivity gaps become a real operator complaint.
+async function maybeForwardMenuWriteToCloud(req, res) {
+  try {
+    const archiveService = require('./services/archiveService');
+    if (!archiveService.isLocalInstall() || !process.env.CLOUD_API_URL) return false;
+  } catch { return false; }
+  try {
+    const url = `${process.env.CLOUD_API_URL}${req.originalUrl}`;
+    const init = { method: req.method, headers: { 'Content-Type': 'application/json' } };
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body && Object.keys(req.body).length) {
+      init.body = JSON.stringify(req.body);
+    }
+    const r = await fetch(url, init);
+    const body = await r.text();
+    console.log(`[menu-write] forwarded ${req.method} ${req.originalUrl} → cloud ${r.status}`);
+    res.status(r.status).type('application/json').send(body);
+    return true;
+  } catch (err) {
+    console.warn(`[menu-write] cloud unreachable for ${req.method} ${req.originalUrl}: ${err.message} — falling back to local (change will be lost on next pull)`);
+    return false;
+  }
+}
+
 app.post('/api/categories', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     const { name } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'Category name required' });
@@ -284,6 +315,7 @@ app.post('/api/categories', async (req, res) => {
 // the Menu Manager finally has full CRUD on categories. Trims + rejects
 // empty names so the chip never collapses to blank.
 app.put('/api/categories/:id', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     const name = String(req.body?.name || '').trim();
     if (!name) return res.status(400).json({ error: 'Category name is required' });
@@ -295,6 +327,7 @@ app.put('/api/categories/:id', async (req, res) => {
 // SEPOS-046o — reorder categories. Frontend sends [{id, sort_order}, ...]
 // after every arrow-button tap; backend persists each row's position.
 app.put('/api/categories/sort-order', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     for (const it of items) {
@@ -305,6 +338,7 @@ app.put('/api/categories/sort-order', async (req, res) => {
 });
 
 app.put('/api/categories/:id/bar', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     const { is_bar } = req.body;
     await pool.query('UPDATE categories SET is_bar = $1 WHERE id = $2', [is_bar, req.params.id]);
@@ -313,6 +347,7 @@ app.put('/api/categories/:id/bar', async (req, res) => {
 });
 
 app.put('/api/categories/:id/default-course', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     const { default_course } = req.body;
     await pool.query('UPDATE categories SET default_course = $1 WHERE id = $2', [default_course, req.params.id]);
@@ -328,6 +363,7 @@ app.get('/api/subcategories', async (req, res) => {
 });
 
 app.post('/api/subcategories', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     const { category_id, name } = req.body;
     const result = await pool.query('INSERT INTO subcategories (category_id, name) VALUES ($1,$2) RETURNING id', [category_id, name]);
@@ -336,6 +372,7 @@ app.post('/api/subcategories', async (req, res) => {
 });
 
 app.delete('/api/subcategories/:id', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     await pool.query('UPDATE menu_items SET subcategory_id = NULL WHERE subcategory_id = $1', [req.params.id]);
     await pool.query('DELETE FROM subcategories WHERE id = $1', [req.params.id]);
@@ -349,6 +386,7 @@ app.delete('/api/subcategories/:id', async (req, res) => {
 // active category when items_count === 0, so the 409 path is mostly
 // belt-and-braces.
 app.delete('/api/categories/:id', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     const itemsRes = await pool.query('SELECT COUNT(*) AS n FROM menu_items WHERE category_id = $1', [req.params.id]);
     const itemCount = parseInt(itemsRes.rows[0].n, 10) || 0;
@@ -387,6 +425,7 @@ app.get('/api/menu/all', async (req, res) => {
 });
 
 app.post('/api/menu/items', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     const { category_id, subcategory_id, name, name_alt, description, price, vat_rate, allergens } = req.body;
     // AI scanner sends allergens as ["Fish","Soybeans"]; normalise to JSON
@@ -403,6 +442,7 @@ app.post('/api/menu/items', async (req, res) => {
 });
 
 app.put('/api/menu/items/sort-order', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     const { items } = req.body;
     for (const item of items) {
@@ -413,6 +453,7 @@ app.put('/api/menu/items/sort-order', async (req, res) => {
 });
 
 app.put('/api/menu/items/:id', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     const { name, name_alt, description, price, is_available, is_online, subcategory_id, category_id, vat_rate } = req.body;
     await pool.query(
@@ -470,6 +511,7 @@ app.delete('/api/modifiers/:id', async (req, res) => {
 });
 
 app.delete('/api/menu/items/:id', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     await pool.query(`UPDATE order_items SET item_name = COALESCE(item_name, (SELECT name FROM menu_items WHERE id = $1)), menu_item_id = NULL WHERE menu_item_id = $1`, [req.params.id]);
     await pool.query('DELETE FROM modifiers WHERE group_id IN (SELECT id FROM modifier_groups WHERE menu_item_id = $1)', [req.params.id]);

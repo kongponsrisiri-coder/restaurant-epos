@@ -292,6 +292,18 @@ app.put('/api/categories/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-046o — reorder categories. Frontend sends [{id, sort_order}, ...]
+// after every arrow-button tap; backend persists each row's position.
+app.put('/api/categories/sort-order', async (req, res) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    for (const it of items) {
+      await pool.query('UPDATE categories SET sort_order = $1 WHERE id = $2', [Number(it.sort_order) || 0, it.id]);
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.put('/api/categories/:id/bar', async (req, res) => {
   try {
     const { is_bar } = req.body;

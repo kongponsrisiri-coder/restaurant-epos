@@ -5,6 +5,7 @@ import {
   getItemModifiers, addModifierGroup, addModifierOption,
   deleteModifierGroup, deleteModifier,
   getSubcategories, addSubcategory, deleteSubcategory, updateCategory, deleteCategory,
+  updateCategoryBar, updateCategorySortOrder,
   addCategory, updateCategoryDefaultCourse,
 } from '../../api';
 import { confirm } from '../../utils/confirm';
@@ -201,12 +202,33 @@ export default function MenuSection() {
     <div style={{ padding: 24 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 20 }}>Menu Manager</h1>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        {menu.map(cat => {
+        {menu.map((cat, catIdx) => {
           const itemCount = cat.items?.length || 0;
           const isActive  = activeCategory === cat.id;
           const isEditing = editingCatId === cat.id;
           const canDelete = isActive && itemCount === 0 && !isEditing;
           const canEdit   = isActive && !isEditing;
+          const isBar     = Number(cat.is_bar) === 1;
+          const canMoveLeft  = isActive && !isEditing && catIdx > 0;
+          const canMoveRight = isActive && !isEditing && catIdx < menu.length - 1;
+          const swapAt = async (otherIdx) => {
+            const reordered = [...menu];
+            [reordered[catIdx], reordered[otherIdx]] = [reordered[otherIdx], reordered[catIdx]];
+            try {
+              await updateCategorySortOrder(reordered.map((c, i) => ({ id: c.id, sort_order: i })));
+              fetchMenu();
+            } catch (err) {
+              alert('Could not reorder: ' + (err?.message || 'unknown error'));
+            }
+          };
+          const toggleBar = async () => {
+            try {
+              await updateCategoryBar(cat.id, isBar ? 0 : 1);
+              fetchMenu();
+            } catch (err) {
+              alert('Could not toggle bar: ' + (err?.message || 'unknown error'));
+            }
+          };
           const saveRename = async () => {
             const trimmed = editingCatName.trim();
             if (!trimmed || trimmed === cat.name) { setEditingCatId(null); return; }
@@ -234,12 +256,22 @@ export default function MenuSection() {
                 </>
               ) : (
                 <>
-                  <button onClick={() => setActiveCategory(cat.id)} style={{ padding: '8px 20px', border: 'none', cursor: 'pointer', fontWeight: 600, background: isActive ? '#1a1a2e' : '#e0e0e0', color: isActive ? 'white' : '#555', borderRadius: (canEdit || canDelete) ? '20px 0 0 20px' : 20 }}>{cat.name} ({itemCount})</button>
+                  {canMoveLeft && (
+                    <button onClick={() => swapAt(catIdx - 1)} title="Move category left" style={{ padding: '0 10px', border: 'none', cursor: 'pointer', fontWeight: 800, background: '#1a1a2e', color: 'white', borderRadius: '20px 0 0 20px', fontSize: 12 }}>◀</button>
+                  )}
+                  <button onClick={() => setActiveCategory(cat.id)} style={{ padding: '8px 20px', border: 'none', cursor: 'pointer', fontWeight: 600, background: isActive ? '#1a1a2e' : '#e0e0e0', color: isActive ? 'white' : '#555', borderRadius: canMoveLeft ? 0 : ((canEdit || canMoveRight) ? '20px 0 0 20px' : 20) }}>{isBar ? '🍹 ' : ''}{cat.name} ({itemCount})</button>
+                  {canEdit && (
+                    <button
+                      onClick={toggleBar}
+                      title={isBar ? 'Stop routing to bar printer (set is_bar=0)' : 'Send this category to the bar printer (set is_bar=1) — for Drinks, Cocktails, etc.'}
+                      style={{ padding: '0 10px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: isBar ? '#7c2d12' : '#1a1a2e', color: isBar ? '#fde68a' : '#888', fontSize: 13 }}
+                    >🍹</button>
+                  )}
                   {canEdit && (
                     <button
                       onClick={() => { setEditingCatName(cat.name); setEditingCatId(cat.id); }}
                       title="Rename this category"
-                      style={{ padding: '0 10px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: '#1a1a2e', color: '#C9A84C', borderRadius: canDelete ? 0 : '0 20px 20px 0', fontSize: 13 }}
+                      style={{ padding: '0 10px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: '#1a1a2e', color: '#C9A84C', fontSize: 13 }}
                     >✎</button>
                   )}
                   {canDelete && (
@@ -256,8 +288,11 @@ export default function MenuSection() {
                         }
                       }}
                       title="Delete this empty category"
-                      style={{ padding: '0 12px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: '#991b1b', color: 'white', borderRadius: '0 20px 20px 0', fontSize: 14 }}
+                      style={{ padding: '0 12px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: '#991b1b', color: 'white', fontSize: 14 }}
                     >🗑️</button>
+                  )}
+                  {canMoveRight && (
+                    <button onClick={() => swapAt(catIdx + 1)} title="Move category right" style={{ padding: '0 10px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: '#1a1a2e', color: 'white', borderRadius: '0 20px 20px 0', fontSize: 12 }}>▶</button>
                   )}
                 </>
               )}
@@ -271,7 +306,7 @@ export default function MenuSection() {
               <option value={1}>🟡 Starter</option>
               <option value={2}>🟢 Main</option>
               <option value={3}>🔴 Dessert</option>
-              <option value={4}>🔵 Extra/Bar</option>
+              <option value={4}>🔵 Extra</option>
             </select>
           </div>
           );

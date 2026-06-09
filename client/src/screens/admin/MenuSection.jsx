@@ -178,9 +178,71 @@ export default function MenuSection() {
 
   const openAddForm  = () => { setForm({ name: '', description: '', price: '', category_id: activeCategory, subcategory_id: null, vat_rate: 20 }); setEditItem(null); setShowForm(true); };
   const openEditForm = (item) => { setForm({ name: item.name, name_alt: item.name_alt || '', description: item.description || '', price: item.price, category_id: item.category_id, subcategory_id: item.subcategory_id || null, vat_rate: item.vat_rate ?? 20 }); setEditItem(item); setShowForm(true); };
-  const handleSave   = async () => { if (!form.name || !form.price) return alert('Name and price are required!'); if (editItem) await updateMenuItem(editItem.id, { ...form, is_available: 1 }); else await addMenuItem(form); setShowForm(false); fetchMenu(); };
-  const toggleAvailable = async (item) => { await updateMenuItem(item.id, { ...item, is_available: item.is_available ? 0 : 1 }); fetchMenu(); };
-  const toggleOnline    = async (item) => { const next = (item.is_online === 0) ? 1 : 0; await updateMenuItem(item.id, { ...item, is_online: next }); fetchMenu(); };
+
+  // SEPOS-046v — optimistic item save. Reflects the change in local menu
+  // state immediately (including moving the item between categories when
+  // category_id changes), then fires the network request in background.
+  // No fetchMenu reconcile — it'd read stale local SQLite and could
+  // revive the old position. Rollback to true state only on error.
+  const handleSave = async () => {
+    if (!form.name || !form.price) return alert('Name and price are required!');
+    if (editItem) {
+      const newCatId = Number(form.category_id);
+      // Optimistic: rebuild each category's items array; remove the edited
+      // item everywhere, then append the patched item to its new category.
+      setMenu(prev => prev.map(cat => {
+        const without = (cat.items || []).filter(it => it.id !== editItem.id);
+        if (cat.id !== newCatId) return { ...cat, items: without };
+        const patched = { ...editItem, ...form, id: editItem.id, category_id: newCatId, is_available: 1 };
+        return { ...cat, items: [...without, patched] };
+      }));
+      setShowForm(false);
+      try { await updateMenuItem(editItem.id, { ...form, is_available: 1 }); }
+      catch (err) { alert('Save failed: ' + (err?.message || 'unknown')); fetchMenu(); }
+    } else {
+      // ADD: insert with a temp negative id, then patch the id with the
+      // server's response when it arrives.
+      const tempId = -Date.now();
+      const newCatId = Number(form.category_id);
+      const draft = { id: tempId, ...form, category_id: newCatId, is_available: 1, is_online: 1 };
+      setMenu(prev => prev.map(cat => cat.id === newCatId
+        ? { ...cat, items: [...(cat.items || []), draft] }
+        : cat));
+      setShowForm(false);
+      try {
+        const res = await addMenuItem(form);
+        if (res?.id) {
+          setMenu(prev => prev.map(cat => ({
+            ...cat,
+            items: (cat.items || []).map(it => it.id === tempId ? { ...it, id: res.id } : it),
+          })));
+        }
+      } catch (err) {
+        alert('Add failed: ' + (err?.message || 'unknown'));
+        setMenu(prev => prev.map(cat => ({ ...cat, items: (cat.items || []).filter(it => it.id !== tempId) })));
+      }
+    }
+  };
+
+  const toggleAvailable = async (item) => {
+    const next = item.is_available ? 0 : 1;
+    setMenu(prev => prev.map(cat => ({
+      ...cat,
+      items: (cat.items || []).map(it => it.id === item.id ? { ...it, is_available: next } : it),
+    })));
+    try { await updateMenuItem(item.id, { ...item, is_available: next }); }
+    catch (err) { fetchMenu(); }
+  };
+
+  const toggleOnline = async (item) => {
+    const next = (item.is_online === 0) ? 1 : 0;
+    setMenu(prev => prev.map(cat => ({
+      ...cat,
+      items: (cat.items || []).map(it => it.id === item.id ? { ...it, is_online: next } : it),
+    })));
+    try { await updateMenuItem(item.id, { ...item, is_online: next }); }
+    catch (err) { fetchMenu(); }
+  };
   const openModifiers   = async (item) => { setModifierItem(item); setActiveGroup(null); const data = await getItemModifiers(item.id); setModifiers(data); };
   const handleAddGroup  = async () => { if (!newGroup.name) return alert('Group name is required!'); await addModifierGroup(modifierItem.id, newGroup); setNewGroup({ name: '', required: true, multi_select: false }); setModifiers(await getItemModifiers(modifierItem.id)); };
   const handleAddOption = async () => { if (!newOption.name) return alert('Option name is required!'); await addModifierOption(activeGroup, { name: newOption.name, extra_price: newOption.extra_price || 0 }); setNewOption({ name: '', extra_price: '' }); setModifiers(await getItemModifiers(modifierItem.id)); };
@@ -441,7 +503,25 @@ export default function MenuSection() {
                   <button onClick={e => { e.stopPropagation(); toggleOnline(item); }} title={item.is_online === 0 ? 'Hidden from online ordering' : 'Visible on online ordering'} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: item.is_online === 0 ? '#e5e7eb' : '#dbeafe', color: item.is_online === 0 ? '#374151' : '#1e40af' }}>{item.is_online === 0 ? '🌐 Hidden' : '🌐 Online'}</button>
                   <button onClick={e => { e.stopPropagation(); openModifiers(item); }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#fef9c3', color: '#713f12', fontWeight: 600, fontSize: 12 }}>Options</button>
                   <button onClick={e => { e.stopPropagation(); openEditForm(item); }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#f0f0f0', fontWeight: 600, fontSize: 12 }}>Edit</button>
-                  <button onClick={async e => { e.stopPropagation(); if (!await confirm(`Delete "${item.name}" permanently?`)) return; try { const res = await fetch(`${SERVER_URL}/api/menu/items/${item.id}`, { method: 'DELETE' }); const data = await res.json(); if (data.success) fetchMenu(); else alert('Delete failed: ' + (data.error || 'Unknown error')); } catch (err) { alert('Delete error: ' + err.message); } }} style={{ padding: '6px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#fee2e2', color: '#991b1b', fontWeight: 600, fontSize: 12 }}>🗑️</button>
+                  <button onClick={async e => {
+                    e.stopPropagation();
+                    if (!await confirm(`Delete "${item.name}" permanently?`)) return;
+                    // SEPOS-046v — optimistic delete: drop the row from
+                    // local menu state immediately; network DELETE runs
+                    // in background. Rollback via fetchMenu only on error.
+                    setMenu(prev => prev.map(cat => ({
+                      ...cat,
+                      items: (cat.items || []).filter(it => it.id !== item.id),
+                    })));
+                    try {
+                      const res = await fetch(`${SERVER_URL}/api/menu/items/${item.id}`, { method: 'DELETE' });
+                      const data = await res.json();
+                      if (!data.success) { alert('Delete failed: ' + (data.error || 'Unknown error')); fetchMenu(); }
+                    } catch (err) {
+                      alert('Delete error: ' + err.message);
+                      fetchMenu();
+                    }
+                  }} style={{ padding: '6px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#fee2e2', color: '#991b1b', fontWeight: 600, fontSize: 12 }}>🗑️</button>
                 </div>
               </div>
             );

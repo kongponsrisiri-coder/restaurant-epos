@@ -319,6 +319,27 @@ app.delete('/api/subcategories/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-046m — delete category. Safety: refuse if the category still
+// has menu_items (Starter has 168 — must never accidentally vanish).
+// Cascades to its subcategories. UI shows the button only on the
+// active category when items_count === 0, so the 409 path is mostly
+// belt-and-braces.
+app.delete('/api/categories/:id', async (req, res) => {
+  try {
+    const itemsRes = await pool.query('SELECT COUNT(*) AS n FROM menu_items WHERE category_id = $1', [req.params.id]);
+    const itemCount = parseInt(itemsRes.rows[0].n, 10) || 0;
+    if (itemCount > 0) {
+      return res.status(409).json({
+        error: `Cannot delete — this category still has ${itemCount} item${itemCount === 1 ? '' : 's'}. Move them to another category first.`,
+        item_count: itemCount,
+      });
+    }
+    await pool.query('DELETE FROM subcategories WHERE category_id = $1', [req.params.id]);
+    await pool.query('DELETE FROM categories WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/menu', async (req, res) => {
   try {
     const [catRes, subRes, itemRes] = await Promise.all([

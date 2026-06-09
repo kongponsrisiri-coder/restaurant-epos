@@ -4,7 +4,7 @@ import {
   getAllMenu as getMenu, addMenuItem, updateMenuItem, deleteMenuItem,
   getItemModifiers, addModifierGroup, addModifierOption,
   deleteModifierGroup, deleteModifier,
-  getSubcategories, addSubcategory, deleteSubcategory,
+  getSubcategories, addSubcategory, deleteSubcategory, deleteCategory,
   addCategory, updateCategoryDefaultCourse,
 } from '../../api';
 import { confirm } from '../../utils/confirm';
@@ -198,9 +198,32 @@ export default function MenuSection() {
     <div style={{ padding: 24 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 20 }}>Menu Manager</h1>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        {menu.map(cat => (
+        {menu.map(cat => {
+          const itemCount = cat.items?.length || 0;
+          const isActive  = activeCategory === cat.id;
+          const canDelete = isActive && itemCount === 0;
+          return (
           <div key={cat.id} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-            <button onClick={() => setActiveCategory(cat.id)} style={{ padding: '8px 20px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, background: activeCategory === cat.id ? '#1a1a2e' : '#e0e0e0', color: activeCategory === cat.id ? 'white' : '#555' }}>{cat.name} ({cat.items?.length || 0})</button>
+            <div style={{ display: 'inline-flex', alignItems: 'stretch', borderRadius: 20, overflow: 'hidden' }}>
+              <button onClick={() => setActiveCategory(cat.id)} style={{ padding: '8px 20px', border: 'none', cursor: 'pointer', fontWeight: 600, background: isActive ? '#1a1a2e' : '#e0e0e0', color: isActive ? 'white' : '#555', borderRadius: canDelete ? '20px 0 0 20px' : 20 }}>{cat.name} ({itemCount})</button>
+              {canDelete && (
+                <button
+                  onClick={async () => {
+                    if (!await confirm(`Delete category "${cat.name}"? It has no items, so this is safe.`)) return;
+                    try {
+                      const res = await deleteCategory(cat.id);
+                      if (res?.error) { alert(res.error); return; }
+                      setActiveCategory(menu.find(c => c.id !== cat.id)?.id || null);
+                      fetchMenu();
+                    } catch (err) {
+                      alert('Could not delete: ' + (err?.message || 'unknown error'));
+                    }
+                  }}
+                  title="Delete this empty category"
+                  style={{ padding: '0 12px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: '#991b1b', color: 'white', borderRadius: '0 20px 20px 0', fontSize: 14 }}
+                >🗑️</button>
+              )}
+            </div>
             <select
               value={cat.default_course || 1}
               onChange={async e => { await updateCategoryDefaultCourse(cat.id, Number(e.target.value)); fetchMenu(); }}
@@ -213,7 +236,8 @@ export default function MenuSection() {
               <option value={4}>🔵 Extra/Bar</option>
             </select>
           </div>
-        ))}
+          );
+        })}
         {showAddCat ? (
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input autoFocus value={newCatName} onChange={e => setNewCatName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddCategory(); if (e.key === 'Escape') { setShowAddCat(false); setNewCatName(''); } }} placeholder="Category name…" style={{ padding: '7px 12px', borderRadius: 20, border: '2px solid #1a1a2e', fontSize: 13, outline: 'none', width: 160 }} />

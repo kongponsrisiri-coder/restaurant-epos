@@ -531,24 +531,26 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
           )}
 
           {/* Course selector */}
-          {!activeCatIsBar && (
-            <div style={{
-              background: '#f8f8f8', padding: '10px 16px', borderBottom: '1px solid #eee',
-              display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0
-            }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#888' }}>Course:</span>
-              {[1, 2, 3, 4].map(c => (
-                <button key={c} onClick={() => setActiveCourse(c)} style={{
-                  padding: '8px 16px', borderRadius: 20, border: 'none', cursor: 'pointer',
-                  fontWeight: 700, fontSize: 13,
-                  background: activeCourse === c ? COURSE_COLORS[c] : '#e0e0e0',
-                  color: activeCourse === c ? 'white' : '#555',
-                }}>
-                  {c === 1 ? 'Starters' : c === 2 ? 'Mains' : c === 3 ? 'Desserts' : 'Extra'}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* SEPOS-046w — course bar stays visible on bar categories too.
+              Hiding it on bar made the whole top section jump out of place,
+              and the course concept is independent of bar routing anyway
+              (a drink ordered with the mains is still course 2). */}
+          <div style={{
+            background: '#f8f8f8', padding: '10px 16px', borderBottom: '1px solid #eee',
+            display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#888' }}>Course:</span>
+            {[1, 2, 3, 4].map(c => (
+              <button key={c} onClick={() => setActiveCourse(c)} style={{
+                padding: '8px 16px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                fontWeight: 700, fontSize: 13,
+                background: activeCourse === c ? COURSE_COLORS[c] : '#e0e0e0',
+                color: activeCourse === c ? 'white' : '#555',
+              }}>
+                {c === 1 ? 'Starters' : c === 2 ? 'Mains' : c === 3 ? 'Desserts' : 'Extra'}
+              </button>
+            ))}
+          </div>
 
           {/* Category tabs */}
           <div style={{

@@ -57,7 +57,12 @@ async function apiFetch(path, options = {}) {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
-  return res.json();
+  const data = await res.json();
+  // SEPOS-046aa — fetch resolves on HTTP 4xx/5xx, so without this a failed
+  // mutation would fall through the success path (and optimistic state
+  // would never roll back). Throw so every caller's catch handles it.
+  if (data && data.error) throw new Error(data.error);
+  return data;
 }
 
 function deriveCustomers(reservations) {
@@ -104,16 +109,21 @@ export default function ReservationsScreen() {
   const [showModal, setShowModal]               = useState(false);
   const [editingId, setEditingId]               = useState(null);
   const [form, setForm]                         = useState({ ...BLANK_FORM, reservation_date: todayStr() });
-  const [saving, setSaving]                     = useState(false);
   const [toast, setToast]                       = useState(null);
   const [newAlert, setNewAlert]                 = useState(null);
   const [customerSearch, setCustomerSearch]     = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const socketRef                               = useRef(null);
+  // SEPOS-046aa — several loadData calls can be in flight (error rollbacks,
+  // manual refresh); only the latest response may win or an older snapshot
+  // would overwrite newer optimistic/socket state.
+  const loadSeqRef                              = useRef(0);
 
   const loadData = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     try {
       const [res, tbls] = await Promise.all([apiFetch('/api/reservations'), apiFetch('/api/tables')]);
+      if (seq !== loadSeqRef.current) return;
       setReservations(Array.isArray(res) ? res : []);
       setTables(Array.isArray(tbls) ? tbls : []);
     } catch { showToast('Error loading data', 'error'); }
@@ -147,6 +157,7 @@ export default function ReservationsScreen() {
   }
 
   function openEdit(r) {
+    if (r.id < 0) return showToast('Still saving — try again in a second.', 'error');
     setEditingId(r.id);
     setForm({ customer_name: r.customer_name || '', customer_phone: r.customer_phone || '', customer_email: r.customer_email || '', covers: r.covers || 2, reservation_date: (r.reservation_date || '').split('T')[0], reservation_time: (r.reservation_time || '').slice(0, 5), table_id: r.table_id || '', notes: r.notes || '', status: r.status || 'pending' });
     setShowModal(true);
@@ -154,67 +165,100 @@ export default function ReservationsScreen() {
 
   function closeModal() { setShowModal(false); setEditingId(null); }
 
+  // SEPOS-046aa — optimistic save. The modal closes and the row appears /
+  // updates instantly; the server's socket emit (new_reservation /
+  // reservation_updated) delivers the canonical row sub-second, so there
+  // is NO loadData on the success path. loadData only rolls back errors.
   async function handleSave() {
   if (!form.customer_name.trim()) { showToast('Guest name required', 'error'); return; }
   if (!form.customer_phone.trim()) { showToast('Phone number required', 'error'); return; }
   if (!form.reservation_date)     { showToast('Date required', 'error'); return; }
   if (!form.reservation_time)     { showToast('Time required', 'error'); return; }
   if (!form.covers || form.covers < 1) { showToast('Covers must be at least 1', 'error'); return; }
-  setSaving(true);
-  try {
-    const payload = { ...form, table_id: form.table_id || null, source: 'epos' };
-    const data = editingId
-      ? await apiFetch(`/api/reservations/${editingId}`, { method: 'PUT', body: JSON.stringify(payload) })
-      : await apiFetch('/api/reservations', { method: 'POST', body: JSON.stringify(payload) });
-    if (data?.error) { showToast(data.error, 'error'); return; }
-    showToast(editingId ? 'Booking updated ✓' : 'Booking created ✓');
-    closeModal(); loadData();
-  } catch { showToast('Save failed — try again', 'error'); }
-  finally { setSaving(false); }
+  const payload = { ...form, table_id: form.table_id || null, source: 'epos' };
+  const savedId = editingId;
+  closeModal();
+  if (savedId) {
+    setReservations(prev => prev.map(x => x.id === savedId ? { ...x, ...payload } : x));
+    showToast('Booking updated ✓');
+    try {
+      const data = await apiFetch(`/api/reservations/${savedId}`, { method: 'PUT', body: JSON.stringify(payload) });
+      if (data?.id) setReservations(prev => prev.map(x => x.id === savedId ? { ...x, ...data } : x));
+    } catch (e) {
+      showToast(e?.message || 'Save failed — try again', 'error');
+      loadData();
+    }
+  } else {
+    const tempId = -Date.now();
+    setReservations(prev => [...prev, { id: tempId, ...payload, status: payload.status || 'pending' }]);
+    showToast('Booking created ✓');
+    try {
+      const data = await apiFetch('/api/reservations', { method: 'POST', body: JSON.stringify(payload) });
+      // The socket's new_reservation may land before this response — drop
+      // the temp row, then only add the response row if the socket hasn't
+      // already delivered it (its handler dedupes by id).
+      setReservations(prev => {
+        const withoutTemp = prev.filter(x => x.id !== tempId);
+        if (!data?.booking_id || withoutTemp.find(x => x.id === data.booking_id)) return withoutTemp;
+        return [...withoutTemp, { id: data.booking_id, ...payload, status: data?.reservation?.status || 'pending' }];
+      });
+    } catch (e) {
+      showToast(e?.message || 'Save failed — try again', 'error');
+      setReservations(prev => prev.filter(x => x.id !== tempId));
+    }
+  }
 }
 
+  // SEPOS-046aa — shared optimistic status change. The pill flips
+  // instantly; the PUT runs in background and the server's
+  // reservation_updated socket emit delivers the canonical row, so the
+  // success path never refetches. loadData rolls back on error.
+  async function setStatusOptimistic(r, status, toastMsg) {
+    if (r.id < 0) return showToast('Still saving — try again in a second.', 'error');
+    setReservations(prev => prev.map(x => x.id === r.id ? { ...x, status } : x));
+    showToast(toastMsg);
+    try {
+      await apiFetch(`/api/reservations/${r.id}`, { method: 'PUT', body: JSON.stringify({ ...r, reservation_date: (r.reservation_date||'').split('T')[0], reservation_time: (r.reservation_time||'').slice(0,5), status }) });
+    } catch (e) {
+      showToast(e?.message || 'Update failed', 'error');
+      loadData();
+    }
+  }
+
   async function handleSeat(r) {
+    if (r.id < 0) return showToast('Still saving — try again in a second.', 'error');
     if (!await confirm(`Seat ${r.customer_name} (${r.covers} covers)?`)) return;
-    try { await apiFetch(`/api/reservations/${r.id}/seat`, { method: 'POST' }); showToast(`${r.customer_name} seated ✓`); loadData(); }
-    catch { showToast('Seating failed', 'error'); }
+    setReservations(prev => prev.map(x => x.id === r.id ? { ...x, status: 'seated' } : x));
+    showToast(`${r.customer_name} seated ✓`);
+    try {
+      const data = await apiFetch(`/api/reservations/${r.id}/seat`, { method: 'POST' });
+      if (data?.reservation) setReservations(prev => prev.map(x => x.id === r.id ? { ...x, ...data.reservation } : x));
+    } catch (e) {
+      showToast(e?.message || 'Seating failed', 'error');
+      loadData();
+    }
   }
 
-  async function handleConfirm(r) {
-    try { await apiFetch(`/api/reservations/${r.id}`, { method: 'PUT', body: JSON.stringify({ ...r, reservation_date: (r.reservation_date||'').split('T')[0], reservation_time: (r.reservation_time||'').slice(0,5), status: 'confirmed' }) }); showToast('Confirmed ✓'); loadData(); }
-    catch { showToast('Update failed', 'error'); }
-  }
-
+  const handleConfirm  = (r) => setStatusOptimistic(r, 'confirmed', 'Confirmed ✓');
   async function handleNoShow(r) {
     if (!await confirm(`Mark ${r.customer_name} as no-show?`)) return;
-    try { await apiFetch(`/api/reservations/${r.id}`, { method: 'PUT', body: JSON.stringify({ ...r, reservation_date: (r.reservation_date||'').split('T')[0], reservation_time: (r.reservation_time||'').slice(0,5), status: 'no-show' }) }); showToast('Marked as no-show'); loadData(); }
-    catch { showToast('Update failed', 'error'); }
+    setStatusOptimistic(r, 'no-show', 'Marked as no-show');
   }
 
   async function handleCancel(r) {
+    if (r.id < 0) return showToast('Still saving — try again in a second.', 'error');
     if (!await confirm(`Cancel ${r.customer_name}'s booking?`)) return;
-    try { await apiFetch(`/api/reservations/${r.id}`, { method: 'DELETE' }); showToast('Booking cancelled'); loadData(); }
-    catch { showToast('Cancel failed', 'error'); }
+    setReservations(prev => prev.map(x => x.id === r.id ? { ...x, status: 'cancelled' } : x));
+    showToast('Booking cancelled');
+    try { await apiFetch(`/api/reservations/${r.id}`, { method: 'DELETE' }); }
+    catch (e) { showToast(e?.message || 'Cancel failed', 'error'); loadData(); }
   }
 
   // SEPOS-044 — let staff close a seated booking by hand (walk-ins where
   // payment happened off-system, parties that left without ordering, etc.).
   // Auto-complete on bill-pay is still the normal path; this is the escape
   // hatch and the only way to mark walk-ins complete from the List view.
-  async function handleComplete(r) {
-    try {
-      await apiFetch(`/api/reservations/${r.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          ...r,
-          reservation_date: (r.reservation_date || '').split('T')[0],
-          reservation_time: (r.reservation_time || '').slice(0, 5),
-          status: 'completed',
-        }),
-      });
-      showToast('Marked complete ✓');
-      loadData();
-    } catch { showToast('Update failed', 'error'); }
-  }
+  const handleComplete = (r) => setStatusOptimistic(r, 'completed', 'Marked complete ✓');
 
   const filtered = reservations.filter(r => {
     const dateOk   = filterDate ? (r.reservation_date || '').startsWith(filterDate) : true;
@@ -491,8 +535,8 @@ export default function ReservationsScreen() {
               </div>
               <div style={{ display: 'flex', gap: 10, marginTop: 22, justifyContent: 'flex-end' }}>
                 <button onClick={closeModal} style={{ padding: '11px 22px', border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer', fontSize: 14, background: 'white', color: '#555' }}>Cancel</button>
-                <button onClick={handleSave} disabled={saving} style={{ padding: '11px 28px', background: saving ? '#bbb' : '#e94560', color: 'white', border: 'none', borderRadius: 8, cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 15 }}>
-                  {saving ? 'Saving…' : editingId ? '✓ Update' : '✓ Create Booking'}
+                <button onClick={handleSave} style={{ padding: '11px 28px', background: '#e94560', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>
+                  {editingId ? '✓ Update' : '✓ Create Booking'}
                 </button>
               </div>
             </div>

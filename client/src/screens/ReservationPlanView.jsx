@@ -196,31 +196,50 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
   const maxCoversPerSlot = settings?.max_covers_per_slot || 20;
 
   // Multi-table assign — `ids` is the full set of tables for this booking.
+  // SEPOS-046aa — optimistic: selectedRes is patched before the PUT so the
+  // sheet + plan update instantly. The parent's socket handler
+  // (reservation_updated) delivers the canonical row into the reservations
+  // prop, so the success path never calls onRefresh — only error rollback.
   const assignTables = async (ids) => {
     if (!selectedRes) return;
     const idsArr = (Array.isArray(ids) ? ids : (ids != null ? [ids] : [])).filter(Boolean);
+    const prevRes = selectedRes;
     setAssigning(true);
-    await put(`/api/reservations/${selectedRes.id}`, {
-      customer_name: selectedRes.customer_name, customer_phone: selectedRes.customer_phone,
-      customer_email: selectedRes.customer_email || null, covers: selectedRes.covers,
-      reservation_date: selectedRes.reservation_date, reservation_time: selectedRes.reservation_time,
-      table_ids: idsArr, notes: selectedRes.notes || null, status: selectedRes.status,
-    });
-    if (onRefresh) onRefresh();
     setSelectedRes(r => ({ ...r, table_id: idsArr[0] || null, table_ids: idsArr.join(',') || null }));
-    setAssigning(false);
+    try {
+      const data = await put(`/api/reservations/${selectedRes.id}`, {
+        customer_name: selectedRes.customer_name, customer_phone: selectedRes.customer_phone,
+        customer_email: selectedRes.customer_email || null, covers: selectedRes.covers,
+        reservation_date: selectedRes.reservation_date, reservation_time: selectedRes.reservation_time,
+        table_ids: idsArr, notes: selectedRes.notes || null, status: selectedRes.status,
+      });
+      if (data?.error) throw new Error(data.error);
+    } catch (e) {
+      alert('Could not assign table: ' + (e?.message || 'unknown'));
+      setSelectedRes(prevRes);
+      if (onRefresh) onRefresh();
+    } finally {
+      setAssigning(false);
+    }
   };
 
   const updateStatus = async (status) => {
     if (!selectedRes) return;
-    await put(`/api/reservations/${selectedRes.id}`, {
-      customer_name: selectedRes.customer_name, customer_phone: selectedRes.customer_phone,
-      customer_email: selectedRes.customer_email || null, covers: selectedRes.covers,
-      reservation_date: selectedRes.reservation_date, reservation_time: selectedRes.reservation_time,
-      table_ids: resTableIds(selectedRes), notes: selectedRes.notes || null, status,
-    });
-    if (onRefresh) onRefresh();
+    const prevRes = selectedRes;
     setSelectedRes(r => ({ ...r, status }));
+    try {
+      const data = await put(`/api/reservations/${selectedRes.id}`, {
+        customer_name: selectedRes.customer_name, customer_phone: selectedRes.customer_phone,
+        customer_email: selectedRes.customer_email || null, covers: selectedRes.covers,
+        reservation_date: selectedRes.reservation_date, reservation_time: selectedRes.reservation_time,
+        table_ids: resTableIds(selectedRes), notes: selectedRes.notes || null, status,
+      });
+      if (data?.error) throw new Error(data.error);
+    } catch (e) {
+      alert('Could not update status: ' + (e?.message || 'unknown'));
+      setSelectedRes(prevRes);
+      if (onRefresh) onRefresh();
+    }
   };
 
   const timeStart = toMins(settings?.opening_time || '11:00');

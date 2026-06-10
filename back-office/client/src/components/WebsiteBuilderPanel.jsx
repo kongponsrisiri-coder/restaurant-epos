@@ -19,15 +19,17 @@ const PRESETS = [
 
 const DEFAULT_WIDGET_BASE = 'https://restaurant-epos-production.up.railway.app';
 
+const GALLERY_SLOTS = 12; // SEPOS-WEB-006 — first 6 show on the home page, all 12 on the gallery page
+
 const PHOTO_SLOTS = [
   { key: 'photo_hero',      label: 'Hero photo',       hint: 'Top-of-page banner. Wide landscape works best.' },
   { key: 'photo_story',     label: 'Story photo',      hint: 'Shown next to your About text.' },
-  { key: 'photo_gallery_1', label: 'Gallery 1', hint: '' },
-  { key: 'photo_gallery_2', label: 'Gallery 2', hint: '' },
-  { key: 'photo_gallery_3', label: 'Gallery 3', hint: '' },
-  { key: 'photo_gallery_4', label: 'Gallery 4', hint: '' },
-  { key: 'photo_gallery_5', label: 'Gallery 5', hint: '' },
-  { key: 'photo_gallery_6', label: 'Gallery 6', hint: '' },
+  ...Array.from({ length: GALLERY_SLOTS }, (_, i) => ({
+    key: `photo_gallery_${i + 1}`,
+    label: `Gallery ${i + 1}`,
+    hint: '',
+    caption: true,
+  })),
 ];
 
 const EMPTY_SECTIONS = {
@@ -97,6 +99,9 @@ const EMPTY_SECTIONS = {
   // Google Map embed (SEPOS-WEB-005)
   map_enabled: false,
 
+  // Per-photo captions, keyed by photo slot (SEPOS-WEB-006)
+  photo_captions: {},
+
   // Social links
   instagram_url: '',
   facebook_url: '',
@@ -111,8 +116,7 @@ const EMPTY = {
   restaurant_name: '', tagline: '', address: '', phone: '', email: '',
   about_text: '', primary_colour: '#7B1C2D', accent_colour: '#C49030',
   photo_hero: '', photo_story: '', logo_url: '',
-  photo_gallery_1: '', photo_gallery_2: '', photo_gallery_3: '',
-  photo_gallery_4: '', photo_gallery_5: '', photo_gallery_6: '',
+  ...Object.fromEntries(Array.from({ length: GALLERY_SLOTS }, (_, i) => [`photo_gallery_${i + 1}`, ''])),
   template: 'classic',
   sections: { ...EMPTY_SECTIONS },
 };
@@ -292,7 +296,7 @@ export default function WebsiteBuilderPanel({ scope }) {
       )}
 
       <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14, padding: '8px 14px', background: `${C.navy}08`, borderRadius: 8, border: `1px solid ${C.border}` }}>
-        📄 The download creates a <strong>ZIP with 4 pages</strong>: Home · Menu · About · Contact — all sharing the same theme and nav.
+        📄 The download creates a <strong>ZIP with up to 5 pages</strong>: Home · Menu · Gallery (when photos are set) · About · Contact — plus sitemap.xml + robots.txt when the Live site URL is filled in.
       </div>
 
       {/* ── Two-pane layout ── */}
@@ -672,8 +676,11 @@ export default function WebsiteBuilderPanel({ scope }) {
           {/* Photos */}
           <Section
             title="Photos &amp; Gallery"
-            toggle={{ label: 'Show gallery section', enabled: cfg.sections.gallery_enabled !== false, onChange: v => setSection('gallery_enabled', v) }}
+            toggle={{ label: 'Show gallery', enabled: cfg.sections.gallery_enabled !== false, onChange: v => setSection('gallery_enabled', v) }}
           >
+            <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 4 }}>
+              The first 6 gallery photos appear on the home page; when any gallery photo is set the site also gets a dedicated <strong>Gallery page</strong> with all 12. Captions show on hover, in the lightbox, and under each photo on the gallery page.
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <PhotoSlot
                 slot={{ key: 'logo_url', label: 'Logo (optional)', hint: 'Shown in nav. Square or wide-rectangle works best.' }}
@@ -683,7 +690,10 @@ export default function WebsiteBuilderPanel({ scope }) {
               />
               {PHOTO_SLOTS.map(slot => (
                 <PhotoSlot key={slot.key} slot={slot} value={cfg[slot.key] || ''}
-                  onChange={v => set(slot.key, v)} onFile={f => handleFile(slot.key, f)} />
+                  onChange={v => set(slot.key, v)} onFile={f => handleFile(slot.key, f)}
+                  caption={(cfg.sections.photo_captions || {})[slot.key] || ''}
+                  onCaption={slot.caption ? (t => setSection('photo_captions', { ...(cfg.sections.photo_captions || {}), [slot.key]: t })) : undefined}
+                />
               ))}
             </div>
           </Section>
@@ -787,6 +797,7 @@ function PreviewPane({ previewHtml, previewPage, setPreviewPage }) {
   const pages = [
     { key: 'index.html',   label: 'Home' },
     { key: 'menu.html',    label: 'Menu' },
+    { key: 'gallery.html', label: 'Gallery' },
     { key: 'about.html',   label: 'About' },
     { key: 'contact.html', label: 'Contact' },
   ];
@@ -1054,7 +1065,7 @@ function ColourField({ label: lbl, value, onChange }) {
   );
 }
 
-function PhotoSlot({ slot, value, onChange, onFile }) {
+function PhotoSlot({ slot, value, onChange, onFile, caption, onCaption }) {
   const [drag, setDrag] = useState(false);
   const inputRef = useRef();
 
@@ -1095,6 +1106,14 @@ function PhotoSlot({ slot, value, onChange, onFile }) {
           onChange={e => e.target.files?.[0] && onFile(e.target.files[0])} />
       </div>
       {slot.hint && <div style={{ fontSize: 11, color: C.textFaint, marginTop: 4 }}>{slot.hint}</div>}
+      {onCaption && value && (
+        <input
+          value={caption || ''}
+          onChange={e => onCaption(e.target.value)}
+          placeholder="Caption shown with this photo (optional)"
+          style={{ ...input, marginTop: 6, fontSize: 12, padding: '7px 10px' }}
+        />
+      )}
     </div>
   );
 }

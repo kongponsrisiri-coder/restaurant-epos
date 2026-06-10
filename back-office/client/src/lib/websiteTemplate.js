@@ -130,6 +130,97 @@ export const TEMPLATES = {
       .hero a.cta:hover { background: #C9A57A; }
     `,
   },
+  streetfood: {
+    label: 'Bangkok Street',
+    description: 'Bold condensed headlines, punchy energy — casual street-food vibe.',
+    headFont:  `'Anton', 'Arial Narrow', sans-serif`,
+    bodyFont:  `'Inter', -apple-system, BlinkMacSystemFont, sans-serif`,
+    googleFonts: 'https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;600;800&display=swap',
+    bg:        '#ffffff',
+    altBg:     '#FFF4E8',
+    navBg:     'rgba(18,16,14,0.96)',
+    navColor:  '#ffffff',
+    navLink:   'rgba(255,255,255,0.85)',
+    footerBg:  '#12100E',
+    footerColor: 'rgba(255,255,255,0.75)',
+    extraCss: `
+      .hero h1 { text-transform: uppercase; letter-spacing: 2px; font-weight: 400; font-size: clamp(44px, 8vw, 92px); }
+      .hero p { text-transform: uppercase; letter-spacing: 3px; font-size: 13px; font-weight: 600; }
+      .section h2 { text-transform: uppercase; letter-spacing: 1.5px; font-weight: 400; }
+      .page-hero h1 { text-transform: uppercase; letter-spacing: 2px; font-weight: 400; }
+      .nav-brand { text-transform: uppercase; letter-spacing: 1.5px; }
+      .stat-value { font-family: 'Anton', sans-serif; letter-spacing: 1px; }
+      .menu-category-title { text-transform: uppercase; letter-spacing: 1px; }
+      .eyebrow { font-weight: 800; }
+      .hero a.cta { border-radius: 0; text-transform: uppercase; }
+      .hero a.cta-ghost { border-radius: 0; text-transform: uppercase; }
+      .nav-cta-btn { border-radius: 0; text-transform: uppercase; }
+    `,
+  },
+  zen: {
+    label: 'Zen Garden',
+    description: 'Airy and calm — soft neutrals, light type, maximum whitespace.',
+    headFont:  `'Marcellus', Georgia, serif`,
+    bodyFont:  `'Karla', -apple-system, BlinkMacSystemFont, sans-serif`,
+    googleFonts: 'https://fonts.googleapis.com/css2?family=Marcellus&family=Karla:wght@400;600;700&display=swap',
+    bg:        '#FBFAF7',
+    altBg:     '#F2EFE9',
+    navBg:     'rgba(251,250,247,0.97)',
+    navColor:  'var(--primary)',
+    navLink:   '#5a564f',
+    footerBg:  '#2B2925',
+    footerColor: 'rgba(255,255,255,0.72)',
+    extraCss: `
+      body { background: #FBFAF7; }
+      .section { padding: 110px 0; }
+      .hero h1 { font-weight: 400; letter-spacing: 4px; }
+      .hero p { letter-spacing: 2px; }
+      .section h2 { font-weight: 400; letter-spacing: 1.5px; }
+      .section h2::after { width: 36px; height: 1px; }
+      .page-hero h1 { font-weight: 400; letter-spacing: 3px; }
+      .nav-brand { font-weight: 400; letter-spacing: 2px; }
+      .pillar-card, .menu-card, .press-card, .review-card, .visit-card, .hours-card { box-shadow: none; border: 1px solid #E7E2D8; }
+      .eyebrow { letter-spacing: 6px; font-weight: 600; }
+    `,
+  },
+  noir: {
+    label: 'Siam Noir',
+    description: 'Black & gold late-night luxury — cocktail-bar mood.',
+    headFont:  `'Cinzel', Georgia, serif`,
+    bodyFont:  `'Inter', -apple-system, BlinkMacSystemFont, sans-serif`,
+    googleFonts: 'https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;600&display=swap',
+    bg:        '#101010',
+    altBg:     '#161513',
+    navBg:     'rgba(10,10,10,0.96)',
+    navColor:  '#E8E2D6',
+    navLink:   'rgba(232,226,214,0.8)',
+    footerBg:  '#0A0908',
+    footerColor: 'rgba(232,226,214,0.65)',
+    extraCss: `
+      body { background: #101010; color: #D8D2C6; }
+      .hero h1 { letter-spacing: 3px; font-weight: 600; }
+      .section h2 { color: #E8E2D6; letter-spacing: 2px; font-weight: 600; }
+      .page-hero { background: #161513; }
+      .page-hero h1 { color: #E8E2D6; }
+      .page-hero p { color: #9a9489; }
+      .about-text p, .philosophy-text, .method-intro { color: #C5BFB2; }
+      .pillar-card, .menu-card, .press-card, .review-card, .visit-card, .hours-card { background: #1B1A17; border-color: #2B2922; box-shadow: none; }
+      .pillar-title, .menu-name, .menu-list-name, .team-name { color: #E8E2D6; }
+      .pillar-text, .menu-desc, .menu-list-desc, .review-text, .team-bio { color: #A8A296; }
+      .press-quote { color: #C5BFB2; }
+      .review-author { color: var(--accent); }
+      .menu-list-item { border-bottom-color: #26241F; }
+      .menu-list-price, .menu-price { color: var(--accent); }
+      .menu-category-title { color: #E8E2D6; }
+      .visit-row { border-bottom-color: #26241F; }
+      .visit-label { color: var(--accent); }
+      .hours-card { color: #C5BFB2; }
+      .booking-strip h2 { color: #E8E2D6; }
+      .booking-strip p { color: #9a9489; }
+      .gpage-fig figcaption { color: #9a9489; }
+      a { color: var(--accent); }
+    `,
+  },
 };
 
 // ── Colour helper ─────────────────────────────────────────────────────────────
@@ -230,6 +321,25 @@ function buildJsonLd(cfg) {
   return `<script type="application/ld+json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
 }
 
+// ── Gallery photos + captions (SEPOS-WEB-006) ────────────────────────────────
+// Up to 12 slots; captions live in sections.photo_captions keyed by slot.
+export const GALLERY_SLOT_COUNT = 12;
+
+function galleryPhotos(cfg) {
+  const caps = (cfg.sections || {}).photo_captions || {};
+  const out = [];
+  for (let i = 1; i <= GALLERY_SLOT_COUNT; i++) {
+    const src = cfg[`photo_gallery_${i}`];
+    if (src) out.push({ src, caption: (caps[`photo_gallery_${i}`] || '').trim() });
+  }
+  return out;
+}
+
+function hasGalleryPage(cfg) {
+  const s = cfg.sections || {};
+  return s.gallery_enabled !== false && galleryPhotos(cfg).length > 0;
+}
+
 // ── Shared nav + footer ───────────────────────────────────────────────────────
 function makeNav(cfg, tpl, activePage = 'index') {
   const name   = escapeHtml(cfg.restaurant_name || 'Restaurant');
@@ -237,6 +347,7 @@ function makeNav(cfg, tpl, activePage = 'index') {
   const pages  = [
     { key: 'index',   label: 'Home',    file: 'index.html' },
     { key: 'menu',    label: 'Menu',    file: 'menu.html' },
+    ...(hasGalleryPage(cfg) ? [{ key: 'gallery', label: 'Gallery', file: 'gallery.html' }] : []),
     { key: 'about',   label: 'About',   file: 'about.html' },
     { key: 'contact', label: 'Contact', file: 'contact.html' },
   ];
@@ -496,11 +607,26 @@ function makeSharedCss(cfg, tpl) {
     .map-embed { max-width: 920px; margin: 36px auto 0; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 28px rgba(0,0,0,0.10); }
     .map-embed iframe { display: block; width: 100%; height: 360px; border: 0; }
 
-    /* ── Gallery lightbox (SEPOS-WEB-005) ── */
-    .gallery-tile { cursor: zoom-in; }
-    .sep-lightbox { position: fixed; inset: 0; z-index: 110; display: none; align-items: center; justify-content: center; background: rgba(10,10,10,0.9); padding: 28px; cursor: zoom-out; }
+    /* ── Gallery captions + lightbox (SEPOS-WEB-005/006) ── */
+    .gallery-tile { cursor: zoom-in; position: relative; overflow: hidden; }
+    .gallery-cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 26px 14px 12px; background: linear-gradient(transparent, rgba(0,0,0,0.7)); color: #fff; font-size: 12px; font-weight: 600; letter-spacing: 0.3px; border-radius: 0 0 10px 10px; opacity: 0; transition: opacity .25s; }
+    .gallery-tile:hover .gallery-cap, .gallery-tile:focus .gallery-cap { opacity: 1; }
+    .sep-lightbox { position: fixed; inset: 0; z-index: 110; display: none; align-items: center; justify-content: center; background: rgba(10,10,10,0.92); padding: 28px; cursor: zoom-out; }
     .sep-lightbox.open { display: flex; }
-    .sep-lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+    .sep-lightbox figure { margin: 0; max-width: 100%; max-height: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .sep-lightbox img { max-width: 100%; max-height: 82vh; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+    .sep-lightbox figcaption { color: rgba(255,255,255,0.85); font-size: 14px; text-align: center; }
+    .sep-lightbox figcaption:empty { display: none; }
+
+    /* ── Gallery page (SEPOS-WEB-006) ── */
+    .gpage-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+    .gpage-fig { margin: 0; }
+    .gpage-fig .gallery-tile { aspect-ratio: 4 / 3; background-size: cover; background-position: center; border-radius: 10px; transition: transform .25s; }
+    .gpage-fig .gallery-tile:hover { transform: scale(1.015); }
+    .gpage-fig .gallery-cap { display: none; }
+    .gpage-fig figcaption { font-size: 13px; color: #666; margin-top: 10px; line-height: 1.5; }
+    @media (max-width: 860px) { .gpage-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 560px) { .gpage-grid { grid-template-columns: 1fr; } }
 
     /* ── Mobile nav ── */
     @media (max-width: 680px) {
@@ -742,30 +868,21 @@ function buildFeaturedDishes(cfg, tpl) {
   </section>`;
 }
 
-function buildGallery(cfg) {
-  const s = cfg.sections || {};
-  if (s.gallery_enabled === false) return '';
-  const photos = [
-    cfg.photo_gallery_1, cfg.photo_gallery_2, cfg.photo_gallery_3,
-    cfg.photo_gallery_4, cfg.photo_gallery_5, cfg.photo_gallery_6,
-  ].filter(Boolean);
-  if (!photos.length) return '';
+// Tile with caption overlay + data-caption for the lightbox.
+function galleryTile(p) {
+  return `<div class="gallery-tile" role="button" tabindex="0" data-caption="${escapeHtml(p.caption)}" aria-label="${escapeHtml(p.caption || 'Gallery photo')}" style="background-image:url('${p.src}')">${p.caption ? `<span class="gallery-cap">${escapeHtml(p.caption)}</span>` : ''}</div>`;
+}
+
+// Shared lightbox overlay + script — append once per page that has tiles.
+function buildLightbox() {
   return `
-  <section class="section section-alt">
-    <div class="container">
-      <span class="eyebrow">Gallery</span>
-      <h2>Our Space</h2>
-      <div class="gallery-grid">
-        ${photos.map(src => `<div class="gallery-tile" role="button" tabindex="0" style="background-image:url('${src}')"></div>`).join('')}
-      </div>
-    </div>
-  </section>
-  <div id="sep-lightbox" class="sep-lightbox"><img alt="Gallery photo" /></div>
+  <div id="sep-lightbox" class="sep-lightbox"><figure><img alt="Gallery photo" /><figcaption></figcaption></figure></div>
   <script>
     (function(){
       var lb = document.getElementById('sep-lightbox');
       if (!lb) return;
       var img = lb.querySelector('img');
+      var cap = lb.querySelector('figcaption');
       lb.addEventListener('click', function(){ lb.classList.remove('open'); });
       document.addEventListener('keydown', function(e){ if (e.key === 'Escape') lb.classList.remove('open'); });
       document.querySelectorAll('.gallery-tile').forEach(function(tile){
@@ -773,11 +890,31 @@ function buildGallery(cfg) {
           var m = (tile.style.backgroundImage || '').match(/url\\(["']?(.*?)["']?\\)/);
           if (!m) return;
           img.src = m[1];
+          img.alt = tile.dataset.caption || 'Gallery photo';
+          cap.textContent = tile.dataset.caption || '';
           lb.classList.add('open');
         });
       });
     })();
   </script>`;
+}
+
+function buildGallery(cfg) {
+  const photos = galleryPhotos(cfg);
+  if ((cfg.sections || {}).gallery_enabled === false || !photos.length) return '';
+  const shown = photos.slice(0, 6);
+  return `
+  <section class="section section-alt">
+    <div class="container">
+      <span class="eyebrow">Gallery</span>
+      <h2>Our Space</h2>
+      <div class="gallery-grid">
+        ${shown.map(galleryTile).join('')}
+      </div>
+      ${photos.length > shown.length ? `<div style="text-align:center;margin-top:28px;"><a href="gallery.html" style="font-weight:700;font-size:15px;">View the full gallery →</a></div>` : ''}
+    </div>
+  </section>
+  ${buildLightbox()}`;
 }
 
 function buildBookingStrip(cfg) {
@@ -1084,6 +1221,39 @@ ${makeFooter(cfg, tpl)}
 </body></html>`;
 }
 
+// SEPOS-WEB-006 — dedicated gallery page: all 12 slots, captions under
+// each photo, lightbox on click.
+function generateGallery(cfg, tpl) {
+  const name   = escapeHtml(cfg.restaurant_name || 'Restaurant');
+  const photos = galleryPhotos(cfg);
+  const figs = photos.map(p => `
+    <figure class="gpage-fig">
+      ${galleryTile(p)}
+      ${p.caption ? `<figcaption>${escapeHtml(p.caption)}</figcaption>` : ''}
+    </figure>`).join('');
+
+  return makeHead(cfg, tpl, `Gallery — ${name}`, `Inside ${cfg.restaurant_name || 'our restaurant'} — the room, the kitchen, the food.`, 'gallery.html') + `
+${buildAnnouncement(cfg)}
+${makeNav(cfg, tpl, 'gallery')}
+
+<div class="page-hero">
+  <span class="eyebrow">Gallery</span>
+  <h1>Our Space</h1>
+  <p>A look inside — tap any photo to view it full size.</p>
+</div>
+
+<section class="section">
+  <div class="container">
+    <div class="gpage-grid">
+      ${figs}
+    </div>
+  </div>
+</section>
+${buildLightbox()}
+${makeFooter(cfg, tpl)}
+</body></html>`;
+}
+
 function generateContact(cfg, tpl) {
   const name    = escapeHtml(cfg.restaurant_name || 'Restaurant');
   const address = escapeHtml(cfg.address || '');
@@ -1135,11 +1305,12 @@ export function generateMultiPageWebsite(cfg) {
     'menu.html':    generateMenu(cfg, tpl),
     'contact.html': generateContact(cfg, tpl),
   };
+  if (hasGalleryPage(cfg)) pages['gallery.html'] = generateGallery(cfg, tpl);
   // SEPOS-WEB-005 — sitemap + robots, generated when the live URL is known.
   const siteUrl = siteUrlOf(cfg);
   if (siteUrl) {
     const lastmod = new Date().toISOString().slice(0, 10);
-    const urls = ['', 'menu.html', 'about.html', 'contact.html'].map(p => `  <url>
+    const urls = ['', 'menu.html', ...(hasGalleryPage(cfg) ? ['gallery.html'] : []), 'about.html', 'contact.html'].map(p => `  <url>
     <loc>${siteUrl}/${p}</loc>
     <lastmod>${lastmod}</lastmod>
   </url>`).join('\n');

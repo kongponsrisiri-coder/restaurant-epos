@@ -148,6 +148,15 @@ ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS photo_gallery_4 TEXT;
 ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS photo_gallery_5 TEXT;
 ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS photo_gallery_6 TEXT;
 
+-- SEPOS-WEB-006 — dedicated gallery page: 12 slots total. Captions live
+-- in sections.photo_captions (JSONB), keyed by the photo column name.
+ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS photo_gallery_7 TEXT;
+ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS photo_gallery_8 TEXT;
+ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS photo_gallery_9 TEXT;
+ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS photo_gallery_10 TEXT;
+ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS photo_gallery_11 TEXT;
+ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS photo_gallery_12 TEXT;
+
 -- SEPOS-042 — Finance / Starling Bank integration. Stores API tokens for
 -- the Starling Personal Access Token and Anthropic API key server-side so
 -- they are never exposed to the browser. One singleton row (id=1).

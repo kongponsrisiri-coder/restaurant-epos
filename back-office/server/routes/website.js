@@ -18,6 +18,8 @@ const UPDATABLE = [
   'primary_colour', 'accent_colour',
   'photo_hero', 'photo_story', 'photo_gallery_1', 'photo_gallery_2', 'photo_gallery_3',
   'photo_gallery_4', 'photo_gallery_5', 'photo_gallery_6',  // SEPOS-WEB-005
+  'photo_gallery_7', 'photo_gallery_8', 'photo_gallery_9',  // SEPOS-WEB-006
+  'photo_gallery_10', 'photo_gallery_11', 'photo_gallery_12',
   'sections',  // SEPOS-WEB-002 — JSON blob of toggleable section content.
   'template',  // SEPOS-WEB-003 — design template key.
   'logo_url',  // SEPOS-WEB-003 — base64 or URL of logo for nav.

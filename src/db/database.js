@@ -675,6 +675,22 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_supplier_invoices_date ON supplier_invoices(invoice_date DESC)`);
 
+    // SEPOS-046ac — `expenses` (Cost & Sales tab) was referenced by three
+    // endpoints but never codified in CREATE TABLE — same class as the
+    // SEPOS-046j inventory gap: worked on main siamepos via a manual psql
+    // migration, 500'd on baan-siam / fresh tenants / desktop SQLite.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS expenses (
+        id SERIAL PRIMARY KEY,
+        category VARCHAR(50) DEFAULT 'other',
+        description TEXT NOT NULL,
+        amount NUMERIC(10,2) NOT NULL,
+        date DATE,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date DESC)`);
+
     // ── SEPOS-BATCH-001 — kitchen batch prep ───────────────────────────
     // batch_recipes is the make-template (e.g. "Red Curry Paste: 5kg from
     // ingredients X+Y+Z, shelf life 5 days"). Creating a batch_recipe

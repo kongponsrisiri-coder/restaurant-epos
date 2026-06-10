@@ -52,6 +52,9 @@ const PULL_TABLES = [
   { path: '/api/batches',                table: 'batches',                pk: 'id' },
   { path: '/api/recipes',                table: 'recipes',                pk: 'id' },
   { path: '/api/recipe-lines',           table: 'recipe_lines',           pk: 'id' },
+  // SEPOS-046ac — Cost & Sales expenses, same cloud-authoritative pull as
+  // the rest of the inventory family.
+  { path: '/api/expenses',               table: 'expenses',               pk: 'id' },
 ];
 
 let initialSyncDone = false;

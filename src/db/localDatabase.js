@@ -490,6 +490,18 @@ function initSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_supplier_invoices_date ON supplier_invoices (invoice_date DESC);
 
+    -- SEPOS-046ac — expenses (Cost & Sales tab); was never codified, see
+    -- the matching CREATE in database.js for the history.
+    CREATE TABLE IF NOT EXISTS expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category TEXT DEFAULT 'other',
+      description TEXT NOT NULL,
+      amount REAL NOT NULL,
+      date TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses (date DESC);
+
     CREATE TABLE IF NOT EXISTS batch_recipes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,

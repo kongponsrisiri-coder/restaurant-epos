@@ -5,7 +5,7 @@ import {
   getItemModifiers, addModifierGroup, addModifierOption,
   deleteModifierGroup, deleteModifier,
   getSubcategories, addSubcategory, deleteSubcategory, updateCategory, deleteCategory,
-  updateCategoryBar, updateCategorySortOrder,
+  updateCategoryBar, updateCategorySortOrder, updateSubcategorySortOrder,
   addCategory, updateCategoryDefaultCourse,
   assertOk,
 } from '../../api';
@@ -458,7 +458,27 @@ export default function MenuSection() {
             >{subcatBusy ? '…' : 'Add'}</button>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {activeCatSubs.map(sub => (<div key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'white', borderRadius: 20, padding: '4px 12px', border: '1px solid #bfdbfe' }}><span style={{ fontSize: 13, color: '#1e40af', fontWeight: 500 }}>{sub.name}</span><button onClick={async () => {
+            {activeCatSubs.map((sub, subIdx) => {
+              // SEPOS-046ab — ◀ ▶ reorder, same optimistic pattern as the
+              // category arrows: resequence local state instantly, persist
+              // in background, fetchMenu rollback only on error.
+              const swapSub = async (otherIdx) => {
+                const reordered = [...activeCatSubs];
+                if (reordered.some(s => s.id < 0)) return alert('Still saving — try again in a second.');
+                [reordered[subIdx], reordered[otherIdx]] = [reordered[otherIdx], reordered[subIdx]];
+                const updates = reordered.map((s, i) => ({ id: s.id, sort_order: i }));
+                const orderMap = Object.fromEntries(updates.map(u => [u.id, u.sort_order]));
+                setSubcategories(prev => prev
+                  .map(s => orderMap[s.id] !== undefined ? { ...s, sort_order: orderMap[s.id] } : s)
+                  .sort((a, b) => (a.category_id - b.category_id) || ((a.sort_order || 0) - (b.sort_order || 0))));
+                try { assertOk(await updateSubcategorySortOrder(updates)); }
+                catch (err) { alert('Could not reorder: ' + (err?.message || 'unknown')); fetchMenu(); }
+              };
+              return (<div key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'white', borderRadius: 20, padding: '4px 12px', border: '1px solid #bfdbfe' }}>
+              {subIdx > 0 && <button onClick={() => swapSub(subIdx - 1)} title="Move left" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', fontSize: 11, fontWeight: 800, padding: 0 }}>◀</button>}
+              <span style={{ fontSize: 13, color: '#1e40af', fontWeight: 500 }}>{sub.name}</span>
+              {subIdx < activeCatSubs.length - 1 && <button onClick={() => swapSub(subIdx + 1)} title="Move right" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', fontSize: 11, fontWeight: 800, padding: 0 }}>▶</button>}
+              <button onClick={async () => {
               if (!await confirm(`Delete "${sub.name}"?`)) return;
               // SEPOS-046t/u — optimistic delete. Chip already gone from
               // state — no fetchMenu reconcile (it'd read stale local
@@ -471,7 +491,8 @@ export default function MenuSection() {
                 alert('Could not delete: ' + (err?.message || 'unknown error'));
                 fetchMenu(); // rollback only on error
               }
-            }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 16 }}>×</button></div>))}
+            }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 16 }}>×</button></div>);
+            })}
             {activeCatSubs.length === 0 && <span style={{ color: '#94a3b8', fontSize: 13 }}>No sub-categories yet</span>}
           </div>
         </div>

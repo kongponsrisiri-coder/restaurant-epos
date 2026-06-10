@@ -151,6 +151,8 @@ export const deleteCategory = (id) => del(`/api/categories/${id}`);
 export const getSubcategories = () => get('/api/subcategories');
 export const addSubcategory = (category_id, name) => post('/api/subcategories', { category_id, name });
 export const deleteSubcategory = (id) => del(`/api/subcategories/${id}`);
+// SEPOS-046ab — same contract as updateCategorySortOrder
+export const updateSubcategorySortOrder = (items) => put('/api/subcategories/sort-order', { items });
 export const fireCourse = (orderId, course) => put(`/api/orders/${orderId}/fire-course/${course}`, {});
 export const getTableStatus = () => get('/api/tables/status');
 export const markBillPrinted = (orderId) => put(`/api/orders/${orderId}/bill-printed`, {});

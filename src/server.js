@@ -371,6 +371,19 @@ app.post('/api/subcategories', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-046ab — reorder sub-categories, same contract as the categories
+// endpoint: frontend sends [{id, sort_order}, ...] after every arrow tap.
+app.put('/api/subcategories/sort-order', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    for (const it of items) {
+      await pool.query('UPDATE subcategories SET sort_order = $1 WHERE id = $2', [Number(it.sort_order) || 0, it.id]);
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.delete('/api/subcategories/:id', async (req, res) => {
   if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
@@ -3634,14 +3647,17 @@ app.post('/api/batches/make', async (req, res) => {
 
     // Compute expires_on. shelf_life_days is INCLUSIVE — made today,
     // 3-day shelf life → expires_on = today + 3.
+    // SEPOS-046ac — computed in JS: the old `($3 || ' days')::INTERVAL`
+    // is PG-only and made every batch make 500 on desktop SQLite installs.
     const shelfDays = br.shelf_life_days || 3;
+    const expiresOn = new Date(Date.now() + shelfDays * 86400000).toISOString().slice(0, 10);
     const batchRes = await client.query(
       `INSERT INTO batches
          (batch_recipe_id, ingredient_id, made_on, expires_on,
           original_quantity, locked_cost_per_unit, status, made_by, notes)
-       VALUES ($1,$2,CURRENT_DATE,CURRENT_DATE + ($3 || ' days')::INTERVAL,
+       VALUES ($1,$2,CURRENT_DATE,$3,
                $4,$5,'active',$6,$7) RETURNING *`,
-      [br.id, batchIngredientId, shelfDays, outQty, costPerUnit, made_by || null, notes || null],
+      [br.id, batchIngredientId, expiresOn, outQty, costPerUnit, made_by || null, notes || null],
     );
 
     // Log a positive movement on the batch ingredient too, so the stock
@@ -3705,16 +3721,20 @@ app.post('/api/batches/:id/discard', async (req, res) => {
 // avoid indefinitely deferring a real waste.
 app.post('/api/batches/:id/extend', async (req, res) => {
   try {
-    const r = await pool.query(`SELECT extended_count FROM batches WHERE id=$1`, [req.params.id]);
+    const r = await pool.query(`SELECT expires_on, extended_count FROM batches WHERE id=$1`, [req.params.id]);
     if (!r.rows[0]) return res.status(404).json({ error: 'Batch not found' });
     if ((r.rows[0].extended_count || 0) >= 3) return res.status(400).json({ error: 'Already extended 3 times — discard if past use' });
+    // SEPOS-046ac — +1 day computed in JS; `+ INTERVAL '1 day'` is PG-only
+    // and made extend 500 on desktop SQLite installs.
+    const curExpiry = new Date(r.rows[0].expires_on);
+    const nextExpiry = new Date(curExpiry.getTime() + 86400000).toISOString().slice(0, 10);
     const u = await pool.query(
       `UPDATE batches
-         SET expires_on = expires_on + INTERVAL '1 day',
+         SET expires_on = $1,
              status = 'active',
              extended_count = COALESCE(extended_count, 0) + 1
-       WHERE id = $1 RETURNING *`,
-      [req.params.id],
+       WHERE id = $2 RETURNING *`,
+      [nextExpiry, req.params.id],
     );
     res.json({ success: true, batch: u.rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -5489,7 +5509,7 @@ app.get('/api/reports/wastage', async (req, res) => {
       LEFT JOIN orders o ON o.id = oi.order_id
       LEFT JOIN recipes r ON r.menu_item_id = oi.menu_item_id
       WHERE oi.voided=1
-        AND o.created_at >= $1::timestamp AND o.created_at <= $2::timestamp
+        AND o.created_at::date >= $1::date AND o.created_at::date <= $2::date
       ORDER BY o.created_at DESC, oi.id DESC
     `, [fromTs, toTs]);
 

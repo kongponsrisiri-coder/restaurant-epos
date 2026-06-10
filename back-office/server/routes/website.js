@@ -17,6 +17,7 @@ const UPDATABLE = [
   'restaurant_name', 'tagline', 'address', 'phone', 'email', 'about_text',
   'primary_colour', 'accent_colour',
   'photo_hero', 'photo_story', 'photo_gallery_1', 'photo_gallery_2', 'photo_gallery_3',
+  'photo_gallery_4', 'photo_gallery_5', 'photo_gallery_6',  // SEPOS-WEB-005
   'sections',  // SEPOS-WEB-002 — JSON blob of toggleable section content.
   'template',  // SEPOS-WEB-003 — design template key.
   'logo_url',  // SEPOS-WEB-003 — base64 or URL of logo for nav.
@@ -142,6 +143,69 @@ Use an empty string for any field not found.`,
     res.json({ success: true, data });
   } catch (err) {
     console.error('[ops-website] ai-import error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── AI copywriting assist: draft a section from the config facts ──
+// SEPOS-WEB-005. kinds: about | philosophy | catering | seo_description | tagline
+const AI_COPY_KINDS = {
+  about: {
+    instruction: 'Write a 2-4 sentence "Our Story" / about-us paragraph in the restaurant\'s own warm first-person-plural voice ("we"). No headings, no quotes around it.',
+    max: 600,
+  },
+  philosophy: {
+    instruction: 'Write a 3-5 sentence brand-philosophy paragraph — the restaurant\'s soul and what eating there should feel like. Evocative but not purple. No headings.',
+    max: 700,
+  },
+  catering: {
+    instruction: 'Write a 2-3 sentence private-dining / catering pitch inviting event enquiries. End with an implicit invitation to get in touch. No headings.',
+    max: 500,
+  },
+  seo_description: {
+    instruction: 'Write ONE meta description of 140-158 characters: cuisine, location, and a reason to visit. Plain text, no quotes.',
+    max: 200,
+  },
+  tagline: {
+    instruction: 'Write ONE short tagline (max 10 words) capturing the cuisine and feel. Plain text, no quotes, no full stop.',
+    max: 100,
+  },
+};
+
+router.post('/ai-copy', async (req, res) => {
+  const { kind, facts } = req.body || {};
+  const spec = AI_COPY_KINDS[kind];
+  if (!spec) return res.status(400).json({ error: `kind must be one of: ${Object.keys(AI_COPY_KINDS).join(', ')}` });
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({ error: 'ANTHROPIC_API_KEY not configured on the back-office service' });
+  }
+  try {
+    const f = facts || {};
+    const factLines = [
+      f.restaurant_name && `Restaurant name: ${f.restaurant_name}`,
+      f.tagline && `Tagline: ${f.tagline}`,
+      f.address && `Address: ${f.address}`,
+      f.about_text && `Existing about text (improve on it, keep true facts): ${f.about_text}`,
+      f.existing && `Existing draft to improve: ${f.existing}`,
+      `Cuisine: ${f.cuisine || 'Thai'}`,
+    ].filter(Boolean).join('\n');
+
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const message = await client.messages.create({
+      model: 'claude-opus-4-8',
+      max_tokens: 1024,
+      system: `You write website copy for independent restaurants in the UK. British English. Never invent specific facts (awards, dates, named dishes, family history) that are not in the provided facts — stay generic where facts are missing. Return ONLY the copy itself: no markdown, no preamble, no quotation marks around the output.`,
+      messages: [{
+        role: 'user',
+        content: `${spec.instruction}\n\nFacts:\n${factLines}`,
+      }],
+    });
+
+    let text = message.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
+    if (text.length > spec.max) text = text.slice(0, spec.max).trim();
+    res.json({ success: true, text });
+  } catch (err) {
+    console.error('[ops-website] ai-copy error', err);
     res.status(500).json({ error: err.message });
   }
 });

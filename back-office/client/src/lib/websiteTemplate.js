@@ -141,6 +141,95 @@ function shade(hex, pct) {
   return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
 }
 
+// ── SEO helpers (SEPOS-WEB-005) ───────────────────────────────────────────────
+
+// Inline SVG favicon — restaurant initial on the primary colour. No file needed.
+function makeFavicon(cfg) {
+  const letter = (cfg.restaurant_name || 'R').trim().charAt(0).toUpperCase();
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="${cfg.primary_colour || '#7B1C2D'}"/><text x="32" y="45" font-family="Georgia,serif" font-size="38" font-weight="700" fill="${cfg.accent_colour || '#C49030'}" text-anchor="middle">${letter}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+function siteUrlOf(cfg) {
+  return ((cfg.sections || {}).site_url || '').trim().replace(/\/+$/, '');
+}
+
+// Best-effort parse of the free-text hours into schema.org openingHours
+// strings ("Mo-Fr 11:00-22:00"). Lines that don't parse are skipped.
+function parseOpeningHours(hoursText) {
+  const DAY = { mon: 'Mo', tue: 'Tu', wed: 'We', thu: 'Th', fri: 'Fr', sat: 'Sa', sun: 'Su' };
+  const re = /^\s*(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?\s*(?:(?:–|—|-|to)\s*(mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?)?\s+(\d{1,2})[:.](\d{2})\s*(?:–|—|-|to)\s*(\d{1,2})[:.](\d{2})/i;
+  const out = [];
+  (hoursText || '').split('\n').forEach(line => {
+    const m = line.match(re);
+    if (!m) return;
+    const d1 = DAY[m[1].toLowerCase()];
+    const d2 = m[2] ? DAY[m[2].toLowerCase()] : '';
+    const open = `${m[3].padStart(2, '0')}:${m[4]}`;
+    const close = `${m[5].padStart(2, '0')}:${m[6]}`;
+    out.push(`${d2 ? `${d1}-${d2}` : d1} ${open}-${close}`);
+  });
+  return out;
+}
+
+// schema.org Restaurant + Menu JSON-LD. Rich results + AI search read this.
+function buildJsonLd(cfg) {
+  const s = cfg.sections || {};
+  const siteUrl = siteUrlOf(cfg);
+  const isHttp = u => /^https?:\/\//i.test(u || '');
+  const data = {
+    '@context': 'https://schema.org',
+    '@type': 'Restaurant',
+    name: cfg.restaurant_name || 'Restaurant',
+    servesCuisine: s.cuisine || 'Thai',
+    priceRange: s.price_range || '££',
+  };
+  if (cfg.address) data.address = cfg.address.replace(/\n/g, ', ');
+  if (cfg.phone) data.telephone = cfg.phone;
+  if (cfg.email) data.email = cfg.email;
+  if (siteUrl) {
+    data.url = siteUrl;
+    data.hasMenu = `${siteUrl}/menu.html`;
+  }
+  // Base64 photos would bloat the markup — only include real URLs.
+  const img = [s.seo_og_image, cfg.photo_hero].find(isHttp);
+  if (img) data.image = img;
+  if (s.booking_widget_enabled) data.acceptsReservations = 'True';
+  const hours = s.hours_enabled ? parseOpeningHours(s.hours_text) : [];
+  if (hours.length) data.openingHours = hours;
+  const sameAs = [s.instagram_url, s.facebook_url, s.tripadvisor_url].filter(isHttp);
+  if (sameAs.length) data.sameAs = sameAs;
+  if (s.reviews_enabled && s.reviews_rating && s.reviews_count) {
+    data.aggregateRating = {
+      '@type': 'AggregateRating',
+      ratingValue: String(s.reviews_rating),
+      reviewCount: String(s.reviews_count),
+    };
+  }
+  if (s.menu_enabled && (s.menu_items || []).length) {
+    const byCat = {};
+    s.menu_items.forEach(it => {
+      const cat = it.category || 'Dishes';
+      (byCat[cat] = byCat[cat] || []).push(it);
+    });
+    data.hasMenu = {
+      '@type': 'Menu',
+      hasMenuSection: Object.entries(byCat).map(([cat, items]) => ({
+        '@type': 'MenuSection',
+        name: cat,
+        hasMenuItem: items.map(it => ({
+          '@type': 'MenuItem',
+          name: it.name,
+          ...(it.description ? { description: it.description } : {}),
+          offers: { '@type': 'Offer', price: Number(it.price || 0).toFixed(2), priceCurrency: 'GBP' },
+        })),
+      })),
+    };
+  }
+  // <-escape so a "</script>" inside content can't break out of the tag.
+  return `<script type="application/ld+json">${JSON.stringify(data).replace(/</g, '\\u003c')}</script>`;
+}
+
 // ── Shared nav + footer ───────────────────────────────────────────────────────
 function makeNav(cfg, tpl, activePage = 'index') {
   const name   = escapeHtml(cfg.restaurant_name || 'Restaurant');
@@ -385,6 +474,34 @@ function makeSharedCss(cfg, tpl) {
     .footer-copy { font-size: 12px; opacity: 0.5; }
     .footer-copy a { color: var(--accent); }
 
+    /* ── Announcement bar (SEPOS-WEB-005) ── */
+    .announce-bar { display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 70; align-items: center; justify-content: center; gap: 10px; min-height: 38px; padding: 6px 40px 6px 16px; background: var(--accent); color: #1a1a1a; font-size: 13px; font-weight: 700; text-align: center; }
+    .announce-bar a { color: #1a1a1a; text-decoration: underline; }
+    .announce-inner { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; }
+    .announce-close { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 14px; cursor: pointer; color: rgba(0,0,0,0.6); padding: 6px; }
+    body.has-announce .nav { top: 38px; }
+
+    /* ── Reviews (SEPOS-WEB-005) ── */
+    .reviews-head { display: flex; align-items: baseline; justify-content: center; gap: 12px; margin-bottom: 32px; flex-wrap: wrap; }
+    .reviews-score { font-family: ${tpl.headFont}; font-size: 48px; font-weight: 700; color: var(--primary); line-height: 1; }
+    .review-stars { color: var(--accent); font-size: 18px; letter-spacing: 2px; }
+    .reviews-count { font-size: 13px; color: #777; }
+    .review-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 22px; }
+    .review-card { background: white; border: 1px solid #eee; border-radius: 12px; padding: 24px; box-shadow: 0 4px 16px rgba(0,0,0,0.04); }
+    .review-card .review-stars { font-size: 14px; margin-bottom: 10px; }
+    .review-text { font-size: 14px; color: #333; line-height: 1.65; margin: 0 0 12px; font-style: italic; }
+    .review-author { font-size: 12px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
+
+    /* ── Map embed (SEPOS-WEB-005) ── */
+    .map-embed { max-width: 920px; margin: 36px auto 0; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 28px rgba(0,0,0,0.10); }
+    .map-embed iframe { display: block; width: 100%; height: 360px; border: 0; }
+
+    /* ── Gallery lightbox (SEPOS-WEB-005) ── */
+    .gallery-tile { cursor: zoom-in; }
+    .sep-lightbox { position: fixed; inset: 0; z-index: 110; display: none; align-items: center; justify-content: center; background: rgba(10,10,10,0.9); padding: 28px; cursor: zoom-out; }
+    .sep-lightbox.open { display: flex; }
+    .sep-lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+
     /* ── Mobile nav ── */
     @media (max-width: 680px) {
       .nav-toggle { display: block; }
@@ -399,11 +516,13 @@ function makeSharedCss(cfg, tpl) {
   `;
 }
 
-function makeHead(cfg, tpl, pageTitle, pageDesc) {
+function makeHead(cfg, tpl, pageTitle, pageDesc, page = 'index.html') {
   const seoTitle  = escapeHtml(pageTitle  || cfg.restaurant_name || 'Restaurant');
   const seoDesc   = escapeHtml(pageDesc   || cfg.tagline         || '');
   const ogImage   = (cfg.sections || {}).seo_og_image || cfg.photo_hero || '';
   const s = cfg.sections || {};
+  const siteUrl = siteUrlOf(cfg);
+  const pageUrl = siteUrl ? `${siteUrl}/${page === 'index.html' ? '' : page}` : '';
   const ga = !s.ga_id ? '' : `
   <script async src="https://www.googletagmanager.com/gtag/js?id=${escapeHtml(s.ga_id)}"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${escapeHtml(s.ga_id)}');</script>`;
@@ -417,10 +536,18 @@ function makeHead(cfg, tpl, pageTitle, pageDesc) {
   <title>${seoTitle}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="${seoDesc}" />
+  <link rel="icon" href="${makeFavicon(cfg)}" />
+  ${pageUrl ? `<link rel="canonical" href="${pageUrl}" />` : ''}
   <meta property="og:title" content="${seoTitle}" />
   <meta property="og:description" content="${seoDesc}" />
   ${ogImage ? `<meta property="og:image" content="${ogImage}" />` : ''}
+  ${pageUrl ? `<meta property="og:url" content="${pageUrl}" />` : ''}
   <meta property="og:type" content="restaurant.restaurant" />
+  <meta name="twitter:card" content="${ogImage ? 'summary_large_image' : 'summary'}" />
+  <meta name="twitter:title" content="${seoTitle}" />
+  <meta name="twitter:description" content="${seoDesc}" />
+  ${ogImage ? `<meta name="twitter:image" content="${ogImage}" />` : ''}
+  ${page === 'index.html' ? buildJsonLd(cfg) : ''}
   ${tpl.googleFonts ? `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="${tpl.googleFonts}" rel="stylesheet">` : ''}
   ${ga}${fb}
   <style>${makeSharedCss(cfg, tpl)}</style>
@@ -429,6 +556,81 @@ function makeHead(cfg, tpl, pageTitle, pageDesc) {
 }
 
 // ── Section builders ──────────────────────────────────────────────────────────
+
+// SEPOS-WEB-005 — announcement / promo bar with an optional date range.
+// Rendered hidden; the inline script shows it only when today is in range,
+// so an expired promo never flashes and the bar self-retires.
+function buildAnnouncement(cfg) {
+  const s = cfg.sections || {};
+  const text = (s.announcement_text || '').trim();
+  if (!s.announcement_enabled || !text) return '';
+  const link = (s.announcement_link || '').trim();
+  const body = link
+    ? `<a href="${escapeHtml(link)}">${escapeHtml(text)}</a>`
+    : `<span>${escapeHtml(text)}</span>`;
+  return `
+  <div class="announce-bar" id="announce-bar" data-start="${escapeHtml(s.announcement_start || '')}" data-end="${escapeHtml(s.announcement_end || '')}">
+    <div class="announce-inner">📣 ${body}</div>
+    <button class="announce-close" aria-label="Dismiss" onclick="document.getElementById('announce-bar').remove();document.body.classList.remove('has-announce');">✕</button>
+  </div>
+  <script>
+    (function(){
+      var bar = document.getElementById('announce-bar');
+      if (!bar) return;
+      var today = new Date().toISOString().slice(0, 10);
+      var from = bar.dataset.start, to = bar.dataset.end;
+      if ((from && today < from) || (to && today > to)) { bar.remove(); return; }
+      bar.style.display = 'flex';
+      document.body.classList.add('has-announce');
+    })();
+  </script>`;
+}
+
+// SEPOS-WEB-005 — curated review wall (Google rating + hand-picked quotes).
+function buildReviews(cfg) {
+  const s = cfg.sections || {};
+  if (!s.reviews_enabled) return '';
+  const items = s.review_items || [];
+  const rating = (s.reviews_rating || '').toString().trim();
+  if (!items.length && !rating) return '';
+  const stars = n => '★'.repeat(Math.max(0, Math.min(5, Math.round(Number(n) || 5))));
+  const head = rating ? `
+    <div class="reviews-head">
+      <span class="reviews-score">${escapeHtml(rating)}</span>
+      <span class="review-stars">${stars(rating)}</span>
+      ${s.reviews_count ? `<span class="reviews-count">from ${escapeHtml(String(s.reviews_count))} Google reviews</span>` : ''}
+    </div>` : '';
+  const cards = items.map(r => `
+    <div class="review-card">
+      <div class="review-stars">${stars(r.stars)}</div>
+      <p class="review-text">${escapeHtml(r.text || '')}</p>
+      ${r.author ? `<div class="review-author">— ${escapeHtml(r.author)}</div>` : ''}
+    </div>`).join('');
+  return `
+  <section class="section">
+    <div class="container">
+      <span class="eyebrow">Reviews</span>
+      <h2>What our guests say</h2>
+      ${head}
+      ${cards ? `<div class="review-grid">${cards}</div>` : ''}
+      ${s.reviews_url ? `<div style="text-align:center;margin-top:28px;"><a href="${escapeHtml(s.reviews_url)}" target="_blank" rel="noopener" style="font-weight:700;">Read all reviews →</a></div>` : ''}
+    </div>
+  </section>`;
+}
+
+// SEPOS-WEB-005 — Google Maps embed from the address. No API key needed.
+function buildMap(cfg) {
+  const s = cfg.sections || {};
+  if (!s.map_enabled || !(cfg.address || '').trim()) return '';
+  const q = encodeURIComponent(
+    `${cfg.restaurant_name ? `${cfg.restaurant_name}, ` : ''}${cfg.address.replace(/\n/g, ', ')}`
+  );
+  return `
+  <div class="map-embed">
+    <iframe src="https://www.google.com/maps?q=${q}&output=embed" loading="lazy"
+      referrerpolicy="no-referrer-when-downgrade" title="Map" allowfullscreen></iframe>
+  </div>`;
+}
 
 function buildStats(cfg) {
   const s = cfg.sections || {};
@@ -554,10 +756,28 @@ function buildGallery(cfg) {
       <span class="eyebrow">Gallery</span>
       <h2>Our Space</h2>
       <div class="gallery-grid">
-        ${photos.map(src => `<div class="gallery-tile" style="background-image:url('${src}')"></div>`).join('')}
+        ${photos.map(src => `<div class="gallery-tile" role="button" tabindex="0" style="background-image:url('${src}')"></div>`).join('')}
       </div>
     </div>
-  </section>`;
+  </section>
+  <div id="sep-lightbox" class="sep-lightbox"><img alt="Gallery photo" /></div>
+  <script>
+    (function(){
+      var lb = document.getElementById('sep-lightbox');
+      if (!lb) return;
+      var img = lb.querySelector('img');
+      lb.addEventListener('click', function(){ lb.classList.remove('open'); });
+      document.addEventListener('keydown', function(e){ if (e.key === 'Escape') lb.classList.remove('open'); });
+      document.querySelectorAll('.gallery-tile').forEach(function(tile){
+        tile.addEventListener('click', function(){
+          var m = (tile.style.backgroundImage || '').match(/url\\(["']?(.*?)["']?\\)/);
+          if (!m) return;
+          img.src = m[1];
+          lb.classList.add('open');
+        });
+      });
+    })();
+  </script>`;
 }
 
 function buildBookingStrip(cfg) {
@@ -615,6 +835,7 @@ function buildVisit(cfg) {
         ${phone   ? `<div class="visit-row"><span class="visit-label">Phone</span><span><a href="tel:${phone}">${phone}</a></span></div>` : ''}
         ${email   ? `<div class="visit-row"><span class="visit-label">Email</span><span><a href="mailto:${email}">${email}</a></span></div>` : ''}
       </div>
+      ${buildMap(cfg)}
     </div>
   </section>`;
 }
@@ -714,7 +935,8 @@ function generateIndex(cfg, tpl) {
   const hasBook  = s.booking_widget_enabled && s.widget_base_url;
   const hasOrder = s.takeaway_widget_enabled && s.widget_base_url;
 
-  return makeHead(cfg, tpl, name, tagline) + `
+  return makeHead(cfg, tpl, name, tagline, 'index.html') + `
+${buildAnnouncement(cfg)}
 ${makeNav(cfg, tpl, 'index')}
 
 <header class="hero" style="${heroBg}">
@@ -736,6 +958,7 @@ ${buildFeaturedDishes(cfg, tpl)}
 ${buildGallery(cfg)}
 ${buildMethod(cfg, tpl)}
 ${buildStory(cfg, tpl)}
+${buildReviews(cfg)}
 ${buildCatering(cfg)}
 ${buildBookingStrip(cfg)}
 ${buildHours(cfg)}
@@ -751,7 +974,8 @@ function generateAbout(cfg, tpl) {
   const about   = escapeHtml(cfg.about_text || '');
   const photo   = cfg.photo_story || '';
 
-  return makeHead(cfg, tpl, `About — ${name}`, tagline) + `
+  return makeHead(cfg, tpl, `About — ${name}`, tagline, 'about.html') + `
+${buildAnnouncement(cfg)}
 ${makeNav(cfg, tpl, 'about')}
 
 <div class="page-hero">
@@ -808,7 +1032,41 @@ function generateMenu(cfg, tpl) {
 
   const noMenu = `<p style="color:#888;text-align:center;padding:40px 0;">Menu coming soon. Please call us or visit for today's specials.</p>`;
 
-  return makeHead(cfg, tpl, `Menu — ${name}`, 'Our menu') + `
+  // SEPOS-WEB-005 — live menu sync. When enabled, the page fetches the
+  // tenant's live /api/menu at load time so a price change on the till is
+  // on the website immediately. The static snapshot stays as the fallback
+  // (and as what crawlers without JS see).
+  const liveMenu = s.live_menu_enabled && s.widget_base_url ? `
+<script>
+  (function(){
+    var root = document.getElementById('menu-root');
+    if (!root) return;
+    function esc(t){ var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
+    fetch('${escapeHtml(s.widget_base_url)}/api/menu')
+      .then(function(r){ if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function(cats){
+        cats = (cats || []).filter(function(c){ return c.items && c.items.length; });
+        if (!cats.length) return; // keep the static snapshot
+        var html = '';
+        cats.forEach(function(c){
+          var items = c.items.filter(function(it){ return it.is_available !== 0 && it.is_available !== '0'; });
+          if (!items.length) return;
+          html += '<div class="menu-category"><div class="menu-category-title">' + esc(c.name) + '</div>';
+          items.forEach(function(it){
+            html += '<div class="menu-list-item"><div><div class="menu-list-name">' + esc(it.name) + '</div>'
+              + (it.description ? '<div class="menu-list-desc">' + esc(it.description) + '</div>' : '')
+              + '</div><div class="menu-list-price">£' + Number(it.price || 0).toFixed(2) + '</div></div>';
+          });
+          html += '</div>';
+        });
+        if (html) root.innerHTML = html;
+      })
+      .catch(function(){ /* offline or blocked — static snapshot stays */ });
+  })();
+</script>` : '';
+
+  return makeHead(cfg, tpl, `Menu — ${name}`, 'Our menu', 'menu.html') + `
+${buildAnnouncement(cfg)}
 ${makeNav(cfg, tpl, 'menu')}
 
 <div class="page-hero">
@@ -817,11 +1075,11 @@ ${makeNav(cfg, tpl, 'menu')}
 </div>
 
 <section class="section">
-  <div class="container" style="max-width:800px;">
+  <div class="container" id="menu-root" style="max-width:800px;">
     ${menuHtml || noMenu}
   </div>
 </section>
-
+${liveMenu}
 ${makeFooter(cfg, tpl)}
 </body></html>`;
 }
@@ -833,7 +1091,8 @@ function generateContact(cfg, tpl) {
   const email   = escapeHtml(cfg.email   || '');
   const s       = cfg.sections || {};
 
-  return makeHead(cfg, tpl, `Contact — ${name}`, 'Find us and get in touch') + `
+  return makeHead(cfg, tpl, `Contact — ${name}`, 'Find us and get in touch', 'contact.html') + `
+${buildAnnouncement(cfg)}
 ${makeNav(cfg, tpl, 'contact')}
 
 <div class="page-hero">
@@ -858,6 +1117,7 @@ ${makeNav(cfg, tpl, 'contact')}
         <div class="hours-card" style="margin-top:16px;text-align:left;">${escapeHtml(s.hours_text).replace(/\n/g,'<br>')}</div>
       </div>` : ''}
     </div>
+    ${buildMap(cfg)}
   </div>
 </section>
 
@@ -869,12 +1129,28 @@ ${makeFooter(cfg, tpl)}
 
 export function generateMultiPageWebsite(cfg) {
   const tpl = TEMPLATES[cfg.template] || TEMPLATES.classic;
-  return {
+  const pages = {
     'index.html':   generateIndex(cfg, tpl),
     'about.html':   generateAbout(cfg, tpl),
     'menu.html':    generateMenu(cfg, tpl),
     'contact.html': generateContact(cfg, tpl),
   };
+  // SEPOS-WEB-005 — sitemap + robots, generated when the live URL is known.
+  const siteUrl = siteUrlOf(cfg);
+  if (siteUrl) {
+    const lastmod = new Date().toISOString().slice(0, 10);
+    const urls = ['', 'menu.html', 'about.html', 'contact.html'].map(p => `  <url>
+    <loc>${siteUrl}/${p}</loc>
+    <lastmod>${lastmod}</lastmod>
+  </url>`).join('\n');
+    pages['sitemap.xml'] = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>
+`;
+    pages['robots.txt'] = `User-agent: *\nAllow: /\n\nSitemap: ${siteUrl}/sitemap.xml\n`;
+  }
+  return pages;
 }
 
 // Legacy single-page — kept for live preview only (uses index.html output)

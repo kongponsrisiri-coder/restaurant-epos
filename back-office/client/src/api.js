@@ -184,6 +184,13 @@ export const api = {
       body: JSON.stringify({ url }),
     }).then(handle),
 
+  aiCopyWebsite: (kind, facts) =>
+    fetch(`${API}/api/website-configs/ai-copy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify({ kind, facts }),
+    }).then(handle),
+
   // ── Finance (Starling) ───────────────────────────────────────
   getFinanceSettings: () =>
     fetch(`${API}/api/finance/settings`, { headers: tokenHeader() }).then(handle),

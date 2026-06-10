@@ -77,13 +77,32 @@ const EMPTY_SECTIONS = {
   takeaway_widget_enabled: false,
   widget_base_url: DEFAULT_WIDGET_BASE,
   menu_enabled: false, menu_items: [],
+  live_menu_enabled: false,                          // SEPOS-WEB-005
   team_enabled: false, team_members: [],
+
+  // Announcement / promo bar (SEPOS-WEB-005)
+  announcement_enabled: false,
+  announcement_text: '',
+  announcement_link: '',
+  announcement_start: '',
+  announcement_end: '',
+
+  // Reviews (SEPOS-WEB-005)
+  reviews_enabled: false,
+  reviews_rating: '',
+  reviews_count: '',
+  reviews_url: '',
+  review_items: [],
+
+  // Google Map embed (SEPOS-WEB-005)
+  map_enabled: false,
 
   // Social links
   instagram_url: '',
   facebook_url: '',
   tripadvisor_url: '',
 
+  site_url: '',                                      // SEPOS-WEB-005
   seo_title: '', seo_description: '', seo_og_image: '',
   ga_id: '', fb_pixel_id: '',
 };
@@ -309,6 +328,7 @@ export default function WebsiteBuilderPanel({ scope }) {
             </Field>
             <Field label="Tagline">
               <input value={cfg.tagline} onChange={e => set('tagline', e.target.value)} style={input} placeholder="Authentic Thai cuisine in the heart of London" />
+              <AiWriteButton kind="tagline" cfg={cfg} existing={cfg.tagline} onText={t => set('tagline', t)} />
             </Field>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <Field label="Phone">
@@ -321,6 +341,34 @@ export default function WebsiteBuilderPanel({ scope }) {
             <Field label="Address">
               <textarea value={cfg.address} onChange={e => set('address', e.target.value)} style={{ ...input, minHeight: 60, resize: 'vertical' }} />
             </Field>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: C.text, fontWeight: 600, cursor: 'pointer' }}>
+              <input type="checkbox" checked={!!cfg.sections.map_enabled} onChange={e => setSection('map_enabled', e.target.checked)} style={{ width: 16, height: 16 }} />
+              Show a Google Map of the address (home + contact pages)
+            </label>
+          </Section>
+
+          {/* Announcement bar */}
+          <Section
+            title="Announcement bar"
+            toggle={{ enabled: !!cfg.sections.announcement_enabled, onChange: v => setSection('announcement_enabled', v) }}
+          >
+            <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>
+              Slim promo strip above the nav — e.g. "Songkran set menu · 13–15 April". With a date range it shows and retires itself automatically.
+            </div>
+            <Field label="Text">
+              <input value={cfg.sections.announcement_text || ''} onChange={e => setSection('announcement_text', e.target.value)} style={input} placeholder="Mother's Day set menu — book now" />
+            </Field>
+            <Field label="Link (optional — makes the text clickable)">
+              <input value={cfg.sections.announcement_link || ''} onChange={e => setSection('announcement_link', e.target.value)} style={input} placeholder="index.html#book or https://…" />
+            </Field>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <Field label="Show from (optional)">
+                <input type="date" value={cfg.sections.announcement_start || ''} onChange={e => setSection('announcement_start', e.target.value)} style={input} />
+              </Field>
+              <Field label="Show until (optional)">
+                <input type="date" value={cfg.sections.announcement_end || ''} onChange={e => setSection('announcement_end', e.target.value)} style={input} />
+              </Field>
+            </div>
           </Section>
 
           {/* Stats bar */}
@@ -380,6 +428,7 @@ export default function WebsiteBuilderPanel({ scope }) {
                 style={{ ...input, minHeight: 100, resize: 'vertical' }}
                 placeholder="Plern is the Thai word for being so absorbed by a moment that time itself slows…"
               />
+              <AiWriteButton kind="philosophy" cfg={cfg} existing={cfg.sections.philosophy_text} onText={t => setSection('philosophy_text', t)} />
             </Field>
             <Field label="Pull quote (optional — shown in a styled block)">
               <textarea
@@ -439,6 +488,7 @@ export default function WebsiteBuilderPanel({ scope }) {
           >
             <Field label="About text (2–3 sentences in the restaurant's voice)">
               <textarea value={cfg.about_text} onChange={e => set('about_text', e.target.value)} style={{ ...input, minHeight: 120, resize: 'vertical' }} />
+              <AiWriteButton kind="about" cfg={cfg} existing={cfg.about_text} onText={t => set('about_text', t)} />
             </Field>
             <div style={{ fontSize: 11, color: C.textFaint }}>The story photo is in the Photos section below.</div>
           </Section>
@@ -516,6 +566,28 @@ export default function WebsiteBuilderPanel({ scope }) {
             <PressEditor items={cfg.sections.press_items || []} onChange={items => setSection('press_items', items)} />
           </Section>
 
+          {/* Reviews */}
+          <Section
+            title="Guest reviews"
+            toggle={{ enabled: !!cfg.sections.reviews_enabled, onChange: v => setSection('reviews_enabled', v) }}
+          >
+            <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10 }}>
+              Google rating + hand-picked quotes. Copy the rating from the restaurant's Google Business Profile and paste 3–6 of the best reviews.
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '110px 110px 1fr', gap: 10 }}>
+              <Field label="Rating">
+                <input value={cfg.sections.reviews_rating || ''} onChange={e => setSection('reviews_rating', e.target.value)} style={input} placeholder="4.8" />
+              </Field>
+              <Field label="Review count">
+                <input value={cfg.sections.reviews_count || ''} onChange={e => setSection('reviews_count', e.target.value)} style={input} placeholder="247" />
+              </Field>
+              <Field label="'Read all reviews' link (optional)">
+                <input value={cfg.sections.reviews_url || ''} onChange={e => setSection('reviews_url', e.target.value)} style={input} placeholder="https://g.page/r/…" />
+              </Field>
+            </div>
+            <ReviewsEditor items={cfg.sections.review_items || []} onChange={items => setSection('review_items', items)} />
+          </Section>
+
           {/* Widgets */}
           <Section title="Online ordering &amp; booking widgets">
             <div style={{ display: 'grid', gap: 14 }}>
@@ -527,6 +599,13 @@ export default function WebsiteBuilderPanel({ scope }) {
                 <input type="checkbox" checked={!!cfg.sections.takeaway_widget_enabled} onChange={e => setSection('takeaway_widget_enabled', e.target.checked)} style={{ width: 16, height: 16 }} />
                 Embed the online takeaway widget
               </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: C.text, fontWeight: 600, cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!cfg.sections.live_menu_enabled} onChange={e => setSection('live_menu_enabled', e.target.checked)} style={{ width: 16, height: 16 }} />
+                Live menu sync — the Menu page fetches the EPOS menu on every visit
+              </label>
+              <div style={{ fontSize: 11, color: C.textFaint, marginTop: -8, marginLeft: 26 }}>
+                Change a price on the till and the website updates itself. Uses the backend URL below; the snapshot below stays as offline fallback.
+              </div>
               <Field label="Widget backend URL">
                 <input
                   value={cfg.sections.widget_base_url || ''}
@@ -550,6 +629,7 @@ export default function WebsiteBuilderPanel({ scope }) {
                 placeholder="Authentic Thai canapés and family-style platters for private events…"
                 style={{ ...input, minHeight: 100, resize: 'vertical' }}
               />
+              <AiWriteButton kind="catering" cfg={cfg} existing={cfg.sections.catering_text} onText={t => setSection('catering_text', t)} />
             </Field>
             <PhotoSlot
               slot={{ key: 'catering_photo', label: 'Catering photo', hint: 'Shown alongside the catering pitch.' }}
@@ -646,6 +726,17 @@ export default function WebsiteBuilderPanel({ scope }) {
 
           {/* SEO */}
           <Section title="SEO &amp; social preview">
+            <Field label="Live site URL">
+              <input
+                value={cfg.sections.site_url || ''}
+                onChange={e => setSection('site_url', e.target.value.trim())}
+                placeholder="https://www.restaurant.co.uk"
+                style={{ ...input, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
+              />
+              <div style={{ fontSize: 11, color: C.textFaint, marginTop: 4 }}>
+                Unlocks sitemap.xml + robots.txt in the ZIP, canonical links, and Google rich-result data (menu, hours, rating shown directly in search).
+              </div>
+            </Field>
             <Field label="Page title">
               <input value={cfg.sections.seo_title || ''} onChange={e => setSection('seo_title', e.target.value)} placeholder={cfg.restaurant_name || 'Restaurant'} style={input} />
             </Field>
@@ -658,6 +749,7 @@ export default function WebsiteBuilderPanel({ scope }) {
                 style={{ ...input, minHeight: 60, resize: 'vertical' }}
               />
               <div style={{ fontSize: 11, color: C.textFaint, marginTop: 4 }}>{(cfg.sections.seo_description || '').length} / 160</div>
+              <AiWriteButton kind="seo_description" cfg={cfg} existing={cfg.sections.seo_description} onText={t => setSection('seo_description', t)} />
             </Field>
             <PhotoSlot
               slot={{ key: 'seo_og_image', label: 'Social share image (optional)', hint: '1200×630 works best. Defaults to hero photo.' }}
@@ -862,6 +954,60 @@ function PressEditor({ items, onChange }) {
       ))}
       <button onClick={add} style={{ ...btn.ghost, justifySelf: 'start' }}>+ Add press item</button>
     </div>
+  );
+}
+
+function ReviewsEditor({ items, onChange }) {
+  const add    = () => onChange([...items, { author: '', text: '', stars: 5 }]);
+  const update = (i, field, value) => { const next = items.slice(); next[i] = { ...next[i], [field]: value }; onChange(next); };
+  const remove = i => onChange(items.filter((_, idx) => idx !== i));
+
+  return (
+    <div style={{ display: 'grid', gap: 12 }}>
+      {items.length === 0 && <div style={{ color: C.textFaint, fontSize: 12, padding: '8px 0' }}>No reviews added yet.</div>}
+      {items.map((r, i) => (
+        <div key={i} style={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, display: 'grid', gap: 10 }}>
+          <textarea value={r.text || ''} onChange={e => update(i, 'text', e.target.value)} placeholder="The best pad thai outside Bangkok…" style={{ ...input, minHeight: 56, resize: 'vertical' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 110px', gap: 10 }}>
+            <input value={r.author || ''} onChange={e => update(i, 'author', e.target.value)} placeholder="Reviewer name" style={input} />
+            <select value={r.stars ?? 5} onChange={e => update(i, 'stars', Number(e.target.value))} style={input}>
+              {[5, 4, 3].map(n => <option key={n} value={n}>{'★'.repeat(n)}</option>)}
+            </select>
+          </div>
+          <button onClick={() => remove(i)} style={{ ...btn.ghost, color: C.danger, fontSize: 12, justifySelf: 'start' }}>Remove</button>
+        </div>
+      ))}
+      <button onClick={add} style={{ ...btn.ghost, justifySelf: 'start' }}>+ Add review</button>
+    </div>
+  );
+}
+
+// SEPOS-WEB-005 — drafts section copy from the config facts via the
+// back-office Anthropic key. Ops can edit the result before it saves.
+function AiWriteButton({ kind, cfg, existing, onText }) {
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const r = await api.aiCopyWebsite(kind, {
+        restaurant_name: cfg.restaurant_name,
+        tagline:         cfg.tagline,
+        address:         cfg.address,
+        about_text:      cfg.about_text,
+        existing:        existing || '',
+      });
+      if (r.error) throw new Error(r.error);
+      if (r.text) onText(r.text);
+    } catch (e) {
+      alert('AI write failed: ' + e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button onClick={run} disabled={busy} style={{ ...btn.ghost, fontSize: 11, padding: '4px 10px', marginTop: 6, opacity: busy ? 0.6 : 1 }}>
+      {busy ? '✨ Writing…' : '✨ Write for me'}
+    </button>
   );
 }
 

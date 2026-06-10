@@ -238,18 +238,6 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
   </div>
 
   <!-- FORM -->
-  <!-- Hidden static form so Netlify Forms detects the fields at deploy
-       time. submitDemo() POSTs the real values via fetch with
-       form-name=demo-request — submissions land in Netlify → Forms.
-       Enable email notifications in Netlify → Site settings → Forms. -->
-  <form name="demo-request" data-netlify="true" netlify-honeypot="bot-field" hidden>
-    <input type="text" name="first_name"><input type="text" name="last_name">
-    <input type="text" name="restaurant"><input type="tel" name="phone">
-    <input type="email" name="email"><input type="text" name="language">
-    <input type="text" name="current_system"><textarea name="notes"></textarea>
-    <input type="text" name="bot-field">
-  </form>
-
   <div class="demo-form-wrap reveal">
     <div class="demo-form-card">
       <div id="demoFormContent">
@@ -283,6 +271,8 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
           </select>
         </div>
         <div class="frow"><label for="dNotes" class="flabel lang-en">Anything specific you'd like to see?</label><label for="dNotes" class="flabel lang-th">มีอะไรที่ต้องการดูเป็นพิเศษ?</label><textarea class="ftextarea" id="dNotes" placeholder="e.g. AI invoice scanner, booking widget, kitchen screen, food cost..."></textarea></div>
+        <!-- Honeypot — invisible to humans; bots that fill it get a silent no-op -->
+        <input type="text" id="dWebsite" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;height:1px;width:1px;opacity:0;">
         <button class="submit-btn" onclick="submitDemo()"><span class="lang-en">See SiamEPOS in Action →</span><span class="lang-th">ดู SiamEPOS ในการทำงานจริง →</span></button>
         <p class="form-note lang-en">Free. No commitment. No credit card. We'll confirm within 2 hours.</p>
         <p class="form-note lang-th">ฟรี ไม่มีข้อผูกมัด ไม่ต้องใส่บัตรเครดิต เราจะยืนยันภายใน 2 ชั่วโมง</p>
@@ -388,18 +378,20 @@ async function submitDemo(){
   if(!fn||!ln||!rest||!ph||!em){alert('Please fill in all required fields.\n\nกรุณากรอกข้อมูลที่จำเป็นทั้งหมด');return;}
   if(!em.includes('@')){alert('Please enter a valid email address.');return;}
   const btn=document.querySelector('.submit-btn');btn.disabled=true;btn.textContent='⏳ Sending...';
-  // Real submission via Netlify Forms (the hidden demo-request form above
-  // registers the fields at deploy time). Previously this function only
+  // Real submission to the SiamEPOS backend, which emails the lead to
+  // info@siamepos.co.uk via Brevo. Previously this function only
   // pretended to send — every lead was silently lost.
   try{
-    const body=new URLSearchParams({
-      'form-name':'demo-request',
-      first_name:fn, last_name:ln, restaurant:rest, phone:ph, email:em,
-      language:document.getElementById('dLang').value,
-      current_system:document.getElementById('dCurrent').value,
-      notes:document.getElementById('dNotes').value.trim(),
+    const resp=await fetch('https://restaurant-epos-production.up.railway.app/api/website/demo-request',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        first_name:fn, last_name:ln, restaurant:rest, phone:ph, email:em,
+        language:document.getElementById('dLang').value,
+        current_system:document.getElementById('dCurrent').value,
+        notes:document.getElementById('dNotes').value.trim(),
+        website:document.getElementById('dWebsite').value, // honeypot — humans leave it empty
+      }),
     });
-    const resp=await fetch('/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body.toString()});
     if(!resp.ok) throw new Error('HTTP '+resp.status);
     document.getElementById('demoFormContent').style.display='none';
     const s=document.getElementById('demoSuccess');s.style.display='block';

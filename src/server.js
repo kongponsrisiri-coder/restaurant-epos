@@ -2498,6 +2498,43 @@ const widgetCors = (req, res, next) => {
   next();
 };
 
+// WEBSITE-POLISH-003 — demo-request lead capture for siamepos.co.uk.
+// The marketing site's Book-a-Demo form POSTs here; we email the lead
+// to info@siamepos.co.uk via Brevo. `website` is a hidden honeypot —
+// bots that fill it get a silent success and no email.
+app.post('/api/website/demo-request', widgetCors, async (req, res) => {
+  try {
+    const { first_name, last_name, restaurant, phone, email, language, current_system, notes, website } = req.body || {};
+    if (website) return res.json({ success: true });
+    if (!first_name?.trim() || !restaurant?.trim() || !phone?.trim() || !email?.trim()) {
+      return res.status(400).json({ error: 'missing required fields' });
+    }
+    const esc = (s) => String(s || '').slice(0, 300).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+    const row = (k, v) => v ? `<tr><td style="padding:6px 12px;color:#888;font-size:13px;">${k}</td><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#0D1B3E;">${esc(v)}</td></tr>` : '';
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:520px;">
+        <div style="background:#0D1B3E;color:#C9A84C;padding:16px 22px;font-size:18px;font-weight:700;">🎯 New demo request — siamepos.co.uk</div>
+        <table style="width:100%;border-collapse:collapse;background:#fafafa;">
+          ${row('Name', `${first_name} ${last_name || ''}`.trim())}
+          ${row('Restaurant', restaurant)}
+          ${row('Phone / WhatsApp', phone)}
+          ${row('Email', email)}
+          ${row('Demo language', language)}
+          ${row('Current system', current_system)}
+          ${row('Notes', notes)}
+        </table>
+        <div style="padding:12px 22px;font-size:12px;color:#888;">Promised response time on the site: within 2 hours.</div>
+      </div>`;
+    const { sendBrevoEmail } = require('./services/emailService');
+    await sendBrevoEmail('info@siamepos.co.uk', `🎯 Demo request — ${esc(restaurant)}`, html);
+    console.log(`🎯 demo request: ${first_name} — ${restaurant} (${email})`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[demo-request]', err.message);
+    res.status(500).json({ error: 'failed to send' });
+  }
+});
+
 // Helper to convert "HH:MM" string to total minutes
 function toMins(t) {
   const [h, m] = String(t).slice(0, 5).split(':').map(Number);

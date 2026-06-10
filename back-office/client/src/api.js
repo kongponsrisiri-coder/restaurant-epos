@@ -191,6 +191,22 @@ export const api = {
       body: JSON.stringify({ kind, facts }),
     }).then(handle),
 
+  publishWebsite: (clientId, files) =>
+    fetch(`${API}/api/website-configs/client/${clientId}/publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify({ files }),
+    }).then(handle),
+
+  getWebsitePublishes: (clientId) =>
+    fetch(`${API}/api/website-configs/client/${clientId}/publishes`, { headers: tokenHeader() }).then(handle),
+
+  restoreWebsitePublish: (clientId, publishId) =>
+    fetch(`${API}/api/website-configs/client/${clientId}/restore/${publishId}`, {
+      method: 'POST',
+      headers: tokenHeader(),
+    }).then(handle),
+
   // ── Finance (Starling) ───────────────────────────────────────
   getFinanceSettings: () =>
     fetch(`${API}/api/finance/settings`, { headers: tokenHeader() }).then(handle),

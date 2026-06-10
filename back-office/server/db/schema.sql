@@ -157,6 +157,28 @@ ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS photo_gallery_10 TEXT;
 ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS photo_gallery_11 TEXT;
 ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS photo_gallery_12 TEXT;
 
+-- SEPOS-WEB-007 — one-click publish to Netlify + publish history.
+-- netlify_site_id ties the client's WEBSITE to its Netlify site (separate
+-- from the EPOS app site provisioned by SEPOS-029). published_at vs
+-- updated_at tells the UI whether the draft has unpublished changes.
+ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS netlify_site_id TEXT;
+ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
+ALTER TABLE website_configs ADD COLUMN IF NOT EXISTS published_by TEXT;
+
+-- Every publish stores a full config snapshot — audit trail + restore.
+CREATE TABLE IF NOT EXISTS website_publishes (
+  id                SERIAL PRIMARY KEY,
+  client_id         INT REFERENCES clients(id) ON DELETE CASCADE,
+  published_by      TEXT,
+  published_at      TIMESTAMPTZ DEFAULT NOW(),
+  netlify_site_id   TEXT,
+  netlify_deploy_id TEXT,
+  url               TEXT,
+  config_snapshot   JSONB
+);
+CREATE INDEX IF NOT EXISTS idx_website_publishes_client
+  ON website_publishes (client_id, published_at DESC);
+
 -- SEPOS-042 — Finance / Starling Bank integration. Stores API tokens for
 -- the Starling Personal Access Token and Anthropic API key server-side so
 -- they are never exposed to the browser. One singleton row (id=1).

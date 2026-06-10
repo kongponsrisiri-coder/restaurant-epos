@@ -176,6 +176,8 @@ export default function ClientDetailPage() {
               </>
             )}
           </SectionCard>
+
+          {!isSpa && <WebsiteCard clientId={client.id} onEdit={() => setTab('website')} />}
         </div>
       )}
 
@@ -258,6 +260,112 @@ export default function ClientDetailPage() {
         </SectionCard>
       )}
     </div>
+  );
+}
+
+// SEPOS-WEB-007 — website status on the client card. Holds the live URL
+// for ANY client (hand-built sites included); when the site is managed by
+// our builder it also shows publish status + unpublished-changes warning.
+function WebsiteCard({ clientId, onEdit }) {
+  const [row, setRow] = useState(null);
+  const [publishes, setPublishes] = useState([]);
+  const [url, setUrl] = useState('');
+  const [savingUrl, setSavingUrl] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.allSettled([
+      api.getClientWebsite(clientId),
+      api.getWebsitePublishes(clientId),
+    ]).then(([cfgR, pubR]) => {
+      if (cancelled) return;
+      if (cfgR.status === 'fulfilled') {
+        setRow(cfgR.value);
+        setUrl((cfgR.value.sections?.site_url) || '');
+      }
+      if (pubR.status === 'fulfilled' && Array.isArray(pubR.value)) setPublishes(pubR.value);
+      setLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [clientId]);
+
+  const saveUrl = async () => {
+    const next = url.trim();
+    if (next === ((row?.sections?.site_url) || '')) return;
+    setSavingUrl(true);
+    try {
+      const saved = await api.saveClientWebsite(clientId, { sections: { ...(row?.sections || {}), site_url: next } });
+      setRow(saved);
+    } catch (e) { alert(e.message); }
+    finally { setSavingUrl(false); }
+  };
+
+  const lastPublish = publishes[0];
+  const liveUrl = (row?.sections?.site_url) || lastPublish?.url || '';
+  const usesBuilder = !!row?.id;
+  const hasUnpublished = usesBuilder && row.published_at && row.updated_at &&
+    new Date(row.updated_at) > new Date(row.published_at);
+
+  return (
+    <SectionCard title="Website">
+      {!loaded ? (
+        <div style={{ color: C.textFaint, padding: 12 }}>Loading…</div>
+      ) : (
+        <div style={{ display: 'grid', gap: 12 }}>
+          <FormRow label="Live URL">
+            <div style={{ display: 'flex', gap: 8, flex: 1 }}>
+              <input
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                onBlur={saveUrl}
+                placeholder="https://www.restaurant.co.uk"
+                disabled={savingUrl}
+                style={{ ...miniInput, flex: 1, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
+              />
+              {liveUrl && (
+                <a href={liveUrl.startsWith('http') ? liveUrl : `https://${liveUrl}`} target="_blank" rel="noopener"
+                  style={{ ...btn.ghost, fontSize: 12, textDecoration: 'none', whiteSpace: 'nowrap' }}>Open ↗</a>
+              )}
+            </div>
+          </FormRow>
+          <div style={{ fontSize: 11, color: C.textFaint, marginTop: -6 }}>
+            Works for any site, even ones not built with our builder. Saved with the client's website config.
+          </div>
+
+          {usesBuilder ? (
+            <div style={{ fontSize: 13, display: 'grid', gap: 6 }}>
+              {row.published_at ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ color: '#166534', fontWeight: 700 }}>● Published</span>
+                  <span style={{ color: C.textMuted }}>
+                    {fmtRelTime(row.published_at)} by {row.published_by || 'ops'}
+                  </span>
+                  {hasUnpublished && (
+                    <span style={{ background: '#fef3c7', color: '#92400e', fontSize: 11, fontWeight: 800, padding: '2px 10px', borderRadius: 999 }}>
+                      draft has unpublished changes
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div style={{ color: C.textMuted }}>Built with our builder — <strong>never published</strong> from here yet.</div>
+              )}
+              {publishes.length > 0 && (
+                <div style={{ color: C.textFaint, fontSize: 12 }}>{publishes.length} publish{publishes.length === 1 ? '' : 'es'} on record</div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: C.textMuted }}>
+              No builder config yet — this client's site lives outside the builder, or hasn't been started.
+            </div>
+          )}
+
+          <button onClick={onEdit} style={{ ...btn.primary, justifySelf: 'start', fontSize: 13 }}>
+            {usesBuilder ? '🌐 Edit website' : '🌐 Start a website'}
+          </button>
+        </div>
+      )}
+    </SectionCard>
   );
 }
 

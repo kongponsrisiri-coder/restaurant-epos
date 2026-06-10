@@ -6,9 +6,11 @@
 // HTML can be fully self-contained (no CDN dependency).
 
 const express = require('express');
+const crypto = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk');
 const { pool } = require('../db/pool');
 const { authRequired } = require('../middleware/auth');
+const { netlifyApi } = require('../services/provisioning');
 
 const router = express.Router();
 router.use(authRequired);
@@ -145,6 +147,133 @@ Use an empty string for any field not found.`,
     res.json({ success: true, data });
   } catch (err) {
     console.error('[ops-website] ai-import error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── SEPOS-WEB-007 — one-click publish to Netlify ───────────────────
+// The browser generates the pages (it owns the template lib) and POSTs
+// them here; we create/reuse the client's WEBSITE Netlify site (separate
+// from the EPOS app site), push a file-digest deploy, and record a
+// publish row with a full config snapshot for history/restore.
+router.post('/client/:clientId/publish', async (req, res) => {
+  try {
+    const clientId = parseInt(req.params.clientId, 10);
+    const files = (req.body || {}).files;
+    if (!files || typeof files !== 'object' || !files['index.html']) {
+      return res.status(400).json({ error: 'files object with at least index.html required' });
+    }
+
+    const cfgQ = await pool.query(`SELECT * FROM website_configs WHERE client_id = $1 LIMIT 1`, [clientId]);
+    if (!cfgQ.rows.length) return res.status(400).json({ error: 'No website config saved for this client yet' });
+    const cfgRow = cfgQ.rows[0];
+    const clientQ = await pool.query(`SELECT * FROM clients WHERE id = $1`, [clientId]);
+    if (!clientQ.rows.length) return res.status(404).json({ error: 'Client not found' });
+    const client = clientQ.rows[0];
+
+    // 1. Ensure the website's Netlify site exists (and still exists).
+    let siteId = cfgRow.netlify_site_id;
+    let site = null;
+    if (siteId) {
+      try { site = await netlifyApi(`/api/v1/sites/${siteId}`); }
+      catch (e) { if (e.status === 404) { siteId = null; } else throw e; }
+    }
+    if (!siteId) {
+      const slugBase = (client.slug || client.restaurant_name || `client-${clientId}`)
+        .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      let name = `siamepos-web-${slugBase}`;
+      try {
+        site = await netlifyApi('/api/v1/sites', { method: 'POST', body: JSON.stringify({ name }) });
+      } catch (e) {
+        if (e.status === 422) { // name taken on Netlify — suffix with the client id
+          name = `${name}-${clientId}`;
+          site = await netlifyApi('/api/v1/sites', { method: 'POST', body: JSON.stringify({ name }) });
+        } else throw e;
+      }
+      siteId = site.id;
+    }
+
+    // 2. File-digest deploy: announce sha1s, then upload whatever Netlify
+    //    doesn't already have from a previous deploy.
+    const sha = {};
+    for (const [fname, content] of Object.entries(files)) {
+      sha[`/${fname}`] = crypto.createHash('sha1').update(String(content), 'utf8').digest('hex');
+    }
+    const deploy = await netlifyApi(`/api/v1/sites/${siteId}/deploys`, {
+      method: 'POST',
+      body: JSON.stringify({ files: sha }),
+    });
+    const required = new Set(deploy.required || []);
+    for (const [fname, content] of Object.entries(files)) {
+      const path = `/${fname}`;
+      if (!required.has(sha[path])) continue;
+      const up = await fetch(`https://api.netlify.com/api/v1/deploys/${deploy.id}/files${encodeURI(path)}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${process.env.NETLIFY_AUTH_TOKEN}`,
+          'Content-Type': 'application/octet-stream',
+        },
+        body: String(content),
+      });
+      if (!up.ok) throw new Error(`Netlify upload ${path} failed: ${up.status} ${(await up.text()).slice(0, 200)}`);
+    }
+
+    const url = site?.ssl_url || site?.url || deploy.ssl_url || deploy.url || '';
+    const by = req.user?.email || req.user?.name || 'ops';
+
+    // 3. Record the publish. Deliberately NOT touching updated_at so the
+    //    draft-vs-live comparison stays meaningful.
+    await pool.query(
+      `UPDATE website_configs SET netlify_site_id = $1, published_at = NOW(), published_by = $2 WHERE id = $3`,
+      [siteId, by, cfgRow.id]
+    );
+    const snap = {};
+    for (const k of UPDATABLE) if (k in cfgRow) snap[k] = cfgRow[k];
+    const ins = await pool.query(
+      `INSERT INTO website_publishes (client_id, published_by, netlify_site_id, netlify_deploy_id, url, config_snapshot)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, published_at`,
+      [clientId, by, siteId, deploy.id, url, JSON.stringify(snap)]
+    );
+
+    res.json({
+      success: true, url, site_id: siteId, deploy_id: deploy.id,
+      publish_id: ins.rows[0].id, published_at: ins.rows[0].published_at, published_by: by,
+    });
+  } catch (err) {
+    console.error('[ops-website] publish error', err);
+    res.status(500).json({ error: err.message, hint: err.hint });
+  }
+});
+
+// Publish history — metadata only, snapshots stay server-side.
+router.get('/client/:clientId/publishes', async (req, res) => {
+  try {
+    const clientId = parseInt(req.params.clientId, 10);
+    const r = await pool.query(
+      `SELECT id, published_by, published_at, url, netlify_site_id
+         FROM website_publishes WHERE client_id = $1
+        ORDER BY published_at DESC LIMIT 20`,
+      [clientId]
+    );
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Restore a published snapshot into the draft config. Does NOT republish —
+// the operator reviews in the builder, then hits Publish again.
+router.post('/client/:clientId/restore/:publishId', async (req, res) => {
+  try {
+    const clientId  = parseInt(req.params.clientId, 10);
+    const publishId = parseInt(req.params.publishId, 10);
+    const r = await pool.query(
+      `SELECT config_snapshot FROM website_publishes WHERE id = $1 AND client_id = $2`,
+      [publishId, clientId]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Publish not found for this client' });
+    const row = await upsertConfig({ client_id: clientId }, pickFields(r.rows[0].config_snapshot || {}));
+    res.json(row);
+  } catch (err) {
+    console.error('[ops-website] restore error', err);
     res.status(500).json({ error: err.message });
   }
 });

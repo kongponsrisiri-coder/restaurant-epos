@@ -252,4 +252,4 @@ function buildRailwayTemplateUrl(client) {
   return url.toString();
 }
 
-module.exports = { seedTenantDatabase, provisionNetlifyTenant, buildRailwayTemplateUrl };
+module.exports = { seedTenantDatabase, provisionNetlifyTenant, buildRailwayTemplateUrl, netlifyApi };

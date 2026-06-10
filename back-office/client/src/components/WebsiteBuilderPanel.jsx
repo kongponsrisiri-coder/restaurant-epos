@@ -130,6 +130,11 @@ export default function WebsiteBuilderPanel({ scope }) {
   const [aiBusy, setAiBusy]   = useState(false);
   const [aiErr, setAiErr]     = useState('');
   const [downloading, setDownloading] = useState(false);
+  const [publishing, setPublishing]   = useState(false);
+  const [publishes, setPublishes]     = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [reloadKey, setReloadKey]     = useState(0);
+  const skipNextSaveRef = useRef(false);
 
   // ── Load ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -154,6 +159,7 @@ export default function WebsiteBuilderPanel({ scope }) {
           merged.sections.pillars = EMPTY_SECTIONS.pillars;
         if (!merged.sections.method_steps || !merged.sections.method_steps.length)
           merged.sections.method_steps = EMPTY_SECTIONS.method_steps;
+        skipNextSaveRef.current = true; // loading isn't an edit — don't re-save it
         setCfg(merged);
       } catch (e) {
         console.error('[website-builder] load error', e);
@@ -162,6 +168,14 @@ export default function WebsiteBuilderPanel({ scope }) {
       }
     })();
     return () => { cancelled = true; };
+  }, [scope.kind, scope.clientId, reloadKey]);
+
+  // ── Publish history (SEPOS-WEB-007, client scope only) ───────────
+  useEffect(() => {
+    if (scope.kind !== 'client') return;
+    api.getWebsitePublishes(scope.clientId)
+      .then(r => { if (Array.isArray(r)) setPublishes(r); })
+      .catch(() => {});
   }, [scope.kind, scope.clientId]);
 
   const set = (k, v) => setCfg(prev => ({ ...prev, [k]: v }));
@@ -172,6 +186,7 @@ export default function WebsiteBuilderPanel({ scope }) {
   const firstRunRef = useRef(true);
   useEffect(() => {
     if (firstRunRef.current) { firstRunRef.current = false; return; }
+    if (skipNextSaveRef.current) { skipNextSaveRef.current = false; return; }
     if (loading) return;
     dirtyRef.current = true;
     const handle = setTimeout(async () => {
@@ -260,9 +275,43 @@ export default function WebsiteBuilderPanel({ scope }) {
     }
   };
 
+  // ── Publish to Netlify (SEPOS-WEB-007) ────────────────────────────
+  const publish = async () => {
+    if (!window.confirm('Publish this website live to Netlify now?')) return;
+    setPublishing(true);
+    try {
+      const pages = generateMultiPageWebsite(cfg);
+      const r = await api.publishWebsite(scope.clientId, pages);
+      if (r.error) throw new Error(r.error + (r.hint ? ` — ${r.hint}` : ''));
+      setPublishes(prev => [
+        { id: r.publish_id, published_at: r.published_at, published_by: r.published_by, url: r.url },
+        ...prev,
+      ]);
+      alert(`Published ✓\n${r.url}`);
+    } catch (e) {
+      alert('Publish failed: ' + e.message);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const restorePublish = async (publishId, when) => {
+    if (!window.confirm(`Replace the current draft with the version published ${when}?\n(The live site is untouched until you Publish again.)`)) return;
+    try {
+      const r = await api.restoreWebsitePublish(scope.clientId, publishId);
+      if (r.error) throw new Error(r.error);
+      setReloadKey(k => k + 1); // reload the restored config into the form
+      setShowHistory(false);
+    } catch (e) {
+      alert('Restore failed: ' + e.message);
+    }
+  };
+
   if (loading) return (
     <div style={{ color: C.textMuted, padding: 40, textAlign: 'center' }}>Loading website config…</div>
   );
+
+  const lastPublish = publishes[0];
 
   return (
     <div>
@@ -284,10 +333,53 @@ export default function WebsiteBuilderPanel({ scope }) {
           {saving ? 'Saving…' : savedAt ? `Saved ${savedAt.toLocaleTimeString()}` : 'Changes auto-save'}
         </div>
         <button onClick={openPreview} style={btn.ghost}>Preview</button>
-        <button onClick={downloadZip} disabled={downloading} style={{ ...btn.gold, opacity: downloading ? 0.6 : 1 }}>
-          {downloading ? 'Zipping…' : '⬇ Download ZIP'}
+        <button onClick={downloadZip} disabled={downloading} style={{ ...btn.ghost, opacity: downloading ? 0.6 : 1 }}>
+          {downloading ? 'Zipping…' : '⬇ ZIP'}
         </button>
+        {scope.kind === 'client' && (
+          <button onClick={publish} disabled={publishing} style={{ ...btn.gold, opacity: publishing ? 0.6 : 1 }}>
+            {publishing ? 'Publishing…' : '🚀 Publish'}
+          </button>
+        )}
       </div>
+
+      {scope.kind === 'client' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: C.textMuted, marginBottom: 14, padding: '8px 14px', background: lastPublish ? '#f0fdf4' : `${C.navy}08`, border: `1px solid ${lastPublish ? '#bbf7d0' : C.border}`, borderRadius: 8, flexWrap: 'wrap' }}>
+          {lastPublish ? (
+            <>
+              <span style={{ fontWeight: 700, color: '#166534' }}>● Live</span>
+              <a href={lastPublish.url} target="_blank" rel="noopener" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>{lastPublish.url}</a>
+              <span>· published {new Date(lastPublish.published_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })} by {lastPublish.published_by || 'ops'}</span>
+            </>
+          ) : (
+            <span>Not published yet — 🚀 Publish puts this site live on Netlify in one click.</span>
+          )}
+          {publishes.length > 0 && (
+            <button onClick={() => setShowHistory(v => !v)} style={{ ...btn.ghost, fontSize: 11, padding: '3px 10px', marginLeft: 'auto' }}>
+              {showHistory ? 'Hide history' : `History (${publishes.length})`}
+            </button>
+          )}
+        </div>
+      )}
+
+      {showHistory && publishes.length > 0 && (
+        <div style={{ ...card, padding: 14, marginBottom: 16 }}>
+          {publishes.map(p => {
+            const when = new Date(p.published_at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+            return (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: `1px solid ${C.borderSoft}`, fontSize: 13 }}>
+                <span style={{ fontWeight: 700, color: C.text, minWidth: 150 }}>{when}</span>
+                <span style={{ color: C.textMuted, flex: 1 }}>{p.published_by || 'ops'}</span>
+                {p.url && <a href={p.url} target="_blank" rel="noopener" style={{ fontSize: 12 }}>view ↗</a>}
+                <button onClick={() => restorePublish(p.id, when)} style={{ ...btn.ghost, fontSize: 11, padding: '3px 10px' }}>Restore this version</button>
+              </div>
+            );
+          })}
+          <div style={{ fontSize: 11, color: C.textFaint, marginTop: 8 }}>
+            Restore loads that version back into the builder as the draft — the live site only changes when you Publish again.
+          </div>
+        </div>
+      )}
 
       {aiErr && (
         <div style={{ background: C.dangerBg, color: '#991b1b', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 16, border: `1px solid ${C.danger}33` }}>

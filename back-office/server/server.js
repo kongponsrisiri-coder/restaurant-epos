@@ -43,7 +43,15 @@ for (const k of expectedEnv) {
 }
 
 app.use(cors({ origin: '*' }));
-app.use(express.json({ limit: '1mb' }));
+// SEPOS-WEB-007 — website configs/publishes carry base64 photos (multi-MB)
+// and finance attachments allow up to ~7 MB base64 bodies; everything else
+// keeps the tight 1 MB cap.
+const jsonSmall = express.json({ limit: '1mb' });
+const jsonLarge = express.json({ limit: '80mb' });
+app.use((req, res, next) => {
+  const big = req.path.startsWith('/api/website-configs') || req.path.startsWith('/api/finance');
+  return (big ? jsonLarge : jsonSmall)(req, res, next);
+});
 
 // Lightweight log of what we're seeing in dev / staging. Skipped in prod
 // if NODE_ENV=production (Railway sets this) to keep logs tidy.

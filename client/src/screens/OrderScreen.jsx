@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, SERVER_URL } from '../api';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, assertOk, SERVER_URL } from '../api';
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
 // SEPOS — DeleteOrderModal removed from OrderScreen 2026-06-01 (Korakot's
@@ -12,6 +12,12 @@ import { parseAllergens } from '../utils/allergens';
 
 const COURSE_LABELS = { 1: 'Starters', 2: 'Mains', 3: 'Desserts', 4: 'Extra' };
 const COURSE_COLORS = { 1: '#3b82f6', 2: '#e94560', 3: '#8b5cf6', 4: '#22c55e' };
+
+// SEPOS-046z — temp ids for optimistic rows (sendOrder pending rows, void
+// ghosts). Strictly monotonic so two events in the same millisecond can
+// never collide — bare -Date.now() could.
+let tempSeq = 0;
+const nextTempId = () => { tempSeq += 1; return -(Date.now() + tempSeq); };
 
 export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const [menu, setMenu] = useState([]);
@@ -30,6 +36,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const [voidPopup, setVoidPopup] = useState(null);
   const [resendPopup, setResendPopup] = useState(null);
   const [showBill, setShowBill] = useState(false);
+  // SEPOS-046z — React modal for discounts. The old flow used
+  // window.prompt(), which is disabled in Electron, so discounts
+  // silently did nothing on desktop installs.
+  // { scope: 'item'|'bill', item?, type: 'percent'|'fixed', value, reason? }
+  const [discountPopup, setDiscountPopup] = useState(null);
   const [serviceChargeRemoved, setServiceChargeRemoved] = useState(false);
   const [activeCourse, setActiveCourse] = useState(1);
   const [firingCourse, setFiringCourse] = useState(null);
@@ -38,9 +49,18 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [mobileTab, setMobileTab] = useState('menu');
 
+  // SEPOS-046z — sendBusy: true while a sendOrder POST is in flight.
+  // Pay / Close-at-£0 / Back-cancel are gated on it (~300ms) so an order
+  // can't be paid or closed before the items it shows have landed.
+  const [sendBusy, setSendBusy] = useState(false);
+  // Sequence guard: several background fetchOrder reconciles can be in
+  // flight at once; only the latest response may win, or an older snapshot
+  // would overwrite newer optimistic state.
+  const fetchSeqRef = useRef(0);
   const fetchOrder = async () => {
+    const seq = ++fetchSeqRef.current;
     const orderData = await getOrder(orderId);
-    setOrder(orderData);
+    if (seq === fetchSeqRef.current) setOrder(orderData);
   };
 
   useEffect(() => {
@@ -211,6 +231,9 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   // window.prompt() is disabled in Electron, so we route this through a
   // React modal (voidPopup) instead of native prompts.
   const handleVoidItem = (item) => {
+    // SEPOS-046z — negative id = optimistic row still being confirmed by
+    // the server (real id arrives on the next fetchOrder, sub-second).
+    if (item.id < 0) return alert('Still sending — try again in a second.');
     setVoidPopup({ item, qty: item.quantity, reason: '', type: null, managerPin: '', authError: '' });
   };
 
@@ -245,8 +268,29 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     const n = Math.max(1, Math.min(item.quantity, Number(qty) || item.quantity));
     const finalReason = (reason && reason.trim()) || type;
     setVoidPopup(null);
-    await voidItem(item.id, finalReason, n, type);
-    await fetchOrder();
+    // SEPOS-046z — optimistic void, mirroring the server: full void marks
+    // the row; partial void shrinks it and adds a voided ghost copy. The
+    // background fetchOrder swaps in the real rows — orders are written
+    // local-first on desktop, so the refetch reads its own write (this is
+    // NOT the menu-style stale-pull situation). fetchOrder doubles as the
+    // rollback on error.
+    setOrder(prev => {
+      if (!prev) return prev;
+      if (n >= item.quantity) {
+        return { ...prev, items: (prev.items || []).map(i =>
+          i.id === item.id ? { ...i, voided: 1, void_reason: finalReason, void_type: type } : i) };
+      }
+      const ghost = { ...item, id: nextTempId(), quantity: n, voided: 1, void_reason: finalReason, void_type: type };
+      return { ...prev, items: [...(prev.items || []).map(i =>
+        i.id === item.id ? { ...i, quantity: i.quantity - n } : i), ghost] };
+    });
+    try {
+      assertOk(await voidItem(item.id, finalReason, n, type));
+      fetchOrder();
+    } catch (e) {
+      alert('Void failed: ' + (e?.message || 'unknown'));
+      fetchOrder();
+    }
   };
 
   // SEPOS-024 — resend with reason (Not Cooked / Wrong Item / Missing Item / Remake)
@@ -255,11 +299,23 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     if (!resendPopup) return;
     const { item } = resendPopup;
     setResendPopup(null);
+    if (item.id < 0) return alert('Still sending — try again in a second.');
     // Open the popup window BEFORE awaits so the browser doesn't block it
     // (popup blocker requires user-gesture context, lost across awaits).
     const popupWin = window.open('', '_blank', 'width=400,height=600,scrollbars=yes');
+    // SEPOS-046z — optimistic: the row flips back to 🔥 cooking instantly.
+    setOrder(prev => prev ? { ...prev, items: (prev.items || []).map(i =>
+      i.id === item.id ? { ...i, status: 'cooking' } : i) } : prev);
     try {
-      await resendToKitchen(orderId, [item.id], reason);
+      assertOk(await resendToKitchen(orderId, [item.id], reason));
+    } catch (e) {
+      try { popupWin?.close(); } catch {}
+      alert('Resend failed: ' + (e?.message || 'unknown'));
+      fetchOrder(); // rollback to true state
+      return;
+    }
+    fetchOrder(); // background reconcile
+    try {
       // SEPOS-024 follow-up 2026-06-02: also dispatch a kitchen print so
       // the chef sees the resend on paper. The /resend endpoint only
       // updates DB + emits the KDS socket event — restaurants with no
@@ -277,7 +333,6 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
       console.warn('[resend] print failed:', e?.message);
       try { popupWin?.close(); } catch {}
     }
-    await fetchOrder();
   };
 
   const sendOrder = async () => {
@@ -305,10 +360,35 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     // If bar also uses server/Electron print the window is closed immediately.
     const barWin = hasBar ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
 
+    // SEPOS-046z — optimistic send: the cart lines appear in the order
+    // panel as ⏳ PENDING rows immediately (negative temp ids), and the
+    // background fetchOrder swaps in the real rows once the POST lands.
+    // Orders are written LOCAL-FIRST on desktop (unlike menu writes), so
+    // the refetch reads its own write — no stale-pull risk. Prints stay on
+    // the success path: a kitchen ticket must never fire for items the
+    // server hasn't accepted. On error the cart is restored intact.
+    const cartSnapshot = cart;
+    const tempIds = new Set();
+    const tempItems = cart.map((c) => {
+      const id = nextTempId();
+      tempIds.add(id);
+      return {
+        id,
+        menu_item_id: c.menu_item_id, name: c.name, name_alt: c.name_alt || '',
+        unit_price: c.unit_price, quantity: c.quantity,
+        notes: c.notes || '', item_note: c.item_note || '',
+        course: c.is_bar ? 0 : (c.course || 1), is_bar: c.is_bar ? 1 : 0,
+        is_fired: c.is_bar ? 1 : 0, status: c.is_bar ? 'cooking' : 'pending', voided: 0,
+      };
+    });
+    setOrder(prev => prev ? { ...prev, items: [...(prev.items || []), ...tempItems] } : prev);
+    setCart([]);
+    if (isMobile) setMobileTab('order');
+    setSendBusy(true);
+
     try {
-      await addOrderItems(orderId, cart);
-      setCart([]);
-      await fetchOrder();
+      assertOk(await addOrderItems(orderId, cartSnapshot));
+      fetchOrder(); // background reconcile — real ids replace the temp rows
 
       // SEPOS-026 — kitchen then bar, sequentially in background.
       // Running both simultaneously causes the USB print server to receive two TCP
@@ -321,12 +401,17 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         .then(() => hasBar     ? printBarOrderTicket({ order: orderSnap, items: justAdded, popupWin: barWin }) : null)
         .catch(e => console.error('[sendOrder] print chain error:', e));
 
-      if (isMobile) setMobileTab('order');
       alert('Order saved! Use 🔥 Fire buttons to send courses to kitchen.');
     } catch (err) {
       // Clean up pre-opened window on error
       try { if (barWin && !barWin.closed) barWin.close(); } catch {}
-      alert('Failed to send order.');
+      // Rollback: drop only OUR temp rows (void ghosts also use negative
+      // ids) and put the cart back exactly as it was.
+      setOrder(prev => prev ? { ...prev, items: (prev.items || []).filter(i => !tempIds.has(i.id)) } : prev);
+      setCart(cartSnapshot);
+      alert('Failed to send order — your items are back in the cart.');
+    } finally {
+      setSendBusy(false);
     }
   };
 
@@ -334,44 +419,73 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     setFiringCourse(course);
     // Pre-open popup before awaits so browser doesn't block it (used only if no TCP printer)
     const coursePopupWin = window.open('', '_blank', 'width=400,height=600,scrollbars=yes');
+    // SEPOS-046z — optimistic: mirror the server's UPDATE (non-bar, unfired,
+    // unvoided items of this course flip to fired/cooking). The pulsing
+    // PENDING cards settle instantly; fetchOrder reconciles/rolls back.
+    const firedAt = new Date().toISOString();
+    setOrder(prev => prev ? { ...prev, items: (prev.items || []).map(i =>
+      (!i.is_bar && !i.voided && !i.is_fired && (i.course || 1) === course)
+        ? { ...i, is_fired: 1, status: 'cooking', fired_at: firedAt }
+        : i) } : prev);
     try {
-      await fireCourse(orderId, course);
-      await fetchOrder();
+      assertOk(await fireCourse(orderId, course));
+      fetchOrder();
       // Fire notice — just "TABLE X / FIRE MAINS", no item list
       printFireNoticeTicket({ order, course, popupWin: coursePopupWin });
       alert(`🔥 ${COURSE_LABELS[course]} fired to kitchen!`);
     } catch (err) {
       try { if (coursePopupWin && !coursePopupWin.closed) coursePopupWin.close(); } catch {}
       alert('Failed to fire course.');
+      fetchOrder(); // rollback
     } finally {
       setFiringCourse(null);
     }
   };
 
   // ── Item discount — apply or remove ──
+  // SEPOS-046z — value entry moved from window.prompt() (DISABLED in
+  // Electron — discounts silently did nothing on desktop installs) to the
+  // DiscountModal. Apply/remove are optimistic with fetchOrder reconcile.
   const handleItemDiscount = async (item) => {
     const allowedRoles = ['admin', 'manager', 'supervisor'];
     if (!allowedRoles.includes(staff?.role)) {
       alert('⛔ Only Admin, Manager or Supervisor can apply discounts!');
       return;
     }
+    if (item.id < 0) return alert('Still sending — try again in a second.');
     if (item.discount_value > 0) {
       const remove = await confirm(
         `This item has a discount:\n${item.discount_type === 'percent' ? item.discount_value + '%' : '£' + item.discount_value} off\n\nOK = Remove discount\nCancel = Change discount`
       );
       if (remove) {
-        await applyItemDiscount(item.id, null, 0);
-        await fetchOrder();
+        setOrder(prev => prev ? { ...prev, items: (prev.items || []).map(i =>
+          i.id === item.id ? { ...i, discount_type: null, discount_value: 0 } : i) } : prev);
+        try { assertOk(await applyItemDiscount(item.id, null, 0)); fetchOrder(); }
+        catch (e) { alert('Could not remove discount: ' + (e?.message || 'unknown')); fetchOrder(); }
         return;
       }
     }
-    const type = (await confirm('OK = percentage %\nCancel = fixed £ amount')) ? 'percent' : 'fixed';
-    const value = prompt(type === 'percent' ? 'Discount %:' : 'Discount £:', '10');
-    if (!value) return;
+    setDiscountPopup({ scope: 'item', item, type: 'percent', value: '10' });
+  };
+
+  const confirmDiscount = async () => {
+    if (!discountPopup) return;
+    const { scope, item, type, value, reason } = discountPopup;
     const num = parseFloat(value);
-    if (isNaN(num) || num <= 0) return alert('Invalid value!');
-    await applyItemDiscount(item.id, type, num);
-    await fetchOrder();
+    if (isNaN(num) || num <= 0) { alert('Invalid value!'); return; }
+    if (type === 'percent' && num > 100) { alert('Percentage cannot exceed 100.'); return; }
+    if (scope === 'bill' && !(reason || '').trim()) { alert('A reason is required for bill discounts.'); return; }
+    setDiscountPopup(null);
+    if (scope === 'item') {
+      setOrder(prev => prev ? { ...prev, items: (prev.items || []).map(i =>
+        i.id === item.id ? { ...i, discount_type: type, discount_value: num } : i) } : prev);
+      try { assertOk(await applyItemDiscount(item.id, type, num)); fetchOrder(); }
+      catch (e) { alert('Discount failed: ' + (e?.message || 'unknown')); fetchOrder(); }
+    } else {
+      setOrder(prev => prev ? { ...prev, discount_type: type, discount_value: num, discount_reason: reason.trim() } : prev);
+      try { assertOk(await applyDiscount(orderId, type, num, reason.trim())); fetchOrder(); }
+      catch (e) { alert('Discount failed: ' + (e?.message || 'unknown')); fetchOrder(); }
+    }
   };
 
   const cartTotal = cart.reduce((sum, i) => sum + i.unit_price * i.quantity, 0);
@@ -482,9 +596,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0
           }}>
             <button onClick={async () => {
-              const allVoided = existingItems.length > 0 && existingItems.every(i => i.voided);
-              const isEmpty = existingItems.length === 0 && cart.length === 0;
-              if (allVoided || isEmpty) await payOrder(orderId, 0, 'cancelled');
+              // SEPOS-046z — don't auto-cancel while a send is in flight:
+              // the items it would judge "empty" may be landing right now.
+              if (!sendBusy) {
+                const allVoided = existingItems.length > 0 && existingItems.every(i => i.voided);
+                const isEmpty = existingItems.length === 0 && cart.length === 0;
+                if (allVoided || isEmpty) await payOrder(orderId, 0, 'cancelled');
+              }
               onClose();
             }} style={{
               background: '#f0f0f0', border: 'none', borderRadius: 10,
@@ -1034,13 +1152,17 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       ? 'Remove voucher? Voucher balance will be restored.'
                       : 'Remove discount?';
                     if (!await confirm(msg)) return;
-                    if (isVoucher) {
-                      const r = await removeVoucherFromBill(orderId);
-                      if (r?.error) { alert('Could not remove: ' + r.error); return; }
-                    } else {
-                      await applyDiscount(orderId, null, 0, null);
+                    // SEPOS-046z — optimistic: totals update instantly,
+                    // fetchOrder reconciles or rolls back.
+                    setOrder(prev => prev ? { ...prev, discount_type: null, discount_value: 0, discount_reason: null } : prev);
+                    try {
+                      if (isVoucher) assertOk(await removeVoucherFromBill(orderId));
+                      else assertOk(await applyDiscount(orderId, null, 0, null));
+                      fetchOrder();
+                    } catch (e) {
+                      alert('Could not remove: ' + (e?.message || 'unknown'));
+                      fetchOrder();
                     }
-                    await fetchOrder();
                   }} style={{
                     padding: '8px 12px', borderRadius: 8, border: 'none',
                     background: '#fee2e2', color: '#ef4444', cursor: 'pointer',
@@ -1050,21 +1172,16 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   </button>
                 </div>
               ) : (
-                <button onClick={async () => {
+                <button onClick={() => {
                   const allowedRoles = ['admin', 'manager', 'supervisor'];
                   if (!allowedRoles.includes(staff?.role)) {
                     alert('⛔ Only Admin, Manager or Supervisor can apply discounts!\n\nPlease ask a manager to authorise.');
                     return;
                   }
-                  const type = (await confirm('OK = percentage\nCancel = fixed amount')) ? 'percent' : 'fixed';
-                  const value = prompt(type === 'percent' ? 'Enter %:' : 'Enter £:', '10');
-                  if (!value) return;
-                  const num = parseFloat(value);
-                  if (isNaN(num) || num <= 0) return alert('Invalid value!');
-                  const reason = prompt('Reason:', 'Manager approval');
-                  if (!reason) return;
-                  await applyDiscount(orderId, type, num, reason);
-                  await fetchOrder();
+                  // SEPOS-046z — DiscountModal replaces window.prompt()
+                  // (disabled in Electron — this button did nothing on
+                  // desktop installs).
+                  setDiscountPopup({ scope: 'bill', type: 'percent', value: '10', reason: 'Manager approval' });
                 }} style={{
                   width: '100%', padding: '10px', borderRadius: 8,
                   border: '2px dashed #e94560', background: 'white',
@@ -1125,6 +1242,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 the operator can release the table without payment. */}
             {orderTotal <= 0.01 && existingItems.length > 0 && cart.length === 0 ? (
               <button onClick={async () => {
+                if (sendBusy) return alert('Still sending — try again in a second.');
                 if (!await confirm('Close this table at £0?\n\nAll items are voided or fully discounted. The order will be closed and the table marked available.')) return;
                 try {
                   const r = await closeOrderZero(orderId);
@@ -1139,12 +1257,19 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 ✓ Close at £0 — Mark table done
               </button>
             ) : (orderTotal > 0 || existingItems.some(i => !i.voided)) && (
-              <button onClick={() => setShowBill(true)} style={{
-                width: '100%', padding: '14px', borderRadius: 12, border: 'none',
-                background: '#e94560', color: 'white', fontSize: 16,
-                fontWeight: 800, cursor: 'pointer'
-              }}>
-                View Bill & Pay — £{orderTotal.toFixed(2)}
+              <button
+                onClick={() => {
+                  // SEPOS-046z — the bill must not open while a send is in
+                  // flight, or it could be paid before those items land.
+                  if (sendBusy) return;
+                  setShowBill(true);
+                }}
+                style={{
+                  width: '100%', padding: '14px', borderRadius: 12, border: 'none',
+                  background: sendBusy ? '#f3a5b3' : '#e94560', color: 'white', fontSize: 16,
+                  fontWeight: 800, cursor: sendBusy ? 'wait' : 'pointer'
+                }}>
+                {sendBusy ? 'Sending order…' : `View Bill & Pay — £${orderTotal.toFixed(2)}`}
               </button>
             )}
           </div>
@@ -1443,6 +1568,92 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 width:'100%', marginTop:14, padding:'12px', borderRadius:10, border:'none',
                 background:'#f0f0f0', cursor:'pointer', fontWeight:700, fontSize:14
               }}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* DISCOUNT POPUP (SEPOS-046z — replaces window.prompt, disabled in Electron) */}
+        {discountPopup && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          }}>
+            <div style={{
+              background: 'white', borderRadius: 16, padding: 24,
+              width: 380, maxWidth: '92vw'
+            }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>
+                {discountPopup.scope === 'item' ? 'Item discount' : 'Bill discount'}
+              </h2>
+              {discountPopup.scope === 'item' && (
+                <div style={{ fontSize: 14, color: '#555', marginBottom: 16 }}>
+                  {discountPopup.item.quantity}× {discountPopup.item.name}
+                </div>
+              )}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>
+                  Discount type
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {[['percent', '% Percentage'], ['fixed', '£ Fixed amount']].map(([t, label]) => (
+                    <button key={t}
+                      onClick={() => setDiscountPopup({ ...discountPopup, type: t })}
+                      style={{
+                        padding: '10px 12px', borderRadius: 8,
+                        border: '2px solid ' + (discountPopup.type === t ? '#1a1a2e' : '#e0e0e0'),
+                        background: discountPopup.type === t ? '#1a1a2e' : 'white',
+                        color: discountPopup.type === t ? 'white' : '#555',
+                        cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                      }}>{label}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>
+                  {discountPopup.type === 'percent' ? 'Discount %' : 'Discount £'}
+                </label>
+                <input
+                  type="number" min="0" step={discountPopup.type === 'percent' ? '1' : '0.01'}
+                  autoFocus
+                  value={discountPopup.value}
+                  onChange={(e) => setDiscountPopup({ ...discountPopup, value: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === 'Enter') confirmDiscount(); }}
+                  style={{
+                    width: '100%', padding: '10px 12px', borderRadius: 8,
+                    border: '1px solid #ddd', fontSize: 16, fontWeight: 700,
+                    textAlign: 'center', boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              {discountPopup.scope === 'bill' && (
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>
+                    Reason
+                  </label>
+                  <input
+                    type="text"
+                    value={discountPopup.reason || ''}
+                    onChange={(e) => setDiscountPopup({ ...discountPopup, reason: e.target.value })}
+                    placeholder="e.g. Manager approval, loyalty..."
+                    style={{
+                      width: '100%', padding: '10px 12px', borderRadius: 8,
+                      border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setDiscountPopup(null)} style={{
+                  flex: 1, padding: '12px', borderRadius: 10, border: 'none',
+                  background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15
+                }}>Cancel</button>
+                <button onClick={confirmDiscount} style={{
+                  flex: 1, padding: '12px', borderRadius: 10, border: 'none',
+                  background: '#22c55e', color: 'white', cursor: 'pointer',
+                  fontWeight: 700, fontSize: 15
+                }}>Apply</button>
+              </div>
             </div>
           </div>
         )}

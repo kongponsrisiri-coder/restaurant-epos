@@ -1,4 +1,8 @@
 User-agent: *
 Allow: /
+Disallow: /heygen-script.html
+Disallow: /heygen-script
+Disallow: /video-script-storyboard.html
+Disallow: /video-script-storyboard
 
 Sitemap: https://siamepos.co.uk/sitemap.xml

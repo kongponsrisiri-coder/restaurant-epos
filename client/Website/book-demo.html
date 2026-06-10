@@ -82,7 +82,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content
 .form-sub{font-size:14px;color:var(--text-muted);margin-bottom:24px;line-height:1.6;}
 .flabel{display:block;font-size:12px;font-weight:700;color:var(--text-muted);letter-spacing:0.5px;margin-bottom:7px;text-transform:uppercase;}
 .finput,.fselect,.ftextarea{width:100%;padding:13px 16px;background:#F9F8FF;border:1px solid #E0DDD6;border-radius:10px;color:var(--navy);font-size:16px;font-family:'Sarabun',sans-serif;outline:none;transition:border-color 0.2s;-webkit-appearance:none;}
-.finput:focus,.fselect:focus,.ftextarea:focus{border-color:var(--gold);}
+.finput:focus,.fselect:focus,.ftextarea:focus{border-color:var(--gold);outline:3px solid rgba(201,168,76,0.35);outline-offset:1px;}
 .finput::placeholder,.ftextarea::placeholder{color:#B0AEC0;}
 .frow{margin-bottom:16px;}
 .frow2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
@@ -192,7 +192,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <li><a href="website-design.html" class="lang-en">Website Design</a><a href="website-design.html" class="lang-th">ออกแบบเว็บ</a></li>
     <li><a href="book-demo.html" class="active lang-en">Book a Demo</a><a href="book-demo.html" class="active lang-th">ทดลองใช้ฟรี</a></li>
   </ul>
-  <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" onclick="document.body.classList.toggle('thai');this.textContent=document.body.classList.contains('thai')?'EN':'ภาษาไทย'">ภาษาไทย</button>
+  <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'ภาษาไทย'">ภาษาไทย</button>
 </nav>
 
 <!-- HERO + FORM -->
@@ -238,6 +238,18 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
   </div>
 
   <!-- FORM -->
+  <!-- Hidden static form so Netlify Forms detects the fields at deploy
+       time. submitDemo() POSTs the real values via fetch with
+       form-name=demo-request — submissions land in Netlify → Forms.
+       Enable email notifications in Netlify → Site settings → Forms. -->
+  <form name="demo-request" data-netlify="true" netlify-honeypot="bot-field" hidden>
+    <input type="text" name="first_name"><input type="text" name="last_name">
+    <input type="text" name="restaurant"><input type="tel" name="phone">
+    <input type="email" name="email"><input type="text" name="language">
+    <input type="text" name="current_system"><textarea name="notes"></textarea>
+    <input type="text" name="bot-field">
+  </form>
+
   <div class="demo-form-wrap reveal">
     <div class="demo-form-card">
       <div id="demoFormContent">
@@ -247,20 +259,20 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
         <p class="form-sub lang-th">กรอกข้อมูลนี้ เราจะยืนยันภายใน 2 ชั่วโมง โดยปกติเร็วกว่านั้น ภาษาไทยหรืออังกฤษก็ได้</p>
 
         <div class="frow2">
-          <div><label class="flabel lang-en">First Name</label><label class="flabel lang-th">ชื่อ</label><input class="finput" type="text" id="dFirst" placeholder="First name" required></div>
-          <div><label class="flabel lang-en">Last Name</label><label class="flabel lang-th">นามสกุล</label><input class="finput" type="text" id="dLast" placeholder="Last name" required></div>
+          <div><label for="dFirst" class="flabel lang-en">First Name</label><label for="dFirst" class="flabel lang-th">ชื่อ</label><input class="finput" type="text" id="dFirst" placeholder="First name" required></div>
+          <div><label for="dLast" class="flabel lang-en">Last Name</label><label for="dLast" class="flabel lang-th">นามสกุล</label><input class="finput" type="text" id="dLast" placeholder="Last name" required></div>
         </div>
-        <div class="frow"><label class="flabel lang-en">Restaurant Name</label><label class="flabel lang-th">ชื่อร้านอาหาร</label><input class="finput" type="text" id="dRestaurant" placeholder="e.g. Siam Kitchen London" required></div>
-        <div class="frow"><label class="flabel">Phone / WhatsApp</label><input class="finput" type="tel" id="dPhone" placeholder="+44 7896 036386" required></div>
-        <div class="frow"><label class="flabel">Email</label><input class="finput" type="email" id="dEmail" placeholder="your@email.com" required></div>
-        <div class="frow"><label class="flabel lang-en">Preferred Language for Demo</label><label class="flabel lang-th">ภาษาที่ต้องการสำหรับสาธิต</label>
+        <div class="frow"><label for="dRestaurant" class="flabel lang-en">Restaurant Name</label><label for="dRestaurant" class="flabel lang-th">ชื่อร้านอาหาร</label><input class="finput" type="text" id="dRestaurant" placeholder="e.g. Siam Kitchen London" required></div>
+        <div class="frow"><label for="dPhone" class="flabel">Phone / WhatsApp</label><input class="finput" type="tel" id="dPhone" placeholder="+44 7896 036386" required></div>
+        <div class="frow"><label for="dEmail" class="flabel">Email</label><input class="finput" type="email" id="dEmail" placeholder="your@email.com" required></div>
+        <div class="frow"><label for="dLang" class="flabel lang-en">Preferred Language for Demo</label><label for="dLang" class="flabel lang-th">ภาษาที่ต้องการสำหรับสาธิต</label>
           <select class="fselect" id="dLang">
             <option value="thai">🇹🇭 Thai / ภาษาไทย</option>
             <option value="english">🇬🇧 English</option>
             <option value="both">Both / ทั้งสองภาษา</option>
           </select>
         </div>
-        <div class="frow"><label class="flabel lang-en">Current system (optional)</label><label class="flabel lang-th">ระบบปัจจุบัน (ถ้ามี)</label>
+        <div class="frow"><label for="dCurrent" class="flabel lang-en">Current system (optional)</label><label for="dCurrent" class="flabel lang-th">ระบบปัจจุบัน (ถ้ามี)</label>
           <select class="fselect" id="dCurrent">
             <option value="">Select if applicable / เลือกถ้ามี</option>
             <option value="square">Square</option>
@@ -270,7 +282,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
             <option value="other">Other</option>
           </select>
         </div>
-        <div class="frow"><label class="flabel lang-en">Anything specific you'd like to see?</label><label class="flabel lang-th">มีอะไรที่ต้องการดูเป็นพิเศษ?</label><textarea class="ftextarea" id="dNotes" placeholder="e.g. AI invoice scanner, booking widget, kitchen screen, food cost..."></textarea></div>
+        <div class="frow"><label for="dNotes" class="flabel lang-en">Anything specific you'd like to see?</label><label for="dNotes" class="flabel lang-th">มีอะไรที่ต้องการดูเป็นพิเศษ?</label><textarea class="ftextarea" id="dNotes" placeholder="e.g. AI invoice scanner, booking widget, kitchen screen, food cost..."></textarea></div>
         <button class="submit-btn" onclick="submitDemo()"><span class="lang-en">See SiamEPOS in Action →</span><span class="lang-th">ดู SiamEPOS ในการทำงานจริง →</span></button>
         <p class="form-note lang-en">Free. No commitment. No credit card. We'll confirm within 2 hours.</p>
         <p class="form-note lang-th">ฟรี ไม่มีข้อผูกมัด ไม่ต้องใส่บัตรเครดิต เราจะยืนยันภายใน 2 ชั่วโมง</p>
@@ -364,7 +376,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
   <div class="footer-col"><h4 class="lang-en">Pages</h4><h4 class="lang-th">หน้า</h4><ul><li><a href="index.html" class="lang-en">Home</a><a href="index.html" class="lang-th">หน้าแรก</a></li><li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li><li><a href="pricing.html" class="lang-en">Pricing</a><a href="pricing.html" class="lang-th">ราคา</a></li><li><a href="why-siamepos.html" class="lang-en">Why Us</a><a href="why-siamepos.html" class="lang-th">ทำไมเรา</a></li></ul></div>
   <div class="footer-col"><h4 class="lang-en">Contact</h4><h4 class="lang-th">ติดต่อ</h4><ul><li><a href="https://wa.me/447896036386">💬 WhatsApp</a></li><li><a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></li><li><a href="book-demo.html" class="lang-en">Thai support available</a><a href="book-demo.html" class="lang-th">ซัพพอร์ตภาษาไทย</a></li></ul></div>
 </footer>
-<div class="footer-bottom"><p>© 2026 SiamEPOS</p><p><a href="index.html" class="lang-en">← Homepage</a><a href="index.html" class="lang-th">← หน้าแรก</a></p></div>
+<div class="footer-bottom"><p>© 2026 SiamEPOS Ltd · Registered in England &amp; Wales · Company No. 17215576</p><p><a href="index.html" class="lang-en">← Homepage</a><a href="index.html" class="lang-th">← หน้าแรก</a></p></div>
 
 <script>
 async function submitDemo(){
@@ -376,11 +388,27 @@ async function submitDemo(){
   if(!fn||!ln||!rest||!ph||!em){alert('Please fill in all required fields.\n\nกรุณากรอกข้อมูลที่จำเป็นทั้งหมด');return;}
   if(!em.includes('@')){alert('Please enter a valid email address.');return;}
   const btn=document.querySelector('.submit-btn');btn.disabled=true;btn.textContent='⏳ Sending...';
-  await new Promise(r=>setTimeout(r,800));
-  document.getElementById('demoFormContent').style.display='none';
-  const s=document.getElementById('demoSuccess');s.style.display='block';
-  const ref='DEMO-'+Date.now().toString().slice(-6);
-  document.getElementById('demoRef').textContent=`✅ ${fn} ${ln} — ${rest} — Ref: ${ref}`;
+  // Real submission via Netlify Forms (the hidden demo-request form above
+  // registers the fields at deploy time). Previously this function only
+  // pretended to send — every lead was silently lost.
+  try{
+    const body=new URLSearchParams({
+      'form-name':'demo-request',
+      first_name:fn, last_name:ln, restaurant:rest, phone:ph, email:em,
+      language:document.getElementById('dLang').value,
+      current_system:document.getElementById('dCurrent').value,
+      notes:document.getElementById('dNotes').value.trim(),
+    });
+    const resp=await fetch('/',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body.toString()});
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    document.getElementById('demoFormContent').style.display='none';
+    const s=document.getElementById('demoSuccess');s.style.display='block';
+    const ref='DEMO-'+Date.now().toString().slice(-6);
+    document.getElementById('demoRef').textContent=`✅ ${fn} ${ln} — ${rest} — Ref: ${ref}`;
+  }catch(e){
+    btn.disabled=false;btn.innerHTML='<span class="lang-en">See SiamEPOS in Action →</span><span class="lang-th">ดู SiamEPOS ในการทำงานจริง →</span>';
+    alert('Sorry — the booking didn\'t go through. Please message us directly on WhatsApp (+44 7896 036386) and we\'ll set up your demo.\n\nขออภัย การจองไม่สำเร็จ กรุณาติดต่อเราทาง WhatsApp');
+  }
 }
 const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:0.1});
 document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));

@@ -255,7 +255,7 @@ footer{background:var(--navy);padding:48px 60px 28px;border-top:1px solid rgba(2
   <button class="nav-burger" id="navBurger" aria-label="Menu">
     <span></span><span></span><span></span>
   </button>
-  <button class="lang-toggle" onclick="document.body.classList.toggle('thai');this.textContent=document.body.classList.contains('thai')?'EN':'ภาษาไทย'">ภาษาไทย</button>
+  <button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'ภาษาไทย'">ภาษาไทย</button>
 </nav>
 
 <!-- HERO -->
@@ -546,7 +546,7 @@ footer{background:var(--navy);padding:48px 60px 28px;border-top:1px solid rgba(2
     </nav>
   </div>
   <div class="footer-bottom">
-    <p>© 2026 SiamEPOS — info@siamepos.co.uk</p>
+    <p>© 2026 SiamEPOS Ltd · Registered in England &amp; Wales · Company No. 17215576 — info@siamepos.co.uk</p>
     <p class="lang-en">Thai restaurant management software · UK</p>
     <p class="lang-th">ซอฟต์แวร์จัดการร้านอาหารไทย · UK</p>
   </div>

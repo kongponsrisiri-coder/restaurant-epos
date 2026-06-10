@@ -189,6 +189,35 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
 .reveal{opacity:0;transform:translateY(20px);transition:opacity 0.7s ease,transform 0.7s ease;}
 .reveal.visible{opacity:1;transform:translateY(0);}
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "SiamEPOS Pro",
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "Web, Windows, macOS",
+  "description": "Complete restaurant management system for Thai restaurants in the UK — EPOS, reservations, online ordering, kitchen screens, inventory and CRM.",
+  "url": "https://siamepos.co.uk/pricing.html",
+  "offers": [
+    {
+      "@type": "Offer",
+      "name": "SiamEPOS Pro — Founder's Rate",
+      "description": "First 50 restaurants, price-locked for life. All features included, monthly rolling.",
+      "price": "59.00",
+      "priceCurrency": "GBP",
+      "priceSpecification": { "@type": "UnitPriceSpecification", "price": "59.00", "priceCurrency": "GBP", "unitCode": "MON" }
+    },
+    {
+      "@type": "Offer",
+      "name": "SiamEPOS Pro — Standard",
+      "price": "89.00",
+      "priceCurrency": "GBP",
+      "priceSpecification": { "@type": "UnitPriceSpecification", "price": "89.00", "priceCurrency": "GBP", "unitCode": "MON" }
+    }
+  ],
+  "provider": { "@type": "Organization", "name": "SiamEPOS Ltd", "url": "https://siamepos.co.uk" }
+}
+</script>
 </head>
 <body>
 
@@ -207,7 +236,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <li><a href="website-design.html" class="lang-en">Website Design</a><a href="website-design.html" class="lang-th">&#x0E2d;&#x0E2d;&#x0E01;&#x0E41;&#x0E1a;&#x0E1a;&#x0E40;&#x0E27;&#x0E47;&#x0E1a;</a></li>
     <li><a href="book-demo.html" class="nav-cta lang-en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th">ทดลองใช้ฟรี</a></li>
   </ul>
-  <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" onclick="document.body.classList.toggle('thai');this.textContent=document.body.classList.contains('thai')?'EN':'ภาษาไทย'">ภาษาไทย</button>
+  <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'ภาษาไทย'">ภาษาไทย</button>
 </nav>
 
 <!-- HERO -->
@@ -338,12 +367,12 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <table class="compare">
       <thead>
         <tr>
-          <th class="lang-en">What you need</th>
-          <th class="lang-en">The Old Way</th>
-          <th class="lang-en">SiamEPOS</th>
-          <th class="lang-th" style="display:none;">สิ่งที่คุณต้องการ</th>
-          <th class="lang-th" style="display:none;">วิธีเดิม</th>
-          <th class="lang-th" style="display:none;">SiamEPOS</th>
+          <th scope="col" class="lang-en">What you need</th>
+          <th scope="col" class="lang-en">The Old Way</th>
+          <th scope="col" class="lang-en">SiamEPOS</th>
+          <th scope="col" class="lang-th" style="display:none;">สิ่งที่คุณต้องการ</th>
+          <th scope="col" class="lang-th" style="display:none;">วิธีเดิม</th>
+          <th scope="col" class="lang-th" style="display:none;">SiamEPOS</th>
         </tr>
       </thead>
       <tbody>
@@ -548,7 +577,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
   <div class="footer-col"><h4 class="lang-en">Pages</h4><h4 class="lang-th">หน้า</h4><ul><li><a href="index.html" class="lang-en">Home</a><a href="index.html" class="lang-th">หน้าแรก</a></li><li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li><li><a href="why-siamepos.html" class="lang-en">Why Us</a><a href="why-siamepos.html" class="lang-th">ทำไมเรา</a></li><li><a href="book-demo.html" class="lang-en">Book Demo</a><a href="book-demo.html" class="lang-th">จองสาธิต</a></li></ul></div>
   <div class="footer-col"><h4 class="lang-en">Contact</h4><h4 class="lang-th">ติดต่อ</h4><ul><li><a href="https://wa.me/447896036386">💬 WhatsApp</a></li><li><a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></li></ul></div>
 </footer>
-<div class="footer-bottom"><p>© 2026 SiamEPOS</p><p><a href="index.html" class="lang-en">← Homepage</a><a href="index.html" class="lang-th">← หน้าแรก</a></p></div>
+<div class="footer-bottom"><p>© 2026 SiamEPOS Ltd · Registered in England &amp; Wales · Company No. 17215576</p><p><a href="index.html" class="lang-en">← Homepage</a><a href="index.html" class="lang-th">← หน้าแรก</a></p></div>
 
 <script>
 // Reveal on scroll

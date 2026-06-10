@@ -421,7 +421,7 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
     <li><a href="website-design.html" class="lang-en">Website Design</a><a href="website-design.html" class="lang-th">&#x0E2d;&#x0E2d;&#x0E01;&#x0E41;&#x0E1a;&#x0E1a;&#x0E40;&#x0E27;&#x0E47;&#x0E1a;</a></li>
     <li><a href="book-demo.html" class="nav-cta lang-en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th">ทดลองใช้ฟรี</a></li>
   </ul>
-  <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" onclick="document.body.classList.toggle('thai');this.textContent=document.body.classList.contains('thai')?'EN':'ภาษาไทย'">ภาษาไทย</button>
+  <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'ภาษาไทย'">ภาษาไทย</button>
 </nav>
 
 <!-- HERO -->
@@ -742,7 +742,7 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
       <div style="color:rgba(255,255,255,0.3);">·</div>
       <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">👥</span> <span class="lang-en">Client CRM</span><span class="lang-th">CRM ลูกค้า</span></div>
       <div style="color:rgba(255,255,255,0.3);">·</div>
-      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">💷</span> <span class="lang-en">£39/month</span><span class="lang-th">£49/เดือน</span></div>
+      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">💷</span> <span class="lang-en">£49/month</span><span class="lang-th">£49/เดือน</span></div>
     </div>
     <a href="spa.html" style="display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,#C9A84C,#E8C96A);color:#0D1B3E;padding:15px 32px;border-radius:10px;font-size:16px;font-weight:800;text-decoration:none;transition:transform 0.2s,box-shadow 0.2s;box-shadow:0 4px 20px rgba(201,168,76,0.35);" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 32px rgba(201,168,76,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 20px rgba(201,168,76,0.35)'" class="lang-en">Learn about SiamSpa →</a>
     <a href="spa.html" style="display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,#C9A84C,#E8C96A);color:#0D1B3E;padding:15px 32px;border-radius:10px;font-size:16px;font-weight:800;text-decoration:none;transition:transform 0.2s,box-shadow 0.2s;box-shadow:0 4px 20px rgba(201,168,76,0.35);" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 32px rgba(201,168,76,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 20px rgba(201,168,76,0.35)'" class="lang-th">เรียนรู้เพิ่มเติมเกี่ยวกับ SiamSpa →</a>
@@ -818,7 +818,7 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
   </div>
 </footer>
 <div class="footer-bottom">
-  <p>© 2026 SiamEPOS. <span class="lang-en">All rights reserved.</span><span class="lang-th">สงวนลิขสิทธิ์</span></p>
+  <p>© 2026 SiamEPOS. <span class="lang-en">All rights reserved. · SiamEPOS Ltd · Registered in England &amp; Wales · Company No. 17215576</span><span class="lang-th">สงวนลิขสิทธิ์ · SiamEPOS Ltd · Registered in England &amp; Wales · Company No. 17215576</span></p>
   <p><a href="why-siamepos.html" class="lang-en">Why SiamEPOS?</a><a href="why-siamepos.html" class="lang-th">ทำไมต้อง SiamEPOS?</a></p>
 </div>
 

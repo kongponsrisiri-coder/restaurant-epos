@@ -128,6 +128,10 @@ export default function LoginScreen({ onLogin }) {
   // Numpad layout: 1-9, blank, 0, ⌫
   const keys = ['1','2','3','4','5','6','7','8','9','','0','⌫'];
 
+  // SEPOS-055 — with a big team the name list goes 2-up (and the card widens)
+  // so more names are visible before scrolling; still scrolls past that.
+  const manyStaff = mode === 'pin' && staffList.length > 8;
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -181,8 +185,9 @@ export default function LoginScreen({ onLogin }) {
         borderRadius: 20,
         padding: '28px 28px 24px',
         width: '100%',
-        // SEPOS-055 — widen to fit name-list (left) + PIN pad (right).
-        maxWidth: (mode === 'pin' && staffList.length > 0) ? 600 : 320,
+        // SEPOS-055 — widen to fit name-list (left) + PIN pad (right);
+        // wider still when the name list goes 2-up for a big team.
+        maxWidth: manyStaff ? 760 : (mode === 'pin' && staffList.length > 0) ? 600 : 320,
       }}>
 
         {/* SEPOS-055 — two-column staff login: name list (left) + PIN pad
@@ -192,13 +197,13 @@ export default function LoginScreen({ onLogin }) {
         {mode === 'pin' && (
         <div style={{ display: 'flex', gap: 22, alignItems: 'stretch', flexWrap: 'wrap' }}>
 
-          {/* LEFT — staff name list */}
+          {/* LEFT — staff name list (2-up + wider for a big team) */}
           {staffList.length > 0 && (
-            <div style={{ flex: '1 1 180px', minWidth: 170, maxWidth: 230, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: manyStaff ? '1 1 380px' : '1 1 180px', minWidth: manyStaff ? 320 : 170, maxWidth: manyStaff ? 400 : 230, display: 'flex', flexDirection: 'column' }}>
               <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginBottom: 10, letterSpacing: '0.06em', textTransform: 'uppercase', textAlign: 'center' }}>
-                Tap your name
+                Tap your name{staffList.length > 6 ? ` (${staffList.length})` : ''}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 360, overflowY: 'auto', paddingRight: 2 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: manyStaff ? '1fr 1fr' : '1fr', gap: 8, maxHeight: 392, overflowY: 'auto', paddingRight: 4 }}>
                 {staffList.map(s => {
                   const sel = selectedStaff?.id === s.id;
                   return (

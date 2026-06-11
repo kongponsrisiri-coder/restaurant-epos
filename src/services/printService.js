@@ -581,7 +581,10 @@ function buildTestPage() {
 
 let _printQueue = Promise.resolve();
 
-function _sendTcp(ip, port, buf, timeoutMs = 6000) {
+// 2s timeout: a printer on the same LAN answers in milliseconds, so a
+// longer wait only delays the LPR fallback when the device is LPR-only
+// or the connect packet is dropped.
+function _sendTcp(ip, port, buf, timeoutMs = 2000) {
   return new Promise((resolve, reject) => {
     const sock = new net.Socket();
     let settled = false;
@@ -727,6 +730,13 @@ async function _sendCups(printerName, buf) {
   }
 }
 
+// Remembers which transport worked per printer so LPR-only print servers
+// (older WAVLINK / TP-Link) don't pay the RAW connect-timeout + error-wait
+// on every single ticket. Process-level, like _cupsQueueCache. Self-heals:
+// if the cached route fails (printer swapped, queue renamed) the entry is
+// dropped and the full RAW → LPR → CUPS chain re-probes.
+const _transportCache = new Map(); // `${ip}:${port}` → 'lpr'
+
 function sendRaw(ip, port, buf, options = {}) {
   const explicitName = (options.printerName || '').trim();
   const lprQueue     = (options.lprQueue    || 'lp').trim();
@@ -738,6 +748,17 @@ function sendRaw(ip, port, buf, options = {}) {
 
   const job = async () => {
     if (hasTcp) {
+      const cacheKey = `${ip}:${port}`;
+
+      // 0) Known LPR-only device — skip the doomed RAW attempt.
+      if (_transportCache.get(cacheKey) === 'lpr') {
+        try { return await _sendLpr(ip, 515, buf, lprQueue); }
+        catch (cachedErr) {
+          _transportCache.delete(cacheKey);
+          console.warn(`[print] cached LPR route to ${ip} failed (${cachedErr.message}) — re-probing full chain`);
+        }
+      }
+
       // 1) RAW 9100 — fast path, works for most modern printers.
       try { return await _sendTcp(ip, port, buf); }
       catch (rawErr) {
@@ -745,7 +766,9 @@ function sendRaw(ip, port, buf, options = {}) {
         //    servers only expose this. Same data, structured handshake.
         try {
           console.warn(`[print] RAW ${ip}:${port} failed (${rawErr.message}) — trying LPR on 515 (queue '${lprQueue}')`);
-          return await _sendLpr(ip, 515, buf, lprQueue);
+          const res = await _sendLpr(ip, 515, buf, lprQueue);
+          _transportCache.set(cacheKey, 'lpr');
+          return res;
         } catch (lprErr) {
           // 3) CUPS — last resort, requires the printer to be installed
           //    in the local print queue. Only works when the backend is

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { SERVER_URL } from '../../../api';
+import { SERVER_URL, authHeaders } from '../../../api';
 import { invAPI, today } from '../shared';
 
 // ── Invoice History (embedded — Sandy design) ─────────────────────
@@ -216,7 +216,7 @@ export default function InvoiceScannerTab() {
     try {
       const base64 = fileData.split(',')[1]; const media_type = file.type || 'image/jpeg';
       const endpoint = mode === 'invoice' ? '/api/ai/scan-invoice' : '/api/ai/scan-expense';
-      const res  = await fetch(`${SERVER_URL}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image_base64: base64, media_type }) });
+      const res  = await fetch(`${SERVER_URL}${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ image_base64: base64, media_type }) });
       const data = await res.json();
       if (!res.ok || !data.success) {
         const detail = data.upstream_status ? ` (upstream ${data.upstream_status})` : '';

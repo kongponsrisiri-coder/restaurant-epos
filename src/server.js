@@ -988,7 +988,12 @@ app.post('/api/staff/login', async (req, res) => {
     const result = await pool.query('SELECT * FROM staff WHERE pin=$1 AND is_active=1', [pin]);
     const staff = result.rows[0];
     if (!staff) return res.status(401).json({ error: 'Invalid PIN' });
-    res.json({ id: staff.id, name: staff.name, role: staff.role });
+    // SEPOS-047a — PIN login now issues the same HMAC session token as
+    // email login (signToken below), so staff-gated endpoints can verify
+    // the caller. Old clients ignore the extra fields harmlessly.
+    const exp = Date.now() + 14 * 24 * 60 * 60 * 1000;
+    const token = signToken({ sid: staff.id, name: staff.name, role: staff.role, exp });
+    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1016,6 +1021,67 @@ function signToken(payload) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const sig = crypto.createHmac('sha256', AUTH_SECRET).update(body).digest('base64url');
   return `${body}.${sig}`;
+}
+
+// SEPOS-047a — verify a signToken() token: HMAC signature + expiry.
+// Returns the {sid, name, role, exp} payload, or null.
+function verifyToken(token) {
+  const [body, sig] = String(token || '').split('.');
+  if (!body || !sig) return null;
+  const expect = crypto.createHmac('sha256', AUTH_SECRET).update(body).digest('base64url');
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expect);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString());
+    if (!payload || !payload.exp || payload.exp < Date.now()) return null;
+    return payload;
+  } catch { return null; }
+}
+
+// SEPOS-047a — route gate for staff-only endpoints. Both login paths
+// (PIN and email) now issue Bearer tokens; api.js attaches them to every
+// request. The 401 message doubles as guidance for stale cached clients
+// that don't send a token yet.
+function requireStaffAuth(roles = null) {
+  return (req, res, next) => {
+    const m = /^Bearer\s+(.+)$/i.exec(req.get('authorization') || '');
+    const payload = m ? verifyToken(m[1]) : null;
+    if (!payload) {
+      return res.status(401).json({ error: 'Please sign out and sign in again to use this section (session expired or app needs a refresh)' });
+    }
+    if (roles && !roles.includes(payload.role)) {
+      return res.status(403).json({ error: 'Your role does not have access to this section' });
+    }
+    req.staffAuth = payload;
+    next();
+  };
+}
+
+// SEPOS-047a — variant for endpoints the desktop relays server-to-server
+// (AI scans: the till has no ANTHROPIC_API_KEY and forwards to cloud).
+// The relay can't mint a Bearer token the cloud would trust (different
+// AUTH_SECRET), so it authenticates with the install's SYNC_SECRET —
+// the same shared secret that already gates the order-sync feeds.
+function requireStaffAuthOrSyncSecret(roles = null) {
+  const gate = requireStaffAuth(roles);
+  return (req, res, next) => {
+    const provided = req.get('x-sync-secret') || '';
+    const expected = process.env.SYNC_SECRET || '';
+    if (expected && provided) {
+      const a = Buffer.from(provided);
+      const b = Buffer.from(expected);
+      if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+        req.staffAuth = { sid: null, name: 'desktop-relay', role: 'admin' };
+        return next();
+      }
+    }
+    return gate(req, res, next);
+  };
+}
+
+if (!process.env.AUTH_SECRET) {
+  console.warn('⚠️  AUTH_SECRET not set — session tokens are signed with the default secret. Set AUTH_SECRET in the environment on any internet-facing deployment.');
 }
 
 // Owner signs in with email + password. Returns a 14-day token.
@@ -3161,9 +3227,14 @@ async function relayAiToCloud(path, body) {
   const cloudUrl = process.env.CLOUD_API_URL;
   if (!cloudUrl) return null;
   try {
+    // SEPOS-047a — the cloud's AI endpoints are auth-gated; the relay
+    // authenticates with the install's SYNC_SECRET (same shared secret
+    // as the order-sync feeds, from config.json / env).
+    const headers = { 'Content-Type': 'application/json' };
+    if (process.env.SYNC_SECRET) headers['x-sync-secret'] = process.env.SYNC_SECRET;
     const r = await fetch(`${cloudUrl}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
     });
     return { status: r.status, json: await r.json() };
@@ -3173,7 +3244,7 @@ async function relayAiToCloud(path, body) {
   }
 }
 
-app.post('/api/ai/scan-menu', async (req, res) => {
+app.post('/api/ai/scan-menu', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     const { image_base64, media_type } = req.body;
     if (!image_base64) return res.status(400).json({ error: 'image_base64 is required' });
@@ -3212,7 +3283,7 @@ app.post('/api/ai/scan-menu', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/ai/scan-invoice', async (req, res) => {
+app.post('/api/ai/scan-invoice', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     const { image_base64, media_type } = req.body;
     if (!image_base64) return res.status(400).json({ success: false, error: 'No image provided' });
@@ -3244,7 +3315,7 @@ app.post('/api/ai/scan-invoice', async (req, res) => {
   } catch (err) { return res.status(500).json({ success: false, error: err.message }); }
 });
 
-app.post('/api/ai/scan-expense', async (req, res) => {
+app.post('/api/ai/scan-expense', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     const { image_base64, media_type } = req.body;
     if (!image_base64) return res.status(400).json({ success: false, error: 'No image provided' });
@@ -3924,40 +3995,12 @@ app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// SEPOS-040 — returns whether Stripe is configured + the publishable key.
-// Widget uses this on init to decide between real-pay and demo-mode UI.
-app.get('/api/takeaway/stripe-config', widgetCors, (req, res) => {
-  const key = process.env.STRIPE_PUBLISHABLE_KEY;
-  res.json({ configured: !!key, publishable_key: key || null });
-});
-
-// SEPOS-040 — create a Stripe PaymentIntent for the takeaway order.
-// Returns { client_secret } which the widget passes to stripe.confirmCardPayment().
-// If Stripe is not configured, returns 503 so the widget knows to stay in mock mode.
-app.post('/api/takeaway/payment-intent', widgetCors, async (req, res) => {
-  if (!process.env.STRIPE_SECRET_KEY) {
-    return res.status(503).json({ error: 'Stripe not configured on this deployment' });
-  }
-  try {
-    const { amount_pence, order_description } = req.body || {};
-    const pence = Math.round(Number(amount_pence));
-    if (!Number.isFinite(pence) || pence < 30) {
-      return res.status(400).json({ error: 'Invalid amount' });
-    }
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-    const intent = await stripe.paymentIntents.create({
-      amount: pence,
-      currency: 'gbp',
-      automatic_payment_methods: { enabled: true },
-      description: order_description || 'Takeaway order',
-      metadata: { product: 'siamepos_takeaway' },
-    });
-    res.json({ client_secret: intent.client_secret, payment_intent_id: intent.id });
-  } catch (err) {
-    console.error('[takeaway] payment-intent error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
+// SEPOS-040 stripe-config + payment-intent routes live further down
+// (search "SEPOS-040 — Stripe payment on the takeaway widget"). An
+// earlier unhardened duplicate pair used to sit HERE and shadowed the
+// hardened pair below it (Express matches in declaration order) — the
+// £500 cap, 50p minimum and restaurant_id metadata were all dead code.
+// Removed in SEPOS-047b; same bug class as SEPOS-046ae.
 
 // SEPOS-DELIVERY-002 — postcode radius check for the takeaway widget.
 // Resolves the customer postcode + the restaurant postcode to lat/lng
@@ -4076,6 +4119,7 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
     // or tampered payments.
     let paymentStatus = 'mock';
     let verifiedPaymentIntentId = null;
+    let verifiedPaymentPence = null;
     if (payment_intent_id) {
       if (!process.env.STRIPE_SECRET_KEY) {
         return res.status(400).json({ error: 'Stripe not configured — cannot verify payment' });
@@ -4086,8 +4130,14 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
         if (pi.status !== 'succeeded') {
           return res.status(402).json({ error: `Payment not completed (${pi.status})` });
         }
+        // SEPOS-047b — the amount itself is verified against the
+        // server-priced order total further down, once it's computed.
+        if (pi.currency !== 'gbp') {
+          return res.status(402).json({ error: 'Payment currency mismatch' });
+        }
         paymentStatus = 'paid';
         verifiedPaymentIntentId = pi.id;
+        verifiedPaymentPence = pi.amount;
       } catch (stripeErr) {
         console.error('[takeaway] Stripe verify error:', stripeErr.message);
         return res.status(402).json({ error: 'Could not verify payment — please try again.' });
@@ -4169,10 +4219,53 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
       }
     }
 
-    // Compute total from items × unit_price (server is the source of truth).
-    const total = items.reduce((s, i) => s + Number(i.unit_price || 0) * Number(i.quantity || 0), 0);
+    // SEPOS-047b — price every line from menu_items, NOT from the
+    // client-sent unit_price (which a tampered widget controls; same
+    // class as the dine-in BUG-EPOS-002 fix). The takeaway widget has
+    // no priced modifiers, so menu price × quantity is the exact total.
+    const menuIds = [...new Set(items.map(i => Number(i.menu_item_id)).filter(Boolean))];
+    if (menuIds.length === 0 || items.some(i => !Number(i.menu_item_id))) {
+      return res.status(400).json({ error: 'Invalid cart — please refresh the menu and try again' });
+    }
+    const priceRes = await client.query(
+      `SELECT id, name, price, is_available FROM menu_items WHERE id = ANY($1)`,
+      [menuIds]
+    );
+    const priceById = new Map(priceRes.rows.map(r => [Number(r.id), r]));
+    let total = 0;
+    for (const it of items) {
+      const mi = priceById.get(Number(it.menu_item_id));
+      if (!mi) return res.status(400).json({ error: `"${it.name || 'An item'}" is no longer on the menu — please refresh and try again` });
+      if (Number(mi.is_available) === 0) {
+        return res.status(400).json({ error: `"${mi.name}" is sold out — please remove it from your cart` });
+      }
+      it.server_price = Number(mi.price) || 0;
+      total += it.server_price * (Number(it.quantity) || 1);
+    }
+
+    // SEPOS-047b — the paid amount must match the server-priced total.
+    // A mismatch means menu prices changed mid-checkout or the widget
+    // was tampered with; either way the order must not land as 'paid'.
+    if (verifiedPaymentIntentId !== null && verifiedPaymentPence !== Math.round(total * 100)) {
+      console.warn(`[takeaway] PI ${verifiedPaymentIntentId} amount ${verifiedPaymentPence}p != order total ${Math.round(total * 100)}p — rejected`);
+      return res.status(402).json({ error: 'Payment amount does not match the order total — please refresh and try again' });
+    }
 
     await client.query('BEGIN');
+
+    // SEPOS-047b — one PaymentIntent settles exactly one order. Backed
+    // by a unique partial index on orders.payment_intent_id; this check
+    // gives a friendly error instead of a raw constraint violation.
+    if (verifiedPaymentIntentId) {
+      const dup = await client.query(
+        `SELECT id FROM orders WHERE payment_intent_id = $1`,
+        [verifiedPaymentIntentId]
+      );
+      if (dup.rows[0]) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'This payment has already been used for another order' });
+      }
+    }
     // SEPOS-046g — customer_note column replaces the discount_reason
     // misuse that polluted Z / Trading reports. Legacy data in existing
     // discount_reason cells is left intact; only new orders go in the
@@ -4210,7 +4303,7 @@ app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
             item_note, is_fired, fired_at, cooking_started_at, status, restaurant_id)
          VALUES ($1, $2, $3, $4, $5, $6, 1, $7, 1, $8, $8, 'cooking', $9) RETURNING id`,
         [orderId, it.menu_item_id || null, it.name || 'Item',
-         it.quantity || 1, it.unit_price || 0,
+         it.quantity || 1, it.server_price, // SEPOS-047b — server-priced, never client input
          it.modifiers ? (Array.isArray(it.modifiers) ? it.modifiers.map(m => m.name).join(', ') : String(it.modifiers)) : '',
          it.item_note || '', now, restaurantId]
       );
@@ -5173,7 +5266,7 @@ async function sendTakeawayConfirmation({ order_id, customer_name, customer_emai
 // Customers tab when an operator gets legitimate consent off-widget
 // (verbal at the table, phone booking, etc.) and wants the customer
 // to start showing up in campaign segments.
-app.put('/api/customers/marketing-consent', async (req, res) => {
+app.put('/api/customers/marketing-consent', requireStaffAuth(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     const { email, consent } = req.body;
     if (!email || !email.trim()) return res.status(400).json({ error: 'email required' });
@@ -5309,7 +5402,7 @@ app.get('/api/unsubscribe', async (req, res) => {
 
 // Count recipients for a segment before sending — let the UI show
 // "Send to N people" without leaking the full list to the renderer.
-app.get('/api/campaigns/recipient-count', async (req, res) => {
+app.get('/api/campaigns/recipient-count', requireStaffAuth(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     const list = await fetchCustomersForSegment(req.query.segment || 'All');
     res.json({ count: list.length });
@@ -5317,7 +5410,7 @@ app.get('/api/campaigns/recipient-count', async (req, res) => {
 });
 
 // Past campaigns (newest first)
-app.get('/api/campaigns', async (req, res) => {
+app.get('/api/campaigns', requireStaffAuth(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     const r = await pool.query('SELECT id, subject, segment, recipient_count, sent_count, failed_count, created_at FROM campaigns ORDER BY id DESC LIMIT 50');
     res.json(r.rows);
@@ -5326,7 +5419,7 @@ app.get('/api/campaigns', async (req, res) => {
 
 // Send a campaign. Reads {subject, body, segment}, resolves recipient list,
 // fires Brevo sends sequentially, records the campaign + counts.
-app.post('/api/campaigns/send', async (req, res) => {
+app.post('/api/campaigns/send', requireStaffAuth(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     const { subject, body, segment } = req.body;
     if (!subject || !subject.trim()) return res.status(400).json({ error: 'Subject is required' });
@@ -5387,7 +5480,7 @@ app.post('/api/campaigns/send', async (req, res) => {
 // reservation date. Marked "estimated" in the UI — accuracy needs a
 // proper orders.reservation_id link (separate ticket).
 // ─────────────────────────────────────────────────────────────────────
-app.get('/api/customers', async (req, res) => {
+app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     // Pull reservations + their estimated spend in one query. The spend
     // join is intentionally loose (table + date) — multiple reservations

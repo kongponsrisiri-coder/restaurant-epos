@@ -27,16 +27,37 @@ const getServerURL = () => {
 
 export const SERVER_URL = getServerURL();
 
-const get = (url) => fetch(SERVER_URL + url).then(r => r.json());
+// SEPOS-047a — both login paths store a Bearer token; attach it to every
+// request so staff-gated endpoints (customers, campaigns, AI scan) work.
+// PIN sessions live under 'siamepos_token' (NOT 'siamepos_auth', which
+// App.jsx auto-restores on load — PIN users must still log in per shift).
+export const authHeaders = () => {
+  try {
+    const raw = localStorage.getItem('siamepos_token') || localStorage.getItem('siamepos_auth');
+    if (!raw) return {};
+    const a = JSON.parse(raw);
+    if (a?.token && (!a.expires_at || a.expires_at > Date.now())) {
+      return { Authorization: `Bearer ${a.token}` };
+    }
+  } catch {}
+  return {};
+};
+export const storePinSession = (r) => {
+  try {
+    if (r?.token) localStorage.setItem('siamepos_token', JSON.stringify({ token: r.token, expires_at: r.expires_at }));
+  } catch {}
+};
+
+const get = (url) => fetch(SERVER_URL + url, { headers: authHeaders() }).then(r => r.json());
 const post = (url, data) => fetch(SERVER_URL + url, {
-  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
   body: JSON.stringify(data)
 }).then(r => r.json());
 const put = (url, data) => fetch(SERVER_URL + url, {
-  method: 'PUT', headers: { 'Content-Type': 'application/json' },
+  method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() },
   body: JSON.stringify(data)
 }).then(r => r.json());
-const del = (url) => fetch(SERVER_URL + url, { method: 'DELETE' }).then(r => r.json());
+const del = (url) => fetch(SERVER_URL + url, { method: 'DELETE', headers: authHeaders() }).then(r => r.json());
 
 // SEPOS-046y — the helpers above resolve (not reject) on HTTP 4xx/5xx, so a
 // try/catch around them only sees network failures. Optimistic-UI handlers

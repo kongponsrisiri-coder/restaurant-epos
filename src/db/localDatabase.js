@@ -630,6 +630,8 @@ function runMigrations() {
   addColumnIfMissing('order_items', 'cloud_id', 'INTEGER');
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_cloud_id      ON orders(cloud_id)      WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] orders.cloud_id index:', err.message); }
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_order_items_cloud_id ON order_items(cloud_id) WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] order_items.cloud_id index:', err.message); }
+  // SEPOS-047b — one Stripe PaymentIntent settles exactly one takeaway order.
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_payment_intent ON orders(payment_intent_id) WHERE payment_intent_id IS NOT NULL'); } catch (err) { console.warn('[db:local] orders.payment_intent index:', err.message); }
 
   // SEPOS-LITE-001 Phase 1 — multi-tenancy. restaurant_id mirrors the
   // cloud schema so cloud→local sync stays column-aligned; Pro installs

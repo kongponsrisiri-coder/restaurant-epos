@@ -472,6 +472,13 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
       ON dining_duration_tiers(restaurant_id, covers_min)
     `);
 
+    // SEPOS-047b — one Stripe PaymentIntent settles exactly one takeaway
+    // order. Race-proof backstop behind the endpoint's friendly check.
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_payment_intent
+      ON orders(payment_intent_id) WHERE payment_intent_id IS NOT NULL
+    `);
+
     // Seed the 3 tiers — safe to re-run on every restart
     await pool.query(`
       INSERT INTO dining_duration_tiers (restaurant_id, covers_min, covers_max, duration_mins) VALUES

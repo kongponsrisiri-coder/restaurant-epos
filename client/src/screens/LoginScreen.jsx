@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { loginStaff, clockIn, clockOut, emailLogin } from '../api';
+import { loginStaff, clockIn, clockOut, emailLogin, storePinSession } from '../api';
 
 // ── Sandy: LoginScreen — SiamEPOS Brand CI v1.1 ───────────────────
 // Deep Navy #0D1B3E background · Thai Gold #C9A84C lotus logo
@@ -27,6 +27,7 @@ export default function LoginScreen({ onLogin }) {
         setError('Incorrect PIN. Please try again.');
         setPin('');
       } else {
+        storePinSession(staff); // SEPOS-047a — Bearer token for gated endpoints
         onLogin(staff);
       }
     } catch {

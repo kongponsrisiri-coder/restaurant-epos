@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { SERVER_URL } from '../../api';
+import { SERVER_URL, authHeaders } from '../../api';
 import {
   getAllMenu as getMenu, addMenuItem, updateMenuItem, deleteMenuItem,
   getItemModifiers, addModifierGroup, addModifierOption,
@@ -47,7 +47,7 @@ function AIScannerModal({ onClose, onImported }) {
     try {
       const base64 = fileData.split(',')[1];
       const media_type = file.type || 'image/jpeg';
-      const res = await fetch(`${SERVER_URL}/api/ai/scan-menu`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image_base64: base64, media_type }) });
+      const res = await fetch(`${SERVER_URL}/api/ai/scan-menu`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ image_base64: base64, media_type }) });
       clearInterval(interval); setScanStep(SCAN_STEPS.length);
       const data = await res.json();
       if (!res.ok || !data.success) {

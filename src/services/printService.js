@@ -16,7 +16,7 @@ const net = require('net');
 const fs  = require('fs').promises;
 const os  = require('os');
 const path = require('path');
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 
 // ── ESC/POS command bytes ─────────────────────────────────────────────────────
 const ESC = 0x1b;
@@ -175,14 +175,30 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
     Number(i.unit_price || 0),
     i.course || 1,
   ].join('|');
+  // SEPOS-047j — accumulate each ORIGINAL row's discount while merging.
+  // A 'fixed' discount is per row (the order total does
+  // quantity*unit_price - discount_value per row), so merging two rows that
+  // each carry a £5 fixed discount must deduct £10, not £5. The old code
+  // recomputed the discount from the MERGED quantity (min(value, merged_p)),
+  // which deducted it once — so the printed line total didn't match the
+  // amount actually charged. Summing per-row discounts is correct for both
+  // 'fixed' and 'percent'.
+  const rowDiscount = (i) => {
+    const rowP = Number(i.unit_price || 0) * Number(i.quantity || 0);
+    if (!(Number(i.discount_value) > 0)) return 0;
+    return i.discount_type === 'percent'
+      ? rowP * Number(i.discount_value) / 100
+      : Math.min(Number(i.discount_value), rowP);
+  };
   const groups = new Map();
   for (const it of activeItems) {
     const k = groupKey(it);
     if (groups.has(k)) {
       const g = groups.get(k);
       g.quantity = Number(g.quantity || 0) + Number(it.quantity || 0);
+      g._discountAmt = (g._discountAmt || 0) + rowDiscount(it);
     } else {
-      groups.set(k, { ...it, quantity: Number(it.quantity || 0) });
+      groups.set(k, { ...it, quantity: Number(it.quantity || 0), _discountAmt: rowDiscount(it) });
     }
   }
   const groupedItems = Array.from(groups.values());
@@ -271,9 +287,14 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
     ...Object.keys(byCourse).sort().flatMap(course => [
       ...byCourse[course].flatMap(item => {
         const p   = item.unit_price * item.quantity;
-        const d   = item.discount_value > 0
-          ? item.discount_type === 'percent' ? p * item.discount_value / 100 : Math.min(item.discount_value, p)
-          : 0;
+        // SEPOS-047j — use the per-row discount summed during the merge above
+        // (correct for merged fixed-discount lines), not a recompute from the
+        // merged quantity. Fall back to a single-row recompute if absent.
+        const d   = item._discountAmt != null
+          ? item._discountAmt
+          : (item.discount_value > 0
+              ? (item.discount_type === 'percent' ? p * item.discount_value / 100 : Math.min(item.discount_value, p))
+              : 0);
         const net = p - d;
         return [
           CMD.BOLD_ON, col2(`${item.quantity}x ${item.name || item.item_name || ('Item #' + item.menu_item_id)}`, '£' + net.toFixed(2)), CMD.BOLD_OFF, lf(),
@@ -717,10 +738,13 @@ async function _sendCups(printerName, buf) {
   await fs.writeFile(tmp, buf);
   try {
     await new Promise((resolve, reject) => {
-      // Quote-escape the printer name to defend against shell injection in
-      // case anyone ever puts a hostile string in the settings table.
-      const safeName = String(printerName).replace(/"/g, '\\"');
-      exec(`lpr -P "${safeName}" -o raw "${tmp}"`, (err, _stdout, stderr) => {
+      // SEPOS-047j — execFile (NOT exec) so printerName is passed as a
+      // literal argv entry, never through a shell. The old exec() only
+      // escaped double-quotes, but inside a double-quoted shell arg
+      // backticks and $(...) still execute — so a printer name like
+      // `$(reboot)` (settable via the unauthenticated settings endpoint on
+      // a LAN install) ran on the host. No shell now = no injection.
+      execFile('lpr', ['-P', String(printerName), '-o', 'raw', tmp], (err, _stdout, stderr) => {
         if (err) return reject(new Error(`CUPS print failed: ${(stderr || '').trim() || err.message}`));
         resolve();
       });

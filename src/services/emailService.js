@@ -6,6 +6,16 @@ const RESTAURANT_PHONE   = '07700 000000';
 const RESTAURANT_ADDRESS = '123 Test Street, London, E1 1AA';
 const FROM_EMAIL         = 'noreply@siamepos.co.uk';
 
+// SEPOS-047j — escape customer-supplied fields (name, notes) before they go
+// into email HTML. They originate from the public booking widget, so an
+// unescaped value could inject markup/links into the confirmation + reminder
+// emails. Low impact (recipient is the customer's own inbox) but free to fix.
+function escapeHtml(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function formatDate(dateStr) {
   try {
     const str   = dateStr instanceof Date ? dateStr.toISOString() : String(dateStr);
@@ -127,9 +137,9 @@ async function sendBookingConfirmation(reservation) {
 
   const date   = formatDate(reservation.reservation_date);
   const time   = formatTime(reservation.reservation_time);
-  const name   = reservation.customer_name;
+  const name   = escapeHtml(reservation.customer_name);
   const covers = reservation.covers;
-  const notes  = reservation.notes || '—';
+  const notes  = escapeHtml(reservation.notes || '—');
   const ref    = reservation.id;
 
   const html = `
@@ -181,7 +191,7 @@ async function sendReminderEmail(reservation) {
 
   const date   = formatDate(reservation.reservation_date);
   const time   = formatTime(reservation.reservation_time);
-  const name   = reservation.customer_name;
+  const name   = escapeHtml(reservation.customer_name);
   const covers = reservation.covers;
 
   const html = `

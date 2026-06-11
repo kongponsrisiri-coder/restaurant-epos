@@ -52,6 +52,36 @@ const ORDER_TOTAL_EXPR = `SUM(CASE
   WHEN discount_type = 'fixed'   THEN GREATEST(0, quantity * unit_price - COALESCE(discount_value,0))
   ELSE quantity * unit_price END)`;
 
+// SEPOS-047j — VAT reports compute gross per item (after the per-ITEM
+// discount) but used to ignore the per-ORDER (bill-level) discount, so a
+// bill-level comp/discount left VAT reported on money never taken. This
+// distributes each order's bill discount proportionally across its items
+// (by item-gross) and returns order_id -> multiplicative factor in [0,1].
+// Rows must carry order_id, discount_type/discount_value (item) and
+// bill_discount_type/bill_discount_value (order).
+function billDiscountFactors(rows) {
+  const grossByOrder = new Map();
+  for (const row of rows) {
+    let g = Number(row.quantity || 0) * Number(row.unit_price || 0);
+    if (row.discount_type === 'percent') g *= 1 - (Number(row.discount_value || 0) / 100);
+    else if (row.discount_type === 'fixed') g = Math.max(0, g - Number(row.discount_value || 0));
+    grossByOrder.set(row.order_id, (grossByOrder.get(row.order_id) || 0) + g);
+  }
+  const factor = new Map();
+  for (const row of rows) {
+    if (factor.has(row.order_id)) continue;
+    const og = grossByOrder.get(row.order_id) || 0;
+    const bdv = Number(row.bill_discount_value || 0);
+    let f = 1;
+    if (bdv > 0 && og > 0) {
+      if (row.bill_discount_type === 'percent') f = Math.max(0, 1 - bdv / 100);
+      else if (row.bill_discount_type === 'fixed') f = Math.max(0, (og - bdv) / og);
+    }
+    factor.set(row.order_id, f);
+  }
+  return factor;
+}
+
 // When the desktop shell sets CLIENT_DIST_PATH (Electron does — pointed at
 // client/dist), serve the React bundle from the local server too. Lets
 // kitchen / bar tablets on the same Wi-Fi load SiamEPOS from this host
@@ -2175,7 +2205,7 @@ app.get('/api/z-report/preview', async (req, res) => {
       // SEPOS-023: breakdown by void_type
       pool.query(`SELECT COALESCE(order_items.void_type, 'Uncategorised') AS void_type, COUNT(*) AS count, COALESCE(SUM(order_items.unit_price * order_items.quantity), 0) AS value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp GROUP BY order_items.void_type ORDER BY value DESC`, [from, to]),
       // SEPOS-021: rows for VAT breakdown (aggregated in JS)
-      pool.query(`SELECT COALESCE(mi.vat_rate, 20) AS vat_rate, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id LEFT JOIN orders o ON o.id = oi.order_id WHERE o.status='closed' AND oi.voided=0 AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp`, [from, to]),
+      pool.query(`SELECT COALESCE(mi.vat_rate, 20) AS vat_rate, oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value, o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id LEFT JOIN orders o ON o.id = oi.order_id WHERE o.status='closed' AND oi.voided=0 AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp`, [from, to]),
       // Korakot 2026-06-02: food vs drink split via categories.is_bar.
       pool.query(`
         SELECT COALESCE(c.is_bar, 0) AS is_bar,
@@ -2205,11 +2235,13 @@ app.get('/api/z-report/preview', async (req, res) => {
 
     // VAT breakdown — same maths as /api/reports/vat
     const vatBuckets = new Map();
+    const vatFactors = billDiscountFactors(vatRowsRes.rows); // SEPOS-047j — bill-level discount
     for (const row of vatRowsRes.rows) {
       const rate = Number(row.vat_rate ?? 20);
       let gross = Number(row.quantity || 0) * Number(row.unit_price || 0);
       if (row.discount_type === 'percent') gross *= 1 - (Number(row.discount_value || 0) / 100);
       else if (row.discount_type === 'fixed') gross = Math.max(0, gross - Number(row.discount_value || 0));
+      gross *= (vatFactors.get(row.order_id) ?? 1); // distribute the order's bill-level discount
       const net = rate > 0 ? gross * (100 / (100 + rate)) : gross;
       const vat = gross - net;
       const b = vatBuckets.get(rate) || { rate, net: 0, vat: 0, gross: 0 };
@@ -3923,10 +3955,21 @@ app.post('/api/batches/:id/extend', async (req, res) => {
     const r = await pool.query(`SELECT expires_on, extended_count FROM batches WHERE id=$1`, [req.params.id]);
     if (!r.rows[0]) return res.status(404).json({ error: 'Batch not found' });
     if ((r.rows[0].extended_count || 0) >= 3) return res.status(400).json({ error: 'Already extended 3 times — discard if past use' });
-    // SEPOS-046ac — +1 day computed in JS; `+ INTERVAL '1 day'` is PG-only
-    // and made extend 500 on desktop SQLite installs.
-    const curExpiry = new Date(r.rows[0].expires_on);
-    const nextExpiry = new Date(curExpiry.getTime() + 86400000).toISOString().slice(0, 10);
+    // SEPOS-046ac — +1 day computed in JS (PG-only INTERVAL 500'd on SQLite).
+    // SEPOS-047j — but `new Date(dateValue).getTime() + 86400000` then
+    // toISOString() was a NO-OP on cloud Postgres during BST: pg parses a
+    // DATE column at LOCAL midnight, so '2026-06-14' → 2026-06-13T23:00:00Z,
+    // +24h → 2026-06-14T23:00:00Z, and .slice(0,10) yields '2026-06-14' —
+    // the SAME date (while still burning one of the 3 allowed extensions).
+    // Fix: read the Y/M/D components (local for a pg Date, or the leading 10
+    // chars for a SQLite string) and add a day in pure UTC so no timezone
+    // can collapse it.
+    const raw = r.rows[0].expires_on;
+    const ymd = raw instanceof Date
+      ? `${raw.getFullYear()}-${String(raw.getMonth() + 1).padStart(2, '0')}-${String(raw.getDate()).padStart(2, '0')}`
+      : String(raw).slice(0, 10);
+    const [yy, mm, dd] = ymd.split('-').map(Number);
+    const nextExpiry = new Date(Date.UTC(yy, mm - 1, dd + 1)).toISOString().slice(0, 10);
     const u = await pool.query(
       `UPDATE batches
          SET expires_on = $1,
@@ -5797,12 +5840,13 @@ app.get('/api/reports/vat', async (req, res) => {
     const toTs   = to   || '2999-12-31';
     // Korakot 2026-06-02: extended to surface is_bar (food vs drink) per
     // line so we can render the breakdown split by category type on the
-    // VAT report. Per-item discount still applied; bill-level discount
-    // still out of scope (rare on a VAT-inclusive UK menu).
+    // VAT report. Per-item AND bill-level discounts are both applied
+    // (SEPOS-047j) so the VAT figure matches money actually taken.
     const r = await pool.query(`
       SELECT COALESCE(mi.vat_rate, 20) AS vat_rate,
              COALESCE(c.is_bar, 0) AS is_bar,
-             oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value
+             oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value,
+             o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value
       FROM order_items oi
       LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
       LEFT JOIN categories  c  ON c.id  = mi.category_id
@@ -5813,11 +5857,13 @@ app.get('/api/reports/vat', async (req, res) => {
 
     const byRate = new Map();
     const byKind = { food: { net: 0, vat: 0, gross: 0, items: 0 }, drink: { net: 0, vat: 0, gross: 0, items: 0 } };
+    const vatFactors = billDiscountFactors(r.rows); // SEPOS-047j — bill-level discount
     for (const row of r.rows) {
       const rate = Number(row.vat_rate ?? 20);
       let gross = Number(row.quantity || 0) * Number(row.unit_price || 0);
       if (row.discount_type === 'percent') gross *= 1 - (Number(row.discount_value || 0) / 100);
       else if (row.discount_type === 'fixed') gross = Math.max(0, gross - Number(row.discount_value || 0));
+      gross *= (vatFactors.get(row.order_id) ?? 1); // distribute the order's bill-level discount
       const net = rate > 0 ? gross * (100 / (100 + rate)) : gross;
       const vat = gross - net;
       const qty = Number(row.quantity || 0);

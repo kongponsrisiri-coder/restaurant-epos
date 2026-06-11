@@ -6,6 +6,28 @@
 
 ---
 
+## 🎉 MILESTONE — 2026-06-11 multi-agent bug hunt COMPLETE (29/29 fixed)
+
+A 52-agent adversarially-verified bug hunt surfaced **29 confirmed findings**;
+**all 29 are now fixed, shipped, and live** across releases **v1.6.56 → v1.6.64**
+(all installer builds published; v1.6.64 verified — 6/6 assets). Breakdown:
+4 internet-exposed security holes · 6 money/data-loss bugs · 4 desktop-only
+SQLite crashes · 3 sync-engine races · 3 frontend unchecked-response bugs ·
+the staff/PIN desktop→cloud sync gap · 5 mop-up (CUPS injection, VAT bill-level
+discount, batch-extend BST, receipt merge discount, email HTML escaping).
+Full report: `~/Documents/SiamEPOS-Docs/qa-reports/SiamEPOS-BugHunt-MultiAgent-2026-06-11.md`.
+Per-release detail in Recently Completed below (tickets SEPOS-047a … 047j).
+
+**⚠️ Still OPEN — Korakot manual actions (NOT code):**
+1. Set `AUTH_SECRET` on every Railway service (ticket **SEPOS-052** written up). Until then the v1.6.56 auth gates are forgeable with the public default secret.
+2. Change the weak `0000` admin PIN in Staff settings.
+
+**Nook:** QA targets are listed per-release below — focus first on the money
+paths (dine-in pay failure, voucher, partial void, discounts/VAT) and the
+desktop SQLite endpoints (staff edit, voucher search/reports, batch delete).
+
+---
+
 ## 🟢 Active Work
 
 | Agent | Working On | Ticket | Started |

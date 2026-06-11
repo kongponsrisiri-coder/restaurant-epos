@@ -982,4 +982,28 @@ async function pullMenuSnapshot() {
   await pullMenuTree();
 }
 
-module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, pullActiveOrders, pullMenuSnapshot, tick };
+// SEPOS-047g — targeted staff refresh, awaited by server.js right after a
+// forwarded staff write (add/edit/delete a PIN) succeeds on the cloud, so
+// the till's Staff list and the login PINs reflect it immediately. Unlike
+// the regular PULL_TABLES staff pull (upsert-only), this also orphan-deletes
+// local staff missing from the cloud snapshot, so a desktop-initiated DELETE
+// actually removes the row locally (guarded to a non-empty cloud list so a
+// transient blank response can't wipe the staff table).
+async function pullStaffSnapshot() {
+  if (!offlineQueue.isLocal || !CLOUD_API_URL) return;
+  try {
+    const r = await fetch(CLOUD_API_URL + '/api/staff', {
+      signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+    });
+    if (!r.ok) { console.warn(`[sync] pullStaffSnapshot ${r.status}`); return; }
+    const rows = await r.json();
+    const list = Array.isArray(rows) ? rows : (rows?.data || []);
+    if (!Array.isArray(list) || list.length === 0) return;
+    await upsertRows('staff', 'id', list);
+    await deleteOrphans('staff', list.map(s => s.id));
+  } catch (err) {
+    console.warn('[sync] pullStaffSnapshot failed:', err.message);
+  }
+}
+
+module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, pullActiveOrders, pullMenuSnapshot, pullStaffSnapshot, tick };

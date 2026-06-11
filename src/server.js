@@ -286,7 +286,11 @@ app.get('/api/categories', async (req, res) => {
 // caveat (logged) is that the change is local-only and will be reverted
 // on next pull. Phase 2 (offline-capable menu queue) is a separate
 // SEPOS-046r if connectivity gaps become a real operator complaint.
-async function maybeForwardMenuWriteToCloud(req, res) {
+// Generic desktop write-through: forward an admin write to the cloud, then
+// pull the affected table back into local SQLite before replying so the
+// client's refetch sees the cloud-acknowledged state immediately. `label`
+// is for logs; `afterPull` is the targeted snapshot pull (menu / staff).
+async function forwardWriteToCloud(req, res, label, afterPull) {
   try {
     const archiveService = require('./services/archiveService');
     if (!archiveService.isLocalInstall() || !process.env.CLOUD_API_URL) return false;
@@ -299,21 +303,40 @@ async function maybeForwardMenuWriteToCloud(req, res) {
     }
     const r = await fetch(url, init);
     const body = await r.text();
-    console.log(`[menu-write] forwarded ${req.method} ${req.originalUrl} → cloud ${r.status}`);
-    // SEPOS-046ad — pull the menu tree back into local SQLite BEFORE
-    // replying, so the client's follow-up refetch (Menu Manager, Order
-    // screen) sees the change immediately instead of on the next 5s
-    // tick. Failure is non-fatal: the regular tick still catches up.
-    if (r.ok) {
-      try { await syncService.pullMenuSnapshot(); }
-      catch (pullErr) { console.warn(`[menu-write] instant menu pull failed: ${pullErr.message}`); }
+    console.log(`[${label}] forwarded ${req.method} ${req.originalUrl} → cloud ${r.status}`);
+    // Pull the affected table back into local SQLite BEFORE replying so the
+    // client's follow-up refetch sees the change immediately instead of on
+    // the next 5s tick. Failure is non-fatal: the regular tick catches up.
+    if (r.ok && afterPull) {
+      try { await afterPull(); }
+      catch (pullErr) { console.warn(`[${label}] instant pull-back failed: ${pullErr.message}`); }
     }
     res.status(r.status).type('application/json').send(body);
     return true;
   } catch (err) {
-    console.warn(`[menu-write] cloud unreachable for ${req.method} ${req.originalUrl}: ${err.message} — falling back to local (change will be lost on next pull)`);
+    console.warn(`[${label}] cloud unreachable for ${req.method} ${req.originalUrl}: ${err.message} — falling back to local (change will be lost on next pull)`);
     return false;
   }
+}
+
+// SEPOS-046q — desktop installs forward menu admin writes to cloud so the
+// operator's edits become the new cloud truth (instead of being silently
+// erased by the next pull tick). On success, an instant menu pull brings
+// the cloud-acknowledged shape into local SQLite. On failure, the request
+// falls back to the local handler so the operator's UI still updates.
+function maybeForwardMenuWriteToCloud(req, res) {
+  return forwardWriteToCloud(req, res, 'menu-write', () => syncService.pullMenuSnapshot());
+}
+
+// SEPOS-047g — same write-through for staff/PIN edits. Before this, staff
+// endpoints wrote ONLY to local SQLite on desktop — no cloud forward, no
+// push queue — so a PIN added/changed/deleted on the till never reached
+// the cloud, the website, or any other device (and could later be clobbered
+// when the 5s pull's upsert-by-id collided with a different cloud staff id).
+// Now a desktop staff write becomes the cloud truth and the instant staff
+// pull (with orphan-delete) reflects it locally + everywhere on next tick.
+function maybeForwardStaffWriteToCloud(req, res) {
+  return forwardWriteToCloud(req, res, 'staff-write', () => syncService.pullStaffSnapshot());
 }
 
 app.post('/api/categories', async (req, res) => {
@@ -1427,6 +1450,7 @@ app.get('/api/staff', async (req, res) => {
 });
 
 app.post('/api/staff', async (req, res) => {
+  if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
     const { name, pin, role, start_date, notes, employment_status } = req.body;
     const result = await pool.query('INSERT INTO staff (name, pin, role, start_date, notes, employment_status) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [name, pin, role, start_date || null, notes || null, employment_status || 'active']);
@@ -1435,6 +1459,7 @@ app.post('/api/staff', async (req, res) => {
 });
 
 app.put('/api/staff/:id', async (req, res) => {
+  if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
     const { name, pin, role, is_active, start_date, notes, employment_status } = req.body;
     // Normalise: when the client doesn't send is_active (or sends an empty
@@ -1476,6 +1501,7 @@ app.put('/api/staff/:id', async (req, res) => {
 });
 
 app.delete('/api/staff/:id', async (req, res) => {
+  if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
     await pool.query('DELETE FROM staff WHERE id=$1', [req.params.id]);
     res.json({ success: true });

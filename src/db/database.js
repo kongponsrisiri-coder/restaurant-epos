@@ -9,10 +9,20 @@ const pool = new Pool({
   connectionTimeoutMillis: 3000,
 });
 
-// Set UK timezone on every connection so CURRENT_TIMESTAMP / NOW() reflect
-// London time (handles BST ↔ GMT automatically).
+// SEPOS-047l — store/serve all timestamps in UTC.
+// The old `SET timezone='Europe/London'` made NOW()/CURRENT_TIMESTAMP write
+// BST wall-clock into the tz-naive TIMESTAMP columns (opened_at, closed_at,
+// fired_at, …), but the Node process reads them back as UTC — so during BST
+// EVERY timestamp came out +1 hour. Visible bug: a freshly-opened table
+// showed "0m" for up to an hour because its opened_at was ~1h in the future,
+// so the floor-map timer read a negative elapsed time and clamped to 0.
+// UK time-of-day logic no longer needs the connection TZ: SEPOS-048 moved
+// the reservation/takeaway HH:MM validators to minutesInZone() using each
+// restaurant's own IANA timezone, so UTC on the wire is both correct and
+// safe. (Existing rows written under the old setting stay 1h off until they
+// close out — only the live/open timers matter.)
 pool.on('connect', client => {
-  client.query("SET timezone='Europe/London'").catch(() => {});
+  client.query("SET timezone='UTC'").catch(() => {});
 });
 
 async function initDB() {

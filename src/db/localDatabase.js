@@ -715,6 +715,22 @@ function preTranslate(sql) {
   out = out.replace(/([\w.]+|\$\d+)\s*::\s*date\b/gi, 'date($1)');
   // `expr::timestamp` → `datetime(expr)`
   out = out.replace(/([\w.]+|\$\d+)\s*::\s*timestamp\b/gi, 'datetime($1)');
+  // SEPOS-047e — `expr::int` → `CAST(expr AS INTEGER)`. SQLite has no `::`
+  // cast syntax, so untranslated `::int` was a hard syntax error that 500'd
+  // (per the bug hunt) every staff edit (COALESCE($N::int,…)), the voucher
+  // sold/redeemed report figures (COUNT(*)::int — silently £0 via .catch),
+  // and batch-recipe deletes (COUNT(*)::int guard). Operand may be a
+  // placeholder ($N), a function call (COUNT(*), SUM(…)), or a column. The
+  // negative lookahead leaves `::int[]` untouched for translateParams' ANY
+  // array expansion below.
+  out = out.replace(
+    /(\$\d+|[A-Za-z_]\w*\s*\([^()]*\)|[\w.]+)\s*::\s*int\b(?!\s*\[)/gi,
+    'CAST($1 AS INTEGER)'
+  );
+  // SEPOS-047e — PG `ILIKE` (case-insensitive LIKE) → SQLite `LIKE`, which
+  // is already case-insensitive for ASCII. Without this, voucher search
+  // (GET /api/vouchers?q=…) 500'd on desktop the moment the operator typed.
+  out = out.replace(/\bILIKE\b/gi, 'LIKE');
   // Korakot 2026-06-02: PG's GREATEST/LEAST aren't in SQLite, but SQLite's
   // max()/min() act as scalar comparators when given >1 argument. The
   // /api/reports/summary + /api/z-report/preview food-vs-drink query

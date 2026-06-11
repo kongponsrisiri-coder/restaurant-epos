@@ -449,6 +449,14 @@ async function pullMenuTree() {
         name: i.name, name_alt: i.name_alt, description: i.description,
         price: i.price, is_available: i.is_available,
         allergens: i.allergens, sort_order: i.sort_order,
+        // SEPOS-047i — vat_rate + is_online were omitted from this projection,
+        // so a VAT-rate change made on the till (forwarded to cloud, then
+        // pulled back) never landed in local menu_items. The desktop bill
+        // VAT breakdown, Z-report VAT and VAT report all JOIN the LOCAL
+        // menu_items.vat_rate, so receipts + HMRC-facing figures used the
+        // stale rate forever. is_online (takeaway-widget visibility) had the
+        // same drop — the toggle reverted on the next local refetch.
+        vat_rate: i.vat_rate, is_online: i.is_online,
       }))
     );
 

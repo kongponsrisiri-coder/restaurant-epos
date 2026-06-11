@@ -40,6 +40,18 @@ app.use('/api/line/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
 
+// SEPOS-047c — single source of truth for an order's live total: the sum
+// of non-voided item line totals WITH per-item discounts applied. Every
+// path that recomputes orders.total (add items, void, merge, item
+// discount) MUST use this — otherwise add/void/merge silently revert a
+// discounted total to the raw undiscounted sum, corrupting the bill and
+// the Z-report subtotal/discount figures. GREATEST → max() and the
+// arithmetic both translate cleanly to SQLite (verified in translateSql).
+const ORDER_TOTAL_EXPR = `SUM(CASE
+  WHEN discount_type = 'percent' THEN quantity * unit_price * (1 - COALESCE(discount_value,0)/100)
+  WHEN discount_type = 'fixed'   THEN GREATEST(0, quantity * unit_price - COALESCE(discount_value,0))
+  ELSE quantity * unit_price END)`;
+
 // When the desktop shell sets CLIENT_DIST_PATH (Electron does — pointed at
 // client/dist), serve the React bundle from the local server too. Lets
 // kitchen / bar tablets on the same Wi-Fi load SiamEPOS from this host
@@ -662,7 +674,7 @@ app.post('/api/orders/:id/items', async (req, res) => {
       if (isBar) firedBarIds.push(newRowId);
       queuedItems.push({ ...item, localItemId: newRowId });
     }
-    const totalRes = await client.query('SELECT SUM(quantity * unit_price) as total FROM order_items WHERE order_id = $1 AND voided = 0', [orderId]);
+    const totalRes = await client.query(`SELECT ${ORDER_TOTAL_EXPR} as total FROM order_items WHERE order_id = $1 AND voided = 0`, [orderId]); // SEPOS-047c — keep per-item discounts
     const total = totalRes.rows[0].total || 0;
     await client.query('UPDATE orders SET total = $1 WHERE id = $2', [total, orderId]);
     await client.query('COMMIT');
@@ -779,13 +791,14 @@ app.put('/api/order-items/:id/void', async (req, res) => {
     if (!orig) return res.status(404).json({ error: 'Item not found' });
 
     const qtyToVoid = Number.isFinite(Number(voidQty)) ? Number(voidQty) : orig.quantity;
+    let ghostItemId = null;
     if (qtyToVoid < orig.quantity && qtyToVoid >= 1) {
       // Partial void: shrink the original row, insert a voided-ghost copy
       // that carries the same per-item state (status/fired/served/etc.) so
       // reports and the kitchen screen treat it consistently.
       const remaining = orig.quantity - qtyToVoid;
       await pool.query('UPDATE order_items SET quantity=$1 WHERE id=$2', [remaining, req.params.id]);
-      await pool.query(
+      const ghostRes = await pool.query(
         `INSERT INTO order_items
            (order_id, menu_item_id, item_name, quantity, unit_price, notes, course, item_note,
             status, is_fired, fired_at, cooking_started_at, served_at, voided, void_reason,
@@ -793,18 +806,28 @@ app.put('/api/order-items/:id/void', async (req, res) => {
          SELECT order_id, menu_item_id, item_name, $1, unit_price, notes, course, item_note,
             status, is_fired, fired_at, cooking_started_at, served_at, 1, $2,
             $3, discount_type, discount_value
-         FROM order_items WHERE id=$4`,
+         FROM order_items WHERE id=$4 RETURNING id`,
         [qtyToVoid, reason, void_type || null, req.params.id]
       );
+      ghostItemId = ghostRes.rows[0]?.id ?? null;
     } else {
       // Full void — existing behaviour.
       await pool.query('UPDATE order_items SET voided=1, void_reason=$1, void_type=$2 WHERE id=$3', [reason, void_type || null, req.params.id]);
     }
-    await offlineQueue.enqueue('void_item', { localItemId: Number(req.params.id), reason, quantity: qtyToVoid });
+    // SEPOS-047c — forward quantity + void_type so the cloud voids the SAME
+    // amount (was sending only {reason}, so the cloud defaulted to a FULL
+    // void of the line — corrupting cloud revenue/wastage). ghostLocalId
+    // lets the sync bind the local partial-void ghost to the cloud ghost
+    // so the next pull doesn't INSERT a duplicate ghost (double-count).
+    await offlineQueue.enqueue('void_item', {
+      localItemId: Number(req.params.id), reason,
+      quantity: qtyToVoid, void_type: void_type || null,
+      ghostLocalId: ghostItemId,
+    });
     const itemRes = await pool.query('SELECT order_id FROM order_items WHERE id = $1', [req.params.id]);
     const item = itemRes.rows[0];
     if (item) {
-      const totalRes = await pool.query('SELECT SUM(quantity * unit_price) as total FROM order_items WHERE order_id=$1 AND voided=0', [item.order_id]);
+      const totalRes = await pool.query(`SELECT ${ORDER_TOTAL_EXPR} as total FROM order_items WHERE order_id=$1 AND voided=0`, [item.order_id]); // SEPOS-047c — keep per-item discounts
       await pool.query('UPDATE orders SET total=$1 WHERE id=$2', [totalRes.rows[0].total || 0, item.order_id]);
       io.emit('item_voided', { item_id: req.params.id });
       const countRes = await pool.query('SELECT COUNT(*) as remaining FROM order_items WHERE order_id=$1 AND voided=0', [item.order_id]);
@@ -814,7 +837,9 @@ app.put('/api/order-items/:id/void', async (req, res) => {
         if (orderRes.rows[0]) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [orderRes.rows[0].table_id]);
       }
     }
-    res.json({ success: true });
+    // SEPOS-047c — return the ghost id so a desktop sync push can bind its
+    // local ghost to this cloud ghost (prevents duplicate on next pull).
+    res.json({ success: true, ghost_item_id: ghostItemId });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -897,6 +922,19 @@ app.post('/api/orders/:id/pay', async (req, res) => {
     // the INSERT blow up with a FK violation and returning a raw 500.
     const existing = await pool.query('SELECT id FROM orders WHERE id=$1', [orderId]);
     if (!existing.rows[0]) return res.status(404).json({ error: 'Order not found' });
+    // SEPOS-047c — explicit cancel of an empty/all-voided order. The
+    // OrderScreen Back button sends amount=0, method='cancelled'; the
+    // BUG-002 positive-amount guard below was rejecting it (400), so the
+    // order stayed 'open' and the table stayed occupied forever. Honour
+    // the cancel here (no payment row), then fall through to the shared
+    // table-freeing logic by marking status='cancelled'.
+    if (String(method).toLowerCase() === 'cancelled' && Number(amount) === 0) {
+      await pool.query("UPDATE orders SET status='cancelled', closed_at=NOW() WHERE id=$1", [orderId]);
+      const cRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [orderId]);
+      const cTableId = cRes.rows[0]?.table_id;
+      if (cTableId) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [cTableId]);
+      return res.json({ success: true, cancelled: true });
+    }
     // BUG-002 — reject non-positive / non-numeric payment amounts.
     // A negative amount used to record with 200 OK, which is a way to
     // quietly reduce takings.
@@ -1896,7 +1934,7 @@ app.put('/api/orders/:id/merge', async (req, res) => {
     const mergeRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [merge_order_id]);
     if (mergeRes.rows[0]) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [mergeRes.rows[0].table_id]);
     await pool.query("UPDATE orders SET status='closed', closed_at=NOW() WHERE id=$1", [merge_order_id]);
-    const totalRes = await pool.query('SELECT SUM(quantity * unit_price) as total FROM order_items WHERE order_id=$1 AND voided=0', [targetOrderId]);
+    const totalRes = await pool.query(`SELECT ${ORDER_TOTAL_EXPR} as total FROM order_items WHERE order_id=$1 AND voided=0`, [targetOrderId]); // SEPOS-047c — keep per-item discounts
     await pool.query('UPDATE orders SET total=$1 WHERE id=$2', [totalRes.rows[0].total || 0, targetOrderId]);
     io.emit('table_merged', { target_order_id: targetOrderId, merged_order_id: merge_order_id });
     res.json({ success: true });
@@ -2001,9 +2039,18 @@ app.delete('/api/orders/:id', async (req, res) => {
     // /api/sync/delete-order endpoint. On cloud mode the offlineQueue
     // helper is a no-op, so this line just falls through silently and
     // the in-process delete above IS the cloud delete.
+    // SEPOS-047c — NEVER fall back to the local id here. cloud_id is the
+    // cloud's primary key for this order; the local SQLite id is a
+    // DIFFERENT number. The old `order.cloud_id || orderId` sent the local
+    // id whenever cloud_id was unbound (order made offline, or deleted
+    // inside the ~5s window before its create push bound cloud_id), and
+    // the cloud then cascade-deleted whichever order happened to own that
+    // id — a wrong, unrecoverable delete. null means "never reached the
+    // cloud"; applyToCloud skips the push rather than guess. (This payload
+    // is only read in DB_MODE=local; the enqueue is a no-op on cloud.)
     await offlineQueue.enqueue('delete_order', {
       localOrderId: orderId,
-      cloudOrderId: order.cloud_id || orderId,  // cloud Mode: cloud_id == orderId
+      cloudOrderId: order.cloud_id || null,
       staff_name:   staff.name,
       staff_role:   staff.role,
       reason:       String(reason).trim(),
@@ -2557,7 +2604,7 @@ app.put('/api/order-items/:id/discount', async (req, res) => {
     await pool.query('UPDATE order_items SET discount_type=$1, discount_value=$2 WHERE id=$3', [discount_type, discount_value, req.params.id]);
     const itemRes = await pool.query('SELECT order_id FROM order_items WHERE id=$1', [req.params.id]);
     if (itemRes.rows[0]) {
-      const totalRes = await pool.query(`SELECT SUM(CASE WHEN discount_type = 'percent' THEN quantity * unit_price * (1 - COALESCE(discount_value,0)/100) WHEN discount_type = 'fixed' THEN GREATEST(0, quantity * unit_price - COALESCE(discount_value,0)) ELSE quantity * unit_price END) as total FROM order_items WHERE order_id=$1 AND voided=0`, [itemRes.rows[0].order_id]);
+      const totalRes = await pool.query(`SELECT ${ORDER_TOTAL_EXPR} as total FROM order_items WHERE order_id=$1 AND voided=0`, [itemRes.rows[0].order_id]); // SEPOS-047c — shared discounted-total expr
       await pool.query('UPDATE orders SET total=$1 WHERE id=$2', [totalRes.rows[0].total || 0, itemRes.rows[0].order_id]);
     }
     res.json({ success: true });

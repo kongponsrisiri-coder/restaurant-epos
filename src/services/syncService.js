@@ -252,11 +252,24 @@ async function applyToCloud(actionType, payload) {
     }
     case 'void_item': {
       const cloudItemId = (await getItemCloudId(payload.localItemId)) || payload.localItemId;
+      // SEPOS-047c — forward quantity + void_type so the cloud voids the
+      // SAME amount (was {reason} only → cloud voided the WHOLE line).
       const r = await fetch(url(`/api/order-items/${cloudItemId}/void`), {
-        method: 'PUT', ...json({ reason: payload.reason }),
+        method: 'PUT', ...json({
+          reason: payload.reason,
+          quantity: payload.quantity,
+          void_type: payload.void_type ?? null,
+        }),
       });
       if (!r.ok) throw new Error(`void_item ${r.status}`);
-      return r.json();
+      const j = await r.json();
+      // Bind the local partial-void ghost to the cloud ghost so the next
+      // pullActiveOrders UPDATEs it instead of INSERTing a second ghost
+      // (which would double-count the voided quantity locally).
+      if (payload.ghostLocalId && j?.ghost_item_id) {
+        await setItemCloudId(payload.ghostLocalId, j.ghost_item_id);
+      }
+      return j;
     }
     case 'update_item_status': {
       // Pass tap "Done" / chef tap "Cooked" on a local-mode install.
@@ -298,8 +311,14 @@ async function applyToCloud(actionType, payload) {
       // so we use the cloudOrderId captured in the payload. Cloud-side
       // endpoint is SYNC_SECRET-gated — the manager PIN was already
       // validated on the Mac before this got queued.
-      const cloudId = payload.cloudOrderId || payload.localOrderId;
-      if (!cloudId) return { skipped: true, reason: 'no cloud_id' };
+      // SEPOS-047c — use ONLY the cloud id; never the local id (deleting
+      // by local id hits a different cloud order). null → the order never
+      // reached the cloud, so there's nothing to delete there.
+      const cloudId = payload.cloudOrderId;
+      if (!cloudId) {
+        console.warn(`[sync] delete_order: local order ${payload.localOrderId} had no cloud_id — never synced, skipping cloud delete`);
+        return { skipped: true, reason: 'never synced to cloud' };
+      }
       if (!process.env.SYNC_SECRET) {
         // Throw so the queue entry stays pending and retries — the moment
         // SYNC_SECRET is configured (Mac config.json or env), the next

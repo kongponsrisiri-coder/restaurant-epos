@@ -181,146 +181,170 @@ export default function LoginScreen({ onLogin }) {
         borderRadius: 20,
         padding: '28px 28px 24px',
         width: '100%',
-        maxWidth: 320,
+        // SEPOS-055 — widen to fit name-list (left) + PIN pad (right).
+        maxWidth: (mode === 'pin' && staffList.length > 0) ? 600 : 320,
       }}>
 
-        {/* SEPOS-055 — staff name picker: tap your name, then enter your PIN. */}
-        {mode === 'pin' && !selectedStaff && staffList.length > 0 && (
-          <div style={{ marginBottom: 4 }}>
-            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', marginBottom: 14, letterSpacing: '0.04em' }}>
-              Tap your name
+        {/* SEPOS-055 — two-column staff login: name list (left) + PIN pad
+            (right), both visible. Tap a name to select it (highlighted), then
+            tap the passcode. Falls back to a single PIN pad (no left list)
+            when the staff list is unavailable (offline / not yet synced). */}
+        {mode === 'pin' && (
+        <div style={{ display: 'flex', gap: 22, alignItems: 'stretch', flexWrap: 'wrap' }}>
+
+          {/* LEFT — staff name list */}
+          {staffList.length > 0 && (
+            <div style={{ flex: '1 1 180px', minWidth: 170, maxWidth: 230, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginBottom: 10, letterSpacing: '0.06em', textTransform: 'uppercase', textAlign: 'center' }}>
+                Tap your name
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 360, overflowY: 'auto', paddingRight: 2 }}>
+                {staffList.map(s => {
+                  const sel = selectedStaff?.id === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => { setSelectedStaff(s); setPin(''); setError(''); setSuccess(''); }}
+                      style={{
+                        minHeight: 50, borderRadius: 11, cursor: 'pointer', padding: '8px 12px', textAlign: 'left',
+                        border: sel ? '1px solid #C9A84C' : '1px solid rgba(201,168,76,0.22)',
+                        background: sel ? 'rgba(201,168,76,0.18)' : 'rgba(255,255,255,0.05)',
+                        color: 'white', fontSize: 15, fontWeight: 700,
+                        display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 1,
+                        transition: 'background 0.1s, border-color 0.1s',
+                      }}
+                    >
+                      <span>{s.name}</span>
+                      {s.role && <span style={{ fontSize: 11, fontWeight: 500, color: sel ? '#C9A84C' : 'rgba(201,168,76,0.55)', textTransform: 'capitalize' }}>{s.role}</span>}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, maxHeight: 320, overflowY: 'auto' }}>
-              {staffList.map(s => (
-                <button
-                  key={s.id}
-                  onClick={() => { setSelectedStaff(s); setPin(''); setError(''); setSuccess(''); }}
-                  style={{
-                    minHeight: 56, borderRadius: 12, border: '1px solid rgba(201,168,76,0.25)',
-                    background: 'rgba(255,255,255,0.06)', color: 'white',
-                    fontSize: 15, fontWeight: 700, cursor: 'pointer', padding: '8px 10px',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
-                  }}
-                >
-                  <span>{s.name}</span>
-                  {s.role && <span style={{ fontSize: 11, fontWeight: 500, color: 'rgba(201,168,76,0.6)', textTransform: 'capitalize' }}>{s.role}</span>}
-                </button>
-              ))}
+          )}
+
+          {/* RIGHT — PIN pad */}
+          <div style={{ flex: '1 1 240px', minWidth: 230 }}>
+            {/* PIN dots / prompt */}
+            <div style={{ height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 14 }}>
+              {pin.length === 0 ? (
+                <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14, letterSpacing: '0.04em' }}>
+                  {selectedStaff ? `Enter ${selectedStaff.name}'s PIN`
+                    : staffList.length > 0 ? 'Tap your name to start'
+                    : 'Enter your PIN'}
+                </span>
+              ) : (
+                Array.from({ length: pin.length }).map((_, i) => (
+                  <div key={i} style={{ width: 13, height: 13, borderRadius: '50%', background: '#C9A84C' }} />
+                ))
+              )}
+            </div>
+
+            {/* Error / success — fixed-height slot so the pad never shifts */}
+            <div style={{ height: 38, marginBottom: 12 }}>
+              {(error || success) && (
+                <div style={{
+                  background: error ? 'rgba(239,68,68,0.14)' : 'rgba(34,197,94,0.16)',
+                  border: `1px solid ${error ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.4)'}`,
+                  color: error ? '#fca5a5' : '#86efac',
+                  borderRadius: 8, padding: '8px 12px',
+                  fontSize: 12.5, textAlign: 'center', fontWeight: 500,
+                }}>
+                  {error || success}
+                </div>
+              )}
+            </div>
+
+            {/* Numpad */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
+              {keys.map((k, i) => {
+                if (k === '') return <div key={i} />;
+                const isDel = k === '⌫';
+                return (
+                  <button
+                    key={i}
+                    onClick={() => isDel ? pressDelete() : pressDigit(k)}
+                    disabled={loading}
+                    style={{
+                      height: 54, borderRadius: 12, border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
+                      background: isDel ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.07)',
+                      color: isDel ? '#fca5a5' : 'white',
+                      fontSize: isDel ? 20 : 22, fontWeight: 700,
+                      transition: 'background 0.1s, transform 0.07s',
+                      fontFamily: 'system-ui, -apple-system, sans-serif',
+                    }}
+                    onMouseDown={e => { if (!loading) e.currentTarget.style.transform = 'scale(0.94)'; }}
+                    onMouseUp={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                  >
+                    {k}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Login button */}
+            <button
+              onClick={() => handleLogin()}
+              disabled={loading || pin.length === 0}
+              style={{
+                width: '100%', height: 50, borderRadius: 12, border: 'none',
+                background: loading        ? 'rgba(255,255,255,0.1)'
+                          : pin.length > 0 ? '#e94560'
+                          : 'rgba(255,255,255,0.07)',
+                color: pin.length > 0 && !loading ? 'white' : 'rgba(255,255,255,0.3)',
+                fontSize: 16, fontWeight: 800,
+                cursor: pin.length > 0 && !loading ? 'pointer' : 'default',
+                transition: 'background 0.15s',
+                letterSpacing: '0.03em',
+              }}
+            >
+              {loading ? 'Checking…' : 'Log In'}
+            </button>
+
+            {/* SEPOS-022 — clock in/out (no app login, just records the event) */}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button
+                onClick={() => handleClock('in')}
+                disabled={loading || pin.length === 0}
+                style={{
+                  flex: 1, height: 40, borderRadius: 10, border: '1px solid rgba(201,168,76,0.3)',
+                  background: 'transparent', color: pin.length > 0 ? '#C9A84C' : 'rgba(201,168,76,0.35)',
+                  fontSize: 13, fontWeight: 700, letterSpacing: '0.04em',
+                  cursor: pin.length > 0 && !loading ? 'pointer' : 'default',
+                }}
+              >🕐 Clock In</button>
+              <button
+                onClick={() => handleClock('out')}
+                disabled={loading || pin.length === 0}
+                style={{
+                  flex: 1, height: 40, borderRadius: 10, border: '1px solid rgba(201,168,76,0.3)',
+                  background: 'transparent', color: pin.length > 0 ? '#C9A84C' : 'rgba(201,168,76,0.35)',
+                  fontSize: 13, fontWeight: 700, letterSpacing: '0.04em',
+                  cursor: pin.length > 0 && !loading ? 'pointer' : 'default',
+                }}
+              >Clock Out 🕔</button>
             </div>
           </div>
+        </div>
         )}
 
-        {/* PIN dots / placeholder — shown once a name is picked (or when the
-            staff list is unavailable, falling back to direct PIN entry). */}
-        {mode === 'pin' && (selectedStaff || staffList.length === 0) && (<>
-        {selectedStaff && (
-          <button
-            onClick={() => { setSelectedStaff(null); setPin(''); setError(''); setSuccess(''); }}
-            style={{ background: 'none', border: 'none', color: 'rgba(201,168,76,0.75)', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'block', margin: '0 auto 8px' }}
-          >‹ {selectedStaff.name} — change</button>
+        {/* Error / success slot for EMAIL mode (pin mode has its own above) */}
+        {mode === 'email' && (
+          <div style={{ height: 38, marginBottom: 12 }}>
+            {(error || success) && (
+              <div style={{
+                background: error ? 'rgba(239,68,68,0.14)' : 'rgba(34,197,94,0.16)',
+                border: `1px solid ${error ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.4)'}`,
+                color: error ? '#fca5a5' : '#86efac',
+                borderRadius: 8, padding: '9px 14px',
+                fontSize: 13, textAlign: 'center', fontWeight: 500,
+              }}>
+                {error || success}
+              </div>
+            )}
+          </div>
         )}
-        <div style={{ height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 20 }}>
-          {pin.length === 0 ? (
-            <span style={{ color: 'rgba(255,255,255,0.22)', fontSize: 14, letterSpacing: '0.05em' }}>
-              {selectedStaff ? `Enter ${selectedStaff.name}'s PIN` : 'Enter your PIN'}
-            </span>
-          ) : (
-            Array.from({ length: pin.length }).map((_, i) => (
-              <div key={i} style={{ width: 13, height: 13, borderRadius: '50%', background: '#C9A84C' }} />
-            ))
-          )}
-        </div>
-        </>)}
-
-        {/* Error / success — fixed-height slot so numpad never shifts */}
-        <div style={{ height: 38, marginBottom: 16 }}>
-          {(error || success) && (
-            <div style={{
-              background: error ? 'rgba(239,68,68,0.14)' : 'rgba(34,197,94,0.16)',
-              border: `1px solid ${error ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.4)'}`,
-              color: error ? '#fca5a5' : '#86efac',
-              borderRadius: 8, padding: '9px 14px',
-              fontSize: 13, textAlign: 'center', fontWeight: 500,
-            }}>
-              {error || success}
-            </div>
-          )}
-        </div>
-
-        {/* SEPOS-LITE-003 — PIN entry (staff). Email form below for owners.
-            SEPOS-055 — only after a name is picked (or no staff list to pick). */}
-        {mode === 'pin' && (selectedStaff || staffList.length === 0) && (<>
-        {/* Numpad */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
-          {keys.map((k, i) => {
-            if (k === '') return <div key={i} />;
-            const isDel = k === '⌫';
-            return (
-              <button
-                key={i}
-                onClick={() => isDel ? pressDelete() : pressDigit(k)}
-                disabled={loading}
-                style={{
-                  height: 58, borderRadius: 12, border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
-                  background: isDel ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.07)',
-                  color: isDel ? '#fca5a5' : 'white',
-                  fontSize: isDel ? 20 : 22, fontWeight: 700,
-                  transition: 'background 0.1s, transform 0.07s',
-                  fontFamily: 'system-ui, -apple-system, sans-serif',
-                }}
-                onMouseDown={e => { if (!loading) e.currentTarget.style.transform = 'scale(0.94)'; }}
-                onMouseUp={e => { e.currentTarget.style.transform = 'scale(1)'; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
-              >
-                {k}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Login button */}
-        <button
-          onClick={() => handleLogin()}
-          disabled={loading || pin.length === 0}
-          style={{
-            width: '100%', height: 52, borderRadius: 12, border: 'none',
-            background: loading        ? 'rgba(255,255,255,0.1)'
-                      : pin.length > 0 ? '#e94560'
-                      : 'rgba(255,255,255,0.07)',
-            color: pin.length > 0 && !loading ? 'white' : 'rgba(255,255,255,0.3)',
-            fontSize: 16, fontWeight: 800,
-            cursor: pin.length > 0 && !loading ? 'pointer' : 'default',
-            transition: 'background 0.15s',
-            letterSpacing: '0.03em',
-          }}
-        >
-          {loading ? 'Checking…' : 'Log In'}
-        </button>
-
-        {/* SEPOS-022 — clock in/out (no app login, just records the event) */}
-        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <button
-            onClick={() => handleClock('in')}
-            disabled={loading || pin.length === 0}
-            style={{
-              flex: 1, height: 42, borderRadius: 10, border: '1px solid rgba(201,168,76,0.3)',
-              background: 'transparent', color: pin.length > 0 ? '#C9A84C' : 'rgba(201,168,76,0.35)',
-              fontSize: 13, fontWeight: 700, letterSpacing: '0.04em',
-              cursor: pin.length > 0 && !loading ? 'pointer' : 'default',
-            }}
-          >🕐 Clock In</button>
-          <button
-            onClick={() => handleClock('out')}
-            disabled={loading || pin.length === 0}
-            style={{
-              flex: 1, height: 42, borderRadius: 10, border: '1px solid rgba(201,168,76,0.3)',
-              background: 'transparent', color: pin.length > 0 ? '#C9A84C' : 'rgba(201,168,76,0.35)',
-              fontSize: 13, fontWeight: 700, letterSpacing: '0.04em',
-              cursor: pin.length > 0 && !loading ? 'pointer' : 'default',
-            }}
-          >Clock Out 🕔</button>
-        </div>
-        </>)}
 
         {/* SEPOS-LITE-003 — email + password login (Lite owners) */}
         {mode === 'email' && (

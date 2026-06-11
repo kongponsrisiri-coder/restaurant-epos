@@ -145,7 +145,7 @@ export default function ZReportSection() {
   const exportReportCsv = () => {
     if (!reportData) return;
     const rows = [];
-    rows.push(['Z Report', reportType === 'day' ? 'End of Day' : 'Shift Close']);
+    rows.push(['Z Report', reportType === 'day' ? 'End of Day' : reportType === 'custom' ? 'Custom Range Report' : 'Shift Close']);
     rows.push(['From', reportData.from || '']);
     rows.push(['To', reportData.to || '']);
     rows.push([]);
@@ -191,7 +191,7 @@ export default function ZReportSection() {
   const doPrintZ = async (mode) => {
     if (!reportData) return;
     const isThermal = (mode === 'thermal');
-    const title = (reportType === 'day' ? 'End of Day' : 'Shift Close') + ' — ' + restaurantName(settings);
+    const title = (reportType === 'day' ? 'End of Day' : reportType === 'custom' ? 'Custom Range Report' : 'Shift Close') + ' — ' + restaurantName(settings);
     if (isThermal) {
       const lines = buildZReportLines(reportData, reportType, settings,
         { floatAmount: floatNum, pettyCash: pettyNum, actualCash: actualNum, difference });
@@ -271,7 +271,7 @@ export default function ZReportSection() {
           </div>
           {history.length === 0 ? <div style={{ color: '#aaa', fontSize: 14 }}>No Z reports yet</div> : history.map(r => (
             <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f0f0f0', fontSize: 14 }}>
-              <div><span style={{ fontWeight: 600, marginRight: 8 }}>{r.type === 'day' ? '🌙 End of Day' : '⏰ Shift Close'}</span><span style={{ color: '#888' }}>{formatDateTime(r.closed_at)}</span></div>
+              <div><span style={{ fontWeight: 600, marginRight: 8 }}>{r.type === 'day' ? '🌙 End of Day' : r.type === 'custom' ? '📅 Custom Range' : '⏰ Shift Close'}</span><span style={{ color: '#888' }}>{formatDateTime(r.closed_at)}</span></div>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                 <span style={{ color: '#555' }}>{r.total_orders} orders</span>
                 <span style={{ fontWeight: 700, color: '#e94560' }}>£{Number(r.total_sales || 0).toFixed(2)}</span>
@@ -284,14 +284,14 @@ export default function ZReportSection() {
 
       {step === 1 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ background: '#fff8f0', borderRadius: 12, padding: 24, border: '1px solid #fed7aa' }}>
-            <div style={{ fontWeight: 700, fontSize: 16, color: '#c2410c', marginBottom: 8 }}>⏰ Close Shift</div>
-            <div style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>For lunch or dinner shift. Choose your time range.</div>
+          <div style={{ background: '#eff6ff', borderRadius: 12, padding: 24, border: '1px solid #bfdbfe' }}>
+            <div style={{ fontWeight: 700, fontSize: 16, color: '#1e40af', marginBottom: 8 }}>📅 Custom Range Report</div>
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>Run a Z for any past date/time range — e.g. last Tuesday's lunch. Does not open or close a shift.</div>
             <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 180 }}><label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>From</label><input type="datetime-local" value={fromTime} onChange={e => setFromTime(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
               <div style={{ flex: 1, minWidth: 180 }}><label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>To</label><input type="datetime-local" value={toTime} onChange={e => setToTime(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
             </div>
-            <button onClick={() => loadReport('shift')} disabled={loading} style={{ padding: '14px 28px', borderRadius: 10, border: 'none', background: '#f97316', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 15 }}>{loading ? 'Loading...' : '⏰ Run Shift Z Report'}</button>
+            <button onClick={() => loadReport('custom')} disabled={loading} style={{ padding: '14px 28px', borderRadius: 10, border: 'none', background: '#2563eb', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 15 }}>{loading ? 'Loading...' : '📅 Run Custom Report'}</button>
           </div>
           <div style={{ background: '#fff0f3', borderRadius: 12, padding: 24, border: '1px solid #fecdd3' }}>
             <div style={{ fontWeight: 700, fontSize: 16, color: '#e94560', marginBottom: 8 }}>🌙 End of Day</div>
@@ -327,7 +327,7 @@ export default function ZReportSection() {
           })()}
           <div style={{ background: 'white', borderRadius: 16, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: 20 }}>
             <div style={{ textAlign: 'center', paddingBottom: 16, marginBottom: 16, borderBottom: '2px dashed #eee' }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#1a1a2e' }}>{reportType === 'day' ? '🌙 END OF DAY' : '⏰ SHIFT CLOSE'}</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#1a1a2e' }}>{reportType === 'day' ? '🌙 END OF DAY' : reportType === 'custom' ? '📅 CUSTOM RANGE' : '⏰ SHIFT CLOSE'}</div>
               <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>{formatDateTime(reportData.from)} — {formatDateTime(reportData.to)}</div>
             </div>
             <div style={{ marginBottom: 20 }}>
@@ -469,7 +469,7 @@ export default function ZReportSection() {
             )}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={handleConfirmSave} style={{ flex: 2, padding: '16px', borderRadius: 12, border: 'none', background: reportType === 'day' ? '#e94560' : '#f97316', color: 'white', fontSize: 16, fontWeight: 800, cursor: 'pointer' }}>{reportType === 'day' ? '🌙 Confirm End of Day' : '⏰ Confirm Close Shift'}</button>
+            <button onClick={handleConfirmSave} style={{ flex: 2, padding: '16px', borderRadius: 12, border: 'none', background: reportType === 'day' ? '#e94560' : reportType === 'custom' ? '#2563eb' : '#16a34a', color: 'white', fontSize: 16, fontWeight: 800, cursor: 'pointer' }}>{reportType === 'day' ? '🌙 Confirm End of Day' : reportType === 'custom' ? '📅 Save Custom Report' : '✅ Confirm Close Shift'}</button>
             <button onClick={() => window.print()} style={{ flex: 1, padding: '16px', borderRadius: 12, border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>🖨️ Print</button>
             <button onClick={() => setStep(2)} style={{ flex: 1, padding: '16px', borderRadius: 12, border: 'none', background: '#f0f0f0', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>← Back</button>
           </div>
@@ -481,7 +481,7 @@ export default function ZReportSection() {
           <div style={{ background: 'white', borderRadius: 16, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: 20 }}>
             <div style={{ textAlign: 'center', marginBottom: 20 }}>
               <div style={{ fontSize: 48 }}>✅</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: '#22c55e', marginTop: 8 }}>{reportType === 'day' ? 'End of Day Complete!' : 'Shift Closed!'}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#22c55e', marginTop: 8 }}>{reportType === 'day' ? 'End of Day Complete!' : reportType === 'custom' ? 'Report Saved!' : 'Shift Closed!'}</div>
               <div style={{ fontSize: 13, color: '#888', marginTop: 4 }}>{formatDateTime(reportData.from)} — {formatDateTime(reportData.to)}</div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 16 }}>
@@ -510,7 +510,7 @@ export default function ZReportSection() {
 function buildZReportBody(r, type, settings, cash, thermal) {
   const head = thermal
     ? `<div class="center" style="font-size:13px;font-weight:900;letter-spacing:1px;">${restaurantName(settings)}</div>
-       <div class="center small">${type === 'day' ? 'END OF DAY' : 'SHIFT CLOSE'}</div>
+       <div class="center small">${type === 'day' ? 'END OF DAY' : type === 'custom' ? 'CUSTOM RANGE' : 'SHIFT CLOSE'}</div>
        <div class="center small muted">${r.from || ''} → ${r.to || ''}</div>
        <div class="center small muted">${nowStamp()}</div>
        <hr class="divider"/>`
@@ -578,7 +578,7 @@ function buildZReportBody(r, type, settings, cash, thermal) {
 function buildZReportLines(r, type, settings, cash) {
   const lines = [];
   lines.push({ kind: 'h1', text: restaurantName(settings) });
-  lines.push({ kind: 'h2', text: type === 'day' ? 'END OF DAY' : 'SHIFT CLOSE' });
+  lines.push({ kind: 'h2', text: type === 'day' ? 'END OF DAY' : type === 'custom' ? 'CUSTOM RANGE' : 'SHIFT CLOSE' });
   if (r.from) lines.push({ kind: 'small', text: `${r.from} -> ${r.to}` });
   lines.push({ kind: 'small', text: nowStamp() });
   lines.push({ kind: 'div' });

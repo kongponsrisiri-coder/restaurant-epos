@@ -205,8 +205,18 @@ async function applyToCloud(actionType, payload) {
       // don't re-create on the cloud — the queue replay is idempotent.
       const existing = await getOrderCloudId(payload.localOrderId);
       if (existing) return { id: existing };
+      // SEPOS-047f — forward staff_id + order_type too. Without them the
+      // cloud defaulted every pushed order to order_type='dine_in',
+      // staff_id NULL, so counter/takeaway orders lost their 🥡 flow and
+      // staff attribution — and the corruption round-tripped: the next
+      // pullActiveOrders cloud-wins UPDATE flipped the LOCAL row to dine_in.
       const r = await fetch(url('/api/orders'), {
-        method: 'POST', ...json({ table_id: payload.table_id, covers: payload.covers }),
+        method: 'POST', ...json({
+          table_id:   payload.table_id,
+          covers:     payload.covers,
+          staff_id:   payload.staff_id,
+          order_type: payload.order_type,
+        }),
       });
       if (!r.ok) throw new Error(`create_order ${r.status}`);
       const j = await r.json();
@@ -751,7 +761,10 @@ async function upsertClosedOrders(orders, order_items, payments) {
     return f;
   };
 
-  let skipped = 0;
+  let skipped = 0, closedApplied = 0;
+  // SEPOS-047f — local orders with a pending push are authoritative; never
+  // clobber them with the cloud echo.
+  const pendingOrderIds = await ordersWithPendingPush();
   for (const cloudOrder of orders) {
     const cloudId = cloudOrder.id;
     if (!cloudId) continue;
@@ -760,16 +773,34 @@ async function upsertClosedOrders(orders, order_items, payments) {
     const fields = pickFields(cloudOrder, orderCols, { cloud_id: cloudId });
 
     if (localId) {
-      // SEPOS-LOCAL-001 Phase 2 — Mac is the source of truth. If we
-      // already have this cloud_id locally, the order was either created
-      // here (and we pushed it up) or pulled in an earlier tick. Either
-      // way the local row is authoritative — skip the UPDATE rather
-      // than clobber local state with Railway's (possibly stale) echo
-      // of our own data. Saves CPU + DB writes on every 5s sync tick.
-      // If we ever need cloud-edits-to-closed-bills, gate this skip on
-      // a cloud updated_at being newer than local updated_at.
-      skipped++;
-      continue;
+      // SEPOS-LOCAL-001 Phase 2 — Mac is the source of truth for orders it
+      // owns. BUT: an order created on a CLOUD terminal is pulled here while
+      // still open (SEPOS-PRO-002 bidirectional flow); when it's later
+      // closed/paid on the cloud it vanishes from the active-orders feed,
+      // and this function used to skip it because the cloud_id was already
+      // bound — so it stayed status='open' on the till FOREVER, with its
+      // payments never landing locally (missing from Z-report + bill
+      // history). SEPOS-047f: if the local row is still 'open' and the till
+      // has no pending push for it, apply the close (UPDATE + children
+      // replace) below. Only skip when local is already closed or we own a
+      // pending mutation for it.
+      const stRes = await pool.query('SELECT status FROM orders WHERE id = $1', [localId]);
+      const localStatus = stRes.rows[0]?.status;
+      if (localStatus === 'open' && !pendingOrderIds.has(Number(localId))) {
+        const setCols = Object.keys(fields).filter(k => k !== 'cloud_id');
+        if (setCols.length > 0) {
+          const sets = setCols.map((c, i) => `${c} = $${i + 1}`).join(',');
+          await pool.query(
+            `UPDATE orders SET ${sets} WHERE id = $${setCols.length + 1}`,
+            [...setCols.map(c => fields[c]), localId]
+          );
+        }
+        closedApplied++;
+        // fall through to the children replace below
+      } else {
+        skipped++;
+        continue;
+      }
     } else {
       const cols = Object.keys(fields);
       const ph = cols.map((_, i) => `$${i + 1}`).join(',');
@@ -803,7 +834,7 @@ async function upsertClosedOrders(orders, order_items, payments) {
       } catch (err) { console.warn('[sync] closed-order payment insert failed:', err.message); }
     }
   }
-  if (skipped > 0) console.log(`[sync] closed-orders: ${skipped} skipped (already local — Phase 2)`);
+  if (skipped > 0 || closedApplied > 0) console.log(`[sync] closed-orders: ${closedApplied} applied (cloud-closed), ${skipped} skipped (already local — Phase 2)`);
 }
 
 async function pullClosedOrders() {
@@ -873,7 +904,12 @@ async function syncOnce() {
       return;
     }
   }
-  orderIdMap.clear();
+  // SEPOS-047f — the in-memory orderIdMap was removed in SEPOS-PRO-002
+  // (replaced by orders.cloud_id columns). The leftover orderIdMap.clear()
+  // threw a ReferenceError after every fully-drained queue, which
+  // propagated into tick() and SKIPPED that tick's pullFromCloud — so the
+  // pull a busy till most needs (right after pushing) was always lost, and
+  // the log filled with "tick failed: orderIdMap is not defined" every 5s.
 }
 
 async function tick() {

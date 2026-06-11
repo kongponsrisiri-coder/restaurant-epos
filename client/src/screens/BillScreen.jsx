@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getBill, markBillPrinted, getVoucher, redeemVoucher, payOrder, applyDiscount, removeVoucherFromBill } from '../api';
+import { getBill, markBillPrinted, getVoucher, redeemVoucher, applyDiscount, removeVoucherFromBill, assertOk } from '../api';
 import { printReceipt } from './ReceiptPrinter';
 import { orderShortLabelPlain, orderSubLabel, isTakeaway } from '../utils/orderLabel';
 import { confirm } from '../utils/confirm';
@@ -252,15 +252,21 @@ export default function BillScreen({ orderId, onClose, onPay }) {
       const r = await redeemVoucher(code, useAmount, orderId, null);
       if (r.error) { setVoucherErr(r.error); setVoucherLoading(false); return; }
       if (isFull) {
-        // Voucher covers the full bill — close as method='voucher'.
-        await payOrder(orderId, billTotal, 'voucher');
+        // SEPOS-047d — voucher covers the full bill. Do NOT call payOrder
+        // here: the receipt "✓ Done" button (handleFinish → onPay) records
+        // the single payment for EVERY method. The old payOrder('voucher')
+        // here plus onPay('Voucher') on Done wrote TWO payment rows, double-
+        // counting voucher takings in Z / Reports. Just show the receipt;
+        // onPay closes the order as method='Voucher'.
         setPaymentDetails({ method: 'Voucher', amountPaid: billTotal, tip: 0, change: 0, voucher_code: code });
         setStage('receipt');
       } else {
         // Partial — apply as a discount, leave the bill open for Cash/Card
         // to settle the remainder. Customer-facing wording mirrors the
-        // spa pattern so the receipt reads sensibly.
-        await applyDiscount(orderId, 'fixed', useAmount, `Voucher ${code} −£${useAmount.toFixed(2)}`);
+        // spa pattern so the receipt reads sensibly. assertOk so a failed
+        // discount (after the voucher was already redeemed server-side)
+        // surfaces in the catch instead of silently vanishing the balance.
+        assertOk(await applyDiscount(orderId, 'fixed', useAmount, `Voucher ${code} −£${useAmount.toFixed(2)}`));
         const fresh = await getBill(orderId);
         setBill(fresh);
         setStage('bill');

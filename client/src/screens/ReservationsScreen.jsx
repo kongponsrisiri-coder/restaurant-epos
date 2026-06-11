@@ -218,7 +218,15 @@ export default function ReservationsScreen() {
     setReservations(prev => prev.map(x => x.id === r.id ? { ...x, status } : x));
     showToast(toastMsg);
     try {
-      await apiFetch(`/api/reservations/${r.id}`, { method: 'PUT', body: JSON.stringify({ ...r, reservation_date: (r.reservation_date||'').split('T')[0], reservation_time: (r.reservation_time||'').slice(0,5), status }) });
+      // SEPOS-047h — send table_ids as an ARRAY. r.table_ids is the CSV
+      // string the API returns ("5,6"); the server only honoured the Array
+      // form, so this status-only PUT used to collapse a multi-table booking
+      // to just its primary table. (The server now also accepts CSV as
+      // defence in depth, but sending the right shape is the real fix.)
+      const tableIdsArr = Array.isArray(r.table_ids)
+        ? r.table_ids
+        : String(r.table_ids || '').split(',').map(s => s.trim()).filter(Boolean);
+      await apiFetch(`/api/reservations/${r.id}`, { method: 'PUT', body: JSON.stringify({ ...r, table_ids: tableIdsArr, reservation_date: (r.reservation_date||'').split('T')[0], reservation_time: (r.reservation_time||'').slice(0,5), status }) });
     } catch (e) {
       showToast(e?.message || 'Update failed', 'error');
       loadData();

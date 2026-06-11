@@ -2965,6 +2965,12 @@ app.put('/api/reservations/:id', async (req, res) => {
     let tableIdsArr;
     if (Array.isArray(req.body.table_ids)) {
       tableIdsArr = req.body.table_ids.map(Number).filter(Boolean);
+    } else if (typeof req.body.table_ids === 'string' && req.body.table_ids.trim() !== '') {
+      // SEPOS-047h — accept the CSV form ("5,6") too. GET returns table_ids
+      // as a CSV string, so a client that echoes the row back (e.g. an
+      // optimistic status PUT) was failing the Array check and collapsing a
+      // multi-table booking to just its primary table. Defence in depth.
+      tableIdsArr = req.body.table_ids.split(',').map(Number).filter(Boolean);
     } else if (table_id != null && table_id !== '') {
       tableIdsArr = [Number(table_id)].filter(Boolean);
     } else {

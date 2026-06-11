@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getTables, createOrder, getOrders, getTableStatus, moveTable, mergeTables, getReservations } from '../api';
+import { getTables, createOrder, getOrders, getTableStatus, moveTable, mergeTables, getReservations, assertOk } from '../api';
 import TakeawayStrip    from '../components/TakeawayStrip';
 import BillPeek         from '../components/BillPeek';
 import SyncHealthBanner from '../components/SyncHealthBanner';
@@ -144,13 +144,18 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
         return;
       }
       try {
-        await moveTable(tableActionPopup.order.id, table.id);
+        // SEPOS-047h — assertOk: api.js resolves {error} on HTTP 4xx/5xx
+        // instead of throwing, so without this the catch was dead code and
+        // "✅ Moved!" showed even when the move 404'd (order closed/deleted
+        // on another terminal) or 500'd — leaving both tables wrong.
+        assertOk(await moveTable(tableActionPopup.order.id, table.id));
         alert(`✅ Moved to Table ${table.table_number}!`);
         setMoveMode(false);
         setTableActionPopup(null);
         fetchData();
       } catch (err) {
-        alert('Failed to move table!');
+        alert(`Failed to move table: ${err.message || 'please try again'}`);
+        fetchData();
       }
       return;
     }
@@ -166,13 +171,14 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
       }
       if (!confirm(`Merge Table ${table.table_number} into Table ${tableActionPopup.table.table_number}? All items will combine.`)) return;
       try {
-        await mergeTables(tableActionPopup.order.id, existingOrder.id);
+        assertOk(await mergeTables(tableActionPopup.order.id, existingOrder.id)); // SEPOS-047h — see move note above
         alert(`✅ Tables merged! Table ${table.table_number} combined into Table ${tableActionPopup.table.table_number}`);
         setMergeMode(false);
         setTableActionPopup(null);
         fetchData();
       } catch (err) {
-        alert('Failed to merge tables!');
+        alert(`Failed to merge tables: ${err.message || 'please try again'}`);
+        fetchData();
       }
       return;
     }
@@ -665,12 +671,17 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                     const num = parseInt(coversInput);
                     if (isNaN(num) || num < 1) return alert('Please enter number of covers!');
                     try {
+                      // SEPOS-047h — createOrder resolves {error} (no throw)
+                      // on failure; without this guard data.id was undefined
+                      // and onOpenOrder(undefined) opened a broken OrderScreen
+                      // for a nonexistent order. Verify the id before nav.
                       const data = await createOrder(showCoversPopup.id, num, staff?.id);
+                      if (!data?.id) throw new Error(data?.error || 'No order id returned');
                       setShowCoversPopup(null);
                       setCoversInput('');
                       onOpenOrder(data.id, showCoversPopup.id);
                     } catch (err) {
-                      alert('Failed to create order!');
+                      alert(`Failed to create order: ${err.message || 'please try again'}`);
                     }
                   } else {
                     setCoversInput(prev => prev.length < 2 ? prev + btn : prev);

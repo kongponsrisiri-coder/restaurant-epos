@@ -4,7 +4,8 @@ import {
   thermalPrint, fullPagePrint, escPosPrint, pageHtml,
   fmt, fmtInt, restaurantName, nowStamp,
 } from '../../utils/reportPrinter';
-import { getZReportPreview, saveZReport, getZReportHistory } from '../../api';
+import { getZReportPreview, getZReportPreviewBySession, saveZReport, getZReportHistory,
+         getCurrentSession, openSession, closeSession } from '../../api';
 import { downloadCsv } from '../../utils/csv';
 import { confirm } from '../../utils/confirm';
 
@@ -22,6 +23,14 @@ export default function ZReportSection() {
   const [pettyCash, setPettyCash]           = useState('');
   const [pettyCashReason, setPettyCashReason] = useState('');
   const [actualCash, setActualCash]         = useState('');
+  // SEPOS-053 — current open trading session (EposNow-style shift)
+  const [session, setSession]       = useState(null);   // { session, orders, takings } | null
+  const [openFloat, setOpenFloat]   = useState('');
+  const [shiftBusy, setShiftBusy]   = useState(false);
+
+  const refreshSession = () => getCurrentSession()
+    .then(r => setSession(r && r.session ? r : null))
+    .catch(() => {});
 
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
@@ -42,17 +51,38 @@ export default function ZReportSection() {
     getZReportHistory().then(setHistory);
     setFromTime(formatLocalDateTime(new Date(now.getFullYear(), now.getMonth(), now.getDate())));
     setToTime(formatLocalDateTime(now));
+    refreshSession();
   }, []);
 
   const loadReport = async (type) => {
     setReportType(type); setLoading(true); setSaved(false);
     try {
-      const from = type === 'day' ? todayStart : new Date(fromTime).toISOString();
-      const to   = type === 'day' ? todayEnd   : new Date(toTime).toISOString();
-      const data = await getZReportPreview(from, to);
+      let data, from, to;
+      if (type === 'session') {
+        // SEPOS-053 — scope the Z to the open shift's own window (open→now),
+        // not a calendar date, so it spans midnight free of the timezone edge.
+        data = await getZReportPreviewBySession(session.session.id);
+        from = data.from; to = data.to;
+      } else {
+        from = type === 'day' ? todayStart : new Date(fromTime).toISOString();
+        to   = type === 'day' ? todayEnd   : new Date(toTime).toISOString();
+        data = await getZReportPreview(from, to);
+      }
       setReportData({ ...data, from, to }); setStep(2);
     } catch { alert('Failed to load report!'); }
     finally { setLoading(false); }
+  };
+
+  // SEPOS-053 — open a new trading session (shift).
+  const handleOpenShift = async () => {
+    setShiftBusy(true);
+    try {
+      const r = await openSession(null, parseFloat(openFloat) || 0);
+      if (r && r.error && !r.session) { alert(r.error); }
+      setOpenFloat('');
+      await refreshSession();
+    } catch { alert('Could not open shift.'); }
+    finally { setShiftBusy(false); }
   };
 
   const handleConfirmSave = async () => {
@@ -78,7 +108,14 @@ export default function ZReportSection() {
     const expectedCash = (reportData.total_cash || 0) - floatNum - pettyNum;
     const difference = actualNum - expectedCash;
     try {
-      await saveZReport(reportType, reportData.from, reportData.to, reportData, floatNum, pettyNum, pettyCashReason, actualNum, difference);
+      const saved = await saveZReport(reportType, reportData.from, reportData.to, reportData, floatNum, pettyNum, pettyCashReason, actualNum, difference);
+      // SEPOS-053 — if this Z closed an open shift, mark the session closed and
+      // link it to the saved z_report. Open tables stay open and will land in
+      // the NEXT shift's Z (matches EposNow).
+      if (reportType === 'session' && session?.session?.id) {
+        try { await closeSession(null, saved?.id || null); } catch {}
+        await refreshSession();
+      }
       setSaved(true); setStep(4); getZReportHistory().then(setHistory);
     } catch { alert('Failed to save Z Report!'); }
   };
@@ -183,6 +220,48 @@ export default function ZReportSection() {
         <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>🔐 Z Report / Close Shift</h1>
         <button onClick={() => setShowHistory(!showHistory)} style={{ background: '#f0f0f0', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>{showHistory ? 'Hide History' : '📋 View History'}</button>
       </div>
+
+      {/* SEPOS-053 — open/close trading shift (EposNow-style). The shift's
+          own open→close window is the Z boundary, so it can span midnight or
+          two nights with no calendar/timezone edge. */}
+      {step === 1 && (
+        session ? (
+          <div style={{ background: '#f0fdf4', border: '2px solid #86efac', borderRadius: 12, padding: 18, marginBottom: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: '#166534' }}>🟢 Shift open</div>
+                <div style={{ fontSize: 13, color: '#15803d', marginTop: 2 }}>
+                  Since {formatDateTime(session.session.opened_at)} · {session.orders || 0} order{(session.orders||0)===1?'':'s'} · £{Number(session.takings || 0).toFixed(2)}
+                </div>
+              </div>
+              <button onClick={() => loadReport('session')} disabled={loading}
+                style={{ padding: '12px 20px', borderRadius: 10, border: 'none', background: '#16a34a', color: 'white', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+                {loading ? 'Loading…' : '✅ Close this shift (Z)'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ background: '#f8fafc', border: '2px dashed #cbd5e1', borderRadius: 12, padding: 18, marginBottom: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: '#334155' }}>No shift open</div>
+                <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>Open a shift to total takings by session — it can run overnight, even across two nights.</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: 14 }}>£</span>
+                  <input type="number" step="0.01" value={openFloat} onChange={e => setOpenFloat(e.target.value)} placeholder="Float"
+                    style={{ width: 100, padding: '11px 10px 11px 22px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 14, boxSizing: 'border-box' }} />
+                </div>
+                <button onClick={handleOpenShift} disabled={shiftBusy}
+                  style={{ padding: '12px 20px', borderRadius: 10, border: 'none', background: '#0ea5e9', color: 'white', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+                  {shiftBusy ? 'Opening…' : '▶ Open Shift'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      )}
 
       {showHistory && (
         <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>

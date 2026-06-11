@@ -183,6 +183,11 @@ export const getZReportPreview = (from, to) => get(`/api/z-report/preview?from=$
 export const saveZReport = (type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference) => 
   post('/api/z-report/save', { type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference });
 export const getZReportHistory = () => get('/api/z-report/history');
+// SEPOS-053 — till sessions (EposNow-style Open Shift → Close Shift)
+export const getZReportPreviewBySession = (sessionId) => get(`/api/z-report/preview?session_id=${encodeURIComponent(sessionId)}`);
+export const getCurrentSession = () => get('/api/till-sessions/current');
+export const openSession  = (staff_id, float_amount) => post('/api/till-sessions/open', { staff_id, float_amount });
+export const closeSession = (closed_by, z_report_id) => post('/api/till-sessions/close', { closed_by, z_report_id });
 export const getBills = (from, to, method) => get(`/api/bills?from=${from}&to=${to}&method=${method}`);
 export const getBillItems = (orderId) => get(`/api/bills/${orderId}/items`);
 export const getKitchenCompleted = () => get('/api/kitchen/completed');

@@ -109,6 +109,13 @@ function resolveRestaurantId(req) {
   );
 }
 
+// SEPOS-053 — stamp an order with the till session that's open at close time
+// (NULL if none). Correlated on the order's own restaurant_id so it's correct
+// single- and multi-tenant. Appended to the SET clause of every close/cancel
+// UPDATE; Close Shift then totals the Z by session_id instead of a date window,
+// so a shift can span midnight / two nights free of the timezone day boundary.
+const OPEN_SESSION_SUBQ = "(SELECT ts.id FROM till_sessions ts WHERE ts.status='open' AND ts.restaurant_id = orders.restaurant_id ORDER BY ts.opened_at DESC LIMIT 1)";
+
 // ── SEPOS-LITE-002 — backend plan gate ───────────────────────────────
 // Server-side backstop for the in-app feature gating: blocks Pro-only
 // API routes on a lite-plan deployment. Under "Lite as Pro" each
@@ -885,7 +892,7 @@ app.put('/api/order-items/:id/void', async (req, res) => {
       io.emit('item_voided', { item_id: req.params.id });
       const countRes = await pool.query('SELECT COUNT(*) as remaining FROM order_items WHERE order_id=$1 AND voided=0', [item.order_id]);
       if (parseInt(countRes.rows[0].remaining) === 0) {
-        await pool.query("UPDATE orders SET status='closed', closed_at=NOW() WHERE id=$1", [item.order_id]);
+        await pool.query(`UPDATE orders SET status='closed', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [item.order_id]);
         const orderRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [item.order_id]);
         if (orderRes.rows[0]) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [orderRes.rows[0].table_id]);
       }
@@ -954,7 +961,7 @@ app.post('/api/orders/:id/close-zero', async (req, res) => {
     }
 
     await client.query('INSERT INTO payments (order_id, amount, method) VALUES ($1, 0, $2)', [orderId, 'zero']);
-    await client.query("UPDATE orders SET status='closed', closed_at=NOW(), total=0 WHERE id=$1", [orderId]);
+    await client.query(`UPDATE orders SET status='closed', closed_at=NOW(), total=0, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
     await client.query('COMMIT');
     io.emit('order_closed', { order_id: Number(orderId) });
     res.json({ success: true, total: 0 });
@@ -982,7 +989,7 @@ app.post('/api/orders/:id/pay', async (req, res) => {
     // the cancel here (no payment row), then fall through to the shared
     // table-freeing logic by marking status='cancelled'.
     if (String(method).toLowerCase() === 'cancelled' && Number(amount) === 0) {
-      await pool.query("UPDATE orders SET status='cancelled', closed_at=NOW() WHERE id=$1", [orderId]);
+      await pool.query(`UPDATE orders SET status='cancelled', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
       const cRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [orderId]);
       const cTableId = cRes.rows[0]?.table_id;
       if (cTableId) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [cTableId]);
@@ -996,7 +1003,7 @@ app.post('/api/orders/:id/pay', async (req, res) => {
       return res.status(400).json({ error: 'Payment amount must be a positive number' });
     }
     await pool.query('INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3)', [orderId, amt, method]);
-    await pool.query("UPDATE orders SET status='closed', closed_at=NOW() WHERE id=$1", [orderId]);
+    await pool.query(`UPDATE orders SET status='closed', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
     const orderRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [orderId]);
     const tableId = orderRes.rows[0]?.table_id;
     if (tableId) {
@@ -2034,7 +2041,7 @@ app.put('/api/orders/:id/merge', async (req, res) => {
     await pool.query('UPDATE order_items SET order_id=$1 WHERE order_id=$2', [targetOrderId, merge_order_id]);
     const mergeRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [merge_order_id]);
     if (mergeRes.rows[0]) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [mergeRes.rows[0].table_id]);
-    await pool.query("UPDATE orders SET status='closed', closed_at=NOW() WHERE id=$1", [merge_order_id]);
+    await pool.query(`UPDATE orders SET status='closed', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [merge_order_id]);
     const totalRes = await pool.query(`SELECT ${ORDER_TOTAL_EXPR} as total FROM order_items WHERE order_id=$1 AND voided=0`, [targetOrderId]); // SEPOS-047c — keep per-item discounts
     await pool.query('UPDATE orders SET total=$1 WHERE id=$2', [totalRes.rows[0].total || 0, targetOrderId]);
     io.emit('table_merged', { target_order_id: targetOrderId, merged_order_id: merge_order_id });
@@ -2240,9 +2247,105 @@ app.post('/api/sync/delete-order', async (req, res) => {
   }
 });
 
+// ── SEPOS-053 — till trading sessions (EposNow-style Open / Close Shift) ──
+// The open session is the boundary for the Z-report instead of a calendar
+// date, so a shift can span midnight / two nights with no timezone edge.
+// On a desktop install the open/close forwards to cloud (reusing the
+// SEPOS-047g write-through) so every terminal agrees on the one open shift.
+app.get('/api/till-sessions/current', async (req, res) => {
+  try {
+    const rid = resolveRestaurantId(req);
+    const r = await pool.query(
+      "SELECT * FROM till_sessions WHERE status='open' AND restaurant_id=$1 ORDER BY opened_at DESC LIMIT 1",
+      [rid]
+    );
+    const session = r.rows[0] || null;
+    if (!session) return res.json({ session: null });
+    // Live tally for the header banner — orders closed since the shift opened.
+    // Keyed on the closed_at instant (the same window the Z uses), NOT on
+    // orders.session_id, so it stays correct even if a cloud→local sync
+    // overwrites the locally-stamped session_id on a multi-terminal install.
+    const t = await pool.query(
+      `SELECT COUNT(DISTINCT o.id) AS orders, COALESCE(SUM(p.amount), 0) AS takings
+         FROM orders o LEFT JOIN payments p ON p.order_id = o.id
+        WHERE o.status='closed' AND o.closed_at >= $1::timestamp`,
+      [session.opened_at]
+    );
+    res.json({ session, orders: Number(t.rows[0].orders || 0), takings: Number(t.rows[0].takings || 0) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Bulk GET for the sync engine (cloud→desktop) and session history.
+app.get('/api/till-sessions', async (req, res) => {
+  try {
+    const rid = resolveRestaurantId(req);
+    const r = await pool.query(
+      "SELECT * FROM till_sessions WHERE restaurant_id=$1 ORDER BY opened_at DESC LIMIT 100", [rid]
+    );
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/till-sessions/open', async (req, res) => {
+  if (await forwardWriteToCloud(req, res, 'session-open', () => syncService.pullSessionsSnapshot())) return;
+  try {
+    const rid = resolveRestaurantId(req);
+    const { staff_id, float_amount } = req.body || {};
+    const existing = await pool.query(
+      "SELECT * FROM till_sessions WHERE status='open' AND restaurant_id=$1 ORDER BY opened_at DESC LIMIT 1", [rid]
+    );
+    if (existing.rows[0]) return res.status(409).json({ error: 'A shift is already open.', session: existing.rows[0] });
+    const r = await pool.query(
+      `INSERT INTO till_sessions (status, opened_at, opened_by, float_amount, restaurant_id)
+       VALUES ('open', NOW(), $1, $2, $3) RETURNING *`,
+      [staff_id || null, Number(float_amount) || 0, rid]
+    );
+    res.json({ session: r.rows[0], success: true });
+  } catch (err) {
+    // Unique partial index race — another terminal opened first. Return theirs.
+    if (String(err.code) === '23505' || /idx_till_sessions_open|UNIQUE/i.test(err.message)) {
+      const rid = resolveRestaurantId(req);
+      const ex = await pool.query("SELECT * FROM till_sessions WHERE status='open' AND restaurant_id=$1 LIMIT 1", [rid]);
+      return res.status(409).json({ error: 'A shift is already open.', session: ex.rows[0] || null });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/till-sessions/close', async (req, res) => {
+  if (await forwardWriteToCloud(req, res, 'session-close', () => syncService.pullSessionsSnapshot())) return;
+  try {
+    const rid = resolveRestaurantId(req);
+    const { closed_by, z_report_id } = req.body || {};
+    const open = await pool.query(
+      "SELECT * FROM till_sessions WHERE status='open' AND restaurant_id=$1 ORDER BY opened_at DESC LIMIT 1", [rid]
+    );
+    if (!open.rows[0]) return res.status(409).json({ error: 'No open shift to close.' });
+    const r = await pool.query(
+      "UPDATE till_sessions SET status='closed', closed_at=NOW(), closed_by=$1, z_report_id=$2 WHERE id=$3 RETURNING *",
+      [closed_by || null, z_report_id || null, open.rows[0].id]
+    );
+    res.json({ session: r.rows[0], success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/z-report/preview', async (req, res) => {
   try {
-    const { from, to } = req.query;
+    let { from, to } = req.query;
+    // SEPOS-053 — session mode: derive the window from the session's own
+    // open/close instants instead of a calendar date. Because the bounds are
+    // exact stored timestamps (not ::date), the Z spans midnight / two nights
+    // and is immune to the timezone day boundary. An order opened before the
+    // shift but paid during it keys on closed_at, so it lands in this Z —
+    // matching the session_id stamped at close.
+    let sessionMeta = null;
+    if (req.query.session_id) {
+      const sres = await pool.query("SELECT * FROM till_sessions WHERE id=$1", [req.query.session_id]);
+      if (!sres.rows[0]) return res.status(404).json({ error: 'Session not found' });
+      sessionMeta = sres.rows[0];
+      from = sessionMeta.opened_at;
+      to   = sessionMeta.closed_at || new Date().toISOString(); // open shift → up to now
+    }
     const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, foodDrinkRes, vouchersSoldRes, vouchersRedeemedRes] = await Promise.all([
       pool.query(`SELECT orders.*, tables.table_number, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp ORDER BY orders.closed_at DESC`, [from, to]),
       pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='open'`),
@@ -2322,7 +2425,7 @@ app.get('/api/z-report/preview', async (req, res) => {
     }
     const vouchersSold     = vouchersSoldRes.rows[0]     || { count: 0, total: 0 };
     const vouchersRedeemed = vouchersRedeemedRes.rows[0] || { count: 0, total: 0 };
-    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_subtotal: totalSubtotal, total_service: totalService, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: totalOrders, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: totalOrders > 0 ? totalSales / totalOrders : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0) }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, ...orderTypeSplit });
+    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_subtotal: totalSubtotal, total_service: totalService, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: totalOrders, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: totalOrders > 0 ? totalSales / totalOrders : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0) }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, session: sessionMeta, from, to, ...orderTypeSplit });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -5085,7 +5188,7 @@ app.put('/api/orders/:id/takeaway-status', async (req, res) => {
     if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status' });
     await pool.query('UPDATE orders SET takeaway_status=$1 WHERE id=$2 AND order_type=\'takeaway\'', [status, req.params.id]);
     if (status === 'collected') {
-      await pool.query("UPDATE orders SET status='closed', closed_at=NOW() WHERE id=$1", [req.params.id]);
+      await pool.query(`UPDATE orders SET status='closed', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [req.params.id]);
       await pool.query("UPDATE order_items SET status='served', served_at=NOW() WHERE order_id=$1 AND status<>'served'", [req.params.id]);
     }
     io.emit('takeaway_status', { order_id: Number(req.params.id), status });
@@ -5215,7 +5318,7 @@ async function applyCourierWebhook(providerLabel, parsed) {
   );
   if (svc && svc.DELIVERED_STATUSES.includes(status) && order.status === 'open') {
     await pool.query(
-      `UPDATE orders SET status='closed', closed_at=NOW(), takeaway_status='collected' WHERE id=$1`,
+      `UPDATE orders SET status='closed', closed_at=NOW(), takeaway_status='collected', session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`,
       [order.id]
     );
     await pool.query(

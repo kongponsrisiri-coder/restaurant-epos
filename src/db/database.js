@@ -156,6 +156,10 @@ async function initDB() {
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS takeaway_status VARCHAR(20)`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20)`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR(255)`);
+    // SEPOS-053 — the trading session an order was closed under (EposNow-style
+    // overnight shifts). NULL when no shift was open at close time; the
+    // date-range Z-report still catches those.
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS session_id INTEGER`);
     // SEPOS-DELIVERY-002 — collection vs delivery for takeaway orders.
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_subtype VARCHAR(20) DEFAULT 'collection'`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT`);
@@ -366,6 +370,26 @@ async function initDB() {
       )
     `);
 
+    // SEPOS-053 — till trading sessions (EposNow-style Open Shift → Close
+    // Shift). At most ONE open session per restaurant (partial unique index
+    // below); orders stamp their session_id at close, and Close Shift totals
+    // the Z by session_id instead of a calendar date window — so a shift can
+    // span midnight / two nights and is immune to the timezone day boundary.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS till_sessions (
+        id SERIAL PRIMARY KEY,
+        status VARCHAR(20) DEFAULT 'open',
+        opened_at TIMESTAMP DEFAULT NOW(),
+        opened_by INTEGER,
+        closed_at TIMESTAMP,
+        closed_by INTEGER,
+        float_amount DECIMAL(10,2) DEFAULT 0,
+        z_report_id INTEGER,
+        cloud_id INTEGER,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS reservations (
         id SERIAL PRIMARY KEY,
@@ -552,11 +576,17 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
       'subcategories', 'modifier_groups', 'modifiers', 'order_item_modifiers',
       'staff', 'tables', 'settings', 'campaigns', 'clock_events',
       'discount_reasons', 'z_reports', 'order_deletions', 'webhook_fires',
-      'reservation_reminders',
+      'reservation_reminders', 'till_sessions',
     ];
     for (const t of TENANT_TABLES) {
       await pool.query(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS restaurant_id VARCHAR(100) DEFAULT 'siamepos'`);
     }
+    // SEPOS-053 — at most one OPEN till session per restaurant. Unique on
+    // restaurant_id but only over open rows, so closed history is unbounded.
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_till_sessions_open
+      ON till_sessions(restaurant_id) WHERE status='open'
+    `);
     // Indexes on the high-traffic tables — only meaningful for the
     // shared multi-tenant Lite DB; harmless on a single-tenant Pro DB.
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_orders_restaurant      ON orders(restaurant_id)`);

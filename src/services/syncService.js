@@ -57,6 +57,10 @@ const PULL_TABLES = [
   // SEPOS-046ac — Cost & Sales expenses, same cloud-authoritative pull as
   // the rest of the inventory family.
   { path: '/api/expenses',               table: 'expenses',               pk: 'id' },
+  // SEPOS-053 — till trading sessions. Cloud→desktop so a shift opened on
+  // another terminal shows on this till's banner; desktop-initiated open/close
+  // forwards to cloud first (forwardWriteToCloud) so ids stay in one space.
+  { path: '/api/till-sessions',          table: 'till_sessions',          pk: 'id' },
 ];
 
 let initialSyncDone = false;
@@ -995,6 +999,24 @@ async function pullMenuSnapshot() {
   await pullMenuTree();
 }
 
+// SEPOS-053 — targeted till_sessions refresh, awaited by server.js right after
+// a forwarded session open/close succeeds on the cloud, so the till's shift
+// banner reflects it immediately instead of on the next 5s tick.
+async function pullSessionsSnapshot() {
+  if (!offlineQueue.isLocal || !CLOUD_API_URL) return;
+  try {
+    const r = await fetch(CLOUD_API_URL + '/api/till-sessions', {
+      signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+    });
+    if (!r.ok) return;
+    const rows = await r.json();
+    const list = Array.isArray(rows) ? rows : (rows?.data || []);
+    await upsertRows('till_sessions', 'id', list);
+  } catch (err) {
+    console.warn('[sync] pullSessionsSnapshot failed:', err.message);
+  }
+}
+
 // SEPOS-047g — targeted staff refresh, awaited by server.js right after a
 // forwarded staff write (add/edit/delete a PIN) succeeds on the cloud, so
 // the till's Staff list and the login PINs reflect it immediately. Unlike
@@ -1033,4 +1055,4 @@ async function pullStaffSnapshot() {
   await pullStaff();
 }
 
-module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, pullActiveOrders, pullMenuSnapshot, pullStaffSnapshot, tick };
+module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, pullActiveOrders, pullMenuSnapshot, pullStaffSnapshot, pullSessionsSnapshot, tick };

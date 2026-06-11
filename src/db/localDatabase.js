@@ -248,6 +248,19 @@ function initSchema() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS till_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      status TEXT DEFAULT 'open',
+      opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      opened_by INTEGER,
+      closed_at TIMESTAMP,
+      closed_by INTEGER,
+      float_amount REAL DEFAULT 0,
+      z_report_id INTEGER,
+      cloud_id INTEGER,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS reservations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       restaurant_id TEXT DEFAULT 'siamepos',
@@ -632,6 +645,10 @@ function runMigrations() {
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_order_items_cloud_id ON order_items(cloud_id) WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] order_items.cloud_id index:', err.message); }
   // SEPOS-047b — one Stripe PaymentIntent settles exactly one takeaway order.
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_payment_intent ON orders(payment_intent_id) WHERE payment_intent_id IS NOT NULL'); } catch (err) { console.warn('[db:local] orders.payment_intent index:', err.message); }
+  // SEPOS-053 — the trading session an order closed under + its cloud binding.
+  addColumnIfMissing('orders', 'session_id', 'INTEGER');
+  addColumnIfMissing('till_sessions', 'cloud_id', 'INTEGER');
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_till_sessions_cloud_id ON till_sessions(cloud_id) WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] till_sessions.cloud_id index:', err.message); }
 
   // SEPOS-LITE-001 Phase 1 — multi-tenancy. restaurant_id mirrors the
   // cloud schema so cloud→local sync stays column-aligned; Pro installs
@@ -641,10 +658,12 @@ function runMigrations() {
     'subcategories', 'modifier_groups', 'modifiers', 'order_item_modifiers',
     'staff', 'tables', 'settings', 'campaigns', 'clock_events',
     'discount_reasons', 'z_reports', 'order_deletions', 'webhook_fires',
-    'reservation_reminders',
+    'reservation_reminders', 'till_sessions',
   ]) {
     addColumnIfMissing(t, 'restaurant_id', "TEXT DEFAULT 'siamepos'");
   }
+  // SEPOS-053 — at most one OPEN till session per restaurant (mirrors PG).
+  try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_till_sessions_open ON till_sessions(restaurant_id) WHERE status='open'"); } catch (err) { console.warn('[db:local] till_sessions open index:', err.message); }
 
   // SEPOS-LITE-003 — email + password login on the staff table.
   addColumnIfMissing('staff', 'email', 'TEXT');

@@ -916,4 +916,15 @@ function stop() {
   }
 }
 
-module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, pullActiveOrders, tick };
+// SEPOS-046ad — targeted menu refresh, awaited by server.js right after a
+// forwarded menu admin write succeeds on the cloud. Pulls ONLY the menu
+// tree (one /api/menu/all request) so the Order screen and Menu Manager
+// see the change immediately instead of on the next 5s tick. Deliberately
+// skips pullModifiersForMenuItems (one request per item — too slow to sit
+// inside a write's response); the regular tick still covers modifiers.
+async function pullMenuSnapshot() {
+  if (!offlineQueue.isLocal || !CLOUD_API_URL) return;
+  await pullMenuTree();
+}
+
+module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, pullActiveOrders, pullMenuSnapshot, tick };

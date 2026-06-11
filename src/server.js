@@ -288,6 +288,14 @@ async function maybeForwardMenuWriteToCloud(req, res) {
     const r = await fetch(url, init);
     const body = await r.text();
     console.log(`[menu-write] forwarded ${req.method} ${req.originalUrl} → cloud ${r.status}`);
+    // SEPOS-046ad — pull the menu tree back into local SQLite BEFORE
+    // replying, so the client's follow-up refetch (Menu Manager, Order
+    // screen) sees the change immediately instead of on the next 5s
+    // tick. Failure is non-fatal: the regular tick still catches up.
+    if (r.ok) {
+      try { await syncService.pullMenuSnapshot(); }
+      catch (pullErr) { console.warn(`[menu-write] instant menu pull failed: ${pullErr.message}`); }
+    }
     res.status(r.status).type('application/json').send(body);
     return true;
   } catch (err) {
@@ -311,6 +319,23 @@ app.post('/api/categories', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-046o — reorder categories. Frontend sends [{id, sort_order}, ...]
+// after every arrow-button tap; backend persists each row's position.
+// MUST be declared before '/api/categories/:id' — Express matches in
+// declaration order, so the param route would otherwise swallow this
+// path with id='sort-order' (SEPOS-046ae: it did, and reorder 400'd
+// against the rename handler from the day it shipped).
+app.put('/api/categories/sort-order', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    for (const it of items) {
+      await pool.query('UPDATE categories SET sort_order = $1 WHERE id = $2', [Number(it.sort_order) || 0, it.id]);
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // SEPOS-046n — rename a category. Pair with the SEPOS-046m delete so
 // the Menu Manager finally has full CRUD on categories. Trims + rejects
 // empty names so the chip never collapses to blank.
@@ -320,19 +345,6 @@ app.put('/api/categories/:id', async (req, res) => {
     const name = String(req.body?.name || '').trim();
     if (!name) return res.status(400).json({ error: 'Category name is required' });
     await pool.query('UPDATE categories SET name = $1 WHERE id = $2', [name, req.params.id]);
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// SEPOS-046o — reorder categories. Frontend sends [{id, sort_order}, ...]
-// after every arrow-button tap; backend persists each row's position.
-app.put('/api/categories/sort-order', async (req, res) => {
-  if (await maybeForwardMenuWriteToCloud(req, res)) return;
-  try {
-    const items = Array.isArray(req.body?.items) ? req.body.items : [];
-    for (const it of items) {
-      await pool.query('UPDATE categories SET sort_order = $1 WHERE id = $2', [Number(it.sort_order) || 0, it.id]);
-    }
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

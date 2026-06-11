@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { loginStaff, clockIn, clockOut, emailLogin, storePinSession } from '../api';
+import { useState, useEffect } from 'react';
+import { loginStaff, clockIn, clockOut, emailLogin, storePinSession, getStaff } from '../api';
 
 // ── Sandy: LoginScreen — SiamEPOS Brand CI v1.1 ───────────────────
 // Deep Navy #0D1B3E background · Thai Gold #C9A84C lotus logo
@@ -14,6 +14,17 @@ export default function LoginScreen({ onLogin }) {
   const [mode, setMode]         = useState('pin');
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
+  // SEPOS-055 — pick your name first, then enter your PIN. The staff list
+  // (names only, no PINs) drives the picker; if it can't load (offline / not
+  // synced) we fall back to direct PIN entry so login is never blocked.
+  const [staffList, setStaffList]         = useState([]);
+  const [selectedStaff, setSelectedStaff] = useState(null);
+
+  useEffect(() => {
+    getStaff()
+      .then(list => setStaffList(Array.isArray(list) ? list.filter(s => s.is_active !== 0) : []))
+      .catch(() => setStaffList([]));
+  }, []);
 
   async function handleLogin(pinToUse) {
     const p = pinToUse ?? pin;
@@ -25,6 +36,11 @@ export default function LoginScreen({ onLogin }) {
       const staff = await loginStaff(p);
       if (staff?.error || !staff?.id) {
         setError('Incorrect PIN. Please try again.');
+        setPin('');
+      } else if (selectedStaff && staff.id !== selectedStaff.id) {
+        // SEPOS-055 — the PIN is valid but belongs to a different person than
+        // the name that was tapped. Don't silently log in the wrong identity.
+        setError(`That PIN isn't ${selectedStaff.name}'s. Check your name and PIN.`);
         setPin('');
       } else {
         storePinSession(staff); // SEPOS-047a — Bearer token for gated endpoints
@@ -168,12 +184,45 @@ export default function LoginScreen({ onLogin }) {
         maxWidth: 320,
       }}>
 
-        {/* PIN dots / placeholder */}
-        {mode === 'pin' && (
+        {/* SEPOS-055 — staff name picker: tap your name, then enter your PIN. */}
+        {mode === 'pin' && !selectedStaff && staffList.length > 0 && (
+          <div style={{ marginBottom: 4 }}>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', marginBottom: 14, letterSpacing: '0.04em' }}>
+              Tap your name
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, maxHeight: 320, overflowY: 'auto' }}>
+              {staffList.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => { setSelectedStaff(s); setPin(''); setError(''); setSuccess(''); }}
+                  style={{
+                    minHeight: 56, borderRadius: 12, border: '1px solid rgba(201,168,76,0.25)',
+                    background: 'rgba(255,255,255,0.06)', color: 'white',
+                    fontSize: 15, fontWeight: 700, cursor: 'pointer', padding: '8px 10px',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
+                  }}
+                >
+                  <span>{s.name}</span>
+                  {s.role && <span style={{ fontSize: 11, fontWeight: 500, color: 'rgba(201,168,76,0.6)', textTransform: 'capitalize' }}>{s.role}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* PIN dots / placeholder — shown once a name is picked (or when the
+            staff list is unavailable, falling back to direct PIN entry). */}
+        {mode === 'pin' && (selectedStaff || staffList.length === 0) && (<>
+        {selectedStaff && (
+          <button
+            onClick={() => { setSelectedStaff(null); setPin(''); setError(''); setSuccess(''); }}
+            style={{ background: 'none', border: 'none', color: 'rgba(201,168,76,0.75)', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'block', margin: '0 auto 8px' }}
+          >‹ {selectedStaff.name} — change</button>
+        )}
         <div style={{ height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 20 }}>
           {pin.length === 0 ? (
             <span style={{ color: 'rgba(255,255,255,0.22)', fontSize: 14, letterSpacing: '0.05em' }}>
-              Enter your PIN
+              {selectedStaff ? `Enter ${selectedStaff.name}'s PIN` : 'Enter your PIN'}
             </span>
           ) : (
             Array.from({ length: pin.length }).map((_, i) => (
@@ -181,7 +230,7 @@ export default function LoginScreen({ onLogin }) {
             ))
           )}
         </div>
-        )}
+        </>)}
 
         {/* Error / success — fixed-height slot so numpad never shifts */}
         <div style={{ height: 38, marginBottom: 16 }}>
@@ -198,8 +247,9 @@ export default function LoginScreen({ onLogin }) {
           )}
         </div>
 
-        {/* SEPOS-LITE-003 — PIN entry (staff). Email form below for owners. */}
-        {mode === 'pin' && (<>
+        {/* SEPOS-LITE-003 — PIN entry (staff). Email form below for owners.
+            SEPOS-055 — only after a name is picked (or no staff list to pick). */}
+        {mode === 'pin' && (selectedStaff || staffList.length === 0) && (<>
         {/* Numpad */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
           {keys.map((k, i) => {

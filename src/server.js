@@ -1483,9 +1483,22 @@ app.post('/api/staff', async (req, res) => {
   if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
     const { name, pin, role, start_date, notes, employment_status } = req.body;
+    // SEPOS-047k — PINs are UNIQUE (staff_pin_key / staff.pin UNIQUE). A
+    // collision used to surface as a raw 500 "duplicate key value violates
+    // unique constraint" → the Staff screen just said "Save failed!" with
+    // no clue. Pre-check and return a clear, actionable 409 instead.
+    const dup = await pool.query('SELECT name FROM staff WHERE pin = $1', [pin]);
+    if (dup.rows[0]) {
+      return res.status(409).json({ error: `PIN ${pin} is already used by ${dup.rows[0].name}. Please choose a different 4-digit PIN.` });
+    }
     const result = await pool.query('INSERT INTO staff (name, pin, role, start_date, notes, employment_status) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [name, pin, role, start_date || null, notes || null, employment_status || 'active']);
     res.json({ id: result.rows[0].id, success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    if (/unique|duplicate/i.test(err.message || '')) {
+      return res.status(409).json({ error: `That PIN is already used by another staff member. Please choose a different 4-digit PIN.` });
+    }
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.put('/api/staff/:id', async (req, res) => {
@@ -1500,6 +1513,14 @@ app.put('/api/staff/:id', async (req, res) => {
     const activeParam = (is_active === undefined || is_active === null || is_active === '')
       ? null
       : (is_active ? 1 : 0);
+    // SEPOS-047k — same friendly duplicate-PIN guard as create, excluding
+    // this staff member's own row.
+    if (pin) {
+      const dup = await pool.query('SELECT name FROM staff WHERE pin = $1 AND id <> $2', [pin, req.params.id]);
+      if (dup.rows[0]) {
+        return res.status(409).json({ error: `PIN ${pin} is already used by ${dup.rows[0].name}. Please choose a different 4-digit PIN.` });
+      }
+    }
     if (pin) {
       await pool.query(
         `UPDATE staff SET
@@ -1527,7 +1548,12 @@ app.put('/api/staff/:id', async (req, res) => {
       );
     }
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    if (/unique|duplicate/i.test(err.message || '')) {
+      return res.status(409).json({ error: `That PIN is already used by another staff member. Please choose a different 4-digit PIN.` });
+    }
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.delete('/api/staff/:id', async (req, res) => {
@@ -1535,6 +1561,25 @@ app.delete('/api/staff/:id', async (req, res) => {
   try {
     await pool.query('DELETE FROM staff WHERE id=$1', [req.params.id]);
     res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-047k — SYNC_SECRET-gated staff feed WITH pins, for the desktop
+// cloud→local pull. The public GET /api/staff omits pin (so PINs aren't
+// exposed on an unauthenticated endpoint), but the till NEEDS pins to
+// (a) show the real staff list and (b) authenticate staff login locally.
+// Without this the pull tried to INSERT cloud staff with no pin and hit
+// the local `pin NOT NULL` constraint, so staff created on the cloud never
+// reached the till — the operator saw a stale list and kept colliding with
+// PINs they couldn't see. Same trust model as the closed/active-order feeds.
+app.get('/api/sync/staff', async (req, res) => {
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected) return res.status(503).json({ error: 'SYNC_SECRET not set on this server' });
+  if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+  try {
+    const result = await pool.query('SELECT * FROM staff');
+    res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

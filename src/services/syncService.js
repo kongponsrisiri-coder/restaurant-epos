@@ -28,7 +28,9 @@ const subscribers = new Set();
 // (categories → subcategories + items) — see pullMenuTree().
 const PULL_TABLES = [
   { path: '/api/tables',                 table: 'tables',                 pk: 'id' },
-  { path: '/api/staff',                  table: 'staff',                  pk: 'id' },
+  // SEPOS-047k — staff is pulled separately via the SYNC_SECRET-gated
+  // /api/sync/staff feed (pullStaff), because the public /api/staff omits
+  // pin and local staff.pin is NOT NULL. See pullStaff() below.
   { path: '/api/settings',               table: 'settings',               pk: 'key' },
   { path: '/api/table-walls',            table: 'table_walls',            pk: 'id' },
   { path: '/api/table-combinations',     table: 'table_combinations',     pk: 'id' },
@@ -540,6 +542,9 @@ async function pullFromCloud() {
     }
   }
 
+  // SEPOS-047k — staff via the gated feed (needs pins; see pullStaff).
+  await pullStaff();
+
   // Nested menu tree + modifier subtree.
   const itemIds = await pullMenuTree();
   if (itemIds.length > 0) {
@@ -997,21 +1002,35 @@ async function pullMenuSnapshot() {
 // local staff missing from the cloud snapshot, so a desktop-initiated DELETE
 // actually removes the row locally (guarded to a non-empty cloud list so a
 // transient blank response can't wipe the staff table).
-async function pullStaffSnapshot() {
-  if (!offlineQueue.isLocal || !CLOUD_API_URL) return;
+// SEPOS-047k — pull staff via the SYNC_SECRET-gated /api/sync/staff feed,
+// which (unlike public /api/staff) includes pin. The local staff.pin is
+// NOT NULL, so a pin-less pull hit the constraint and skipped every row —
+// cloud staff never reached the till. Orphan-deletes so cloud-side staff
+// deletions propagate (guarded to a non-empty list). Silently no-ops
+// without SYNC_SECRET (the feed 401s), same as the other gated pulls.
+async function pullStaff() {
+  if (!offlineQueue.isLocal || !CLOUD_API_URL || !process.env.SYNC_SECRET) return;
   try {
-    const r = await fetch(CLOUD_API_URL + '/api/staff', {
+    const r = await fetch(CLOUD_API_URL + '/api/sync/staff', {
+      headers: { 'x-sync-secret': process.env.SYNC_SECRET },
       signal: AbortSignal.timeout(PING_TIMEOUT_MS),
     });
-    if (!r.ok) { console.warn(`[sync] pullStaffSnapshot ${r.status}`); return; }
+    if (!r.ok) { console.warn(`[sync] pullStaff ${r.status}`); return; }
     const rows = await r.json();
     const list = Array.isArray(rows) ? rows : (rows?.data || []);
     if (!Array.isArray(list) || list.length === 0) return;
-    await upsertRows('staff', 'id', list);
+    const n = await upsertRows('staff', 'id', list);
     await deleteOrphans('staff', list.map(s => s.id));
+    if (n > 0) console.log(`[sync] pull staff: ${n} rows`);
   } catch (err) {
-    console.warn('[sync] pullStaffSnapshot failed:', err.message);
+    console.warn('[sync] pullStaff failed:', err.message);
   }
+}
+
+// Instant staff refresh after a forwarded staff write (add/edit/delete a
+// PIN) succeeds on the cloud — same gated feed as the tick.
+async function pullStaffSnapshot() {
+  await pullStaff();
 }
 
 module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, pullActiveOrders, pullMenuSnapshot, pullStaffSnapshot, tick };

@@ -27,7 +27,7 @@ export default function StaffSection() {
       setStaff(prev => prev.map(s => s.id === editStaff.id ? { ...s, ...fields } : s));
       setShowForm(false); setEditStaff(null);
       try { assertOk(await updateStaff(editStaff.id, form)); }
-      catch { alert('Save failed!'); getStaff().then(setStaff); }
+      catch (e) { alert(e.message || 'Save failed!'); getStaff().then(setStaff); } // SEPOS-047k — show the real reason (e.g. PIN in use)
     } else {
       const tempId = -Date.now();
       const { pin, ...fields } = form;
@@ -36,8 +36,8 @@ export default function StaffSection() {
       try {
         const res = assertOk(await addStaff(form));
         if (res?.id) setStaff(prev => prev.map(s => s.id === tempId ? { ...s, id: res.id } : s));
-      } catch {
-        alert('Save failed!');
+      } catch (e) {
+        alert(e.message || 'Save failed!'); // SEPOS-047k — show the real reason (e.g. PIN in use)
         setStaff(prev => prev.filter(s => s.id !== tempId));
       }
     }

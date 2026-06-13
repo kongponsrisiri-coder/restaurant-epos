@@ -7,17 +7,7 @@ const router  = express.Router();
 const { pool } = require('../db/pool');
 const { sendWelcomeEmail } = require('../services/welcomeEmail');
 const { generateSlug, uniqueSlug } = require('./clients'); // re-use slug helpers
-
-// Lazy-init Stripe so missing key doesn't crash the whole server.
-let _stripe = null;
-function stripe() {
-  if (!_stripe) {
-    const key = process.env.STRIPE_SECRET_KEY;
-    if (!key) throw new Error('STRIPE_SECRET_KEY not configured on this service');
-    _stripe = require('stripe')(key);
-  }
-  return _stripe;
-}
+const { stripe } = require('../services/stripeClient'); // shared lazy Stripe client
 
 // Plan → Stripe price ID mapping (env vars set in Railway back-office service)
 const PLAN_PRICE = {
@@ -112,6 +102,12 @@ router.post('/complete', async (req, res) => {
     // Derive plan from formData (payment intent approach — plan is passed directly)
     let plan = formData.plan || 'pro';
 
+    // Stripe linkage captured below and persisted on the client record so the
+    // back office can find / cancel the subscription and the webhook can match
+    // future payment-failure / cancellation events back to this client.
+    let stripeCustomerId     = null;
+    let stripeSubscriptionId = null;
+
     // Verify payment with Stripe when we have a real payment intent ID
     if (subscriptionId !== 'test') {
       const s = stripe();
@@ -123,10 +119,12 @@ router.post('/complete', async (req, res) => {
         });
       }
 
+      stripeCustomerId = pi.customer || null;
+
       // Now create the recurring subscription (first month already paid via PI above)
       const priceId = PLAN_PRICE[plan];
       if (priceId) {
-        await s.subscriptions.create({
+        const sub = await s.subscriptions.create({
           customer:          pi.customer,
           items:             [{ price: priceId }],
           collection_method: 'charge_automatically',
@@ -135,7 +133,8 @@ router.post('/complete', async (req, res) => {
           proration_behavior: 'none',
           default_payment_method: pi.payment_method,
           metadata: { onboarded_via: 'kiosk' },
-        }).catch(e => console.warn('[onboard] subscription create warning:', e.message));
+        }).catch(e => { console.warn('[onboard] subscription create warning:', e.message); return null; });
+        if (sub) stripeSubscriptionId = sub.id;
       }
     }
 
@@ -156,9 +155,10 @@ router.post('/complete', async (req, res) => {
     const { rows } = await pool.query(
       `INSERT INTO clients
          (restaurant_name, owner_name, email, phone, plan, status,
-          monthly_fee, sub_start, next_billing, product, metadata, slug)
+          monthly_fee, sub_start, next_billing, product, metadata, slug,
+          stripe_customer_id, stripe_subscription_id)
        VALUES ($1,$2,$3,$4,$5,'in_setup',$6,CURRENT_DATE,
-               (CURRENT_DATE + INTERVAL '1 month'), $7, $8, $9)
+               (CURRENT_DATE + INTERVAL '1 month'), $7, $8, $9, $10, $11)
        RETURNING id, restaurant_name, email, account_ref, slug`,
       [
         formData.businessName,
@@ -170,6 +170,8 @@ router.post('/complete', async (req, res) => {
         formData.product     || 'restaurant',
         JSON.stringify(metadata),
         slug,
+        stripeCustomerId,
+        stripeSubscriptionId,
       ]
     );
 

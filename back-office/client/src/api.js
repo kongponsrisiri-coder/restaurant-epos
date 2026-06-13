@@ -109,6 +109,13 @@ export const api = {
       body: JSON.stringify(body),
     }).then(handle),
 
+  // BO-FOUNDER-002 — cancel the client's Stripe subscription (admin only).
+  cancelSubscription: (id) =>
+    fetch(`${API}/api/clients/${id}/cancel-subscription`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+    }).then(handle),
+
   runHealth: (clientId) =>
     fetch(`${API}/api/health/run`, {
       method: 'POST',

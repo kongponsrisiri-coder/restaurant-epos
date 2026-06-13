@@ -9,6 +9,7 @@ const path    = require('path');
 const { pool } = require('../db/pool');
 const { authRequired, adminOnly } = require('../middleware/auth');
 const { sendWelcomeEmail }        = require('../services/welcomeEmail');
+const { stripe }                  = require('../services/stripeClient');
 const {
   seedTenantDatabase,
   provisionNetlifyTenant,
@@ -194,6 +195,52 @@ router.delete('/:id', adminOnly, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[ops-clients] delete error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── BO-FOUNDER-002 — cancel a client's Stripe subscription ─────────
+// Cancels the recurring subscription in Stripe and marks the client churned.
+// Admin only. Idempotent-ish: if the subscription is already gone in Stripe
+// we still flip the local status so the dashboard ends up correct.
+router.post('/:id/cancel-subscription', adminOnly, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { rows } = await pool.query(
+      'SELECT id, restaurant_name, stripe_subscription_id FROM clients WHERE id = $1',
+      [id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Client not found' });
+
+    const subId = rows[0].stripe_subscription_id;
+    if (!subId) {
+      return res.status(400).json({
+        error: 'No Stripe subscription on file for this client. If they pay another way, set the status manually.',
+      });
+    }
+
+    let stripeResult = 'canceled';
+    try {
+      await stripe().subscriptions.cancel(subId);
+    } catch (err) {
+      // resource_missing → already cancelled/deleted in Stripe. Anything else
+      // is a real failure we should surface rather than silently churn.
+      if (err.code === 'resource_missing') {
+        stripeResult = 'already_gone';
+      } else {
+        console.error('[ops-clients] stripe cancel error', err.message);
+        return res.status(502).json({ error: `Stripe cancel failed: ${err.message}` });
+      }
+    }
+
+    const upd = await pool.query(
+      `UPDATE clients SET status = 'churned' WHERE id = $1
+       RETURNING id, restaurant_name, status, stripe_subscription_id`,
+      [id]
+    );
+    res.json({ success: true, stripe: stripeResult, client: upd.rows[0] });
+  } catch (err) {
+    console.error('[ops-clients] cancel-subscription error', err);
     res.status(500).json({ error: err.message });
   }
 });

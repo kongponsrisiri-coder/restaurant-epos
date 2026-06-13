@@ -15,6 +15,7 @@ const ticketsRoutes = require('./routes/tickets');
 const websiteRoutes  = require('./routes/website');
 const financeRoutes  = require('./routes/finance');
 const onboardRoutes  = require('./routes/onboard');
+const stripeWebhookRoutes = require('./routes/stripeWebhook');
 const healthCron     = require('./services/healthCheck');
 
 const PORT = parseInt(process.env.PORT || '3002', 10);
@@ -43,6 +44,12 @@ for (const k of expectedEnv) {
 }
 
 app.use(cors({ origin: '*' }));
+
+// BO-FOUNDER-002 — Stripe webhook MUST be registered before the JSON body
+// parser below: signature verification needs the raw request body, and the
+// route's own express.raw() handler responds before the JSON middleware runs.
+app.use('/api/stripe', stripeWebhookRoutes);
+
 // SEPOS-WEB-007 — website configs/publishes carry base64 photos (multi-MB)
 // and finance attachments allow up to ~7 MB base64 bodies; everything else
 // keeps the tight 1 MB cap.

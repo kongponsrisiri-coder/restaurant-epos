@@ -97,6 +97,7 @@ export const STATUS_STYLE = {
   setup:   { bg: '#fef3c7', color: '#92400e', label: 'Setup' },
   active:  { bg: '#dcfce7', color: '#166534', label: 'Active' },
   trial:   { bg: '#dbeafe', color: '#1e40af', label: 'Trial' },
+  past_due:{ bg: '#ffedd5', color: '#9a3412', label: 'Past due' },
   churned: { bg: '#fee2e2', color: '#991b1b', label: 'Churned' },
   paused:  { bg: '#f1f5f9', color: '#475569', label: 'Paused' },
 };

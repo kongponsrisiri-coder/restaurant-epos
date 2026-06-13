@@ -16,6 +16,12 @@ export default function ClientDetailPage() {
   const [tab, setTab] = useState('overview');
   const [noteCategory, setNoteCategory] = useState('general');
   const [noteText, setNoteText] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+
+  const me = (() => {
+    try { return JSON.parse(localStorage.getItem('ops_user') || 'null'); } catch { return null; }
+  })();
+  const isAdmin = me?.role === 'admin';
 
   const load = async () => {
     try { setData(await api.getClient(id)); }
@@ -47,6 +53,23 @@ export default function ClientDetailPage() {
     await api.addNote(id, noteCategory, noteText.trim());
     setNoteText(''); setNoteCategory('general');
     load();
+  };
+
+  const cancelSub = async () => {
+    if (!window.confirm(
+      `Cancel the Stripe subscription for ${data.client.restaurant_name}?\n\n` +
+      `They will stop being billed and the client will be marked "Churned". ` +
+      `This cannot be undone from here.`
+    )) return;
+    setCancelling(true);
+    try {
+      const r = await api.cancelSubscription(id);
+      window.alert(r.stripe === 'already_gone'
+        ? 'Subscription was already cancelled in Stripe — client marked churned.'
+        : 'Subscription cancelled in Stripe — client marked churned.');
+      await load();
+    } catch (e) { window.alert(e.message); }
+    finally { setCancelling(false); }
   };
 
   return (
@@ -155,6 +178,54 @@ export default function ClientDetailPage() {
             <FormRow label="Next billing">
               <input type="date" defaultValue={client.next_billing ? String(client.next_billing).slice(0,10) : ''} onBlur={(e) => saveField('next_billing', e.target.value || null)} style={miniInput} />
             </FormRow>
+
+            {/* BO-FOUNDER-002 — Stripe subscription linkage + cancel */}
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5, color: C.textMuted, marginBottom: 10 }}>
+                Stripe billing
+              </div>
+              {client.stripe_subscription_id ? (
+                <>
+                  <div style={{ fontSize: 12, color: C.textMuted, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all', marginBottom: 6 }}>
+                    sub: {client.stripe_subscription_id}
+                  </div>
+                  {client.stripe_customer_id && (
+                    <div style={{ fontSize: 12, color: C.textMuted, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all', marginBottom: 10 }}>
+                      cus: {client.stripe_customer_id}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <a
+                      href={`https://dashboard.stripe.com/subscriptions/${client.stripe_subscription_id}`}
+                      target="_blank" rel="noopener noreferrer"
+                      style={{ ...btn.ghost, fontSize: 12, textDecoration: 'none' }}
+                    >
+                      View in Stripe ↗
+                    </a>
+                    {isAdmin && client.status !== 'churned' && (
+                      <button
+                        onClick={cancelSub}
+                        disabled={cancelling}
+                        style={{
+                          ...btn.ghost, fontSize: 12,
+                          color: C.danger || '#991b1b', borderColor: C.danger || '#fecaca',
+                          opacity: cancelling ? 0.6 : 1, cursor: cancelling ? 'wait' : 'pointer',
+                        }}
+                        title="Cancel this client's recurring Stripe subscription"
+                      >
+                        {cancelling ? 'Cancelling…' : 'Cancel subscription'}
+                      </button>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 13, color: C.textFaint }}>
+                  No Stripe subscription on file. {client.metadata?.signed_up_via === 'kiosk'
+                    ? 'This client signed up before billing linkage was added, or pays another way.'
+                    : 'Added manually — bill them outside Stripe, or have them self-pay via the kiosk link.'}
+                </div>
+              )}
+            </div>
           </SectionCard>
 
           <SectionCard title="Recent health">

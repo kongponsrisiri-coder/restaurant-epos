@@ -30,6 +30,12 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS product TEXT DEFAULT 'restaurant';
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS account_ref TEXT UNIQUE;
 -- BO-SLUG-001 — short unique slug for subdomain + Railway service name
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS slug VARCHAR(20) UNIQUE;
+-- BO-FOUNDER-002 — Stripe linkage so we can find/cancel a client's
+-- subscription and the webhook can flip status on payment failure/cancel.
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS stripe_customer_id     TEXT;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_clients_stripe_customer     ON clients (stripe_customer_id);
+CREATE INDEX IF NOT EXISTS idx_clients_stripe_subscription ON clients (stripe_subscription_id);
 -- Backfill existing rows using a slugified version of restaurant_name
 UPDATE clients SET slug = LOWER(REGEXP_REPLACE(
   SUBSTRING(TRIM(restaurant_name) FROM 1 FOR 20), '[^a-z0-9]+', '-', 'g'))

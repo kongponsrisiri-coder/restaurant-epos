@@ -229,7 +229,7 @@ function AddClientModal({ onClose, onSaved }) {
             <select value={f.plan} onChange={(e) => set('plan', e.target.value)} style={input}>
               {f.product === 'spa'
                 ? <option value="spa">Spa £49/mo</option>
-                : <><option value="trial">Trial</option><option value="cloud">Cloud</option><option value="pro">Pro</option></>
+                : <><option value="trial">Trial</option><option value="cloud">Cloud</option><option value="pro">Pro</option><option value="founder">Founder's Pack £59/mo</option></>
               }
             </select>
           </div>

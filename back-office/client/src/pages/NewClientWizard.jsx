@@ -310,6 +310,7 @@ function Step1({ f, set, errors }) {
                   <option value="starter">Starter</option>
                   <option value="cloud">Cloud</option>
                   <option value="pro">Pro</option>
+                  <option value="founder">Founder's Pack £59/mo</option>
                 </>
             }
           </select>

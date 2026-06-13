@@ -101,7 +101,7 @@ export const STATUS_STYLE = {
   paused:  { bg: '#f1f5f9', color: '#475569', label: 'Paused' },
 };
 
-export const PLAN_LABEL = { trial: 'Trial', cloud: 'Cloud', pro: 'Pro', spa: 'Spa £49/mo' };
+export const PLAN_LABEL = { trial: 'Trial', cloud: 'Cloud', pro: 'Pro', founder: "Founder's Pack £59/mo", spa: 'Spa £49/mo' };
 
 // BO-SPA-001 — product type badges
 export const PRODUCT_BADGE = {

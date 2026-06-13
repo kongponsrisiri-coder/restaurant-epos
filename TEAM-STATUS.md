@@ -34,7 +34,7 @@ desktop SQLite endpoints (staff edit, voucher search/reports, batch delete).
 
 | Agent | Working On | Ticket | Started |
 |-------|-----------|--------|---------|
-| _(team between tickets — see backlog at the bottom of the file)_ | | | |
+| Krit | Add "Founder's Pack" plan (£59/mo) to back-office | BO-FOUNDER-001 | 2026-06-13 |
 
 ---
 

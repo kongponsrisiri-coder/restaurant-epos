@@ -22,6 +22,7 @@ function stripe() {
 // Plan → Stripe price ID mapping (env vars set in Railway back-office service)
 const PLAN_PRICE = {
   pro:           process.env.STRIPE_PRICE_PRO,
+  founder:       process.env.STRIPE_PRICE_FOUNDER,   // BO-FOUNDER-001 — founder's pack (full restaurant Pro)
   lite_booking:  process.env.STRIPE_PRICE_LITE_BOOKING,
   lite_ordering: process.env.STRIPE_PRICE_LITE_ORDERING,
   lite_bundle:   process.env.STRIPE_PRICE_LITE_BUNDLE,
@@ -30,7 +31,7 @@ const PLAN_PRICE = {
 
 // Plan → monthly fee (£) for the client record
 const PLAN_FEE = {
-  pro: 89, lite_booking: 29, lite_ordering: 39, lite_bundle: 49, spa: 49,
+  pro: 89, founder: 59, lite_booking: 29, lite_ordering: 39, lite_bundle: 49, spa: 49,
 };
 
 // ── POST /api/onboard/start-payment ───────────────────────────────────────
@@ -212,6 +213,7 @@ router.get('/stripe-key', (req, res) => {
 
 const PLAN_LABEL = {
   pro: 'SiamEPOS Pro £89/mo',
+  founder: "SiamEPOS Founder's Pack £59/mo",
   lite_booking: 'SiamEPOS Lite — Booking £29/mo',
   lite_ordering: 'SiamEPOS Lite — Ordering £39/mo',
   lite_bundle: 'SiamEPOS Lite — Bundle £49/mo',

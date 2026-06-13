@@ -78,9 +78,14 @@ function Progress({ step, total }) {
 // ── Plan data ───────────────────────────────────────────────────────────────
 const RESTAURANT_PLANS = [
   {
+    key: 'founder', name: "SiamEPOS Founder's Pack", price: '£59/mo',
+    features: ['Everything in SiamEPOS Pro', 'Founder rate — locked in for life', 'Full EPOS — dine-in & takeaway', 'Kitchen display system', 'Online reservations & ordering', 'Desktop app (works offline)', 'Customer CRM & campaigns', 'Priority founder support'],
+    highlight: true,
+  },
+  {
     key: 'pro', name: 'SiamEPOS Pro', price: '£89/mo',
     features: ['Full EPOS — dine-in & takeaway', 'Kitchen display system', 'Online reservations', 'Online ordering widget', 'Desktop app (works offline)', 'Customer CRM & campaigns', 'Staff management & reports'],
-    highlight: true,
+    highlight: false,
   },
   {
     key: 'lite_bundle', name: 'SiamEPOS Lite — Bundle', price: '£49/mo',
@@ -294,7 +299,15 @@ function StepAddress({ form, set, onNext, onBack }) {
 
 // ── Step 3: Plan ─────────────────────────────────────────────────────────────
 function StepPlan({ form, set, onNext, onBack }) {
-  const plans = form.product === 'spa' ? SPA_PLANS : RESTAURANT_PLANS;
+  // Founder's Pack is invite-only — only shown when the kiosk is opened
+  // with ?founder=1. Otherwise drop it and promote Pro to "Most popular".
+  const showFounder = new URLSearchParams(window.location.search).get('founder') === '1';
+  let plans = form.product === 'spa' ? SPA_PLANS : RESTAURANT_PLANS;
+  if (!showFounder) {
+    plans = plans
+      .filter(p => p.key !== 'founder')
+      .map(p => (p.key === 'pro' ? { ...p, highlight: true } : p));
+  }
 
   return (
     <div>

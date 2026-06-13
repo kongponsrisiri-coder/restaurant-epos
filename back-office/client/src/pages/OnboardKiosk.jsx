@@ -366,7 +366,7 @@ function StepPayment({ form, noStripe, onBack, onDone }) {
   const [err, setErr]         = useState('');
 
   const PLAN_PRICE_LABEL = {
-    pro: '£89', lite_booking: '£29', lite_ordering: '£39',
+    founder: '£59', pro: '£89', lite_booking: '£29', lite_ordering: '£39',
     lite_bundle: '£49', spa: '£49',
   };
 

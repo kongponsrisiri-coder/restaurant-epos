@@ -12,7 +12,27 @@ export default function DashboardPage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [productFilter, setProductFilter] = useState('all');
+  const [copiedLink, setCopiedLink] = useState(false);
   const nav = useNavigate();
+
+  // Founder's Pack signup kiosk — invite-only link to hand to a prospect.
+  // Built from the live origin so it works on whatever domain ops runs on.
+  const founderLink = `${window.location.origin}/onboard?founder=1`;
+  const copyFounderLink = async () => {
+    try {
+      await navigator.clipboard.writeText(founderLink);
+    } catch {
+      // Clipboard API blocked (non-HTTPS / old browser) — fall back to prompt-free select.
+      const ta = document.createElement('textarea');
+      ta.value = founderLink;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch { /* ignore */ }
+      document.body.removeChild(ta);
+    }
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -50,6 +70,14 @@ export default function DashboardPage() {
           </p>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
+          {/* BO-FOUNDER-001 — copy the invite-only Founder's Pack self-pay kiosk link. */}
+          <button
+            onClick={copyFounderLink}
+            style={copiedLink ? { ...btn.ghost, color: C.success, borderColor: C.success } : btn.ghost}
+            title="Copy the invite-only Founder's Pack signup link (client pays £59/mo by card)"
+          >
+            {copiedLink ? '✓ Copied!' : '🔗 Founder link'}
+          </button>
           <button onClick={() => setShowAdd(true)} style={btn.ghost} title="Add a placeholder row only">
             + Quick add
           </button>

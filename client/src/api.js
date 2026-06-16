@@ -258,6 +258,10 @@ export const getWastageReport = (from, to) =>
 export const getCustomers = () => get('/api/customers');
 export const setCustomerConsent = (email, consent) =>
   put('/api/customers/marketing-consent', { email, consent });
+// SEPOS-056 — delete customers (one or many emails). The CRM is derived,
+// so the server removes their reservations and clears their PII from
+// takeaway orders.
+export const deleteCustomers = (emails) => post('/api/customers/delete', { emails });
 
 // SEPOS-033 Phase 2 — email campaigns
 export const getCampaigns      = ()                    => get('/api/campaigns');

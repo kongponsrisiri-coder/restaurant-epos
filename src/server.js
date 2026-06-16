@@ -5854,6 +5854,39 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-056 — delete customers from the CRM. There is no customers table:
+// the CRM is a view derived from reservations + takeaway orders keyed by
+// email. So "delete a customer" means erasing their identity from those
+// underlying rows:
+//   • reservations carry no money → hard-delete them for that email
+//     (children cascade via reservation_id ... ON DELETE CASCADE)
+//   • takeaway orders carry revenue → anonymise (NULL the PII) so the
+//     sale + Z-report stay intact but the person leaves the CRM
+// Accepts one or many emails ({ emails: [...] }) so the same endpoint
+// powers the per-row delete and the "delete all matching filter" button.
+app.post('/api/customers/delete', requireStaffAuth(['admin', 'manager', 'supervisor']), async (req, res) => {
+  try {
+    const emails = Array.isArray(req.body?.emails) ? req.body.emails : [];
+    const clean = [...new Set(emails
+      .map(e => String(e || '').trim().toLowerCase())
+      .filter(Boolean))];
+    if (clean.length === 0) return res.status(400).json({ error: 'No customer emails provided' });
+
+    let reservationsRemoved = 0, ordersAnonymised = 0;
+    for (const email of clean) {
+      const del = await pool.query(
+        `DELETE FROM reservations WHERE LOWER(TRIM(customer_email)) = $1`, [email]);
+      reservationsRemoved += del.rowCount || 0;
+      const anon = await pool.query(
+        `UPDATE orders SET customer_name = NULL, customer_email = NULL, customer_phone = NULL
+          WHERE order_type = 'takeaway' AND LOWER(TRIM(customer_email)) = $1`, [email]);
+      ordersAnonymised += anon.rowCount || 0;
+    }
+
+    res.json({ deleted: clean.length, reservations_removed: reservationsRemoved, orders_anonymised: ordersAnonymised });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─────────────────────────────────────────────────────────────────────
 // SEPOS-032 — stock depletion on sale
 // Walks each given order_item → its recipe → recipe_lines, and inserts

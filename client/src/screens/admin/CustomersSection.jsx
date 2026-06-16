@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getCustomers, setCustomerConsent, assertOk } from '../../api';
+import { getCustomers, setCustomerConsent, deleteCustomers, assertOk } from '../../api';
 import { confirm } from '../../utils/confirm';
 
 // SEPOS-033 Phase 1 — Customer CRM.
@@ -55,6 +55,24 @@ export default function CustomersSection() {
     }
   }
 
+  // SEPOS-056 — delete one customer (per-row) or every customer currently
+  // shown by the search/status filter. The CRM is derived, so the server
+  // removes their reservations and strips their PII from takeaway orders.
+  async function removeCustomers(emails, singleLabel) {
+    const list = [...new Set(emails.filter(Boolean))];
+    if (list.length === 0) return;
+    const msg = list.length === 1
+      ? `Delete ${singleLabel || list[0]}?\n\nThis removes their bookings and clears their details from any takeaway orders. This cannot be undone.`
+      : `Delete ${list.length} customers matching the current filter?\n\nThis removes their bookings and clears their details from any takeaway orders. This cannot be undone.`;
+    if (!await confirm(msg)) return;
+    try {
+      assertOk(await deleteCustomers(list));
+      await load();
+    } catch (err) {
+      alert('Could not delete: ' + (err?.message || 'unknown'));
+    }
+  }
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return customers.filter(c => {
@@ -100,6 +118,18 @@ export default function CustomersSection() {
 
       {/* Status tiles */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:10, marginBottom:16 }}>
+        {/* Always-visible "All" reset — clicking a status tile filters; this
+            clears it back to the full list without leaving the tab. */}
+        <button onClick={() => setStatusFilter('All')} style={{
+          background: statusFilter === 'All' ? '#1a1a2e' : '#f1f5f9',
+          color: statusFilter === 'All' ? 'white' : '#1a1a2e',
+          border: 'none', borderRadius: 10, padding: '14px 16px',
+          textAlign: 'left', cursor: 'pointer',
+          transition: 'background 0.15s, color 0.15s',
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, opacity: statusFilter === 'All' ? 0.85 : 1 }}>👥 All</div>
+          <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{customers.length}</div>
+        </button>
         {['VIP', 'Regular', 'New', 'Lapsed'].map(s => {
           const st = STATUS_STYLE[s];
           const active = statusFilter === s;
@@ -147,6 +177,12 @@ export default function CustomersSection() {
           color:'#0D1B3E', fontWeight:700, fontSize:13,
           cursor: filtered.length ? 'pointer' : 'not-allowed'
         }}>⬇ Export CSV</button>
+        <button onClick={() => removeCustomers(filtered.map(c => c.customer_email), null)} disabled={filtered.length === 0} style={{
+          padding:'10px 18px', borderRadius:8, border:'none',
+          background: filtered.length ? '#fee2e2' : '#f3e3e3',
+          color: filtered.length ? '#991b1b' : '#c9a3a3', fontWeight:700, fontSize:13,
+          cursor: filtered.length ? 'pointer' : 'not-allowed'
+        }} title="Delete every customer currently shown by the search/filter">🗑 Delete all {filtered.length}</button>
       </div>
 
       {/* Table */}
@@ -167,6 +203,7 @@ export default function CustomersSection() {
                 <th style={{ padding:'8px 6px' }}>Last visit</th>
                 <th style={{ padding:'8px 6px', textAlign:'right' }}>Spend (est.)</th>
                 <th style={{ padding:'8px 6px' }}>Consent</th>
+                <th style={{ padding:'8px 6px', textAlign:'right' }}></th>
               </tr>
             </thead>
             <tbody>
@@ -218,6 +255,14 @@ export default function CustomersSection() {
                           title="Only opt in when you have legitimate consent (verbal, signed, etc.)"
                         >+ Opt in</button>
                       )}
+                    </td>
+                    <td style={{ padding:'10px 6px', textAlign:'right' }}>
+                      <button
+                        onClick={() => removeCustomers([c.customer_email], c.customer_name || c.customer_email)}
+                        disabled={!c.customer_email}
+                        title="Delete this customer"
+                        style={{ background:'#fee2e2', color:'#991b1b', padding:'4px 9px', borderRadius:6, fontSize:12, fontWeight:700, border:'none', cursor: c.customer_email ? 'pointer' : 'not-allowed' }}
+                      >🗑</button>
                     </td>
                   </tr>
                 );

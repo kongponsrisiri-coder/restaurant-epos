@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-R0E872VB21"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-R0E872VB21');
+</script>
+<meta charset="UTF-8">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='50' fill='%230D1B3E'/%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%23C9A84C' stroke-width='1.8'/%3E%3Cg transform='translate(50,50)'%3E%3Cpath d='M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z' fill='%23C9A84C'/%3E%3Cpath d='M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z' fill='%23C9A84C' opacity='0.82' transform='rotate(72)'/%3E%3Ccircle cx='0' cy='0' r='5' fill='%23C9A84C'/%3E%3C/g%3E%3C/svg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SiamEPOS Pro — Restaurant Management System for Thai Restaurants in the UK</title>
+<meta name="description" content="SiamEPOS replaces OpenTable, Just Eat and your old EPOS in one system. Thai restaurant management built for the UK — £59/month. Zero commission. Thai-speaking support.">
+<link rel="canonical" href="https://siamepos.co.uk/siampro.html">
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SiamEPOS">
+<meta property="og:url" content="https://siamepos.co.uk/siampro.html">
+<meta property="og:title" content="SiamEPOS Pro — Restaurant Management System for Thai Restaurants in the UK">
+<meta property="og:description" content="SiamEPOS replaces OpenTable, Just Eat and your old EPOS in one system. Thai restaurant management built for the UK — £59/month. Zero commission. Thai-speaking support.">
+<meta property="og:image" content="https://siamepos.co.uk/og-image.jpg">
+<meta property="og:locale" content="en_GB">
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="SiamEPOS Pro — Restaurant Management System for Thai Restaurants in the UK">
+<meta name="twitter:description" content="SiamEPOS replaces OpenTable, Just Eat and your old EPOS in one system. From £59/month. Zero commission. Thai-speaking support.">
+<meta name="twitter:image" content="https://siamepos.co.uk/og-image.jpg">
+<!-- Schema.org Structured Data -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "SiamEPOS",
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "Web, iOS, Android, Windows, macOS",
+  "url": "https://siamepos.co.uk",
+  "description": "SiamEPOS is the UK's only Thai Restaurant Management System — table management, reservations, allergens, stock, and AI cost intelligence in one platform. From £59/month.",
+  "offers": {
+    "@type": "Offer",
+    "price": "59",
+    "priceCurrency": "GBP",
+    "priceSpecification": {
+      "@type": "UnitPriceSpecification",
+      "price": "59",
+      "priceCurrency": "GBP",
+      "unitText": "MONTH"
+    }
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "SiamEPOS",
+    "url": "https://siamepos.co.uk",
+    "email": "info@siamepos.co.uk",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://siamepos.co.uk/og-image.jpg"
+    },
+    "address": {
+      "@type": "PostalAddress",
+      "addressCountry": "GB"
+    }
+  },
+  "featureList": [
+    "Zero-commission online reservations",
+    "Zero-commission online takeaway ordering",
+    "UK 14-allergen management (Natasha's Law)",
+    "AI invoice scanner and inventory costing",
+    "Table management and live floor map",
+    "Kitchen Display System (KDS)",
+    "Customer CRM with email campaigns",
+    "Staff management and clock in/out",
+    "Bilingual English and Thai interface",
+    "Offline mode with cloud sync"
+  ],
+  "inLanguage": ["en-GB", "th"]
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold: #C9A84C; --gold-light: #E8C96A;
+  --navy: #0D1B3E; --navy-mid: #1A2F6B;
+  --white: #FDFAF4; --text-muted: #6B7A9F;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body { font-family:'Sarabun',sans-serif; background:var(--white); color:var(--navy); overflow-x:hidden; }
+body.thai .lang-en { display:none; }
+body:not(.thai) .lang-th { display:none; }
+
+/* NAV */
+nav { position:fixed; top:0; left:0; right:0; z-index:100; display:flex; justify-content:space-between; align-items:center; padding:18px 60px; background:rgba(13,27,62,0.96); backdrop-filter:blur(12px); border-bottom:1px solid rgba(201,168,76,0.2); }
+.nav-logo { display:flex; align-items:center; gap:10px; text-decoration:none; }
+.nav-logo{display:flex;align-items:center;text-decoration:none;}
+.nav-links { display:flex; align-items:center; gap:24px; list-style:none; }
+.nav-links a { color:rgba(255,255,255,0.75); text-decoration:none; font-size:14px; font-weight:600; transition:color 0.2s; }
+.nav-links a:hover { color:var(--gold); }
+.nav-cta { background:linear-gradient(135deg,var(--gold),var(--gold-light)); color:var(--navy)!important; padding:9px 20px; border-radius:8px; font-weight:700!important; }
+.nav-book { background:transparent; border:1px solid rgba(201,168,76,0.5); color:var(--gold)!important; padding:9px 18px; border-radius:8px; }
+.lang-toggle { background:rgba(201,168,76,0.12); border:1px solid rgba(201,168,76,0.35); color:var(--gold); padding:6px 12px; border-radius:20px; cursor:pointer; font-size:12px; font-weight:700; font-family:'Sarabun',sans-serif; }
+
+/* BOOK BTN */
+.book-btn { display:inline-flex; align-items:center; gap:8px; background:linear-gradient(135deg,var(--gold),var(--gold-light)); color:var(--navy); padding:13px 26px; border-radius:10px; font-size:15px; font-weight:800; border:none; cursor:pointer; font-family:'Sarabun',sans-serif; transition:transform 0.2s,box-shadow 0.2s; white-space:nowrap; }
+.book-btn:hover { transform:translateY(-2px); box-shadow:0 10px 28px rgba(201,168,76,0.45); }
+.book-btn.ghost { background:transparent; border:2px solid var(--gold); color:var(--gold); }
+.book-btn.ghost:hover { background:rgba(201,168,76,0.1); }
+
+/* BOOKING MODAL */
+.booking-overlay { display:none; position:fixed; inset:0; z-index:999; background:rgba(7,15,36,0.88); backdrop-filter:blur(8px); align-items:center; justify-content:center; padding:20px; }
+.booking-overlay.open { display:flex; }
+.booking-modal { background:#0D1B3E; border:1px solid rgba(201,168,76,0.3); border-radius:24px; padding:36px; width:100%; max-width:460px; position:relative; box-shadow:0 40px 80px rgba(0,0,0,0.6); animation:modalIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both; max-height:92vh; overflow-y:auto; }
+@keyframes modalIn { from{opacity:0;transform:scale(0.9) translateY(20px)} to{opacity:1;transform:scale(1) translateY(0)} }
+.modal-close { position:absolute; top:14px; right:16px; background:rgba(255,255,255,0.07); border:none; color:rgba(255,255,255,0.5); font-size:18px; width:30px; height:30px; border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.modal-close:hover { background:rgba(255,255,255,0.15); color:white; }
+.modal-title { font-family:'Cormorant Garamond',serif; font-size:26px; font-weight:700; color:white; margin-bottom:4px; }
+.modal-sub { font-size:13px; color:rgba(255,255,255,0.45); margin-bottom:24px; }
+.modal-steps { display:flex; gap:0; margin-bottom:24px; }
+.modal-step { flex:1; text-align:center; position:relative; }
+.modal-step::after { content:''; position:absolute; top:13px; left:50%; right:-50%; height:2px; background:rgba(255,255,255,0.08); z-index:0; }
+.modal-step:last-child::after { display:none; }
+.sc { width:26px; height:26px; border-radius:50%; background:rgba(255,255,255,0.07); border:2px solid rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:rgba(255,255,255,0.4); margin:0 auto 4px; position:relative; z-index:1; transition:all 0.3s; }
+.sc.active { background:var(--gold); border-color:var(--gold); color:var(--navy); }
+.sc.done { background:rgba(201,168,76,0.2); border-color:var(--gold); color:var(--gold); }
+.sl { font-size:9px; color:rgba(255,255,255,0.3); }
+.sl.active { color:var(--gold); font-weight:700; }
+.form-panel { display:none; }
+.form-panel.active { display:block; animation:fadeUp 0.3s ease both; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+.flabel { display:block; font-size:11px; font-weight:700; color:rgba(255,255,255,0.5); letter-spacing:0.5px; margin-bottom:7px; text-transform:uppercase; }
+.finput, .fselect, .ftextarea { width:100%; padding:12px 14px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); border-radius:10px; color:white; font-size:16px; font-family:'Sarabun',sans-serif; outline:none; transition:border-color 0.2s; -webkit-appearance:none; }
+.finput:focus,.fselect:focus,.ftextarea:focus { border-color:var(--gold); }
+.finput::placeholder,.ftextarea::placeholder { color:rgba(255,255,255,0.25); }
+.fselect option { background:#0D1B3E; }
+.ftextarea { resize:none; height:72px; }
+.frow { margin-bottom:14px; }
+.frow2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+.ferr { color:#FF6B6B; font-size:11px; margin-top:4px; display:none; }
+.ferr.show { display:block; }
+.time-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; }
+.tslot { padding:9px 4px; border-radius:8px; text-align:center; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08); font-size:12px; font-weight:600; color:rgba(255,255,255,0.55); cursor:pointer; transition:all 0.2s; font-family:'Sarabun',sans-serif; }
+.tslot:hover { border-color:rgba(201,168,76,0.4); color:var(--gold); }
+.tslot.selected { background:var(--gold); border-color:var(--gold); color:var(--navy); font-weight:800; }
+.mbtn-row { display:flex; gap:10px; margin-top:20px; }
+.mbtn-back { padding:12px 18px; border-radius:10px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); color:rgba(255,255,255,0.6); font-size:13px; font-weight:600; cursor:pointer; font-family:'Sarabun',sans-serif; }
+.mbtn-next { flex:1; padding:13px; border-radius:10px; background:linear-gradient(135deg,var(--gold),var(--gold-light)); border:none; color:var(--navy); font-size:14px; font-weight:800; cursor:pointer; font-family:'Sarabun',sans-serif; transition:all 0.2s; }
+.mbtn-next:hover { transform:translateY(-1px); box-shadow:0 6px 20px rgba(201,168,76,0.4); }
+.mbtn-next:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+.bsuccess { display:none; text-align:center; padding:20px 0; }
+.bsuccess-icon { font-size:52px; margin-bottom:14px; }
+.bsuccess-title { font-family:'Cormorant Garamond',serif; font-size:26px; font-weight:700; color:white; margin-bottom:8px; }
+.bsuccess-sub { font-size:13px; color:rgba(255,255,255,0.5); line-height:1.7; margin-bottom:20px; }
+.bsuccess-ref { background:rgba(201,168,76,0.1); border:1px solid rgba(201,168,76,0.25); border-radius:10px; padding:12px 18px; font-size:12px; color:var(--gold); font-weight:700; margin-bottom:18px; }
+
+/* WHATSAPP FLOAT */
+.wa-float { position:fixed; bottom:28px; right:28px; z-index:98; display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
+.wa-btn { display:flex; align-items:center; gap:10px; background:#25D366; color:white; padding:13px 20px; border-radius:50px; font-size:14px; font-weight:700; text-decoration:none; box-shadow:0 8px 24px rgba(37,211,102,0.4); transition:transform 0.2s,box-shadow 0.2s; font-family:'Sarabun',sans-serif; }
+.wa-btn:hover { transform:translateY(-2px); box-shadow:0 12px 32px rgba(37,211,102,0.5); }
+.wa-icon { font-size:20px; }
+
+/* HERO */
+.hero { min-height:100vh; background:linear-gradient(160deg,var(--navy) 0%,var(--navy-mid) 60%,#0A2456 100%); display:grid; grid-template-columns:1fr 1fr; align-items:center; gap:60px; position:relative; overflow:hidden; padding:120px 60px 80px; }
+.hero::before { content:''; position:absolute; inset:0; background-image:repeating-linear-gradient(0deg,rgba(201,168,76,0.055) 0px,rgba(201,168,76,0.055) 1px,transparent 1px,transparent 48px),repeating-linear-gradient(90deg,rgba(201,168,76,0.055) 0px,rgba(201,168,76,0.055) 1px,transparent 1px,transparent 48px); }
+.hero::after { content:''; position:absolute; width:600px; height:600px; background:radial-gradient(circle,rgba(201,168,76,0.12) 0%,transparent 70%); right:10%; top:50%; transform:translateY(-50%); border-radius:50%; pointer-events:none; }
+.hero-content { position:relative; z-index:1; animation:fadeUp 0.9s ease both; }
+
+/* HERO MOCKUP */
+.hero-mockup { position:relative; z-index:1; animation:fadeUp 0.9s 0.2s ease both; }
+.mockup-window { background:#070F24; border:1px solid rgba(201,168,76,0.22); border-radius:16px; overflow:hidden; box-shadow:0 32px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04), 0 0 60px rgba(201,168,76,0.06); }
+.mockup-titlebar { background:#0A1628; border-bottom:1px solid rgba(201,168,76,0.12); padding:11px 16px; display:flex; align-items:center; gap:10px; }
+.mockup-dots { display:flex; gap:6px; flex-shrink:0; }
+.mockup-dots span { width:10px; height:10px; border-radius:50%; }
+.mockup-dots span:nth-child(1){background:#FF5F57;} .mockup-dots span:nth-child(2){background:#FFBD2E;} .mockup-dots span:nth-child(3){background:#28C840;}
+.mockup-wtitle { font-size:11px; color:rgba(255,255,255,0.38); flex:1; text-align:center; letter-spacing:0.3px; }
+.mockup-live { font-size:10px; color:#22c55e; font-weight:700; letter-spacing:0.5px; }
+.mockup-body { padding:16px; }
+.mockup-tableplan { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:12px; }
+.mt { border-radius:10px; padding:10px 6px; text-align:center; transition:transform 0.2s; cursor:default; }
+.mt.available { background:rgba(34,197,94,0.12); border:1px solid rgba(34,197,94,0.35); }
+.mt.occupied  { background:rgba(233,69,96,0.12);  border:1px solid rgba(233,69,96,0.35); }
+.mt.starters  { background:rgba(234,179,8,0.12);  border:1px solid rgba(234,179,8,0.35); }
+.mt.mains     { background:rgba(96,165,250,0.12);  border:1px solid rgba(96,165,250,0.35); }
+.mt.desserts  { background:rgba(236,72,153,0.12);  border:1px solid rgba(236,72,153,0.35); }
+.mt-n { display:block; font-size:10px; font-weight:800; color:white; margin-bottom:3px; }
+.mt-t { display:block; font-size:9px; color:rgba(255,255,255,0.45); }
+.mt-s { display:block; font-size:8px; color:rgba(255,255,255,0.3); margin-top:2px; }
+.mt.available .mt-t { color:#22c55e; }
+.mockup-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+.mchip { font-size:9px; font-weight:700; padding:3px 8px; border-radius:20px; }
+.mchip.green { background:rgba(34,197,94,0.15); color:#22c55e; }
+.mchip.red   { background:rgba(233,69,96,0.15); color:#e94560; }
+.mchip.blue  { background:rgba(96,165,250,0.15); color:#60a5fa; }
+.mchip.pink  { background:rgba(236,72,153,0.15); color:#ec4899; }
+.mockup-notif { background:rgba(201,168,76,0.08); border:1px solid rgba(201,168,76,0.2); border-radius:10px; padding:10px 12px; display:flex; align-items:flex-start; gap:10px; margin-bottom:10px; }
+.mn-bell { flex-shrink:0; color:#C9A84C; }
+.mn-title { font-size:10px; font-weight:700; color:white; margin-bottom:2px; }
+.mn-sub { font-size:9px; color:rgba(255,255,255,0.4); }
+.mockup-revenue { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; background:rgba(255,255,255,0.03); border-radius:8px; border:1px solid rgba(255,255,255,0.06); }
+.mr-label { font-size:10px; color:rgba(255,255,255,0.4); }
+.mr-value { font-size:16px; font-weight:800; color:#22c55e; font-family:'Cormorant Garamond',serif; }
+@media(max-width:1100px){.hero{grid-template-columns:1fr;}.hero-mockup{display:none;}}
+.hero-tag { display:inline-flex; align-items:center; gap:8px; background:rgba(201,168,76,0.15); border:1px solid rgba(201,168,76,0.4); color:var(--gold); padding:7px 16px; border-radius:30px; font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:24px; }
+.hero h1 { font-family:'Cormorant Garamond',serif; font-size:68px; font-weight:700; line-height:1.05; color:white; margin-bottom:20px; }
+.hero h1 em { font-style:italic; color:var(--gold); }
+.hero-sub { font-size:18px; color:rgba(255,255,255,0.7); line-height:1.75; margin-bottom:36px; font-weight:300; max-width:580px; }
+.hero-actions { display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin-bottom:56px; }
+.hero-stats { display:flex; gap:40px; flex-wrap:wrap; }
+.hstat-num { font-family:'Cormorant Garamond',serif; font-size:38px; font-weight:700; color:var(--gold); line-height:1; }
+.hstat-label { font-size:11px; color:rgba(255,255,255,0.45); text-transform:uppercase; letter-spacing:1px; margin-top:3px; }
+
+/* STATS BAR */
+.stats-bar { background:var(--navy); border-top:1px solid rgba(201,168,76,0.15); border-bottom:1px solid rgba(201,168,76,0.15); padding:28px 60px; display:flex; justify-content:center; align-items:stretch; gap:0; flex-wrap:wrap; }
+.stats-bar-item { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 48px; border-right:1px solid rgba(201,168,76,0.15); text-align:center; }
+.stats-bar-item:last-child { border-right:none; }
+.stats-bar-num { font-family:'Cormorant Garamond',serif; font-size:42px; font-weight:700; color:var(--gold); line-height:1; margin-bottom:4px; }
+.stats-bar-label { font-size:12px; color:rgba(255,255,255,0.5); font-weight:600; letter-spacing:0.5px; text-transform:uppercase; }
+
+/* PROOF BAR */
+.proof-bar { background:linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.06)); border-top:1px solid rgba(201,168,76,0.25); border-bottom:1px solid rgba(201,168,76,0.25); padding:20px 60px; display:flex; justify-content:center; align-items:center; gap:60px; flex-wrap:wrap; }
+.proof-item { display:flex; align-items:center; gap:12px; font-size:14px; font-weight:700; color:white; }
+.proof-item span { color:var(--gold); }
+
+/* SECTIONS */
+section { padding:100px 60px; }
+.section-label { display:inline-block; color:var(--gold); font-size:11px; font-weight:700; letter-spacing:3px; text-transform:uppercase; margin-bottom:14px; }
+.section-title { font-family:'Cormorant Garamond',serif; font-size:50px; font-weight:700; line-height:1.1; color:var(--navy); margin-bottom:18px; }
+.section-title.white { color:white; }
+.section-sub { font-size:17px; color:var(--text-muted); line-height:1.7; max-width:560px; }
+
+/* FEATURES GRID */
+.features-section { background:var(--white); }
+.features-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:24px; max-width:1100px; margin:60px auto 0; }
+.fcard { background:white; border:1px solid #E8E8F0; border-radius:20px; padding:32px 28px; transition:transform 0.3s,box-shadow 0.3s,border-color 0.3s; position:relative; overflow:hidden; text-decoration:none; display:block; }
+.fcard::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,var(--gold),var(--gold-light)); transform:scaleX(0); transform-origin:left; transition:transform 0.3s; }
+.fcard:hover { transform:translateY(-6px); box-shadow:0 20px 50px rgba(13,27,62,0.1); border-color:rgba(201,168,76,0.3); }
+.fcard:hover::before { transform:scaleX(1); }
+.fcard.highlight { border-color:rgba(201,168,76,0.3); background:linear-gradient(160deg,#FDFAF4,#FBF5E6); }
+.fcard-icon { width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:rgba(201,168,76,0.08); border:1px solid rgba(201,168,76,0.2); border-radius:12px; margin-bottom:16px; }
+.fcard-badge { display:inline-block; background:rgba(201,168,76,0.15); border:1px solid rgba(201,168,76,0.3); color:var(--gold); font-size:9px; font-weight:800; letter-spacing:1px; text-transform:uppercase; padding:3px 10px; border-radius:20px; margin-bottom:10px; }
+.fcard-villain { font-size:11px; color:#c0392b; font-weight:700; margin-bottom:6px; letter-spacing:0.3px; }
+.fcard-title { font-size:18px; font-weight:700; color:var(--navy); margin-bottom:8px; }
+.fcard-desc { font-size:13px; color:var(--text-muted); line-height:1.65; }
+.fcard-coming { font-size:11px; color:var(--gold); font-weight:700; margin-top:10px; opacity:0.7; }
+
+/* COST REALITY SECTION */
+.cost-reality { background:var(--navy); }
+.cost-table-wrap { max-width:900px; margin:60px auto 0; }
+.cost-versus { display:grid; grid-template-columns:1fr auto 1fr; gap:0; align-items:stretch; }
+.cost-col { border-radius:20px; overflow:hidden; }
+.cost-col-header { padding:22px 28px; font-size:13px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase; }
+.cost-col.old .cost-col-header { background:#1a0a0a; color:#ff6b6b; border-radius:16px 16px 0 0; }
+.cost-col.new .cost-col-header { background:rgba(201,168,76,0.2); color:var(--gold); border-radius:16px 16px 0 0; }
+.cost-row { display:flex; justify-content:space-between; align-items:center; padding:16px 28px; border-bottom:1px solid rgba(255,255,255,0.06); }
+.cost-col.old .cost-row { background:rgba(255,255,255,0.03); }
+.cost-col.new .cost-row { background:rgba(201,168,76,0.04); }
+.cost-col.old .cost-row:last-child { background:rgba(200,0,0,0.12); border-bottom:none; font-weight:800; }
+.cost-col.new .cost-row:last-child { background:rgba(201,168,76,0.15); border-bottom:none; font-weight:800; }
+.cost-label { font-size:13px; color:rgba(255,255,255,0.65); }
+.cost-amount { font-size:14px; font-weight:800; }
+.cost-col.old .cost-amount { color:#ff6b6b; }
+.cost-col.new .cost-amount { color:var(--gold); }
+.cost-divider { display:flex; align-items:center; justify-content:center; padding:0 28px; }
+.cost-vs-badge { width:52px; height:52px; border-radius:50%; background:rgba(201,168,76,0.15); border:2px solid rgba(201,168,76,0.35); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; color:var(--gold); }
+.cost-saving-banner { margin-top:24px; background:linear-gradient(135deg,rgba(201,168,76,0.15),rgba(201,168,76,0.08)); border:1px solid rgba(201,168,76,0.3); border-radius:16px; padding:24px 32px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:20px; }
+.cost-saving-text { font-size:17px; color:white; font-weight:300; line-height:1.6; }
+.cost-saving-text strong { color:var(--gold); font-weight:800; }
+.cost-saving-pill { background:linear-gradient(135deg,var(--gold),var(--gold-light)); color:var(--navy); padding:10px 24px; border-radius:50px; font-size:14px; font-weight:800; white-space:nowrap; flex-shrink:0; }
+
+/* PRICING PREVIEW */
+.pricing-section { background:#F7F5F0; }
+.pricing-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:20px; max-width:1000px; margin:60px auto 0; }
+.pcard { background:white; border:1px solid #E0DDD6; border-radius:20px; padding:36px 28px; position:relative; transition:transform 0.3s,box-shadow 0.3s; }
+.pcard:hover { transform:translateY(-4px); box-shadow:0 16px 40px rgba(13,27,62,0.1); }
+.pcard.featured { background:var(--navy); border-color:var(--gold); transform:scale(1.04); }
+.pcard.featured:hover { transform:scale(1.04) translateY(-4px); }
+.pcard-badge { position:absolute; top:-12px; left:50%; transform:translateX(-50%); background:linear-gradient(135deg,var(--gold),var(--gold-light)); color:var(--navy); font-size:10px; font-weight:800; padding:4px 16px; border-radius:20px; text-transform:uppercase; letter-spacing:1px; white-space:nowrap; }
+.pcard-tier { font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--gold); margin-bottom:10px; }
+.pcard-price { font-family:'Cormorant Garamond',serif; font-size:52px; font-weight:700; color:var(--navy); line-height:1; margin-bottom:4px; }
+.pcard.featured .pcard-price { color:white; }
+.pcard-period { font-size:12px; color:var(--text-muted); margin-bottom:14px; }
+.pcard.featured .pcard-period { color:rgba(255,255,255,0.45); }
+.pcard-key { font-size:13px; color:var(--text-muted); line-height:1.6; margin-bottom:20px; }
+.pcard.featured .pcard-key { color:rgba(255,255,255,0.6); }
+.btn-pcard { display:block; width:100%; padding:12px; border-radius:10px; border:none; font-size:14px; font-weight:700; cursor:pointer; text-decoration:none; text-align:center; transition:all 0.2s; font-family:'Sarabun',sans-serif; }
+.btn-outline-navy { background:transparent; border:2px solid rgba(13,27,62,0.2); color:var(--navy); }
+.btn-outline-navy:hover { border-color:var(--gold); color:var(--gold); }
+.btn-gold { background:linear-gradient(135deg,var(--gold),var(--gold-light)); color:var(--navy); }
+.btn-gold:hover { box-shadow:0 6px 20px rgba(201,168,76,0.4); transform:translateY(-1px); }
+
+/* COMPARISON TABLE */
+.compare-section { background:var(--white); }
+.compare-table { width:100%; max-width:900px; margin:50px auto 0; border-collapse:collapse; }
+.compare-table th { background:var(--navy); color:white; padding:14px 20px; font-size:13px; font-weight:700; text-align:left; }
+.compare-table th:first-child { border-radius:12px 0 0 0; }
+.compare-table th:last-child { border-radius:0 12px 0 0; color:var(--gold); }
+.compare-table td { padding:14px 20px; font-size:14px; border-bottom:1px solid #EEEDF0; }
+.compare-table tr:last-child td { border-bottom:none; font-weight:800; font-size:16px; }
+.compare-table tr:last-child td:last-child { color:var(--gold); background:rgba(201,168,76,0.06); }
+.compare-table tr:hover td { background:#F9F8FF; }
+.compare-highlight { background:rgba(201,168,76,0.06)!important; }
+
+/* TRUST BAR */
+.trust-bar { background:#F7F5F0; border-top:1px solid #E8E5DC; border-bottom:1px solid #E8E5DC; padding:24px 60px; display:flex; justify-content:center; align-items:center; gap:48px; flex-wrap:wrap; }
+.trust-item { display:flex; align-items:center; gap:9px; font-size:13px; font-weight:600; color:var(--navy); }
+.trust-item .t-icon { font-size:18px; }
+
+/* FINAL CTA */
+.final-cta { background:linear-gradient(135deg,var(--navy) 0%,#0A2456 100%); text-align:center; position:relative; overflow:hidden; }
+.final-cta::before { content:''; position:absolute; width:700px; height:700px; background:radial-gradient(circle,rgba(201,168,76,0.07) 0%,transparent 70%); top:50%; left:50%; transform:translate(-50%,-50%); }
+.final-cta .section-title { color:white; }
+.final-cta .section-sub { color:rgba(255,255,255,0.6); margin:0 auto 40px; }
+.cta-personal { max-width:560px; margin:0 auto 32px; font-size:16px; color:rgba(255,255,255,0.55); line-height:1.8; font-weight:300; font-style:italic; }
+.cta-trust-row { display:flex; justify-content:center; align-items:center; gap:28px; flex-wrap:wrap; margin-top:28px; }
+.cta-trust-chip { display:flex; align-items:center; gap:6px; font-size:12px; color:rgba(255,255,255,0.45); font-weight:600; }
+
+/* FOOTER */
+footer { background:#070F24; padding:56px 60px; display:grid; grid-template-columns:2fr 1fr 1fr 1fr; gap:48px; }
+.footer-brand {}
+.footer-logo { font-family:'Cormorant Garamond',serif; font-size:26px; font-weight:700; color:var(--gold); margin-bottom:12px; }
+.footer-logo span { color:white; }
+.footer-tagline { color:rgba(255,255,255,0.4); font-size:13px; line-height:1.7; max-width:240px; margin-bottom:20px; }
+.footer-col h4 { color:white; font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:16px; }
+.footer-col ul { list-style:none; display:flex; flex-direction:column; gap:9px; }
+.footer-col ul a { color:rgba(255,255,255,0.4); font-size:13px; text-decoration:none; transition:color 0.2s; }
+.footer-col ul a:hover { color:var(--gold); }
+.footer-bottom { background:#040A18; padding:18px 60px; display:flex; justify-content:space-between; align-items:center; }
+.footer-bottom p { color:rgba(255,255,255,0.22); font-size:12px; }
+.footer-bottom a { color:var(--gold); text-decoration:none; }
+
+/* RESPONSIVE */
+@media(max-width:1100px) {
+  nav { padding:14px 24px; }
+  .nav-links { gap:14px; }
+  section { padding:80px 28px; }
+  .proof-bar { padding:18px 24px; gap:24px; }
+  .stats-bar { padding:20px 24px; gap:20px; }
+  .stats-bar-item { padding:0 24px; }
+  .features-grid { grid-template-columns:repeat(2,1fr); }
+  .pricing-grid { grid-template-columns:1fr; max-width:340px; }
+  .pcard.featured { transform:scale(1); }
+  .cost-versus { grid-template-columns:1fr; }
+  .cost-divider { padding:20px 0; }
+  footer { grid-template-columns:1fr 1fr; gap:32px; padding:44px 24px; }
+  .footer-bottom { padding:16px 24px; flex-direction:column; gap:6px; text-align:center; }
+  .hero { padding:100px 24px 70px; }
+  .hero h1 { font-size:48px; }
+  .hero-stats { gap:28px; }
+  .trust-bar { padding:20px 24px; gap:24px; }
+}
+@media(max-width:640px) {
+  .features-grid { grid-template-columns:1fr; }
+
+  .nav-burger{display:inline-block!important;}
+  .lang-toggle{font-size:11px;padding:6px 10px;}
+  nav{padding:14px 18px;}
+  .nav-logo svg{width:140px;height:42px;}
+  .nav-links{display:none !important;position:fixed;top:62px;left:0;right:0;background:var(--navy,#0D1B3E);border-top:1px solid rgba(201,168,76,0.2);flex-direction:column;gap:0;padding:8px 0;z-index:200;}
+  body.menu-open .nav-links{display:flex !important;}
+  body.menu-open{overflow:hidden;}
+  .nav-links li{width:100%;}
+  .nav-links li a{display:block;padding:14px 24px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:15px;}
+  .nav-links li:last-child a{border-bottom:none;}
+  .hero h1{font-size:36px !important;line-height:1.15 !important;}
+  .hero p,.hero-sub{font-size:15px !important;}
+  .hero-actions{flex-direction:column;align-items:stretch;}
+  .hero-actions .book-btn,.hero-actions a{width:100%;text-align:center;}
+  .hero-stats{flex-direction:column;gap:16px !important;}
+  .features-grid,.fcards,.pcards,.feat-inner{grid-template-columns:1fr !important;gap:32px !important;}
+  .feat-inner.rev{direction:ltr;}
+  [style*="grid-template-columns:repeat(3"],[style*="grid-template-columns: repeat(3"],
+  [style*="grid-template-columns:repeat(4"],[style*="grid-template-columns: repeat(4"],
+  [style*="grid-template-columns:1fr 1fr"],[style*="grid-template-columns: 1fr 1fr"],
+  [style*="grid-template-columns:1fr 1.4fr"],[style*="grid-template-columns: 1fr 1.4fr"]{
+    grid-template-columns:1fr !important;gap:24px !important;
+  }
+  [style*="gap:80px"],[style*="gap:64px"],[style*="gap: 80px"],[style*="gap: 64px"]{gap:32px !important;}
+  iframe{height:280px !important;}
+  section,.feat-section{padding:56px 20px !important;}
+  footer{grid-template-columns:1fr;}
+  .wa-float{bottom:16px;right:16px;}
+  .stats-bar{padding:20px 16px;gap:0;}
+  .stats-bar-item{padding:16px 20px;border-right:none;border-bottom:1px solid rgba(201,168,76,0.15);width:100%;}
+  .stats-bar-item:last-child{border-bottom:none;}
+  .cost-saving-banner{flex-direction:column;align-items:flex-start;}
+  .cta-trust-row{flex-direction:column;gap:14px;}
+}
+.reveal { opacity:0; transform:translateY(20px); transition:opacity 0.7s ease,transform 0.7s ease; }
+.reveal.visible { opacity:1; transform:translateY(0); }
+.rd1{transition-delay:0.1s} .rd2{transition-delay:0.2s} .rd3{transition-delay:0.3s} .rd4{transition-delay:0.4s}
+
+.nav-burger{display:none;background:none;border:none;color:white;font-size:24px;line-height:1;cursor:pointer;padding:4px 6px;margin-left:6px;}
+.nav-burger:hover{color:var(--gold);}
+</style>
+</head>
+<body>
+
+<!-- booking modal removed — restaurant booking demo now lives at https://www.siamepos.net -->
+
+<!-- WHATSAPP FLOAT -->
+<div class="wa-float">
+  <a href="https://wa.me/447896036386?text=Hello%2C%20I%27m%20interested%20in%20SiamEPOS" target="_blank" class="wa-btn">
+    <span class="wa-icon">💬</span>
+    <span class="lang-en">WhatsApp Us</span>
+    <span class="lang-th">ทัก WhatsApp</span>
+  </a>
+</div>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="index.html">
+    <svg width="170" height="50" viewBox="0 0 340 100" xmlns="http://www.w3.org/2000/svg"><circle cx="52" cy="50" r="44" fill="none" stroke="#C9A84C" stroke-width="1.5"/><circle cx="52" cy="50" r="38" fill="none" stroke="#C9A84C" stroke-width="0.5" opacity="0.28"/><g transform="translate(52,50)"><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/><circle cx="0" cy="0" r="8" fill="#0D1B3E"/><circle cx="0" cy="0" r="4.5" fill="#C9A84C"/></g><line x1="110" y1="16" x2="110" y2="84" stroke="#C9A84C" stroke-width="0.8" opacity="0.32"/><text x="126" y="58" font-family="Georgia, serif" font-size="40" font-weight="700" letter-spacing="-1"><tspan fill="white">Siam</tspan><tspan fill="#C9A84C">EPOS</tspan></text></svg>
+  </a>
+  <ul class="nav-links">
+    <li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li>
+    <li><a href="siampro.html" class="active lang-en">SiamPRO</a><a href="siampro.html" class="active lang-th">SiamPRO</a></li>
+    <li><a href="lite.html" class="lang-en">SiamLite</a><a href="lite.html" class="lang-th">SiamLite</a></li>
+    <li><a href="spa.html" class="lang-en">SiamSpa</a><a href="spa.html" class="lang-th">SiamSpa</a></li>
+    <li><a href="siamshop.html" class="lang-en">SiamShop</a><a href="siamshop.html" class="lang-th">SiamShop</a></li>
+    <li><a href="why-siamepos.html" class="lang-en">Why Us</a><a href="why-siamepos.html" class="lang-th">ทำไมต้องเรา</a></li>
+    <li><a href="website-design.html" class="lang-en">Website Design</a><a href="website-design.html" class="lang-th">&#x0E2d;&#x0E2d;&#x0E01;&#x0E41;&#x0E1a;&#x0E1a;&#x0E40;&#x0E27;&#x0E47;&#x0E1a;</a></li>
+    <li><a href="book-demo.html" class="nav-cta lang-en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th">จองเดโม</a></li>
+  </ul>
+  <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'ภาษาไทย'">ภาษาไทย</button>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-tag">🇹🇭 <span class="lang-en">Built for Thai restaurants in the UK</span><span class="lang-th">สร้างมาเพื่อร้านอาหารไทยในสหราชอาณาจักร</span></div>
+    <h1 class="lang-en">Stop paying commission<br>to people who don't care<br>about <em>your restaurant</em></h1>
+    <h1 class="lang-th">เลิกจ่ายค่าคอมมิชชั่น<br>ให้คนที่ไม่เคยแคร์<br><em>ร้านของคุณ</em></h1>
+    <p class="hero-sub lang-en">OpenTable takes your bookings. Just Eat takes 35% of your takeaway. Your EPOS doesn't even speak Thai. SiamEPOS replaces all three — for <strong style="color:white;">£59 a month</strong>. With Thai-speaking support, built-in allergen compliance, and AI that photographs your invoices and updates your stock automatically.</p>
+    <p class="hero-sub lang-th">OpenTable กุมการจองโต๊ะของร้านคุณไว้ Just Eat หัก 35% จากยอดอาหารสั่งกลับบ้าน แถม EPOS ที่ใช้อยู่ก็พูดไทยไม่ได้ด้วยซ้ำ SiamEPOS ตัวเดียวแทนได้ทั้งสามอย่าง — แค่ <strong style="color:white;">£59 ต่อเดือน</strong> พร้อมซัพพอร์ตภาษาไทย ระบบสารก่อภูมิแพ้ครบในตัว และ AI ที่แค่ถ่ายรูปใบแจ้งหนี้ สต๊อกวัตถุดิบก็อัปเดตให้เองอัตโนมัติ</p>
+    <div class="hero-actions">
+      <a href="book-demo.html" class="book-btn lang-en">Book a Free Demo</a>
+      <a href="book-demo.html" class="book-btn lang-th">จองเดโมฟรี</a>
+      <a href="features.html" style="color:rgba(255,255,255,0.6);font-size:15px;font-weight:600;text-decoration:none;" class="lang-en">See all features →</a>
+      <a href="features.html" style="color:rgba(255,255,255,0.6);font-size:15px;font-weight:600;text-decoration:none;" class="lang-th">ดูฟีเจอร์ทั้งหมด →</a>
+    </div>
+    <div class="hero-stats">
+      <div><div class="hstat-num">£0</div><div class="hstat-label lang-en">Booking commission, ever</div><div class="hstat-label lang-th">ค่าคอมจองโต๊ะ — ตลอดไป</div></div>
+      <div><div class="hstat-num">0%</div><div class="hstat-label lang-en">Takeaway commission</div><div class="hstat-label lang-th">ค่าคอมสั่งกลับบ้าน</div></div>
+      <div><div class="hstat-num" style="font-size:22px;">CRM</div><div class="hstat-label lang-en">You own your customers</div><div class="hstat-label lang-th">คุณเป็นเจ้าของข้อมูลลูกค้า</div></div>
+    </div>
+  </div>
+
+  <!-- Hero product mockup -->
+  <div class="hero-mockup">
+    <div class="mockup-window">
+      <div class="mockup-titlebar">
+        <div class="mockup-dots"><span></span><span></span><span></span></div>
+        <span class="mockup-wtitle">SiamEPOS · Live Floor Plan</span>
+        <span class="mockup-live">● LIVE</span>
+      </div>
+      <div class="mockup-body">
+        <div class="mockup-tableplan">
+          <div class="mt occupied"><span class="mt-n">T1</span><span class="mt-t">1h 24m</span><span class="mt-s">Mains</span></div>
+          <div class="mt available"><span class="mt-n">T2</span><span class="mt-t">Free</span></div>
+          <div class="mt starters"><span class="mt-n">T3</span><span class="mt-t">22m</span><span class="mt-s">Starters</span></div>
+          <div class="mt mains"><span class="mt-n">T4</span><span class="mt-t">47m</span><span class="mt-s">Mains</span></div>
+          <div class="mt desserts"><span class="mt-n">T5</span><span class="mt-t">1h 08m</span><span class="mt-s">Desserts</span></div>
+          <div class="mt occupied"><span class="mt-n">T6</span><span class="mt-t">14m</span><span class="mt-s">Ordered</span></div>
+          <div class="mt available"><span class="mt-n">T7</span><span class="mt-t">Free</span></div>
+          <div class="mt mains"><span class="mt-n">T8</span><span class="mt-t">33m</span><span class="mt-s">Mains</span></div>
+        </div>
+        <div class="mockup-chips">
+          <span class="mchip green">● 2 Available</span>
+          <span class="mchip red">● 2 Ordered</span>
+          <span class="mchip blue">● 2 Mains</span>
+          <span class="mchip pink">● 1 Desserts</span>
+        </div>
+        <div class="mockup-notif">
+          <svg class="mn-bell" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <div><div class="mn-title">New booking — tonight 7:30pm</div><div class="mn-sub">Somchai P. · 4 guests · just now</div></div>
+        </div>
+        <div class="mockup-revenue">
+          <span class="mr-label">Tonight's revenue</span>
+          <span class="mr-value">£1,284</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROOF BAR -->
+<div class="proof-bar">
+  <div class="proof-item">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#C9A84C;flex-shrink:0;"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/><path d="M8 2v16M16 6v16"/></svg>
+    <span class="lang-en">Works <span>offline</span> — keeps running if internet drops</span>
+    <span class="lang-th"><span>ออฟไลน์ได้</span> — เน็ตล่ม ร้านก็ขายต่อได้</span>
+  </div>
+  <div class="proof-item">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#C9A84C;flex-shrink:0;"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+    <span class="lang-en">Any phone is a <span>full terminal</span></span>
+    <span class="lang-th">มือถือทุกเครื่อง <span>เป็น POS</span> ได้ทันที</span>
+  </div>
+  <div class="proof-item">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#C9A84C;flex-shrink:0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    <span class="lang-en"><span>No per-cover fees</span> — ever</span>
+    <span class="lang-th">ไม่มีค่าธรรมเนียมต่อหัว <span>ไม่มีวันเก็บ</span></span>
+  </div>
+</div>
+
+<!-- THE ONE PARAGRAPH -->
+<section style="background:var(--navy); padding:60px 60px; text-align:center;">
+  <p style="max-width:780px; margin:0 auto; font-size:19px; color:rgba(255,255,255,0.8); line-height:1.85; font-weight:300;" class="lang-en">"Thai restaurants in the UK are paying OpenTable per head, giving Just Eat 35% of every takeaway order, and running on an EPOS that doesn't understand their menu or their language. SiamEPOS was built to fix all three — for <strong style="color:var(--gold)">£59 a month</strong>. AI that photographs your supplier invoices and updates stock automatically. A booking widget that replaces OpenTable for zero commission. Cost vs sales analysis that tells you exactly which dishes make you money. <strong style="color:var(--gold)">In Thai and English. From day one.</strong>"</p>
+  <p style="max-width:780px; margin:0 auto; font-size:19px; color:rgba(255,255,255,0.8); line-height:1.85; font-weight:300;" class="lang-th">"ทุกวันนี้ร้านอาหารไทยในสหราชอาณาจักรต้องจ่ายค่าธรรมเนียมต่อหัวให้ OpenTable โดน Just Eat หัก 35% จากทุกออเดอร์สั่งกลับบ้าน แถมยังใช้ EPOS ที่ไม่เข้าใจทั้งเมนูและภาษาของเรา SiamEPOS เกิดมาเพื่อแก้ทั้งสามปัญหานี้ — ในราคาแค่ <strong style="color:var(--gold)">£59 ต่อเดือน</strong> AI ที่แค่ถ่ายรูปใบแจ้งหนี้จากซัพพลายเออร์ สต๊อกก็อัปเดตให้อัตโนมัติ วิดเจ็ตจองโต๊ะที่ใช้แทน OpenTable ได้โดยไม่เสียค่าคอมมิชชั่นเลย และระบบวิเคราะห์ต้นทุนเทียบยอดขายที่บอกชัด ๆ ว่าเมนูไหนทำเงินให้คุณ <strong style="color:var(--gold)">ทั้งภาษาไทยและอังกฤษ ตั้งแต่วันแรก</strong>"</p>
+</section>
+
+<!-- 6 FEATURES GRID -->
+<section class="features-section reveal">
+  <div style="text-align:center;">
+    <div class="section-label lang-en">Six reasons Thai restaurants switch</div>
+    <div class="section-label lang-th">หกเหตุผลที่ร้านอาหารไทยเปลี่ยนมาใช้</div>
+    <h2 class="section-title lang-en">Everything you're paying for separately —<br>now in one system</h2>
+    <h2 class="section-title lang-th">ทุกอย่างที่คุณเคยต้องจ่ายแยกหลายเจ้า —<br>รวมจบในระบบเดียว</h2>
+  </div>
+  <div class="features-grid">
+
+    <!-- 1. Reservations -->
+    <a href="features.html#reservations" class="fcard highlight reveal rd1">
+      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg></div>
+      <div class="fcard-badge lang-en">£0 commission — always</div>
+      <div class="fcard-badge lang-th">ค่าคอม £0 — ตลอดไป</div>
+      <div class="fcard-villain lang-en">OpenTable charges £4,500/year</div>
+      <div class="fcard-villain lang-th">OpenTable เก็บ £4,500 ต่อปี</div>
+      <div class="fcard-title lang-en">Zero-Fee Online Reservations</div>
+      <div class="fcard-title lang-th">จองโต๊ะออนไลน์ ค่าคอม 0%</div>
+      <p class="fcard-desc lang-en">Drop-in booking widget on your own website. Instant confirmation, automated reminders, full guest history. Every booking belongs to you — not OpenTable. Not ResDiary. You.</p>
+      <p class="fcard-desc lang-th">วิดเจ็ตจองโต๊ะติดบนเว็บไซต์ของคุณเอง ยืนยันทันที แจ้งเตือนลูกค้าอัตโนมัติ เก็บประวัติแขกครบ ทุกการจองเป็นของคุณ — ไม่ใช่ของ OpenTable ไม่ใช่ของ ResDiary ของคุณคนเดียว</p>
+    </a>
+
+    <!-- 2. Takeaway -->
+    <a href="features.html#takeaway" class="fcard highlight reveal rd2">
+      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div>
+      <div class="fcard-badge lang-en">0% vs Just Eat's 35%</div>
+      <div class="fcard-badge lang-th">0% เทียบกับ Just Eat 35%</div>
+      <div class="fcard-villain lang-en">Just Eat / Deliveroo take 35%+ per order</div>
+      <div class="fcard-villain lang-th">Just Eat / Deliveroo กิน 35%+ ต่อออเดอร์</div>
+      <div class="fcard-title lang-en">Online Ordering — Collection or Delivery</div>
+      <div class="fcard-title lang-th">สั่งออนไลน์ — รับเองหรือส่งถึงบ้าน</div>
+      <p class="fcard-desc lang-en">Your website. Your widget. Your customer. Orders go straight to your kitchen. For delivery, connect Uber Direct or use your own driver — SiamEPOS handles both. You keep every penny.</p>
+      <p class="fcard-desc lang-th">เว็บของคุณ วิดเจ็ตของคุณ ลูกค้าของคุณ ออเดอร์วิ่งตรงเข้าครัว ส่วนงานส่งถึงบ้าน จะเชื่อม Uber Direct หรือใช้คนขับของร้านเองก็ได้ — SiamEPOS รองรับทั้งคู่ เงินทุกเพนนีเป็นของคุณ</p>
+    </a>
+
+    <!-- 3. Allergens -->
+    <a href="features.html#allergens" class="fcard reveal rd3">
+      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg></div>
+      <div class="fcard-badge lang-en">Natasha's Law compliant</div>
+      <div class="fcard-badge lang-th">รองรับกฎหมาย Natasha's Law</div>
+      <div class="fcard-villain lang-en">Manual allergen spreadsheets — one mistake = legal liability</div>
+      <div class="fcard-villain lang-th">จดสารก่อภูมิแพ้เองในตาราง — พลาดครั้งเดียวถึงขั้นผิดกฎหมาย</div>
+      <div class="fcard-title lang-en">Allergen Management — Automatic</div>
+      <div class="fcard-title lang-th">จัดการสารก่อภูมิแพ้ — อัตโนมัติ</div>
+      <p class="fcard-desc lang-en">All 14 UK allergens tracked at recipe level. Build your recipes once — allergen chips appear on menus, the takeaway widget, and every printed label. Compliant from the moment you go live.</p>
+      <p class="fcard-desc lang-th">ติดตามสารก่อภูมิแพ้ครบทั้ง 14 ชนิดตามกฎหมาย UK ลึกถึงระดับสูตรอาหาร ตั้งสูตรแค่ครั้งเดียว — ป้ายสารก่อภูมิแพ้ขึ้นเองทั้งบนเมนู วิดเจ็ตสั่งอาหาร และฉลากที่พิมพ์ทุกใบ ถูกต้องตามกฎหมายตั้งแต่วันแรกที่เปิดใช้</p>
+    </a>
+
+    <!-- 4. AI Inventory -->
+    <a href="features.html#inventory" class="fcard highlight reveal rd1">
+      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+      <div class="fcard-badge lang-en">AI-powered — 30 seconds</div>
+      <div class="fcard-badge lang-th">ใช้ AI — เสร็จใน 30 วินาที</div>
+      <div class="fcard-villain lang-en">Typing out supplier invoices by hand — every week</div>
+      <div class="fcard-villain lang-th">นั่งคีย์ใบแจ้งหนี้ซัพพลายเออร์เอง — ทุกสัปดาห์</div>
+      <div class="fcard-title lang-en">AI Inventory + Cost vs Sales</div>
+      <div class="fcard-title lang-th">AI สต๊อกวัตถุดิบ + ต้นทุน vs ยอดขาย</div>
+      <p class="fcard-desc lang-en">Stop typing out supplier invoices by hand. Photograph it — AI does the rest. Stock updates, costs update, and you see live gross margin on every dish. The most painful job in a restaurant, eliminated.</p>
+      <p class="fcard-desc lang-th">เลิกนั่งคีย์ใบแจ้งหนี้ทีละบรรทัด แค่ถ่ายรูป ที่เหลือ AI จัดการให้ สต๊อกอัปเดต ต้นทุนอัปเดต เห็นกำไรขั้นต้นของทุกจานแบบเรียลไทม์ งานที่ปวดหัวที่สุดในร้านอาหาร — หายไปเลย</p>
+    </a>
+
+    <!-- 5. Table Map + KDS -->
+    <a href="features.html#epos" class="fcard reveal rd2">
+      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+      <div class="fcard-title lang-en">Live Table Map + Kitchen Display</div>
+      <div class="fcard-title lang-th">แผนผังโต๊ะเรียลไทม์ + จอครัว</div>
+      <p class="fcard-desc lang-en">Colour-coded floor plan. Per-course timers so starters don't arrive with mains. Kitchen screen replaces paper dockets — chefs tick items off, the Pass knows what's ready. Any screen, any device.</p>
+      <p class="fcard-desc lang-th">แผนผังโต๊ะแยกสีตามสถานะ จับเวลาแยกแต่ละคอร์ส สตาร์ทเตอร์จะได้ไม่ออกพร้อมจานหลัก จอครัวใช้แทนบิลกระดาษ — เชฟติ๊กทีละจาน หน้าพาสรู้ทันทีว่าอะไรพร้อมเสิร์ฟ ใช้ได้ทุกจอ ทุกอุปกรณ์</p>
+    </a>
+
+    <!-- 6. Customer CRM -->
+    <a href="features.html#crm" class="fcard highlight reveal rd3">
+      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+      <div class="fcard-badge lang-en">Own your customers</div>
+      <div class="fcard-badge lang-th">ลูกค้าเป็นของคุณ</div>
+      <div class="fcard-villain lang-en">OpenTable and Deliveroo own your customer data — you don't</div>
+      <div class="fcard-villain lang-th">OpenTable และ Deliveroo เป็นเจ้าของข้อมูลลูกค้า — ไม่ใช่คุณ</div>
+      <div class="fcard-title lang-en">Customer CRM + Email Campaigns</div>
+      <div class="fcard-title lang-th">CRM ลูกค้า + แคมเปญอีเมล</div>
+      <p class="fcard-desc lang-en">Every diner, every order, all yours. See who hasn't visited in 60 days and win them back automatically. Run birthday campaigns. Send offers. GDPR compliant. Your list, your revenue — forever.</p>
+      <p class="fcard-desc lang-th">ลูกค้าทุกคน ออเดอร์ทุกรายการ เป็นของคุณ เห็นว่าใครไม่มา 60 วันแล้วดึงกลับอัตโนมัติ ส่งแคมเปญวันเกิด ส่งโปรโมชั่น สอดคล้อง GDPR รายชื่อของคุณ รายได้ของคุณ — ตลอดไป</p>
+    </a>
+
+  </div>
+  <div style="text-align:center; margin-top:40px;">
+    <a href="features.html" class="book-btn ghost" style="display:inline-flex; text-decoration:none;">
+      <span class="lang-en">See all features in detail →</span>
+      <span class="lang-th">ดูฟีเจอร์ทั้งหมด →</span>
+    </a>
+  </div>
+</section>
+
+<!-- WHAT YOU'RE PAYING NOW -->
+<section class="cost-reality reveal">
+  <div style="text-align:center;">
+    <div class="section-label lang-en" style="color:var(--gold);">The maths don't lie</div>
+    <div class="section-label lang-th" style="color:var(--gold);">ตัวเลขไม่โกหก</div>
+    <h2 class="section-title white lang-en">What you're paying now<br>vs what you'd pay with SiamEPOS</h2>
+    <h2 class="section-title white lang-th">ตอนนี้คุณจ่ายอยู่เท่าไหร่<br>เทียบกับถ้าใช้ SiamEPOS</h2>
+    <p class="section-sub lang-en" style="color:rgba(255,255,255,0.5); margin:0 auto 0; max-width:520px;">Based on a typical Thai restaurant doing 200 covers/week and £2,000/week in takeaway orders.</p>
+    <p class="section-sub lang-th" style="color:rgba(255,255,255,0.5); margin:0 auto 0; max-width:520px;">อ้างอิงจากร้านอาหารไทยทั่วไปที่รับลูกค้า 200 คน/สัปดาห์ และยอดสั่งกลับบ้าน £2,000/สัปดาห์</p>
+  </div>
+  <div class="cost-table-wrap">
+    <div class="cost-versus">
+      <div class="cost-col old">
+        <div class="cost-col-header lang-en">What you pay now</div>
+        <div class="cost-col-header lang-th">ที่คุณจ่ายอยู่ตอนนี้</div>
+        <div class="cost-row">
+          <span class="cost-label lang-en">OpenTable / ResDiary</span>
+          <span class="cost-label lang-th">OpenTable / ResDiary</span>
+          <span class="cost-amount lang-en">~£375/month</span>
+          <span class="cost-amount lang-th">~£375/เดือน</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label lang-en">Just Eat / Deliveroo (35%)</span>
+          <span class="cost-label lang-th">Just Eat / Deliveroo (35%)</span>
+          <span class="cost-amount lang-en">~£2,800/month</span>
+          <span class="cost-amount lang-th">~£2,800/เดือน</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label lang-en">Generic EPOS + hardware</span>
+          <span class="cost-label lang-th">EPOS ทั่วไป + ค่าเครื่อง</span>
+          <span class="cost-amount lang-en">£100–200/month</span>
+          <span class="cost-amount lang-th">£100–200/เดือน</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label lang-en">Stock management (manual or accountant)</span>
+          <span class="cost-label lang-th">จัดการสต๊อก (ทำเองหรือจ้างนักบัญชี)</span>
+          <span class="cost-amount lang-en">£100–300/month</span>
+          <span class="cost-amount lang-th">£100–300/เดือน</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label lang-en" style="font-size:15px; font-weight:800; color:white;">Total</span>
+          <span class="cost-label lang-th" style="font-size:15px; font-weight:800; color:white;">รวม</span>
+          <span class="cost-amount" style="font-size:18px;">£3,375–3,675/mo</span>
+        </div>
+      </div>
+      <div class="cost-divider">
+        <div class="cost-vs-badge">VS</div>
+      </div>
+      <div class="cost-col new">
+        <div class="cost-col-header lang-en">SiamEPOS</div>
+        <div class="cost-col-header lang-th">SiamEPOS</div>
+        <div class="cost-row">
+          <span class="cost-label lang-en">Reservations — zero commission</span>
+          <span class="cost-label lang-th">จองโต๊ะ — ค่าคอม 0%</span>
+          <span class="cost-amount lang-en">£0</span>
+          <span class="cost-amount lang-th">£0</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label lang-en">Takeaway — zero commission</span>
+          <span class="cost-label lang-th">สั่งกลับบ้าน — ค่าคอม 0%</span>
+          <span class="cost-amount lang-en">£0</span>
+          <span class="cost-amount lang-th">£0</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label lang-en">EPOS + table map + KDS</span>
+          <span class="cost-label lang-th">EPOS + แผนผังโต๊ะ + จอครัว</span>
+          <span class="cost-amount lang-en">Included</span>
+          <span class="cost-amount lang-th">รวมให้แล้ว</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label lang-en">AI inventory + cost vs sales</span>
+          <span class="cost-label lang-th">AI สต๊อกวัตถุดิบ + ต้นทุน vs ยอดขาย</span>
+          <span class="cost-amount lang-en">Included</span>
+          <span class="cost-amount lang-th">รวมให้แล้ว</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label lang-en" style="font-size:15px; font-weight:800; color:white;">Total</span>
+          <span class="cost-label lang-th" style="font-size:15px; font-weight:800; color:white;">รวม</span>
+          <span class="cost-amount" style="font-size:22px;">£59/month</span>
+        </div>
+      </div>
+    </div>
+    <div class="cost-saving-banner">
+      <div class="cost-saving-text lang-en">That's a saving of <strong>over £3,200 every month</strong> — more than <strong>£38,400 a year</strong> — going back into your restaurant instead of into OpenTable's and Deliveroo's pockets.</div>
+      <div class="cost-saving-text lang-th">เท่ากับประหยัดได้ <strong>กว่า £3,200 ทุกเดือน</strong> — หรือมากกว่า <strong>£38,400 ต่อปี</strong> — เงินก้อนนี้กลับเข้าร้านของคุณ แทนที่จะเข้ากระเป๋า OpenTable กับ Deliveroo</div>
+      <a href="book-demo.html" class="cost-saving-pill lang-en">See it in a demo</a>
+      <a href="book-demo.html" class="cost-saving-pill lang-th">ดูของจริงในเดโม</a>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING PREVIEW -->
+<section class="pricing-section reveal">
+  <div style="text-align:center;">
+    <div class="section-label lang-en">Simple pricing</div>
+    <div class="section-label lang-th">ราคาเรียบง่าย ตรงไปตรงมา</div>
+    <h2 class="section-title lang-en">One price.<br>Everything included.</h2>
+    <h2 class="section-title lang-th">ราคาเดียว<br>รวมทุกอย่าง</h2>
+    <p class="section-sub lang-en" style="margin:0 auto;">No setup fee. No contract. No "add-on" trap. Cancel anytime.</p>
+    <p class="section-sub lang-th" style="margin:0 auto;">ไม่มีค่าติดตั้ง ไม่ผูกสัญญา ไม่มีกับดักค่าบริการเสริม ยกเลิกได้ทุกเมื่อ</p>
+  </div>
+  <div style="max-width:520px;margin:60px auto 0;">
+    <div class="pcard featured reveal" style="transform:none;">
+      <div class="pcard-badge lang-en">&#x1F3F7;&#xFE0F; Founder&rsquo;s Rate &mdash; First 50 clients only</div>
+      <div class="pcard-badge lang-th">&#x1F3F7;&#xFE0F; Founder&rsquo;s Rate &mdash; เฉพาะ 50 ร้านแรกเท่านั้น</div>
+      <div class="pcard-tier">SiamEPOS Pro</div>
+      <div class="pcard-price">£59</div>
+      <div class="pcard-period lang-en">per month &nbsp;&middot;&nbsp; price-locked forever &nbsp;&middot;&nbsp; no setup fee</div>
+      <div class="pcard-period lang-th">ต่อเดือน &nbsp;&middot;&nbsp; ล็อกราคานี้ตลอดไป &nbsp;&middot;&nbsp; ไม่มีค่าติดตั้ง</div>
+      <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:6px;" class="lang-en">Standard price: <span style="text-decoration:line-through">£89/month</span></div>
+      <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:6px;" class="lang-th">ราคาปกติ: <span style="text-decoration:line-through">£89/เดือน</span></div>
+      <div style="font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:14px;opacity:0.85;" class="lang-en">── Limited founding spots remaining ──</div>
+      <div style="font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:14px;opacity:0.85;" class="lang-th">── สิทธิ์ Founder&rsquo;s Rate เหลือจำกัด ──</div>
+      <p class="pcard-key lang-en">EPOS &middot; Table map &middot; Kitchen screen &middot; Zero-commission reservations &middot; Zero-commission takeaway &middot; Customer CRM &middot; AI invoice scanner &middot; Allergen management &middot; Thai + English</p>
+      <p class="pcard-key lang-th">EPOS &middot; แผนผังโต๊ะ &middot; จอครัว &middot; จองโต๊ะ 0% &middot; สั่งกลับบ้าน 0% &middot; CRM ลูกค้า &middot; AI สแกนใบแจ้งหนี้ &middot; จัดการสารก่อภูมิแพ้ &middot; ไทย + อังกฤษ</p>
+      <a href="book-demo.html" class="btn-pcard btn-gold lang-en" style="margin-bottom:10px;">Book a Free Demo</a>
+      <a href="book-demo.html" class="btn-pcard btn-gold lang-th" style="margin-bottom:10px;">จองเดโมฟรี</a>
+      <a href="pricing.html" class="btn-pcard btn-outline-navy lang-en">See everything included &rarr;</a>
+      <a href="pricing.html" class="btn-pcard btn-outline-navy lang-th">ดูทุกอย่างที่รวมให้ &rarr;</a>
+    </div>
+  </div>
+  <p style="text-align:center;margin-top:28px;color:var(--text-muted);font-size:14px;" class="lang-en">Lock in the Founder&rsquo;s Rate — <strong>£59/month, price-locked forever</strong>. Standard price is £89/month.</p>
+  <p style="text-align:center;margin-top:28px;color:var(--text-muted);font-size:14px;" class="lang-th">ล็อกราคา Founder&rsquo;s Rate ได้เลย — <strong>£59/เดือน ตลอดไป</strong> จากราคาปกติ £89/เดือน</p>
+</section>
+
+<!-- SOCIAL PROOF / TRUST — WEBSITE-POLISH-005
+     Live content below is strictly verifiable (Companies House, IPO
+     trademark register, ICO). The testimonial grid further down is
+     built and styled but COMMENTED OUT — uncomment it the day we have
+     the first real client quote. NEVER publish invented testimonials. -->
+<section class="reveal" style="background:#F7F5F0;padding:80px 60px;">
+  <div style="max-width:1100px;margin:0 auto;text-align:center;">
+    <div class="section-label lang-en">Built properly. Registered properly.</div>
+    <div class="section-label lang-th">สร้างอย่างจริงจัง จดทะเบียนถูกต้อง</div>
+    <h2 class="section-title lang-en">A real UK company you can <em>look up</em></h2>
+    <h2 class="section-title lang-th">บริษัทจริงใน UK ที่<em>ตรวจสอบได้</em></h2>
+    <p style="color:var(--text-muted);font-size:15px;max-width:620px;margin:10px auto 44px;line-height:1.7;" class="lang-en">Before you trust your restaurant's bookings, orders and customer data to anyone — check who they are. Here's us, all verifiable:</p>
+    <p style="color:var(--text-muted);font-size:15px;max-width:620px;margin:10px auto 44px;line-height:1.7;" class="lang-th">ก่อนจะฝากการจอง ออเดอร์ และข้อมูลลูกค้าของร้านไว้กับใคร — เช็กให้ชัวร์ก่อนว่าเขาเป็นใคร นี่คือเรา ตรวจสอบได้ทุกข้อ:</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;text-align:left;">
+      <div style="background:white;border:1px solid #E8E5DE;border-radius:14px;padding:24px;">
+        <div style="font-size:24px;margin-bottom:10px;">🇬🇧</div>
+        <div style="font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px;" class="lang-en">UK registered company</div>
+        <div style="font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px;" class="lang-th">บริษัทจดทะเบียนใน UK</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;" class="lang-en">SiamEPOS Ltd — Company No. 17215576, registered in England &amp; Wales. Look us up on Companies House.</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;" class="lang-th">SiamEPOS Ltd — ทะเบียนเลขที่ 17215576 จดทะเบียนใน England &amp; Wales ตรวจสอบได้ที่ Companies House</div>
+      </div>
+      <div style="background:white;border:1px solid #E8E5DE;border-radius:14px;padding:24px;">
+        <div style="font-size:24px;margin-bottom:10px;">™️</div>
+        <div style="font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px;" class="lang-en">Registered trademark</div>
+        <div style="font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px;" class="lang-th">เครื่องหมายการค้าจดทะเบียน</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;" class="lang-en">SiamEPOS™ is a UK registered trade mark (UK00004385501). We're building this for the long run.</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;" class="lang-th">SiamEPOS™ เป็นเครื่องหมายการค้าจดทะเบียนใน UK (UK00004385501) เราตั้งใจทำเพื่อระยะยาว</div>
+      </div>
+      <div style="background:white;border:1px solid #E8E5DE;border-radius:14px;padding:24px;">
+        <div style="font-size:24px;margin-bottom:10px;">🔐</div>
+        <div style="font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px;" class="lang-en">ICO registered</div>
+        <div style="font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px;" class="lang-th">จดทะเบียนกับ ICO</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;" class="lang-en">Registered with the UK Information Commissioner's Office. Your customers' data is handled under UK GDPR — and it stays yours.</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;" class="lang-th">จดทะเบียนกับ ICO หน่วยงานคุ้มครองข้อมูลของ UK ข้อมูลลูกค้าของคุณดูแลตามกฎหมาย UK GDPR — และเป็นของคุณเสมอ</div>
+      </div>
+      <div style="background:white;border:1px solid #E8E5DE;border-radius:14px;padding:24px;">
+        <div style="font-size:24px;margin-bottom:10px;">🤝</div>
+        <div style="font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px;" class="lang-en">Talk to the founder</div>
+        <div style="font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px;" class="lang-th">คุยกับผู้ก่อตั้งโดยตรง</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;" class="lang-en">No call centre. Your WhatsApp messages are answered by the Thai founder who built the system — in Thai or English.</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;" class="lang-th">ไม่มีคอลเซ็นเตอร์ ข้อความ WhatsApp ของคุณตอบโดยผู้ก่อตั้งคนไทยที่สร้างระบบนี้เอง — ภาษาไทยหรืออังกฤษก็ได้</div>
+      </div>
+    </div>
+
+    <!-- ═══ TESTIMONIALS — COMMENTED OUT until we have REAL quotes. ═══
+         To activate: (1) replace name/restaurant/quote with a real,
+         permission-granted client quote, (2) remove this comment wrapper.
+         Do NOT invent quotes — one caught fake testimonial costs more
+         trust than fifty real ones earn.
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;text-align:left;margin-top:20px;">
+      <div style="background:var(--navy);border-radius:14px;padding:28px;color:white;">
+        <div style="color:var(--gold);font-size:18px;letter-spacing:2px;margin-bottom:12px;">★★★★★</div>
+        <p style="font-size:14px;line-height:1.7;color:rgba(255,255,255,0.85);margin-bottom:16px;" class="lang-en">"[REAL QUOTE HERE — what changed for their restaurant, in their words]"</p>
+        <p style="font-size:14px;line-height:1.7;color:rgba(255,255,255,0.85);margin-bottom:16px;" class="lang-th">"[คำพูดจริงของลูกค้า]"</p>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold-light));display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--navy);">[A]</div>
+          <div>
+            <div style="font-weight:700;font-size:13px;">[Owner name]</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.5);">[Restaurant, City]</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    ═══ END TESTIMONIALS ═══ -->
+
+    <p style="margin-top:36px;font-size:14px;color:var(--text-muted);" class="lang-en">Want to hear it from a restaurant like yours? <a href="book-demo.html" style="color:var(--gold);font-weight:700;">Book a demo</a> and we'll show you SiamEPOS running live — then introduce you to a founding restaurant once you're serious.</p>
+    <p style="margin-top:36px;font-size:14px;color:var(--text-muted);" class="lang-th">อยากฟังจากร้านอาหารแบบเดียวกับคุณ? <a href="book-demo.html" style="color:var(--gold);font-weight:700;">จองเดโม</a> แล้วเราจะโชว์ SiamEPOS ทำงานจริงให้ดู — และแนะนำให้รู้จักร้านในกลุ่ม Founding 50 เมื่อคุณจริงจัง</p>
+  </div>
+</section>
+
+<!-- SIAMSPA TEASER -->
+<section class="reveal" style="background:linear-gradient(135deg,#0D1B3E 0%,#0A2456 100%);padding:80px 60px;text-align:center;position:relative;overflow:hidden;">
+  <div style="position:absolute;width:600px;height:600px;background:radial-gradient(circle,rgba(201,168,76,0.08) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;"></div>
+  <div style="position:relative;max-width:720px;margin:0 auto;">
+    <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:#C9A84C;padding:6px 16px;border-radius:30px;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;">✨ NEW — SiamSpa</div>
+    <h2 style="font-family:'Cormorant Garamond',serif;font-size:46px;font-weight:700;line-height:1.15;color:white;margin:0 0 18px;" class="lang-en">Run your Thai spa or<br>massage shop from your phone.</h2>
+    <h2 style="font-family:'Cormorant Garamond',serif;font-size:46px;font-weight:700;line-height:1.15;color:white;margin:0 0 18px;" class="lang-th">บริหารสปาหรือร้านนวดไทย<br>จากมือถือของคุณ</h2>
+    <p style="color:rgba(255,255,255,0.65);font-size:17px;line-height:1.7;max-width:560px;margin:0 auto 36px;" class="lang-en">Live appointment timeline. Therapist schedules. No double-bookings. Client records. The same SiamEPOS quality — built for spas and massage shops.</p>
+    <p style="color:rgba(255,255,255,0.65);font-size:17px;line-height:1.7;max-width:560px;margin:0 auto 36px;" class="lang-th">เห็นไทม์ไลน์คิวนัดหมายสด ๆ ตารางงานเทอราพิสต์ชัดเจน ไม่มีคิวจองซ้อน เก็บประวัติลูกค้าครบ คุณภาพเดียวกับ SiamEPOS — สร้างมาเพื่อสปาและร้านนวดโดยเฉพาะ</p>
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;margin-bottom:36px;">
+      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">📅</span> <span class="lang-en">Appointment timeline</span><span class="lang-th">ไทม์ไลน์นัดหมาย</span></div>
+      <div style="color:rgba(255,255,255,0.3);">·</div>
+      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">💆</span> <span class="lang-en">Therapist scheduling</span><span class="lang-th">จัดตารางเทอราพิสต์</span></div>
+      <div style="color:rgba(255,255,255,0.3);">·</div>
+      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">👥</span> <span class="lang-en">Client CRM</span><span class="lang-th">CRM ลูกค้า</span></div>
+      <div style="color:rgba(255,255,255,0.3);">·</div>
+      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">💷</span> <span class="lang-en">£49/month</span><span class="lang-th">£49/เดือน</span></div>
+    </div>
+    <a href="spa.html" style="display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,#C9A84C,#E8C96A);color:#0D1B3E;padding:15px 32px;border-radius:10px;font-size:16px;font-weight:800;text-decoration:none;transition:transform 0.2s,box-shadow 0.2s;box-shadow:0 4px 20px rgba(201,168,76,0.35);" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 32px rgba(201,168,76,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 20px rgba(201,168,76,0.35)'" class="lang-en">Learn about SiamSpa →</a>
+    <a href="spa.html" style="display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,#C9A84C,#E8C96A);color:#0D1B3E;padding:15px 32px;border-radius:10px;font-size:16px;font-weight:800;text-decoration:none;transition:transform 0.2s,box-shadow 0.2s;box-shadow:0 4px 20px rgba(201,168,76,0.35);" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 32px rgba(201,168,76,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 20px rgba(201,168,76,0.35)'" class="lang-th">ทำความรู้จัก SiamSpa →</a>
+  </div>
+</section>
+
+<!-- TRUST BAR -->
+<div class="trust-bar reveal">
+  <div class="trust-item"><span class="t-icon">🇹🇭</span> <span class="lang-en">Thai-speaking WhatsApp support</span><span class="lang-th">ซัพพอร์ตภาษาไทยทาง WhatsApp</span></div>
+  <div class="trust-item"><span class="t-icon">🌐</span> <span class="lang-en">Works offline — no internet required</span><span class="lang-th">ทำงานออฟไลน์ได้ ไม่ต้องมีอินเตอร์เน็ต</span></div>
+  <div class="trust-item"><span class="t-icon">📱</span> <span class="lang-en">Any device — phone, tablet, Mac, Windows</span><span class="lang-th">อุปกรณ์ใดก็ได้ มือถือ แท็บเล็ต Mac และ Windows</span></div>
+  <div class="trust-item"><span class="t-icon">🛡️</span> <span class="lang-en">UK GDPR + Natasha's Law compliant</span><span class="lang-th">สอดคล้อง UK GDPR และ Natasha's Law</span></div>
+  <div class="trust-item"><span class="t-icon">✅</span> <span class="lang-en">Cancel anytime — no long-term contract</span><span class="lang-th">ยกเลิกได้ทุกเมื่อ ไม่ผูกสัญญา</span></div>
+</div>
+
+<!-- FINAL CTA -->
+<section class="final-cta">
+  <div style="position:relative;z-index:1;max-width:640px;margin:0 auto;" class="reveal">
+    <div class="section-label lang-en">Let's talk</div>
+    <div class="section-label lang-th">คุยกันได้เลย</div>
+    <h2 class="section-title white lang-en">Book a free 20-minute demo.<br>In English or Thai.</h2>
+    <h2 class="section-title white lang-th">จองเดโมฟรี 20 นาที<br>คุยไทยหรืออังกฤษก็ได้</h2>
+    <p class="cta-personal lang-en">"No contract. No pressure. No jargon. Just a Thai-speaking person who actually understands your restaurant — showing you exactly how SiamEPOS would work for yours."</p>
+    <p class="cta-personal lang-th">"ไม่ผูกสัญญา ไม่กดดัน ไม่มีศัพท์เทคนิคให้ปวดหัว แค่คนพูดไทยที่เข้าใจร้านอาหารจริง ๆ มาโชว์ให้ดูว่า SiamEPOS จะช่วยร้านของคุณได้ยังไง"</p>
+    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
+      <a href="book-demo.html" class="book-btn lang-en">Book Your Free Demo</a>
+      <a href="book-demo.html" class="book-btn lang-th">จองเดโมฟรีเลย</a>
+      <a href="https://wa.me/447896036386?text=Hello%2C%20I%27d%20like%20to%20know%20more%20about%20SiamEPOS" target="_blank" class="book-btn ghost lang-en" style="text-decoration:none;">💬 WhatsApp us instead</a>
+      <a href="https://wa.me/447896036386?text=สวัสดีครับ%20สนใจ%20SiamEPOS" target="_blank" class="book-btn ghost lang-th" style="text-decoration:none;">💬 หรือทัก WhatsApp มาเลย</a>
+    </div>
+    <div class="cta-trust-row">
+      <span class="cta-trust-chip">✅ <span class="lang-en">No contract</span><span class="lang-th">ไม่ผูกสัญญา</span></span>
+      <span class="cta-trust-chip">✅ <span class="lang-en">No setup fee</span><span class="lang-th">ไม่มีค่าติดตั้ง</span></span>
+      <span class="cta-trust-chip">✅ <span class="lang-en">Cancel anytime</span><span class="lang-th">ยกเลิกได้ทุกเมื่อ</span></span>
+      <span class="cta-trust-chip">✅ <span class="lang-en">Thai support via WhatsApp</span><span class="lang-th">ซัพพอร์ตภาษาไทยทาง WhatsApp</span></span>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-brand">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><svg width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="none" stroke="#C9A84C" stroke-width="1.8"/><circle cx="50" cy="50" r="39" fill="none" stroke="#C9A84C" stroke-width="0.6" opacity="0.28"/><g transform="translate(50,50)"><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/><circle cx="0" cy="0" r="9" fill="#0D1B3E"/><circle cx="0" cy="0" r="5" fill="#C9A84C"/></g></svg><span style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:#C9A84C;">Siam<span style="color:white;">EPOS</span></span></div>
+    <p class="footer-tagline lang-en">The Thai Restaurant Management System. Built for Thai restaurants in the UK.</p>
+    <p class="footer-tagline lang-th">ระบบจัดการร้านอาหารไทย สร้างมาเพื่อร้านอาหารไทยในสหราชอาณาจักร</p>
+    <a href="https://wa.me/447896036386" target="_blank" style="display:inline-flex;align-items:center;gap:8px;background:#25D366;color:white;padding:10px 18px;border-radius:50px;font-size:13px;font-weight:700;text-decoration:none;margin-top:4px;">💬 <span class="lang-en">WhatsApp / LINE</span><span class="lang-th">WhatsApp / LINE</span></a>
+  </div>
+  <div class="footer-col">
+    <h4 class="lang-en">Product</h4><h4 class="lang-th">ผลิตภัณฑ์</h4>
+    <ul>
+      <li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li>
+      <li><a href="pricing.html" class="lang-en">Pricing</a><a href="pricing.html" class="lang-th">ราคา</a></li>
+      <li><a href="spa.html" class="lang-en">SiamSpa</a><a href="spa.html" class="lang-th">SiamSpa</a></li>
+      <li><a href="siamshop.html" class="lang-en">SiamShop</a><a href="siamshop.html" class="lang-th">SiamShop</a></li>
+      <li><a href="why-siamepos.html" class="lang-en">Why SiamEPOS</a><a href="why-siamepos.html" class="lang-th">ทำไมต้อง SiamEPOS</a></li>
+      <li><a href="book-demo.html" class="lang-en">Book Demo</a><a href="book-demo.html" class="lang-th">จองเดโม</a></li>
+    </ul>
+  </div>
+  <div class="footer-col">
+    <h4 class="lang-en">Support</h4><h4 class="lang-th">ซัพพอร์ต</h4>
+    <ul>
+      <li><a href="https://wa.me/447896036386" class="lang-en">WhatsApp Support</a><a href="https://wa.me/447896036386" class="lang-th">WhatsApp ซัพพอร์ต</a></li>
+      <li><a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></li>
+      <li><a href="book-demo.html" class="lang-en">Thai support available</a><a href="book-demo.html" class="lang-th">ซัพพอร์ตภาษาไทย</a></li>
+    </ul>
+  </div>
+  <div class="footer-col">
+    <h4 class="lang-en">Legal</h4><h4 class="lang-th">กฎหมาย</h4>
+    <ul>
+      <li><a href="privacy-policy.html" class="lang-en">Privacy Policy</a><a href="privacy-policy.html" class="lang-th">นโยบายความเป็นส่วนตัว</a></li>
+      <li><a href="terms.html" class="lang-en">Terms of Service</a><a href="terms.html" class="lang-th">เงื่อนไขการใช้บริการ</a></li>
+      <li><a href="cookie-policy.html" class="lang-en">Cookie Policy</a><a href="cookie-policy.html" class="lang-th">นโยบายคุกกี้</a></li>
+    </ul>
+  </div>
+</footer>
+<div class="footer-bottom">
+  <p>© 2026 SiamEPOS. <span class="lang-en">All rights reserved. · SiamEPOS Ltd · Registered in England &amp; Wales · Company No. 17215576</span><span class="lang-th">สงวนลิขสิทธิ์ · SiamEPOS Ltd · Registered in England &amp; Wales · Company No. 17215576</span></p>
+  <p><a href="why-siamepos.html" class="lang-en">Why SiamEPOS?</a><a href="why-siamepos.html" class="lang-th">ทำไมต้อง SiamEPOS?</a></p>
+</div>
+
+<script>
+// Booking modal removed — that demo lives at https://www.siamepos.net now.
+
+// Scroll reveal
+const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:0.1});
+document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
+document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',function(e){const t=document.querySelector(this.getAttribute('href'));if(t){e.preventDefault();t.scrollIntoView({behavior:'smooth',block:'start'});}}));
+
+// Hero counter animation — counts £ and % up from "before" values to 0
+(function(){
+  var stats = document.querySelectorAll('.hstat-num');
+  var done = false;
+  function animateCounter(el, from, to, prefix, suffix, duration){
+    var start = null;
+    function step(ts){
+      if(!start) start = ts;
+      var progress = Math.min((ts - start) / duration, 1);
+      var ease = 1 - Math.pow(1 - progress, 3);
+      var val = Math.round(from + (to - from) * ease);
+      el.textContent = prefix + val + suffix;
+      if(progress < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+  var heroObs = new IntersectionObserver(function(entries){
+    if(done) return;
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        done = true;
+        heroObs.disconnect();
+        // First stat: £0 booking commission — count from £375 down to £0
+        animateCounter(stats[0], 375, 0, '£', '', 1400);
+        // Second stat: 0% takeaway commission — count from 35 down to 0
+        setTimeout(function(){ animateCounter(stats[1], 35, 0, '', '%', 1400); }, 200);
+      }
+    });
+  }, {threshold: 0.5});
+  if(stats[0]) heroObs.observe(stats[0]);
+})();
+
+// Mockup table pulse — randomly flicker one table status every few seconds
+(function(){
+  var tables = document.querySelectorAll('.mt');
+  if(!tables.length) return;
+  var states = ['available','occupied','starters','mains','desserts'];
+  setInterval(function(){
+    var idx = Math.floor(Math.random() * tables.length);
+    var t = tables[idx];
+    var cur = Array.from(t.classList).find(function(c){ return states.indexOf(c) > -1; });
+    if(!cur) return;
+    t.style.transition = 'opacity 0.4s';
+    t.style.opacity = '0.4';
+    setTimeout(function(){ t.style.opacity = '1'; }, 400);
+  }, 2800);
+})();
+</script>
+<script>document.querySelectorAll('.nav-burger').forEach(function(b){b.addEventListener('click',function(){document.body.classList.toggle('menu-open');});});document.querySelectorAll('.nav-links a').forEach(function(a){a.addEventListener('click',function(){document.body.classList.remove('menu-open');});});</script>
+</body>
+</html>

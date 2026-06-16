@@ -12,8 +12,8 @@
 <meta charset="UTF-8">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='50' cy='50' r='50' fill='%230D1B3E'/%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%23C9A84C' stroke-width='1.8'/%3E%3Cg transform='translate(50,50)'%3E%3Cpath d='M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z' fill='%23C9A84C'/%3E%3Cpath d='M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z' fill='%23C9A84C' opacity='0.82' transform='rotate(72)'/%3E%3Ccircle cx='0' cy='0' r='5' fill='%23C9A84C'/%3E%3C/g%3E%3C/svg%3E">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SiamEPOS — The Thai Restaurant Management System</title>
-<meta name="description" content="SiamEPOS replaces OpenTable, Just Eat and your old EPOS in one system. Thai restaurant management built for the UK — £59/month. Zero commission. Thai-speaking support.">
+<title>SiamEPOS — The Thai Business Management System | Restaurants, Spas &amp; Shops in the UK</title>
+<meta name="description" content="SiamEPOS is the Thai business management platform for the UK — one system for Thai restaurants, spas and supermarkets. Bookings, ordering, stock, payments and reports, with Thai-speaking support and zero marketplace commission.">
 <link rel="canonical" href="https://siamepos.co.uk/">
 <!-- Open Graph -->
 <meta property="og:type" content="website">
@@ -394,6 +394,20 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
 
 .nav-burger{display:none;background:none;border:none;color:white;font-size:24px;line-height:1;cursor:pointer;padding:4px 6px;margin-left:6px;}
 .nav-burger:hover{color:var(--gold);}
+/* PRODUCT CHOOSER (company hub) */
+.chooser{background:var(--white);}
+.vchooser{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:1000px;margin:48px auto 0;}
+.vcard{display:block;text-decoration:none;background:white;border:1px solid #E8E8F0;border-radius:20px;padding:30px 26px;text-align:center;transition:transform 0.3s,box-shadow 0.3s,border-color 0.3s;border-top:4px solid var(--accent,#C9A84C);}
+.vcard:hover{transform:translateY(-6px);box-shadow:0 20px 50px rgba(13,27,62,0.1);border-color:rgba(201,168,76,0.4);}
+.vcard .vc-icon{font-size:40px;margin-bottom:12px;}
+.vcard .vc-kicker{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;}
+.vcard .vc-name{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700;color:var(--navy);margin-bottom:8px;}
+.vcard .vc-desc{font-size:13px;color:var(--text-muted);line-height:1.6;margin-bottom:14px;}
+.vcard .vc-go{font-size:13px;font-weight:700;color:var(--gold);}
+.chooser-more{display:flex;justify-content:center;gap:14px;flex-wrap:wrap;max-width:1000px;margin:22px auto 0;}
+.chooser-more a{display:inline-flex;align-items:center;gap:8px;background:#F7F5F0;border:1px solid #E8E5DC;border-radius:12px;padding:12px 20px;text-decoration:none;color:var(--navy);font-size:13px;font-weight:700;transition:border-color 0.2s,background 0.2s;}
+.chooser-more a:hover{border-color:var(--gold);background:#FBF5E6;}
+@media(max-width:960px){.vchooser{grid-template-columns:1fr;gap:14px;margin-top:32px;}}
 </style>
 </head>
 <body>
@@ -416,9 +430,10 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
   </a>
   <ul class="nav-links">
     <li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li>
-    <li><a href="pricing.html" class="lang-en">SiamPRO</a><a href="pricing.html" class="lang-th">SiamPRO</a></li>
+    <li><a href="siampro.html" class="lang-en">SiamPRO</a><a href="siampro.html" class="lang-th">SiamPRO</a></li>
     <li><a href="lite.html" class="lang-en">SiamLite</a><a href="lite.html" class="lang-th">SiamLite</a></li>
     <li><a href="spa.html" class="lang-en">SiamSpa</a><a href="spa.html" class="lang-th">SiamSpa</a></li>
+    <li><a href="siamshop.html" class="lang-en">SiamShop</a><a href="siamshop.html" class="lang-th">SiamShop</a></li>
     <li><a href="why-siamepos.html" class="lang-en">Why Us</a><a href="why-siamepos.html" class="lang-th">ทำไมต้องเรา</a></li>
     <li><a href="website-design.html" class="lang-en">Website Design</a><a href="website-design.html" class="lang-th">&#x0E2d;&#x0E2d;&#x0E01;&#x0E41;&#x0E1a;&#x0E1a;&#x0E40;&#x0E27;&#x0E47;&#x0E1a;</a></li>
     <li><a href="book-demo.html" class="nav-cta lang-en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th">จองเดโม</a></li>
@@ -429,406 +444,59 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
 <!-- HERO -->
 <section class="hero">
   <div class="hero-content">
-    <div class="hero-tag">🇹🇭 <span class="lang-en">Built for Thai restaurants in the UK</span><span class="lang-th">สร้างมาเพื่อร้านอาหารไทยในสหราชอาณาจักร</span></div>
-    <h1 class="lang-en">Stop paying commission<br>to people who don't care<br>about <em>your restaurant</em></h1>
-    <h1 class="lang-th">เลิกจ่ายค่าคอมมิชชั่น<br>ให้คนที่ไม่เคยแคร์<br><em>ร้านของคุณ</em></h1>
-    <p class="hero-sub lang-en">OpenTable takes your bookings. Just Eat takes 35% of your takeaway. Your EPOS doesn't even speak Thai. SiamEPOS replaces all three — for <strong style="color:white;">£59 a month</strong>. With Thai-speaking support, built-in allergen compliance, and AI that photographs your invoices and updates your stock automatically.</p>
-    <p class="hero-sub lang-th">OpenTable กุมการจองโต๊ะของร้านคุณไว้ Just Eat หัก 35% จากยอดอาหารสั่งกลับบ้าน แถม EPOS ที่ใช้อยู่ก็พูดไทยไม่ได้ด้วยซ้ำ SiamEPOS ตัวเดียวแทนได้ทั้งสามอย่าง — แค่ <strong style="color:white;">£59 ต่อเดือน</strong> พร้อมซัพพอร์ตภาษาไทย ระบบสารก่อภูมิแพ้ครบในตัว และ AI ที่แค่ถ่ายรูปใบแจ้งหนี้ สต๊อกวัตถุดิบก็อัปเดตให้เองอัตโนมัติ</p>
+    <div class="hero-tag">🇹🇭 <span class="lang-en">Built for Thai businesses in the UK</span><span class="lang-th">สร้างมาเพื่อธุรกิจไทยในสหราชอาณาจักร</span></div>
+    <h1 class="lang-en">One system to run your<br>Thai <em>restaurant, spa or shop</em></h1>
+    <h1 class="lang-th">ระบบเดียวสำหรับ<br><em>ร้านอาหาร สปา หรือร้านค้า</em>ไทยของคุณ</h1>
+    <p class="hero-sub lang-en">Bookings, ordering, stock, payments and reports — built for Thai businesses in the UK, with Thai-speaking support from day one. Whether you run a restaurant, a spa or a supermarket, there's a SiamEPOS made for you — and <strong style="color:white;">zero marketplace commission</strong>.</p>
+    <p class="hero-sub lang-th">จองคิว สั่งอาหาร สต๊อก ชำระเงิน และรายงาน — สร้างมาเพื่อธุรกิจไทยในสหราชอาณาจักร พร้อมซัพพอร์ตภาษาไทยตั้งแต่วันแรก ไม่ว่าคุณจะมีร้านอาหาร สปา หรือซูเปอร์มาร์เก็ต ก็มี SiamEPOS ที่สร้างมาเพื่อคุณ — และ<strong style="color:white;">ไม่มีค่าคอมมิชชั่นมาร์เก็ตเพลส</strong></p>
     <div class="hero-actions">
       <a href="book-demo.html" class="book-btn lang-en">Book a Free Demo</a>
       <a href="book-demo.html" class="book-btn lang-th">จองเดโมฟรี</a>
-      <a href="features.html" style="color:rgba(255,255,255,0.6);font-size:15px;font-weight:600;text-decoration:none;" class="lang-en">See all features →</a>
-      <a href="features.html" style="color:rgba(255,255,255,0.6);font-size:15px;font-weight:600;text-decoration:none;" class="lang-th">ดูฟีเจอร์ทั้งหมด →</a>
-    </div>
-    <div class="hero-stats">
-      <div><div class="hstat-num">£0</div><div class="hstat-label lang-en">Booking commission, ever</div><div class="hstat-label lang-th">ค่าคอมจองโต๊ะ — ตลอดไป</div></div>
-      <div><div class="hstat-num">0%</div><div class="hstat-label lang-en">Takeaway commission</div><div class="hstat-label lang-th">ค่าคอมสั่งกลับบ้าน</div></div>
-      <div><div class="hstat-num" style="font-size:22px;">CRM</div><div class="hstat-label lang-en">You own your customers</div><div class="hstat-label lang-th">คุณเป็นเจ้าของข้อมูลลูกค้า</div></div>
-    </div>
-  </div>
-
-  <!-- Hero product mockup -->
-  <div class="hero-mockup">
-    <div class="mockup-window">
-      <div class="mockup-titlebar">
-        <div class="mockup-dots"><span></span><span></span><span></span></div>
-        <span class="mockup-wtitle">SiamEPOS · Live Floor Plan</span>
-        <span class="mockup-live">● LIVE</span>
-      </div>
-      <div class="mockup-body">
-        <div class="mockup-tableplan">
-          <div class="mt occupied"><span class="mt-n">T1</span><span class="mt-t">1h 24m</span><span class="mt-s">Mains</span></div>
-          <div class="mt available"><span class="mt-n">T2</span><span class="mt-t">Free</span></div>
-          <div class="mt starters"><span class="mt-n">T3</span><span class="mt-t">22m</span><span class="mt-s">Starters</span></div>
-          <div class="mt mains"><span class="mt-n">T4</span><span class="mt-t">47m</span><span class="mt-s">Mains</span></div>
-          <div class="mt desserts"><span class="mt-n">T5</span><span class="mt-t">1h 08m</span><span class="mt-s">Desserts</span></div>
-          <div class="mt occupied"><span class="mt-n">T6</span><span class="mt-t">14m</span><span class="mt-s">Ordered</span></div>
-          <div class="mt available"><span class="mt-n">T7</span><span class="mt-t">Free</span></div>
-          <div class="mt mains"><span class="mt-n">T8</span><span class="mt-t">33m</span><span class="mt-s">Mains</span></div>
-        </div>
-        <div class="mockup-chips">
-          <span class="mchip green">● 2 Available</span>
-          <span class="mchip red">● 2 Ordered</span>
-          <span class="mchip blue">● 2 Mains</span>
-          <span class="mchip pink">● 1 Desserts</span>
-        </div>
-        <div class="mockup-notif">
-          <svg class="mn-bell" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-          <div><div class="mn-title">New booking — tonight 7:30pm</div><div class="mn-sub">Somchai P. · 4 guests · just now</div></div>
-        </div>
-        <div class="mockup-revenue">
-          <span class="mr-label">Tonight's revenue</span>
-          <span class="mr-value">£1,284</span>
-        </div>
-      </div>
+      <a href="#products" style="color:rgba(255,255,255,0.6);font-size:15px;font-weight:600;text-decoration:none;" class="lang-en">Explore our products ↓</a>
+      <a href="#products" style="color:rgba(255,255,255,0.6);font-size:15px;font-weight:600;text-decoration:none;" class="lang-th">ดูผลิตภัณฑ์ทั้งหมด ↓</a>
     </div>
   </div>
 </section>
 
-<!-- PROOF BAR -->
-<div class="proof-bar">
-  <div class="proof-item">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#C9A84C;flex-shrink:0;"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/><path d="M8 2v16M16 6v16"/></svg>
-    <span class="lang-en">Works <span>offline</span> — keeps running if internet drops</span>
-    <span class="lang-th"><span>ออฟไลน์ได้</span> — เน็ตล่ม ร้านก็ขายต่อได้</span>
-  </div>
-  <div class="proof-item">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#C9A84C;flex-shrink:0;"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
-    <span class="lang-en">Any phone is a <span>full terminal</span></span>
-    <span class="lang-th">มือถือทุกเครื่อง <span>เป็น POS</span> ได้ทันที</span>
-  </div>
-  <div class="proof-item">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#C9A84C;flex-shrink:0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-    <span class="lang-en"><span>No per-cover fees</span> — ever</span>
-    <span class="lang-th">ไม่มีค่าธรรมเนียมต่อหัว <span>ไม่มีวันเก็บ</span></span>
-  </div>
-</div>
-
-<!-- THE ONE PARAGRAPH -->
-<section style="background:var(--navy); padding:60px 60px; text-align:center;">
-  <p style="max-width:780px; margin:0 auto; font-size:19px; color:rgba(255,255,255,0.8); line-height:1.85; font-weight:300;" class="lang-en">"Thai restaurants in the UK are paying OpenTable per head, giving Just Eat 35% of every takeaway order, and running on an EPOS that doesn't understand their menu or their language. SiamEPOS was built to fix all three — for <strong style="color:var(--gold)">£59 a month</strong>. AI that photographs your supplier invoices and updates stock automatically. A booking widget that replaces OpenTable for zero commission. Cost vs sales analysis that tells you exactly which dishes make you money. <strong style="color:var(--gold)">In Thai and English. From day one.</strong>"</p>
-  <p style="max-width:780px; margin:0 auto; font-size:19px; color:rgba(255,255,255,0.8); line-height:1.85; font-weight:300;" class="lang-th">"ทุกวันนี้ร้านอาหารไทยในสหราชอาณาจักรต้องจ่ายค่าธรรมเนียมต่อหัวให้ OpenTable โดน Just Eat หัก 35% จากทุกออเดอร์สั่งกลับบ้าน แถมยังใช้ EPOS ที่ไม่เข้าใจทั้งเมนูและภาษาของเรา SiamEPOS เกิดมาเพื่อแก้ทั้งสามปัญหานี้ — ในราคาแค่ <strong style="color:var(--gold)">£59 ต่อเดือน</strong> AI ที่แค่ถ่ายรูปใบแจ้งหนี้จากซัพพลายเออร์ สต๊อกก็อัปเดตให้อัตโนมัติ วิดเจ็ตจองโต๊ะที่ใช้แทน OpenTable ได้โดยไม่เสียค่าคอมมิชชั่นเลย และระบบวิเคราะห์ต้นทุนเทียบยอดขายที่บอกชัด ๆ ว่าเมนูไหนทำเงินให้คุณ <strong style="color:var(--gold)">ทั้งภาษาไทยและอังกฤษ ตั้งแต่วันแรก</strong>"</p>
-</section>
-
-<!-- 6 FEATURES GRID -->
-<section class="features-section reveal">
+<!-- PRODUCT CHOOSER (company hub) -->
+<section class="chooser" id="products">
   <div style="text-align:center;">
-    <div class="section-label lang-en">Six reasons Thai restaurants switch</div>
-    <div class="section-label lang-th">หกเหตุผลที่ร้านอาหารไทยเปลี่ยนมาใช้</div>
-    <h2 class="section-title lang-en">Everything you're paying for separately —<br>now in one system</h2>
-    <h2 class="section-title lang-th">ทุกอย่างที่คุณเคยต้องจ่ายแยกหลายเจ้า —<br>รวมจบในระบบเดียว</h2>
+    <div class="section-label lang-en">Which business are you?</div>
+    <div class="section-label lang-th">คุณทำธุรกิจแบบไหน?</div>
+    <h2 class="section-title lang-en">Pick your business —<br>we'll show you the right system</h2>
+    <h2 class="section-title lang-th">เลือกธุรกิจของคุณ —<br>แล้วเราจะพาไปยังระบบที่ใช่</h2>
   </div>
-  <div class="features-grid">
-
-    <!-- 1. Reservations -->
-    <a href="features.html#reservations" class="fcard highlight reveal rd1">
-      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg></div>
-      <div class="fcard-badge lang-en">£0 commission — always</div>
-      <div class="fcard-badge lang-th">ค่าคอม £0 — ตลอดไป</div>
-      <div class="fcard-villain lang-en">OpenTable charges £4,500/year</div>
-      <div class="fcard-villain lang-th">OpenTable เก็บ £4,500 ต่อปี</div>
-      <div class="fcard-title lang-en">Zero-Fee Online Reservations</div>
-      <div class="fcard-title lang-th">จองโต๊ะออนไลน์ ค่าคอม 0%</div>
-      <p class="fcard-desc lang-en">Drop-in booking widget on your own website. Instant confirmation, automated reminders, full guest history. Every booking belongs to you — not OpenTable. Not ResDiary. You.</p>
-      <p class="fcard-desc lang-th">วิดเจ็ตจองโต๊ะติดบนเว็บไซต์ของคุณเอง ยืนยันทันที แจ้งเตือนลูกค้าอัตโนมัติ เก็บประวัติแขกครบ ทุกการจองเป็นของคุณ — ไม่ใช่ของ OpenTable ไม่ใช่ของ ResDiary ของคุณคนเดียว</p>
+  <div class="vchooser">
+    <a class="vcard" href="siampro.html" style="--accent:#e94560;">
+      <div class="vc-icon">🍜</div>
+      <div class="vc-kicker">SiamEPOS Pro</div>
+      <div class="vc-name lang-en">Restaurant</div><div class="vc-name lang-th">ร้านอาหาร</div>
+      <p class="vc-desc lang-en">Tables, kitchen, bookings, takeaway, stock &amp; reports — zero commission.</p>
+      <p class="vc-desc lang-th">โต๊ะ ครัว จองโต๊ะ สั่งกลับบ้าน สต๊อกและรายงาน — ไม่มีค่าคอม</p>
+      <span class="vc-go lang-en">Explore SiamEPOS Pro →</span><span class="vc-go lang-th">ดู SiamEPOS Pro →</span>
     </a>
-
-    <!-- 2. Takeaway -->
-    <a href="features.html#takeaway" class="fcard highlight reveal rd2">
-      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div>
-      <div class="fcard-badge lang-en">0% vs Just Eat's 35%</div>
-      <div class="fcard-badge lang-th">0% เทียบกับ Just Eat 35%</div>
-      <div class="fcard-villain lang-en">Just Eat / Deliveroo take 35%+ per order</div>
-      <div class="fcard-villain lang-th">Just Eat / Deliveroo กิน 35%+ ต่อออเดอร์</div>
-      <div class="fcard-title lang-en">Online Ordering — Collection or Delivery</div>
-      <div class="fcard-title lang-th">สั่งออนไลน์ — รับเองหรือส่งถึงบ้าน</div>
-      <p class="fcard-desc lang-en">Your website. Your widget. Your customer. Orders go straight to your kitchen. For delivery, connect Uber Direct or use your own driver — SiamEPOS handles both. You keep every penny.</p>
-      <p class="fcard-desc lang-th">เว็บของคุณ วิดเจ็ตของคุณ ลูกค้าของคุณ ออเดอร์วิ่งตรงเข้าครัว ส่วนงานส่งถึงบ้าน จะเชื่อม Uber Direct หรือใช้คนขับของร้านเองก็ได้ — SiamEPOS รองรับทั้งคู่ เงินทุกเพนนีเป็นของคุณ</p>
+    <a class="vcard" href="spa.html" style="--accent:#C9A84C;">
+      <div class="vc-icon">💆</div>
+      <div class="vc-kicker">SiamSpa</div>
+      <div class="vc-name lang-en">Spa &amp; Massage</div><div class="vc-name lang-th">สปาและนวด</div>
+      <p class="vc-desc lang-en">Online booking with therapist choice, live timeline, client records &amp; CRM.</p>
+      <p class="vc-desc lang-th">จองออนไลน์เลือกเทอราพิสต์ ไทม์ไลน์สด ประวัติลูกค้าและ CRM</p>
+      <span class="vc-go lang-en">Explore SiamSpa →</span><span class="vc-go lang-th">ดู SiamSpa →</span>
     </a>
-
-    <!-- 3. Allergens -->
-    <a href="features.html#allergens" class="fcard reveal rd3">
-      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg></div>
-      <div class="fcard-badge lang-en">Natasha's Law compliant</div>
-      <div class="fcard-badge lang-th">รองรับกฎหมาย Natasha's Law</div>
-      <div class="fcard-villain lang-en">Manual allergen spreadsheets — one mistake = legal liability</div>
-      <div class="fcard-villain lang-th">จดสารก่อภูมิแพ้เองในตาราง — พลาดครั้งเดียวถึงขั้นผิดกฎหมาย</div>
-      <div class="fcard-title lang-en">Allergen Management — Automatic</div>
-      <div class="fcard-title lang-th">จัดการสารก่อภูมิแพ้ — อัตโนมัติ</div>
-      <p class="fcard-desc lang-en">All 14 UK allergens tracked at recipe level. Build your recipes once — allergen chips appear on menus, the takeaway widget, and every printed label. Compliant from the moment you go live.</p>
-      <p class="fcard-desc lang-th">ติดตามสารก่อภูมิแพ้ครบทั้ง 14 ชนิดตามกฎหมาย UK ลึกถึงระดับสูตรอาหาร ตั้งสูตรแค่ครั้งเดียว — ป้ายสารก่อภูมิแพ้ขึ้นเองทั้งบนเมนู วิดเจ็ตสั่งอาหาร และฉลากที่พิมพ์ทุกใบ ถูกต้องตามกฎหมายตั้งแต่วันแรกที่เปิดใช้</p>
+    <a class="vcard" href="siamshop.html" style="--accent:#0D1B3E;">
+      <div class="vc-icon">🛒</div>
+      <div class="vc-kicker">SiamShop</div>
+      <div class="vc-name lang-en">Supermarket</div><div class="vc-name lang-th">ซูเปอร์มาร์เก็ต</div>
+      <p class="vc-desc lang-en">One stock core for an in-store till, an online shop &amp; a phone scanner.</p>
+      <p class="vc-desc lang-th">สต็อกกลางเดียวสำหรับหน้าร้าน ร้านออนไลน์ และสแกนเนอร์มือถือ</p>
+      <span class="vc-go lang-en">Explore SiamShop →</span><span class="vc-go lang-th">ดู SiamShop →</span>
     </a>
-
-    <!-- 4. AI Inventory -->
-    <a href="features.html#inventory" class="fcard highlight reveal rd1">
-      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
-      <div class="fcard-badge lang-en">AI-powered — 30 seconds</div>
-      <div class="fcard-badge lang-th">ใช้ AI — เสร็จใน 30 วินาที</div>
-      <div class="fcard-villain lang-en">Typing out supplier invoices by hand — every week</div>
-      <div class="fcard-villain lang-th">นั่งคีย์ใบแจ้งหนี้ซัพพลายเออร์เอง — ทุกสัปดาห์</div>
-      <div class="fcard-title lang-en">AI Inventory + Cost vs Sales</div>
-      <div class="fcard-title lang-th">AI สต๊อกวัตถุดิบ + ต้นทุน vs ยอดขาย</div>
-      <p class="fcard-desc lang-en">Stop typing out supplier invoices by hand. Photograph it — AI does the rest. Stock updates, costs update, and you see live gross margin on every dish. The most painful job in a restaurant, eliminated.</p>
-      <p class="fcard-desc lang-th">เลิกนั่งคีย์ใบแจ้งหนี้ทีละบรรทัด แค่ถ่ายรูป ที่เหลือ AI จัดการให้ สต๊อกอัปเดต ต้นทุนอัปเดต เห็นกำไรขั้นต้นของทุกจานแบบเรียลไทม์ งานที่ปวดหัวที่สุดในร้านอาหาร — หายไปเลย</p>
-    </a>
-
-    <!-- 5. Table Map + KDS -->
-    <a href="features.html#epos" class="fcard reveal rd2">
-      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
-      <div class="fcard-title lang-en">Live Table Map + Kitchen Display</div>
-      <div class="fcard-title lang-th">แผนผังโต๊ะเรียลไทม์ + จอครัว</div>
-      <p class="fcard-desc lang-en">Colour-coded floor plan. Per-course timers so starters don't arrive with mains. Kitchen screen replaces paper dockets — chefs tick items off, the Pass knows what's ready. Any screen, any device.</p>
-      <p class="fcard-desc lang-th">แผนผังโต๊ะแยกสีตามสถานะ จับเวลาแยกแต่ละคอร์ส สตาร์ทเตอร์จะได้ไม่ออกพร้อมจานหลัก จอครัวใช้แทนบิลกระดาษ — เชฟติ๊กทีละจาน หน้าพาสรู้ทันทีว่าอะไรพร้อมเสิร์ฟ ใช้ได้ทุกจอ ทุกอุปกรณ์</p>
-    </a>
-
-    <!-- 6. Customer CRM -->
-    <a href="features.html#crm" class="fcard highlight reveal rd3">
-      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-      <div class="fcard-badge lang-en">Own your customers</div>
-      <div class="fcard-badge lang-th">ลูกค้าเป็นของคุณ</div>
-      <div class="fcard-villain lang-en">OpenTable and Deliveroo own your customer data — you don't</div>
-      <div class="fcard-villain lang-th">OpenTable และ Deliveroo เป็นเจ้าของข้อมูลลูกค้า — ไม่ใช่คุณ</div>
-      <div class="fcard-title lang-en">Customer CRM + Email Campaigns</div>
-      <div class="fcard-title lang-th">CRM ลูกค้า + แคมเปญอีเมล</div>
-      <p class="fcard-desc lang-en">Every diner, every order, all yours. See who hasn't visited in 60 days and win them back automatically. Run birthday campaigns. Send offers. GDPR compliant. Your list, your revenue — forever.</p>
-      <p class="fcard-desc lang-th">ลูกค้าทุกคน ออเดอร์ทุกรายการ เป็นของคุณ เห็นว่าใครไม่มา 60 วันแล้วดึงกลับอัตโนมัติ ส่งแคมเปญวันเกิด ส่งโปรโมชั่น สอดคล้อง GDPR รายชื่อของคุณ รายได้ของคุณ — ตลอดไป</p>
-    </a>
-
   </div>
-  <div style="text-align:center; margin-top:40px;">
-    <a href="features.html" class="book-btn ghost" style="display:inline-flex; text-decoration:none;">
-      <span class="lang-en">See all features in detail →</span>
-      <span class="lang-th">ดูฟีเจอร์ทั้งหมด →</span>
-    </a>
+  <div class="chooser-more">
+    <a href="lite.html"><span class="lang-en">🔖 SiamLite — booking &amp; ordering widgets</span><span class="lang-th">🔖 SiamLite — วิดเจ็ตจองและสั่งอาหาร</span></a>
+    <a href="website-design.html"><span class="lang-en">🌐 Website Design for your business</span><span class="lang-th">🌐 ออกแบบเว็บไซต์ให้ธุรกิจคุณ</span></a>
   </div>
 </section>
-
-<!-- WHAT YOU'RE PAYING NOW -->
-<section class="cost-reality reveal">
-  <div style="text-align:center;">
-    <div class="section-label lang-en" style="color:var(--gold);">The maths don't lie</div>
-    <div class="section-label lang-th" style="color:var(--gold);">ตัวเลขไม่โกหก</div>
-    <h2 class="section-title white lang-en">What you're paying now<br>vs what you'd pay with SiamEPOS</h2>
-    <h2 class="section-title white lang-th">ตอนนี้คุณจ่ายอยู่เท่าไหร่<br>เทียบกับถ้าใช้ SiamEPOS</h2>
-    <p class="section-sub lang-en" style="color:rgba(255,255,255,0.5); margin:0 auto 0; max-width:520px;">Based on a typical Thai restaurant doing 200 covers/week and £2,000/week in takeaway orders.</p>
-    <p class="section-sub lang-th" style="color:rgba(255,255,255,0.5); margin:0 auto 0; max-width:520px;">อ้างอิงจากร้านอาหารไทยทั่วไปที่รับลูกค้า 200 คน/สัปดาห์ และยอดสั่งกลับบ้าน £2,000/สัปดาห์</p>
-  </div>
-  <div class="cost-table-wrap">
-    <div class="cost-versus">
-      <div class="cost-col old">
-        <div class="cost-col-header lang-en">What you pay now</div>
-        <div class="cost-col-header lang-th">ที่คุณจ่ายอยู่ตอนนี้</div>
-        <div class="cost-row">
-          <span class="cost-label lang-en">OpenTable / ResDiary</span>
-          <span class="cost-label lang-th">OpenTable / ResDiary</span>
-          <span class="cost-amount lang-en">~£375/month</span>
-          <span class="cost-amount lang-th">~£375/เดือน</span>
-        </div>
-        <div class="cost-row">
-          <span class="cost-label lang-en">Just Eat / Deliveroo (35%)</span>
-          <span class="cost-label lang-th">Just Eat / Deliveroo (35%)</span>
-          <span class="cost-amount lang-en">~£2,800/month</span>
-          <span class="cost-amount lang-th">~£2,800/เดือน</span>
-        </div>
-        <div class="cost-row">
-          <span class="cost-label lang-en">Generic EPOS + hardware</span>
-          <span class="cost-label lang-th">EPOS ทั่วไป + ค่าเครื่อง</span>
-          <span class="cost-amount lang-en">£100–200/month</span>
-          <span class="cost-amount lang-th">£100–200/เดือน</span>
-        </div>
-        <div class="cost-row">
-          <span class="cost-label lang-en">Stock management (manual or accountant)</span>
-          <span class="cost-label lang-th">จัดการสต๊อก (ทำเองหรือจ้างนักบัญชี)</span>
-          <span class="cost-amount lang-en">£100–300/month</span>
-          <span class="cost-amount lang-th">£100–300/เดือน</span>
-        </div>
-        <div class="cost-row">
-          <span class="cost-label lang-en" style="font-size:15px; font-weight:800; color:white;">Total</span>
-          <span class="cost-label lang-th" style="font-size:15px; font-weight:800; color:white;">รวม</span>
-          <span class="cost-amount" style="font-size:18px;">£3,375–3,675/mo</span>
-        </div>
-      </div>
-      <div class="cost-divider">
-        <div class="cost-vs-badge">VS</div>
-      </div>
-      <div class="cost-col new">
-        <div class="cost-col-header lang-en">SiamEPOS</div>
-        <div class="cost-col-header lang-th">SiamEPOS</div>
-        <div class="cost-row">
-          <span class="cost-label lang-en">Reservations — zero commission</span>
-          <span class="cost-label lang-th">จองโต๊ะ — ค่าคอม 0%</span>
-          <span class="cost-amount lang-en">£0</span>
-          <span class="cost-amount lang-th">£0</span>
-        </div>
-        <div class="cost-row">
-          <span class="cost-label lang-en">Takeaway — zero commission</span>
-          <span class="cost-label lang-th">สั่งกลับบ้าน — ค่าคอม 0%</span>
-          <span class="cost-amount lang-en">£0</span>
-          <span class="cost-amount lang-th">£0</span>
-        </div>
-        <div class="cost-row">
-          <span class="cost-label lang-en">EPOS + table map + KDS</span>
-          <span class="cost-label lang-th">EPOS + แผนผังโต๊ะ + จอครัว</span>
-          <span class="cost-amount lang-en">Included</span>
-          <span class="cost-amount lang-th">รวมให้แล้ว</span>
-        </div>
-        <div class="cost-row">
-          <span class="cost-label lang-en">AI inventory + cost vs sales</span>
-          <span class="cost-label lang-th">AI สต๊อกวัตถุดิบ + ต้นทุน vs ยอดขาย</span>
-          <span class="cost-amount lang-en">Included</span>
-          <span class="cost-amount lang-th">รวมให้แล้ว</span>
-        </div>
-        <div class="cost-row">
-          <span class="cost-label lang-en" style="font-size:15px; font-weight:800; color:white;">Total</span>
-          <span class="cost-label lang-th" style="font-size:15px; font-weight:800; color:white;">รวม</span>
-          <span class="cost-amount" style="font-size:22px;">£59/month</span>
-        </div>
-      </div>
-    </div>
-    <div class="cost-saving-banner">
-      <div class="cost-saving-text lang-en">That's a saving of <strong>over £3,200 every month</strong> — more than <strong>£38,400 a year</strong> — going back into your restaurant instead of into OpenTable's and Deliveroo's pockets.</div>
-      <div class="cost-saving-text lang-th">เท่ากับประหยัดได้ <strong>กว่า £3,200 ทุกเดือน</strong> — หรือมากกว่า <strong>£38,400 ต่อปี</strong> — เงินก้อนนี้กลับเข้าร้านของคุณ แทนที่จะเข้ากระเป๋า OpenTable กับ Deliveroo</div>
-      <a href="book-demo.html" class="cost-saving-pill lang-en">See it in a demo</a>
-      <a href="book-demo.html" class="cost-saving-pill lang-th">ดูของจริงในเดโม</a>
-    </div>
-  </div>
-</section>
-
-<!-- PRICING PREVIEW -->
-<section class="pricing-section reveal">
-  <div style="text-align:center;">
-    <div class="section-label lang-en">Simple pricing</div>
-    <div class="section-label lang-th">ราคาเรียบง่าย ตรงไปตรงมา</div>
-    <h2 class="section-title lang-en">One price.<br>Everything included.</h2>
-    <h2 class="section-title lang-th">ราคาเดียว<br>รวมทุกอย่าง</h2>
-    <p class="section-sub lang-en" style="margin:0 auto;">No setup fee. No contract. No "add-on" trap. Cancel anytime.</p>
-    <p class="section-sub lang-th" style="margin:0 auto;">ไม่มีค่าติดตั้ง ไม่ผูกสัญญา ไม่มีกับดักค่าบริการเสริม ยกเลิกได้ทุกเมื่อ</p>
-  </div>
-  <div style="max-width:520px;margin:60px auto 0;">
-    <div class="pcard featured reveal" style="transform:none;">
-      <div class="pcard-badge lang-en">&#x1F3F7;&#xFE0F; Founder&rsquo;s Rate &mdash; First 50 clients only</div>
-      <div class="pcard-badge lang-th">&#x1F3F7;&#xFE0F; Founder&rsquo;s Rate &mdash; เฉพาะ 50 ร้านแรกเท่านั้น</div>
-      <div class="pcard-tier">SiamEPOS Pro</div>
-      <div class="pcard-price">£59</div>
-      <div class="pcard-period lang-en">per month &nbsp;&middot;&nbsp; price-locked forever &nbsp;&middot;&nbsp; no setup fee</div>
-      <div class="pcard-period lang-th">ต่อเดือน &nbsp;&middot;&nbsp; ล็อกราคานี้ตลอดไป &nbsp;&middot;&nbsp; ไม่มีค่าติดตั้ง</div>
-      <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:6px;" class="lang-en">Standard price: <span style="text-decoration:line-through">£89/month</span></div>
-      <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:6px;" class="lang-th">ราคาปกติ: <span style="text-decoration:line-through">£89/เดือน</span></div>
-      <div style="font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:14px;opacity:0.85;" class="lang-en">── Limited founding spots remaining ──</div>
-      <div style="font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:14px;opacity:0.85;" class="lang-th">── สิทธิ์ Founder&rsquo;s Rate เหลือจำกัด ──</div>
-      <p class="pcard-key lang-en">EPOS &middot; Table map &middot; Kitchen screen &middot; Zero-commission reservations &middot; Zero-commission takeaway &middot; Customer CRM &middot; AI invoice scanner &middot; Allergen management &middot; Thai + English</p>
-      <p class="pcard-key lang-th">EPOS &middot; แผนผังโต๊ะ &middot; จอครัว &middot; จองโต๊ะ 0% &middot; สั่งกลับบ้าน 0% &middot; CRM ลูกค้า &middot; AI สแกนใบแจ้งหนี้ &middot; จัดการสารก่อภูมิแพ้ &middot; ไทย + อังกฤษ</p>
-      <a href="book-demo.html" class="btn-pcard btn-gold lang-en" style="margin-bottom:10px;">Book a Free Demo</a>
-      <a href="book-demo.html" class="btn-pcard btn-gold lang-th" style="margin-bottom:10px;">จองเดโมฟรี</a>
-      <a href="pricing.html" class="btn-pcard btn-outline-navy lang-en">See everything included &rarr;</a>
-      <a href="pricing.html" class="btn-pcard btn-outline-navy lang-th">ดูทุกอย่างที่รวมให้ &rarr;</a>
-    </div>
-  </div>
-  <p style="text-align:center;margin-top:28px;color:var(--text-muted);font-size:14px;" class="lang-en">Lock in the Founder&rsquo;s Rate — <strong>£59/month, price-locked forever</strong>. Standard price is £89/month.</p>
-  <p style="text-align:center;margin-top:28px;color:var(--text-muted);font-size:14px;" class="lang-th">ล็อกราคา Founder&rsquo;s Rate ได้เลย — <strong>£59/เดือน ตลอดไป</strong> จากราคาปกติ £89/เดือน</p>
-</section>
-
-<!-- SOCIAL PROOF / TRUST — WEBSITE-POLISH-005
-     Live content below is strictly verifiable (Companies House, IPO
-     trademark register, ICO). The testimonial grid further down is
-     built and styled but COMMENTED OUT — uncomment it the day we have
-     the first real client quote. NEVER publish invented testimonials. -->
-<section class="reveal" style="background:#F7F5F0;padding:80px 60px;">
-  <div style="max-width:1100px;margin:0 auto;text-align:center;">
-    <div class="section-label lang-en">Built properly. Registered properly.</div>
-    <div class="section-label lang-th">สร้างอย่างจริงจัง จดทะเบียนถูกต้อง</div>
-    <h2 class="section-title lang-en">A real UK company you can <em>look up</em></h2>
-    <h2 class="section-title lang-th">บริษัทจริงใน UK ที่<em>ตรวจสอบได้</em></h2>
-    <p style="color:var(--text-muted);font-size:15px;max-width:620px;margin:10px auto 44px;line-height:1.7;" class="lang-en">Before you trust your restaurant's bookings, orders and customer data to anyone — check who they are. Here's us, all verifiable:</p>
-    <p style="color:var(--text-muted);font-size:15px;max-width:620px;margin:10px auto 44px;line-height:1.7;" class="lang-th">ก่อนจะฝากการจอง ออเดอร์ และข้อมูลลูกค้าของร้านไว้กับใคร — เช็กให้ชัวร์ก่อนว่าเขาเป็นใคร นี่คือเรา ตรวจสอบได้ทุกข้อ:</p>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;text-align:left;">
-      <div style="background:white;border:1px solid #E8E5DE;border-radius:14px;padding:24px;">
-        <div style="font-size:24px;margin-bottom:10px;">🇬🇧</div>
-        <div style="font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px;" class="lang-en">UK registered company</div>
-        <div style="font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px;" class="lang-th">บริษัทจดทะเบียนใน UK</div>
-        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;" class="lang-en">SiamEPOS Ltd — Company No. 17215576, registered in England &amp; Wales. Look us up on Companies House.</div>
-        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;" class="lang-th">SiamEPOS Ltd — ทะเบียนเลขที่ 17215576 จดทะเบียนใน England &amp; Wales ตรวจสอบได้ที่ Companies House</div>
-      </div>
-      <div style="background:white;border:1px solid #E8E5DE;border-radius:14px;padding:24px;">
-        <div style="font-size:24px;margin-bottom:10px;">™️</div>
-        <div style="font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px;" class="lang-en">Registered trademark</div>
-        <div style="font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px;" class="lang-th">เครื่องหมายการค้าจดทะเบียน</div>
-        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;" class="lang-en">SiamEPOS™ is a UK registered trade mark (UK00004385501). We're building this for the long run.</div>
-        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;" class="lang-th">SiamEPOS™ เป็นเครื่องหมายการค้าจดทะเบียนใน UK (UK00004385501) เราตั้งใจทำเพื่อระยะยาว</div>
-      </div>
-      <div style="background:white;border:1px solid #E8E5DE;border-radius:14px;padding:24px;">
-        <div style="font-size:24px;margin-bottom:10px;">🔐</div>
-        <div style="font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px;" class="lang-en">ICO registered</div>
-        <div style="font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px;" class="lang-th">จดทะเบียนกับ ICO</div>
-        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;" class="lang-en">Registered with the UK Information Commissioner's Office. Your customers' data is handled under UK GDPR — and it stays yours.</div>
-        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;" class="lang-th">จดทะเบียนกับ ICO หน่วยงานคุ้มครองข้อมูลของ UK ข้อมูลลูกค้าของคุณดูแลตามกฎหมาย UK GDPR — และเป็นของคุณเสมอ</div>
-      </div>
-      <div style="background:white;border:1px solid #E8E5DE;border-radius:14px;padding:24px;">
-        <div style="font-size:24px;margin-bottom:10px;">🤝</div>
-        <div style="font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px;" class="lang-en">Talk to the founder</div>
-        <div style="font-weight:700;font-size:15px;color:var(--navy);margin-bottom:6px;" class="lang-th">คุยกับผู้ก่อตั้งโดยตรง</div>
-        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;" class="lang-en">No call centre. Your WhatsApp messages are answered by the Thai founder who built the system — in Thai or English.</div>
-        <div style="font-size:13px;color:var(--text-muted);line-height:1.6;" class="lang-th">ไม่มีคอลเซ็นเตอร์ ข้อความ WhatsApp ของคุณตอบโดยผู้ก่อตั้งคนไทยที่สร้างระบบนี้เอง — ภาษาไทยหรืออังกฤษก็ได้</div>
-      </div>
-    </div>
-
-    <!-- ═══ TESTIMONIALS — COMMENTED OUT until we have REAL quotes. ═══
-         To activate: (1) replace name/restaurant/quote with a real,
-         permission-granted client quote, (2) remove this comment wrapper.
-         Do NOT invent quotes — one caught fake testimonial costs more
-         trust than fifty real ones earn.
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;text-align:left;margin-top:20px;">
-      <div style="background:var(--navy);border-radius:14px;padding:28px;color:white;">
-        <div style="color:var(--gold);font-size:18px;letter-spacing:2px;margin-bottom:12px;">★★★★★</div>
-        <p style="font-size:14px;line-height:1.7;color:rgba(255,255,255,0.85);margin-bottom:16px;" class="lang-en">"[REAL QUOTE HERE — what changed for their restaurant, in their words]"</p>
-        <p style="font-size:14px;line-height:1.7;color:rgba(255,255,255,0.85);margin-bottom:16px;" class="lang-th">"[คำพูดจริงของลูกค้า]"</p>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold-light));display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--navy);">[A]</div>
-          <div>
-            <div style="font-weight:700;font-size:13px;">[Owner name]</div>
-            <div style="font-size:12px;color:rgba(255,255,255,0.5);">[Restaurant, City]</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    ═══ END TESTIMONIALS ═══ -->
-
-    <p style="margin-top:36px;font-size:14px;color:var(--text-muted);" class="lang-en">Want to hear it from a restaurant like yours? <a href="book-demo.html" style="color:var(--gold);font-weight:700;">Book a demo</a> and we'll show you SiamEPOS running live — then introduce you to a founding restaurant once you're serious.</p>
-    <p style="margin-top:36px;font-size:14px;color:var(--text-muted);" class="lang-th">อยากฟังจากร้านอาหารแบบเดียวกับคุณ? <a href="book-demo.html" style="color:var(--gold);font-weight:700;">จองเดโม</a> แล้วเราจะโชว์ SiamEPOS ทำงานจริงให้ดู — และแนะนำให้รู้จักร้านในกลุ่ม Founding 50 เมื่อคุณจริงจัง</p>
-  </div>
-</section>
-
-<!-- SIAMSPA TEASER -->
-<section class="reveal" style="background:linear-gradient(135deg,#0D1B3E 0%,#0A2456 100%);padding:80px 60px;text-align:center;position:relative;overflow:hidden;">
-  <div style="position:absolute;width:600px;height:600px;background:radial-gradient(circle,rgba(201,168,76,0.08) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;"></div>
-  <div style="position:relative;max-width:720px;margin:0 auto;">
-    <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:#C9A84C;padding:6px 16px;border-radius:30px;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;">✨ NEW — SiamSpa</div>
-    <h2 style="font-family:'Cormorant Garamond',serif;font-size:46px;font-weight:700;line-height:1.15;color:white;margin:0 0 18px;" class="lang-en">Run your Thai spa or<br>massage shop from your phone.</h2>
-    <h2 style="font-family:'Cormorant Garamond',serif;font-size:46px;font-weight:700;line-height:1.15;color:white;margin:0 0 18px;" class="lang-th">บริหารสปาหรือร้านนวดไทย<br>จากมือถือของคุณ</h2>
-    <p style="color:rgba(255,255,255,0.65);font-size:17px;line-height:1.7;max-width:560px;margin:0 auto 36px;" class="lang-en">Live appointment timeline. Therapist schedules. No double-bookings. Client records. The same SiamEPOS quality — built for spas and massage shops.</p>
-    <p style="color:rgba(255,255,255,0.65);font-size:17px;line-height:1.7;max-width:560px;margin:0 auto 36px;" class="lang-th">เห็นไทม์ไลน์คิวนัดหมายสด ๆ ตารางงานเทอราพิสต์ชัดเจน ไม่มีคิวจองซ้อน เก็บประวัติลูกค้าครบ คุณภาพเดียวกับ SiamEPOS — สร้างมาเพื่อสปาและร้านนวดโดยเฉพาะ</p>
-    <div style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;margin-bottom:36px;">
-      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">📅</span> <span class="lang-en">Appointment timeline</span><span class="lang-th">ไทม์ไลน์นัดหมาย</span></div>
-      <div style="color:rgba(255,255,255,0.3);">·</div>
-      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">💆</span> <span class="lang-en">Therapist scheduling</span><span class="lang-th">จัดตารางเทอราพิสต์</span></div>
-      <div style="color:rgba(255,255,255,0.3);">·</div>
-      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">👥</span> <span class="lang-en">Client CRM</span><span class="lang-th">CRM ลูกค้า</span></div>
-      <div style="color:rgba(255,255,255,0.3);">·</div>
-      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">💷</span> <span class="lang-en">£49/month</span><span class="lang-th">£49/เดือน</span></div>
-    </div>
-    <a href="spa.html" style="display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,#C9A84C,#E8C96A);color:#0D1B3E;padding:15px 32px;border-radius:10px;font-size:16px;font-weight:800;text-decoration:none;transition:transform 0.2s,box-shadow 0.2s;box-shadow:0 4px 20px rgba(201,168,76,0.35);" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 32px rgba(201,168,76,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 20px rgba(201,168,76,0.35)'" class="lang-en">Learn about SiamSpa →</a>
-    <a href="spa.html" style="display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,#C9A84C,#E8C96A);color:#0D1B3E;padding:15px 32px;border-radius:10px;font-size:16px;font-weight:800;text-decoration:none;transition:transform 0.2s,box-shadow 0.2s;box-shadow:0 4px 20px rgba(201,168,76,0.35);" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 32px rgba(201,168,76,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 20px rgba(201,168,76,0.35)'" class="lang-th">ทำความรู้จัก SiamSpa →</a>
-  </div>
-</section>
-
-<!-- TRUST BAR -->
-<div class="trust-bar reveal">
-  <div class="trust-item"><span class="t-icon">🇹🇭</span> <span class="lang-en">Thai-speaking WhatsApp support</span><span class="lang-th">ซัพพอร์ตภาษาไทยทาง WhatsApp</span></div>
-  <div class="trust-item"><span class="t-icon">🌐</span> <span class="lang-en">Works offline — no internet required</span><span class="lang-th">ทำงานออฟไลน์ได้ ไม่ต้องมีอินเตอร์เน็ต</span></div>
-  <div class="trust-item"><span class="t-icon">📱</span> <span class="lang-en">Any device — phone, tablet, Mac, Windows</span><span class="lang-th">อุปกรณ์ใดก็ได้ มือถือ แท็บเล็ต Mac และ Windows</span></div>
-  <div class="trust-item"><span class="t-icon">🛡️</span> <span class="lang-en">UK GDPR + Natasha's Law compliant</span><span class="lang-th">สอดคล้อง UK GDPR และ Natasha's Law</span></div>
-  <div class="trust-item"><span class="t-icon">✅</span> <span class="lang-en">Cancel anytime — no long-term contract</span><span class="lang-th">ยกเลิกได้ทุกเมื่อ ไม่ผูกสัญญา</span></div>
-</div>
 
 <!-- FINAL CTA -->
 <section class="final-cta">
@@ -868,6 +536,7 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
       <li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li>
       <li><a href="pricing.html" class="lang-en">Pricing</a><a href="pricing.html" class="lang-th">ราคา</a></li>
       <li><a href="spa.html" class="lang-en">SiamSpa</a><a href="spa.html" class="lang-th">SiamSpa</a></li>
+      <li><a href="siamshop.html" class="lang-en">SiamShop</a><a href="siamshop.html" class="lang-th">SiamShop</a></li>
       <li><a href="why-siamepos.html" class="lang-en">Why SiamEPOS</a><a href="why-siamepos.html" class="lang-th">ทำไมต้อง SiamEPOS</a></li>
       <li><a href="book-demo.html" class="lang-en">Book Demo</a><a href="book-demo.html" class="lang-th">จองเดโม</a></li>
     </ul>

@@ -6,6 +6,39 @@
 
 ---
 
+## 🎯 PHASE 1 MANDATE — ALL AGENTS (2026-06-16)
+
+**Korakot's direction: Phase 1 only. One goal across the whole team — get paying clients.**
+
+Three products. All three need their first client live before anything else matters.
+
+| Product | First target | Agent responsible |
+|---------|-------------|-------------------|
+| **SiamEPOS** (restaurant POS) | First Thai restaurant signed + live | Krit, Sandy, Maya, Nook |
+| **SiamSpa** (spa management) | First Thai spa signed + live | Sam, Sandy, Maya |
+| **SiamShop** (Thai supermarket e-commerce) | Demo-ready → first supermarket live | Joy, Sandy |
+
+**Rules for every agent while Phase 1 is active:**
+- ❌ No new feature work unless it directly closes a sale or unblocks a client going live
+- ❌ Do not start Phase 2 (SiamPay) or Phase 3 (SiamTransfer) work — those are parked
+- ✅ Stability, polish, demos, onboarding, and outreach only
+- ✅ If a prospect asks for a feature, log it — don't build it yet
+
+**What each agent is doing in Phase 1:**
+- **Krit** — Keep SiamEPOS stable. Fix bugs immediately. Support client onboarding. No new tickets.
+- **Sandy** — siamepos.co.uk must convert visitors. Demo sites (siamepos.net, spa demo) must look sharp for sales calls.
+- **Maya** — Outreach to Thai community: restaurants, spas, supermarkets. Facebook groups, LINE, WhatsApp. Every week push for leads.
+- **Nick** — Advise on pricing, pitch, and deals. Help close. No new strategic planning until first client is signed.
+- **Nook** — QA every product before client demos. Nothing goes in front of a prospect that has a visible bug.
+- **Kai** — Inventory module demo-ready. Support Krit on any client onboarding questions.
+- **Sam** — SiamSpa demo-ready and stable for first prospect call.
+- **Joy** — SIAMSHOP-001 → 005 (scaffold → catalogue → checkout → emails → order admin). First demo = first client opportunity.
+- **Pose** — Subscription billing working cleanly for new signups on all three products.
+
+Phase 2 and Phase 3 will begin only when at least one client is live on each Phase 1 product.
+
+---
+
 ## 🎉 MILESTONE — 2026-06-11 multi-agent bug hunt COMPLETE (29/29 fixed)
 
 A 52-agent adversarially-verified bug hunt surfaced **29 confirmed findings**;
@@ -306,6 +339,7 @@ Launch Joy: `cd ~/Desktop/siamshop && claude --model claude-fable-5`
 | 2026-05-17 | Claude | Nick | ACTION: Write a pitch document for SiamEPOS Lite (widgets-only product for restaurants already on another EPOS). Target audience: Thai restaurant owners locked into VDIT or other EPOS contracts. Pricing agreed by Korakot: Booking widget £29/month, Ordering widget £39/month, Bundle (both) £49/month, Full SiamEPOS Pro £89/month (widgets included). Core pitch angle: (1) ROI hook — a restaurant doing £3,000/month on Deliveroo pays £900 commission; our ordering widget at £39/month saves £861+/month even moving a third of orders. (2) Booking hook — replaces OpenTable (£299+/month) or FoodBooking.com (closing March 2027). (3) Switch trigger — they pay £49/month widgets + their EPOS fee (say £80-100). When EPOS contract expires: "Switch to full SiamEPOS at £89 — widgets included, no separate EPOS fee, you save £40-60/month." (4) VDIT angle — don't name them, but "already on another EPOS system? Start with just the widgets. Add the full system when you're ready." Deliverable: a sales pitch doc (Word or PDF) Korakot can use in demos and send to prospects. Also suggest what Nick should add to CLAUDE-Nick.md as ongoing competitive context. |
 | 2026-05-17 | Claude | Maya | ✅ DONE — lite.html built and live. |
 | 2026-06-09 | Maya | Sandy | ACTION: Add CRM feature deep-dive section (Section 09) to features.html. Full HTML + instructions in ~/Documents/Claude/Projects/SiamEpos/SANDY-CRM-FEATURE-SECTION.md. Paste before &lt;div class="btm-strip"&gt;. No new CSS needed. Also add anchor link on hero CRM card. |
+| 2026-06-16 | Maya | Sandy | ACTION: Add a "See the real system" section to **siampro.html** using Korakot's live EPOS screenshots (Reservations, Customers CRM, Allergens) — real screens convert better than copy. Full bilingual block copy + layout + image-prep rules in ~/Documents/Claude/Projects/SiamEpos/SANDY-PRODUCT-SCREENSHOTS-SECTION.md. ⚠️ CRM screenshot must be cropped/blurred — it shows QA test emails/phones; never publish contact PII. Korakot to drop the 3 source PNGs into client/Website/assets/ first. |
 | 2026-05-17 | Pose | Krit | SEPOS-LITE-001 Phase 2b now unblocked — Lite backend deployed at lite-api.siamepos.co.uk (Railway, Online). DNS propagation pending for custom domain — Namecheap CNAME needed. Once DNS live, login works at siamepos-lite.netlify.app. Coordinate on endpoint read-scoping when ready. |
 | 2026-05-17 | Korakot | Krit | **SEPOS-LITE-003 — Email login for Lite clients on app.siamepos.co.uk (Korakot directive 2026-05-17).** Lite clients are treated as full Pro clients but log in with email + password, not PIN. **What to build:** (1) Add a small **"Sign in with email →"** link at the bottom of the existing PIN login screen. (2) That link opens an email + password form — checks against the `lite_users` table (same table Pose built for the Lite onboarding). (3) On success: look up `restaurant_id` from `lite_users` → load `restaurants.plan` → launch the app with that restaurant's context and plan-based feature gating (Krit's SEPOS-LITE-002 gates already handle this). (4) JWT token stored in localStorage with 14-day expiry — same as Lite onboarding. Owner doesn't need to log in every day. (5) PIN screen stays completely unchanged for in-restaurant staff — this is purely an additional entry point, not a replacement. **One source of truth:** `restaurants.plan` controls what every user sees regardless of login method. Pro = full access. lite_* = feature gating. **No breaking changes** — existing Pro staff PIN login unaffected. Email login only activates when someone uses that path. Safe to ship alongside live Pro installs. |
 | 2026-05-17 | Korakot | Krit | **SEPOS-LITE-002 — Plan-gated feature access (Korakot directive 2026-05-17).** Strategy change: Lite customers get the FULL SiamEPOS interface (ops.siamepos.co.uk or app.siamepos.co.uk), NOT a stripped-down dashboard. Features unlock/lock by plan. Onboarding at siamepos-lite.netlify.app stays — after signup they are redirected into the main app. **Feature gate matrix:** `lite_booking` (£29) → Reservations + table plan ✅, Customers + Campaigns ✅, Embed codes ✅, Kitchen ❌, Orders/takeaway ❌, Full EPOS (dine-in billing, staff, Z-report) ❌. `lite_ordering` (£39) → Orders/takeaway ✅, Kitchen screen ✅, Customers + Campaigns ✅, Embed codes ✅, Reservations ❌, Full EPOS ❌. `lite_bundle` (£49) → Reservations ✅, Orders ✅, Kitchen ✅, Customers ✅, Campaigns ✅, Embed codes ✅, Full EPOS ❌. `pro` (£89) → Everything ✅. **Implementation:** Extend Krit's existing plan gating in utils/plan.js — add `canAccessReservations(plan)`, `canAccessKitchen(plan)`, `canAccessOrders(plan)`, `canAccessFullEPOS(plan)` helpers. Gate nav tabs, admin sections, and routes accordingly. Show a friendly "Upgrade to unlock" message for locked features rather than a blank screen. Lite customers should feel they're using the real SiamEPOS — just with some tabs locked until they upgrade. |

@@ -410,6 +410,17 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
 .qnav-btn:hover{background:var(--navy);color:white;border-color:var(--navy);}
 .features-grid .fcard{scroll-margin-top:140px;}
 @media(max-width:960px){.page-hero{padding:110px 24px 56px;}.page-hero h1{font-size:38px;}.quick-nav{padding:12px 16px;top:56px;}}
+/* SEE IT IN ACTION — real product screenshots */
+.showcase{background:var(--white);}
+.showcase-row{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;max-width:1100px;margin:0 auto 66px;}
+.showcase-row:last-of-type{margin-bottom:0;}
+.showcase-row.reverse .showcase-media{order:2;}
+.showcase-frame{border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(13,27,62,0.18);border:1px solid #E8E5DC;}
+.showcase-frame img{display:block;width:100%;height:auto;}
+.showcase-kicker{display:inline-block;color:var(--gold);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;}
+.showcase-text h3{font-family:'Cormorant Garamond',serif;font-size:30px;color:var(--navy);line-height:1.15;margin-bottom:12px;}
+.showcase-text p{font-size:15px;color:var(--text-muted);line-height:1.7;}
+@media(max-width:860px){.showcase-row{grid-template-columns:1fr;gap:22px;margin-bottom:48px;}.showcase-row.reverse .showcase-media{order:0;}}
 </style>
 </head>
 <body>
@@ -627,6 +638,55 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
       </ul>
     </div>
 
+  </div>
+</section>
+
+<!-- SEE IT IN ACTION — real product screenshots -->
+<section class="showcase reveal">
+  <div style="text-align:center;margin-bottom:54px;">
+    <div class="section-label lang-en">See it in action</div>
+    <div class="section-label lang-th">ดูการใช้งานจริง</div>
+    <h2 class="section-title lang-en">See the real system — not a mockup</h2>
+    <h2 class="section-title lang-th">ดูระบบจริง — ไม่ใช่ภาพจำลอง</h2>
+  </div>
+  <div class="showcase-row">
+    <div class="showcase-media">
+      <div class="showcase-frame">
+        <img src="assets/screen-reservations.webp" alt="SiamEPOS reservations — list, timeline and floor-plan views" loading="lazy" width="1600" height="1039">
+      </div>
+    </div>
+    <div class="showcase-text">
+      <div class="showcase-kicker lang-en">Reservations</div><div class="showcase-kicker lang-th">การจองโต๊ะ</div>
+      <h3 class="lang-en">Online bookings, zero commission</h3><h3 class="lang-th">จองโต๊ะออนไลน์ ไม่มีค่าคอมมิชชั่น</h3>
+      <p class="lang-en">List, Timeline and Floor-Plan views, table merge &amp; move, and guest notes — all on your own system, with no per-cover commission.</p>
+      <p class="lang-th">ดูแบบรายการ ไทม์ไลน์ และผังโต๊ะ รวม/ย้ายโต๊ะ พร้อมโน้ตลูกค้า — ทั้งหมดบนระบบของคุณเอง โดยไม่มีค่าคอมต่อหัว</p>
+    </div>
+  </div>
+  <div class="showcase-row reverse">
+    <div class="showcase-media">
+      <div class="showcase-frame">
+        <img src="assets/screen-crm.webp" alt="SiamEPOS customer CRM — VIP, Regular, New and Lapsed segments" loading="lazy" width="1600" height="1039">
+      </div>
+    </div>
+    <div class="showcase-text">
+      <div class="showcase-kicker lang-en">Customer CRM</div><div class="showcase-kicker lang-th">CRM ลูกค้า</div>
+      <h3 class="lang-en">Your customers. Your data. Yours to keep.</h3><h3 class="lang-th">ลูกค้าของคุณ ข้อมูลของคุณ เป็นของคุณ</h3>
+      <p class="lang-en">Diners are auto-segmented into VIP, Regular, New and Lapsed — with consent tracking and one-click CSV export.</p>
+      <p class="lang-th">แยกลูกค้าอัตโนมัติเป็น VIP ลูกค้าประจำ ลูกค้าใหม่ และลูกค้าที่หายไป พร้อมบันทึกความยินยอมและส่งออก CSV ได้ในคลิกเดียว</p>
+    </div>
+  </div>
+  <div class="showcase-row">
+    <div class="showcase-media">
+      <div class="showcase-frame">
+        <img src="assets/screen-allergens.webp" alt="SiamEPOS allergen menu — all 14 UK allergens AI-scanned" loading="lazy" width="1600" height="1039">
+      </div>
+    </div>
+    <div class="showcase-text">
+      <div class="showcase-kicker lang-en">Allergens</div><div class="showcase-kicker lang-th">สารก่อภูมิแพ้</div>
+      <h3 class="lang-en">Natasha's Law, handled automatically</h3><h3 class="lang-th">Natasha's Law จัดการให้อัตโนมัติ</h3>
+      <p class="lang-en">All 14 UK allergens AI-scanned across your full menu, with Thai dish names and a printable allergen sheet.</p>
+      <p class="lang-th">AI สแกนสารก่อภูมิแพ้ครบ 14 ชนิดทั้งเมนู พร้อมชื่อเมนูภาษาไทยและพิมพ์ใบแสดงได้ทันที</p>
+    </div>
   </div>
 </section>
 

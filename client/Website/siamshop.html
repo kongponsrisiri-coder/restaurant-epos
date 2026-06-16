@@ -190,6 +190,17 @@ footer{background:#070F24;padding:56px 60px;display:grid;grid-template-columns:2
   .cta-trust-row{flex-direction:column;gap:14px;}
   .pricing-card{margin:40px 24px 0;padding:32px 24px;}
 }
+/* SEE IT IN ACTION — real product screenshots */
+.showcase{background:var(--white);}
+.showcase-row{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;max-width:1100px;margin:0 auto 60px;}
+.showcase-row:last-of-type{margin-bottom:0;}
+.showcase-row.reverse .showcase-media{order:2;}
+.showcase-frame{border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(13,27,62,0.18);border:1px solid #E8E5DC;}
+.showcase-frame img{display:block;width:100%;height:auto;}
+.showcase-kicker{display:inline-block;color:var(--gold);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;}
+.showcase-text h3{font-family:'Cormorant Garamond',serif;font-size:30px;color:var(--navy);line-height:1.15;margin-bottom:12px;}
+.showcase-text p{font-size:15px;color:var(--text-muted);line-height:1.7;}
+@media(max-width:860px){.showcase-row{grid-template-columns:1fr;gap:22px;margin-bottom:44px;}.showcase-row.reverse .showcase-media{order:0;}}
 </style>
 </head>
 <body>
@@ -363,6 +374,52 @@ footer{background:#070F24;padding:56px 60px;display:grid;grid-template-columns:2
       <div class="hcore-title lang-th">บัญชีสต็อกสดเดียว</div>
       <p class="hcore-desc lang-en">Every sale and delivery from all three doors writes here. True stock levels and combined sales, always.</p>
       <p class="hcore-desc lang-th">ทุกการขายและการรับของจากทั้งสามประตูบันทึกที่นี่ ได้ยอดสต็อกที่ถูกต้องและยอดขายรวมเสมอ</p>
+    </div>
+  </div>
+</section>
+
+<!-- SEE IT IN ACTION — real product screenshots -->
+<section class="showcase reveal">
+  <div style="text-align:center;margin-bottom:54px;">
+    <div class="section-label lang-en">See it in action</div>
+    <div class="section-label lang-th">ดูการใช้งานจริง</div>
+    <h2 class="section-title lang-en">The real system — not a mockup</h2>
+    <h2 class="section-title lang-th">ระบบจริง — ไม่ใช่ภาพจำลอง</h2>
+  </div>
+  <div class="showcase-row">
+    <div class="showcase-media"><div class="showcase-frame"><img src="assets/shop-online.webp" alt="SiamShop online shop — product grid with categories and search" loading="lazy" width="1600" height="1039"></div></div>
+    <div class="showcase-text">
+      <div class="showcase-kicker lang-en">Online shop</div><div class="showcase-kicker lang-th">ร้านออนไลน์</div>
+      <h3 class="lang-en">Your own online shop</h3><h3 class="lang-th">ร้านออนไลน์ของคุณเอง</h3>
+      <p class="lang-en">Customers browse, order online and pay by card — bilingual, with categories, search and your live stock levels.</p>
+      <p class="lang-th">ลูกค้าเลือกซื้อ สั่งออนไลน์ และจ่ายด้วยบัตรได้ — สองภาษา พร้อมหมวดหมู่ ค้นหา และสต๊อกสดของคุณ</p>
+    </div>
+  </div>
+  <div class="showcase-row reverse">
+    <div class="showcase-media"><div class="showcase-frame"><img src="assets/shop-till.webp" alt="SiamShop in-store till — scan, basket and cash or card" loading="lazy" width="1600" height="1039"></div></div>
+    <div class="showcase-text">
+      <div class="showcase-kicker lang-en">In-store till</div><div class="showcase-kicker lang-th">หน้าร้าน</div>
+      <h3 class="lang-en">Ring up walk-ins at the till</h3><h3 class="lang-th">ขายหน้าร้านที่เครื่องคิดเงิน</h3>
+      <p class="lang-en">Scan or search, build the basket, take cash or card — and every sale decrements the same shared stock.</p>
+      <p class="lang-th">สแกนหรือค้นหา ใส่ตะกร้า รับเงินสดหรือบัตร — ทุกการขายตัดจากสต๊อกกลางเดียวกัน</p>
+    </div>
+  </div>
+  <div class="showcase-row">
+    <div class="showcase-media"><div class="showcase-frame"><img src="assets/shop-orders.webp" alt="SiamShop orders — website and Messenger orders in one list" loading="lazy" width="1600" height="1039"></div></div>
+    <div class="showcase-text">
+      <div class="showcase-kicker lang-en">Orders</div><div class="showcase-kicker lang-th">ออเดอร์</div>
+      <h3 class="lang-en">Every order, every channel</h3><h3 class="lang-th">ทุกออเดอร์ ทุกช่องทาง</h3>
+      <p class="lang-en">Website and Messenger orders land in one list — paid, awaiting dispatch or refunded — dispatch or cancel in a click.</p>
+      <p class="lang-th">ออเดอร์จากเว็บไซต์และ Messenger รวมในที่เดียว — จ่ายแล้ว รอจัดส่ง หรือคืนเงิน — กดจัดส่งหรือยกเลิกได้ในคลิกเดียว</p>
+    </div>
+  </div>
+  <div class="showcase-row reverse">
+    <div class="showcase-media"><div class="showcase-frame"><img src="assets/shop-dashboard.webp" alt="SiamShop dashboard — takings, top sellers and stock at a glance" loading="lazy" width="1600" height="1039"></div></div>
+    <div class="showcase-text">
+      <div class="showcase-kicker lang-en">Dashboard</div><div class="showcase-kicker lang-th">แดชบอร์ด</div>
+      <h3 class="lang-en">See the whole shop at a glance</h3><h3 class="lang-th">เห็นภาพรวมทั้งร้านในหน้าเดียว</h3>
+      <p class="lang-en">Takings by day, week and month, top sellers, low stock and what's awaiting dispatch — in-store and online together.</p>
+      <p class="lang-th">ยอดขายรายวัน รายสัปดาห์ รายเดือน สินค้าขายดี ของใกล้หมด และที่รอจัดส่ง — รวมหน้าร้านกับออนไลน์</p>
     </div>
   </div>
 </section>

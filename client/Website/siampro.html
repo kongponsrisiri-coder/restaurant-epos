@@ -244,6 +244,9 @@ section { padding:100px 60px; }
 .fcard-villain { font-size:11px; color:#c0392b; font-weight:700; margin-bottom:6px; letter-spacing:0.3px; }
 .fcard-title { font-size:18px; font-weight:700; color:var(--navy); margin-bottom:8px; }
 .fcard-desc { font-size:13px; color:var(--text-muted); line-height:1.65; }
+.fcard-points { list-style:none; margin:14px 0 0; padding:0; display:flex; flex-direction:column; gap:7px; }
+.fcard-points li { display:flex; align-items:flex-start; gap:8px; font-size:12.5px; color:var(--navy); line-height:1.5; }
+.fcard-points li::before { content:'\2713'; color:var(--gold); font-weight:800; flex-shrink:0; }
 .fcard-coming { font-size:11px; color:var(--gold); font-weight:700; margin-top:10px; opacity:0.7; }
 
 /* COST REALITY SECTION */
@@ -394,6 +397,19 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
 
 .nav-burger{display:none;background:none;border:none;color:white;font-size:24px;line-height:1;cursor:pointer;padding:4px 6px;margin-left:6px;}
 .nav-burger:hover{color:var(--gold);}
+/* PAGE HERO + QUICK NAV (from former Features page) */
+.page-hero{background:linear-gradient(160deg,var(--navy) 0%,var(--navy-mid) 100%);padding:140px 60px 70px;text-align:center;position:relative;overflow:hidden;}
+.page-hero::before{content:'';position:absolute;inset:0;background-image:repeating-linear-gradient(45deg,rgba(201,168,76,0.03) 0px,rgba(201,168,76,0.03) 1px,transparent 1px,transparent 60px);}
+.page-hero>*{position:relative;z-index:1;}
+.page-tag{display:inline-flex;align-items:center;gap:8px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:var(--gold);padding:7px 16px;border-radius:30px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:22px;}
+.page-hero h1{font-family:'Cormorant Garamond',serif;font-size:58px;font-weight:700;color:white;line-height:1.1;margin-bottom:16px;}
+.page-hero h1 em{font-style:italic;color:var(--gold);}
+.page-hero p{font-size:17px;color:rgba(255,255,255,0.65);max-width:600px;margin:0 auto;line-height:1.7;}
+.quick-nav{background:white;border-bottom:1px solid #EEEDF0;padding:16px 60px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;position:sticky;top:62px;z-index:90;box-shadow:0 2px 8px rgba(0,0,0,0.06);}
+.qnav-btn{padding:7px 16px;border:1px solid #E0DDD6;border-radius:20px;font-size:13px;font-weight:600;color:var(--text-muted);background:white;cursor:pointer;text-decoration:none;transition:all 0.2s;font-family:'Sarabun',sans-serif;}
+.qnav-btn:hover{background:var(--navy);color:white;border-color:var(--navy);}
+.features-grid .fcard{scroll-margin-top:140px;}
+@media(max-width:960px){.page-hero{padding:110px 24px 56px;}.page-hero h1{font-size:38px;}.quick-nav{padding:12px 16px;top:56px;}}
 </style>
 </head>
 <body>
@@ -415,8 +431,8 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
     <svg width="170" height="50" viewBox="0 0 340 100" xmlns="http://www.w3.org/2000/svg"><circle cx="52" cy="50" r="44" fill="none" stroke="#C9A84C" stroke-width="1.5"/><circle cx="52" cy="50" r="38" fill="none" stroke="#C9A84C" stroke-width="0.5" opacity="0.28"/><g transform="translate(52,50)"><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/><circle cx="0" cy="0" r="8" fill="#0D1B3E"/><circle cx="0" cy="0" r="4.5" fill="#C9A84C"/></g><line x1="110" y1="16" x2="110" y2="84" stroke="#C9A84C" stroke-width="0.8" opacity="0.32"/><text x="126" y="58" font-family="Georgia, serif" font-size="40" font-weight="700" letter-spacing="-1"><tspan fill="white">Siam</tspan><tspan fill="#C9A84C">EPOS</tspan></text></svg>
   </a>
   <ul class="nav-links">
-    <li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li>
-    <li><a href="siampro.html" class="active lang-en">SiamPRO</a><a href="siampro.html" class="active lang-th">SiamPRO</a></li>
+    <li><a href="features.html" class="lang-en">Products</a><a href="features.html" class="lang-th">ผลิตภัณฑ์</a></li>
+    <li><a href="siampro.html" class="active lang-en">SiamEPOS Pro</a><a href="siampro.html" class="active lang-th">SiamEPOS Pro</a></li>
     <li><a href="lite.html" class="lang-en">SiamLite</a><a href="lite.html" class="lang-th">SiamLite</a></li>
     <li><a href="spa.html" class="lang-en">SiamSpa</a><a href="spa.html" class="lang-th">SiamSpa</a></li>
     <li><a href="siamshop.html" class="lang-en">SiamShop</a><a href="siamshop.html" class="lang-th">SiamShop</a></li>
@@ -428,63 +444,27 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
 </nav>
 
 <!-- HERO -->
-<section class="hero">
-  <div class="hero-content">
-    <div class="hero-tag">🇹🇭 <span class="lang-en">Built for Thai restaurants in the UK</span><span class="lang-th">สร้างมาเพื่อร้านอาหารไทยในสหราชอาณาจักร</span></div>
-    <h1 class="lang-en">Stop paying commission<br>to people who don't care<br>about <em>your restaurant</em></h1>
-    <h1 class="lang-th">เลิกจ่ายค่าคอมมิชชั่น<br>ให้คนที่ไม่เคยแคร์<br><em>ร้านของคุณ</em></h1>
-    <p class="hero-sub lang-en">OpenTable takes your bookings. Just Eat takes 35% of your takeaway. Your EPOS doesn't even speak Thai. SiamEPOS replaces all three — for <strong style="color:white;">£59 a month</strong>. With Thai-speaking support, built-in allergen compliance, and AI that photographs your invoices and updates your stock automatically.</p>
-    <p class="hero-sub lang-th">OpenTable กุมการจองโต๊ะของร้านคุณไว้ Just Eat หัก 35% จากยอดอาหารสั่งกลับบ้าน แถม EPOS ที่ใช้อยู่ก็พูดไทยไม่ได้ด้วยซ้ำ SiamEPOS ตัวเดียวแทนได้ทั้งสามอย่าง — แค่ <strong style="color:white;">£59 ต่อเดือน</strong> พร้อมซัพพอร์ตภาษาไทย ระบบสารก่อภูมิแพ้ครบในตัว และ AI ที่แค่ถ่ายรูปใบแจ้งหนี้ สต๊อกวัตถุดิบก็อัปเดตให้เองอัตโนมัติ</p>
-    <div class="hero-actions">
-      <a href="book-demo.html" class="book-btn lang-en">Book a Free Demo</a>
-      <a href="book-demo.html" class="book-btn lang-th">จองเดโมฟรี</a>
-      <a href="features.html" style="color:rgba(255,255,255,0.6);font-size:15px;font-weight:600;text-decoration:none;" class="lang-en">See all features →</a>
-      <a href="features.html" style="color:rgba(255,255,255,0.6);font-size:15px;font-weight:600;text-decoration:none;" class="lang-th">ดูฟีเจอร์ทั้งหมด →</a>
-    </div>
-    <div class="hero-stats">
-      <div><div class="hstat-num">£0</div><div class="hstat-label lang-en">Booking commission, ever</div><div class="hstat-label lang-th">ค่าคอมจองโต๊ะ — ตลอดไป</div></div>
-      <div><div class="hstat-num">0%</div><div class="hstat-label lang-en">Takeaway commission</div><div class="hstat-label lang-th">ค่าคอมสั่งกลับบ้าน</div></div>
-      <div><div class="hstat-num" style="font-size:22px;">CRM</div><div class="hstat-label lang-en">You own your customers</div><div class="hstat-label lang-th">คุณเป็นเจ้าของข้อมูลลูกค้า</div></div>
-    </div>
-  </div>
-
-  <!-- Hero product mockup -->
-  <div class="hero-mockup">
-    <div class="mockup-window">
-      <div class="mockup-titlebar">
-        <div class="mockup-dots"><span></span><span></span><span></span></div>
-        <span class="mockup-wtitle">SiamEPOS · Live Floor Plan</span>
-        <span class="mockup-live">● LIVE</span>
-      </div>
-      <div class="mockup-body">
-        <div class="mockup-tableplan">
-          <div class="mt occupied"><span class="mt-n">T1</span><span class="mt-t">1h 24m</span><span class="mt-s">Mains</span></div>
-          <div class="mt available"><span class="mt-n">T2</span><span class="mt-t">Free</span></div>
-          <div class="mt starters"><span class="mt-n">T3</span><span class="mt-t">22m</span><span class="mt-s">Starters</span></div>
-          <div class="mt mains"><span class="mt-n">T4</span><span class="mt-t">47m</span><span class="mt-s">Mains</span></div>
-          <div class="mt desserts"><span class="mt-n">T5</span><span class="mt-t">1h 08m</span><span class="mt-s">Desserts</span></div>
-          <div class="mt occupied"><span class="mt-n">T6</span><span class="mt-t">14m</span><span class="mt-s">Ordered</span></div>
-          <div class="mt available"><span class="mt-n">T7</span><span class="mt-t">Free</span></div>
-          <div class="mt mains"><span class="mt-n">T8</span><span class="mt-t">33m</span><span class="mt-s">Mains</span></div>
-        </div>
-        <div class="mockup-chips">
-          <span class="mchip green">● 2 Available</span>
-          <span class="mchip red">● 2 Ordered</span>
-          <span class="mchip blue">● 2 Mains</span>
-          <span class="mchip pink">● 1 Desserts</span>
-        </div>
-        <div class="mockup-notif">
-          <svg class="mn-bell" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-          <div><div class="mn-title">New booking — tonight 7:30pm</div><div class="mn-sub">Somchai P. · 4 guests · just now</div></div>
-        </div>
-        <div class="mockup-revenue">
-          <span class="mr-label">Tonight's revenue</span>
-          <span class="mr-value">£1,284</span>
-        </div>
-      </div>
-    </div>
+<section class="page-hero">
+  <div class="page-tag">✅ <span class="lang-en">All features live — nothing coming soon</span><span class="lang-th">ทุกฟีเจอร์ใช้งานได้จริงวันนี้ — ไม่มีคำว่า "เร็ว ๆ นี้"</span></div>
+  <h1 class="lang-en">Everything your restaurant<br>needs. <em>Already built.</em></h1>
+  <h1 class="lang-th">ทุกอย่างที่ร้านอาหารของคุณต้องการ<br><em>สร้างเสร็จแล้ว</em></h1>
+  <p class="lang-en">Not a roadmap. Not a pitch deck. Every feature below is live and in use today.</p>
+  <p class="lang-th">ไม่ใช่แผนในอนาคต ไม่ใช่สไลด์นำเสนอ ทุกฟีเจอร์ด้านล่างนี้เปิดใช้งานจริง และมีร้านใช้อยู่ทุกวันนี้</p>
+  <div style="margin-top:28px;">
+    <a href="book-demo.html" class="book-btn lang-en">Book a Free Demo</a><a href="book-demo.html" class="book-btn lang-th">จองเดโมฟรี</a>
   </div>
 </section>
+<div class="quick-nav">
+  <a href="#epos" class="qnav-btn">🗺️ <span class="lang-en">Core EPOS</span><span class="lang-th">ระบบ EPOS</span></a>
+  <a href="#reservations" class="qnav-btn">📅 <span class="lang-en">Reservations</span><span class="lang-th">จองโต๊ะ</span></a>
+  <a href="#ordering" class="qnav-btn">🛒 <span class="lang-en">Online Ordering</span><span class="lang-th">สั่งออนไลน์</span></a>
+  <a href="#scanner" class="qnav-btn">🤖 <span class="lang-en">AI Scanner</span><span class="lang-th">AI สแกน</span></a>
+  <a href="#inventory" class="qnav-btn">📦 <span class="lang-en">Inventory</span><span class="lang-th">สต๊อก</span></a>
+  <a href="#allergens" class="qnav-btn">⚠️ <span class="lang-en">Allergens</span><span class="lang-th">สารก่อภูมิแพ้</span></a>
+  <a href="#crm" class="qnav-btn">🤝 <span class="lang-en">Customer CRM</span><span class="lang-th">CRM ลูกค้า</span></a>
+  <a href="#thai" class="qnav-btn">🇹🇭 <span class="lang-en">Built for Thai</span><span class="lang-th">เพื่อคนไทย</span></a>
+  <a href="#offline" class="qnav-btn">☁️ <span class="lang-en">Offline Mode</span><span class="lang-th">ออฟไลน์</span></a>
+</div>
 
 <!-- PROOF BAR -->
 <div class="proof-bar">
@@ -512,95 +492,141 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
 </section>
 
 <!-- 6 FEATURES GRID -->
-<section class="features-section reveal">
+<section id="features" class="features-section reveal">
   <div style="text-align:center;">
-    <div class="section-label lang-en">Six reasons Thai restaurants switch</div>
-    <div class="section-label lang-th">หกเหตุผลที่ร้านอาหารไทยเปลี่ยนมาใช้</div>
-    <h2 class="section-title lang-en">Everything you're paying for separately —<br>now in one system</h2>
-    <h2 class="section-title lang-th">ทุกอย่างที่คุณเคยต้องจ่ายแยกหลายเจ้า —<br>รวมจบในระบบเดียว</h2>
+    <div class="section-label lang-en">Everything SiamEPOS Pro does</div>
+    <div class="section-label lang-th">ทุกอย่างที่ SiamEPOS Pro ทำได้</div>
+    <h2 class="section-title lang-en">One system. Every tool your restaurant runs on.</h2>
+    <h2 class="section-title lang-th">ระบบเดียว ครบทุกเครื่องมือที่ร้านคุณต้องใช้</h2>
   </div>
   <div class="features-grid">
 
-    <!-- 1. Reservations -->
-    <a href="features.html#reservations" class="fcard highlight reveal rd1">
-      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg></div>
-      <div class="fcard-badge lang-en">£0 commission — always</div>
-      <div class="fcard-badge lang-th">ค่าคอม £0 — ตลอดไป</div>
-      <div class="fcard-villain lang-en">OpenTable charges £4,500/year</div>
-      <div class="fcard-villain lang-th">OpenTable เก็บ £4,500 ต่อปี</div>
-      <div class="fcard-title lang-en">Zero-Fee Online Reservations</div>
-      <div class="fcard-title lang-th">จองโต๊ะออนไลน์ ค่าคอม 0%</div>
-      <p class="fcard-desc lang-en">Drop-in booking widget on your own website. Instant confirmation, automated reminders, full guest history. Every booking belongs to you — not OpenTable. Not ResDiary. You.</p>
-      <p class="fcard-desc lang-th">วิดเจ็ตจองโต๊ะติดบนเว็บไซต์ของคุณเอง ยืนยันทันที แจ้งเตือนลูกค้าอัตโนมัติ เก็บประวัติแขกครบ ทุกการจองเป็นของคุณ — ไม่ใช่ของ OpenTable ไม่ใช่ของ ResDiary ของคุณคนเดียว</p>
-    </a>
-
-    <!-- 2. Takeaway -->
-    <a href="features.html#takeaway" class="fcard highlight reveal rd2">
-      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div>
-      <div class="fcard-badge lang-en">0% vs Just Eat's 35%</div>
-      <div class="fcard-badge lang-th">0% เทียบกับ Just Eat 35%</div>
-      <div class="fcard-villain lang-en">Just Eat / Deliveroo take 35%+ per order</div>
-      <div class="fcard-villain lang-th">Just Eat / Deliveroo กิน 35%+ ต่อออเดอร์</div>
-      <div class="fcard-title lang-en">Online Ordering — Collection or Delivery</div>
-      <div class="fcard-title lang-th">สั่งออนไลน์ — รับเองหรือส่งถึงบ้าน</div>
-      <p class="fcard-desc lang-en">Your website. Your widget. Your customer. Orders go straight to your kitchen. For delivery, connect Uber Direct or use your own driver — SiamEPOS handles both. You keep every penny.</p>
-      <p class="fcard-desc lang-th">เว็บของคุณ วิดเจ็ตของคุณ ลูกค้าของคุณ ออเดอร์วิ่งตรงเข้าครัว ส่วนงานส่งถึงบ้าน จะเชื่อม Uber Direct หรือใช้คนขับของร้านเองก็ได้ — SiamEPOS รองรับทั้งคู่ เงินทุกเพนนีเป็นของคุณ</p>
-    </a>
-
-    <!-- 3. Allergens -->
-    <a href="features.html#allergens" class="fcard reveal rd3">
-      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg></div>
-      <div class="fcard-badge lang-en">Natasha's Law compliant</div>
-      <div class="fcard-badge lang-th">รองรับกฎหมาย Natasha's Law</div>
-      <div class="fcard-villain lang-en">Manual allergen spreadsheets — one mistake = legal liability</div>
-      <div class="fcard-villain lang-th">จดสารก่อภูมิแพ้เองในตาราง — พลาดครั้งเดียวถึงขั้นผิดกฎหมาย</div>
-      <div class="fcard-title lang-en">Allergen Management — Automatic</div>
-      <div class="fcard-title lang-th">จัดการสารก่อภูมิแพ้ — อัตโนมัติ</div>
-      <p class="fcard-desc lang-en">All 14 UK allergens tracked at recipe level. Build your recipes once — allergen chips appear on menus, the takeaway widget, and every printed label. Compliant from the moment you go live.</p>
-      <p class="fcard-desc lang-th">ติดตามสารก่อภูมิแพ้ครบทั้ง 14 ชนิดตามกฎหมาย UK ลึกถึงระดับสูตรอาหาร ตั้งสูตรแค่ครั้งเดียว — ป้ายสารก่อภูมิแพ้ขึ้นเองทั้งบนเมนู วิดเจ็ตสั่งอาหาร และฉลากที่พิมพ์ทุกใบ ถูกต้องตามกฎหมายตั้งแต่วันแรกที่เปิดใช้</p>
-    </a>
-
-    <!-- 4. AI Inventory -->
-    <a href="features.html#inventory" class="fcard highlight reveal rd1">
-      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
-      <div class="fcard-badge lang-en">AI-powered — 30 seconds</div>
-      <div class="fcard-badge lang-th">ใช้ AI — เสร็จใน 30 วินาที</div>
-      <div class="fcard-villain lang-en">Typing out supplier invoices by hand — every week</div>
-      <div class="fcard-villain lang-th">นั่งคีย์ใบแจ้งหนี้ซัพพลายเออร์เอง — ทุกสัปดาห์</div>
-      <div class="fcard-title lang-en">AI Inventory + Cost vs Sales</div>
-      <div class="fcard-title lang-th">AI สต๊อกวัตถุดิบ + ต้นทุน vs ยอดขาย</div>
-      <p class="fcard-desc lang-en">Stop typing out supplier invoices by hand. Photograph it — AI does the rest. Stock updates, costs update, and you see live gross margin on every dish. The most painful job in a restaurant, eliminated.</p>
-      <p class="fcard-desc lang-th">เลิกนั่งคีย์ใบแจ้งหนี้ทีละบรรทัด แค่ถ่ายรูป ที่เหลือ AI จัดการให้ สต๊อกอัปเดต ต้นทุนอัปเดต เห็นกำไรขั้นต้นของทุกจานแบบเรียลไทม์ งานที่ปวดหัวที่สุดในร้านอาหาร — หายไปเลย</p>
-    </a>
-
-    <!-- 5. Table Map + KDS -->
-    <a href="features.html#epos" class="fcard reveal rd2">
+    <div class="fcard highlight reveal rd1">
       <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
-      <div class="fcard-title lang-en">Live Table Map + Kitchen Display</div>
-      <div class="fcard-title lang-th">แผนผังโต๊ะเรียลไทม์ + จอครัว</div>
-      <p class="fcard-desc lang-en">Colour-coded floor plan. Per-course timers so starters don't arrive with mains. Kitchen screen replaces paper dockets — chefs tick items off, the Pass knows what's ready. Any screen, any device.</p>
-      <p class="fcard-desc lang-th">แผนผังโต๊ะแยกสีตามสถานะ จับเวลาแยกแต่ละคอร์ส สตาร์ทเตอร์จะได้ไม่ออกพร้อมจานหลัก จอครัวใช้แทนบิลกระดาษ — เชฟติ๊กทีละจาน หน้าพาสรู้ทันทีว่าอะไรพร้อมเสิร์ฟ ใช้ได้ทุกจอ ทุกอุปกรณ์</p>
-    </a>
+      <div class="fcard-badge lang-en">Till · Tables · Kitchen</div><div class="fcard-badge lang-th">หน้าร้าน · โต๊ะ · ครัว</div>
+      <div id="epos" class="fcard-title lang-en">Complete EPOS — Floor to Kitchen</div><div class="fcard-title lang-th">ระบบ EPOS ครบ — หน้าร้านถึงครัว</div>
+      <p class="fcard-desc lang-en">Everything from the first order to the final bill, in one system.</p><p class="fcard-desc lang-th">ตั้งแต่ออเดอร์แรกจนปิดบิลสุดท้าย — จบในระบบเดียว</p>
+      <ul class="fcard-points">
+        <li><span class="lang-en">PIN login with 6 role tiers (waiter, kitchen, bar, supervisor, manager, admin)</span><span class="lang-th">เข้าระบบด้วย PIN แยก 6 ระดับ (เสิร์ฟ ครัว บาร์ หัวหน้า ผู้จัดการ แอดมิน)</span></li>
+        <li><span class="lang-en">Colour-coded table map with per-course live timers</span><span class="lang-th">แผนผังโต๊ะแยกสี จับเวลาแยกแต่ละคอร์ส</span></li>
+        <li><span class="lang-en">Order screen — categories, modifiers, course selection</span><span class="lang-th">หน้าสั่งอาหาร — หมวดหมู่ ตัวเลือกเสริม เลือกคอร์ส</span></li>
+        <li><span class="lang-en">Kitchen Display — upcoming, cooking, pass, completed</span><span class="lang-th">จอครัว — รอทำ กำลังทำ พาส เสร็จแล้ว</span></li>
+        <li><span class="lang-en">Bar screen — drinks bypass the kitchen automatically</span><span class="lang-th">จอบาร์ — เครื่องดื่มข้ามครัวอัตโนมัติ</span></li>
+        <li><span class="lang-en">Bill screen — split equally or by item, change &amp; tips</span><span class="lang-th">หน้าบิล — แยกบิลเท่ากันหรือรายเมนู ทอนเงินและทิป</span></li>
+        <li><span class="lang-en">Table move &amp; merge</span><span class="lang-th">ย้ายและรวมโต๊ะได้</span></li>
+      </ul>
+    </div>
 
-    <!-- 6. Customer CRM -->
-    <a href="features.html#crm" class="fcard highlight reveal rd3">
+    <div class="fcard highlight reveal rd2">
+      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+      <div class="fcard-badge lang-en">£0 commission — always</div><div class="fcard-badge lang-th">ค่าคอม £0 — ตลอดไป</div>
+      <div id="reservations" class="fcard-title lang-en">Zero-Fee Online Reservations</div><div class="fcard-title lang-th">จองโต๊ะออนไลน์ ค่าคอม 0%</div>
+      <p class="fcard-desc lang-en">Your own booking system — OpenTable charges £4,500/year for this.</p><p class="fcard-desc lang-th">ระบบจองของคุณเอง — OpenTable เก็บปีละ £4,500 กับฟีเจอร์นี้</p>
+      <ul class="fcard-points">
+        <li><span class="lang-en">Booking widget embeds on any site with one line of code</span><span class="lang-th">วิดเจ็ตจองฝังบนเว็บไหนก็ได้ด้วยโค้ดบรรทัดเดียว</span></li>
+        <li><span class="lang-en">Timeline (OpenTable-style) + Floor Plan (Resy-style) views</span><span class="lang-th">มุมมอง Timeline และแผนผังโต๊ะแบบกดดูการจองได้</span></li>
+        <li><span class="lang-en">Guest records — VIP / Regular / New + full history</span><span class="lang-th">บันทึกลูกค้า — VIP / ประจำ / ใหม่ พร้อมประวัติครบ</span></li>
+        <li><span class="lang-en">Smart table assignment + partial combinations</span><span class="lang-th">จัดโต๊ะอัจฉริยะ + รวมโต๊ะบางส่วนได้</span></li>
+        <li><span class="lang-en">Conflict detection blocks double-booking</span><span class="lang-th">กันจองชนกัน บล็อกการจองซ้ำ</span></li>
+        <li><span class="lang-en">Status flow + automatic confirmation emails</span><span class="lang-th">สถานะการจอง + อีเมลยืนยันอัตโนมัติ</span></li>
+      </ul>
+    </div>
+
+    <div class="fcard highlight reveal rd3">
+      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div>
+      <div class="fcard-badge lang-en">0% vs Just Eat's 35%</div><div class="fcard-badge lang-th">0% เทียบ Just Eat 35%</div>
+      <div id="ordering" class="fcard-title lang-en">Online Ordering — Collection or Delivery</div><div class="fcard-title lang-th">สั่งออนไลน์ — รับเองหรือส่งถึงบ้าน</div>
+      <p class="fcard-desc lang-en">Customers order on your website. You keep every penny.</p><p class="fcard-desc lang-th">ลูกค้าสั่งบนเว็บของคุณ เงินทุกบาทเป็นของคุณ</p>
+      <ul class="fcard-points">
+        <li><span class="lang-en">Orders fire to the kitchen display when payment clears</span><span class="lang-th">ออเดอร์เข้าจอครัวทันทีที่จ่ายเงินสำเร็จ</span></li>
+        <li><span class="lang-en">0% commission — only Stripe's ~1.5% card fee</span><span class="lang-th">ค่าคอม 0% — มีแค่ค่าบัตร Stripe ~1.5%</span></li>
+        <li><span class="lang-en">Delivery via Uber Direct or your own driver</span><span class="lang-th">ส่งผ่าน Uber Direct หรือคนขับของร้านเอง</span></li>
+        <li><span class="lang-en">Bilingual menu online — Thai + English</span><span class="lang-th">เมนูออนไลน์สองภาษา ไทย + อังกฤษ</span></li>
+        <li><span class="lang-en">You own every customer + order history</span><span class="lang-th">ลูกค้าและประวัติการสั่งทุกรายการเป็นของคุณ</span></li>
+      </ul>
+    </div>
+
+    <div class="fcard highlight reveal rd1">
+      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+      <div class="fcard-badge lang-en">AI-powered — 30 seconds</div><div class="fcard-badge lang-th">ใช้ AI — 30 วินาที</div>
+      <div id="scanner" class="fcard-title lang-en">AI Menu &amp; Invoice Scanner</div><div class="fcard-title lang-th">AI สแกนเมนูและใบส่งของ</div>
+      <p class="fcard-desc lang-en">Photograph it — AI does the rest.</p><p class="fcard-desc lang-th">แค่ถ่ายรูป — ที่เหลือ AI จัดการให้</p>
+      <ul class="fcard-points">
+        <li><span class="lang-en">Photo or PDF of any menu → every dish read instantly</span><span class="lang-th">ถ่ายรูปหรือ PDF เมนู → อ่านทุกจานให้ทันที</span></li>
+        <li><span class="lang-en">Auto-detects all 14 UK allergens per dish</span><span class="lang-th">ตรวจสารก่อภูมิแพ้ครบ 14 ชนิดให้ทุกจาน</span></li>
+        <li><span class="lang-en">Outputs dish names in English AND Thai</span><span class="lang-th">ได้ชื่อเมนูทั้งภาษาอังกฤษและไทย</span></li>
+        <li><span class="lang-en">One click — the whole menu imported live</span><span class="lang-th">คลิกเดียว — เมนูทั้งร้านเข้าระบบพร้อมใช้</span></li>
+        <li><span class="lang-en">Invoice scanner updates ingredient costs from a photo</span><span class="lang-th">สแกนใบส่งของ อัปเดตต้นทุนวัตถุดิบจากรูปถ่าย</span></li>
+      </ul>
+    </div>
+
+    <div class="fcard reveal rd2">
+      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+      <div class="fcard-badge lang-en">Know your margins</div><div class="fcard-badge lang-th">รู้กำไรทุกจาน</div>
+      <div id="inventory" class="fcard-title lang-en">Inventory &amp; Cost vs Sales</div><div class="fcard-title lang-th">สต๊อกวัตถุดิบ + ต้นทุน vs ยอดขาย</div>
+      <p class="fcard-desc lang-en">Know what you have, what it costs, and what makes you money.</p><p class="fcard-desc lang-th">รู้ว่ามีของอะไร ต้นทุนเท่าไหร่ และเมนูไหนทำเงิน</p>
+      <ul class="fcard-points">
+        <li><span class="lang-en">Ingredients &amp; stock tracked in real time</span><span class="lang-th">ติดตามวัตถุดิบและสต๊อกแบบเรียลไทม์</span></li>
+        <li><span class="lang-en">Recipe costing — exact food-cost % per dish</span><span class="lang-th">คิดต้นทุนตามสูตร — % ต้นทุนจริงต่อจาน</span></li>
+        <li><span class="lang-en">Stock log — full movement history</span><span class="lang-th">บันทึกสต๊อก — ประวัติเข้า-ออกครบทุกรายการ</span></li>
+        <li><span class="lang-en">Cost vs Sales dashboard — theoretical vs actual, weekly</span><span class="lang-th">แดชบอร์ดต้นทุนเทียบยอดขายรายสัปดาห์</span></li>
+        <li><span class="lang-en">Profit per dish — flags dishes losing you money</span><span class="lang-th">กำไรรายเมนู — ชี้เป้าจานที่ขาดทุน</span></li>
+      </ul>
+    </div>
+
+    <div class="fcard reveal rd3">
+      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg></div>
+      <div class="fcard-badge lang-en">Natasha's Law compliant</div><div class="fcard-badge lang-th">ตามกฎ Natasha's Law</div>
+      <div id="allergens" class="fcard-title lang-en">Allergen Management — Automatic</div><div class="fcard-title lang-th">จัดการสารก่อภูมิแพ้ — อัตโนมัติ</div>
+      <p class="fcard-desc lang-en">Full UK allergen compliance, zero extra work.</p><p class="fcard-desc lang-th">ถูกต้องตามกฎสารก่อภูมิแพ้ UK โดยไม่ต้องทำอะไรเพิ่ม</p>
+      <ul class="fcard-points">
+        <li><span class="lang-en">Complete UK 14-allergen matrix for every dish</span><span class="lang-th">ตารางสารก่อภูมิแพ้ครบ 14 ชนิดทุกเมนู</span></li>
+        <li><span class="lang-en">Auto-calculated from recipes — fish sauce, peanuts, soy</span><span class="lang-th">คำนวณจากสูตร — น้ำปลา ถั่วลิสง ซีอิ๊ว</span></li>
+        <li><span class="lang-en">Manual override — staff flag extra allergens per order</span><span class="lang-th">ปรับเพิ่มเองได้ — ระบุสารก่อภูมิแพ้รายออเดอร์</span></li>
+        <li><span class="lang-en">Printable allergen sheet — compliant for display</span><span class="lang-th">พิมพ์ใบสารก่อภูมิแพ้ติดหน้าร้านได้</span></li>
+      </ul>
+    </div>
+
+    <div class="fcard highlight reveal rd1">
       <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-      <div class="fcard-badge lang-en">Own your customers</div>
-      <div class="fcard-badge lang-th">ลูกค้าเป็นของคุณ</div>
-      <div class="fcard-villain lang-en">OpenTable and Deliveroo own your customer data — you don't</div>
-      <div class="fcard-villain lang-th">OpenTable และ Deliveroo เป็นเจ้าของข้อมูลลูกค้า — ไม่ใช่คุณ</div>
-      <div class="fcard-title lang-en">Customer CRM + Email Campaigns</div>
-      <div class="fcard-title lang-th">CRM ลูกค้า + แคมเปญอีเมล</div>
-      <p class="fcard-desc lang-en">Every diner, every order, all yours. See who hasn't visited in 60 days and win them back automatically. Run birthday campaigns. Send offers. GDPR compliant. Your list, your revenue — forever.</p>
-      <p class="fcard-desc lang-th">ลูกค้าทุกคน ออเดอร์ทุกรายการ เป็นของคุณ เห็นว่าใครไม่มา 60 วันแล้วดึงกลับอัตโนมัติ ส่งแคมเปญวันเกิด ส่งโปรโมชั่น สอดคล้อง GDPR รายชื่อของคุณ รายได้ของคุณ — ตลอดไป</p>
-    </a>
+      <div class="fcard-badge lang-en">Own your customers</div><div class="fcard-badge lang-th">ลูกค้าเป็นของคุณ</div>
+      <div id="crm" class="fcard-title lang-en">Customer CRM + Win-Back Campaigns</div><div class="fcard-title lang-th">CRM ลูกค้า + แคมเปญดึงกลับ</div>
+      <p class="fcard-desc lang-en">OpenTable and Deliveroo own your customers. SiamEPOS gives them back.</p><p class="fcard-desc lang-th">OpenTable และ Deliveroo ยึดลูกค้าคุณไว้ SiamEPOS คืนให้คุณ</p>
+      <ul class="fcard-points">
+        <li><span class="lang-en">Database auto-builds from every booking &amp; order</span><span class="lang-th">ฐานข้อมูลสร้างเองจากทุกการจองและออเดอร์</span></li>
+        <li><span class="lang-en">Tracks each customer's visit history &amp; total spend</span><span class="lang-th">เก็บประวัติการมาและยอดใช้จ่ายรวมของลูกค้า</span></li>
+        <li><span class="lang-en">Win-back alerts for customers absent 60+ days</span><span class="lang-th">แจ้งเตือนดึงลูกค้าที่หายไปเกิน 60 วัน</span></li>
+        <li><span class="lang-en">Email campaigns sent from SiamEPOS (Brevo)</span><span class="lang-th">ส่งแคมเปญอีเมลจากระบบได้เลย (Brevo)</span></li>
+        <li><span class="lang-en">GDPR consent captured + one-click unsubscribe</span><span class="lang-th">เก็บความยินยอม GDPR + ยกเลิกรับอีเมลคลิกเดียว</span></li>
+      </ul>
+    </div>
 
-  </div>
-  <div style="text-align:center; margin-top:40px;">
-    <a href="features.html" class="book-btn ghost" style="display:inline-flex; text-decoration:none;">
-      <span class="lang-en">See all features in detail →</span>
-      <span class="lang-th">ดูฟีเจอร์ทั้งหมด →</span>
-    </a>
+    <div class="fcard reveal rd2">
+      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+      <div class="fcard-badge lang-en">Bilingual EN/TH</div><div class="fcard-badge lang-th">สองภาษา EN/TH</div>
+      <div id="thai" class="fcard-title lang-en">Built for Thai, Not Translated</div><div class="fcard-title lang-th">สร้างมาเพื่อคนไทย ไม่ใช่แค่แปลมา</div>
+      <p class="fcard-desc lang-en">The only system your Thai staff can use without training.</p><p class="fcard-desc lang-th">ระบบเดียวที่พนักงานไทยใช้ได้เลย ไม่ต้องอบรม</p>
+      <ul class="fcard-points">
+        <li><span class="lang-en">Kitchen display — Thai AND English at once</span><span class="lang-th">จอครัว — ไทยและอังกฤษพร้อมกัน</span></li>
+        <li><span class="lang-en">Bilingual menus, order screens &amp; bills</span><span class="lang-th">เมนู หน้าสั่งอาหาร และบิล สองภาษา</span></li>
+        <li><span class="lang-en">AI-generated Thai dish names on every menu scan</span><span class="lang-th">AI ใส่ชื่อเมนูภาษาไทยทุกครั้งที่สแกน</span></li>
+        <li><span class="lang-en">Thai-speaking support, any time</span><span class="lang-th">ซัพพอร์ตภาษาไทยได้ทุกเวลา</span></li>
+      </ul>
+    </div>
+
+    <div class="fcard reveal rd3">
+      <div class="fcard-icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#C9A84C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></div>
+      <div class="fcard-badge lang-en">Never stops</div><div class="fcard-badge lang-th">ไม่มีวันหยุด</div>
+      <div id="offline" class="fcard-title lang-en">Offline Mode</div><div class="fcard-title lang-th">โหมดออฟไลน์</div>
+      <p class="fcard-desc lang-en">Your system never stops — even when your internet does.</p><p class="fcard-desc lang-th">ระบบของคุณไม่มีวันหยุด — แม้อินเทอร์เน็ตล่ม</p>
+      <ul class="fcard-points">
+        <li><span class="lang-en">Orders, kitchen tickets &amp; bills keep running offline</span><span class="lang-th">รับออเดอร์ ส่งครัว เก็บบิล เดินต่อแบบออฟไลน์</span></li>
+        <li><span class="lang-en">Auto-syncs when the connection returns — no data lost</span><span class="lang-th">ซิงค์อัตโนมัติเมื่อเน็ตกลับมา — ข้อมูลไม่สูญหาย</span></li>
+        <li><span class="lang-en">Clear offline indicator so staff know the status</span><span class="lang-th">มีสัญลักษณ์บอกสถานะออฟไลน์ชัดเจน</span></li>
+        <li><span class="lang-en">Works on any device — no app to install</span><span class="lang-th">ใช้ได้ทุกอุปกรณ์ — ไม่ต้องลงแอป</span></li>
+      </ul>
+    </div>
+
   </div>
 </section>
 
@@ -734,10 +760,68 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
      trademark register, ICO). The testimonial grid further down is
      built and styled but COMMENTED OUT — uncomment it the day we have
      the first real client quote. NEVER publish invented testimonials. -->
-<section class="reveal" style="background:#F7F5F0;padding:80px 60px;">
+
+<!-- SIAMSPA TEASER -->
+<section class="reveal" style="background:linear-gradient(135deg,#0D1B3E 0%,#0A2456 100%);padding:80px 60px;text-align:center;position:relative;overflow:hidden;">
+  <div style="position:absolute;width:600px;height:600px;background:radial-gradient(circle,rgba(201,168,76,0.08) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;"></div>
+  <div style="position:relative;max-width:720px;margin:0 auto;">
+    <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:#C9A84C;padding:6px 16px;border-radius:30px;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;">✨ NEW — SiamSpa</div>
+    <h2 style="font-family:'Cormorant Garamond',serif;font-size:46px;font-weight:700;line-height:1.15;color:white;margin:0 0 18px;" class="lang-en">Run your Thai spa or<br>massage shop from your phone.</h2>
+    <h2 style="font-family:'Cormorant Garamond',serif;font-size:46px;font-weight:700;line-height:1.15;color:white;margin:0 0 18px;" class="lang-th">บริหารสปาหรือร้านนวดไทย<br>จากมือถือของคุณ</h2>
+    <p style="color:rgba(255,255,255,0.65);font-size:17px;line-height:1.7;max-width:560px;margin:0 auto 36px;" class="lang-en">Live appointment timeline. Therapist schedules. No double-bookings. Client records. The same SiamEPOS quality — built for spas and massage shops.</p>
+    <p style="color:rgba(255,255,255,0.65);font-size:17px;line-height:1.7;max-width:560px;margin:0 auto 36px;" class="lang-th">เห็นไทม์ไลน์คิวนัดหมายสด ๆ ตารางงานเทอราพิสต์ชัดเจน ไม่มีคิวจองซ้อน เก็บประวัติลูกค้าครบ คุณภาพเดียวกับ SiamEPOS — สร้างมาเพื่อสปาและร้านนวดโดยเฉพาะ</p>
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;margin-bottom:36px;">
+      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">📅</span> <span class="lang-en">Appointment timeline</span><span class="lang-th">ไทม์ไลน์นัดหมาย</span></div>
+      <div style="color:rgba(255,255,255,0.3);">·</div>
+      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">💆</span> <span class="lang-en">Therapist scheduling</span><span class="lang-th">จัดตารางเทอราพิสต์</span></div>
+      <div style="color:rgba(255,255,255,0.3);">·</div>
+      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">👥</span> <span class="lang-en">Client CRM</span><span class="lang-th">CRM ลูกค้า</span></div>
+      <div style="color:rgba(255,255,255,0.3);">·</div>
+      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">💷</span> <span class="lang-en">£49/month</span><span class="lang-th">£49/เดือน</span></div>
+    </div>
+    <a href="spa.html" style="display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,#C9A84C,#E8C96A);color:#0D1B3E;padding:15px 32px;border-radius:10px;font-size:16px;font-weight:800;text-decoration:none;transition:transform 0.2s,box-shadow 0.2s;box-shadow:0 4px 20px rgba(201,168,76,0.35);" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 32px rgba(201,168,76,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 20px rgba(201,168,76,0.35)'" class="lang-en">Learn about SiamSpa →</a>
+    <a href="spa.html" style="display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,#C9A84C,#E8C96A);color:#0D1B3E;padding:15px 32px;border-radius:10px;font-size:16px;font-weight:800;text-decoration:none;transition:transform 0.2s,box-shadow 0.2s;box-shadow:0 4px 20px rgba(201,168,76,0.35);" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 32px rgba(201,168,76,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 20px rgba(201,168,76,0.35)'" class="lang-th">ทำความรู้จัก SiamSpa →</a>
+  </div>
+</section>
+
+<!-- TRUST BAR -->
+<div class="trust-bar reveal">
+  <div class="trust-item"><span class="t-icon">🇹🇭</span> <span class="lang-en">Thai-speaking WhatsApp support</span><span class="lang-th">ซัพพอร์ตภาษาไทยทาง WhatsApp</span></div>
+  <div class="trust-item"><span class="t-icon">🌐</span> <span class="lang-en">Works offline — no internet required</span><span class="lang-th">ทำงานออฟไลน์ได้ ไม่ต้องมีอินเตอร์เน็ต</span></div>
+  <div class="trust-item"><span class="t-icon">📱</span> <span class="lang-en">Any device — phone, tablet, Mac, Windows</span><span class="lang-th">อุปกรณ์ใดก็ได้ มือถือ แท็บเล็ต Mac และ Windows</span></div>
+  <div class="trust-item"><span class="t-icon">🛡️</span> <span class="lang-en">UK GDPR + Natasha's Law compliant</span><span class="lang-th">สอดคล้อง UK GDPR และ Natasha's Law</span></div>
+  <div class="trust-item"><span class="t-icon">✅</span> <span class="lang-en">Cancel anytime — no long-term contract</span><span class="lang-th">ยกเลิกได้ทุกเมื่อ ไม่ผูกสัญญา</span></div>
+</div>
+
+<!-- FINAL CTA -->
+<section class="final-cta">
+  <div style="position:relative;z-index:1;max-width:640px;margin:0 auto;" class="reveal">
+    <div class="section-label lang-en">Let's talk</div>
+    <div class="section-label lang-th">คุยกันได้เลย</div>
+    <h2 class="section-title white lang-en">Book a free 20-minute demo.<br>In English or Thai.</h2>
+    <h2 class="section-title white lang-th">จองเดโมฟรี 20 นาที<br>คุยไทยหรืออังกฤษก็ได้</h2>
+    <p class="cta-personal lang-en">"No contract. No pressure. No jargon. Just a Thai-speaking person who actually understands your restaurant — showing you exactly how SiamEPOS would work for yours."</p>
+    <p class="cta-personal lang-th">"ไม่ผูกสัญญา ไม่กดดัน ไม่มีศัพท์เทคนิคให้ปวดหัว แค่คนพูดไทยที่เข้าใจร้านอาหารจริง ๆ มาโชว์ให้ดูว่า SiamEPOS จะช่วยร้านของคุณได้ยังไง"</p>
+    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
+      <a href="book-demo.html" class="book-btn lang-en">Book Your Free Demo</a>
+      <a href="book-demo.html" class="book-btn lang-th">จองเดโมฟรีเลย</a>
+      <a href="https://wa.me/447896036386?text=Hello%2C%20I%27d%20like%20to%20know%20more%20about%20SiamEPOS" target="_blank" class="book-btn ghost lang-en" style="text-decoration:none;">💬 WhatsApp us instead</a>
+      <a href="https://wa.me/447896036386?text=สวัสดีครับ%20สนใจ%20SiamEPOS" target="_blank" class="book-btn ghost lang-th" style="text-decoration:none;">💬 หรือทัก WhatsApp มาเลย</a>
+    </div>
+    <div class="cta-trust-row">
+      <span class="cta-trust-chip">✅ <span class="lang-en">No contract</span><span class="lang-th">ไม่ผูกสัญญา</span></span>
+      <span class="cta-trust-chip">✅ <span class="lang-en">No setup fee</span><span class="lang-th">ไม่มีค่าติดตั้ง</span></span>
+      <span class="cta-trust-chip">✅ <span class="lang-en">Cancel anytime</span><span class="lang-th">ยกเลิกได้ทุกเมื่อ</span></span>
+      <span class="cta-trust-chip">✅ <span class="lang-en">Thai support via WhatsApp</span><span class="lang-th">ซัพพอร์ตภาษาไทยทาง WhatsApp</span></span>
+    </div>
+  </div>
+</section>
+
+<!-- ABOUT / OUR COMPANY -->
+<section id="about" class="reveal" style="background:#F7F5F0;padding:80px 60px;">
   <div style="max-width:1100px;margin:0 auto;text-align:center;">
-    <div class="section-label lang-en">Built properly. Registered properly.</div>
-    <div class="section-label lang-th">สร้างอย่างจริงจัง จดทะเบียนถูกต้อง</div>
+    <div class="section-label lang-en">About us</div>
+    <div class="section-label lang-th">เกี่ยวกับเรา</div>
     <h2 class="section-title lang-en">A real UK company you can <em>look up</em></h2>
     <h2 class="section-title lang-th">บริษัทจริงใน UK ที่<em>ตรวจสอบได้</em></h2>
     <p style="color:var(--text-muted);font-size:15px;max-width:620px;margin:10px auto 44px;line-height:1.7;" class="lang-en">Before you trust your restaurant's bookings, orders and customer data to anyone — check who they are. Here's us, all verifiable:</p>
@@ -799,62 +883,6 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
   </div>
 </section>
 
-<!-- SIAMSPA TEASER -->
-<section class="reveal" style="background:linear-gradient(135deg,#0D1B3E 0%,#0A2456 100%);padding:80px 60px;text-align:center;position:relative;overflow:hidden;">
-  <div style="position:absolute;width:600px;height:600px;background:radial-gradient(circle,rgba(201,168,76,0.08) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;"></div>
-  <div style="position:relative;max-width:720px;margin:0 auto;">
-    <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:#C9A84C;padding:6px 16px;border-radius:30px;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;">✨ NEW — SiamSpa</div>
-    <h2 style="font-family:'Cormorant Garamond',serif;font-size:46px;font-weight:700;line-height:1.15;color:white;margin:0 0 18px;" class="lang-en">Run your Thai spa or<br>massage shop from your phone.</h2>
-    <h2 style="font-family:'Cormorant Garamond',serif;font-size:46px;font-weight:700;line-height:1.15;color:white;margin:0 0 18px;" class="lang-th">บริหารสปาหรือร้านนวดไทย<br>จากมือถือของคุณ</h2>
-    <p style="color:rgba(255,255,255,0.65);font-size:17px;line-height:1.7;max-width:560px;margin:0 auto 36px;" class="lang-en">Live appointment timeline. Therapist schedules. No double-bookings. Client records. The same SiamEPOS quality — built for spas and massage shops.</p>
-    <p style="color:rgba(255,255,255,0.65);font-size:17px;line-height:1.7;max-width:560px;margin:0 auto 36px;" class="lang-th">เห็นไทม์ไลน์คิวนัดหมายสด ๆ ตารางงานเทอราพิสต์ชัดเจน ไม่มีคิวจองซ้อน เก็บประวัติลูกค้าครบ คุณภาพเดียวกับ SiamEPOS — สร้างมาเพื่อสปาและร้านนวดโดยเฉพาะ</p>
-    <div style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;margin-bottom:36px;">
-      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">📅</span> <span class="lang-en">Appointment timeline</span><span class="lang-th">ไทม์ไลน์นัดหมาย</span></div>
-      <div style="color:rgba(255,255,255,0.3);">·</div>
-      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">💆</span> <span class="lang-en">Therapist scheduling</span><span class="lang-th">จัดตารางเทอราพิสต์</span></div>
-      <div style="color:rgba(255,255,255,0.3);">·</div>
-      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">👥</span> <span class="lang-en">Client CRM</span><span class="lang-th">CRM ลูกค้า</span></div>
-      <div style="color:rgba(255,255,255,0.3);">·</div>
-      <div style="display:flex;align-items:center;gap:8px;color:rgba(255,255,255,0.75);font-size:14px;font-weight:600;"><span style="color:#C9A84C;">💷</span> <span class="lang-en">£49/month</span><span class="lang-th">£49/เดือน</span></div>
-    </div>
-    <a href="spa.html" style="display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,#C9A84C,#E8C96A);color:#0D1B3E;padding:15px 32px;border-radius:10px;font-size:16px;font-weight:800;text-decoration:none;transition:transform 0.2s,box-shadow 0.2s;box-shadow:0 4px 20px rgba(201,168,76,0.35);" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 32px rgba(201,168,76,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 20px rgba(201,168,76,0.35)'" class="lang-en">Learn about SiamSpa →</a>
-    <a href="spa.html" style="display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,#C9A84C,#E8C96A);color:#0D1B3E;padding:15px 32px;border-radius:10px;font-size:16px;font-weight:800;text-decoration:none;transition:transform 0.2s,box-shadow 0.2s;box-shadow:0 4px 20px rgba(201,168,76,0.35);" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 32px rgba(201,168,76,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 20px rgba(201,168,76,0.35)'" class="lang-th">ทำความรู้จัก SiamSpa →</a>
-  </div>
-</section>
-
-<!-- TRUST BAR -->
-<div class="trust-bar reveal">
-  <div class="trust-item"><span class="t-icon">🇹🇭</span> <span class="lang-en">Thai-speaking WhatsApp support</span><span class="lang-th">ซัพพอร์ตภาษาไทยทาง WhatsApp</span></div>
-  <div class="trust-item"><span class="t-icon">🌐</span> <span class="lang-en">Works offline — no internet required</span><span class="lang-th">ทำงานออฟไลน์ได้ ไม่ต้องมีอินเตอร์เน็ต</span></div>
-  <div class="trust-item"><span class="t-icon">📱</span> <span class="lang-en">Any device — phone, tablet, Mac, Windows</span><span class="lang-th">อุปกรณ์ใดก็ได้ มือถือ แท็บเล็ต Mac และ Windows</span></div>
-  <div class="trust-item"><span class="t-icon">🛡️</span> <span class="lang-en">UK GDPR + Natasha's Law compliant</span><span class="lang-th">สอดคล้อง UK GDPR และ Natasha's Law</span></div>
-  <div class="trust-item"><span class="t-icon">✅</span> <span class="lang-en">Cancel anytime — no long-term contract</span><span class="lang-th">ยกเลิกได้ทุกเมื่อ ไม่ผูกสัญญา</span></div>
-</div>
-
-<!-- FINAL CTA -->
-<section class="final-cta">
-  <div style="position:relative;z-index:1;max-width:640px;margin:0 auto;" class="reveal">
-    <div class="section-label lang-en">Let's talk</div>
-    <div class="section-label lang-th">คุยกันได้เลย</div>
-    <h2 class="section-title white lang-en">Book a free 20-minute demo.<br>In English or Thai.</h2>
-    <h2 class="section-title white lang-th">จองเดโมฟรี 20 นาที<br>คุยไทยหรืออังกฤษก็ได้</h2>
-    <p class="cta-personal lang-en">"No contract. No pressure. No jargon. Just a Thai-speaking person who actually understands your restaurant — showing you exactly how SiamEPOS would work for yours."</p>
-    <p class="cta-personal lang-th">"ไม่ผูกสัญญา ไม่กดดัน ไม่มีศัพท์เทคนิคให้ปวดหัว แค่คนพูดไทยที่เข้าใจร้านอาหารจริง ๆ มาโชว์ให้ดูว่า SiamEPOS จะช่วยร้านของคุณได้ยังไง"</p>
-    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
-      <a href="book-demo.html" class="book-btn lang-en">Book Your Free Demo</a>
-      <a href="book-demo.html" class="book-btn lang-th">จองเดโมฟรีเลย</a>
-      <a href="https://wa.me/447896036386?text=Hello%2C%20I%27d%20like%20to%20know%20more%20about%20SiamEPOS" target="_blank" class="book-btn ghost lang-en" style="text-decoration:none;">💬 WhatsApp us instead</a>
-      <a href="https://wa.me/447896036386?text=สวัสดีครับ%20สนใจ%20SiamEPOS" target="_blank" class="book-btn ghost lang-th" style="text-decoration:none;">💬 หรือทัก WhatsApp มาเลย</a>
-    </div>
-    <div class="cta-trust-row">
-      <span class="cta-trust-chip">✅ <span class="lang-en">No contract</span><span class="lang-th">ไม่ผูกสัญญา</span></span>
-      <span class="cta-trust-chip">✅ <span class="lang-en">No setup fee</span><span class="lang-th">ไม่มีค่าติดตั้ง</span></span>
-      <span class="cta-trust-chip">✅ <span class="lang-en">Cancel anytime</span><span class="lang-th">ยกเลิกได้ทุกเมื่อ</span></span>
-      <span class="cta-trust-chip">✅ <span class="lang-en">Thai support via WhatsApp</span><span class="lang-th">ซัพพอร์ตภาษาไทยทาง WhatsApp</span></span>
-    </div>
-  </div>
-</section>
-
 <!-- FOOTER -->
 <footer>
   <div class="footer-brand">
@@ -866,7 +894,7 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
   <div class="footer-col">
     <h4 class="lang-en">Product</h4><h4 class="lang-th">ผลิตภัณฑ์</h4>
     <ul>
-      <li><a href="features.html" class="lang-en">Features</a><a href="features.html" class="lang-th">ฟีเจอร์</a></li>
+      <li><a href="features.html" class="lang-en">Products</a><a href="features.html" class="lang-th">ผลิตภัณฑ์</a></li>
       <li><a href="pricing.html" class="lang-en">Pricing</a><a href="pricing.html" class="lang-th">ราคา</a></li>
       <li><a href="spa.html" class="lang-en">SiamSpa</a><a href="spa.html" class="lang-th">SiamSpa</a></li>
       <li><a href="siamshop.html" class="lang-en">SiamShop</a><a href="siamshop.html" class="lang-th">SiamShop</a></li>

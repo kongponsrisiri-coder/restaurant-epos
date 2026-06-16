@@ -193,6 +193,13 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
   const active         = reservations.filter(r =>
     r.status !== 'cancelled' && r.status !== 'no-show' && r.status !== 'completed'
   );
+  // The timeline is a schedule/history view, so a COMPLETED booking should
+  // stay visible (recoloured) rather than vanish — completed bookings are in
+  // the past and won't false-overlap a later rebooking. Cancelled / no-show
+  // are still hidden (they "didn't happen" and could clash with a rebooking).
+  const timelineRes    = reservations.filter(r =>
+    r.status !== 'cancelled' && r.status !== 'no-show'
+  );
   const maxCoversPerSlot = settings?.max_covers_per_slot || 20;
 
   // Multi-table assign — `ids` is the full set of tables for this booking.
@@ -268,7 +275,7 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
         {planView === 'timeline' ? (
-          <TimelineView tables={tables} reservations={active} tiers={tiers}
+          <TimelineView tables={tables} reservations={timelineRes} tiers={tiers}
             tableGroups={tableGroups} settings={settings}
             timeStart={timeStart} timeEnd={timeEnd} selectedDate={selectedDate}
             selectedRes={selectedRes} onSelect={setSelectedRes} />
@@ -661,7 +668,8 @@ function BookingPanel({ res, allReservations, tables, tableGroups, tiers, onAssi
             {['pending','confirmed','seated','completed','no-show','cancelled'].map(s => (
               <button key={s} onClick={() => onStatusChange(s)}
                 style={{ padding: '5px 9px', borderRadius: 6, border: `1.5px solid ${STATUS_COLORS[s].border}`,
-                  background: res.status === s ? STATUS_COLORS[s].bg : 'white', color: STATUS_COLORS[s].text,
+                  background: res.status === s ? STATUS_COLORS[s].bg : 'white',
+                  color: res.status === s ? STATUS_COLORS[s].text : STATUS_COLORS[s].border,
                   cursor: 'pointer', fontSize: 11, fontWeight: 700, textTransform: 'capitalize' }}>{s}</button>
             ))}
           </div>

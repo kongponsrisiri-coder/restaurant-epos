@@ -484,7 +484,7 @@ export default function TablePlanSection() {
                 </div>
                 <div>
                   <label style={lbl}>Capacity (seats)</label>
-                  <input type="number" defaultValue={selectedTable.capacity} key={selectedTable.id + '_c'} onBlur={e => updateSelectedTable({ capacity: parseInt(e.target.value) || 1 })} style={inp} />
+                  <input type="number" defaultValue={selectedTable.capacity} key={selectedTable.id + '_c'} onChange={e => { if (e.target.value !== '') updateSelectedTable({ capacity: parseInt(e.target.value) || 1 }); }} style={inp} />
                 </div>
                 <div>
                   <label style={lbl}>Shape</label>

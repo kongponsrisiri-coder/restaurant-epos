@@ -270,7 +270,7 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
         {planView === 'timeline' ? (
           <TimelineView tables={tables} reservations={active} tiers={tiers}
             tableGroups={tableGroups} settings={settings}
-            timeStart={timeStart} timeEnd={timeEnd}
+            timeStart={timeStart} timeEnd={timeEnd} selectedDate={selectedDate}
             selectedRes={selectedRes} onSelect={setSelectedRes} />
         ) : (
           <FloorPlanView tables={tables} reservations={active} tiers={tiers}
@@ -291,12 +291,24 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
 // ═══════════════════════════════════════════════════════
 // TIMELINE VIEW — stacks overlapping bookings on same row
 // ═══════════════════════════════════════════════════════
-function TimelineView({ tables, reservations, tiers, tableGroups, settings, timeStart, timeEnd, selectedRes, onSelect }) {
+function TimelineView({ tables, reservations, tiers, tableGroups, settings, timeStart, timeEnd, selectedDate, selectedRes, onSelect }) {
   const SLOT = 30, COL_W = 72, LBL_W = 120;
   const totalMins  = timeEnd - timeStart;
-  const maxPerSlot = settings?.max_covers_per_slot || 20;
   const slots = [];
   for (let m = timeStart; m <= timeEnd; m += SLOT) slots.push(m);
+
+  // Live "now" indicator — a red line down the grid at the current time,
+  // shown only when viewing today and the clock is inside the time window.
+  // Re-ticks every minute so it crawls across the day.
+  const [nowMins, setNowMins] = useState(() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); });
+  useEffect(() => {
+    const id = setInterval(() => { const d = new Date(); setNowMins(d.getHours() * 60 + d.getMinutes()); }, 60000);
+    return () => clearInterval(id);
+  }, []);
+  const d0 = new Date();
+  const todayKey = `${d0.getFullYear()}-${String(d0.getMonth() + 1).padStart(2, '0')}-${String(d0.getDate()).padStart(2, '0')}`;
+  const showNow = selectedDate === todayKey && nowMins >= timeStart && nowMins <= timeEnd;
+  const nowX = ((nowMins - timeStart) / totalMins) * (slots.length * COL_W);
 
   // SEPOS-049 — Build rows: one per PHYSICAL table. Linked tables used to
   // collapse into a single combined row, so a small party dropped on one
@@ -372,6 +384,8 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
               {m % 60 === 0 ? minsToTime(m) : '·'}
             </div>
           ))}
+          {showNow && <div style={{ position: 'absolute', left: LBL_W + nowX, top: 0, bottom: 0, width: 2, background: '#e94560', zIndex: 12, pointerEvents: 'none' }} />}
+          {showNow && <div style={{ position: 'absolute', left: LBL_W + nowX, top: 4, transform: 'translateX(-50%)', background: '#e94560', color: 'white', fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 4, zIndex: 13, whiteSpace: 'nowrap', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }}>{minsToTime(nowMins)}</div>}
         </div>
 
         {rows.map((row, ri) => {
@@ -392,6 +406,7 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
               </div>
               <div style={{ flex: 1, position: 'relative' }}>
                 {slots.map(m => <div key={m} style={{ position: 'absolute', left: ((m - timeStart) / totalMins) * (slots.length * COL_W), top: 0, bottom: 0, width: 1, background: m % 60 === 0 ? '#e5e7eb' : '#f3f4f6' }} />)}
+                {showNow && <div style={{ position: 'absolute', left: nowX, top: 0, bottom: 0, width: 2, background: '#e94560', opacity: 0.7, zIndex: 4, pointerEvents: 'none' }} />}
                 {/* Overlap warning band */}
                 {laneCount > 1 && <div style={{ position: 'absolute', inset: 0, background: 'rgba(239,68,68,0.04)', pointerEvents: 'none' }} />}
                 {row.entries.map(({ res: r, isPrimary }) => {
@@ -433,6 +448,7 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
               <div style={{ fontSize: 11, color: '#9ca3af' }}>{unassigned.length} booking{unassigned.length !== 1 ? 's' : ''}</div>
             </div>
             <div style={{ flex: 1, position: 'relative' }}>
+              {showNow && <div style={{ position: 'absolute', left: nowX, top: 0, bottom: 0, width: 2, background: '#e94560', opacity: 0.7, zIndex: 4, pointerEvents: 'none' }} />}
               {unassigned.map(r => {
                 const isSel = selectedRes?.id === r.id;
                 const left = ((toMins(r.reservation_time) - timeStart) / totalMins) * (slots.length * COL_W);
@@ -451,23 +467,6 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
           </div>
         )}
 
-        {/* Capacity footer */}
-        <div style={{ display: 'flex', background: '#1a1a2e', position: 'sticky', bottom: 0 }}>
-          <div style={{ width: LBL_W, flexShrink: 0, padding: '6px 12px', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
-            <div>Covers</div><div style={{ fontSize: 9, opacity: 0.6 }}>max {maxPerSlot}</div>
-          </div>
-          {slots.map(m => {
-            const covers = reservations.reduce((sum, r) => { const s = toMins(r.reservation_time), e = s + getDuration(r.covers, tiers); return s <= m && e > m ? sum + r.covers : sum; }, 0);
-            const pct = Math.min(covers / maxPerSlot, 1);
-            const barColor = pct >= 1 ? '#ef4444' : pct >= 0.75 ? '#f59e0b' : '#22c55e';
-            return (
-              <div key={m} style={{ width: COL_W, flexShrink: 0, padding: '4px 2px', textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.07)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: covers > 0 ? '#C9A84C' : 'rgba(255,255,255,0.15)' }}>{covers > 0 ? covers : '·'}</div>
-                {covers > 0 && <div style={{ width: COL_W - 8, height: 3, background: 'rgba(255,255,255,0.1)', borderRadius: 2 }}><div style={{ width: `${pct * 100}%`, height: '100%', background: barColor, borderRadius: 2 }} /></div>}
-              </div>
-            );
-          })}
-        </div>
       </div>
     </div>
   );
@@ -516,12 +515,14 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
           })}
         </div>
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#f0ede8', backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)', backgroundSize: '30px 30px' }}>
-        <div style={{ position: 'relative', width: canvasW, height: canvasH }}>
-          <div style={{ position: 'absolute', top: 12, right: 12, background: 'white', borderRadius: 10, padding: '10px 14px', fontSize: 11, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', zIndex: 10 }}>
-            {['pending','confirmed','seated'].map(s => <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}><div style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLORS[s].dot }} /><span style={{ color: '#555', textTransform: 'capitalize' }}>{s}</span></div>)}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, paddingTop: 4, borderTop: '1px solid #f0f0f0' }}><div style={{ width: 8, height: 8, borderRadius: '50%', border: '1px solid #9ca3af', background: 'white' }} /><span style={{ color: '#555' }}>Available</span></div>
-          </div>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        {/* Status legend — its own bar above the floor so it never sits on top of a table */}
+        <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: '8px 16px', background: 'white', borderBottom: '1px solid #e5e7eb', fontSize: 11 }}>
+          {['pending','confirmed','seated'].map(s => <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLORS[s].dot }} /><span style={{ color: '#555', textTransform: 'capitalize' }}>{s}</span></div>)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 8, height: 8, borderRadius: '50%', border: '1px solid #9ca3af', background: 'white' }} /><span style={{ color: '#555' }}>Available</span></div>
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#f0ede8', backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)', backgroundSize: '30px 30px' }}>
+          <div style={{ position: 'relative', width: canvasW, height: canvasH }}>
           {tables.map(table => {
             const booking = getBookingForTable(table.id);
             const c = booking ? (STATUS_COLORS[booking.status] || STATUS_COLORS.pending) : null;
@@ -562,6 +563,7 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
             );
           })}
           {tables.length === 0 && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: '#888' }}><div style={{ fontSize: 36 }}>🗺</div><div>Set up your floor plan in Admin → Table Plan first</div></div>}
+          </div>
         </div>
       </div>
 

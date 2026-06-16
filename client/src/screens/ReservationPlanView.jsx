@@ -18,7 +18,9 @@ const STATUS_COLORS = {
   // so reception (separate from servers) can see at a glance which tables
   // are taken. Punchier green + stronger border + dark text on light bg.
   seated:    { bg: '#22c55e', border: '#15803d', text: 'white',   dot: '#22c55e' },
-  completed: { bg: '#e0e7ff', border: '#6366f1', text: '#3730a3', dot: '#6366f1' },
+  // Slate grey reads as "done / in the past" and won't be confused with
+  // confirmed (blue) now that completed bookings stay on the timeline.
+  completed: { bg: '#e2e8f0', border: '#64748b', text: '#334155', dot: '#64748b' },
   cancelled: { bg: '#fee2e2', border: '#ef4444', text: '#991b1b', dot: '#ef4444' },
   'no-show': { bg: '#fee2e2', border: '#ef4444', text: '#991b1b', dot: '#ef4444' },
 };

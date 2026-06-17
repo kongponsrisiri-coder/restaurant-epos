@@ -754,6 +754,72 @@ async function _sendCups(printerName, buf) {
   }
 }
 
+// SEPOS-058 — raw print to a USB printer on Windows. There is no `lpr` on
+// Windows, so a printer configured by NAME (a USB thermal printer installed
+// via its Windows driver, no IP) had no working path — the bytes never
+// reached it as RAW, so it just fed blank paper. This sends the ESC/POS
+// bytes straight to the named printer with the spooler's "RAW" datatype
+// (the standard RawPrinterHelper Win32 calls), bypassing the GDI driver —
+// driven by PowerShell so there's no native module to rebuild per Electron
+// ABI. Printer name is passed as a literal (single-quoted, '' escaped) and
+// the whole script goes via -EncodedCommand, so there is no shell injection.
+const _WIN_RAW_CSHARP = [
+  'using System;',
+  'using System.IO;',
+  'using System.Runtime.InteropServices;',
+  'public class SiamEposRawPrinter {',
+  '  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] public struct DOCINFO { [MarshalAs(UnmanagedType.LPWStr)] public string pDocName; [MarshalAs(UnmanagedType.LPWStr)] public string pOutputFile; [MarshalAs(UnmanagedType.LPWStr)] public string pDataType; }',
+  '  [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool OpenPrinter(string src, out IntPtr h, IntPtr pd);',
+  '  [DllImport("winspool.drv", SetLastError=true)] static extern bool ClosePrinter(IntPtr h);',
+  '  [DllImport("winspool.drv", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool StartDocPrinter(IntPtr h, int level, ref DOCINFO di);',
+  '  [DllImport("winspool.drv", SetLastError=true)] static extern bool EndDocPrinter(IntPtr h);',
+  '  [DllImport("winspool.drv", SetLastError=true)] static extern bool StartPagePrinter(IntPtr h);',
+  '  [DllImport("winspool.drv", SetLastError=true)] static extern bool EndPagePrinter(IntPtr h);',
+  '  [DllImport("winspool.drv", SetLastError=true)] static extern bool WritePrinter(IntPtr h, byte[] data, int n, out int written);',
+  '  public static void Send(string printer, string file) {',
+  '    IntPtr h; if (!OpenPrinter(printer, out h, IntPtr.Zero)) throw new Exception("OpenPrinter failed (" + Marshal.GetLastWin32Error() + ") for printer: " + printer);',
+  '    try {',
+  '      DOCINFO di = new DOCINFO(); di.pDocName = "SiamEPOS"; di.pDataType = "RAW";',
+  '      if (!StartDocPrinter(h, 1, ref di)) throw new Exception("StartDocPrinter failed (" + Marshal.GetLastWin32Error() + ")");',
+  '      StartPagePrinter(h);',
+  '      byte[] b = File.ReadAllBytes(file); int w;',
+  '      if (!WritePrinter(h, b, b.Length, out w)) throw new Exception("WritePrinter failed (" + Marshal.GetLastWin32Error() + ")");',
+  '      EndPagePrinter(h); EndDocPrinter(h);',
+  '    } finally { ClosePrinter(h); }',
+  '  }',
+  '}',
+].join('\n');
+
+async function _sendWindowsRaw(printerName, buf) {
+  const tmp = path.join(os.tmpdir(),
+    `siamepos-print-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.bin`);
+  await fs.writeFile(tmp, buf);
+  const psPrinter = String(printerName).replace(/'/g, "''");
+  const psFile    = tmp.replace(/'/g, "''");
+  const script = `$ErrorActionPreference='Stop'\nAdd-Type -TypeDefinition @'\n${_WIN_RAW_CSHARP}\n'@\n[SiamEposRawPrinter]::Send('${psPrinter}','${psFile}')`;
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  try {
+    await new Promise((resolve, reject) => {
+      execFile('powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+        { timeout: 15000 },
+        (err, _stdout, stderr) => {
+          if (err) return reject(new Error(`Windows raw print failed: ${(stderr || '').trim() || err.message}`));
+          resolve();
+        });
+    });
+  } finally {
+    fs.unlink(tmp).catch(() => {});
+  }
+}
+
+// Send raw bytes to a printer addressed by NAME (no IP), per platform:
+// Windows → spooler RAW datatype; Mac/Linux → CUPS `lpr -o raw`.
+function _sendToNamedPrinter(printerName, buf) {
+  if (process.platform === 'win32') return _sendWindowsRaw(printerName, buf);
+  return _sendCups(printerName, buf);
+}
+
 // Remembers which transport worked per printer so LPR-only print servers
 // (older WAVLINK / TP-Link) don't pay the RAW connect-timeout + error-wait
 // on every single ticket. Process-level, like _cupsQueueCache. Self-heals:
@@ -806,7 +872,7 @@ function sendRaw(ip, port, buf, options = {}) {
         }
       }
     }
-    return _sendCups(explicitName, buf);
+    return _sendToNamedPrinter(explicitName, buf);
   };
 
   _printQueue = _printQueue.catch(() => {}).then(job);

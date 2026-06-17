@@ -3514,7 +3514,7 @@ app.post('/api/ai/scan-menu', requireStaffAuthOrSyncSecret(['admin', 'manager', 
     }
     const isImage = media_type && media_type.startsWith('image/');
     const contentItem = isImage ? { type: 'image', source: { type: 'base64', media_type, data: image_base64 } } : { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: image_base64 } };
-    const requestBody = JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 4000, messages: [{ role: 'user', content: [contentItem, { type: 'text', text: `You are an expert restaurant menu reader and UK food safety specialist.\n\nAnalyse this menu image/document and extract ALL dishes. For each dish provide:\n1. English name\n2. Thai name (transliterate or translate)\n3. Short appetising description (1-2 sentences)\n4. Price in GBP — exact if visible, estimated if not. Mark assumed prices.\n5. UK 14 allergens — gluten, crustaceans, eggs, fish, peanuts, soybeans, milk, nuts, celery, mustard, sesame, sulphites, lupin, molluscs. Fish sauce is in almost all Thai food.\n6. Category (Starters, Mains, Curries, Noodles, Rice Dishes, Salads, Desserts, Drinks, Sides)\n7. Confidence score 0-100\n\nReturn ONLY valid JSON, no markdown, no explanation:\n{\n  "restaurant_type": "Thai Restaurant",\n  "total_dishes": 0,\n  "categories": [\n    {\n      "name": "Category Name",\n      "dishes": [\n        {\n          "name_en": "English Name",\n          "name_th": "ชื่อภาษาไทย",\n          "description": "Description",\n          "price": 12.50,\n          "price_assumed": false,\n          "allergens": ["Fish","Soybeans"],\n          "confidence": 95\n        }\n      ]\n    }\n  ]\n}` }] }] });
+    const requestBody = JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 8000, messages: [{ role: 'user', content: [contentItem, { type: 'text', text: `You are an expert restaurant menu reader and UK food safety specialist.\n\nAnalyse this menu image/document and extract ALL dishes. For each dish provide:\n1. English name\n2. Thai name (transliterate or translate)\n3. Short appetising description (1-2 sentences)\n4. Price in GBP — exact if visible, estimated if not. Mark assumed prices.\n5. UK 14 allergens — gluten, crustaceans, eggs, fish, peanuts, soybeans, milk, nuts, celery, mustard, sesame, sulphites, lupin, molluscs. Fish sauce is in almost all Thai food.\n6. Category (Starters, Mains, Curries, Noodles, Rice Dishes, Salads, Desserts, Drinks, Sides)\n7. Confidence score 0-100\n\nReturn ONLY valid JSON, no markdown, no explanation:\n{\n  "restaurant_type": "Thai Restaurant",\n  "total_dishes": 0,\n  "categories": [\n    {\n      "name": "Category Name",\n      "dishes": [\n        {\n          "name_en": "English Name",\n          "name_th": "ชื่อภาษาไทย",\n          "description": "Description",\n          "price": 12.50,\n          "price_assumed": false,\n          "allergens": ["Fish","Soybeans"],\n          "confidence": 95\n        }\n      ]\n    }\n  ]\n}` }] }] });
     const https = require('https');
     const result = await new Promise((resolve, reject) => {
       const options = { hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(requestBody), 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' } };
@@ -3534,9 +3534,20 @@ app.post('/api/ai/scan-menu', requireStaffAuthOrSyncSecret(['admin', 'manager', 
     }
     const data = JSON.parse(result.body);
     const raw = data.content.map(b => b.text || '').join('');
-    const clean = raw.replace(/```json|```/g, '').trim();
+    // Extract the JSON object robustly: strip markdown fences, then slice from
+    // the first '{' to the last '}' so any surrounding prose is dropped.
+    let clean = raw.replace(/```json|```/g, '').trim();
+    const first = clean.indexOf('{'), last = clean.lastIndexOf('}');
+    if (first >= 0 && last > first) clean = clean.slice(first, last + 1);
     let menu;
-    try { menu = JSON.parse(clean); } catch (parseErr) { return res.status(500).json({ error: 'AI returned invalid JSON — try again with a clearer image' }); }
+    try { menu = JSON.parse(clean); } catch (parseErr) {
+      // stop_reason === 'max_tokens' means the menu was too long for one pass
+      // and the JSON was cut off — guide the operator to split it.
+      const truncated = data.stop_reason === 'max_tokens';
+      return res.status(500).json({ error: truncated
+        ? 'This menu is too long to read in one go — scan one page/section at a time.'
+        : 'AI returned invalid JSON — try again with a clearer image' });
+    }
     console.log(`🍜 Menu scan complete: ${menu.total_dishes || '?'} dishes`);
     res.json({ success: true, menu });
   } catch (err) { res.status(500).json({ error: err.message }); }

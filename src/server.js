@@ -6612,10 +6612,15 @@ app.post('/api/print/report-text', async (req, res) => {
 });
 
 app.post('/api/print/receipt', async (req, res) => {
-  const { order_id, payment_details } = req.body;
+  const { order_id, payment_details, printer_name } = req.body;
   try {
     const settings = await loadSettings();
-    if (!settings.printer_receipt_ip) return res.json({ success: false, reason: 'no_ip' });
+    // SEPOS-058 — a USB printer is addressed by NAME (no IP). When the client
+    // passes printer_name (the desktop's selected device), print by name via
+    // the platform raw path (Windows spooler RAW / CUPS) instead of requiring
+    // an IP. This gives crisp ESC/POS black + silent, vs the faint HTML/GDI path.
+    if (printer_name) { settings.printer_receipt_name = printer_name; settings.printer_receipt_ip = ''; }
+    if (!settings.printer_receipt_ip && !settings.printer_receipt_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
       `SELECT orders.*, tables.table_number
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id

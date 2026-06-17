@@ -13,9 +13,15 @@
 import { serverPrintReceipt } from '../api';
 
 export function printReceipt({ order, items, settings, paymentDetails = {} }) {
-  // ── 1. Server-side network print (iPad-friendly) ──────────────────────────
-  if (settings.printer_receipt_ip) {
-    serverPrintReceipt(order.id, paymentDetails)
+  // ── 1. Server-side print (ESC/POS — crisp black + silent) ─────────────────
+  // Use it for a network printer (IP) OR — SEPOS-058 — a USB printer addressed
+  // by name on the desktop. The HTML/GDI fallback (_clientPrint) prints faint
+  // anti-aliased text on thermal units, so prefer the raw path whenever we have
+  // a target. The desktop's chosen device lives in localStorage.receipt_printer_name.
+  const deviceName = (typeof localStorage !== 'undefined' && localStorage.getItem('receipt_printer_name')) || '';
+  const usbName = (!settings.printer_receipt_ip && deviceName && window.siamepos?.isElectron) ? deviceName : null;
+  if (settings.printer_receipt_ip || usbName) {
+    serverPrintReceipt(order.id, paymentDetails, usbName || undefined)
       .then(r => {
         if (!r || !r.success) {
           console.warn('[receipt] server print failed, falling back:', r?.error || r?.reason);

@@ -413,9 +413,25 @@ function PrinterCard({ cardStyle }) {
     try {
       const r = await window.siamepos.printHtml({ html, deviceName: receiptName || undefined });
       setTestState(r && r.success ? 'ok' : 'fail');
-      if (r && !r.success) console.error('[printer] test print failed:', r.error);
+      if (r && !r.success) {
+        const reason = r.error || 'Unknown error';
+        console.error('[printer] test print failed:', reason);
+        // Show the reason so the operator can act on it — the red button
+        // only lasts 3s and gives no detail.
+        alert(
+          `Print failed: "${reason}"\n\n` +
+          `Troubleshooting steps:\n` +
+          `1. Press the Windows key → search "Printers & scanners" → click POS-80M\n` +
+          `2. Click "Open print queue" — cancel any stuck jobs\n` +
+          `3. Right-click the printer → "See what's printing" — if it says Offline or Error, click "Use Printer Online"\n` +
+          `4. Make sure the printer is plugged in and has paper loaded shiny-side up\n` +
+          `5. Try the test again`
+        );
+      }
     } catch (e) {
       setTestState('fail');
+      console.error('[printer] testPrint threw:', e);
+      alert('Print error: ' + e.message);
     }
     setTimeout(() => setTestState('idle'), 3000);
   };

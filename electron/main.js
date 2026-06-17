@@ -103,13 +103,29 @@ ipcMain.handle('print-html', async (event, opts) => {
           margins: { marginType: 'none' },
           copies: Math.max(1, Number(copies) || 1),
         };
-        if (deviceName) printOpts.deviceName = deviceName;
+        if (deviceName) {
+          printOpts.deviceName = deviceName;
+          // 80mm thermal receipt printers: set explicit page size so Chromium
+          // doesn't default to A4 (210×297mm), which most USB thermal drivers
+          // silently reject or scale incorrectly.
+          // Width: 80mm = 80,000 µm.  Height: 279mm gives a long enough
+          // virtual page for any receipt; the cutter / tear-off handles the
+          // physical cut so we don't need to match roll length exactly.
+          printOpts.pageSize = { width: 80000, height: 279000 };
+        }
+        console.log('[siamepos] print-html → device:', deviceName || '(default)', 'copies:', printOpts.copies);
         printWin.webContents.print(printOpts, (success, failureReason) => {
+          if (success) {
+            console.log('[siamepos] print job accepted by', deviceName || '(default)');
+          } else {
+            console.error('[siamepos] print job FAILED for', deviceName || '(default)', '— reason:', failureReason);
+          }
           finish({ success, error: success ? null : (failureReason || 'Print failed.') });
         });
       }, 550);
     });
     printWin.webContents.once('did-fail-load', (e, code, desc) => {
+      console.error('[siamepos] print HTML failed to render:', desc);
       finish({ success: false, error: `Could not render print content: ${desc}` });
     });
     printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));

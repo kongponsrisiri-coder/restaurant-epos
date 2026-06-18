@@ -9,6 +9,7 @@ const pool = require('./db/dbAdapter');
 const offlineQueue = require('./services/offlineQueue');
 const syncService = require('./services/syncService');
 const cloudRelay = require('./services/cloudRelay');
+const licenseService = require('./services/licenseService');  // SEPOS-060
 const makeWebhooks = require('./services/makeWebhooks');
 const printService = require('./services/printService');
 const stuartService = require('./services/stuartService');
@@ -751,7 +752,7 @@ app.get('/api/orders/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/orders', async (req, res) => {
+app.post('/api/orders', requireActiveSubscription, async (req, res) => {
   try {
     const { table_id, covers, staff_id, order_type } = req.body;
     // SEPOS-045 — counter orders (and any tableless mode) skip the table
@@ -1212,6 +1213,29 @@ function verifyToken(token) {
     if (!payload || !payload.exp || payload.exp < Date.now()) return null;
     return payload;
   } catch { return null; }
+}
+
+// SEPOS-060 — subscription gate. Blocks cloud-dependent actions for a churned
+// client (online ordering/booking, login, sync). `active` + `past_due` pass
+// (past_due gets a grace window + a warning shown elsewhere). Fail OPEN on any
+// DB/lookup error — never block a paying client over a transient glitch.
+async function requireActiveSubscription(req, res, next) {
+  try {
+    const rid = resolveRestaurantId(req);
+    const r = await pool.query('SELECT status FROM restaurants WHERE restaurant_id = $1', [rid]);
+    const status = (r.rows[0] && r.rows[0].status) || 'active';
+    if (status === 'churned' || status === 'cancelled' || status === 'suspended') {
+      return res.status(403).json({
+        error: 'subscription_inactive',
+        status,
+        message: 'This SiamEPOS subscription is inactive. Please contact SiamEPOS to reactivate.',
+      });
+    }
+    next();
+  } catch (err) {
+    console.warn('[license] subscription gate check failed (allowing):', err.message);
+    next();
+  }
 }
 
 // SEPOS-047a — route gate for staff-only endpoints. Both login paths
@@ -1735,6 +1759,38 @@ app.get('/api/restaurant', async (req, res) => {
   } catch (err) {
     console.error('GET /api/restaurant error:', err.message);
     res.json({ restaurant_id: rid, name: null, plan: 'pro', status: 'active' });
+  }
+});
+
+// SEPOS-060 — license check. The desktop calls this on launch + periodically.
+// When the subscription is active/past_due it returns a SIGNED token the till
+// caches and verifies offline (valid for GRACE_DAYS); when churned it returns
+// { active:false } so the till locks once its cached token expires. If
+// LICENSE_PRIVATE_KEY isn't set, we "fail open" (active, unsigned) so licensing
+// can be rolled out without bricking tills before the key is deployed.
+app.get('/api/license', async (req, res) => {
+  try {
+    const rid = resolveRestaurantId(req);
+    const r = await pool.query('SELECT restaurant_id, plan, status FROM restaurants WHERE restaurant_id = $1', [rid]);
+    const row = r.rows[0] || { restaurant_id: rid, plan: 'pro', status: 'active' };
+    const status = row.status || 'active';
+    if (status === 'churned' || status === 'cancelled' || status === 'suspended') {
+      return res.json({ active: false, status });
+    }
+    const now = Date.now();
+    const payload = {
+      restaurant_id: row.restaurant_id,
+      plan: row.plan || 'pro',
+      status,                                   // active | past_due
+      issued_at: now,
+      valid_until: now + licenseService.GRACE_DAYS * 24 * 60 * 60 * 1000,
+    };
+    const token = licenseService.signLicense(payload);
+    if (!token) return res.json({ active: true, status, unsigned: true, valid_until: payload.valid_until });
+    res.json({ active: true, status, token, valid_until: payload.valid_until });
+  } catch (err) {
+    // Fail open — a glitch must never lock a paying client out.
+    res.json({ active: true, status: 'active', error: err.message });
   }
 });
 
@@ -4438,7 +4494,7 @@ app.get('/api/takeaway/delivery-check', widgetCors, async (req, res) => {
 });
 
 // Submit a takeaway order from the public widget.
-app.post('/api/takeaway/orders', widgetCors, async (req, res) => {
+app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, async (req, res) => {
   const client = await pool.connect();
   try {
     const {

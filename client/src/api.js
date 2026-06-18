@@ -145,10 +145,10 @@ export const serverPrintReceipt   = (order_id, payment_details, printer_name) =>
 // SEPOS-REPORTS-001 — ESC/POS print for admin reports (Sales / Items /
 // Z / VAT / Bills). Takes a line DSL — see printService.buildReportText.
 export const serverPrintReportText = (lines) => post('/api/print/report-text', { lines });
-export const serverPrintKitchen   = (order_id, items, course)   => post('/api/print/kitchen', { order_id, items, course });
-export const serverPrintBar           = (order_id, items)         => post('/api/print/bar',          { order_id, items });
-export const serverPrintKitchenFull   = (order_id, items)         => post('/api/print/kitchen-full', { order_id, items });
-export const serverPrintFireNotice    = (order_id, course)        => post('/api/print/kitchen-fire', { order_id, course });
+export const serverPrintKitchen   = (order_id, items, course, printer_name)   => post('/api/print/kitchen', { order_id, items, course, printer_name });
+export const serverPrintBar           = (order_id, items, printer_name)         => post('/api/print/bar',          { order_id, items, printer_name });
+export const serverPrintKitchenFull   = (order_id, items, printer_name)         => post('/api/print/kitchen-full', { order_id, items, printer_name });
+export const serverPrintFireNotice    = (order_id, course, printer_name)        => post('/api/print/kitchen-fire', { order_id, course, printer_name });
 export const getDiscountReasons = () => get('/api/discount-reasons');
 export const addDiscountReason = (reason) => post('/api/discount-reasons', { reason });
 export const deleteDiscountReason = (id) => del(`/api/discount-reasons/${id}`);

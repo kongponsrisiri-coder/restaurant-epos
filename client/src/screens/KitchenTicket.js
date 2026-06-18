@@ -78,11 +78,20 @@ function closeWin(win) { try { if (win && !win.closed) win.close(); } catch {} }
 async function dispatchPrint({ settings, serverFn, html, copies = 1, popupWin = null }) {
   if (!shouldPrint(settings)) { closeWin(popupWin); return; }
 
-  // 1. Server-side network print — backend reads settings.printer_kitchen_copies
-  // and loops by itself, so we don't need to pass copies on this branch.
+  // Desktop's chosen kitchen device — falls back to the receipt printer for
+  // single-printer setups. SEPOS-058: when set with no IP, print via the
+  // server's raw ESC/POS path (crisp black + silent) like the receipt does;
+  // the HTML/GDI path below prints faint grey on thermal units.
+  const deviceName = (typeof localStorage !== 'undefined' &&
+    (localStorage.getItem('kitchen_printer_name') || localStorage.getItem('receipt_printer_name'))) || '';
+  const autoOn     = typeof localStorage === 'undefined' || localStorage.getItem('kitchen_auto_print') !== '0';
+  const usbName    = (!settings?.printer_kitchen_ip && deviceName && window.siamepos?.isElectron) ? deviceName : null;
+
+  // 1. Server-side ESC/POS — network IP, or USB-by-name on the desktop.
+  // Backend reads settings.printer_kitchen_copies and loops by itself.
   try {
-    if (settings && settings.printer_kitchen_ip) {
-      const r = await serverFn();
+    if ((settings && settings.printer_kitchen_ip) || usbName) {
+      const r = await serverFn(usbName || undefined);
       if (r && r.success) { closeWin(popupWin); return; }
       console.warn('[kitchen-ticket] server print failed, falling back:', r?.error || r?.reason);
     }
@@ -90,12 +99,8 @@ async function dispatchPrint({ settings, serverFn, html, copies = 1, popupWin = 
     console.warn('[kitchen-ticket] server print error, falling back:', e);
   }
 
-  // 2. Electron silent print — must pass copies; Electron's printHtml
-  // accepts { copies } and loops internally. Without this the operator
-  // sets "2" in Settings but Electron only ever prints once. (Bug found
-  // 2026-06-01.)
-  const deviceName = (typeof localStorage !== 'undefined' && localStorage.getItem('kitchen_printer_name')) || '';
-  const autoOn     = typeof localStorage === 'undefined' || localStorage.getItem('kitchen_auto_print') !== '0';
+  // 2. Electron silent HTML print (fallback if the raw path errors) — must
+  // pass copies; Electron's printHtml accepts { copies } and loops internally.
   if (deviceName && autoOn && window.siamepos?.isElectron && window.siamepos.printHtml) {
     closeWin(popupWin); // Electron prints — no popup needed
     window.siamepos.printHtml({ html, deviceName, copies })
@@ -138,7 +143,7 @@ export async function printFullOrderTicket({ order, items, popupWin = null }) {
 
   await dispatchPrint({
     settings,
-    serverFn: () => serverPrintKitchenFull(order.id, active),
+    serverFn: (pn) => serverPrintKitchenFull(order.id, active, pn),
     html:     buildFullOrderTicketHTML({ order, items: active, copies, bilingual }),
     copies,
     popupWin,
@@ -157,7 +162,7 @@ export async function printKitchenTicket({ order, items, course, popupWin = null
 
   await dispatchPrint({
     settings,
-    serverFn: () => serverPrintKitchen(order.id, active, course),
+    serverFn: (pn) => serverPrintKitchen(order.id, active, course, pn),
     html:     buildKitchenTicketHTML({ order, items: active, course, copies, bilingual }),
     copies,
     popupWin,
@@ -169,11 +174,14 @@ export async function printKitchenTicket({ order, items, course, popupWin = null
 // shows a minimal notice page.
 export async function printFireNoticeTicket({ order, course, popupWin = null }) {
   const settings = await getCachedSettings();
+  const deviceName = (typeof localStorage !== 'undefined' &&
+    (localStorage.getItem('kitchen_printer_name') || localStorage.getItem('receipt_printer_name'))) || '';
+  const usbName    = (!settings?.printer_kitchen_ip && deviceName && window.siamepos?.isElectron) ? deviceName : null;
 
-  // 1. Server-side network print
+  // 1. Server-side ESC/POS — network IP, or USB-by-name on the desktop.
   try {
-    if (settings && settings.printer_kitchen_ip) {
-      const r = await serverPrintFireNotice(order.id, course);
+    if ((settings && settings.printer_kitchen_ip) || usbName) {
+      const r = await serverPrintFireNotice(order.id, course, usbName || undefined);
       if (r && r.success) { closeWin(popupWin); return; }
       console.warn('[fire-notice] server print failed, falling back:', r?.error || r?.reason);
     }
@@ -181,8 +189,7 @@ export async function printFireNoticeTicket({ order, course, popupWin = null }) 
     console.warn('[fire-notice] server print error, falling back:', e);
   }
 
-  // 2. Electron silent print
-  const deviceName = (typeof localStorage !== 'undefined' && localStorage.getItem('kitchen_printer_name')) || '';
+  // 2. Electron silent print (fallback)
   const autoOn     = typeof localStorage === 'undefined' || localStorage.getItem('kitchen_auto_print') !== '0';
   const bilingual  = isBilingual(settings);
   const html       = buildFireNoticeHTML({ order, course, bilingual });
@@ -210,10 +217,14 @@ export async function printBarOrderTicket({ order, items, popupWin = null }) {
   const settings = await getCachedSettings();
   const bilingual = isBilingual(settings);
 
-  // 1. Server-side TCP to bar printer IP
+  const deviceName = (typeof localStorage !== 'undefined' &&
+    (localStorage.getItem('bar_printer_name') || localStorage.getItem('kitchen_printer_name') || localStorage.getItem('receipt_printer_name'))) || '';
+  const usbName    = (!settings?.printer_bar_ip && deviceName && window.siamepos?.isElectron) ? deviceName : null;
+
+  // 1. Server-side ESC/POS — bar printer IP, or USB-by-name on the desktop.
   try {
-    if (settings && settings.printer_bar_ip) {
-      const r = await serverPrintBar(order.id, barItems);
+    if ((settings && settings.printer_bar_ip) || usbName) {
+      const r = await serverPrintBar(order.id, barItems, usbName || undefined);
       if (r && r.success) { closeWin(popupWin); return; }
       console.warn('[bar-ticket] server print failed, falling back:', r?.error || r?.reason);
     }
@@ -221,8 +232,7 @@ export async function printBarOrderTicket({ order, items, popupWin = null }) {
     console.warn('[bar-ticket] server print error, falling back:', e);
   }
 
-  // 2. Electron silent print to bar printer device
-  const deviceName = (typeof localStorage !== 'undefined' && localStorage.getItem('bar_printer_name')) || '';
+  // 2. Electron silent print to bar printer device (fallback)
   const autoOn     = typeof localStorage === 'undefined' || localStorage.getItem('kitchen_auto_print') !== '0';
   const html       = buildKitchenTicketHTML({ order, items: barItems, course: 4, copies: 1, bilingual });
 

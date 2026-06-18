@@ -6643,10 +6643,11 @@ app.post('/api/print/receipt', async (req, res) => {
 
 // Print a kitchen ticket for a given order + course
 app.post('/api/print/kitchen', async (req, res) => {
-  const { order_id, items, course } = req.body;
+  const { order_id, items, course, printer_name } = req.body;
   try {
     const settings = await loadSettings();
-    if (!settings.printer_kitchen_ip) return res.json({ success: false, reason: 'no_ip' });
+    if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
+    if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
       `SELECT orders.*, tables.table_number
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
@@ -6662,10 +6663,11 @@ app.post('/api/print/kitchen', async (req, res) => {
 
 // Print a bar ticket
 app.post('/api/print/bar', async (req, res) => {
-  const { order_id, items } = req.body;
+  const { order_id, items, printer_name } = req.body;
   try {
     const settings = await loadSettings();
-    if (!settings.printer_bar_ip) return res.json({ success: false, reason: 'no_ip' });
+    if (printer_name) { settings.printer_bar_name = printer_name; settings.printer_bar_ip = ''; }
+    if (!settings.printer_bar_ip && !settings.printer_bar_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
       `SELECT orders.*, tables.table_number
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
@@ -6681,10 +6683,11 @@ app.post('/api/print/bar', async (req, res) => {
 
 // Print a course fire notice (TABLE X / FIRE MAINS — no item list)
 app.post('/api/print/kitchen-fire', async (req, res) => {
-  const { order_id, course } = req.body;
+  const { order_id, course, printer_name } = req.body;
   try {
     const settings = await loadSettings();
-    if (!settings.printer_kitchen_ip) return res.json({ success: false, reason: 'no_ip' });
+    if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
+    if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
       `SELECT orders.*, tables.table_number
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
@@ -6700,10 +6703,11 @@ app.post('/api/print/kitchen-fire', async (req, res) => {
 
 // Print a full-order kitchen ticket (all courses combined — fired on Send Order)
 app.post('/api/print/kitchen-full', async (req, res) => {
-  const { order_id, items } = req.body;
+  const { order_id, items, printer_name } = req.body;
   try {
     const settings = await loadSettings();
-    if (!settings.printer_kitchen_ip) return res.json({ success: false, reason: 'no_ip' });
+    if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
+    if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
       `SELECT orders.*, tables.table_number
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id

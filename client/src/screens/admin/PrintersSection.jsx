@@ -334,7 +334,7 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
                 const cp = (settings.kitchen_thai_codepage || '').toString().trim();
                 if (!cp) return alert('Type a codepage number first');
                 try {
-                  const r = await printerThaiTest(Number(cp));
+                  const r = await printerThaiTest(Number(cp), (typeof localStorage !== 'undefined' && (localStorage.getItem('receipt_printer_name') || localStorage.getItem('kitchen_printer_name'))) || undefined);
                   if (!r?.success) alert('Print failed: ' + (r?.error || r?.reason || 'unknown'));
                 } catch (e) { alert('Print failed: ' + e?.message); }
               }}
@@ -345,7 +345,7 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
             <button
               onClick={async () => {
                 try {
-                  const r = await printerThaiTest();
+                  const r = await printerThaiTest(null, (typeof localStorage !== 'undefined' && (localStorage.getItem('receipt_printer_name') || localStorage.getItem('kitchen_printer_name'))) || undefined);
                   if (!r?.success) alert('Print failed: ' + (r?.error || r?.reason || 'unknown'));
                 } catch (e) { alert('Print failed: ' + e?.message); }
               }}

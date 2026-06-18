@@ -6423,6 +6423,14 @@ async function loadSettings() {
 app.post('/api/print/thai-test', async (req, res) => {
   try {
     const settings = await loadSettings();
+    // SEPOS-058 — a USB printer is addressed by name (no IP). Let the client
+    // pass its selected device so the Thai-codepage probe reaches it without
+    // requiring settings.printer_*_name to be saved first (avoids NO_IP).
+    if (req.body?.printer_name) {
+      settings.printer_kitchen_name = req.body.printer_name;
+      settings.printer_kitchen_ip = '';
+      settings.printer_receipt_ip = '';
+    }
     // Optional ?cp=255 OR { cp: 255 } in body → focus the test on a
     // single codepage instead of sweeping the full candidate list.
     // Useful when an operator already knows the printer's spec value.
@@ -6643,10 +6651,11 @@ app.post('/api/print/receipt', async (req, res) => {
 
 // Print a kitchen ticket for a given order + course
 app.post('/api/print/kitchen', async (req, res) => {
-  const { order_id, items, course, printer_name } = req.body;
+  const { order_id, items, course, printer_name, copies } = req.body;
   try {
     const settings = await loadSettings();
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
+    if (copies) settings.printer_kitchen_copies = String(copies); // client-resolved copies (per-device or system)
     if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
       `SELECT orders.*, tables.table_number
@@ -6703,10 +6712,11 @@ app.post('/api/print/kitchen-fire', async (req, res) => {
 
 // Print a full-order kitchen ticket (all courses combined — fired on Send Order)
 app.post('/api/print/kitchen-full', async (req, res) => {
-  const { order_id, items, printer_name } = req.body;
+  const { order_id, items, printer_name, copies } = req.body;
   try {
     const settings = await loadSettings();
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
+    if (copies) settings.printer_kitchen_copies = String(copies); // client-resolved copies (per-device or system)
     if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
       `SELECT orders.*, tables.table_number

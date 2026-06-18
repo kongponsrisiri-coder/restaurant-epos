@@ -121,7 +121,7 @@ export const printerGetMac        = (ip)  => get(`/api/print/get-mac?ip=${encode
 export const printerDiscover      = (mac) => get(`/api/print/discover?mac=${encodeURIComponent(mac)}`);
 // SEPOS-PRINT-THAI-PROBE — visual codepage probe ticket
 // Pass a cp number to test that specific codepage only; omit to sweep all.
-export const printerThaiTest      = (cp = null) => post('/api/print/thai-test', cp ? { cp } : {});
+export const printerThaiTest      = (cp = null, printer_name) => post('/api/print/thai-test', { ...(cp ? { cp } : {}), ...(printer_name ? { printer_name } : {}) });
 
 // SEPOS-LOCAL-001 P1 — local HMRC archive status + manual triggers
 export const getArchiveStatus     = () => get('/api/local/archive-status');
@@ -145,9 +145,9 @@ export const serverPrintReceipt   = (order_id, payment_details, printer_name) =>
 // SEPOS-REPORTS-001 — ESC/POS print for admin reports (Sales / Items /
 // Z / VAT / Bills). Takes a line DSL — see printService.buildReportText.
 export const serverPrintReportText = (lines) => post('/api/print/report-text', { lines });
-export const serverPrintKitchen   = (order_id, items, course, printer_name)   => post('/api/print/kitchen', { order_id, items, course, printer_name });
+export const serverPrintKitchen   = (order_id, items, course, printer_name, copies)   => post('/api/print/kitchen', { order_id, items, course, printer_name, copies });
 export const serverPrintBar           = (order_id, items, printer_name)         => post('/api/print/bar',          { order_id, items, printer_name });
-export const serverPrintKitchenFull   = (order_id, items, printer_name)         => post('/api/print/kitchen-full', { order_id, items, printer_name });
+export const serverPrintKitchenFull   = (order_id, items, printer_name, copies)         => post('/api/print/kitchen-full', { order_id, items, printer_name, copies });
 export const serverPrintFireNotice    = (order_id, course, printer_name)        => post('/api/print/kitchen-fire', { order_id, course, printer_name });
 export const getDiscountReasons = () => get('/api/discount-reasons');
 export const addDiscountReason = (reason) => post('/api/discount-reasons', { reason });

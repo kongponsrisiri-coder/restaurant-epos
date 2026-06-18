@@ -91,7 +91,7 @@ async function dispatchPrint({ settings, serverFn, html, copies = 1, popupWin = 
   // Backend reads settings.printer_kitchen_copies and loops by itself.
   try {
     if ((settings && settings.printer_kitchen_ip) || usbName) {
-      const r = await serverFn(usbName || undefined);
+      const r = await serverFn(usbName || undefined, copies);
       if (r && r.success) { closeWin(popupWin); return; }
       console.warn('[kitchen-ticket] server print failed, falling back:', r?.error || r?.reason);
     }
@@ -143,7 +143,7 @@ export async function printFullOrderTicket({ order, items, popupWin = null }) {
 
   await dispatchPrint({
     settings,
-    serverFn: (pn) => serverPrintKitchenFull(order.id, active, pn),
+    serverFn: (pn, cp) => serverPrintKitchenFull(order.id, active, pn, cp),
     html:     buildFullOrderTicketHTML({ order, items: active, copies, bilingual }),
     copies,
     popupWin,
@@ -162,7 +162,7 @@ export async function printKitchenTicket({ order, items, course, popupWin = null
 
   await dispatchPrint({
     settings,
-    serverFn: (pn) => serverPrintKitchen(order.id, active, course, pn),
+    serverFn: (pn, cp) => serverPrintKitchen(order.id, active, course, pn, cp),
     html:     buildKitchenTicketHTML({ order, items: active, course, copies, bilingual }),
     copies,
     popupWin,

@@ -907,7 +907,17 @@ async function printFireNotice(settings, order, course) {
   const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
   const buf = buildFireNotice({ order, course, bilingual });
-  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName, lprQueue });
+  if (ip) {
+    // Network: send each copy as its own job (back-to-back streams can garble
+    // some print servers, and _sendTcp already paces them).
+    for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName, lprQueue });
+  } else {
+    // USB/name (Windows spooler / CUPS): send ALL copies in ONE job with the
+    // ticket buffer concatenated. Avoids spawning a PowerShell process per
+    // copy — that per-copy spawn was the lag between the 1st and 2nd ticket.
+    const payload = copies > 1 ? Buffer.concat(Array.from({ length: copies }, () => buf)) : buf;
+    await sendRaw(ip, port, payload, { printerName, lprQueue });
+  }
 }
 
 async function printKitchenTicket(settings, order, items, course) {
@@ -924,7 +934,17 @@ async function printKitchenTicket(settings, order, items, course) {
   if (!ip && !printerName) throw new Error('NO_IP');
   const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
   const buf = buildKitchenTicket({ order, items, course, bilingual, thaiCodepage });
-  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName, lprQueue });
+  if (ip) {
+    // Network: send each copy as its own job (back-to-back streams can garble
+    // some print servers, and _sendTcp already paces them).
+    for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName, lprQueue });
+  } else {
+    // USB/name (Windows spooler / CUPS): send ALL copies in ONE job with the
+    // ticket buffer concatenated. Avoids spawning a PowerShell process per
+    // copy — that per-copy spawn was the lag between the 1st and 2nd ticket.
+    const payload = copies > 1 ? Buffer.concat(Array.from({ length: copies }, () => buf)) : buf;
+    await sendRaw(ip, port, payload, { printerName, lprQueue });
+  }
 }
 
 async function printFullKitchenTicket(settings, order, items) {
@@ -941,7 +961,17 @@ async function printFullKitchenTicket(settings, order, items) {
   if (!ip && !printerName) throw new Error('NO_IP');
   const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
   const buf = buildFullKitchenTicket({ order, items, bilingual, thaiCodepage });
-  for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName, lprQueue });
+  if (ip) {
+    // Network: send each copy as its own job (back-to-back streams can garble
+    // some print servers, and _sendTcp already paces them).
+    for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName, lprQueue });
+  } else {
+    // USB/name (Windows spooler / CUPS): send ALL copies in ONE job with the
+    // ticket buffer concatenated. Avoids spawning a PowerShell process per
+    // copy — that per-copy spawn was the lag between the 1st and 2nd ticket.
+    const payload = copies > 1 ? Buffer.concat(Array.from({ length: copies }, () => buf)) : buf;
+    await sendRaw(ip, port, payload, { printerName, lprQueue });
+  }
 }
 
 async function printBarTicket(settings, order, items) {

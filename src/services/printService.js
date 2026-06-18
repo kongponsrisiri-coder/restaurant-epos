@@ -790,27 +790,82 @@ const _WIN_RAW_CSHARP = [
   '}',
 ].join('\n');
 
-async function _sendWindowsRaw(printerName, buf) {
-  const tmp = path.join(os.tmpdir(),
-    `siamepos-print-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.bin`);
-  await fs.writeFile(tmp, buf);
-  const psPrinter = String(printerName).replace(/'/g, "''");
-  const psFile    = tmp.replace(/'/g, "''");
-  const script = `$ErrorActionPreference='Stop'\nAdd-Type -TypeDefinition @'\n${_WIN_RAW_CSHARP}\n'@\n[SiamEposRawPrinter]::Send('${psPrinter}','${psFile}')`;
-  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+// Persistent print helper. Spawning PowerShell + compiling the RawPrinter
+// type per job cost ~1-2s EACH — the lag before every ticket. Instead keep
+// ONE powershell process alive, Add-Type the helper once, and stream jobs to
+// it over stdin: first print pays the ~1-2s startup, every print after is
+// near-instant (~50ms). Jobs are serialised by _printQueue, so there's only
+// one outstanding response at a time. Self-heals: if the process dies or a
+// job hangs, it's respawned on the next print.
+let _winPrintProc = null;
+
+function _getWinPrintProc() {
+  if (_winPrintProc) return _winPrintProc;
+  const { spawn } = require('child_process');
+  const readline = require('readline');
+  // Reads "<base64 printerName> <base64 filepath>" lines; prints each via the
+  // RawPrinter helper; replies "OK" or "ERR <msg>" per line. base64 avoids any
+  // quoting/space issues in printer names or temp paths.
+  const reader = `$ErrorActionPreference='Stop'
+Add-Type -TypeDefinition @'
+${_WIN_RAW_CSHARP}
+'@
+while ($true) {
+  $line = [Console]::In.ReadLine()
+  if ($null -eq $line) { break }
+  if ($line.Trim() -eq '') { continue }
   try {
-    await new Promise((resolve, reject) => {
-      execFile('powershell.exe',
-        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
-        { timeout: 15000 },
-        (err, _stdout, stderr) => {
-          if (err) return reject(new Error(`Windows raw print failed: ${(stderr || '').trim() || err.message}`));
-          resolve();
-        });
-    });
-  } finally {
-    fs.unlink(tmp).catch(() => {});
+    $p = $line.Split(' ')
+    $name = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p[0]))
+    $path = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p[1]))
+    [SiamEposRawPrinter]::Send($name, $path)
+    [Console]::Out.WriteLine('OK')
+  } catch {
+    [Console]::Out.WriteLine('ERR ' + ($_.Exception.Message -replace '[\\r\\n]',' '))
   }
+  [Console]::Out.Flush()
+}`;
+  const encoded = Buffer.from(reader, 'utf16le').toString('base64');
+  const proc = spawn('powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+    { stdio: ['pipe', 'pipe', 'pipe'] });
+  proc._pending = [];
+  readline.createInterface({ input: proc.stdout }).on('line', (line) => {
+    const job = proc._pending.shift();
+    if (!job) return;
+    if (line.startsWith('OK')) job.resolve();
+    else job.reject(new Error(`Windows raw print failed: ${line.replace(/^ERR /, '')}`));
+  });
+  proc.stderr.on('data', (d) => console.warn('[winprint]', String(d).trim()));
+  const die = (err) => {
+    (proc._pending || []).forEach((j) => j.reject(err));
+    proc._pending = [];
+    if (_winPrintProc === proc) _winPrintProc = null;
+  };
+  proc.on('exit', (code) => die(new Error(`print helper exited (${code})`)));
+  proc.on('error', (e) => die(e));
+  _winPrintProc = proc;
+  return proc;
+}
+
+function _sendWindowsRaw(printerName, buf) {
+  return new Promise((resolve, reject) => {
+    const tmp = path.join(os.tmpdir(),
+      `siamepos-print-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.bin`);
+    fs.writeFile(tmp, buf).then(() => {
+      let proc;
+      try { proc = _getWinPrintProc(); } catch (e) { fs.unlink(tmp).catch(() => {}); return reject(e); }
+      const finish = (fn, arg) => { clearTimeout(timer); fs.unlink(tmp).catch(() => {}); fn(arg); };
+      const timer = setTimeout(() => {
+        try { proc.kill(); } catch (e) {} // respawn clean on next print
+        finish(reject, new Error('Windows raw print timed out'));
+      }, 15000);
+      proc._pending.push({ resolve: () => finish(resolve), reject: (e) => finish(reject, e) });
+      const b64 = (s) => Buffer.from(String(s), 'utf8').toString('base64');
+      try { proc.stdin.write(`${b64(printerName)} ${b64(tmp)}\n`); }
+      catch (e) { finish(reject, e); }
+    }).catch(reject);
+  });
 }
 
 // Send raw bytes to a printer addressed by NAME (no IP), per platform:

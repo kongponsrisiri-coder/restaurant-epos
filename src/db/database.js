@@ -102,6 +102,20 @@ async function initDB() {
       )
     `);
 
+    // SEPOS-059 — shared modifier library. A modifier_groups row with
+    // menu_item_id = NULL is a reusable "library" group (e.g. Meat choice,
+    // Spice level); this join links it to many dishes. Per-dish (legacy)
+    // groups keep their menu_item_id and still work — resolution UNIONs both.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS menu_item_modifier_groups (
+        id SERIAL PRIMARY KEY,
+        menu_item_id INTEGER REFERENCES menu_items(id) ON DELETE CASCADE,
+        group_id INTEGER REFERENCES modifier_groups(id) ON DELETE CASCADE,
+        sort_order INTEGER DEFAULT 0,
+        UNIQUE (menu_item_id, group_id)
+      )
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS orders (
         id SERIAL PRIMARY KEY,

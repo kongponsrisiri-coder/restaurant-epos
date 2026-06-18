@@ -92,6 +92,11 @@ export const addModifierGroup = (itemId, group) => post(`/api/menu/items/${itemI
 export const addModifierOption = (groupId, option) => post(`/api/modifier-groups/${groupId}/options`, option);
 export const deleteModifierGroup = (groupId) => del(`/api/modifier-groups/${groupId}`);
 export const deleteModifier = (modifierId) => del(`/api/modifiers/${modifierId}`);
+// SEPOS-059 — shared modifier library: reusable groups attached to many dishes.
+export const getModifierLibrary  = () => get('/api/modifier-library');
+export const createLibraryGroup  = (group) => post('/api/modifier-library', group);
+export const attachGroupToItem   = (itemId, groupId) => post(`/api/menu/items/${itemId}/modifier-groups/${groupId}`, {});
+export const detachGroupFromItem = (itemId, groupId) => del(`/api/menu/items/${itemId}/modifier-groups/${groupId}`);
 export const voidItem = (itemId, reason, quantity, void_type) => {
   const body = { reason };
   if (quantity)  body.quantity  = quantity;

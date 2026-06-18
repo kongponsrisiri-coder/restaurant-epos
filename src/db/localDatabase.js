@@ -88,6 +88,15 @@ function initSchema() {
       is_available INTEGER DEFAULT 1
     );
 
+    -- SEPOS-059 — shared modifier library link (see database.js for rationale)
+    CREATE TABLE IF NOT EXISTS menu_item_modifier_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      menu_item_id INTEGER REFERENCES menu_items(id) ON DELETE CASCADE,
+      group_id INTEGER REFERENCES modifier_groups(id) ON DELETE CASCADE,
+      sort_order INTEGER DEFAULT 0,
+      UNIQUE (menu_item_id, group_id)
+    );
+
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       table_id INTEGER REFERENCES tables(id) ON DELETE SET NULL,

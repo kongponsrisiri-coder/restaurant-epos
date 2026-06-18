@@ -563,7 +563,14 @@ app.put('/api/menu/items/:id', async (req, res) => {
 
 app.get('/api/menu/items/:id/modifiers', async (req, res) => {
   try {
-    const groupRes = await pool.query('SELECT * FROM modifier_groups WHERE menu_item_id = $1', [req.params.id]);
+    // SEPOS-059 — resolve BOTH per-dish (legacy) groups AND attached library
+    // groups (shared, linked via menu_item_modifier_groups). A library group
+    // is reusable, so the same group id can appear on many dishes.
+    const groupRes = await pool.query(
+      `SELECT * FROM modifier_groups
+        WHERE menu_item_id = $1
+           OR id IN (SELECT group_id FROM menu_item_modifier_groups WHERE menu_item_id = $1)
+        ORDER BY id`, [req.params.id]);
     if (groupRes.rows.length === 0) return res.json([]);
     const groupsWithMods = await Promise.all(groupRes.rows.map(async group => {
       const modRes = await pool.query('SELECT * FROM modifiers WHERE group_id = $1 AND is_available = 1', [group.id]);
@@ -574,6 +581,7 @@ app.get('/api/menu/items/:id/modifiers', async (req, res) => {
 });
 
 app.post('/api/menu/items/:id/modifiers', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     const { name, required, multi_select } = req.body;
     const result = await pool.query(
@@ -585,6 +593,7 @@ app.post('/api/menu/items/:id/modifiers', async (req, res) => {
 });
 
 app.post('/api/modifier-groups/:id/options', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     const { name, extra_price } = req.body;
     const result = await pool.query('INSERT INTO modifiers (group_id, name, extra_price) VALUES ($1,$2,$3) RETURNING id', [req.params.id, name, extra_price || 0]);
@@ -593,6 +602,7 @@ app.post('/api/modifier-groups/:id/options', async (req, res) => {
 });
 
 app.delete('/api/modifier-groups/:id', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     await pool.query('DELETE FROM modifiers WHERE group_id = $1', [req.params.id]);
     await pool.query('DELETE FROM modifier_groups WHERE id = $1', [req.params.id]);
@@ -601,10 +611,77 @@ app.delete('/api/modifier-groups/:id', async (req, res) => {
 });
 
 app.delete('/api/modifiers/:id', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     await pool.query('DELETE FROM modifiers WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── SEPOS-059 — Shared Modifier Library ───────────────────────────────────
+// Reusable option groups (Meat choice, Spice level…) defined once and
+// attached to many dishes. A library group is a modifier_groups row with
+// menu_item_id = NULL; menu_item_modifier_groups links it to dishes.
+
+// All shared (library) groups + their options.
+app.get('/api/modifier-library', async (req, res) => {
+  try {
+    const groupRes = await pool.query('SELECT * FROM modifier_groups WHERE menu_item_id IS NULL ORDER BY id');
+    const groups = await Promise.all(groupRes.rows.map(async group => {
+      const modRes = await pool.query('SELECT * FROM modifiers WHERE group_id = $1 ORDER BY id', [group.id]);
+      return { ...group, modifiers: modRes.rows };
+    }));
+    res.json(groups);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Create a shared (library) group — menu_item_id stays NULL.
+app.post('/api/modifier-library', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  try {
+    const { name, required, multi_select } = req.body;
+    const result = await pool.query(
+      'INSERT INTO modifier_groups (menu_item_id, name, required, multi_select) VALUES (NULL,$1,$2,$3) RETURNING id',
+      [name, required ? 1 : 0, multi_select ? 1 : 0]);
+    res.json({ id: result.rows[0].id, success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Attach / detach a library group to/from a dish.
+app.post('/api/menu/items/:id/modifier-groups/:groupId', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  try {
+    await pool.query(
+      `INSERT INTO menu_item_modifier_groups (menu_item_id, group_id) VALUES ($1,$2)
+       ON CONFLICT (menu_item_id, group_id) DO NOTHING`,
+      [req.params.id, req.params.groupId]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/menu/items/:id/modifier-groups/:groupId', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  try {
+    await pool.query('DELETE FROM menu_item_modifier_groups WHERE menu_item_id = $1 AND group_id = $2',
+      [req.params.id, req.params.groupId]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Flat feeds for desktop sync (cloud-wins upsert). Pulling shared groups +
+// the join lets the till resolve identically to cloud (the old per-item pull
+// duplicated a shared group id across dishes and lost all but the last).
+app.get('/api/modifier-groups-all', async (req, res) => {
+  try { res.json((await pool.query('SELECT * FROM modifier_groups')).rows); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.get('/api/modifiers-all', async (req, res) => {
+  try { res.json((await pool.query('SELECT * FROM modifiers')).rows); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.get('/api/menu-item-modifier-groups', async (req, res) => {
+  try { res.json((await pool.query('SELECT * FROM menu_item_modifier_groups')).rows); }
+  catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.delete('/api/menu/items/:id', async (req, res) => {

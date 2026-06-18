@@ -54,6 +54,14 @@ const PULL_TABLES = [
   { path: '/api/batches',                table: 'batches',                pk: 'id' },
   { path: '/api/recipes',                table: 'recipes',                pk: 'id' },
   { path: '/api/recipe-lines',           table: 'recipe_lines',           pk: 'id' },
+  // SEPOS-059 — shared modifier library. Pull modifier_groups (incl. shared
+  // NULL-menu_item_id groups), all options, and the dish↔group join as flat
+  // cloud-wins tables so the till resolves item modifiers identically to the
+  // cloud. Replaces the old per-item modifier pull (which lost a shared group
+  // on all but the last dish it was attached to).
+  { path: '/api/modifier-groups-all',        table: 'modifier_groups',           pk: 'id' },
+  { path: '/api/modifiers-all',              table: 'modifiers',                 pk: 'id' },
+  { path: '/api/menu-item-modifier-groups',  table: 'menu_item_modifier_groups', pk: 'id' },
   // SEPOS-046ac — Cost & Sales expenses, same cloud-authoritative pull as
   // the rest of the inventory family.
   { path: '/api/expenses',               table: 'expenses',               pk: 'id' },
@@ -549,11 +557,10 @@ async function pullFromCloud() {
   // SEPOS-047k — staff via the gated feed (needs pins; see pullStaff).
   await pullStaff();
 
-  // Nested menu tree + modifier subtree.
-  const itemIds = await pullMenuTree();
-  if (itemIds.length > 0) {
-    await pullModifiersForMenuItems(itemIds);
-  }
+  // Nested menu tree (categories + items). Modifiers + the shared library
+  // (groups, options, dish↔group join) now sync as flat cloud-wins tables in
+  // PULL_TABLES (SEPOS-059), so there's no per-item modifier pull here.
+  await pullMenuTree();
 
   // Closed orders + items + payments — gated by SYNC_SECRET.
   await pullClosedOrders();

@@ -4,6 +4,7 @@ import {
   getAllMenu as getMenu, addMenuItem, updateMenuItem, deleteMenuItem,
   getItemModifiers, addModifierGroup, addModifierOption,
   deleteModifierGroup, deleteModifier,
+  getModifierLibrary, createLibraryGroup, attachGroupToItem, detachGroupFromItem,
   getSubcategories, addSubcategory, deleteSubcategory, updateCategory, deleteCategory,
   updateCategoryBar, updateCategorySortOrder, updateSubcategorySortOrder,
   addCategory, updateCategoryDefaultCourse,
@@ -142,6 +143,7 @@ export default function MenuSection() {
   const [form, setForm]                     = useState({ name: '', name_alt: '', description: '', price: '', category_id: '', subcategory_id: null });
   const [modifierItem, setModifierItem]     = useState(null);
   const [modifiers, setModifiers]           = useState([]);
+  const [library, setLibrary]               = useState([]);  // SEPOS-059 reusable groups
   const [newGroup, setNewGroup]             = useState({ name: '', required: true, multi_select: false });
   const [newOption, setNewOption]           = useState({ name: '', extra_price: '' });
   const [activeGroup, setActiveGroup]       = useState(null);
@@ -244,9 +246,28 @@ export default function MenuSection() {
     try { assertOk(await updateMenuItem(item.id, { ...item, is_online: next })); }
     catch (err) { alert('Could not update — check connection.'); fetchMenu(); }
   };
-  const openModifiers   = async (item) => { setModifierItem(item); setActiveGroup(null); const data = await getItemModifiers(item.id); setModifiers(data); };
-  const handleAddGroup  = async () => { if (!newGroup.name) return alert('Group name is required!'); await addModifierGroup(modifierItem.id, newGroup); setNewGroup({ name: '', required: true, multi_select: false }); setModifiers(await getItemModifiers(modifierItem.id)); };
-  const handleAddOption = async () => { if (!newOption.name) return alert('Option name is required!'); await addModifierOption(activeGroup, { name: newOption.name, extra_price: newOption.extra_price || 0 }); setNewOption({ name: '', extra_price: '' }); setModifiers(await getItemModifiers(modifierItem.id)); };
+  const openModifiers   = async (item) => { setModifierItem(item); setActiveGroup(null); const [data, lib] = await Promise.all([getItemModifiers(item.id), getModifierLibrary()]); setModifiers(data); setLibrary(Array.isArray(lib) ? lib : []); };
+  const refreshModifiers = async () => { const [data, lib] = await Promise.all([getItemModifiers(modifierItem.id), getModifierLibrary()]); setModifiers(data); setLibrary(Array.isArray(lib) ? lib : []); };
+  // SEPOS-059 — create a reusable (library) group and auto-attach to this dish,
+  // or a one-off dish-specific group, depending on the "Reusable" tick.
+  const handleAddGroup  = async () => {
+    if (!newGroup.name) return alert('Group name is required!');
+    if (newGroup.shared) {
+      const r = await createLibraryGroup({ name: newGroup.name, required: newGroup.required, multi_select: newGroup.multi_select });
+      if (r?.id) await attachGroupToItem(modifierItem.id, r.id);
+    } else {
+      await addModifierGroup(modifierItem.id, newGroup);
+    }
+    setNewGroup({ name: '', required: true, multi_select: false, shared: false });
+    await refreshModifiers();
+  };
+  // Tick/untick a library group for this dish (attach/detach the link).
+  const toggleLibrary = async (groupId, attached) => {
+    if (attached) await detachGroupFromItem(modifierItem.id, groupId);
+    else await attachGroupToItem(modifierItem.id, groupId);
+    await refreshModifiers();
+  };
+  const handleAddOption = async () => { if (!newOption.name) return alert('Option name is required!'); await addModifierOption(activeGroup, { name: newOption.name, extra_price: newOption.extra_price || 0 }); setNewOption({ name: '', extra_price: '' }); await refreshModifiers(); };
   const handleDeleteGroup  = async (groupId) => { if (!confirm('Delete this group and all its options?')) return; await deleteModifierGroup(groupId); setModifiers(await getItemModifiers(modifierItem.id)); if (activeGroup === groupId) setActiveGroup(null); };
   const handleDeleteOption = async (optionId) => { await deleteModifier(optionId); setModifiers(await getItemModifiers(modifierItem.id)); };
 
@@ -575,17 +596,29 @@ export default function MenuSection() {
             {modifiers.map(group => (
               <div key={group.id} style={{ background: '#f8f8f8', borderRadius: 12, padding: 16, marginBottom: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <div><span style={{ fontWeight: 700, fontSize: 15 }}>{group.name}</span><span style={{ marginLeft: 8, fontSize: 12, color: '#888' }}>{group.required ? 'Required' : 'Optional'} · {group.multi_select ? 'Multi' : 'Pick one'}</span></div>
-                  <div style={{ display: 'flex', gap: 6 }}><button onClick={() => setActiveGroup(activeGroup === group.id ? null : group.id)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#1a1a2e', color: 'white', fontSize: 12, fontWeight: 600 }}>+ Add option</button><button onClick={() => handleDeleteGroup(group.id)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#fee2e2', color: '#991b1b', fontSize: 12, fontWeight: 600 }}>Delete</button></div>
+                  <div><span style={{ fontWeight: 700, fontSize: 15 }}>{group.name}</span>{group.menu_item_id == null && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, background: '#e0e7ff', color: '#3730a3', padding: '2px 6px', borderRadius: 4 }}>♻️ SHARED</span>}<span style={{ marginLeft: 8, fontSize: 12, color: '#888' }}>{group.required ? 'Required' : 'Optional'} · {group.multi_select ? 'Multi' : 'Pick one'}</span></div>
+                  <div style={{ display: 'flex', gap: 6 }}><button onClick={() => setActiveGroup(activeGroup === group.id ? null : group.id)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#1a1a2e', color: 'white', fontSize: 12, fontWeight: 600 }}>+ Add option</button>{group.menu_item_id == null ? <button onClick={() => toggleLibrary(group.id, true)} title="Remove from this dish (keeps the shared group for other dishes)" style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#fde68a', color: '#713f12', fontSize: 12, fontWeight: 600 }}>Remove</button> : <button onClick={() => handleDeleteGroup(group.id)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#fee2e2', color: '#991b1b', fontSize: 12, fontWeight: 600 }}>Delete</button>}</div>
                 </div>
                 {group.modifiers?.map(opt => (<div key={opt.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderTop: '1px solid #eee' }}><span style={{ fontSize: 14 }}>{opt.name} {opt.extra_price > 0 && <span style={{ color: '#e94560' }}>+£{Number(opt.extra_price).toFixed(2)}</span>}</span><button onClick={() => handleDeleteOption(opt.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 18 }}>×</button></div>))}
                 {activeGroup === group.id && (<div style={{ display: 'flex', gap: 8, marginTop: 10 }}><input value={newOption.name} onChange={e => setNewOption({ ...newOption, name: e.target.value })} placeholder="Option name" style={{ flex: 2, padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }} /><input value={newOption.extra_price} onChange={e => setNewOption({ ...newOption, extra_price: e.target.value })} placeholder="+£ extra" type="number" step="0.01" style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }} /><button onClick={handleAddOption} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 600 }}>Add</button></div>)}
               </div>
             ))}
+            {library.filter(g => !modifiers.some(m => m.id === g.id)).length > 0 && (
+              <div style={{ background: '#eef2ff', borderRadius: 12, padding: 16, marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>♻️ Add a shared group</div>
+                <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>Reusable groups you defined once. Tick to use on this dish — edit the group once and every dish updates.</div>
+                {library.filter(g => !modifiers.some(m => m.id === g.id)).map(g => (
+                  <label key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer', fontSize: 13 }}>
+                    <input type="checkbox" checked={false} onChange={() => toggleLibrary(g.id, false)} />
+                    <span><strong>{g.name}</strong> <span style={{ color: '#888' }}>({g.required ? 'Required' : 'Optional'}, {g.multi_select ? 'multi' : 'pick one'})</span> — {(g.modifiers || []).map(o => o.name).join(', ') || 'no options yet'}</span>
+                  </label>
+                ))}
+              </div>
+            )}
             <div style={{ background: '#f0f7ff', borderRadius: 12, padding: 16, marginTop: 8 }}>
               <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>Add new option group</div>
               <input value={newGroup.name} onChange={e => setNewGroup({ ...newGroup, name: e.target.value })} placeholder="e.g. Choose Meat" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box', marginBottom: 10 }} />
-              <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}><label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={newGroup.required} onChange={e => setNewGroup({ ...newGroup, required: e.target.checked })} /> Required</label><label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={newGroup.multi_select} onChange={e => setNewGroup({ ...newGroup, multi_select: e.target.checked })} /> Allow multiple</label></div>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}><label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={newGroup.required} onChange={e => setNewGroup({ ...newGroup, required: e.target.checked })} /> Required</label><label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={newGroup.multi_select} onChange={e => setNewGroup({ ...newGroup, multi_select: e.target.checked })} /> Allow multiple</label><label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: '#3730a3', fontWeight: 600 }} title="Save to the shared library so you can reuse it on other dishes"><input type="checkbox" checked={newGroup.shared || false} onChange={e => setNewGroup({ ...newGroup, shared: e.target.checked })} /> ♻️ Reusable</label></div>
               <button onClick={handleAddGroup} style={{ width: '100%', padding: '10px', borderRadius: 8, border: 'none', background: '#1a1a2e', color: 'white', cursor: 'pointer', fontWeight: 600 }}>Create Group</button>
             </div>
           </div>

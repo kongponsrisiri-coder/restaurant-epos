@@ -31,9 +31,18 @@ let _settingsCache   = null;
 let _settingsFetched = false;
 async function getCachedSettings() {
   if (_settingsFetched) return _settingsCache;
-  try { _settingsCache = await getSettings(); } catch {}
-  _settingsFetched = true;
-  setTimeout(() => { _settingsFetched = false; }, 60000);
+  let result = null;
+  try { result = await getSettings(); } catch {}
+  // M4 fix — only cache a GOOD result. api.js resolves with {error} on an HTTP
+  // failure (it does NOT throw), so a transient 500 would otherwise poison the
+  // cache with a useless object for 60s and every kitchen ticket in that window
+  // would print with no printer settings. On failure leave the cache untouched
+  // and let the next print retry.
+  if (result && typeof result === 'object' && !result.error) {
+    _settingsCache = result;
+    _settingsFetched = true;
+    setTimeout(() => { _settingsFetched = false; }, 60000);
+  }
   return _settingsCache;
 }
 

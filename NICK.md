@@ -61,6 +61,37 @@ This distinction is critical and must be maintained in every document, ticket, a
 
 ---
 
+## THE ERP POSITIONING — KEY INVESTOR & SALES FRAMING (added 2026-06-18)
+
+**The headline:** *"The ERP built for Thai businesses in the UK — at SaaS prices."*
+
+SiamEPOS is not a POS system. Look at what it actually covers across all three products:
+
+| Module | What it covers |
+|--------|---------------|
+| SiamEPOS | Sales, orders, kitchen, tables, floor plan |
+| SiamSpa | Bookings, staff, treatments, service management |
+| SiamShop | Product catalogue, orders, stock, e-commerce |
+| SiamPay (Phase 2) | Integrated payments across all three |
+| Inventory | Ingredients, recipes, supplier invoices, stock levels |
+| CRM | Customer database, campaigns, loyalty, GDPR |
+| Staff | Clock in/out, performance, wages, role tiers |
+| Reports | VAT, Z reports, sales vs cost, wastage |
+
+That is an ERP — a fully integrated business operating system.
+SAP and Oracle charge £50,000+ to implement and take years to roll out.
+SiamEPOS costs £89/month and sets up in an afternoon.
+
+**Use this framing for:**
+- Investor pitches and the business plan
+- Press and PR
+- Sales calls to restaurant/spa/supermarket owners
+- Any document where you need to justify price or scope
+
+**Do NOT lead with "POS system" in any investor-facing document.** Lead with the platform breadth. The valuation multiple on an ERP platform is higher than on a POS tool.
+
+---
+
 ## COMPANY & LEGAL STATUS
 
 | Item | Detail |

@@ -798,14 +798,24 @@ const _WIN_RAW_CSHARP = [
 // one outstanding response at a time. Self-heals: if the process dies or a
 // job hangs, it's respawned on the next print.
 let _winPrintProc = null;
+let _winJobSeq = 0;
 
 function _getWinPrintProc() {
-  if (_winPrintProc) return _winPrintProc;
+  // C2 fix — only reuse a verifiably-alive helper. A proc that has exited or is
+  // mid-close still lingers in _winPrintProc until its 'exit' event fires; a job
+  // grabbing it would write to a dead stdin and EPIPE (a silently lost ticket).
+  if (_winPrintProc && _winPrintProc.exitCode === null && !_winPrintProc.killed
+      && _winPrintProc.stdin && _winPrintProc.stdin.writable) {
+    return _winPrintProc;
+  }
+  if (_winPrintProc) { try { _winPrintProc.kill(); } catch (e) {} _winPrintProc = null; }
   const { spawn } = require('child_process');
   const readline = require('readline');
-  // Reads "<base64 printerName> <base64 filepath>" lines; prints each via the
-  // RawPrinter helper; replies "OK" or "ERR <msg>" per line. base64 avoids any
-  // quoting/space issues in printer names or temp paths.
+  // Reads "<id> <base64 printerName> <base64 filepath>" lines; prints each via
+  // the RawPrinter helper; replies "<id> OK" or "<id> ERR <msg>". C1 fix — the
+  // id lets us match each reply to its exact job (Map lookup) instead of a blind
+  // FIFO shift; a timed-out / write-failed job can no longer desync the queue and
+  // mis-pair every later reply. base64 avoids quoting/space issues in names/paths.
   const reader = `$ErrorActionPreference='Stop'
 Add-Type -TypeDefinition @'
 ${_WIN_RAW_CSHARP}
@@ -814,14 +824,15 @@ while ($true) {
   $line = [Console]::In.ReadLine()
   if ($null -eq $line) { break }
   if ($line.Trim() -eq '') { continue }
+  $p = $line.Split(' ')
+  $id = $p[0]
   try {
-    $p = $line.Split(' ')
-    $name = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p[0]))
-    $path = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p[1]))
+    $name = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p[1]))
+    $path = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p[2]))
     [SiamEposRawPrinter]::Send($name, $path)
-    [Console]::Out.WriteLine('OK')
+    [Console]::Out.WriteLine($id + ' OK')
   } catch {
-    [Console]::Out.WriteLine('ERR ' + ($_.Exception.Message -replace '[\\r\\n]',' '))
+    [Console]::Out.WriteLine($id + ' ERR ' + ($_.Exception.Message -replace '[\\r\\n]',' '))
   }
   [Console]::Out.Flush()
 }`;
@@ -829,17 +840,21 @@ while ($true) {
   const proc = spawn('powershell.exe',
     ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
     { stdio: ['pipe', 'pipe', 'pipe'] });
-  proc._pending = [];
+  proc._jobs = new Map(); // id → { resolve, reject }
   readline.createInterface({ input: proc.stdout }).on('line', (line) => {
-    const job = proc._pending.shift();
-    if (!job) return;
-    if (line.startsWith('OK')) job.resolve();
-    else job.reject(new Error(`Windows raw print failed: ${line.replace(/^ERR /, '')}`));
+    const sp = line.indexOf(' ');
+    const id = sp === -1 ? line : line.slice(0, sp);
+    const rest = sp === -1 ? '' : line.slice(sp + 1);
+    const job = proc._jobs.get(id);
+    if (!job) return; // unknown / late reply for an already-settled job — ignore
+    proc._jobs.delete(id);
+    if (rest.startsWith('OK')) job.resolve();
+    else job.reject(new Error(`Windows raw print failed: ${rest.replace(/^ERR /, '')}`));
   });
   proc.stderr.on('data', (d) => console.warn('[winprint]', String(d).trim()));
   const die = (err) => {
-    (proc._pending || []).forEach((j) => j.reject(err));
-    proc._pending = [];
+    for (const job of proc._jobs.values()) job.reject(err);
+    proc._jobs.clear();
     if (_winPrintProc === proc) _winPrintProc = null;
   };
   proc.on('exit', (code) => die(new Error(`print helper exited (${code})`)));
@@ -855,14 +870,26 @@ function _sendWindowsRaw(printerName, buf) {
     fs.writeFile(tmp, buf).then(() => {
       let proc;
       try { proc = _getWinPrintProc(); } catch (e) { fs.unlink(tmp).catch(() => {}); return reject(e); }
-      const finish = (fn, arg) => { clearTimeout(timer); fs.unlink(tmp).catch(() => {}); fn(arg); };
+      const id = String(++_winJobSeq);
+      let settled = false;
+      const finish = (fn, arg) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        proc._jobs.delete(id);
+        fs.unlink(tmp).catch(() => {});
+        fn(arg);
+      };
       const timer = setTimeout(() => {
-        try { proc.kill(); } catch (e) {} // respawn clean on next print
+        // Abort a hung Send by respawning; die() rejects every still-pending job
+        // (now safe — matched by id, no desync). Drop our slot first.
+        proc._jobs.delete(id);
+        try { proc.kill(); } catch (e) {}
         finish(reject, new Error('Windows raw print timed out'));
       }, 15000);
-      proc._pending.push({ resolve: () => finish(resolve), reject: (e) => finish(reject, e) });
+      proc._jobs.set(id, { resolve: () => finish(resolve), reject: (e) => finish(reject, e) });
       const b64 = (s) => Buffer.from(String(s), 'utf8').toString('base64');
-      try { proc.stdin.write(`${b64(printerName)} ${b64(tmp)}\n`); }
+      try { proc.stdin.write(`${id} ${b64(printerName)} ${b64(tmp)}\n`); }
       catch (e) { finish(reject, e); }
     }).catch(reject);
   });

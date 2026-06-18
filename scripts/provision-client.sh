@@ -41,6 +41,7 @@ read -p "Owner email:                                " OWNER_EMAIL
 read -p "Owner password (min 8 chars):               " -s OWNER_PASSWORD
 echo ""
 read -p "Owner name:                                 " OWNER_NAME
+read -p "Owner till PIN (4-6 digits, blank=auto):    " OWNER_PIN
 echo ""
 echo "Plan options: lite_booking | lite_ordering | lite_bundle | pro"
 read -p "Plan:                                       " PLAN
@@ -51,6 +52,11 @@ read -p "Restaurant email (public-facing):           " RESTAURANT_EMAIL
 # Validate slug
 if [[ ! "$SLUG" =~ ^[a-z0-9-]+$ ]]; then
   err "Slug must be lowercase letters, numbers and hyphens only (e.g. baan-siam)"
+fi
+
+# Validate owner PIN (optional — blank lets the backend auto-allocate a free one)
+if [[ -n "$OWNER_PIN" && ! "$OWNER_PIN" =~ ^[0-9]{4,6}$ ]]; then
+  err "Owner till PIN must be 4-6 digits (or left blank)"
 fi
 
 # Validate plan
@@ -81,6 +87,7 @@ log "Railway CLI ready"
 JWT_SECRET=$(openssl rand -hex 32)
 AUTH_SECRET=$(openssl rand -hex 32)
 SYNC_SECRET=$(openssl rand -hex 32)
+UNSUB_SECRET=$(openssl rand -hex 32)   # HMAC for unsubscribe links (insecure default otherwise)
 log "Secrets generated"
 
 # ── 4. Manual Railway dashboard steps ────────────────────────────────────────
@@ -109,20 +116,26 @@ log "Railway CLI linked"
 # ── 6. Set environment variables ─────────────────────────────────────────────
 info "Setting environment variables on ${SERVICE_NAME}..."
 
-railway variables set \
-  NODE_ENV=production \
-  RESTAURANT_ID="$SLUG" \
-  RESTAURANT_NAME="$RESTAURANT_NAME" \
-  RESTAURANT_EMAIL="$RESTAURANT_EMAIL" \
-  RESTAURANT_ADDRESS="$RESTAURANT_ADDRESS" \
-  RESTAURANT_PHONE="$RESTAURANT_PHONE" \
-  JWT_SECRET="$JWT_SECRET" \
-  AUTH_SECRET="$AUTH_SECRET" \
-  SYNC_SECRET="$SYNC_SECRET" \
-  PUBLIC_API_URL="https://${SUBDOMAIN}" \
-  STUART_ENV=production \
-  DELIVEROO_ENV=production \
-  UBER_DIRECT_ENV=production
+# Railway CLI v4 takes each var as a separate --set flag (the old positional
+# `railway variables set KEY=val …` form was removed). TZ=Europe/London is
+# essential — Railway containers default to UTC and HH:MM booking-slot checks
+# come out 1h off during BST without it.
+railway variables \
+  --set "NODE_ENV=production" \
+  --set "TZ=Europe/London" \
+  --set "RESTAURANT_ID=$SLUG" \
+  --set "RESTAURANT_NAME=$RESTAURANT_NAME" \
+  --set "RESTAURANT_EMAIL=$RESTAURANT_EMAIL" \
+  --set "RESTAURANT_ADDRESS=$RESTAURANT_ADDRESS" \
+  --set "RESTAURANT_PHONE=$RESTAURANT_PHONE" \
+  --set "JWT_SECRET=$JWT_SECRET" \
+  --set "AUTH_SECRET=$AUTH_SECRET" \
+  --set "SYNC_SECRET=$SYNC_SECRET" \
+  --set "UNSUB_SECRET=$UNSUB_SECRET" \
+  --set "PUBLIC_API_URL=https://${SUBDOMAIN}" \
+  --set "STUART_ENV=production" \
+  --set "DELIVEROO_ENV=production" \
+  --set "UBER_DIRECT_ENV=production"
 
 log "Environment variables set"
 
@@ -168,10 +181,13 @@ info "Creating owner login (${OWNER_EMAIL})..."
 SEED_RESPONSE=$(curl -s -X POST "${DEPLOY_URL}/api/auth/set-credentials" \
   -H "Content-Type: application/json" \
   -H "X-Setup-Secret: ${AUTH_SECRET}" \
-  -d "{\"email\":\"${OWNER_EMAIL}\",\"password\":\"${OWNER_PASSWORD}\",\"name\":\"${OWNER_NAME}\"}")
+  -d "{\"email\":\"${OWNER_EMAIL}\",\"password\":\"${OWNER_PASSWORD}\",\"name\":\"${OWNER_NAME}\",\"pin\":\"${OWNER_PIN}\"}")
 
 if echo "$SEED_RESPONSE" | grep -q '"id"'; then
-  log "Owner login created"
+  # The backend echoes the PIN it actually set (the one we sent, or an
+  # auto-allocated free one). The owner needs this to log into the till.
+  ASSIGNED_PIN=$(echo "$SEED_RESPONSE" | sed -n 's/.*"pin":"\([0-9]*\)".*/\1/p')
+  log "Owner login created — till PIN: ${ASSIGNED_PIN:-<see response>}"
 else
   warn "set-credentials returned: ${SEED_RESPONSE}"
   warn "You may need to run this manually once the service is live"

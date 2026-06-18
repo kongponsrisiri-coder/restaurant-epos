@@ -59,9 +59,9 @@ const PULL_TABLES = [
   // cloud-wins tables so the till resolves item modifiers identically to the
   // cloud. Replaces the old per-item modifier pull (which lost a shared group
   // on all but the last dish it was attached to).
-  { path: '/api/modifier-groups-all',        table: 'modifier_groups',           pk: 'id' },
-  { path: '/api/modifiers-all',              table: 'modifiers',                 pk: 'id' },
-  { path: '/api/menu-item-modifier-groups',  table: 'menu_item_modifier_groups', pk: 'id' },
+  { path: '/api/modifier-groups-all',        table: 'modifier_groups',           pk: 'id', orphan: true },
+  { path: '/api/modifiers-all',              table: 'modifiers',                 pk: 'id', orphan: true },
+  { path: '/api/menu-item-modifier-groups',  table: 'menu_item_modifier_groups', pk: 'id', orphan: true },
   // SEPOS-046ac — Cost & Sales expenses, same cloud-authoritative pull as
   // the rest of the inventory family.
   { path: '/api/expenses',               table: 'expenses',               pk: 'id' },
@@ -546,9 +546,24 @@ async function pullFromCloud() {
         continue;
       }
       const rows = await r.json();
-      const list = Array.isArray(rows) ? rows : (rows?.data || []);
+      // SEPOS-060 fix — GET /api/settings returns an OBJECT {key:value}, not an
+      // array, so the old `Array.isArray ? rows : rows?.data || []` discarded it
+      // every tick and settings (printer IP, Thai codepage, service charge…)
+      // never reached a freshly-provisioned till. Map the object to rows.
+      const list = Array.isArray(rows) ? rows
+        : ep.table === 'settings' ? Object.entries(rows || {}).map(([key, value]) => ({ key, value }))
+        : (rows?.data || []);
       const n = await upsertRows(ep.table, ep.pk, list);
       if (n > 0) console.log(`[sync] pull ${ep.table}: ${n} rows`);
+      // SEPOS-059 fix — cloud-wins DELETE for flagged flat tables (the modifier
+      // library). The pull was upsert-only, so a group/option/link deleted or
+      // detached on cloud lingered on the till forever. Gated on r.ok (checked
+      // above) so a transient failure never wipes local; an empty 200 list
+      // legitimately means "cloud has none" → remove all local.
+      if (ep.orphan && ep.pk === 'id') {
+        const removed = await deleteOrphans(ep.table, list.map((row) => row.id));
+        if (removed > 0) console.log(`[sync] orphan-delete ${ep.table}: ${removed} rows`);
+      }
     } catch (err) {
       console.warn(`[sync] pull ${ep.path} failed:`, err.message);
     }

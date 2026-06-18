@@ -1315,20 +1315,34 @@ app.post('/api/auth/set-credentials', async (req, res) => {
     if ((req.get('X-Setup-Secret') || '') !== AUTH_SECRET) {
       return res.status(403).json({ error: 'Forbidden' });
     }
-    const { email, password, name } = req.body || {};
+    const { email, password, name, pin } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
     const clean = String(email).trim();
     const hash = hashPassword(password);
-    const existing = await pool.query(`SELECT id FROM staff WHERE LOWER(email) = LOWER($1)`, [clean]);
+    // SEPOS-054 fix — the owner MUST carry a PIN. The till's local staff.pin is
+    // NOT NULL and PIN login keys on it, so a pin-less owner row silently never
+    // syncs to a freshly-provisioned till (this blocked Chart Thai's first
+    // login). Use the PIN the provisioner passed, else allocate a free one.
+    const requestedPin = pin != null ? String(pin).replace(/\D/g, '').slice(0, 6) : '';
+    const freePin = async () => {
+      const used = await pool.query(`SELECT pin FROM staff WHERE pin IS NOT NULL`);
+      const taken = new Set(used.rows.map((r) => String(r.pin)));
+      for (let p = 1234; p <= 9999; p++) { const s = String(p); if (!taken.has(s)) return s; }
+      for (let p = 1000; p < 1234; p++) { const s = String(p); if (!taken.has(s)) return s; }
+      return null;
+    };
+    const existing = await pool.query(`SELECT id, pin FROM staff WHERE LOWER(email) = LOWER($1)`, [clean]);
     if (existing.rows[0]) {
-      await pool.query(`UPDATE staff SET password_hash = $1, is_active = 1 WHERE id = $2`, [hash, existing.rows[0].id]);
-      return res.json({ id: existing.rows[0].id, updated: true });
+      const ownerPin = requestedPin || existing.rows[0].pin || (await freePin());
+      await pool.query(`UPDATE staff SET password_hash = $1, is_active = 1, pin = $2 WHERE id = $3`, [hash, ownerPin, existing.rows[0].id]);
+      return res.json({ id: existing.rows[0].id, updated: true, pin: ownerPin });
     }
+    const ownerPin = requestedPin || (await freePin());
     const ins = await pool.query(
-      `INSERT INTO staff (name, role, email, password_hash, is_active) VALUES ($1, 'admin', $2, $3, 1) RETURNING id`,
-      [name || 'Owner', clean, hash]
+      `INSERT INTO staff (name, pin, role, email, password_hash, is_active) VALUES ($1, $2, 'admin', $3, $4, 1) RETURNING id`,
+      [name || 'Owner', ownerPin, clean, hash]
     );
-    res.json({ id: ins.rows[0].id, created: true });
+    res.json({ id: ins.rows[0].id, created: true, pin: ownerPin });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1437,6 +1451,31 @@ function planForPriceId(priceId) {
   return hit ? hit[0] : null;
 }
 
+// SEPOS-060 fix — map Stripe's subscription.status to our internal
+// restaurants.status that requireActiveSubscription understands. The webhook
+// used to hard-code 'active' for every subscription.updated event, so a
+// past_due/canceled sub stayed 'active' and the gate never fired. Note Stripe
+// spells it 'canceled' (one L) → our blocking status is 'churned'. Unknown
+// states fail OPEN (treated active) so a paying client is never wrongly locked.
+function mapStripeStatus(s) {
+  switch (String(s || '').toLowerCase()) {
+    case 'active':
+    case 'trialing':
+      return 'active';
+    case 'past_due':
+    case 'unpaid':
+    case 'incomplete':
+      return 'past_due';       // serve + warning, grace window — no hard lock
+    case 'canceled':
+    case 'incomplete_expired':
+      return 'churned';        // blocked by the gate
+    case 'paused':
+      return 'suspended';      // blocked by the gate
+    default:
+      return 'active';
+  }
+}
+
 // Resolve which restaurant a Stripe object belongs to. The Lite checkout
 // stamps subscription_data.metadata.restaurant_id, so events usually
 // carry it; otherwise fall back to the Stripe customer / subscription id
@@ -1489,19 +1528,22 @@ app.post('/api/stripe/webhook', async (req, res) => {
         } else if (!plan) {
           console.warn(`[stripe] ${event.type}: price not mapped to a plan for ${rid}`);
         } else {
+          // Map Stripe's status to our internal status (active/past_due/
+          // churned/suspended) so the subscription gate actually fires.
+          const mappedStatus = mapStripeStatus(sub.status);
           // A recovered subscription (back to active) clears any earlier
           // payment-failure flag.
-          const clearFailure = sub.status === 'active' ? ', payment_failed_at = NULL' : '';
+          const clearFailure = mappedStatus === 'active' ? ', payment_failed_at = NULL' : '';
           await pool.query(
             `UPDATE restaurants
                 SET plan = $1,
-                    status = 'active',
-                    stripe_customer_id = $2,
-                    stripe_subscription_id = $3${clearFailure}
-              WHERE restaurant_id = $4`,
-            [plan, sub.customer || null, sub.id, rid]
+                    status = $2,
+                    stripe_customer_id = $3,
+                    stripe_subscription_id = $4${clearFailure}
+              WHERE restaurant_id = $5`,
+            [plan, mappedStatus, sub.customer || null, sub.id, rid]
           );
-          console.log(`[stripe] ${event.type}: ${rid} → plan=${plan} status=${sub.status}`);
+          console.log(`[stripe] ${event.type}: ${rid} → plan=${plan} stripe=${sub.status} status=${mappedStatus}`);
         }
         break;
       }

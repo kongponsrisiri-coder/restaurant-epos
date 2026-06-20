@@ -261,7 +261,11 @@ async function applyToCloud(actionType, payload) {
     case 'pay_order': {
       const cloudId = (await getOrderCloudId(payload.localOrderId)) || payload.localOrderId;
       const r = await fetch(url(`/api/orders/${cloudId}/pay`), {
-        method: 'POST', ...json({ amount: payload.amount, method: payload.method }),
+        // SEPOS-062 — forward the per-tender split breakdown when present so the
+        // cloud records the same Cash/Card rows the till did.
+        method: 'POST', ...json(payload.payments
+          ? { payments: payload.payments }
+          : { amount: payload.amount, method: payload.method }),
       });
       if (!r.ok) throw new Error(`pay_order ${r.status}`);
       return r.json();

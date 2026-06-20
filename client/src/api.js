@@ -81,7 +81,11 @@ export const createOrder = (table_id, covers, staff_id) => post('/api/orders', {
 export const createCounterOrder = (staff_id) =>
   post('/api/orders', { table_id: null, covers: 1, staff_id, order_type: 'counter' });
 export const addOrderItems = (orderId, items) => post(`/api/orders/${orderId}/items`, { items });
-export const payOrder = (orderId, amount, method) => post(`/api/orders/${orderId}/pay`, { amount, method });
+// SEPOS-062 — `tenders` (optional) is an array of {amount, method} for split
+// bills, so each tender is recorded as its own payment row with its real method
+// (Cash/Card) instead of one lumped 'Split' row. Single payments omit it.
+export const payOrder = (orderId, amount, method, tenders) =>
+  post(`/api/orders/${orderId}/pay`, tenders && tenders.length ? { payments: tenders } : { amount, method });
 export const updateItemStatus = (itemId, status) => put(`/api/order-items/${itemId}/status`, { status });
 export const loginStaff = (pin) => post('/api/staff/login', { pin });
 // SEPOS-LITE-003 — email + password login (Lite restaurant owners).

@@ -1814,7 +1814,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         <BillScreen
           orderId={orderId}
           onClose={() => setShowBill(false)}
-          onPay={async (total, method, amountPaid, tip) => {
+          onPay={async (total, method, amountPaid, tip, tenders) => {
             // SEPOS-047c — api.js resolves {error} on HTTP 4xx/5xx instead
             // of throwing, so this MUST assertOk: without it a rejected
             // payment (order deleted elsewhere → 404, SQLite 500) fell
@@ -1823,7 +1823,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             // real error and KEEP the bill open so staff can retry.
             try {
               if (cart.length > 0) assertOk(await addOrderItems(orderId, cart));
-              assertOk(await payOrder(orderId, total, method));
+              assertOk(await payOrder(orderId, total, method, tenders));
             } catch (e) {
               alert(`⚠️ Payment NOT completed — the bill is still open.\n\n${e.message || 'Please try again.'}`);
               return;

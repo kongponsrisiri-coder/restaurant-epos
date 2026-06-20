@@ -1073,14 +1073,35 @@ app.post('/api/orders/:id/pay', async (req, res) => {
       if (cTableId) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [cTableId]);
       return res.json({ success: true, cancelled: true });
     }
-    // BUG-002 — reject non-positive / non-numeric payment amounts.
-    // A negative amount used to record with 200 OK, which is a way to
-    // quietly reduce takings.
-    const amt = Number(amount);
-    if (!Number.isFinite(amt) || amt <= 0) {
-      return res.status(400).json({ error: 'Payment amount must be a positive number' });
+    // SEPOS-062 — split payments. When the bill is settled with more than one
+    // tender (e.g. £50 cash + £50 card), the client sends `payments: [{amount,
+    // method}, …]` and we record ONE payments row per tender with its REAL
+    // method. Previously a split wrote a single row with method 'Split', which
+    // the Z-report buckets into "Other" — so cash-drawer reconciliation was
+    // wrong on any day with split bills. Single-tender stays on {amount,method}.
+    // BUG-002 — reject non-positive / non-numeric amounts (a negative used to
+    // record 200 OK, a way to quietly reduce takings).
+    const tenders = Array.isArray(req.body.payments) && req.body.payments.length ? req.body.payments : null;
+    let paymentRows;
+    if (tenders) {
+      paymentRows = [];
+      for (const t of tenders) {
+        const a = Number(t.amount);
+        if (!Number.isFinite(a) || a <= 0) {
+          return res.status(400).json({ error: 'Each split payment amount must be a positive number' });
+        }
+        paymentRows.push({ amount: a, method: t.method || 'Other' });
+      }
+    } else {
+      const amt = Number(amount);
+      if (!Number.isFinite(amt) || amt <= 0) {
+        return res.status(400).json({ error: 'Payment amount must be a positive number' });
+      }
+      paymentRows = [{ amount: amt, method }];
     }
-    await pool.query('INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3)', [orderId, amt, method]);
+    for (const p of paymentRows) {
+      await pool.query('INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3)', [orderId, p.amount, p.method]);
+    }
     await pool.query(`UPDATE orders SET status='closed', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
     const orderRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [orderId]);
     const tableId = orderRes.rows[0]?.table_id;
@@ -1135,7 +1156,7 @@ app.post('/api/orders/:id/pay', async (req, res) => {
       }
     }
     io.emit('order_closed', { order_id: orderId });
-    await offlineQueue.enqueue('pay_order', { localOrderId: Number(orderId), amount, method });
+    await offlineQueue.enqueue('pay_order', { localOrderId: Number(orderId), amount, method, payments: tenders || undefined });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

@@ -1025,6 +1025,33 @@ async function pullMenuSnapshot() {
   await pullMenuTree();
 }
 
+// SEPOS-059 — pull the flat modifier-library tables back immediately after a
+// modifier write forwards to cloud. Without this the till's admin refetch read
+// stale local data (the new option/group only landed on the next 5s tick, so it
+// "didn't show until you closed and reopened"). pullMenuSnapshot only pulls the
+// menu TREE — not these flat tables, which is what GET .../modifiers reads.
+// Same feeds + orphan-delete as the main pull loop; gated on r.ok.
+async function pullModifiersSnapshot() {
+  if (!offlineQueue.isLocal || !CLOUD_API_URL) return;
+  const feeds = [
+    { path: '/api/modifier-groups-all', table: 'modifier_groups' },
+    { path: '/api/modifiers-all', table: 'modifiers' },
+    { path: '/api/menu-item-modifier-groups', table: 'menu_item_modifier_groups' },
+  ];
+  for (const f of feeds) {
+    try {
+      const r = await fetch(CLOUD_API_URL + f.path, { signal: AbortSignal.timeout(PING_TIMEOUT_MS) });
+      if (!r.ok) continue;
+      const rows = await r.json();
+      const list = Array.isArray(rows) ? rows : (rows?.data || []);
+      await upsertRows(f.table, 'id', list);
+      await deleteOrphans(f.table, list.map((row) => row.id));
+    } catch (err) {
+      console.warn(`[sync] pullModifiersSnapshot ${f.path} failed:`, err.message);
+    }
+  }
+}
+
 // SEPOS-053 — targeted till_sessions refresh, awaited by server.js right after
 // a forwarded session open/close succeeds on the cloud, so the till's shift
 // banner reflects it immediately instead of on the next 5s tick.
@@ -1081,4 +1108,4 @@ async function pullStaffSnapshot() {
   await pullStaff();
 }
 
-module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, pullActiveOrders, pullMenuSnapshot, pullStaffSnapshot, pullSessionsSnapshot, tick };
+module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, pullActiveOrders, pullMenuSnapshot, pullModifiersSnapshot, pullStaffSnapshot, pullSessionsSnapshot, tick };

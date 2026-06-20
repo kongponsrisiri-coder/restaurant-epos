@@ -367,6 +367,13 @@ function maybeForwardMenuWriteToCloud(req, res) {
   return forwardWriteToCloud(req, res, 'menu-write', () => syncService.pullMenuSnapshot());
 }
 
+// SEPOS-059 — modifier-library writes pull the flat modifier tables back (not the
+// menu tree), so the till admin's refetch shows the new/removed option instantly
+// instead of only after the next 5s tick (the "had to close & reopen" bug).
+function maybeForwardModifierWriteToCloud(req, res) {
+  return forwardWriteToCloud(req, res, 'modifier-write', () => syncService.pullModifiersSnapshot());
+}
+
 // SEPOS-047g — same write-through for staff/PIN edits. Before this, staff
 // endpoints wrote ONLY to local SQLite on desktop — no cloud forward, no
 // push queue — so a PIN added/changed/deleted on the till never reached
@@ -583,7 +590,7 @@ app.get('/api/menu/items/:id/modifiers', async (req, res) => {
 });
 
 app.post('/api/menu/items/:id/modifiers', async (req, res) => {
-  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  if (await maybeForwardModifierWriteToCloud(req, res)) return;
   try {
     const { name, required, multi_select } = req.body;
     const result = await pool.query(
@@ -595,7 +602,7 @@ app.post('/api/menu/items/:id/modifiers', async (req, res) => {
 });
 
 app.post('/api/modifier-groups/:id/options', async (req, res) => {
-  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  if (await maybeForwardModifierWriteToCloud(req, res)) return;
   try {
     const { name, extra_price } = req.body;
     const result = await pool.query('INSERT INTO modifiers (group_id, name, extra_price) VALUES ($1,$2,$3) RETURNING id', [req.params.id, name, extra_price || 0]);
@@ -604,7 +611,7 @@ app.post('/api/modifier-groups/:id/options', async (req, res) => {
 });
 
 app.delete('/api/modifier-groups/:id', async (req, res) => {
-  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  if (await maybeForwardModifierWriteToCloud(req, res)) return;
   try {
     await pool.query('DELETE FROM modifiers WHERE group_id = $1', [req.params.id]);
     await pool.query('DELETE FROM modifier_groups WHERE id = $1', [req.params.id]);
@@ -613,7 +620,7 @@ app.delete('/api/modifier-groups/:id', async (req, res) => {
 });
 
 app.delete('/api/modifiers/:id', async (req, res) => {
-  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  if (await maybeForwardModifierWriteToCloud(req, res)) return;
   try {
     await pool.query('DELETE FROM modifiers WHERE id = $1', [req.params.id]);
     res.json({ success: true });
@@ -639,7 +646,7 @@ app.get('/api/modifier-library', async (req, res) => {
 
 // Create a shared (library) group — menu_item_id stays NULL.
 app.post('/api/modifier-library', async (req, res) => {
-  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  if (await maybeForwardModifierWriteToCloud(req, res)) return;
   try {
     const { name, required, multi_select } = req.body;
     const result = await pool.query(
@@ -651,7 +658,7 @@ app.post('/api/modifier-library', async (req, res) => {
 
 // Attach / detach a library group to/from a dish.
 app.post('/api/menu/items/:id/modifier-groups/:groupId', async (req, res) => {
-  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  if (await maybeForwardModifierWriteToCloud(req, res)) return;
   try {
     await pool.query(
       `INSERT INTO menu_item_modifier_groups (menu_item_id, group_id) VALUES ($1,$2)
@@ -662,7 +669,7 @@ app.post('/api/menu/items/:id/modifier-groups/:groupId', async (req, res) => {
 });
 
 app.delete('/api/menu/items/:id/modifier-groups/:groupId', async (req, res) => {
-  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  if (await maybeForwardModifierWriteToCloud(req, res)) return;
   try {
     await pool.query('DELETE FROM menu_item_modifier_groups WHERE menu_item_id = $1 AND group_id = $2',
       [req.params.id, req.params.groupId]);

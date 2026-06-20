@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, assertOk, SERVER_URL } from '../api';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, assertOk, getSettings, SERVER_URL } from '../api';
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
 // SEPOS — DeleteOrderModal removed from OrderScreen 2026-06-01 (Korakot's
@@ -42,6 +42,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   // { scope: 'item'|'bill', item?, type: 'percent'|'fixed', value, reason? }
   const [discountPopup, setDiscountPopup] = useState(null);
   const [serviceChargeRemoved, setServiceChargeRemoved] = useState(false);
+  const [settings, setSettings] = useState({}); // for the configured service-charge rate
   const [activeCourse, setActiveCourse] = useState(1);
   const [firingCourse, setFiringCourse] = useState(null);
 
@@ -62,6 +63,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     const orderData = await getOrder(orderId);
     if (seq === fetchSeqRef.current) setOrder(orderData);
   };
+
+  // Load settings once for the configured service-charge rate (the running
+  // total below previously hard-coded 12.5%, so any client on a different rate
+  // — or with service charge disabled — saw a wrong "View Bill & Pay" amount).
+  useEffect(() => {
+    getSettings().then((s) => { if (s && typeof s === 'object' && !s.error) setSettings(s); }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -510,7 +518,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     ? order.discount_type === 'percent' ? subtotal * (order.discount_value / 100) : order.discount_value
     : 0;
   const afterDiscount = Math.max(0, subtotal - discountAmount);
-  const serviceChargeAmount = serviceChargeRemoved ? 0 : afterDiscount * 0.125;
+  // Mirror BillScreen's logic exactly (single source of truth for the rate).
+  const scRate = parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5) / 100;
+  const scEnabled = settings.service_charge_enabled !== '0' && settings.service_charge_enabled !== 'false';
+  const serviceChargeAmount = (serviceChargeRemoved || !scEnabled) ? 0 : afterDiscount * scRate;
   const orderTotal = afterDiscount + serviceChargeAmount;
 
   const activeItems = menu.find(c => c.id === activeCategory)?.items || [];
@@ -1208,12 +1219,12 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               <span>Subtotal</span><span>£{afterDiscount.toFixed(2)}</span>
             </div>
 
-            <div style={{
+            {scEnabled && <div style={{
               display: 'flex', justifyContent: 'space-between',
               alignItems: 'center', marginBottom: 10
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 13, color: '#555' }}>Service (12.5%)</span>
+                <span style={{ fontSize: 13, color: '#555' }}>Service ({parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5)}%)</span>
                 <button onClick={() => setServiceChargeRemoved(!serviceChargeRemoved)} style={{
                   background: serviceChargeRemoved ? '#fee2e2' : '#dcfce7',
                   border: 'none', borderRadius: 6, padding: '3px 10px',
@@ -1224,7 +1235,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 </button>
               </div>
               <span style={{ fontSize: 13 }}>£{serviceChargeAmount.toFixed(2)}</span>
-            </div>
+            </div>}
 
             <div style={{
               display: 'flex', justifyContent: 'space-between', marginBottom: 14,

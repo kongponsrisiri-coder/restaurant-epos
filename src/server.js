@@ -1178,7 +1178,19 @@ app.post('/api/staff/login', async (req, res) => {
 // app. Credentials live on the staff table; the PIN login above is
 // untouched. Built on Node's `crypto` — no extra dependencies.
 // password_hash format: "<saltHex>:<scrypt(password,salt,64)Hex>".
-const AUTH_SECRET = process.env.AUTH_SECRET || 'siamepos-dev-auth-secret-change-me';
+// SEPOS-061 security fix — never run on the PUBLIC default secret in production.
+// The default is in the open-source repo, so if a deploy forgets AUTH_SECRET an
+// attacker could forge admin Bearer tokens AND hit the X-Setup-Secret-gated
+// endpoints (set-credentials → mint an admin owner). When unset/default in
+// production we substitute a RANDOM per-boot secret: tokens become unforgeable
+// (the public default no longer validates) and the setup endpoints can't be
+// called with the known default. Side effect — sessions reset on restart and
+// the provisioner must use the real AUTH_SECRET — both correct/intended.
+const DEFAULT_AUTH_SECRET = 'siamepos-dev-auth-secret-change-me';
+let AUTH_SECRET = process.env.AUTH_SECRET || DEFAULT_AUTH_SECRET;
+if ((!process.env.AUTH_SECRET || AUTH_SECRET === DEFAULT_AUTH_SECRET) && process.env.NODE_ENV === 'production') {
+  AUTH_SECRET = crypto.randomBytes(32).toString('hex');
+}
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -1279,8 +1291,12 @@ function requireStaffAuthOrSyncSecret(roles = null) {
   };
 }
 
-if (!process.env.AUTH_SECRET) {
-  console.warn('⚠️  AUTH_SECRET not set — session tokens are signed with the default secret. Set AUTH_SECRET in the environment on any internet-facing deployment.');
+if (!process.env.AUTH_SECRET || process.env.AUTH_SECRET === DEFAULT_AUTH_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('🔒 AUTH_SECRET unset/default in production — using a RANDOM per-boot secret. Tokens reset on restart and the setup/credential endpoints are unusable until you set AUTH_SECRET in the environment.');
+  } else {
+    console.warn('⚠️  AUTH_SECRET not set — using the dev default. Set AUTH_SECRET on any internet-facing deployment.');
+  }
 }
 
 // Owner signs in with email + password. Returns a 14-day token.
@@ -3814,6 +3830,11 @@ app.delete('/api/expenses/:id', async (req, res) => {
 app.post('/api/supplier-invoices', async (req, res) => {
   const client = await pool.connect();
   try {
+    // SEPOS-046 fix — wrap the whole invoice (header + every stock/cost update)
+    // in ONE transaction. Without it, an error partway through the line_items
+    // loop left the header + already-applied stock increments committed while
+    // the rest weren't; the operator re-submitted and double-counted stock.
+    await client.query('BEGIN');
     const { supplier_name, invoice_date, invoice_number, total_amount, status, line_items } = req.body;
 
     // 1. Save the invoice header
@@ -3886,9 +3907,11 @@ app.post('/api/supplier-invoices', async (req, res) => {
     }
 
     // 3. Return everything the frontend needs for the done screen
+    await client.query('COMMIT');
     res.json({ id: invoiceId, success: true, created, updated, price_changes });
 
   } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (e) {}
     res.status(500).json({ error: err.message });
   } finally {
     client.release();

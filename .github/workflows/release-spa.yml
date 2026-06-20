@@ -1,0 +1,162 @@
+name: Release Spa
+
+# SiamEPOS SPA desktop installer pipeline — completely separate from the
+# restaurant pipeline (release.yml).
+#
+#   - Restaurant releases trigger on  `v*`     tags  → restaurant-epos releases
+#   - Spa releases trigger on         `spa-v*` tags  → siamepos-spa-releases
+#
+# `v*` does NOT match `spa-v*` (different first character), so tagging the
+# spa never fires the restaurant build and vice-versa.
+#
+# The spa desktop app is a THIN wrapper that loads the live cloud web app —
+# no React bundle, no better-sqlite3 — so this workflow is much lighter than
+# the restaurant one (no client build, no native rebuild).
+#
+# ── Manual prerequisites (one-time) ──────────────────────────────────
+#   1. Create an EMPTY public GitHub repo:  kongponsrisiri-coder/siamepos-spa-releases
+#      (this is where the installers + auto-update manifests are published;
+#       electron/package.json `publish` points here).
+#   2. Add a repo secret `GH_PAT` to THIS repo (restaurant-epos) — a classic
+#      Personal Access Token with `repo` scope — so this workflow can publish
+#      cross-repo into siamepos-spa-releases. (GITHUB_TOKEN only writes to the
+#      current repo, hence the PAT.)
+#   3. The Apple signing secrets (MAC_CERT_P12_BASE64, MAC_CERT_PASSWORD,
+#      MAC_APPLE_ID, MAC_APPLE_APP_PASSWORD, MAC_TEAM_ID) already live in this
+#      repo for the restaurant build and are reused here automatically.
+#
+# Cut a release:   git tag spa-v0.1.0 && git push origin spa-v0.1.0
+
+on:
+  push:
+    tags:
+      - 'spa-v*'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  # ── Mac ────────────────────────────────────────────────────────────
+  build-mac:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      HAS_MAC_CERT: ${{ secrets.MAC_CERT_P12_BASE64 != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: spa-epos/electron/package-lock.json
+
+      - name: Install Electron deps
+        run: |
+          cd spa-epos/electron
+          npm install
+
+      - name: Import Apple Developer ID certificate
+        if: env.HAS_MAC_CERT == 'true'
+        uses: apple-actions/import-codesign-certs@v7
+        with:
+          p12-file-base64: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          p12-password:    ${{ secrets.MAC_CERT_PASSWORD }}
+
+      - name: Build Mac DMG
+        run: |
+          cd spa-epos/electron
+          npm run build:mac
+        env:
+          CSC_LINK:                    ${{ secrets.MAC_CERT_P12_BASE64 }}
+          CSC_KEY_PASSWORD:            ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID:                    ${{ secrets.MAC_APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.MAC_APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID:               ${{ secrets.MAC_TEAM_ID }}
+
+      - name: Upload DMG + update manifest
+        uses: actions/upload-artifact@v5
+        with:
+          name: spa-mac-installer
+          path: |
+            spa-epos/electron/dist-electron/*.dmg
+            spa-epos/electron/dist-electron/*.blockmap
+            spa-epos/electron/dist-electron/latest-mac.yml
+          if-no-files-found: error
+          retention-days: 14
+
+  # ── Windows ────────────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: spa-epos/electron/package-lock.json
+
+      - name: Install Electron deps
+        run: |
+          cd spa-epos/electron
+          npm install
+
+      - name: Build Windows installer
+        run: |
+          cd spa-epos/electron
+          npm run build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload EXE + update manifest
+        uses: actions/upload-artifact@v5
+        with:
+          name: spa-windows-installer
+          path: |
+            spa-epos/electron/dist-electron/*.exe
+            spa-epos/electron/dist-electron/*.blockmap
+            spa-epos/electron/dist-electron/latest.yml
+          if-no-files-found: error
+          retention-days: 14
+
+  # ── Release (publishes to the dedicated spa releases repo) ──────────
+  release:
+    needs: [build-mac, build-windows]
+    runs-on: ubuntu-latest
+    # Publish on a spa-v* tag as long as WINDOWS built — a Mac failure
+    # (e.g. expired notarization password) must not block the release.
+    if: always() && startsWith(github.ref, 'refs/tags/spa-v') && needs.build-windows.result == 'success'
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: dist
+
+      - name: Show downloaded files
+        run: ls -laR dist
+
+      - name: Publish to siamepos-spa-releases
+        uses: softprops/action-gh-release@v2
+        with:
+          # Cross-repo publish — keeps spa auto-update isolated from the
+          # restaurant's so their latest-mac.yml manifests never collide.
+          repository: kongponsrisiri-coder/siamepos-spa-releases
+          token: ${{ secrets.GH_PAT }}
+          tag_name: ${{ github.ref_name }}
+          name: SiamEPOS Spa ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+          files: |
+            dist/spa-mac-installer/*.dmg
+            dist/spa-mac-installer/*.blockmap
+            dist/spa-mac-installer/latest-mac.yml
+            dist/spa-windows-installer/*.exe
+            dist/spa-windows-installer/*.blockmap
+            dist/spa-windows-installer/latest.yml

@@ -117,6 +117,10 @@ export const amendBillMethod      = (orderId, body) => put(`/api/bills/${orderId
 export const getBillAmendments    = (orderId) => get(`/api/bills/${orderId}/amendments`);
 export const getSettings = () => get('/api/settings');
 export const updateSettings = (settings) => put('/api/settings', settings);
+// SEPOS-060 phase 2 — desktop offline license lock state + manual re-check
+// (used by the lock screen after a client pays so they unlock without waiting).
+export const getLicenseState = () => get('/api/license-state');
+export const recheckLicense  = () => post('/api/license-recheck', {});
 // SEPOS-LITE-001 — restaurant record incl. subscription plan.
 export const getRestaurant = () => get('/api/restaurant');
 

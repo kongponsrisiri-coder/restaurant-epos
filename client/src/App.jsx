@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { startMonitoring, onStatusChange, getServerStatus } from './utils/serverDetect';
-import { getRestaurant } from './api';
+import { getRestaurant, getLicenseState } from './api';
 import { canAccessReservations, canAccessKitchen, canAccessFullEPOS } from './utils/plan';
 import UpgradeLocked from './components/UpgradeLocked';
 import LoginScreen from './screens/LoginScreen';
@@ -12,6 +12,7 @@ import BarScreen from './screens/BarScreen';
 import ReservationsScreen from './screens/ReservationsScreen';
 import CounterScreen from './screens/CounterScreen';
 import SyncQueuePill from './components/SyncQueuePill';
+import LockScreen from './screens/LockScreen';
 import './App.css';
 
 // ── Sandy: Lotus badge logo mark — replaces SVG flags ─────────────
@@ -82,6 +83,24 @@ export default function App() {
     () => typeof localStorage !== 'undefined' && localStorage.getItem(INSTALL_DISMISSED_KEY) === '1'
   );
   const isMobile = window.innerWidth < 768;
+
+  // SEPOS-060 phase 2 — desktop offline license lock. Poll the local license
+  // state; if the subscription has lapsed (grace expired / clock rollback) the
+  // till is locked. Fails open everywhere else (cloud, or until the signing key
+  // is deployed), so this never blocks a paying till or the web POS.
+  const [licenseLock, setLicenseLock] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      try {
+        const st = await getLicenseState();
+        if (alive) setLicenseLock(st && st.locked ? st : null);
+      } catch { /* unreachable → leave as-is (don't lock on a failed poll) */ }
+    };
+    poll();
+    const id = setInterval(poll, 5 * 60 * 1000); // re-check every 5 min for the banner/unlock
+    return () => { alive = false; clearInterval(id); };
+  }, []);
 
   useEffect(() => {
     startMonitoring();
@@ -187,6 +206,13 @@ export default function App() {
       </div>
     );
   };
+
+  // SEPOS-060 phase 2 — a lapsed till is fully locked: the lock screen overrides
+  // login and every screen until the subscription is reactivated (or the cloud
+  // re-issues a valid token). Only ever set on a desktop till past its grace.
+  if (licenseLock) {
+    return <LockScreen state={licenseLock} onUnlocked={() => setLicenseLock(null)} />;
+  }
 
   // ── Determine body ────────────────────────────────────────────
   let body;

@@ -10,6 +10,7 @@ const offlineQueue = require('./services/offlineQueue');
 const syncService = require('./services/syncService');
 const cloudRelay = require('./services/cloudRelay');
 const licenseService = require('./services/licenseService');  // SEPOS-060
+const licenseClient = require('./services/licenseClient');    // SEPOS-060 phase 2 (desktop offline lock)
 const makeWebhooks = require('./services/makeWebhooks');
 const printService = require('./services/printService');
 const stuartService = require('./services/stuartService');
@@ -752,7 +753,7 @@ app.get('/api/orders/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/orders', requireActiveSubscription, async (req, res) => {
+app.post('/api/orders', requireActiveSubscription, requireValidLicense, async (req, res) => {
   try {
     const { table_id, covers, staff_id, order_type } = req.body;
     // SEPOS-045 — counter orders (and any tableless mode) skip the table
@@ -777,7 +778,7 @@ app.post('/api/orders', requireActiveSubscription, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/orders/:id/items', async (req, res) => {
+app.post('/api/orders/:id/items', requireValidLicense, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1052,7 +1053,7 @@ app.post('/api/orders/:id/close-zero', async (req, res) => {
   }
 });
 
-app.post('/api/orders/:id/pay', async (req, res) => {
+app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
   try {
     const { amount, method } = req.body;
     const orderId = req.params.id;
@@ -1269,6 +1270,28 @@ async function requireActiveSubscription(req, res, next) {
     console.warn('[license] subscription gate check failed (allowing):', err.message);
     next();
   }
+}
+
+// SEPOS-060 phase 2 — desktop OFFLINE license gate. Backstop to the React lock
+// screen so a UI-only bypass can't keep trading on a lapsed till. ONLY enforces
+// on the desktop (local mode); the cloud uses requireActiveSubscription above.
+// Fails OPEN (licenseClient is fail-open by design — never locks until a signed
+// token has been seen, i.e. until LICENSE_PRIVATE_KEY is deployed).
+function requireValidLicense(req, res, next) {
+  try {
+    if (!offlineQueue.isLocal) return next();
+    const st = licenseClient.getLicenseState();
+    if (st && st.locked) {
+      return res.status(403).json({
+        error: 'license_locked',
+        reason: st.reason,
+        message: 'SiamEPOS subscription has lapsed. Please contact SiamEPOS to reactivate this till.',
+      });
+    }
+  } catch (e) {
+    // Any glitch → allow (a paying till must never be locked by a bug here).
+  }
+  next();
 }
 
 // SEPOS-047a — route gate for staff-only endpoints. Both login paths
@@ -1870,6 +1893,28 @@ app.get('/api/license', async (req, res) => {
   } catch (err) {
     // Fail open — a glitch must never lock a paying client out.
     res.json({ active: true, status: 'active', error: err.message });
+  }
+});
+
+// SEPOS-060 phase 2 — the DESKTOP till's cached offline lock decision. The React
+// lock screen polls this (it reads the local licenseClient cache, not the cloud,
+// so it works offline). On the cloud this returns not-enforced (unlocked).
+app.get('/api/license-state', (req, res) => {
+  try {
+    res.json(licenseClient.getLicenseState());
+  } catch (e) {
+    res.json({ locked: false, reason: 'error', error: e.message });
+  }
+});
+
+// SEPOS-060 phase 2 — force an immediate cloud check-in (the lock screen's
+// "I've paid — re-check" button), then return the fresh lock decision.
+app.post('/api/license-recheck', async (req, res) => {
+  try {
+    await licenseClient.checkIn();
+    res.json(licenseClient.getLicenseState());
+  } catch (e) {
+    res.json({ locked: false, reason: 'error', error: e.message });
   }
 });
 
@@ -4580,7 +4625,7 @@ app.get('/api/takeaway/delivery-check', widgetCors, async (req, res) => {
 });
 
 // Submit a takeaway order from the public widget.
-app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, async (req, res) => {
+app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireValidLicense, async (req, res) => {
   const client = await pool.connect();
   try {
     const {
@@ -7611,6 +7656,9 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('✅ EPOS server is running on port ' + PORT);
   console.log('');
   syncService.start();
+  // SEPOS-060 phase 2 — desktop offline license lock. No-op in cloud mode
+  // (no SQLITE_PATH). Fails open until LICENSE_PRIVATE_KEY is deployed.
+  licenseClient.start();
   // SEPOS-PRO-003 — Mac local server subscribes to cloud Socket.io so
   // every cloud event lands on the Mac in real time. No-op in cloud mode.
   cloudRelay.start(io, syncService);

@@ -138,9 +138,13 @@ jobs:
   release:
     needs: [build-mac, build-windows]
     runs-on: ubuntu-latest
-    # Publish on a spa-v* tag as long as WINDOWS built — a Mac failure
-    # (e.g. expired notarization password) must not block the release.
-    if: always() && startsWith(github.ref, 'refs/tags/spa-v') && needs.build-windows.result == 'success'
+    # Publish on a spa-v* tag as long as AT LEAST ONE platform built — a failure
+    # on the other (e.g. a Windows native-rebuild hiccup or expired Mac
+    # notarization password) must not block shipping the installer that did
+    # build. `fail_on_unmatched_files: false` below means whatever exists is
+    # attached; the missing platform's files are simply skipped.
+    if: always() && startsWith(github.ref, 'refs/tags/spa-v') &&
+        (needs.build-mac.result == 'success' || needs.build-windows.result == 'success')
     steps:
       - name: Download all build artifacts
         uses: actions/download-artifact@v5

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v48'; // bump to invalidate stale caches
+const CACHE_NAME = 'siamepos-shell-v49'; // bump to invalidate stale caches
 const APP_SHELL = [
   '/',
   '/index.html',

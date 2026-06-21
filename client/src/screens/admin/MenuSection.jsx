@@ -294,7 +294,11 @@ export default function MenuSection() {
     await refreshModifiers();
   };
   const handleAddOption = async (name, extra_price) => { await addModifierOption(activeGroup, { name, extra_price: extra_price || 0 }); await refreshModifiers(); };
-  const handleDeleteGroup  = async (groupId) => { if (!confirm('Delete this group and all its options?')) return; await deleteModifierGroup(groupId); setModifiers(await getItemModifiers(modifierItem.id)); if (activeGroup === groupId) setActiveGroup(null); };
+  const handleDeleteGroup  = async (groupId) => { if (!await confirm('Delete this group and all its options?', { danger: true, okLabel: 'Delete' })) return; await deleteModifierGroup(groupId); await refreshModifiers(); if (activeGroup === groupId) setActiveGroup(null); };
+  // SEPOS-059 — delete a SHARED (reusable) group from the library entirely. It's
+  // removed from every dish that uses it, so warn clearly. (Detaching from just
+  // one dish is the "Remove" button on an attached group.)
+  const handleDeleteLibraryGroup = async (g) => { if (!await confirm(`Delete the shared group "${g.name}"?\n\nThis removes it from EVERY dish that uses it — not just this one.`, { danger: true, okLabel: 'Delete everywhere' })) return; await deleteModifierGroup(g.id); await refreshModifiers(); };
   const handleDeleteOption = async (optionId) => { await deleteModifier(optionId); setModifiers(await getItemModifiers(modifierItem.id)); };
 
   function handleDragStart(e, index) { setDragIndex(index); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', index); }
@@ -634,10 +638,13 @@ export default function MenuSection() {
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>♻️ Add a shared group</div>
                 <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>Reusable groups you defined once. Tick to use on this dish — edit the group once and every dish updates.</div>
                 {library.filter(g => !modifiers.some(m => m.id === g.id)).map(g => (
-                  <label key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer', fontSize: 13 }}>
-                    <input type="checkbox" checked={false} onChange={() => toggleLibrary(g.id, false)} />
-                    <span><strong>{g.name}</strong> <span style={{ color: '#888' }}>({g.required ? 'Required' : 'Optional'}, {g.multi_select ? 'multi' : 'pick one'})</span> — {(g.modifiers || []).map(o => o.name).join(', ') || 'no options yet'}</span>
-                  </label>
+                  <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, flex: 1 }}>
+                      <input type="checkbox" checked={false} onChange={() => toggleLibrary(g.id, false)} />
+                      <span><strong>{g.name}</strong> <span style={{ color: '#888' }}>({g.required ? 'Required' : 'Optional'}, {g.multi_select ? 'multi' : 'pick one'})</span> — {(g.modifiers || []).map(o => o.name).join(', ') || 'no options yet'}</span>
+                    </label>
+                    <button onClick={() => handleDeleteLibraryGroup(g)} title="Delete this shared group everywhere" style={{ flexShrink: 0, padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#fee2e2', color: '#991b1b', fontSize: 12, fontWeight: 600 }}>🗑️ Delete</button>
+                  </div>
                 ))}
               </div>
             )}

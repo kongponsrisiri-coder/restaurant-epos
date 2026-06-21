@@ -106,6 +106,37 @@ Tickets prefixed **SIAMSHOP-***. Stack: React+Vite (Netlify) · Node+Express (Ra
 First prospect already interested — need SIAMSHOP-001→003 for a working demo.
 Launch Joy: `cd ~/Desktop/siamshop && claude --model claude-fable-5`
 
+### 🤖 FEATURE: Facebook Messenger AI order-taking (LIVE) — team explainer
+
+**This is SiamShop's headline differentiator. Maya/Sandy/Nick — use this in every pitch.**
+
+**The problem it kills:** Thai supermarkets already take loads of orders by Facebook
+Messenger (customers DM a list of what they want). Today the owner reads each message
+and **types the bill by hand** — slow, error-prone, and it doesn't update stock or records.
+
+**What SiamShop does instead — fully automatic, no staff:**
+1. Customer messages the shop's Facebook Page a normal list, e.g. *"2x jasmine rice 5kg, 1 coconut milk, น้ำปลา 1 ขวด"* (Thai or English).
+2. **AI (Claude) reads the message**, matches each item to the shop's real product catalogue, and ignores anything it can't find.
+3. It **prices everything from live stock/prices** and replies in seconds with a tidy summary + subtotal + a **ready-to-pay checkout link** (and flags anything not found / under the min order).
+4. Customer taps the link → pays by **card (Stripe) or bank transfer** and enters their delivery address.
+5. The order lands in the shop's admin **tagged `source = messenger`**, decrements the **same shared stock** as the till + website, and triggers the confirmation emails.
+
+**Why it sells:** "Your customers order the way they already do — in Messenger — but you
+never type a bill again. The AI does it, takes the money, and updates your stock." It meets
+Thai shoppers where they are (Facebook-first) and removes the owner's biggest daily chore.
+Works bilingually (Thai/English). One stock core means Messenger + walk-in till + website
+all show true stock and combined "what sold".
+
+**Status:** built + LIVE end-to-end (ticket SIAMSHOP-011). Bot replies on the connected
+Page; checkout links point at the live site. ⚠️ While the FB app is in **Development mode**
+it only replies to app admins/testers — going public needs Meta **App Review**
+(`pages_messaging` permission), a step to schedule before a client's public launch.
+
+**Tech note (for devs):** webhook `POST /api/messenger/webhook` (signature-verified via
+`MESSENGER_APP_SECRET`); parsing in `src/services/aiService.js` (Claude `claude-opus-4-8`,
+json_schema) + `messengerService.js` (Graph API send). Env on Railway: `MESSENGER_VERIFY_TOKEN`,
+`MESSENGER_APP_SECRET`, `MESSENGER_PAGE_ACCESS_TOKEN`, `ANTHROPIC_API_KEY`. Logs `[messenger]` lines per step.
+
 ---
 
 ## ✅ Recently Completed (last 14 days)

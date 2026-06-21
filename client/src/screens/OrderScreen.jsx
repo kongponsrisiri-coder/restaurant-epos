@@ -1420,7 +1420,29 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       {group.required ? 'Required' : 'Optional'} · {group.multi_select ? 'Choose multiple' : 'Choose one'}
                     </span>
                   </div>
-                  {group.modifiers?.map(opt => {
+                  {/* SEPOS-059 — "choose one" groups use a compact dropdown;
+                      multi-select groups keep tappable cards (a dropdown can't
+                      pick several). Selection shape is unchanged: [opt] or []. */}
+                  {!group.multi_select ? (
+                    <select
+                      value={selectedModifiers[group.id]?.[0]?.id ?? ''}
+                      onChange={e => {
+                        const opt = (group.modifiers || []).find(m => String(m.id) === e.target.value);
+                        setSelectedModifiers(prev => ({ ...prev, [group.id]: opt ? [opt] : [] }));
+                      }}
+                      style={{
+                        width: '100%', padding: '12px 14px', borderRadius: 10, fontSize: 15,
+                        background: 'white', cursor: 'pointer',
+                        border: `2px solid ${selectedModifiers[group.id]?.length ? '#e94560' : '#eee'}`,
+                      }}>
+                      <option value="">{group.required ? '— Select —' : '— None —'}</option>
+                      {group.modifiers?.map(opt => (
+                        <option key={opt.id} value={opt.id}>
+                          {opt.name}{opt.extra_price > 0 ? ` (+£${Number(opt.extra_price).toFixed(2)})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  ) : group.modifiers?.map(opt => {
                     const selected = (selectedModifiers[group.id] || []).find(m => m.id === opt.id);
                     return (
                       <div key={opt.id}

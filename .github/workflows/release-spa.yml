@@ -17,17 +17,15 @@ name: Release Spa
 # build:client → rebuild:native → electron-builder. VITE_API_BASE is set empty
 # so the bundled client calls the local server same-origin.
 #
-# ── Manual prerequisites (one-time) ──────────────────────────────────
-#   1. Create an EMPTY public GitHub repo:  kongponsrisiri-coder/siamepos-spa-releases
-#      (this is where the installers + auto-update manifests are published;
-#       electron/package.json `publish` points here).
-#   2. Add a repo secret `GH_PAT` to THIS repo (restaurant-epos) — a classic
-#      Personal Access Token with `repo` scope — so this workflow can publish
-#      cross-repo into siamepos-spa-releases. (GITHUB_TOKEN only writes to the
-#      current repo, hence the PAT.)
-#   3. The Apple signing secrets (MAC_CERT_P12_BASE64, MAC_CERT_PASSWORD,
-#      MAC_APPLE_ID, MAC_APPLE_APP_PASSWORD, MAC_TEAM_ID) already live in this
-#      repo for the restaurant build and are reused here automatically.
+# ── Prerequisites ────────────────────────────────────────────────────
+#   NONE beyond what the restaurant build already has. This publishes to THIS
+#   repo with the built-in GITHUB_TOKEN (no Personal Access Token, no separate
+#   releases repo). The Apple signing secrets (MAC_CERT_P12_BASE64,
+#   MAC_CERT_PASSWORD, MAC_APPLE_ID, MAC_APPLE_APP_PASSWORD, MAC_TEAM_ID) already
+#   live here for the restaurant build and are reused automatically.
+#
+#   Spa releases are tagged `spa-v*` and published as PRERELEASES, so they
+#   never collide with the restaurant's stable `v*` releases / auto-update.
 #
 # Cut a release:   git tag spa-v0.1.0 && git push origin spa-v0.1.0
 
@@ -134,15 +132,19 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # ── Release (publishes to the dedicated spa releases repo) ──────────
+  # ── Release (publishes to THIS repo, like the restaurant build) ─────
   release:
     needs: [build-mac, build-windows]
     runs-on: ubuntu-latest
+    # Publishes to this same repo using the built-in GITHUB_TOKEN — exactly like
+    # the restaurant release.yml, so no Personal Access Token is needed. Spa
+    # releases are marked `prerelease: true` so the RESTAURANT's auto-updater
+    # (which only looks at stable releases) never picks them up, and vice-versa
+    # (the spa app sets allowPrerelease so it only reads its own spa-v* builds).
+    permissions:
+      contents: write
     # Publish on a spa-v* tag as long as AT LEAST ONE platform built — a failure
-    # on the other (e.g. a Windows native-rebuild hiccup or expired Mac
-    # notarization password) must not block shipping the installer that did
-    # build. `fail_on_unmatched_files: false` below means whatever exists is
-    # attached; the missing platform's files are simply skipped.
+    # on the other must not block shipping the installer that did build.
     if: always() && startsWith(github.ref, 'refs/tags/spa-v') &&
         (needs.build-mac.result == 'success' || needs.build-windows.result == 'success')
     steps:
@@ -154,15 +156,12 @@ jobs:
       - name: Show downloaded files
         run: ls -laR dist
 
-      - name: Publish to siamepos-spa-releases
+      - name: Publish SiamEPOS Spa release
         uses: softprops/action-gh-release@v2
         with:
-          # Cross-repo publish — keeps spa auto-update isolated from the
-          # restaurant's so their latest-mac.yml manifests never collide.
-          repository: kongponsrisiri-coder/siamepos-spa-releases
-          token: ${{ secrets.GH_PAT }}
           tag_name: ${{ github.ref_name }}
           name: SiamEPOS Spa ${{ github.ref_name }}
+          prerelease: true
           generate_release_notes: true
           fail_on_unmatched_files: false
           files: |

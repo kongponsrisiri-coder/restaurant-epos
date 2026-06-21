@@ -9,9 +9,13 @@ name: Release Spa
 # `v*` does NOT match `spa-v*` (different first character), so tagging the
 # spa never fires the restaurant build and vice-versa.
 #
-# The spa desktop app is a THIN wrapper that loads the live cloud web app —
-# no React bundle, no better-sqlite3 — so this workflow is much lighter than
-# the restaurant one (no client build, no native rebuild).
+# Phase B: the spa desktop app now runs its OWN local server on an encrypted
+# SQLite DB (offline-capable), so the build bundles the React client + the
+# server + node_modules and rebuilds the native SQLCipher module
+# (better-sqlite3-multiple-ciphers) for Electron's ABI. Hence we install the
+# root, client AND electron dependencies, and `npm run build:mac/win` chains
+# build:client → rebuild:native → electron-builder. VITE_API_BASE is set empty
+# so the bundled client calls the local server same-origin.
 #
 # ── Manual prerequisites (one-time) ──────────────────────────────────
 #   1. Create an EMPTY public GitHub repo:  kongponsrisiri-coder/siamepos-spa-releases
@@ -54,10 +58,11 @@ jobs:
           cache: npm
           cache-dependency-path: spa-epos/electron/package-lock.json
 
-      - name: Install Electron deps
+      - name: Install dependencies (root + client + electron)
         run: |
-          cd spa-epos/electron
-          npm install
+          cd spa-epos && npm install
+          cd client && npm install && cd ..
+          cd electron && npm install
 
       - name: Import Apple Developer ID certificate
         if: env.HAS_MAC_CERT == 'true'
@@ -71,6 +76,7 @@ jobs:
           cd spa-epos/electron
           npm run build:mac
         env:
+          VITE_API_BASE:               ''
           CSC_LINK:                    ${{ secrets.MAC_CERT_P12_BASE64 }}
           CSC_KEY_PASSWORD:            ${{ secrets.MAC_CERT_PASSWORD }}
           APPLE_ID:                    ${{ secrets.MAC_APPLE_ID }}
@@ -103,16 +109,18 @@ jobs:
           cache: npm
           cache-dependency-path: spa-epos/electron/package-lock.json
 
-      - name: Install Electron deps
+      - name: Install dependencies (root + client + electron)
         run: |
-          cd spa-epos/electron
-          npm install
+          cd spa-epos && npm install
+          cd client && npm install && cd ..
+          cd electron && npm install
 
       - name: Build Windows installer
         run: |
           cd spa-epos/electron
           npm run build:win
         env:
+          VITE_API_BASE: ''
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload EXE + update manifest

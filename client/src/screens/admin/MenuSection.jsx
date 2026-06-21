@@ -12,6 +12,33 @@ import {
 } from '../../api';
 import { confirm } from '../../utils/confirm';
 
+// ── Add-option row (SEPOS-059) ────────────────────────────────────
+// Self-contained so the input's state is LOCAL. Previously the option-name
+// field lived in a shared parent state INSIDE modifiers.map(), so anything that
+// re-rendered the modal could interrupt typing ("can't type the name"). Keeping
+// state here means each keystroke only re-renders this little row. autoFocus
+// also focuses the field the moment "+ Add option" is tapped — which pops the
+// on-screen keyboard on a touchscreen till. Enter submits for fast entry.
+function OptionAdder({ onAdd }) {
+  const [name, setName]   = useState('');
+  const [price, setPrice] = useState('');
+  const submit = () => {
+    const n = name.trim();
+    if (!n) return alert('Option name is required!');
+    onAdd(n, price);
+    setName('');
+    setPrice('');
+  };
+  const onKey = (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
+  return (
+    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+      <input autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={onKey} placeholder="Option name" style={{ flex: 2, padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }} />
+      <input value={price} onChange={e => setPrice(e.target.value)} onKeyDown={onKey} placeholder="+£ extra" type="number" step="0.01" style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }} />
+      <button onClick={submit} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 600 }}>Add</button>
+    </div>
+  );
+}
+
 // ── AI Menu Scanner Modal ─────────────────────────────────────────
 function AIScannerModal({ onClose, onImported }) {
   const [stage, setStage]             = useState('upload');
@@ -145,7 +172,6 @@ export default function MenuSection() {
   const [modifiers, setModifiers]           = useState([]);
   const [library, setLibrary]               = useState([]);  // SEPOS-059 reusable groups
   const [newGroup, setNewGroup]             = useState({ name: '', required: true, multi_select: false });
-  const [newOption, setNewOption]           = useState({ name: '', extra_price: '' });
   const [activeGroup, setActiveGroup]       = useState(null);
   const [showSubcatManager, setShowSubcatManager] = useState(false);
   const [newSubcatName, setNewSubcatName]   = useState('');
@@ -267,7 +293,7 @@ export default function MenuSection() {
     else await attachGroupToItem(modifierItem.id, groupId);
     await refreshModifiers();
   };
-  const handleAddOption = async () => { if (!newOption.name) return alert('Option name is required!'); await addModifierOption(activeGroup, { name: newOption.name, extra_price: newOption.extra_price || 0 }); setNewOption({ name: '', extra_price: '' }); await refreshModifiers(); };
+  const handleAddOption = async (name, extra_price) => { await addModifierOption(activeGroup, { name, extra_price: extra_price || 0 }); await refreshModifiers(); };
   const handleDeleteGroup  = async (groupId) => { if (!confirm('Delete this group and all its options?')) return; await deleteModifierGroup(groupId); setModifiers(await getItemModifiers(modifierItem.id)); if (activeGroup === groupId) setActiveGroup(null); };
   const handleDeleteOption = async (optionId) => { await deleteModifier(optionId); setModifiers(await getItemModifiers(modifierItem.id)); };
 
@@ -600,7 +626,7 @@ export default function MenuSection() {
                   <div style={{ display: 'flex', gap: 6 }}><button onClick={() => setActiveGroup(activeGroup === group.id ? null : group.id)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#1a1a2e', color: 'white', fontSize: 12, fontWeight: 600 }}>+ Add option</button>{group.menu_item_id == null ? <button onClick={() => toggleLibrary(group.id, true)} title="Remove from this dish (keeps the shared group for other dishes)" style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#fde68a', color: '#713f12', fontSize: 12, fontWeight: 600 }}>Remove</button> : <button onClick={() => handleDeleteGroup(group.id)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#fee2e2', color: '#991b1b', fontSize: 12, fontWeight: 600 }}>Delete</button>}</div>
                 </div>
                 {group.modifiers?.map(opt => (<div key={opt.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderTop: '1px solid #eee' }}><span style={{ fontSize: 14 }}>{opt.name} {opt.extra_price > 0 && <span style={{ color: '#e94560' }}>+£{Number(opt.extra_price).toFixed(2)}</span>}</span><button onClick={() => handleDeleteOption(opt.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 18 }}>×</button></div>))}
-                {activeGroup === group.id && (<div style={{ display: 'flex', gap: 8, marginTop: 10 }}><input value={newOption.name} onChange={e => setNewOption({ ...newOption, name: e.target.value })} placeholder="Option name" style={{ flex: 2, padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }} /><input value={newOption.extra_price} onChange={e => setNewOption({ ...newOption, extra_price: e.target.value })} placeholder="+£ extra" type="number" step="0.01" style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }} /><button onClick={handleAddOption} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 600 }}>Add</button></div>)}
+                {activeGroup === group.id && <OptionAdder key={group.id} onAdd={handleAddOption} />}
               </div>
             ))}
             {library.filter(g => !modifiers.some(m => m.id === g.id)).length > 0 && (

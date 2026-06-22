@@ -132,6 +132,17 @@ p{font-weight:300;line-height:1.7;color:var(--stone);}
   .section{padding:48px 20px;}
 }
 </style>
+<style id="mobile-hardening">
+/* SEPOS — universal mobile responsiveness pass: collapse inline multi-column
+   grids, keep media within the screen, kill stray horizontal overflow. */
+@media(max-width:768px){
+  [style*="grid-template-columns"]{grid-template-columns:1fr !important;}
+  [style*="gap:64px"],[style*="gap: 64px"],[style*="gap:80px"],[style*="gap: 80px"]{gap:28px !important;}
+  img{max-width:100% !important;height:auto !important;}
+  iframe{max-width:100% !important;}
+  html,body{overflow-x:hidden !important;}
+}
+</style>
 </head>
 <body>
 

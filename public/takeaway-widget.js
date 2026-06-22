@@ -787,9 +787,17 @@
   }
 
   // ── Master render ─────────────────────────────────────────────────
+  let _lastViewKey = null;
   function render() {
     const root = $('tw-root');
     if (!root) return;
+
+    // Preserve scroll within the SAME view so tapping a dish to add it doesn't
+    // jump the menu back to the top (render() replaces the whole modal HTML).
+    // Reset to top only when the view actually changes (step / cart toggle).
+    const viewKey = state.step + ':' + (state.mobileCartOpen ? 'cart' : '');
+    const prevBody = root.querySelector('.tw-body');
+    const savedScroll = (prevBody && viewKey === _lastViewKey) ? prevBody.scrollTop : 0;
 
     const stepsHtml = [1,2,3,4].map((n, idx) => {
       const cls = state.step > n ? 'done' : state.step === n ? 'active' : '';
@@ -818,6 +826,11 @@
       </div>
       ${state.mobileCartOpen ? '' : `<div class="tw-foot">${renderFooter()}</div>`}
     `;
+
+    // Restore the scroll position captured above (keeps your place after adding).
+    const newBody = root.querySelector('.tw-body');
+    if (newBody && savedScroll) newBody.scrollTop = savedScroll;
+    _lastViewKey = viewKey;
 
     // Show the "Next" button on desktop for step 2, hide on mobile (cart bar handles it)
     if (state.step === 2 && !state.mobileCartOpen) {

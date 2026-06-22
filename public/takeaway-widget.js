@@ -816,11 +816,11 @@
       <div class="tw-body">
         <div class="tw-body-inner">${body}</div>
       </div>
-      <div class="tw-foot">${renderFooter()}</div>
+      ${state.mobileCartOpen ? '' : `<div class="tw-foot">${renderFooter()}</div>`}
     `;
 
     // Show the "Next" button on desktop for step 2, hide on mobile (cart bar handles it)
-    if (state.step === 2) {
+    if (state.step === 2 && !state.mobileCartOpen) {
       const nextBtn = $('tw-next');
       if (nextBtn) {
         // Show on desktop, hide on mobile via CSS isn't available for dynamic elements —

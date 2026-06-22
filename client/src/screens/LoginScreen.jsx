@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { loginStaff, clockIn, clockOut, emailLogin, storePinSession, getStaff } from '../api';
+import { loginStaff, clockIn, clockOut, emailLogin, storePinSession, getStaff, getRestaurant, getSettings } from '../api';
 
 // ── Sandy: LoginScreen — SiamEPOS Brand CI v1.1 ───────────────────
 // Deep Navy #0D1B3E background · Thai Gold #C9A84C lotus logo
@@ -19,11 +19,21 @@ export default function LoginScreen({ onLogin }) {
   // synced) we fall back to direct PIN entry so login is never blocked.
   const [staffList, setStaffList]         = useState([]);
   const [selectedStaff, setSelectedStaff] = useState(null);
+  const [restaurantName, setRestaurantName] = useState(''); // which restaurant this till is
 
   useEffect(() => {
     getStaff()
       .then(list => setStaffList(Array.isArray(list) ? list.filter(s => s.is_active !== 0) : []))
       .catch(() => setStaffList([]));
+    // Show which restaurant this till is configured for, so staff/owner can tell
+    // at a glance (especially across multiple client installs). Prefer the
+    // owner-set receipt name, then the registry name, then the slug.
+    Promise.all([getSettings().catch(() => null), getRestaurant().catch(() => null)])
+      .then(([settings, r]) => {
+        const name = (settings && settings.restaurant_name) || (r && (r.name || r.restaurant_id)) || '';
+        setRestaurantName(String(name || '').trim());
+      })
+      .catch(() => {});
   }, []);
 
   async function handleLogin(pinToUse) {
@@ -176,6 +186,12 @@ export default function LoginScreen({ onLogin }) {
         <div style={{ color: 'rgba(201,168,76,0.55)', fontSize: 12, marginTop: 6, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
           {mode === 'pin' ? 'Staff Login' : 'Owner Login'}
         </div>
+
+        {restaurantName && (
+          <div style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 14 }}>
+            {restaurantName}
+          </div>
+        )}
       </div>
 
       {/* ── PIN card ───────────────────────────────────────────── */}

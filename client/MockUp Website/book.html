@@ -313,7 +313,13 @@ async function swBuildTimes(){
     const data=await r.json();
     g.innerHTML='';
     const av=data.slots.filter(s=>s.available);
-    if(!av.length){g.innerHTML='<p style="grid-column:1/-1;text-align:center;font-size:12px;letter-spacing:.1em;color:var(--stone);padding:12px 0;">No availability. Please try another date.</p>';return;}
+    if(!av.length){
+      // Party larger than the restaurant takes online → the server returns a
+      // "please call the restaurant" message; show that (+ phone) instead of the
+      // generic "try another date".
+      const note=data.message||'No availability. Please try another date.';
+      const tel=data.restaurant_phone?'<br><a href="tel:'+String(data.restaurant_phone).replace(/\s/g,'')+'" style="color:var(--forest);font-weight:600;">📞 '+data.restaurant_phone+'</a>':'';
+      g.innerHTML='<p style="grid-column:1/-1;text-align:center;font-size:13px;letter-spacing:.04em;color:var(--stone);padding:14px 8px;line-height:1.55;">'+note+tel+'</p>';return;}
     av.forEach(s=>{const b=document.createElement('button');b.className='sw-time';b.textContent=s.time;b.onclick=()=>{document.querySelectorAll('.sw-time').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');swT=s.time;document.getElementById('swErrT').classList.remove('show');};g.appendChild(b);});
   }catch{g.innerHTML='<p style="grid-column:1/-1;text-align:center;font-size:12px;color:var(--stone);padding:12px 0;">Could not load times. Please try again.</p>';}
 }

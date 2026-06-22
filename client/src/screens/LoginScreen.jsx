@@ -27,10 +27,12 @@ export default function LoginScreen({ onLogin }) {
       .catch(() => setStaffList([]));
     // Show which restaurant this till is configured for, so staff/owner can tell
     // at a glance (especially across multiple client installs). Prefer the
-    // owner-set receipt name, then the registry name, then the slug.
-    Promise.all([getSettings().catch(() => null), getRestaurant().catch(() => null)])
-      .then(([settings, r]) => {
-        const name = (settings && settings.restaurant_name) || (r && (r.name || r.restaurant_id)) || '';
+    // authoritative registry name (e.g. "Chart Thai Pinner"); the settings
+    // restaurant_name is often a generic "SiamEPOS" default, so it's last.
+    Promise.all([getRestaurant().catch(() => null), getSettings().catch(() => null)])
+      .then(([r, settings]) => {
+        const generic = (n) => !n || /^siamepos$/i.test(String(n).trim());
+        const name = (r && r.name) || (settings && !generic(settings.restaurant_name) && settings.restaurant_name) || (r && r.restaurant_id) || '';
         setRestaurantName(String(name || '').trim());
       })
       .catch(() => {});

@@ -1863,6 +1863,19 @@ app.get('/api/restaurant', async (req, res) => {
       `SELECT restaurant_id, name, plan, status FROM restaurants WHERE restaurant_id = $1`,
       [rid]
     );
+    if (r.rows[0] && r.rows[0].name) return res.json(r.rows[0]);
+    // On a desktop till the restaurants registry isn't synced locally, so the
+    // local row has no name. Fall back to the cloud's record so the app can show
+    // WHICH restaurant this till is (otherwise every till reads as 'SiamEPOS').
+    if (offlineQueue.isLocal && process.env.CLOUD_API_URL) {
+      try {
+        const cr = await fetch(process.env.CLOUD_API_URL + '/api/restaurant', { signal: AbortSignal.timeout(4000) });
+        if (cr.ok) {
+          const data = await cr.json();
+          if (data && (data.name || data.restaurant_id)) return res.json(data);
+        }
+      } catch { /* offline — fall through to whatever we have locally */ }
+    }
     if (r.rows[0]) return res.json(r.rows[0]);
     res.json({ restaurant_id: rid, name: null, plan: 'pro', status: 'active' });
   } catch (err) {

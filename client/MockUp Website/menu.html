@@ -256,11 +256,32 @@ p{font-weight:300;line-height:1.7;color:var(--stone);}
     Su: { name:'Sulphites',   color:'#7c3aed' },
     Mo: { name:'Molluscs',    color:'#0e7490' },
   };
+  // Reverse lookup: full allergen name (lowercase) → short code, so EPOS values
+  // like ["Crustaceans","Gluten"] map to the C/G chips. The EPOS stores allergens
+  // as a JSON string of FULL NAMES, not the short codes.
+  var ALLERGEN_BY_NAME = {};
+  Object.keys(ALLERGEN_META).forEach(function(k){ ALLERGEN_BY_NAME[ALLERGEN_META[k].name.toLowerCase()] = k; });
+  function toCode(x){
+    var s = String(x).trim().replace(/^["'\[\]]+|["'\[\]]+$/g,'');
+    if (!s) return null;
+    if (ALLERGEN_META[s]) return s;                                  // already a code
+    var lc = s.toLowerCase();
+    return ALLERGEN_BY_NAME[lc] || ALLERGEN_BY_NAME[lc.replace(/s$/,'')] || null;
+  }
   function guessAllergens(item){
     if (item.allergens) {
-      // If the EPOS has allergens stored (CSV or array), trust it
-      var raw = Array.isArray(item.allergens) ? item.allergens : String(item.allergens).split(/[,;\s]+/);
-      return raw.map(function(x){return String(x).trim();}).filter(Boolean);
+      // EPOS allergens can be a JSON-array string, a real array, or CSV — of
+      // full names OR codes. Parse robustly, then map every value to a code.
+      var raw = item.allergens;
+      if (typeof raw === 'string') {
+        var t = raw.trim();
+        if (t.charAt(0) === '[') { try { raw = JSON.parse(t); } catch(e){ raw = t.split(/[,;]+/); } }
+        else raw = t.split(/[,;]+/);
+      }
+      if (!Array.isArray(raw)) raw = [raw];
+      var codes = raw.map(toCode).filter(Boolean);
+      if (codes.length) return codes;
+      // else fall through to keyword guessing below
     }
     var n = (item.name+' '+(item.name_alt||'')).toLowerCase();
     var hits = {};

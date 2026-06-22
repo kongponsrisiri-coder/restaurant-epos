@@ -494,6 +494,12 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
     return reservations.find(r => resTableIds(r).includes(tableId)) || null;
   }
 
+  // SEPOS-044 — running seat progress for the booking being assigned, so the
+  // operator sees "X of Y seats" right on the floor plan as they tap tables.
+  const selIds     = selectedRes ? resTableIds(selectedRes) : [];
+  const seatedCap  = selIds.reduce((s, id) => s + (tables.find(t => t.id === id)?.capacity || 0), 0);
+  const enough     = selectedRes && seatedCap >= (selectedRes.covers || 0);
+
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', overflow: 'hidden' }}>
       <div style={{ width: 240, flexShrink: 0, borderRight: '1px solid #e5e7eb', background: 'white', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -527,8 +533,14 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {/* Status legend — its own bar above the floor so it never sits on top of a table */}
         <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: '8px 16px', background: selectedRes ? '#1a1a2e' : 'white', borderBottom: '1px solid #e5e7eb', fontSize: 11 }}>
-          <div style={{ fontWeight: 700, fontSize: 12, color: selectedRes ? '#fbbf24' : '#9ca3af' }}>
-            {selectedRes ? `👆 Tap a table to seat ${selectedRes.customer_name} (${selectedRes.covers}p) — tap more to join` : 'Tap a booking on the left, then tap a table to seat it'}
+          <div style={{ fontWeight: 700, fontSize: 12, color: !selectedRes ? '#9ca3af' : enough ? '#34d399' : '#fbbf24' }}>
+            {!selectedRes
+              ? 'Tap a booking on the left, then tap a table to seat it'
+              : selIds.length === 0
+                ? `👆 Tap a table to seat ${selectedRes.customer_name} (${selectedRes.covers}p) — tap more to join`
+                : enough
+                  ? `✓ ${selectedRes.customer_name} — ${seatedCap} seats for ${selectedRes.covers}p · tap ✕ on the booking when done`
+                  : `👆 ${selectedRes.customer_name} — ${seatedCap} of ${selectedRes.covers} seats, tap another table to add`}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             {['pending','confirmed','seated'].map(s => <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLORS[s].dot }} /><span style={{ color: selectedRes ? '#cbd5e1' : '#555', textTransform: 'capitalize' }}>{s}</span></div>)}
@@ -540,7 +552,10 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
           {tables.map(table => {
             const booking = getBookingForTable(table.id);
             const c = booking ? (STATUS_COLORS[booking.status] || STATUS_COLORS.pending) : null;
-            const isSel = selectedRes?.id === booking?.id;
+            // Must have a booking AND be the selected one. Without the !!booking
+            // guard, an empty table + no selection is `undefined === undefined`
+            // → true, painting every available table dark navy.
+            const isSel = !!booking && selectedRes?.id === booking.id;
             const isPrimary     = booking && resTableIds(booking)[0] === table.id;
             const isGroupMember = booking && !isPrimary;
             return (

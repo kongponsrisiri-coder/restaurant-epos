@@ -355,15 +355,17 @@ export default function TablePlanSection() {
         </div>
       </div>
 
+      {/* Floating overlay (position:fixed) so showing/hiding it never reflows the
+          floor plan — otherwise the table you're about to click would jump. */}
       {mode === 'link' && (
-        <div style={{ background: '#fef9c3', border: '1px solid #f59e0b', borderRadius: 8, padding: '8px 14px', marginBottom: 12, fontSize: 13, color: '#92400e', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ flex: 1 }}>
+        <div style={{ position: 'fixed', top: 70, left: '50%', transform: 'translateX(-50%)', zIndex: 2000, maxWidth: '92vw', background: '#fef9c3', border: '1px solid #f59e0b', borderRadius: 10, padding: '10px 16px', fontSize: 13, color: '#92400e', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 8px 28px rgba(0,0,0,0.22)' }}>
+          <span>
             {linkFrom
               ? `Table ${tables.find(t => t.id === linkFrom)?.table_number} selected → now click the adjacent table to link`
               : 'Click the first table, then click the adjacent table — only link tables with NO partition between them'}
           </span>
           <button onClick={() => { setMode('select'); setLinkFrom(null); }}
-            style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#92400e', fontWeight: 700, fontSize: 16, padding: 0 }}>×</button>
+            style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#92400e', fontWeight: 700, fontSize: 16, padding: 0, lineHeight: 1 }}>×</button>
         </div>
       )}
 

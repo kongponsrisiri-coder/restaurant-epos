@@ -284,7 +284,7 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
         ) : (
           <FloorPlanView tables={tables} reservations={active} tiers={tiers}
             tableGroups={tableGroups} selectedRes={selectedRes} onSelect={setSelectedRes}
-            onRefresh={onRefresh} selectedDate={selectedDate} />
+            onAssign={assignTables} onRefresh={onRefresh} selectedDate={selectedDate} />
         )}
         {selectedRes && (
           <BookingPanel res={selectedRes} allReservations={active}
@@ -484,7 +484,7 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
 // ═══════════════════════════════════════════════════════
 // FLOOR PLAN VIEW
 // ═══════════════════════════════════════════════════════
-function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, onSelect, onRefresh, selectedDate }) {
+function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, onSelect, onAssign, onRefresh, selectedDate }) {
   const [seatTable, setSeatTable] = useState(null);  // SEPOS-044 — tap-to-seat target
   const canvasW = tables.length ? Math.max(900, ...tables.map(t => (t.pos_x||0) + (t.width||80) + 80)) : 900;
   const canvasH = tables.length ? Math.max(600, ...tables.map(t => (t.pos_y||0) + (t.height||80) + 80)) : 600;
@@ -526,9 +526,14 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
       </div>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {/* Status legend — its own bar above the floor so it never sits on top of a table */}
-        <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: '8px 16px', background: 'white', borderBottom: '1px solid #e5e7eb', fontSize: 11 }}>
-          {['pending','confirmed','seated'].map(s => <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLORS[s].dot }} /><span style={{ color: '#555', textTransform: 'capitalize' }}>{s}</span></div>)}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 8, height: 8, borderRadius: '50%', border: '1px solid #9ca3af', background: 'white' }} /><span style={{ color: '#555' }}>Available</span></div>
+        <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: '8px 16px', background: selectedRes ? '#1a1a2e' : 'white', borderBottom: '1px solid #e5e7eb', fontSize: 11 }}>
+          <div style={{ fontWeight: 700, fontSize: 12, color: selectedRes ? '#fbbf24' : '#9ca3af' }}>
+            {selectedRes ? `👆 Tap a table to seat ${selectedRes.customer_name} (${selectedRes.covers}p) — tap more to join` : 'Tap a booking on the left, then tap a table to seat it'}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            {['pending','confirmed','seated'].map(s => <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLORS[s].dot }} /><span style={{ color: selectedRes ? '#cbd5e1' : '#555', textTransform: 'capitalize' }}>{s}</span></div>)}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 8, height: 8, borderRadius: '50%', border: '1px solid #9ca3af', background: 'white' }} /><span style={{ color: selectedRes ? '#cbd5e1' : '#555' }}>Available</span></div>
+          </div>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#f0ede8', backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)', backgroundSize: '30px 30px' }}>
           <div style={{ position: 'relative', width: canvasW, height: canvasH }}>
@@ -539,7 +544,22 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
             const isPrimary     = booking && resTableIds(booking)[0] === table.id;
             const isGroupMember = booking && !isPrimary;
             return (
-              <div key={table.id} onClick={() => setSeatTable(table)}
+              <div key={table.id} onClick={() => {
+                  // SEPOS-044 — natural flow: pick a booking, then tap tables on
+                  // the plan to assign/join them (mirrors the side panel). Tap an
+                  // already-assigned table to remove it; tap another booking's
+                  // table to switch to that booking; with nothing selected, tap to
+                  // seat a walk-in as before.
+                  if (selectedRes && onAssign) {
+                    if (booking && booking.id !== selectedRes.id) { onSelect(booking); return; }
+                    const ids = resTableIds(selectedRes);
+                    const next = ids.includes(table.id) ? ids.filter(x => x !== table.id) : [...ids, table.id];
+                    onAssign(next);
+                    return;
+                  }
+                  if (booking) { onSelect(booking); return; }
+                  setSeatTable(table);
+                }}
                 style={{ position: 'absolute', left: table.pos_x||0, top: table.pos_y||0, width: table.width||80, height: table.height||80,
                   borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,
                   background: isSel ? '#1a1a2e' : booking ? c.bg : 'white',

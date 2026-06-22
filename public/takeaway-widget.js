@@ -379,14 +379,37 @@
     const existing = state.cart.find(c => c.menu_item_id === item.id);
     if (existing) existing.quantity += 1;
     else state.cart.push({ menu_item_id: item.id, name: item.name, unit_price: Number(item.price || 0), quantity: 1 });
-    render();
+    applyCartChange();
   }
   function changeQty(menu_item_id, delta) {
     const it = state.cart.find(c => c.menu_item_id === menu_item_id);
     if (!it) return;
     it.quantity += delta;
     if (it.quantity <= 0) state.cart = state.cart.filter(c => c.menu_item_id !== menu_item_id);
-    render();
+    applyCartChange();
+  }
+  // On the menu view, update ONLY the cart UI (bar + sidebar) so the menu list —
+  // and its scroll position — is never rebuilt; tapping a dish no longer jumps
+  // back to the top. Any other view does a normal full render.
+  function applyCartChange() {
+    if (state.step === 2 && !state.mobileCartOpen) updateCartUI();
+    else render();
+  }
+  function updateCartUI() {
+    const count = cartCount();
+    const bar = $('tw-cart-bar');
+    if (bar) {
+      bar.classList.toggle('hidden', count === 0);
+      const c = bar.querySelector('.tw-cart-bar-count'); if (c) c.textContent = count + ' item' + (count !== 1 ? 's' : '');
+      const t = bar.querySelector('.tw-cart-bar-total'); if (t) t.textContent = fmt(cartTotal());
+    }
+    const side = document.querySelector('.tw-cart-sidebar');
+    if (side) {
+      side.innerHTML = '<div class="tw-cart-title">🛒 Your order</div>' + renderCartRows();
+      side.querySelectorAll('[data-inc]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(Number(b.dataset.inc), 1); }));
+      side.querySelectorAll('[data-dec]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(Number(b.dataset.dec), -1); }));
+    }
+    const next = $('tw-next'); if (next) next.disabled = count === 0;
   }
   function computePickupISO() {
     // SEPOS-047 — pickup is now derived from the server's load-aware

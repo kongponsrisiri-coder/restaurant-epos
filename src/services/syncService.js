@@ -1025,6 +1025,29 @@ async function pullMenuSnapshot() {
   await pullMenuTree();
 }
 
+// SEPOS-027 — pull the floor plan (tables + linked groups) back immediately
+// after a till edit forwards to cloud, so the cloud (which online booking uses
+// for table-aware availability) and the till stay in lock-step.
+async function pullTablesSnapshot() {
+  if (!offlineQueue.isLocal || !CLOUD_API_URL) return;
+  const feeds = [
+    { path: '/api/tables', table: 'tables' },
+    { path: '/api/table-combinations', table: 'table_combinations' },
+  ];
+  for (const f of feeds) {
+    try {
+      const r = await fetch(CLOUD_API_URL + f.path, { signal: AbortSignal.timeout(PING_TIMEOUT_MS) });
+      if (!r.ok) continue;
+      const rows = await r.json();
+      const list = Array.isArray(rows) ? rows : (rows?.data || []);
+      await upsertRows(f.table, 'id', list);
+      await deleteOrphans(f.table, list.map((row) => row.id));
+    } catch (err) {
+      console.warn(`[sync] pullTablesSnapshot ${f.path} failed:`, err.message);
+    }
+  }
+}
+
 // SEPOS-059 — pull the flat modifier-library tables back immediately after a
 // modifier write forwards to cloud. Without this the till's admin refetch read
 // stale local data (the new option/group only landed on the next 5s tick, so it
@@ -1108,4 +1131,4 @@ async function pullStaffSnapshot() {
   await pullStaff();
 }
 
-module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, pullActiveOrders, pullMenuSnapshot, pullModifiersSnapshot, pullStaffSnapshot, pullSessionsSnapshot, tick };
+module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, pullActiveOrders, pullMenuSnapshot, pullModifiersSnapshot, pullTablesSnapshot, pullStaffSnapshot, pullSessionsSnapshot, tick };

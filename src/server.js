@@ -11,6 +11,7 @@ const syncService = require('./services/syncService');
 const cloudRelay = require('./services/cloudRelay');
 const licenseService = require('./services/licenseService');  // SEPOS-060
 const licenseClient = require('./services/licenseClient');    // SEPOS-060 phase 2 (desktop offline lock)
+const tableAllocator = require('./services/tableAllocator');   // SEPOS-027 table-aware reservations
 const makeWebhooks = require('./services/makeWebhooks');
 const printService = require('./services/printService');
 const stuartService = require('./services/stuartService');
@@ -185,6 +186,7 @@ app.put('/api/tables/:id', async (req, res) => {
 });
 
 app.put('/api/tables/:id/plan', async (req, res) => {
+  if (await maybeForwardTableWriteToCloud(req, res)) return;
   try {
     const { pos_x, pos_y, shape, width, height, name, capacity, table_number } = req.body;
     await pool.query(
@@ -196,6 +198,7 @@ app.put('/api/tables/:id/plan', async (req, res) => {
 });
 
 app.post('/api/tables', async (req, res) => {
+  if (await maybeForwardTableWriteToCloud(req, res)) return;
   try {
     const { table_number, capacity, pos_x, pos_y, shape } = req.body;
     const result = await pool.query(
@@ -207,6 +210,7 @@ app.post('/api/tables', async (req, res) => {
 });
 
 app.delete('/api/tables/:id', async (req, res) => {
+  if (await maybeForwardTableWriteToCloud(req, res)) return;
   try {
     await pool.query('DELETE FROM tables WHERE id = $1', [req.params.id]);
     res.json({ success: true });
@@ -225,6 +229,7 @@ app.get('/api/table-combinations', async (req, res) => {
 });
 
 app.post('/api/table-combinations', async (req, res) => {
+  if (await maybeForwardTableWriteToCloud(req, res)) return;
   try {
     const { table_id_a, table_id_b } = req.body;
     if (!table_id_a || !table_id_b) return res.status(400).json({ error: 'table_id_a and table_id_b required' });
@@ -237,6 +242,7 @@ app.post('/api/table-combinations', async (req, res) => {
 });
 
 app.delete('/api/table-combinations/:id', async (req, res) => {
+  if (await maybeForwardTableWriteToCloud(req, res)) return;
   try {
     await pool.query('UPDATE table_combinations SET is_active = false WHERE id = $1', [req.params.id]);
     res.json({ success: true });
@@ -372,6 +378,13 @@ function maybeForwardMenuWriteToCloud(req, res) {
 // instead of only after the next 5s tick (the "had to close & reopen" bug).
 function maybeForwardModifierWriteToCloud(req, res) {
   return forwardWriteToCloud(req, res, 'modifier-write', () => syncService.pullModifiersSnapshot());
+}
+
+// SEPOS-027 — floor-plan writes (tables + linked groups) forward to cloud so the
+// cloud (which online booking uses for table-aware availability) stays in sync
+// with the till, which is the only place the floor plan is edited.
+function maybeForwardTableWriteToCloud(req, res) {
+  return forwardWriteToCloud(req, res, 'table-write', () => syncService.pullTablesSnapshot());
 }
 
 // SEPOS-047g — same write-through for staff/PIN edits. Before this, staff
@@ -3168,6 +3181,49 @@ function minutesInZone(date, timeZone) {
   }
 }
 
+// SEPOS-027 — parse a reservation's assigned tables (table_ids CSV, or table_id).
+function parseTableIds(table_id, table_ids) {
+  if (table_ids) return String(table_ids).split(',').map(s => parseInt(s.trim(), 10)).filter(Boolean);
+  if (table_id) return [parseInt(table_id, 10)].filter(Boolean);
+  return [];
+}
+
+// SEPOS-027 — load seating units + the day's live bookings (with their assigned
+// tables + dining durations) for table-aware availability / auto-assignment.
+async function loadSeating(restaurant_id, date) {
+  const [tablesRes, combosRes, bookingsRes] = await Promise.all([
+    pool.query('SELECT id, table_number, capacity FROM tables'),
+    pool.query('SELECT table_id_a, table_id_b, is_active FROM table_combinations WHERE is_active = true'),
+    pool.query(
+      `SELECT TO_CHAR(r.reservation_time,'HH24:MI') AS time_str, r.covers, r.table_id, r.table_ids,
+              COALESCE(d.duration_mins, 90) AS duration_mins
+         FROM reservations r
+         LEFT JOIN dining_duration_tiers d
+           ON r.covers >= d.covers_min AND (d.covers_max IS NULL OR r.covers <= d.covers_max) AND d.restaurant_id = $2
+        WHERE r.reservation_date = $1 AND r.restaurant_id = $2 AND r.status NOT IN ('cancelled','no-show')`,
+      [date, restaurant_id]
+    ),
+  ]);
+  const units = tableAllocator.buildUnits(tablesRes.rows, combosRes.rows);
+  const bookings = bookingsRes.rows.map(r => {
+    const startMins = toMins(r.time_str);
+    return { startMins, endMins: startMins + parseInt(r.duration_mins, 10), covers: parseInt(r.covers, 10), tableIds: parseTableIds(r.table_id, r.table_ids) };
+  });
+  return { units, bookings };
+}
+
+async function durationForCovers(restaurant_id, covers) {
+  try {
+    const r = await pool.query(
+      `SELECT duration_mins FROM dining_duration_tiers
+        WHERE restaurant_id=$1 AND covers_min<=$2 AND (covers_max IS NULL OR covers_max>=$2)
+        ORDER BY covers_min DESC LIMIT 1`,
+      [restaurant_id, covers]
+    );
+    return r.rows[0]?.duration_mins ? parseInt(r.rows[0].duration_mins, 10) : 90;
+  } catch { return 90; }
+}
+
 // ── Availability — supports all_day and split (lunch/dinner) service ──
 app.get('/api/reservations/availability', widgetCors, async (req, res) => {
   try {
@@ -3237,9 +3293,9 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
       }
     }
 
-    // Fetch bookings with dining duration
+    // Fetch bookings with dining duration + assigned tables (table-aware).
     const bookingsRes = await pool.query(
-      `SELECT TO_CHAR(r.reservation_time, 'HH24:MI') AS time_str, r.covers,
+      `SELECT TO_CHAR(r.reservation_time, 'HH24:MI') AS time_str, r.covers, r.table_id, r.table_ids,
               COALESCE(d.duration_mins, 90) AS duration_mins
        FROM reservations r
        LEFT JOIN dining_duration_tiers d
@@ -3253,8 +3309,19 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
 
     const bookings = bookingsRes.rows.map(r => {
       const startMins = toMins(r.time_str);
-      return { startMins, covers: parseInt(r.covers, 10), endMins: startMins + parseInt(r.duration_mins, 10) };
+      return { startMins, covers: parseInt(r.covers, 10), endMins: startMins + parseInt(r.duration_mins, 10), tableIds: parseTableIds(r.table_id, r.table_ids) };
     });
+
+    // SEPOS-027 — table-aware availability: a slot is only open if a table (or
+    // linked group) big enough is actually free then. Falls back to the
+    // covers-only rule when no unit can fit the party (covers > maxUnit) so an
+    // incomplete floor plan never wrongly rejects.
+    const tablesRes = await pool.query('SELECT id, table_number, capacity FROM tables');
+    const combosRes = await pool.query('SELECT table_id_a, table_id_b, is_active FROM table_combinations WHERE is_active = true');
+    const units = tableAllocator.buildUnits(tablesRes.rows, combosRes.rows);
+    const maxUnit = units.reduce((m, u) => Math.max(m, u.capacity), 0);
+    const newDuration = await durationForCovers(restaurant_id, coversNum);
+    const tableAware = units.length > 0 && coversNum <= maxUnit;
 
     const maxCovers = s.max_covers_per_slot || 20;
     const isToday   = requestedDate.toDateString() === new Date().toDateString();
@@ -3268,7 +3335,13 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
       const activeCovers = bookings.reduce((sum, b) => (b.startMins <= slotMins && b.endMins > slotMins ? sum + b.covers : sum), 0);
       const remaining    = maxCovers - activeCovers;
       const pastCutoff   = isToday && slotMins < nowMins;
-      return { time, available: !pastCutoff && remaining >= coversNum, remaining_covers: Math.max(0, remaining), past: pastCutoff };
+      // A table/group big enough must be free for the party's whole stay.
+      let tableOk = true;
+      if (tableAware) {
+        const overlap = bookings.filter(b => b.startMins < slotMins + newDuration && b.endMins > slotMins);
+        tableOk = tableAllocator.canSeat(units, overlap, coversNum).ok;
+      }
+      return { time, available: !pastCutoff && remaining >= coversNum && tableOk, remaining_covers: Math.max(0, remaining), past: pastCutoff };
     });
 
     res.json({ date, covers: coversNum, restaurant_id, slots: result });
@@ -3390,10 +3463,38 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
     const maxCovers = settingsRes.rows[0]?.max_covers_per_slot || 20;
     const alreadyBooked = parseInt(slotCheck.rows[0]?.booked || 0, 10);
     if (alreadyBooked + coversNum > maxCovers) return res.status(409).json({ error: 'This time slot is no longer available. Please choose another time.' });
+
+    // SEPOS-027 — table-aware auto-assign + block for ONLINE (widget) bookings.
+    // Find the best-fit free table/linked-group for the party at that time; if
+    // none is free, refuse the booking (don't accept what we can't seat). Staff
+    // bookings keep whatever table they chose (they manage the floor manually).
+    let assignTableId = table_id;
+    let assignTableIds = null;
+    if (source === 'widget') {
+      try {
+        const { units, bookings } = await loadSeating(restaurant_id, reservation_date);
+        const maxUnit = units.reduce((m, u) => Math.max(m, u.capacity), 0);
+        if (units.length > 0 && coversNum <= maxUnit) {
+          const startMins = toMins(reservation_time);
+          const newDuration = await durationForCovers(restaurant_id, coversNum);
+          const overlap = bookings.filter(b => b.startMins < startMins + newDuration && b.endMins > startMins);
+          const fit = tableAllocator.canSeat(units, overlap, coversNum);
+          if (!fit.ok) {
+            const phone = settingsRes.rows[0]?.restaurant_phone;
+            return res.status(409).json({ error: phone
+              ? `Sorry, we don't have a table for ${coversNum} at that time. Please pick another time or call us on ${phone}.`
+              : `Sorry, we don't have a table for ${coversNum} at that time. Please pick another time.` });
+          }
+          assignTableId  = fit.tableIds[0] || null;
+          assignTableIds = fit.tableIds.join(',');
+        }
+      } catch (e) { console.warn('[reservations] table allocation skipped:', e.message); }
+    }
+
     const insertStatus = source === 'widget' ? 'pending' : (status || 'pending');
     const result = await pool.query(
-      `INSERT INTO reservations (restaurant_id, table_id, customer_name, customer_phone, customer_email, covers, reservation_date, reservation_time, status, notes, source, marketing_consent) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-      [restaurant_id, table_id, customer_name.trim(), customer_phone.trim(), customer_email?.trim() || null, coversNum, reservation_date, reservation_time, insertStatus, notes?.trim() || null, source, marketing_consent ? 1 : 0]
+      `INSERT INTO reservations (restaurant_id, table_id, table_ids, customer_name, customer_phone, customer_email, covers, reservation_date, reservation_time, status, notes, source, marketing_consent) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      [restaurant_id, assignTableId, assignTableIds, customer_name.trim(), customer_phone.trim(), customer_email?.trim() || null, coversNum, reservation_date, reservation_time, insertStatus, notes?.trim() || null, source, marketing_consent ? 1 : 0]
     );
     const reservation = result.rows[0];
     io.emit('new_reservation', { ...reservation, reservation_date: String(reservation.reservation_date).split('T')[0], reservation_time: String(reservation.reservation_time).slice(0, 5) });

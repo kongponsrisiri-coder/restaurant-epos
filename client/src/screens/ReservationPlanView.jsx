@@ -158,6 +158,24 @@ function getConflictingBooking(tableId, allReservations, currentRes, tiers) {
   });
 }
 
+// Tightest gap (mins) between currentRes and any other NON-overlapping booking on
+// the table that day, plus that booking's required seating time (from the
+// restaurant's Dining Duration settings). { mins, other, needMins } or null.
+function nearestTurnGap(tableId, allReservations, currentRes, tiers) {
+  const curStart = toMins(currentRes.reservation_time);
+  const curEnd   = curStart + getDuration(currentRes.covers, tiers);
+  let best = null;
+  allReservations.forEach(r => {
+    if (r.id === currentRes.id || r.status === 'cancelled' || r.status === 'no-show') return;
+    if (!resTableIds(r).includes(tableId)) return;
+    const rStart = toMins(r.reservation_time), rEnd = rStart + getDuration(r.covers, tiers);
+    if (curStart < rEnd && curEnd > rStart) return; // overlap handled elsewhere (switch)
+    const gap = rStart >= curEnd ? rStart - curEnd : curStart - rEnd;
+    if (best === null || gap < best.mins) best = { mins: gap, other: r };
+  });
+  return best;
+}
+
 // ═══════════════════════════════════════════════════════
 // MAIN
 // ═══════════════════════════════════════════════════════
@@ -566,7 +584,7 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
             const isPrimary     = booking && resTableIds(booking)[0] === table.id;
             const isGroupMember = booking && !isPrimary;
             return (
-              <div key={table.id} onClick={() => {
+              <div key={table.id} onClick={async () => {
                   // SEPOS-044 — natural flow: pick a booking, then tap tables on
                   // the plan to assign/join them (mirrors the side panel). Tap an
                   // already-assigned table to remove it; tap another booking's
@@ -575,8 +593,18 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
                   if (selectedRes && onAssign) {
                     if (booking && booking.id !== selectedRes.id) { onSelect(booking); return; }
                     const ids = resTableIds(selectedRes);
-                    const next = ids.includes(table.id) ? ids.filter(x => x !== table.id) : [...ids, table.id];
-                    onAssign(next);
+                    if (ids.includes(table.id)) { onAssign(ids.filter(x => x !== table.id)); return; } // remove
+                    // Re-using a table the same day: if the gap to its other
+                    // booking is shorter than this party's seating time (from the
+                    // restaurant's Dining Duration settings), confirm the tight turn.
+                    const turn = nearestTurnGap(table.id, reservations, selectedRes, tiers);
+                    const needMins = getDuration(selectedRes.covers, tiers);
+                    if (turn && turn.mins < needMins) {
+                      const other = turn.other.customer_name?.split(' ')[0] || 'another booking';
+                      const ok = await confirm(`Table ${table.table_number} has ${other} at ${String(turn.other.reservation_time).slice(0,5)} — only ${turn.mins} min turnaround, but a ${selectedRes.covers}-cover seating needs ${needMins} min. Seat this party here anyway?`, { okLabel: 'Seat anyway', danger: true });
+                      if (!ok) return;
+                    }
+                    onAssign([...ids, table.id]);
                     return;
                   }
                   if (booking) { onSelect(booking); return; }

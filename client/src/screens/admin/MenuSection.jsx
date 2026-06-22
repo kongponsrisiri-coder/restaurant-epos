@@ -173,6 +173,7 @@ export default function MenuSection() {
   const [library, setLibrary]               = useState([]);  // SEPOS-059 reusable groups
   const [newGroup, setNewGroup]             = useState({ name: '', required: true, multi_select: false });
   const [activeGroup, setActiveGroup]       = useState(null);
+  const [pickGroup, setPickGroup]           = useState(''); // shared-group dropdown selection
   const [showSubcatManager, setShowSubcatManager] = useState(false);
   const [newSubcatName, setNewSubcatName]   = useState('');
   // SEPOS-046s — in-flight guard for the Add Sub-category button so a slow
@@ -636,16 +637,17 @@ export default function MenuSection() {
             {library.filter(g => !modifiers.some(m => m.id === g.id)).length > 0 && (
               <div style={{ background: '#eef2ff', borderRadius: 12, padding: 16, marginBottom: 12 }}>
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>♻️ Add a shared group</div>
-                <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>Reusable groups you defined once. Tick to use on this dish — edit the group once and every dish updates.</div>
-                {library.filter(g => !modifiers.some(m => m.id === g.id)).map(g => (
-                  <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, flex: 1 }}>
-                      <input type="checkbox" checked={false} onChange={() => toggleLibrary(g.id, false)} />
-                      <span><strong>{g.name}</strong> <span style={{ color: '#888' }}>({g.required ? 'Required' : 'Optional'}, {g.multi_select ? 'multi' : 'pick one'})</span> — {(g.modifiers || []).map(o => o.name).join(', ') || 'no options yet'}</span>
-                    </label>
-                    <button onClick={() => handleDeleteLibraryGroup(g)} title="Delete this shared group everywhere" style={{ flexShrink: 0, padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#fee2e2', color: '#991b1b', fontSize: 12, fontWeight: 600 }}>🗑️ Delete</button>
-                  </div>
-                ))}
+                <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>Reusable groups you defined once. Pick one to add to this dish — edit the group once and every dish updates.</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <select value={pickGroup} onChange={e => setPickGroup(e.target.value)} style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid #c7d2fe', fontSize: 13, background: 'white', cursor: 'pointer' }}>
+                    <option value="">— Choose a shared group —</option>
+                    {library.filter(g => !modifiers.some(m => m.id === g.id)).map(g => (
+                      <option key={g.id} value={g.id}>{g.name} ({g.required ? 'Required' : 'Optional'}, {g.multi_select ? 'multi' : 'pick one'}) — {(g.modifiers || []).map(o => o.name).join(', ') || 'no options yet'}</option>
+                    ))}
+                  </select>
+                  <button disabled={!pickGroup} onClick={() => { toggleLibrary(Number(pickGroup), false); setPickGroup(''); }} style={{ flexShrink: 0, padding: '10px 16px', borderRadius: 8, border: 'none', cursor: pickGroup ? 'pointer' : 'default', background: pickGroup ? '#1a1a2e' : '#cbd5e1', color: 'white', fontWeight: 700, fontSize: 13 }}>Add</button>
+                  <button disabled={!pickGroup} title="Delete this shared group everywhere" onClick={async () => { const g = library.find(x => String(x.id) === pickGroup); if (g) { await handleDeleteLibraryGroup(g); setPickGroup(''); } }} style={{ flexShrink: 0, padding: '10px 14px', borderRadius: 8, border: 'none', cursor: pickGroup ? 'pointer' : 'default', background: pickGroup ? '#fee2e2' : '#f1f5f9', color: '#991b1b', fontWeight: 700, fontSize: 13 }}>🗑️</button>
+                </div>
               </div>
             )}
             <div style={{ background: '#f0f7ff', borderRadius: 12, padding: 16, marginTop: 8 }}>

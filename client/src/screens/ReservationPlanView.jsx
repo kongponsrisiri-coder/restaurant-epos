@@ -490,7 +490,14 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
   const canvasH = tables.length ? Math.max(600, ...tables.map(t => (t.pos_y||0) + (t.height||80) + 80)) : 600;
 
   function getBookingForTable(tableId) {
-    // A booking sits on a table when that table is in its table_ids set.
+    // Time-aware when a booking is being assigned: a table held by a booking at
+    // a NON-overlapping time (e.g. T6 booked 18:00 while you're seating 20:00) is
+    // free for this slot, so it shows available and tapping it ADDS it. Only a
+    // booking that overlaps the selected one's time counts as occupying the table.
+    if (selectedRes) {
+      if (resTableIds(selectedRes).includes(tableId)) return selectedRes;
+      return getConflictingBooking(tableId, reservations, selectedRes, tiers) || null;
+    }
     return reservations.find(r => resTableIds(r).includes(tableId)) || null;
   }
 

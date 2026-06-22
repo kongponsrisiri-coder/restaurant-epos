@@ -284,19 +284,25 @@ export default function ZReportSection() {
 
       {step === 1 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* SEPOS-Z-TIDY — one report section. "End of Day" and "Custom Range"
+              were the same operation (a Z over a from→to window); merged so it's
+              clear this is report-only and doesn't touch the shift. */}
           <div style={{ background: '#eff6ff', borderRadius: 12, padding: 24, border: '1px solid #bfdbfe' }}>
-            <div style={{ fontWeight: 700, fontSize: 16, color: '#1e40af', marginBottom: 8 }}>📅 Custom Range Report</div>
-            <div style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>Run a Z for any past date/time range — e.g. last Tuesday's lunch. Does not open or close a shift.</div>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 180 }}><label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>From</label><input type="datetime-local" value={fromTime} onChange={e => setFromTime(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
-              <div style={{ flex: 1, minWidth: 180 }}><label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>To</label><input type="datetime-local" value={toTime} onChange={e => setToTime(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: '#1e40af', marginBottom: 4 }}>📊 Sales Report (Z)</div>
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 18 }}>A read-only sales report for a chosen period. This does <strong>not</strong> close a shift — to end a shift, use “Close this shift” above.</div>
+
+            <button onClick={() => loadReport('day')} disabled={loading} style={{ width: '100%', padding: '16px', borderRadius: 10, border: 'none', background: '#e94560', color: 'white', fontWeight: 800, cursor: 'pointer', fontSize: 16 }}>{loading ? 'Loading…' : "🌙 Today's Z — End of Day"}</button>
+            <div style={{ fontSize: 12, color: '#aaa', marginTop: 6 }}>Covers all of today's trading, midnight → now.</div>
+
+            <div style={{ borderTop: '1px solid #dbeafe', marginTop: 20, paddingTop: 18 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: '#1e40af', marginBottom: 4 }}>📅 Any other period</div>
+              <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>e.g. last Tuesday's lunch, or last week's totals.</div>
+              <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 180 }}><label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>From</label><input type="datetime-local" value={fromTime} onChange={e => setFromTime(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
+                <div style={{ flex: 1, minWidth: 180 }}><label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>To</label><input type="datetime-local" value={toTime} onChange={e => setToTime(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
+              </div>
+              <button onClick={() => loadReport('custom')} disabled={loading} style={{ padding: '14px 28px', borderRadius: 10, border: 'none', background: '#2563eb', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 15 }}>{loading ? 'Loading…' : '📅 Run Report'}</button>
             </div>
-            <button onClick={() => loadReport('custom')} disabled={loading} style={{ padding: '14px 28px', borderRadius: 10, border: 'none', background: '#2563eb', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 15 }}>{loading ? 'Loading...' : '📅 Run Custom Report'}</button>
-          </div>
-          <div style={{ background: '#fff0f3', borderRadius: 12, padding: 24, border: '1px solid #fecdd3' }}>
-            <div style={{ fontWeight: 700, fontSize: 16, color: '#e94560', marginBottom: 8 }}>🌙 End of Day</div>
-            <div style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>Closes all of today's trading from midnight to now.</div>
-            <button onClick={() => loadReport('day')} disabled={loading} style={{ padding: '14px 28px', borderRadius: 10, border: 'none', background: '#e94560', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 15 }}>{loading ? 'Loading...' : '🌙 Run End of Day'}</button>
           </div>
         </div>
       )}

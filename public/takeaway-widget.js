@@ -347,6 +347,7 @@
     menu: [],
     activeCategory: null,
     cart: [],
+    mobileCartOpen: false, // mobile: show the editable cart review before details
     // SEPOS-047 — kitchen-load-aware wait time. No customer-facing picker.
     // Populated by loadAvailability() and refreshed on every step transition
     // so the busy chip stays accurate as the kitchen empties / fills.
@@ -536,6 +537,18 @@
     if (state.menu.length === 0) {
       return `<div style="text-align:center;padding:60px 0;color:#888;font-size:15px;">Loading menu…</div>`;
     }
+    // Mobile: "View cart" opens an editable review (add/remove) BEFORE details —
+    // details are only asked at checkout, and the cart stays editable here.
+    if (state.mobileCartOpen) {
+      return `
+        <h2 class="tw-h2">🛒 Your order</h2>
+        <div style="margin-top:8px;">${renderCartRows()}</div>
+        <div style="display:flex;gap:10px;margin-top:18px;">
+          <button class="tw-btn" id="tw-cart-addmore" style="flex:1;background:#f0f0f0;color:#1a1a2e;">← Add more items</button>
+          <button class="tw-btn tw-btn-primary" id="tw-cart-checkout" style="flex:2;" ${state.cart.length === 0 ? 'disabled' : ''}>Checkout · ${fmt(cartTotal())}</button>
+        </div>
+      `;
+    }
     const active = state.menu.find(c => c.id === state.activeCategory) || state.menu[0];
     state.activeCategory = active.id;
     const count = cartCount();
@@ -705,6 +718,7 @@
           <span style="color:#C9A84C;">${fmt(cartTotal())}</span>
         </div>
       </div>
+      <button id="tw-edit-order" style="background:none;border:none;color:#0D1B3E;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer;margin:-8px 0 16px;padding:0;">✏️ Edit order</button>
 
       <div style="display:flex;align-items:center;gap:12px;background:#f0f7ee;border:1.5px solid #86efac;border-radius:12px;padding:14px 16px;margin-bottom:16px;">
         <span style="font-size:24px;">🕐</span>
@@ -825,6 +839,8 @@
 
   function bindHandlers() {
     $('tw-close')?.addEventListener('click', closeWidget);
+    // Review & pay → "Edit order" jumps back to the editable cart (add/remove).
+    $('tw-edit-order')?.addEventListener('click', () => { state.step = 2; state.mobileCartOpen = true; render(); });
 
     if (state.step === 1) {
       // ASAP only — no schedule picker
@@ -861,9 +877,14 @@
       document.querySelectorAll('[data-dec]').forEach(b => {
         b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(Number(b.dataset.dec), -1); });
       });
-      // Mobile cart bar → go to checkout
+      // Mobile cart bar → open the editable cart review (NOT straight to details).
       $('tw-cart-bar-btn')?.addEventListener('click', () => {
-        if (state.cart.length > 0) { state.step = 3; render(); }
+        if (state.cart.length > 0) { state.mobileCartOpen = true; render(); }
+      });
+      // Cart review → add more items (back to menu) or checkout (→ details).
+      $('tw-cart-addmore')?.addEventListener('click', () => { state.mobileCartOpen = false; render(); });
+      $('tw-cart-checkout')?.addEventListener('click', () => {
+        if (state.cart.length > 0) { state.mobileCartOpen = false; state.step = 3; render(); }
       });
     }
 

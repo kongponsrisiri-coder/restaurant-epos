@@ -1153,11 +1153,13 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
         }
       } catch {}
       // SEPOS-044 — auto-complete the seated booking on this table.
-      // Orders don't carry reservation_id today (known limitation), so we
-      // pick the most recently updated 'seated' reservation on the same
-      // table. Two queries (instead of one subquery) so the path works
-      // identically on PG and SQLite. Reports + the booking timeline
-      // both rely on this flip — also covers walk-ins.
+      // SEPOS-PRO-008 — and stamp orders.reservation_id so the bill is tied
+      // EXACTLY to that booking (and its customer), replacing the old
+      // table_id+date guess in the CRM spend aggregation. We pick the most
+      // recently updated 'seated' reservation on the same table. Two queries
+      // (instead of one subquery) so the path works identically on PG and
+      // SQLite. Reports + the booking timeline both rely on this flip —
+      // walk-ins (no seated booking) simply stay unlinked.
       try {
         const seated = await pool.query(
           `SELECT id FROM reservations WHERE table_id=$1 AND status='seated'
@@ -1165,6 +1167,8 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
           [tableId]
         );
         if (seated.rows[0]) {
+          // Link the just-paid bill to the booking for accurate spend.
+          await pool.query(`UPDATE orders SET reservation_id=$1 WHERE id=$2`, [seated.rows[0].id, orderId]);
           const completeRes = await pool.query(
             `UPDATE reservations SET status='completed', updated_at=NOW()
              WHERE id=$1 RETURNING *`,
@@ -6017,9 +6021,11 @@ async function fetchCustomersForSegment(segment) {
            MAX(COALESCE(r.marketing_consent, 0)) AS marketing_consent
     FROM reservations r
     LEFT JOIN orders o
-      ON o.table_id = r.table_id
-     AND DATE(o.opened_at) = r.reservation_date
-     AND o.status = 'closed'
+      ON o.status = 'closed'
+     AND (
+           o.reservation_id = r.id
+        OR (o.reservation_id IS NULL AND o.table_id = r.table_id AND DATE(o.opened_at) = r.reservation_date)
+         )
     WHERE r.customer_email IS NOT NULL AND TRIM(r.customer_email) <> ''
     GROUP BY LOWER(TRIM(r.customer_email))
   `);
@@ -6140,11 +6146,13 @@ app.post('/api/campaigns/send', requireStaffAuth(['admin', 'manager', 'superviso
 // SEPOS-033 — customer CRM
 // Aggregates the reservations table by email (case-insensitive) to give
 // the owner a customer list with visit counts, first/last visit, status
-// (VIP / Regular / New / Lapsed) and an estimated total spend.
+// (VIP / Regular / New / Lapsed) and total spend.
 //
-// Spend estimate uses a heuristic: orders on the reserved table on the
-// reservation date. Marked "estimated" in the UI — accuracy needs a
-// proper orders.reservation_id link (separate ticket).
+// SEPOS-PRO-008 — spend is now EXACT for bills linked to their booking via
+// orders.reservation_id (stamped when the bill is paid on a seated table).
+// Older/unlinked bills fall back to the legacy heuristic (orders on the
+// reserved table on the reservation date). Takeaway spend is exact (customer
+// is on the order row).
 // ─────────────────────────────────────────────────────────────────────
 app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
@@ -6166,9 +6174,11 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
         COALESCE(SUM(o.total), 0) AS total_spend
       FROM reservations r
       LEFT JOIN orders o
-        ON o.table_id = r.table_id
-       AND DATE(o.opened_at) = r.reservation_date
-       AND o.status = 'closed'
+        ON o.status = 'closed'
+       AND (
+             o.reservation_id = r.id
+          OR (o.reservation_id IS NULL AND o.table_id = r.table_id AND DATE(o.opened_at) = r.reservation_date)
+           )
       WHERE r.customer_email IS NOT NULL AND TRIM(r.customer_email) <> ''
       GROUP BY LOWER(TRIM(r.customer_email))
       ORDER BY MAX(r.reservation_date) DESC

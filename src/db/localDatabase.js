@@ -119,6 +119,7 @@ function initSchema() {
       takeaway_status TEXT,
       payment_status TEXT,
       payment_intent_id TEXT,
+      reservation_id INTEGER,
       cloud_id INTEGER
     );
 
@@ -597,6 +598,8 @@ function runMigrations() {
   addColumnIfMissing('order_items', 'void_type', 'TEXT');
   // SEPOS-030: staff attribution on orders
   addColumnIfMissing('orders', 'staff_id', 'INTEGER');
+  // SEPOS-PRO-008: link a bill to its booking for accurate per-customer spend
+  addColumnIfMissing('orders', 'reservation_id', 'INTEGER');
   // SEPOS-021: VAT rate per menu item
   addColumnIfMissing('menu_items', 'vat_rate', 'REAL DEFAULT 20.0');
   addColumnIfMissing('menu_items', 'is_online', 'INTEGER DEFAULT 1');

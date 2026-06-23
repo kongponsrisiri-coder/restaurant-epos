@@ -243,6 +243,10 @@ async function initDB() {
     `);
 
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS staff_id INTEGER REFERENCES staff(id) ON DELETE SET NULL`); // SEPOS-030
+    // SEPOS-PRO-008 — link a bill to the booking it belongs to, for accurate
+    // per-customer spend. ON DELETE SET NULL: deleting a reservation must NEVER
+    // delete the bill (revenue stays; the link just clears).
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS reservation_id INTEGER REFERENCES reservations(id) ON DELETE SET NULL`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS payments (

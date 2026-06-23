@@ -89,9 +89,11 @@ desktop SQLite endpoints (staff edit, voucher search/reports, batch delete).
 
 ---
 
-## 🔴 ACTION FOR POSE — set `JWT_SECRET` on every SiamSpa Railway (Krit, 2026-06-23)
+## 🟢 RESOLVED on the demo spa — `JWT_SECRET` set on SiamSpa Railway (Krit + Korakot, 2026-06-23)
 
-**Was a live, exploitable hole on the spa cloud — closed in code, but ops MUST finish it.**
+> ✅ **DONE on `spa-api.siamepos.co.uk`** — Korakot set a strong `JWT_SECRET` via the Railway dashboard; verified live (set-credentials accepts the new secret → 400 on empty body, rejects the public default → 403). Owner-login provisioning from the back-office now works against this spa. **Pose: still required on every NEW spa/SiamShop deploy + the restaurant tenants' `AUTH_SECRET` — keep this on the new-deploy env checklist.**
+
+**Was a live, exploitable hole on the spa cloud — closed in code, then ops finished it.**
 
 While stress-testing the spa I found `spa-api.siamepos.co.uk` had **no `JWT_SECRET` set** (and no `NODE_ENV=production`). The repo's public default secret `dev-only-change-me` was therefore in force, so **anyone could forge an admin JWT** and call protected endpoints — and `POST /api/auth/set-credentials` (gated by that same secret) could be used to **mint an admin owner login**. I confirmed it live (created + then deactivated a throwaway admin id 8), then closed it.
 

@@ -95,6 +95,23 @@ export const api = {
       body: JSON.stringify(body || {}),
     }).then(handle),
 
+  // SEPOS-SECGATE-001 — go-live security gate.
+  getSecurityGate: (id) =>
+    fetch(`${API}/api/clients/${id}/security`, { headers: tokenHeader() }).then(handle),
+
+  verifySecurityGate: (id) =>
+    fetch(`${API}/api/clients/${id}/security/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+    }).then(handle),
+
+  setSecurityCheck: (id, key, value) =>
+    fetch(`${API}/api/clients/${id}/security`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify({ key, value }),
+    }).then(handle),
+
   // SEPOS-WEB-004 — pull the tenant's live menu for the Featured Dishes
   // section of the website builder. Server-side proxy avoids CORS.
   getClientMenuPreview: (id) =>

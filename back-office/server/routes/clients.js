@@ -76,6 +76,90 @@ function defaultOnboardingState() {
   return out;
 }
 
+// ── SEPOS-SECGATE-001 — Go-live security gate ──────────────────────────────
+// A client must NOT flip setup→live until these pass. The AUTH_SECRET check is
+// VERIFIED LIVE (we probe the tenant), not merely attested — a checkbox can be
+// lied to, a 403 from the tenant cannot. The other two are operator
+// attestations for things we can't safely probe from here.
+const SECURITY_CHECKS = [
+  { key: 'auth_secret',    auto: true,  label: 'Tenant secret set — public default AUTH_SECRET/JWT_SECRET rejected (verified live)' },
+  { key: 'admin_pin',      auto: false, label: 'Default 0000 admin PIN changed' },
+  { key: 'tokens_revoked', auto: false, label: 'Temporary provisioning / Railway CLI tokens revoked' },
+];
+
+// Public default secrets baked into the open-source repos — what the probe uses.
+const DEFAULT_SECRETS = {
+  restaurant: 'siamepos-dev-auth-secret-change-me',
+  spa:        'dev-only-change-me',
+};
+
+function defaultSecurityState() {
+  const out = {};
+  for (const c of SECURITY_CHECKS) out[c.key] = false;
+  out.auth_secret_checked_at = null;
+  out.auth_secret_detail = null;
+  return out;
+}
+
+function securityGatePassed(securityState) {
+  const s = { ...defaultSecurityState(), ...(securityState || {}) };
+  return SECURITY_CHECKS.every(c => s[c.key] === true);
+}
+
+function buildSecurityChecklist(securityState) {
+  const s = { ...defaultSecurityState(), ...(securityState || {}) };
+  return {
+    checks: SECURITY_CHECKS.map(c => ({
+      key:        c.key,
+      label:      c.label,
+      auto:       c.auto,
+      done:       s[c.key] === true,
+      detail:     c.key === 'auth_secret' ? s.auth_secret_detail : null,
+      checked_at: c.key === 'auth_secret' ? s.auth_secret_checked_at : null,
+    })),
+    gate_passed: securityGatePassed(s),
+  };
+}
+
+// Single source of truth for "ready to go live": every onboarding step done
+// AND the security gate passed. Used to GATE the forward setup→live flip
+// everywhere (it never demotes an already-live client — that stays driven by
+// the onboarding checklist alone).
+function goLiveReady(onboardingState, securityState) {
+  return ONBOARDING_STEPS.every(s => onboardingState[s.key]) && securityGatePassed(securityState);
+}
+
+// Probe a tenant's set-credentials endpoint with the known PUBLIC default
+// secret. 403 = default rejected → a real (or random-per-boot) secret is in
+// force → PASS. 400/200 = default ACCEPTED → AUTH_SECRET unset/default →
+// forgeable tokens → FAIL. Unreachable → unknown (can't pass the gate).
+async function probeAuthSecret(url, product) {
+  const base = String(url).replace(/\/$/, '');
+  const defaults = product && DEFAULT_SECRETS[product]
+    ? [DEFAULT_SECRETS[product]]
+    : Object.values(DEFAULT_SECRETS); // unknown product → fail if EITHER default works
+  for (const secret of defaults) {
+    let resp;
+    try {
+      resp = await fetch(base + '/api/auth/set-credentials', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Setup-Secret': secret },
+        body:    '{}',
+        signal:  AbortSignal.timeout(10000),
+      });
+    } catch (e) {
+      return { status: 'unknown', pass: false, detail: `Could not reach tenant: ${e.message}` };
+    }
+    if (resp.status === 404) {
+      return { status: 'unknown', pass: false, detail: 'Tenant has no /api/auth/set-credentials route (wrong URL, or an older build).' };
+    }
+    if (resp.status !== 403) {
+      return { status: 'fail', pass: false, detail: `Public default secret ACCEPTED (HTTP ${resp.status}) — AUTH_SECRET/JWT_SECRET is unset or default. Set a unique secret on the tenant Railway, then re-check.` };
+    }
+  }
+  return { status: 'pass', pass: true, detail: 'Public default secret rejected (403) — a real secret is set.' };
+}
+
 // Tiny templating helper for seed files — replaces {{placeholders}}.
 function renderTemplate(filePath, vars) {
   const text = fs.readFileSync(filePath, 'utf8');
@@ -371,6 +455,7 @@ router.get('/:id/onboarding-checklist', async (req, res) => {
       status:        c.status,
       go_live_date:  state.go_live_date,
       checklist:     buildChecklist(state),
+      security:      buildSecurityChecklist(c.metadata && c.metadata.security),
     });
   } catch (err) {
     console.error('[ops-clients] checklist read error', err);
@@ -397,14 +482,17 @@ router.put('/:id/checklist', async (req, res) => {
     const state = { ...defaultOnboardingState(), ...(metadata.onboarding || {}) };
     state[key] = !!done;
 
-    // Auto-flip setup→live once every step is ticked. Stamping the date
-    // here so reports can read it directly off the client row.
-    const allDone = ONBOARDING_STEPS.every(s => state[s.key]);
+    // Auto-flip setup→live once every step is ticked AND the security gate
+    // passes (SEPOS-SECGATE-001). Forward flip needs both; the back-out to
+    // setup stays driven by the onboarding checklist alone, so the gate never
+    // surprise-demotes an already-live client.
+    const onboardingDone = ONBOARDING_STEPS.every(s => state[s.key]);
+    const ready = goLiveReady(state, metadata.security);
     let nextStatus = cur.rows[0].status;
-    if (allDone && nextStatus === 'setup') {
+    if (ready && nextStatus === 'setup') {
       nextStatus = 'live';
       state.go_live_date = new Date().toISOString().slice(0, 10);
-    } else if (!allDone && nextStatus === 'live') {
+    } else if (!onboardingDone && nextStatus === 'live') {
       // Untick takes us back to setup — defensive in case ops mis-clicks.
       nextStatus = 'setup';
       state.go_live_date = null;
@@ -416,10 +504,13 @@ router.put('/:id/checklist', async (req, res) => {
       [JSON.stringify(metadata), nextStatus, id]
     );
     res.json({
-      success: true,
+      success:   true,
       client:    updated.rows[0],
       checklist: buildChecklist(state),
-      go_live:   allDone,
+      security:  buildSecurityChecklist(metadata.security),
+      go_live:   ready,
+      // Help the UI explain "all steps ticked but still not live".
+      blocked_by_security: onboardingDone && !securityGatePassed(metadata.security),
     });
   } catch (err) {
     console.error('[ops-clients] checklist update error', err);
@@ -450,7 +541,7 @@ router.post('/:id/provision/seed-db', async (req, res) => {
     const state = { ...defaultOnboardingState(), ...(m.onboarding || {}) };
     state.staff_seeded    = true;
     state.settings_seeded = true;
-    const allDone = ONBOARDING_STEPS.every(s => state[s.key]);
+    const allDone = goLiveReady(state, m.security);  // SEPOS-SECGATE-001 — gate on security too
     let nextStatus = client.status;
     if (allDone && nextStatus === 'setup') {
       nextStatus = 'live';
@@ -570,7 +661,7 @@ router.post('/:id/provision/netlify', async (req, res) => {
     state.netlify_provisioned = true;
     state.dns_pointed         = true;   // custom_domain on site-create handles the CNAME side
     m.onboarding = state;
-    const allDone = ONBOARDING_STEPS.every(s => state[s.key]);
+    const allDone = goLiveReady(state, m.security);  // SEPOS-SECGATE-001 — gate on security too
     const nextStatus = allDone ? 'live' : client.status;
     if (allDone && client.status === 'setup') state.go_live_date = new Date().toISOString().slice(0, 10);
 
@@ -663,7 +754,7 @@ router.post('/:id/provision/owner-login', async (req, res) => {
     if (req.body?.setup_secret) m.tenant_setup_secret = req.body.setup_secret;
     const state = { ...defaultOnboardingState(), ...(m.onboarding || {}) };
     state.owner_access = true;
-    const allDone = ONBOARDING_STEPS.every(s => state[s.key]);
+    const allDone = goLiveReady(state, m.security);  // SEPOS-SECGATE-001 — gate on security too
     let nextStatus = client.status;
     if (allDone && nextStatus === 'setup') {
       nextStatus = 'live';
@@ -682,6 +773,105 @@ router.post('/:id/provision/owner-login', async (req, res) => {
     });
   } catch (err) {
     console.error('[ops-clients] provision owner-login error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── SEPOS-SECGATE-001 — Go-live security gate routes ───────────────────────
+
+// Current gate state (auto + manual checks + overall pass/fail).
+router.get('/:id/security', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const r = await pool.query('SELECT metadata FROM clients WHERE id = $1', [id]);
+    if (r.rows.length === 0) return res.status(404).json({ error: 'Client not found' });
+    res.json(buildSecurityChecklist((r.rows[0].metadata || {}).security));
+  } catch (err) {
+    console.error('[ops-clients] security read error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Run the live AUTH_SECRET probe against the tenant + persist the result.
+// This is the one check that cannot be hand-ticked — it must be proven.
+router.post('/:id/security/verify', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const cur = await pool.query('SELECT * FROM clients WHERE id = $1', [id]);
+    if (cur.rows.length === 0) return res.status(404).json({ error: 'Client not found' });
+    const client = cur.rows[0];
+    const m = client.metadata || {};
+    const url = m.tenant_railway_url;
+    if (!url) {
+      return res.status(400).json({
+        error: 'Tenant Railway URL not set on this client',
+        hint:  'Paste it into Setup → Tenant infrastructure → Railway service URL.',
+      });
+    }
+
+    const result = await probeAuthSecret(url, client.product);
+    const sec = { ...defaultSecurityState(), ...(m.security || {}) };
+    sec.auth_secret            = result.pass;
+    sec.auth_secret_checked_at = new Date().toISOString();
+    sec.auth_secret_detail     = result.detail;
+    m.security = sec;
+
+    // A passing probe can complete the gate → flip setup→live if everything
+    // else is done. Never demote here.
+    const state = { ...defaultOnboardingState(), ...(m.onboarding || {}) };
+    let nextStatus = client.status;
+    if (goLiveReady(state, sec) && nextStatus === 'setup') {
+      nextStatus = 'live';
+      state.go_live_date = state.go_live_date || new Date().toISOString().slice(0, 10);
+      m.onboarding = state;
+    }
+    await pool.query('UPDATE clients SET metadata = $1, status = $2 WHERE id = $3',
+      [JSON.stringify(m), nextStatus, id]);
+
+    res.json({ check: result, ...buildSecurityChecklist(sec) });
+  } catch (err) {
+    console.error('[ops-clients] security verify error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Toggle a MANUAL attestation (admin_pin, tokens_revoked). Auto checks are
+// rejected here — they can only be proven via /security/verify.
+router.put('/:id/security', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { key, value } = req.body || {};
+    const def = SECURITY_CHECKS.find(c => c.key === key);
+    if (!def) return res.status(400).json({ error: 'unknown security check key' });
+    if (def.auto) return res.status(400).json({ error: `'${key}' is verified automatically — use "Run security check"; it can't be ticked by hand.` });
+
+    const cur = await pool.query('SELECT * FROM clients WHERE id = $1', [id]);
+    if (cur.rows.length === 0) return res.status(404).json({ error: 'Client not found' });
+    const client = cur.rows[0];
+    const m = client.metadata || {};
+    const sec = { ...defaultSecurityState(), ...(m.security || {}) };
+    sec[key] = !!value;
+    m.security = sec;
+
+    const state = { ...defaultOnboardingState(), ...(m.onboarding || {}) };
+    let nextStatus = client.status;
+    if (goLiveReady(state, sec) && nextStatus === 'setup') {
+      nextStatus = 'live';
+      state.go_live_date = state.go_live_date || new Date().toISOString().slice(0, 10);
+      m.onboarding = state;
+    } else if (!securityGatePassed(sec) && nextStatus === 'live' && ONBOARDING_STEPS.every(s => state[s.key])) {
+      // If the only thing holding the client 'live' was the gate and an
+      // attestation is now un-ticked, pull it back to setup.
+      nextStatus = 'setup';
+      state.go_live_date = null;
+      m.onboarding = state;
+    }
+    await pool.query('UPDATE clients SET metadata = $1, status = $2 WHERE id = $3',
+      [JSON.stringify(m), nextStatus, id]);
+
+    res.json(buildSecurityChecklist(sec));
+  } catch (err) {
+    console.error('[ops-clients] security toggle error', err);
     res.status(500).json({ error: err.message });
   }
 });

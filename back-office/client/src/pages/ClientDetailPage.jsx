@@ -570,6 +570,7 @@ function NoteItem({ note }) {
 // Seed SQL downloads + status auto-flip live here too.
 function OnboardingSection({ clientId, metadata, status, clientEmail, onReload }) {
   const [checklist, setChecklist] = useState(null);
+  const [security, setSecurity] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [secretShown, setSecretShown] = useState(false);
@@ -581,9 +582,31 @@ function OnboardingSection({ clientId, metadata, status, clientEmail, onReload }
     try {
       const r = await api.getOnboardingChecklist(clientId);
       setChecklist(r.checklist);
+      setSecurity(r.security || null);
     } catch (e) { setErr(e.message); }
   };
   useEffect(() => { load(); }, [clientId]);
+
+  // SEPOS-SECGATE-001 — go-live security gate actions.
+  const verifySecurity = async () => {
+    setBusy(true); setErr('');
+    try {
+      const r = await api.verifySecurityGate(clientId);
+      setSecurity(r);
+      onReload?.();
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  const toggleSecurity = async (key, value) => {
+    setBusy(true); setErr('');
+    try {
+      const r = await api.setSecurityCheck(clientId, key, value);
+      setSecurity(r);
+      onReload?.();
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
 
   const toggle = async (key, done) => {
     setBusy(true); setErr('');
@@ -707,6 +730,11 @@ function OnboardingSection({ clientId, metadata, status, clientEmail, onReload }
         <div style={{ background: C.border, borderRadius: 999, height: 8, overflow: 'hidden' }}>
           <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? C.success : C.gold, transition: 'width 0.3s' }} />
         </div>
+        {pct === 100 && security && !security.gate_passed && status !== 'live' && (
+          <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, fontSize: 13, background: C.dangerBg, color: '#991b1b', border: `1px solid ${C.danger}33` }}>
+            🔒 All onboarding steps done — but the <strong>go-live security gate</strong> below is still blocking. Clear it to take this client live.
+          </div>
+        )}
       </div>
 
       {err && <div style={{ background: C.dangerBg, color: '#991b1b', padding: '10px 14px', borderRadius: 8, fontSize: 13 }}>{err}</div>}
@@ -843,6 +871,64 @@ function OnboardingSection({ clientId, metadata, status, clientEmail, onReload }
                 <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>Shown once — send to the owner, then ask them to change it on first sign-in.</div>
               </div>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* Go-live security gate (SEPOS-SECGATE-001) */}
+      <div style={{ ...card, padding: 0, overflow: 'hidden', border: `1px solid ${security && !security.gate_passed ? C.danger + '55' : C.border}` }}>
+        <div style={{ padding: '14px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 13, fontWeight: 800, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+            🔒 Go-live security gate
+          </h3>
+          <span style={{
+            marginLeft: 'auto', padding: '4px 12px', borderRadius: 999, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.6,
+            background: security?.gate_passed ? C.successBg : C.dangerBg,
+            color:      security?.gate_passed ? '#166534'  : '#991b1b',
+          }}>
+            {security ? (security.gate_passed ? '✓ Passed' : 'Blocking go-live') : '…'}
+          </span>
+        </div>
+        <div style={{ padding: '12px 22px', fontSize: 12.5, color: C.textMuted, borderBottom: `1px solid ${C.borderSoft}` }}>
+          A client cannot flip to <strong>live</strong> until every check below passes. The tenant-secret check is <strong>proven live</strong> (we probe the tenant) — it can't be ticked by hand.
+        </div>
+        {security === null ? (
+          <div style={{ padding: 30, textAlign: 'center', color: C.textMuted }}>Loading…</div>
+        ) : (
+          <div>
+            {security.checks.map((c, i) => (
+              <div key={c.key} style={{
+                display: 'flex', alignItems: 'flex-start', gap: 14,
+                padding: '14px 22px', borderTop: i === 0 ? 'none' : `1px solid ${C.borderSoft}`,
+                background: c.done ? C.successBg : 'transparent', opacity: busy ? 0.6 : 1,
+              }}>
+                {c.auto ? (
+                  <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, marginTop: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, background: c.done ? C.success : C.dangerBg, color: c.done ? 'white' : '#991b1b' }}>
+                    {c.done ? '✓' : '!'}
+                  </div>
+                ) : (
+                  <input type="checkbox" checked={c.done} disabled={busy}
+                    onChange={(e) => toggleSecurity(c.key, e.target.checked)}
+                    style={{ width: 18, height: 18, marginTop: 1, cursor: busy ? 'wait' : 'pointer', flexShrink: 0 }} />
+                )}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: c.done ? 700 : 500, color: c.done ? '#166534' : C.text }}>
+                    {c.label}
+                    {c.auto && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, color: C.gold, textTransform: 'uppercase', letterSpacing: 0.5 }}>verified</span>}
+                  </div>
+                  {c.auto && c.detail && (
+                    <div style={{ fontSize: 12, color: c.done ? '#166534' : '#991b1b', marginTop: 4 }}>
+                      {c.detail}{c.checked_at && <span style={{ color: C.textFaint }}> · checked {new Date(c.checked_at).toLocaleString()}</span>}
+                    </div>
+                  )}
+                  {c.auto && (
+                    <button onClick={verifySecurity} disabled={busy} style={{ ...btn.ghost, marginTop: 8, padding: '6px 12px', fontSize: 12 }}>
+                      {busy ? 'Checking…' : (c.done ? '↻ Re-check' : '🔍 Run security check')}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

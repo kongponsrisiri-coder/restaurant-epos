@@ -99,6 +99,8 @@ desktop SQLite endpoints (staff edit, voucher search/reports, batch delete).
 ### 📨 Handoff for Sam — queued ticket
 - ✅ **SEPOS-SPA-PRO-002 — DONE (Sam, 2026-06-23).** Mac auto-update zip target + fullscreen + updater diagnostics shipped in **siamepos-spa v0.2.1** (the spa moved to its own repo same day — see Recently Completed). `latest-mac.yml` now points at the `.zip`; one-time reinstall of v0.2.1 needed because the spa till's updater repo changed. Thanks Krit for the spec.
 
+> 🧭 **BREADCRUMB — SiamSpa now lives in its OWN repo: `~/Desktop/siamepos-spa`** (it was moved out of `~/Desktop/restaurant-epos/spa-epos` on 2026-06-23; the old subfolder NO LONGER EXISTS). **Always launch Sam from the new path:** `cd ~/Desktop/siamepos-spa && claude` (resume with `claude --resume`). ⚠️ Because the repo moved mid-session, Sam's Claude session history was stranded under the old path's project folder — if `claude --resume` ever fails to list a spa session from the new path, the transcripts are under `~/.claude/projects/-Users-korakot-Desktop-restaurant-epos-spa-epos/`; copy the latest `*.jsonl` into `~/.claude/projects/-Users-korakot-Desktop-siamepos-spa/` and resume again (done once already on 2026-06-23 to recover Sam). Spa releases now publish to its own repo, NOT restaurant-epos.
+
 ---
 
 ## 🛒 SiamShop — New Product

@@ -89,12 +89,29 @@ desktop SQLite endpoints (staff edit, voucher search/reports, batch delete).
 
 ---
 
+## 🔴 ACTION FOR POSE — set `JWT_SECRET` on every SiamSpa Railway (Krit, 2026-06-23)
+
+**Was a live, exploitable hole on the spa cloud — closed in code, but ops MUST finish it.**
+
+While stress-testing the spa I found `spa-api.siamepos.co.uk` had **no `JWT_SECRET` set** (and no `NODE_ENV=production`). The repo's public default secret `dev-only-change-me` was therefore in force, so **anyone could forge an admin JWT** and call protected endpoints — and `POST /api/auth/set-credentials` (gated by that same secret) could be used to **mint an admin owner login**. I confirmed it live (created + then deactivated a throwaway admin id 8), then closed it.
+
+**Code fix (shipped, live on spa):** `JWT_SECRET` **and** `SETUP_SECRET` now fall back to a **random per-boot secret** whenever unset or equal to the public default — no `NODE_ENV` dependency (the restaurant's SEPOS-061 only checked production; the spa Railway doesn't set `NODE_ENV`, which is exactly why the mitigation didn't fire). Files: `siamepos-spa/src/middleware/auth.js`, `siamepos-spa/src/routes/auth.js`. The hole is closed regardless of ops action.
+
+**Why ops STILL must set it (now required, not optional):**
+1. With a random per-boot secret, **every owner/staff session resets on each Railway restart/redeploy** — annoying for owners signing in on mobile.
+2. **Owner remote login can't be provisioned until it's set.** The new back-office "Provision owner login" button (below) POSTs the tenant's `/api/auth/set-credentials` with `X-Setup-Secret` = the tenant's `JWT_SECRET`. Until a real secret is set on the spa Railway, that call (correctly) returns **403** and no owner login can be created.
+
+**Do this per spa deploy:** set a long random `JWT_SECRET` on the spa's Railway service (same as the restaurant's `AUTH_SECRET` story — see the open Korakot manual-action above). Then paste that same value into the back-office once via the new owner-login provisioning field; it's remembered in client metadata after. Same applies to the restaurant tenants' `AUTH_SECRET` (already flagged) and any new SiamShop deploys.
+
+---
+
 ## 🟢 Active Work
 
 
 
 | Agent | Working On | Ticket | Started |
 |-------|-----------|--------|---------|
+| Krit | Back-office owner-login provisioning (POSTs tenant set-credentials) + spa security closeout | SEPOS-SPA-OWNER-001 v2 | 2026-06-23 |
 
 ### 📨 Handoff for Sam — queued ticket
 - 📋 **SEPOS-SPA-LICENSE-001 — spa licensing + ops device tracking (spec from Krit, 2026-06-23).** Get the spa on the SAME model as the restaurant for (A) the **offline license lock** (SEPOS-060 — Ed25519 sign-on-cloud / verify-offline, 14-day grace, fail-open, `requireValidLicense`, LockScreen) and (B) the **device→ops heartbeat** (till POSTs `/api/device/heartbeat` → `devices` table → `/api/health` exposes `tills:[…]` → ops reads it). Full spec with file pointers + acceptance: `~/Documents/Claude/Projects/SiamEpos/SEPOS-SPA-LICENSE-001-Sam-Licensing-and-Ops.md`. **🔑 Decide with Pose first:** share ONE Ed25519 keypair across restaurant+spa (recommended) vs per-product. **Krit is building the restaurant-epos heartbeat + `/api/health` `tills` shape + the ops ingestion/UI now** — match the `tills` JSON shape verbatim (Krit will post it in the spec when it lands). Reference impl = restaurant-epos `src/services/license{Service,Client}.js`.

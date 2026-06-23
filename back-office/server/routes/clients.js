@@ -62,8 +62,11 @@ const ONBOARDING_STEPS = [
   { key: 'menu_imported',           label: 'Menu imported (AI scanner or manual)' },
   { key: 'stripe_connected',        label: 'Stripe Connect linked (skip if no takeaway)' },
   { key: 'desktop_installer_sent',  label: 'Desktop installer + SYNC_SECRET sent to owner' },
-  // SEPOS-SPA-OWNER-001 — provision the owner's remote mobile sign-in (spa: magic link).
-  { key: 'owner_access',            label: 'Owner mobile login set up — owner email saved + JWT_SECRET & BREVO_API_KEY on Railway + magic-link tested' },
+  // SEPOS-SPA-OWNER-001 v2 — provision the owner's remote email+password sign-in
+  // (matches the restaurant web-app login). Automated by the "Provision owner
+  // login" button → POSTs the tenant's /api/auth/set-credentials. Requires
+  // JWT_SECRET (or SETUP_SECRET) set on the tenant Railway first.
+  { key: 'owner_access',            label: 'Owner mobile login provisioned (email + password) — needs JWT_SECRET on tenant Railway' },
 ];
 
 function defaultOnboardingState() {
@@ -581,6 +584,104 @@ router.post('/:id/provision/netlify', async (req, res) => {
     });
   } catch (err) {
     console.error('[ops-clients] provision netlify error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// SEPOS-SPA-OWNER-001 v2 — provision the owner's remote login (email + password)
+// on the tenant by calling its secret-gated POST /api/auth/set-credentials.
+// Mirrors the restaurant web-app login so both products work the same way.
+//
+//   body: { setup_secret?, email?, password?, name? }
+//
+// The tenant's setup secret is its JWT_SECRET (or a dedicated SETUP_SECRET) —
+// set on the tenant Railway FIRST. We read it from client.metadata
+// (tenant_setup_secret / tenant_jwt_secret) or accept it once via body. The
+// owner email defaults to the client's email on file. A strong temp password is
+// generated when one isn't supplied and returned ONCE so the operator can hand
+// it to the owner (we never store it).
+//
+// Pre-req: tenant_railway_url must be set, and the tenant must have a real
+// JWT_SECRET/SETUP_SECRET on Railway — otherwise set-credentials uses a random
+// per-boot secret and (correctly) rejects every call with 403.
+router.post('/:id/provision/owner-login', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const cur = await pool.query('SELECT * FROM clients WHERE id = $1', [id]);
+    if (cur.rows.length === 0) return res.status(404).json({ error: 'Client not found' });
+    const client = cur.rows[0];
+    const m = client.metadata || {};
+
+    const url = m.tenant_railway_url;
+    if (!url) {
+      return res.status(400).json({
+        error: 'Tenant Railway URL not set on this client',
+        hint:  'Paste the URL into Setup → Tenant infrastructure → Railway service URL.',
+      });
+    }
+    const setupSecret = req.body?.setup_secret || m.tenant_setup_secret || m.tenant_jwt_secret || '';
+    if (!setupSecret) {
+      return res.status(400).json({
+        error: 'Tenant setup secret missing',
+        hint:  'Set JWT_SECRET (or SETUP_SECRET) on the tenant Railway, then paste it here. It is the only key that can provision an owner login.',
+      });
+    }
+    const email = (req.body?.email || client.email || '').trim();
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'A valid owner email is required (none on file for this client).' });
+    }
+    // A strong temp password if the operator didn't choose one. No ambiguous
+    // chars; returned once for the operator to relay to the owner.
+    const tempPassword = req.body?.password
+      || ('Spa-' + crypto.randomBytes(6).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 9));
+
+    let resp, body;
+    try {
+      resp = await fetch(url.replace(/\/$/, '') + '/api/auth/set-credentials', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Setup-Secret': setupSecret },
+        body:    JSON.stringify({ email, password: tempPassword, name: client.owner_name || 'Owner' }),
+        signal:  AbortSignal.timeout(10000),
+      });
+      body = await resp.json().catch(() => ({}));
+    } catch (e) {
+      return res.status(502).json({ error: 'Could not reach the tenant API', hint: e.message });
+    }
+    if (resp.status === 403) {
+      return res.status(400).json({
+        error: 'Tenant rejected the setup secret (403)',
+        hint:  'The secret must match JWT_SECRET/SETUP_SECRET on the tenant Railway. If JWT_SECRET is unset, the tenant uses a random per-boot secret — set it on Railway first, then retry.',
+      });
+    }
+    if (!resp.ok) {
+      return res.status(502).json({ error: `Tenant set-credentials failed (${resp.status})`, detail: body });
+    }
+
+    // Persist the owner email + remember the secret so the operator doesn't
+    // have to paste it again, and tick the checklist step.
+    m.owner_email = email;
+    if (req.body?.setup_secret) m.tenant_setup_secret = req.body.setup_secret;
+    const state = { ...defaultOnboardingState(), ...(m.onboarding || {}) };
+    state.owner_access = true;
+    const allDone = ONBOARDING_STEPS.every(s => state[s.key]);
+    let nextStatus = client.status;
+    if (allDone && nextStatus === 'setup') {
+      nextStatus = 'live';
+      state.go_live_date = new Date().toISOString().slice(0, 10);
+    }
+    m.onboarding = state;
+    await pool.query('UPDATE clients SET metadata = $1, status = $2 WHERE id = $3',
+      [JSON.stringify(m), nextStatus, id]);
+
+    res.json({
+      success:       true,
+      email,
+      temp_password: tempPassword,   // shown ONCE — relay to the owner, not stored
+      tenant_result: body,           // { created, pin } or { updated }
+      checklist:     buildChecklist(state),
+    });
+  } catch (err) {
+    console.error('[ops-clients] provision owner-login error', err);
     res.status(500).json({ error: err.message });
   }
 });

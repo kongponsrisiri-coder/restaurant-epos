@@ -85,6 +85,16 @@ export const api = {
   getRailwayTemplateUrl: (id) =>
     fetch(`${API}/api/clients/${id}/provision/railway-template`, { headers: tokenHeader() }).then(handle),
 
+  // SEPOS-SPA-OWNER-001 v2 — provision the owner's email+password remote login
+  // on the tenant. body: { setup_secret?, email?, password? }. Returns
+  // { temp_password } once for the operator to relay to the owner.
+  provisionOwnerLogin: (id, body) =>
+    fetch(`${API}/api/clients/${id}/provision/owner-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify(body || {}),
+    }).then(handle),
+
   // SEPOS-WEB-004 — pull the tenant's live menu for the Featured Dishes
   // section of the website builder. Server-side proxy avoids CORS.
   getClientMenuPreview: (id) =>

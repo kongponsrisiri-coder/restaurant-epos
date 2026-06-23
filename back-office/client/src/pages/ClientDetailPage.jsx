@@ -330,6 +330,7 @@ export default function ClientDetailPage() {
           clientId={client.id}
           metadata={client.metadata || {}}
           status={client.status}
+          clientEmail={client.email}
           onReload={load}
         />
       )}
@@ -567,7 +568,7 @@ function NoteItem({ note }) {
 // left after the wizard ran. SYNC_SECRET is always retrievable here
 // (in case the operator misses it on the wizard's success card).
 // Seed SQL downloads + status auto-flip live here too.
-function OnboardingSection({ clientId, metadata, status, onReload }) {
+function OnboardingSection({ clientId, metadata, status, clientEmail, onReload }) {
   const [checklist, setChecklist] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -605,6 +606,8 @@ function OnboardingSection({ clientId, metadata, status, onReload }) {
   // checklist auto-updates.
   const [seedingMsg, setSeedingMsg] = useState(null);
   const [netlifyMsg, setNetlifyMsg] = useState(null);
+  const [ownerSecret, setOwnerSecret] = useState('');
+  const [ownerMsg, setOwnerMsg] = useState(null);
 
   const runSeed = async () => {
     setBusy(true); setErr(''); setSeedingMsg(null);
@@ -643,6 +646,24 @@ function OnboardingSection({ clientId, metadata, status, onReload }) {
       onReload?.();
     } catch (e) {
       setNetlifyMsg({ ok: false, text: e.message });
+    } finally { setBusy(false); }
+  };
+
+  const runOwnerLogin = async () => {
+    setBusy(true); setErr(''); setOwnerMsg(null);
+    try {
+      const r = await api.provisionOwnerLogin(clientId, ownerSecret ? { setup_secret: ownerSecret } : {});
+      setChecklist(r.checklist);
+      setOwnerMsg({
+        ok: true,
+        text: `✓ Owner login provisioned for ${r.email}`,
+        password: r.temp_password,
+        pin: r.tenant_result?.pin,
+      });
+      setOwnerSecret('');
+      onReload?.();
+    } catch (e) {
+      setOwnerMsg({ ok: false, text: e.message });
     } finally { setBusy(false); }
   };
 
@@ -783,6 +804,45 @@ function OnboardingSection({ clientId, metadata, status, onReload }) {
             border:     `1px solid ${seedingMsg.ok ? C.success : C.danger}33`,
           }}>
             {seedingMsg.text}
+          </div>
+        )}
+      </div>
+
+      {/* Owner remote login provisioning (SEPOS-SPA-OWNER-001 v2) */}
+      <div style={{ ...card, padding: 22 }}>
+        <h3 style={{ margin: 0, marginBottom: 14, fontSize: 13, fontWeight: 800, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+          Owner remote login
+        </h3>
+        <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 14 }}>
+          Creates the owner's <strong>email + password</strong> sign-in on the tenant (same login as the restaurant web app). Sends to the client email on file (<strong>{clientEmail || metadata?.owner_email || '—'}</strong>) and returns a one-time temporary password to relay. Requires the tenant Railway URL set in <strong>🔐 Setup → Tenant infrastructure</strong>, and a real <code style={{ background: C.surfaceAlt, padding: '1px 6px', borderRadius: 4, fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>JWT_SECRET</code> on the tenant Railway — paste that secret below the first time (it's then remembered).
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input
+            type="password"
+            value={ownerSecret}
+            onChange={(e) => setOwnerSecret(e.target.value)}
+            placeholder="Tenant JWT_SECRET / SETUP_SECRET (first time only)"
+            style={{ flex: '1 1 320px', minWidth: 240, padding: '9px 12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13 }}
+          />
+          <button onClick={runOwnerLogin} disabled={busy} style={{ ...btn.gold, opacity: busy ? 0.6 : 1 }}>
+            {busy ? 'Provisioning…' : '🔑 Provision owner login'}
+          </button>
+        </div>
+        {ownerMsg && (
+          <div style={{
+            marginTop: 14, padding: '10px 14px', borderRadius: 8, fontSize: 13,
+            background: ownerMsg.ok ? C.successBg : C.dangerBg,
+            color:      ownerMsg.ok ? '#166534'  : '#991b1b',
+            border:     `1px solid ${ownerMsg.ok ? C.success : C.danger}33`,
+          }}>
+            {ownerMsg.text}
+            {ownerMsg.ok && ownerMsg.password && (
+              <div style={{ marginTop: 8, fontFamily: 'ui-monospace, SFMono-Regular, monospace', fontSize: 13 }}>
+                Temp password: <strong>{ownerMsg.password}</strong>
+                {ownerMsg.pin && <> · PIN: <strong>{ownerMsg.pin}</strong></>}
+                <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>Shown once — send to the owner, then ask them to change it on first sign-in.</div>
+              </div>
+            )}
           </div>
         )}
       </div>

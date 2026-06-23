@@ -242,6 +242,122 @@ function DataStorageCard({ cardStyle }) {
   );
 }
 
+// ── SEPOS-PRO-005 — App & Updates card ──────────────────────────────
+// Gives the owner a heads-up that the till keeps itself current, rather
+// than leaving them to discover updates by accident. Desktop only (the
+// web POS / iPads update via the PWA service worker, not electron-updater)
+// — on the web build `window.siamepos` is undefined and we render nothing.
+function AppUpdatesCard({ cardStyle }) {
+  const sep = window.siamepos;            // present only inside the desktop app
+  const [version, setVersion] = useState(null);
+  // status ∈ idle | checking | available | downloading | downloaded | up-to-date | error
+  const [status, setStatus]   = useState('idle');
+  const [percent, setPercent] = useState(0);
+  const [newVersion, setNewVersion] = useState(null);
+  const [lastChecked, setLastChecked] = useState(null);
+
+  useEffect(() => {
+    if (!sep) return;
+    if (sep.getVersion) sep.getVersion().then((v) => v && setVersion(v)).catch(() => {});
+    if (sep.onUpdateStatus) {
+      sep.onUpdateStatus((p) => {
+        if (!p || !p.state) return;
+        if (p.state === 'checking')        { setStatus('checking'); }
+        else if (p.state === 'available')  { setStatus('available'); setNewVersion(p.version || null); }
+        else if (p.state === 'not-available') { setStatus('up-to-date'); setLastChecked(new Date()); }
+        else if (p.state === 'downloading'){ setStatus('downloading'); setPercent(p.percent || 0); }
+        else if (p.state === 'downloaded') { setStatus('downloaded'); setNewVersion(p.version || null); }
+        else if (p.state === 'error')      { setStatus('error'); }
+      });
+    }
+  }, [sep]);
+
+  // Web POS — nothing to show (PWA handles its own updates).
+  if (!sep) return null;
+
+  const check = async () => {
+    if (!sep.checkForUpdates) return;
+    setStatus('checking');
+    try {
+      const r = await sep.checkForUpdates();
+      setLastChecked(new Date());
+      if (r && r.ok === false && r.reason === 'not-packaged') setStatus('idle');
+      else if (r && r.ok && !r.version) setStatus('up-to-date');
+      // 'available'/'downloading'/'downloaded' arrive via onUpdateStatus events.
+    } catch { setStatus('error'); }
+  };
+
+  const badge = {
+    'idle':        { text: `🟢 v${version || '—'}`,        bg:'#f0f0f0', fg:'#555' },
+    'checking':    { text: '🔄 Checking…',                 bg:'#eff6ff', fg:'#1d4ed8' },
+    'up-to-date':  { text: '✅ Up to date',                bg:'#dcfce7', fg:'#15803d' },
+    'available':   { text: '⬇️ Update found — downloading', bg:'#eff6ff', fg:'#1d4ed8' },
+    'downloading': { text: `⬇️ Downloading ${percent}%`,   bg:'#eff6ff', fg:'#1d4ed8' },
+    'downloaded':  { text: '✨ Update ready',              bg:'#fef9c3', fg:'#854d0e' },
+    'error':       { text: '⚠️ Check failed',              bg:'#fee2e2', fg:'#991b1b' },
+  }[status] || { text: `🟢 v${version || '—'}`, bg:'#f0f0f0', fg:'#555' };
+
+  const busy = status === 'checking' || status === 'downloading' || status === 'available';
+
+  return (
+    <div style={cardStyle}>
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8, flexWrap:'wrap' }}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>⬆️ App &amp; Updates</h2>
+        <span style={{ fontSize:11, fontWeight:700, color:badge.fg, background:badge.bg, padding:'3px 9px', borderRadius:12 }}>
+          {badge.text}
+        </span>
+      </div>
+      <p style={{ fontSize:13, color:'#888', marginBottom:14, lineHeight:1.5 }}>
+        SiamEPOS Pro keeps itself up to date automatically — new versions download quietly in the
+        background and apply when you restart. You don't need to do anything; this is just so you
+        can see what's running and check on demand.
+      </p>
+
+      <div style={{ background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:10, padding:14 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+          <div>
+            <div style={{ fontSize:12, color:'#888' }}>Installed version</div>
+            <div style={{ fontSize:18, fontWeight:800, color:'#1a1a2e' }}>v{version || '—'}</div>
+            {lastChecked && (
+              <div style={{ fontSize:11, color:'#aaa', marginTop:2 }}>
+                Last checked {lastChecked.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}
+              </div>
+            )}
+          </div>
+
+          {status === 'downloaded' ? (
+            <button onClick={() => sep.restartToUpdate && sep.restartToUpdate()}
+              style={{ padding:'10px 18px', borderRadius:8, border:'none', background:'#16a34a', color:'white', fontWeight:800, fontSize:14, cursor:'pointer' }}>
+              ✨ Restart to update{newVersion ? ` → v${newVersion}` : ''}
+            </button>
+          ) : (
+            <button onClick={check} disabled={busy}
+              style={{ padding:'10px 18px', borderRadius:8, border:'1px solid #1a1a2e', background:'white', color:'#1a1a2e', fontWeight:700, fontSize:13, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1 }}>
+              {status === 'checking' ? 'Checking…' : '🔄 Check for updates'}
+            </button>
+          )}
+        </div>
+
+        {status === 'downloading' && (
+          <div style={{ marginTop:12, height:8, background:'#e5e7eb', borderRadius:6, overflow:'hidden' }}>
+            <div style={{ width:`${percent}%`, height:'100%', background:'#2563eb', transition:'width 0.3s' }} />
+          </div>
+        )}
+        {status === 'available' && (
+          <div style={{ marginTop:10, fontSize:12, color:'#1d4ed8' }}>
+            New version{newVersion ? ` v${newVersion}` : ''} found — downloading now. You'll get a “Restart to update” button when it's ready.
+          </div>
+        )}
+        {status === 'error' && (
+          <div style={{ marginTop:10, fontSize:12, color:'#991b1b' }}>
+            Couldn't reach the update server. The app will try again automatically — check your internet connection.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── SEPOS-LOCAL-001 Phase 6 — Remote Access (Cloudflare Tunnel) ─────
 function RemoteAccessCard({ cardStyle }) {
   const [info, setInfo] = useState(null);
@@ -1138,6 +1254,9 @@ export default function SettingsSection() {
 
       {/* SEPOS-LOCAL-001 P3 — first-boot migration banner */}
       <MigrationBanner />
+
+      {/* SEPOS-PRO-005 — version + auto-update status (desktop app only) */}
+      <AppUpdatesCard cardStyle={cardStyle} />
 
       {/* ── Network Setup (QR for iPads) ── */}
       <NetworkSetupCard cardStyle={cardStyle} />

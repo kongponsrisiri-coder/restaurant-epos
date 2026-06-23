@@ -652,24 +652,46 @@ function refreshTrayMenu() {
   ]));
 }
 
+// SEPOS-PRO-005 — module-scope handle so the renderer's "Check for updates"
+// button (Settings → App & Updates) can drive the same autoUpdater instance.
+let autoUpdater = null;
+
 function setupAutoUpdater() {
   // electron-updater is wired but inert until a publish feed is configured
   // in electron/package.json -> build.publish (GitHub Releases recommended).
   try {
-    const { autoUpdater } = require('electron-updater');
+    autoUpdater = require('electron-updater').autoUpdater;
     autoUpdater.autoDownload = true;
-    autoUpdater.on('error', (err) => console.error('[updater]', err?.message || err));
-    autoUpdater.on('update-available', () => console.log('[updater] update available — downloading'));
-    autoUpdater.on('update-downloaded', () => {
+
+    // SEPOS-PRO-005 — push every lifecycle state to the renderer so the
+    // Settings → App & Updates card can show live status (not just the
+    // "ready to restart" banner). Payload state ∈
+    // checking | available | not-available | downloading | downloaded | error.
+    const sendStatus = (payload) => {
+      try { if (mainWindow) mainWindow.webContents.send('siamepos:update-status', payload); }
+      catch (_) { /* window gone */ }
+    };
+
+    autoUpdater.on('checking-for-update', () => sendStatus({ state: 'checking' }));
+    autoUpdater.on('update-available', (info) => {
+      console.log('[updater] update available — downloading');
+      sendStatus({ state: 'available', version: info?.version });
+    });
+    autoUpdater.on('update-not-available', () => sendStatus({ state: 'not-available' }));
+    autoUpdater.on('download-progress', (p) => {
+      sendStatus({ state: 'downloading', percent: Math.round(p?.percent || 0) });
+    });
+    autoUpdater.on('error', (err) => {
+      console.error('[updater]', err?.message || err);
+      sendStatus({ state: 'error', message: err?.message || String(err) });
+    });
+    autoUpdater.on('update-downloaded', (info) => {
       console.log('[updater] update downloaded — will install on next restart');
+      sendStatus({ state: 'downloaded', version: info?.version });
+      // Keep the original channel too so the existing restart banner still fires.
       if (mainWindow) mainWindow.webContents.send('siamepos:update-ready');
     });
-    // SEPOS-PRO-004 — renderer "Restart to update" button applies the downloaded
-    // update immediately (quit + relaunch onto the new version).
-    ipcMain.handle('siamepos:restart-to-update', () => {
-      try { autoUpdater.quitAndInstall(); }
-      catch (e) { console.warn('[updater] quitAndInstall failed:', e?.message || e); }
-    });
+
     autoUpdater.checkForUpdatesAndNotify().catch((err) => {
       console.warn('[updater] check skipped:', err?.message || err);
     });
@@ -677,6 +699,32 @@ function setupAutoUpdater() {
     console.warn('[updater] not initialised:', err?.message || err);
   }
 }
+
+// SEPOS-PRO-004 — renderer "Restart to update" button applies the downloaded
+// update immediately (quit + relaunch onto the new version).
+ipcMain.handle('siamepos:restart-to-update', () => {
+  try { autoUpdater && autoUpdater.quitAndInstall(); }
+  catch (e) { console.warn('[updater] quitAndInstall failed:', e?.message || e); }
+});
+
+// SEPOS-PRO-005 — current app version for the Settings card. Works in dev too
+// (returns the electron/package.json version) so the card always shows a build.
+ipcMain.handle('siamepos:get-version', () => {
+  try { return app.getVersion(); } catch (_) { return null; }
+});
+
+// SEPOS-PRO-005 — manual "Check for updates" from Settings. Only meaningful in a
+// packaged install (autoUpdater is null in dev); returns a small status object so
+// the renderer can show "Updates only run in the installed app" when unpackaged.
+ipcMain.handle('siamepos:check-for-updates', async () => {
+  if (!autoUpdater) return { ok: false, reason: 'not-packaged' };
+  try {
+    const r = await autoUpdater.checkForUpdates();
+    return { ok: true, version: r?.updateInfo?.version || null };
+  } catch (e) {
+    return { ok: false, reason: 'error', message: e?.message || String(e) };
+  }
+});
 
 app.whenReady().then(async () => {
   // Dock icon (macOS only — Linux/Windows ignore this).

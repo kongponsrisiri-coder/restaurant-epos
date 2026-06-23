@@ -47,6 +47,8 @@ async function pingAndRecord(client) {
       is_online = true;
       orders_today  = Number.isFinite(parseInt(body.orders_today, 10)) ? parseInt(body.orders_today, 10) : null;
       last_order_at = body.last_order_at || null;
+      // SEPOS-PRO-009 — record the desktop tills the tenant reported.
+      if (Array.isArray(body.tills)) await recordTills(client.id, body.tills);
     }
   } catch (err) {
     response_ms = Date.now() - started;
@@ -60,6 +62,34 @@ async function pingAndRecord(client) {
   await pruneOldRows(client.id);
 
   return { ran: true, online: is_online, response_ms, orders_today, last_order_at };
+}
+
+// SEPOS-PRO-009 — upsert each reported till (one row per client+device), then
+// drop tills that have gone silent for 30+ days (decommissioned / test rows).
+async function recordTills(clientId, tills) {
+  try {
+    for (const t of tills) {
+      if (!t || !t.device_id) continue;
+      await pool.query(
+        `INSERT INTO client_tills (client_id, device_id, app_version, platform, last_seen, updated_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         ON CONFLICT (client_id, device_id) DO UPDATE SET
+           app_version = EXCLUDED.app_version,
+           platform    = EXCLUDED.platform,
+           last_seen   = EXCLUDED.last_seen,
+           updated_at  = NOW()`,
+        [clientId, String(t.device_id).slice(0, 64),
+         t.app_version || null, t.platform || null, t.last_seen || null]
+      );
+    }
+    await pool.query(
+      `DELETE FROM client_tills WHERE client_id = $1 AND last_seen IS NOT NULL
+         AND last_seen < NOW() - INTERVAL '30 days'`,
+      [clientId]
+    );
+  } catch (err) {
+    console.warn(`[ops-health] tills client=${clientId} failed:`, err.message);
+  }
 }
 
 async function pruneOldRows(clientId) {

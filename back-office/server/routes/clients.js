@@ -135,16 +135,19 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const [clientRes, healthRes, notesRes] = await Promise.all([
+    const [clientRes, healthRes, notesRes, tillsRes] = await Promise.all([
       pool.query('SELECT * FROM clients WHERE id = $1', [id]),
       pool.query('SELECT * FROM health_checks WHERE client_id = $1 ORDER BY checked_at DESC LIMIT 48', [id]),
       pool.query('SELECT * FROM support_notes WHERE client_id = $1 ORDER BY created_at DESC', [id]),
+      // SEPOS-PRO-009 — desktop tills reported by this client's install(s).
+      pool.query('SELECT device_id, app_version, platform, last_seen FROM client_tills WHERE client_id = $1 ORDER BY last_seen DESC', [id]),
     ]);
     if (clientRes.rows.length === 0) return res.status(404).json({ error: 'Client not found' });
     res.json({
       client: clientRes.rows[0],
       health: healthRes.rows,
       notes:  notesRes.rows,
+      tills:  tillsRes.rows,
     });
   } catch (err) {
     console.error('[ops-clients] detail error', err);

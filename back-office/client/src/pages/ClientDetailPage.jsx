@@ -7,6 +7,18 @@ import HealthDot from '../components/HealthDot.jsx';
 import Avatar from '../components/Avatar.jsx';
 import WebsiteBuilderPanel from '../components/WebsiteBuilderPanel.jsx';
 
+// SEPOS-PRO-009 — desktop till helpers.
+const PLATFORM_LABEL = { darwin: 'macOS', win32: 'Windows', linux: 'Linux' };
+// Semver-ish compare for Array.sort (ascending → highest version is last).
+function cmpVer(a, b) {
+  const pa = String(a || '').split('.').map(n => parseInt(n, 10) || 0);
+  const pb = String(b || '').split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+  }
+  return 0;
+}
+
 export default function ClientDetailPage() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -30,7 +42,7 @@ export default function ClientDetailPage() {
   useEffect(() => { load(); }, [id]);
 
   if (!data) return <div style={{ color: C.textMuted }}>Loading…</div>;
-  const { client, health, notes } = data;
+  const { client, health, notes, tills = [] } = data;
   const latest = health[0];
   const isSpa = (client.product || 'restaurant') === 'spa';
   const prod = PRODUCT_BADGE[client.product || 'restaurant'];
@@ -138,6 +150,7 @@ export default function ClientDetailPage() {
           ['onboarding', '📋 Onboarding'],
           ['setup',      '🔐 Setup'],
           ['health',     `Health (${health.length})`],
+          ['tills',      `🖥️ Tills (${tills.length})`],
           ['notes',      `Notes (${notes.length})`],
           ...(!isSpa ? [['website', '🌐 Website']] : []),
         ].map(([k, l]) => (
@@ -270,6 +283,43 @@ export default function ClientDetailPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {tab === 'tills' && (
+        <SectionCard title="Desktop tills (SiamEPOS Pro installs)">
+          {tills.length === 0 ? (
+            <div style={{ color: C.textFaint, padding: 18, textAlign: 'center', lineHeight: 1.6 }}>
+              No tills reporting yet.<br />
+              <span style={{ fontSize: 12 }}>Desktop installs on v1.6.102+ report a heartbeat every 5 min. Web-only (browser) tills don't appear here.</span>
+            </div>
+          ) : (
+            <div>
+              {(() => {
+                // Newest version seen across this client's tills → flag the laggards.
+                const latestVer = tills.map(t => t.app_version || '').sort(cmpVer).slice(-1)[0] || '';
+                return tills.map(t => {
+                  const seenMs = t.last_seen ? Date.now() - new Date(t.last_seen).getTime() : Infinity;
+                  const online = seenMs < 15 * 60 * 1000;       // heartbeat every 5 min → 15 min grace
+                  const outdated = latestVer && (t.app_version || '') !== latestVer;
+                  return (
+                    <div key={t.device_id} style={{ display: 'grid', gridTemplateColumns: '20px 1fr 110px 90px 1fr', gap: 12, alignItems: 'center', padding: '10px 0', borderBottom: `1px solid ${C.borderSoft}`, fontSize: 13 }}>
+                      <HealthDot online={online} size={9} />
+                      <span style={{ color: C.text, fontWeight: 600, fontFamily: 'monospace', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis' }} title={t.device_id}>{t.device_id}</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ color: C.text, fontWeight: 700 }}>v{t.app_version || '?'}</span>
+                        {outdated && <span style={{ fontSize: 10, fontWeight: 700, color: C.warning, background: C.warningBg, padding: '2px 6px', borderRadius: 10 }}>outdated</span>}
+                      </span>
+                      <span style={{ color: C.textMuted }}>{PLATFORM_LABEL[t.platform] || t.platform || '—'}</span>
+                      <span style={{ color: online ? C.textMuted : C.danger, fontSize: 12, textAlign: 'right' }}>
+                        {t.last_seen ? fmtRelTime(t.last_seen) : 'never'}
+                      </span>
+                    </div>
+                  );
+                });
+              })()}
             </div>
           )}
         </SectionCard>

@@ -70,6 +70,22 @@ CREATE TABLE IF NOT EXISTS health_checks (
 CREATE INDEX IF NOT EXISTS idx_health_client_time
   ON health_checks (client_id, checked_at DESC);
 
+-- SEPOS-PRO-009 — desktop till telemetry. The health-check cron reads the
+-- tenant's /api/health `tills:[…]` and upserts one row per device here, so the
+-- dashboard can show which tills exist, their app version + last-seen. One row
+-- per (client, device); stale rows pruned after 30 days of silence.
+CREATE TABLE IF NOT EXISTS client_tills (
+  id          SERIAL PRIMARY KEY,
+  client_id   INT REFERENCES clients(id) ON DELETE CASCADE,
+  device_id   TEXT NOT NULL,
+  app_version TEXT,
+  platform    TEXT,
+  last_seen   TIMESTAMPTZ,
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (client_id, device_id)
+);
+CREATE INDEX IF NOT EXISTS idx_client_tills_client ON client_tills (client_id);
+
 CREATE TABLE IF NOT EXISTS support_notes (
   id              SERIAL PRIMARY KEY,
   client_id       INT REFERENCES clients(id) ON DELETE CASCADE,

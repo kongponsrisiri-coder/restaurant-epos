@@ -80,7 +80,7 @@ Full report: `~/Documents/SiamEPOS-Docs/qa-reports/SiamEPOS-BugHunt-MultiAgent-2
 Per-release detail in Recently Completed below (tickets SEPOS-047a … 047j).
 
 **⚠️ Still OPEN — Korakot manual actions (NOT code):**
-1. Set `AUTH_SECRET` on every Railway service (ticket **SEPOS-052** written up). Until then the v1.6.56 auth gates are forgeable with the public default secret.
+1. ✅ **AUTH_SECRET — mostly closed (Korakot + Krit, 2026-06-23).** Confirmed already set on the live restaurant tenants: **Main SiamEPOS** (`api.siamepos.co.uk` / `restaurant-epos-production`), **Baan Siam**, **chart-thai** — none were exposed. **SiamLite parked** for now (separate shared `siamepos-lite` service + its own marketing domain — not addressed; revisit when Lite has live paying clients). Also done: **spa** `JWT_SECRET` set + verified (see resolved block below). **Standing rule for Pose:** unique `AUTH_SECRET`/`JWT_SECRET` per service on every NEW deploy (SEPOS-052 / new-deploy env checklist).
 2. Change the weak `0000` admin PIN in Staff settings.
 
 **Nook:** QA targets are listed per-release below — focus first on the money

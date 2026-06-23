@@ -243,10 +243,6 @@ async function initDB() {
     `);
 
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS staff_id INTEGER REFERENCES staff(id) ON DELETE SET NULL`); // SEPOS-030
-    // SEPOS-PRO-008 — link a bill to the booking it belongs to, for accurate
-    // per-customer spend. ON DELETE SET NULL: deleting a reservation must NEVER
-    // delete the bill (revenue stays; the link just clears).
-    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS reservation_id INTEGER REFERENCES reservations(id) ON DELETE SET NULL`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS payments (
@@ -430,6 +426,12 @@ async function initDB() {
     await pool.query(`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS marketing_consent INTEGER DEFAULT 0`); // SEPOS-033 (GDPR)
     await pool.query(`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS unsubscribed_at TIMESTAMP`); // SEPOS-033
     await pool.query(`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS table_ids TEXT`); // multi-table join — CSV of table ids, table_id stays the primary
+
+    // SEPOS-PRO-008 — link a bill to the booking it belongs to, for accurate
+    // per-customer spend. Placed AFTER the reservations table exists so the FK
+    // resolves on a fresh database. ON DELETE SET NULL: deleting a reservation
+    // must NEVER delete the bill (revenue stays; the link just clears).
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS reservation_id INTEGER REFERENCES reservations(id) ON DELETE SET NULL`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS reservation_reminders (

@@ -552,6 +552,10 @@ function stopLocalServer() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
+    // SEPOS-PRO-007 — launch the till in true fullscreen so it presents like a
+    // dedicated POS terminal. width/height stay as the restored size if staff
+    // leave fullscreen (Mac: Ctrl+Cmd+F · Windows: F11 · Esc).
+    fullscreen: true,
     width: 1280,
     height: 800,
     minWidth: 1024,

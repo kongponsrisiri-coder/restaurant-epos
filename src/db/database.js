@@ -433,6 +433,19 @@ async function initDB() {
     // must NEVER delete the bill (revenue stays; the link just clears).
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS reservation_id INTEGER REFERENCES reservations(id) ON DELETE SET NULL`);
 
+    // SEPOS-PRO-009 — desktop till telemetry for ops. Each install POSTs a
+    // heartbeat (device_id, app version, platform) here; /api/health exposes it
+    // so the ops dashboard can track which tills exist, their version + last-seen.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS devices (
+        device_id     VARCHAR(64) PRIMARY KEY,
+        restaurant_id VARCHAR(100),
+        app_version   VARCHAR(20),
+        platform      VARCHAR(20),
+        last_seen     TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS reservation_reminders (
         id SERIAL PRIMARY KEY,

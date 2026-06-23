@@ -528,6 +528,8 @@ function startLocalServer() {
       DB_MODE: 'local',
       SQLITE_PATH: sqlitePath,
       CLIENT_DIST_PATH: clientDist,
+      // SEPOS-PRO-009 — so the till heartbeat reports the installed version to ops.
+      APP_VERSION: app.getVersion(),
       // CLOUD_API_URL controls the Phase 3 sync target. Pass it through from
       // the launching shell if set; otherwise the queue accumulates with no push.
       ...(process.env.CLOUD_API_URL ? { CLOUD_API_URL: process.env.CLOUD_API_URL } : {}),

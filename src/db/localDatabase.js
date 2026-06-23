@@ -391,6 +391,16 @@ function initSchema() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- SEPOS-PRO-009 — device telemetry (mirrors PG; inert locally since tills
+    -- POST their heartbeat to the CLOUD, not the local server).
+    CREATE TABLE IF NOT EXISTS devices (
+      device_id     TEXT PRIMARY KEY,
+      restaurant_id TEXT,
+      app_version   TEXT,
+      platform      TEXT,
+      last_seen     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Offline action queue (Phase 3 consumer)
     CREATE TABLE IF NOT EXISTS sync_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

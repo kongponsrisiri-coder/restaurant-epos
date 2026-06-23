@@ -11,6 +11,7 @@ const syncService = require('./services/syncService');
 const cloudRelay = require('./services/cloudRelay');
 const licenseService = require('./services/licenseService');  // SEPOS-060
 const licenseClient = require('./services/licenseClient');    // SEPOS-060 phase 2 (desktop offline lock)
+const heartbeatClient = require('./services/heartbeatClient'); // SEPOS-PRO-009 (desktop till → ops telemetry)
 const tableAllocator = require('./services/tableAllocator');   // SEPOS-027 table-aware reservations
 const makeWebhooks = require('./services/makeWebhooks');
 const printService = require('./services/printService');
@@ -736,13 +737,52 @@ app.get('/api/health', async (req, res) => {
         MAX(created_at) AS last_order_at
       FROM orders
     `);
+    // SEPOS-PRO-009 — surface desktop tills so ops can track installs + versions.
+    // Wrapped separately so a missing devices table (older deploy) never breaks health.
+    let tills = [];
+    try {
+      const d = await pool.query(`SELECT device_id, app_version, platform, last_seen FROM devices ORDER BY last_seen DESC`);
+      tills = d.rows.map(r => ({
+        device_id: r.device_id,
+        app_version: r.app_version,
+        platform: r.platform,
+        last_seen: r.last_seen,
+      }));
+    } catch (_) { /* devices table not present yet */ }
     res.json({
       status: 'ok',
       orders_today: parseInt(result.rows[0].orders_today, 10) || 0,
       last_order_at: result.rows[0].last_order_at,
+      tills,
     });
   } catch (err) {
     res.status(500).json({ status: 'error', error: err.message });
+  }
+});
+
+// SEPOS-PRO-009 — desktop till heartbeat. The Electron app POSTs this on launch
+// + every few minutes so ops can see which tills exist, their version, platform
+// and last-seen. Ungated telemetry (device_id is the PK → repeated calls just
+// upsert one row). Field lengths capped defensively.
+app.post('/api/device/heartbeat', async (req, res) => {
+  try {
+    const { device_id, app_version, platform } = req.body || {};
+    if (!device_id) return res.status(400).json({ error: 'device_id required' });
+    const rid = (req.body && req.body.restaurant_id) || resolveRestaurantId(req) || null;
+    await pool.query(
+      `INSERT INTO devices (device_id, restaurant_id, app_version, platform, last_seen)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+       ON CONFLICT(device_id) DO UPDATE SET
+         restaurant_id = EXCLUDED.restaurant_id,
+         app_version   = EXCLUDED.app_version,
+         platform      = EXCLUDED.platform,
+         last_seen     = CURRENT_TIMESTAMP`,
+      [String(device_id).slice(0, 64), rid ? String(rid).slice(0, 100) : null,
+       String(app_version || '').slice(0, 20), String(platform || '').slice(0, 20)]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -7790,6 +7830,8 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   // SEPOS-060 phase 2 — desktop offline license lock. No-op in cloud mode
   // (no SQLITE_PATH). Fails open until LICENSE_PRIVATE_KEY is deployed.
   licenseClient.start();
+  // SEPOS-PRO-009 — desktop till telemetry to ops. No-op in cloud mode.
+  heartbeatClient.start();
   // SEPOS-PRO-003 — Mac local server subscribes to cloud Socket.io so
   // every cloud event lands on the Mac in real time. No-op in cloud mode.
   cloudRelay.start(io, syncService);

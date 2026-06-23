@@ -62,6 +62,8 @@ const ONBOARDING_STEPS = [
   { key: 'menu_imported',           label: 'Menu imported (AI scanner or manual)' },
   { key: 'stripe_connected',        label: 'Stripe Connect linked (skip if no takeaway)' },
   { key: 'desktop_installer_sent',  label: 'Desktop installer + SYNC_SECRET sent to owner' },
+  // SEPOS-SPA-OWNER-001 — provision the owner's remote mobile sign-in (spa: magic link).
+  { key: 'owner_access',            label: 'Owner mobile login set up — owner email saved + JWT_SECRET & BREVO_API_KEY on Railway + magic-link tested' },
 ];
 
 function defaultOnboardingState() {

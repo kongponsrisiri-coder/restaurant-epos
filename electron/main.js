@@ -663,6 +663,26 @@ function setupAutoUpdater() {
     autoUpdater = require('electron-updater').autoUpdater;
     autoUpdater.autoDownload = true;
 
+    // SEPOS-PRO-006 — persist updater logs to a file so failures are
+    // diagnosable on a real till (electron-updater otherwise only logs to a
+    // console nobody captures on a packaged app). One line per event in
+    // ~/Library/Logs/<app>/updater.log (macOS) / %APPDATA%\..\logs (Win).
+    try {
+      const logDir = app.getPath('logs');
+      fs.mkdirSync(logDir, { recursive: true });
+      const logFile = path.join(logDir, 'updater.log');
+      const write = (level, ...args) => {
+        const line = `[${new Date().toISOString()}] ${level} ${args.map((a) => (a && a.stack) || (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ')}\n`;
+        try { fs.appendFileSync(logFile, line); } catch (_) {}
+      };
+      autoUpdater.logger = {
+        info:  (...a) => { write('INFO', ...a); console.log('[updater]', ...a); },
+        warn:  (...a) => { write('WARN', ...a); console.warn('[updater]', ...a); },
+        error: (...a) => { write('ERROR', ...a); console.error('[updater]', ...a); },
+        debug: (...a) => write('DEBUG', ...a),
+      };
+    } catch (e) { console.warn('[updater] file logger not set:', e?.message || e); }
+
     // SEPOS-PRO-005 — push every lifecycle state to the renderer so the
     // Settings → App & Updates card can show live status (not just the
     // "ready to restart" banner). Payload state ∈

@@ -108,10 +108,13 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: mac-installer
-          # .dmg = installer, .blockmap = delta-update map,
-          # latest-mac.yml = manifest electron-updater fetches.
+          # .dmg = manual installer, .zip = the archive macOS in-place
+          # auto-update (Squirrel.Mac) actually consumes (SEPOS-PRO-006 —
+          # DMG-only releases could NOT self-update on Mac), .blockmap = delta
+          # map, latest-mac.yml = manifest electron-updater fetches.
           path: |
             electron/dist-electron/*.dmg
+            electron/dist-electron/*.zip
             electron/dist-electron/*.blockmap
             electron/dist-electron/latest-mac.yml
           if-no-files-found: error
@@ -202,6 +205,7 @@ jobs:
           # blockmap files so existing installs can auto-update.
           files: |
             dist/mac-installer/*.dmg
+            dist/mac-installer/*.zip
             dist/mac-installer/*.blockmap
             dist/mac-installer/latest-mac.yml
             dist/windows-installer/*.exe

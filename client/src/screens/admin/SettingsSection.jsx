@@ -255,6 +255,7 @@ function AppUpdatesCard({ cardStyle }) {
   const [percent, setPercent] = useState(0);
   const [newVersion, setNewVersion] = useState(null);
   const [lastChecked, setLastChecked] = useState(null);
+  const [errMsg, setErrMsg] = useState(null);
 
   useEffect(() => {
     if (!sep) return;
@@ -267,7 +268,7 @@ function AppUpdatesCard({ cardStyle }) {
         else if (p.state === 'not-available') { setStatus('up-to-date'); setLastChecked(new Date()); }
         else if (p.state === 'downloading'){ setStatus('downloading'); setPercent(p.percent || 0); }
         else if (p.state === 'downloaded') { setStatus('downloaded'); setNewVersion(p.version || null); }
-        else if (p.state === 'error')      { setStatus('error'); }
+        else if (p.state === 'error')      { setStatus('error'); setErrMsg(p.message || null); }
       });
     }
   }, [sep]);
@@ -350,7 +351,12 @@ function AppUpdatesCard({ cardStyle }) {
         )}
         {status === 'error' && (
           <div style={{ marginTop:10, fontSize:12, color:'#991b1b' }}>
-            Couldn't reach the update server. The app will try again automatically — check your internet connection.
+            Couldn't complete the update check. The app will try again automatically — check your internet connection.
+            {errMsg && (
+              <div style={{ marginTop:6, fontFamily:'Menlo,Consolas,monospace', fontSize:11, color:'#b45309', wordBreak:'break-word' }}>
+                {errMsg}
+              </div>
+            )}
           </div>
         )}
       </div>

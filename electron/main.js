@@ -664,6 +664,12 @@ function setupAutoUpdater() {
       console.log('[updater] update downloaded — will install on next restart');
       if (mainWindow) mainWindow.webContents.send('siamepos:update-ready');
     });
+    // SEPOS-PRO-004 — renderer "Restart to update" button applies the downloaded
+    // update immediately (quit + relaunch onto the new version).
+    ipcMain.handle('siamepos:restart-to-update', () => {
+      try { autoUpdater.quitAndInstall(); }
+      catch (e) { console.warn('[updater] quitAndInstall failed:', e?.message || e); }
+    });
     autoUpdater.checkForUpdatesAndNotify().catch((err) => {
       console.warn('[updater] check skipped:', err?.message || err);
     });

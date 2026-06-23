@@ -84,6 +84,16 @@ export default function App() {
   );
   const isMobile = window.innerWidth < 768;
 
+  // SEPOS-PRO-004 — desktop auto-update: main.js fires 'siamepos:update-ready'
+  // once electron-updater has downloaded a new version. Show a banner so staff
+  // can restart and apply it now instead of waiting for an incidental restart.
+  const [updateReady, setUpdateReady] = useState(false);
+  useEffect(() => {
+    if (window.siamepos && window.siamepos.onUpdateReady) {
+      window.siamepos.onUpdateReady(() => setUpdateReady(true));
+    }
+  }, []);
+
   // SEPOS-060 phase 2 — desktop offline license lock. Poll the local license
   // state; if the subscription has lapsed (grace expired / clock rollback) the
   // till is locked. Fails open everywhere else (cloud, or until the signing key
@@ -397,6 +407,25 @@ export default function App() {
     <>
       {body}
       <InstallBanner />
+      {updateReady && (
+        <div style={{
+          position: 'fixed', bottom: 16, left: 16, right: 16, maxWidth: 460, margin: '0 auto',
+          zIndex: 100001, background: '#0D1B3E', color: 'white', borderRadius: 12,
+          padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+        }}>
+          <div style={{ flex: 1, fontSize: 14, lineHeight: 1.4 }}>
+            <strong>✨ Update ready</strong><br />
+            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>A new version of SiamEPOS has downloaded.</span>
+          </div>
+          <button onClick={() => { window.siamepos && window.siamepos.restartToUpdate && window.siamepos.restartToUpdate(); }}
+            style={{ background: '#C9A84C', color: '#0D1B3E', border: 'none', borderRadius: 8, padding: '10px 16px', fontWeight: 800, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            Restart now
+          </button>
+          <button onClick={() => setUpdateReady(false)} aria-label="Dismiss"
+            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 18, cursor: 'pointer', padding: '0 2px' }}>×</button>
+        </div>
+      )}
     </>
   );
 }

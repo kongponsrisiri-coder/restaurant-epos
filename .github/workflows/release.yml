@@ -16,8 +16,27 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
+  # ── Version guard (SEPOS-PRO-004) ──────────────────────────────────
+  # electron-updater compares versions; if the tag doesn't match
+  # electron/package.json the release would offer no update (or the wrong
+  # one). Fail fast before the ~30-min Mac build if they diverge.
+  verify-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Tag must match electron/package.json version
+        run: |
+          PKG=$(node -p "require('./electron/package.json').version")
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "electron/package.json = $PKG   tag = $TAG"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "::error::Tag v$TAG does not match electron/package.json version $PKG — bump the version before tagging."
+            exit 1
+          fi
+
   # ── Mac ────────────────────────────────────────────────────────────
   build-mac:
+    needs: verify-version
     runs-on: macos-latest
     # 60 min (up from 30). Apple's notary service round-trip takes
     # ~20-30 minutes per build (verified on the v1.6.4 attempt where
@@ -100,6 +119,7 @@ jobs:
 
   # ── Windows ────────────────────────────────────────────────────────
   build-windows:
+    needs: verify-version
     runs-on: windows-latest
     timeout-minutes: 30
     steps:

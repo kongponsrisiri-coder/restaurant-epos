@@ -403,11 +403,21 @@ export default function App() {
     );
   }
 
+  // SEPOS-PRO-005 — hold the "Restart to update" banner back during active
+  // service. A restart nag over the live floor/order/kitchen/bar screens is
+  // disruptive mid-shift, so only surface it on the safe, between-service
+  // moments: the login screen (shift change) and the Admin back office. The
+  // update is already downloaded either way — it also applies on the next
+  // natural restart, and a manager can always restart on demand from
+  // Settings → App & Updates. Kitchen/bar role users (always on a service
+  // screen) get prompted at their next login.
+  const updateBannerAllowed = !staff || screen === 'admin';
+
   return (
     <>
       {body}
       <InstallBanner />
-      {updateReady && (
+      {updateReady && updateBannerAllowed && (
         <div style={{
           position: 'fixed', bottom: 16, left: 16, right: 16, maxWidth: 460, margin: '0 auto',
           zIndex: 100001, background: '#0D1B3E', color: 'white', borderRadius: 12,

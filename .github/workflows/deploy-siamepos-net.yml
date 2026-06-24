@@ -1,0 +1,55 @@
+name: Deploy siamepos.net (Baan Siam demo)
+
+# Auto-deploys the Baan Siam demo site (client/MockUp Website/) to its Netlify
+# site whenever that folder changes on main — so "fixed in the repo" no longer
+# means "stale on the live site". Path-scoped: backend / app / other pushes do
+# NOT trigger it. Clean /book-style URLs are preserved by transforming the
+# .html links at deploy time (the repo keeps book.html; Netlify serves /book).
+#
+# One-time setup: add a repo secret NETLIFY_AUTH_TOKEN (a Netlify personal
+# access token). The site ID below is not secret.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'client/MockUp Website/**'
+  workflow_dispatch: {}   # allow manual "Run workflow" from the Actions tab (use this to test once the secret is set)
+
+concurrency:
+  group: deploy-siamepos-net
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage deploy copy with clean URLs
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          SRC="client/MockUp Website"
+          DST="${RUNNER_TEMP}/baan-deploy"
+          cp -R "$SRC" "$DST"
+          # Match current live: href="book.html" -> href="/book", index.html -> "/"
+          for f in "$DST"/*.html "$DST"/portfolio/*.html; do
+            [ -f "$f" ] || continue
+            perl -i -pe 's/href="index\.html"/href="\/"/g; s/href="(about|allergens|book|contact|menu|order|portfolio)\.html"/href="\/$1"/g' "$f"
+          done
+          echo "DEPLOY_DIR=$DST" >> "$GITHUB_ENV"
+
+      - name: Deploy to Netlify (production)
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: 71d19263-fe6c-4c15-8bcc-ed8f0bf76ef0
+        run: |
+          if [ -z "${NETLIFY_AUTH_TOKEN:-}" ]; then
+            echo "::error::NETLIFY_AUTH_TOKEN secret is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          npx --yes netlify-cli@26 deploy --prod --no-build \
+            --dir "$DEPLOY_DIR" \
+            --site "$NETLIFY_SITE_ID" \
+            --message "auto-deploy ${GITHUB_SHA::7} from ${GITHUB_REF_NAME}"

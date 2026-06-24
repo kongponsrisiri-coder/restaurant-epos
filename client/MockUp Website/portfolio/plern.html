@@ -996,6 +996,16 @@
     @media (max-width: 760px) {
       .gallery-grid { grid-template-columns: 1fr 1fr; }
     }
+    /* Mobile polish — keep the 3-step process readable + universal overflow safety */
+    @media (max-width: 560px) {
+      .zones { gap: 14px; }
+      .zone-num { font-size: 30px; }
+      .zone-name { font-size: 15px; }
+    }
+    @media (max-width: 768px) {
+      img, svg, video { max-width: 100%; height: auto; }
+      html, body { overflow-x: hidden; }
+    }
   </style>
 </head>
 <body>

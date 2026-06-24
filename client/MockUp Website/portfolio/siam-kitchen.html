@@ -506,6 +506,11 @@
       .hero h1 { font-size: clamp(36px, 12vw, 56px); }
       .form-row { grid-template-columns: 1fr; }
     }
+    /* Universal overflow safety on mobile */
+    @media (max-width: 768px) {
+      img, svg, video { max-width: 100%; height: auto; }
+      html, body { overflow-x: hidden; }
+    }
   </style>
 </head>
 <body>

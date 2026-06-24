@@ -69,8 +69,8 @@ p{font-weight:300;line-height:1.7;color:var(--stone);}
 .pf-card:nth-child(2n){border-left:var(--border);}
 .pf-card:nth-last-child(-n+2){border-bottom:none;}
 .pf-card:hover{background:#FCFAF4;}
-.pf-card__thumb{position:relative;aspect-ratio:16/10;overflow:hidden;border-bottom:var(--border);}
-.pf-card__thumb object,.pf-card__thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+.pf-card__thumb{display:block;position:relative;aspect-ratio:16/10;overflow:hidden;border-bottom:var(--border);}
+.pf-card__thumb object,.pf-card__thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;}
 .pf-card__tag{position:absolute;top:14px;left:14px;background:rgba(40,60,47,0.92);color:var(--ivory);font-size:9px;font-weight:400;letter-spacing:0.22em;text-transform:uppercase;padding:5px 12px;}
 .pf-card__tag--mock{background:rgba(139,98,68,0.92);}
 .pf-card__body{padding:32px 32px 36px;}

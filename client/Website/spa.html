@@ -214,6 +214,7 @@ footer{background:#070F24;padding:56px 60px;display:grid;grid-template-columns:2
 </style>
 </head>
 <body>
+<script>(function(){var th=false;try{th=localStorage.getItem('siamLang')==='th'}catch(e){}if(th){document.body.classList.add('thai');document.documentElement.lang='th';document.addEventListener('DOMContentLoaded',function(){var b=document.querySelector('.lang-toggle');if(b)b.textContent='EN';});}})();</script>
 
 <!-- WHATSAPP -->
 <div class="wa-float">
@@ -237,7 +238,7 @@ footer{background:#070F24;padding:56px 60px;display:grid;grid-template-columns:2
     <li><a href="website-design.html" class="lang-en">Website Design</a><a href="website-design.html" class="lang-th">ออกแบบเว็บ</a></li>
     <li><a href="book-demo.html" class="nav-cta lang-en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th">จองเดโม</a></li>
   </ul>
-  <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'ภาษาไทย'">ภาษาไทย</button>
+  <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'ภาษาไทย';try{localStorage.setItem('siamLang',th?'th':'en')}catch(e){}">ภาษาไทย</button>
 </nav>
 
 <!-- HERO -->
@@ -296,8 +297,8 @@ footer{background:#070F24;padding:56px 60px;display:grid;grid-template-columns:2
 
     <div class="fcard highlight reveal rd2">
       <div class="fcard-icon">⭐</div>
-      <div class="fcard-badge lang-en">What VDIT charges extra for</div>
-      <div class="fcard-badge lang-th">ฟีเจอร์ที่ VDIT คิดเงินเพิ่ม</div>
+      <div class="fcard-badge lang-en">What others charge extra for</div>
+      <div class="fcard-badge lang-th">ฟีเจอร์ที่เจ้าอื่นคิดเงินเพิ่ม</div>
       <div class="fcard-villain lang-en">Competitors charge per month just for this feature</div>
       <div class="fcard-villain lang-th">คู่แข่งคิดค่าบริการรายเดือนกับฟีเจอร์นี้ฟีเจอร์เดียว</div>
       <div class="fcard-title lang-en">Customers choose their therapist online</div>
@@ -504,7 +505,7 @@ footer{background:#070F24;padding:56px 60px;display:grid;grid-template-columns:2
       <div class="cmp-row"><span class="cmp-icon">❌</span><span class="cmp-text lang-en">Paper health forms — get lost, no signature, legal risk</span><span class="cmp-text lang-th">แบบฟอร์มสุขภาพกระดาษ — หายง่าย ไม่มีลายเซ็น เสี่ยงปัญหากฎหมาย</span></div>
       <div class="cmp-row"><span class="cmp-icon">❌</span><span class="cmp-text lang-en">No idea which treatments make money until end of month</span><span class="cmp-text lang-th">ไม่รู้เลยว่าทรีตเมนต์ไหนทำเงิน จนกว่าจะถึงสิ้นเดือน</span></div>
       <div class="cmp-row"><span class="cmp-icon">❌</span><span class="cmp-text lang-en">Can't check bookings unless you're physically in the shop</span><span class="cmp-text lang-th">เช็กคิวจองไม่ได้เลยถ้าตัวไม่อยู่ที่ร้าน</span></div>
-      <div class="cmp-row"><span class="cmp-icon">❌</span><span class="cmp-text lang-en">Booking-only tools (like VDIT) — still need separate systems for revenue, rota, records</span><span class="cmp-text lang-th">เครื่องมือที่จองได้อย่างเดียว (อย่าง VDIT) — ยังต้องใช้ระบบแยกสำหรับยอดขาย ตารางงาน และประวัติลูกค้า</span></div>
+      <div class="cmp-row"><span class="cmp-icon">❌</span><span class="cmp-text lang-en">Booking-only tools — still need separate systems for revenue, rota, records</span><span class="cmp-text lang-th">เครื่องมือที่จองได้อย่างเดียว — ยังต้องใช้ระบบแยกสำหรับยอดขาย ตารางงาน และประวัติลูกค้า</span></div>
     </div>
     <div class="cmp-col good">
       <div class="cmp-header"><span class="lang-en">With SiamSpa</span><span class="lang-th">เมื่อใช้ SiamSpa</span></div>

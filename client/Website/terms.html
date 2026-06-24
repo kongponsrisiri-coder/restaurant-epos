@@ -153,6 +153,7 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
 </style>
 </head>
 <body>
+<script>(function(){var th=false;try{th=localStorage.getItem('siamLang')==='th'}catch(e){}if(th){document.body.classList.add('thai');document.documentElement.lang='th';document.addEventListener('DOMContentLoaded',function(){var b=document.querySelector('.lang-toggle');if(b)b.textContent='EN';});}})();</script>
 
 <!-- WHATSAPP FLOAT -->
 <div class="wa-float">
@@ -179,7 +180,7 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
     <li><a href="book-demo.html" class="nav-cta lang-en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th">จองเดโม</a></li>
   </ul>
   <button class="nav-burger" aria-label="Open menu">☰</button>
-  <button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'ภาษาไทย'">ภาษาไทย</button>
+  <button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'ภาษาไทย';try{localStorage.setItem('siamLang',th?'th':'en')}catch(e){}">ภาษาไทย</button>
 </nav>
 
 <!-- PAGE HERO -->

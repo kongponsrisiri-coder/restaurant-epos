@@ -140,6 +140,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
 </style>
 </head>
 <body>
+<script>(function(){var th=false;try{th=localStorage.getItem('siamLang')==='th'}catch(e){}if(th){document.body.classList.add('thai');document.documentElement.lang='th';document.addEventListener('DOMContentLoaded',function(){var b=document.querySelector('.lang-toggle');if(b)b.textContent='EN';});}})();</script>
 
 <div class="wa-float">
   <a href="https://wa.me/447896036386" target="_blank" class="wa-btn">&#x1F4AC; <span class="lang-en">WhatsApp Us</span><span class="lang-th">&#x0E40;&#x0E27;&#x0E47;&#x0E1A;&#x0E44;&#x0E0B;&#x0E15;&#x0E4C;&#x0E23;&#x0E32;&#x0E04;&#x0E32;&#x0E40;&#x0E17;&#x0E48;&#x0E32;&#x0E44;&#x0E2B;&#x0E23;&#x0E48;</span></a>
@@ -157,7 +158,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <li><a href="website-design.html" class="active lang-en">Website Design</a><a href="website-design.html" class="active lang-th">&#x0E2D;&#x0E2D;&#x0E01;&#x0E41;&#x0E1A;&#x0E1A;&#x0E40;&#x0E27;&#x0E47;&#x0E1A;</a></li>
     <li><a href="book-demo.html" class="nav-cta lang-en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th">&#x0E17;&#x0E14;&#x0E25;&#x0E2D;&#x0E07;&#x0E1F;&#x0E23;&#x0E35;</a></li>
   </ul>
-  <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;'">&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;</button>
+  <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;';try{localStorage.setItem('siamLang',th?'th':'en')}catch(e){}">&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;</button>
 </nav>
 
 <!-- HERO -->

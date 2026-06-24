@@ -196,6 +196,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
 </style>
 </head>
 <body>
+<script>(function(){var th=false;try{th=localStorage.getItem('siamLang')==='th'}catch(e){}if(th){document.body.classList.add('thai');document.documentElement.lang='th';document.addEventListener('DOMContentLoaded',function(){var b=document.querySelector('.lang-toggle');if(b)b.textContent='EN';});}})();</script>
 
 <div class="wa-float">
   <a href="https://wa.me/447896036386" target="_blank" class="wa-btn">&#x1F4AC; <span class="lang-en">Need help?</span><span class="lang-th">มีอะไรให้ช่วยไหม?</span></a>
@@ -225,7 +226,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <li><a href="index.html#install" class="active lang-en">Install Widget</a><a href="index.html#install" class="active lang-th">&#x0E15;&#x0E34;&#x0E14;&#x0E15;&#x0E31;&#x0E49;&#x0E07;&#x0E27;&#x0E34;&#x0E14;&#x0E40;&#x0E08;&#x0E47;&#x0E15;</a></li>
     <li><a href="book-demo.html" class="nav-cta lang-en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th">จองเดโม</a></li>
   </ul>
-  <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;'">&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;</button>
+  <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;';try{localStorage.setItem('siamLang',th?'th':'en')}catch(e){}">&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;</button>
 </nav>
 
 <!-- HERO -->

@@ -1239,5 +1239,8 @@ module.exports = {
   testPrint,
   findCupsQueueForIp,
   buildReceipt,           // exported for mock-receipt test print
+  buildTestPage,          // SEPOS-ANDROID-001 — buffer endpoints for the native app
+  buildKitchenTicket,     // SEPOS-ANDROID-001
+  buildFullKitchenTicket, // SEPOS-ANDROID-001
   printReportText,        // SEPOS-REPORTS-001 — admin report ESC/POS
 };

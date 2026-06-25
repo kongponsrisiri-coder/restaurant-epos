@@ -10,7 +10,8 @@
 // to persist changes.
 
 import { useState, useEffect } from 'react';
-import { getSettings, updateSettings, testNetworkPrinter, cupsQueueForIp, printerHealth, printerGetMac, printerDiscover, printerThaiTest } from '../../api';
+import { getSettings, updateSettings, testNetworkPrinter, cupsQueueForIp, printerHealth, printerGetMac, printerDiscover, printerThaiTest, getPrintTestBuffer } from '../../api';
+import { isNativeApp, sendRawToPrinter } from '../../native/printer'; // SEPOS-ANDROID-001
 
 // ── Network Printers card (IP-based, RAW + LPR + CUPS fallback chain) ──
 function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
@@ -104,8 +105,16 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
     if (!ip && !name) return;
     setTest(key, 'testing');
     try {
-      const r = await testNetworkPrinter(ip || '', port, name || '');
-      setTest(key, r && r.success ? 'ok' : 'fail');
+      if (isNativeApp() && ip) {
+        // SEPOS-ANDROID-001 — on the Android app the cloud can't reach a LAN
+        // printer, so fetch the server's ESC/POS test page and send it ourselves.
+        const buf = await getPrintTestBuffer();
+        const r = await sendRawToPrinter(ip, port, buf.data);
+        setTest(key, r && r.ok ? 'ok' : 'fail');
+      } else {
+        const r = await testNetworkPrinter(ip || '', port, name || '');
+        setTest(key, r && r.success ? 'ok' : 'fail');
+      }
     } catch { setTest(key, 'fail'); }
     setTimeout(() => setTest(key, 'idle'), 3000);
   };

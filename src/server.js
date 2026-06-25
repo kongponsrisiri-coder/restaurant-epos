@@ -7054,6 +7054,42 @@ app.post('/api/print/report-text', async (req, res) => {
   }
 });
 
+// ── SEPOS-ANDROID-001 — ESC/POS buffers for the native Android app ──────────
+// The cloud can't reach a LAN printer, so the Android app PULLS the bytes and
+// sends them to the printer itself (native TCP plugin). Same builders as the
+// desktop path → byte-identical formatting (Thai, £, logo, cut). Returns base64.
+app.get('/api/print/buffers/test', async (req, res) => {
+  try {
+    const buf = printService.buildTestPage();
+    res.json({ ok: true, data: Buffer.from(buf).toString('base64'), bytes: buf.length });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/print/buffers/receipt', async (req, res) => {
+  const { order_id, payment_details } = req.body || {};
+  try {
+    const settings = await loadSettings();
+    const orderRes = await pool.query(
+      `SELECT orders.*, tables.table_number
+       FROM orders LEFT JOIN tables ON orders.table_id = tables.id
+       WHERE orders.id = $1`, [order_id]);
+    if (!orderRes.rows.length) return res.status(404).json({ ok: false, error: 'Order not found' });
+    const itemsRes = await pool.query(
+      `SELECT order_items.*, menu_items.name, menu_items.name_alt
+       FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
+       WHERE order_items.order_id = $1`, [order_id]);
+    const buf = printService.buildReceipt({
+      order: orderRes.rows[0], items: itemsRes.rows, settings, paymentDetails: payment_details || {},
+    });
+    res.json({ ok: true, data: Buffer.from(buf).toString('base64'), bytes: buf.length });
+  } catch (err) {
+    console.error('[print/buffers/receipt]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post('/api/print/receipt', async (req, res) => {
   const { order_id, payment_details, printer_name } = req.body;
   try {

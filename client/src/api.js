@@ -126,6 +126,9 @@ export const getRestaurant = () => get('/api/restaurant');
 
 // SEPOS-025/026 — Network printing (server-side ESC/POS to TCP port 9100)
 export const testNetworkPrinter   = (ip, port, printer_name) => post('/api/print/test',    { ip, port, printer_name });
+// SEPOS-ANDROID-001 — ESC/POS buffers (base64) for the native app to send itself.
+export const getPrintTestBuffer   = () => get('/api/print/buffers/test');
+export const getReceiptBuffer     = (order_id, payment_details) => post('/api/print/buffers/receipt', { order_id, payment_details });
 export const cupsQueueForIp       = (ip) => get(`/api/print/cups-queue-for-ip?ip=${encodeURIComponent(ip)}`);
 // SEPOS-PRINT-HEALTH-001 — TCP reachability check, returns { ok, latency_ms, error? }
 export const printerHealth        = (ip, port) => get(`/api/print/health?ip=${encodeURIComponent(ip)}&port=${port || 9100}`);

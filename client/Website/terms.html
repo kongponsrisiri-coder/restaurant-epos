@@ -153,7 +153,7 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
 </style>
 </head>
 <body>
-<script>(function(){var th=false;try{th=localStorage.getItem('siamLang')==='th'}catch(e){}if(th){document.body.classList.add('thai');document.documentElement.lang='th';document.addEventListener('DOMContentLoaded',function(){var b=document.querySelector('.lang-toggle');if(b)b.textContent='EN';});}})();</script>
+<script>(function(){var s=null;try{s=localStorage.getItem('siamLang')}catch(e){}var th=(s==='th')||(s===null&&/^th/i.test((navigator.language||navigator.userLanguage||'')));if(th){document.body.classList.add('thai');document.documentElement.lang='th';document.addEventListener('DOMContentLoaded',function(){var b=document.querySelector('.lang-toggle');if(b)b.textContent='EN';});}})();</script>
 
 <!-- WHATSAPP FLOAT -->
 <div class="wa-float">

@@ -222,7 +222,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
 </script>
 </head>
 <body>
-<script>(function(){var th=false;try{th=localStorage.getItem('siamLang')==='th'}catch(e){}if(th){document.body.classList.add('thai');document.documentElement.lang='th';document.addEventListener('DOMContentLoaded',function(){var b=document.querySelector('.lang-toggle');if(b)b.textContent='EN';});}})();</script>
+<script>(function(){var s=null;try{s=localStorage.getItem('siamLang')}catch(e){}var th=(s==='th')||(s===null&&/^th/i.test((navigator.language||navigator.userLanguage||'')));if(th){document.body.classList.add('thai');document.documentElement.lang='th';document.addEventListener('DOMContentLoaded',function(){var b=document.querySelector('.lang-toggle');if(b)b.textContent='EN';});}})();</script>
 
 <div class="wa-float">
   <a href="https://wa.me/447896036386" target="_blank" class="wa-btn">💬 <span class="lang-en">WhatsApp Us</span><span class="lang-th">ทักเราทาง WhatsApp</span></a>
@@ -297,8 +297,8 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
         <div class="price-saves">
           <p class="lang-en">Compared to what you replace</p>
           <p class="lang-th">เทียบกับค่าบริการเดิมที่คุณจะได้เลิกจ่าย</p>
-          <strong class="lang-en">Save £411–£1,411 every month</strong>
-          <strong class="lang-th">ประหยัด £411–£1,411 ทุกเดือน</strong>
+          <strong class="lang-en">Most restaurants save £440–£1,440 a month</strong>
+          <strong class="lang-th">ร้านส่วนใหญ่ประหยัด £440–£1,440 ต่อเดือน</strong>
         </div>
 
         <a href="book-demo.html" class="btn-gold-big lang-en">Book a Free 20-Minute Demo</a>

@@ -424,7 +424,7 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
 </style>
 </head>
 <body>
-<script>(function(){var th=false;try{th=localStorage.getItem('siamLang')==='th'}catch(e){}if(th){document.body.classList.add('thai');document.documentElement.lang='th';document.addEventListener('DOMContentLoaded',function(){var b=document.querySelector('.lang-toggle');if(b)b.textContent='EN';});}})();</script>
+<script>(function(){var s=null;try{s=localStorage.getItem('siamLang')}catch(e){}var th=(s==='th')||(s===null&&/^th/i.test((navigator.language||navigator.userLanguage||'')));if(th){document.body.classList.add('thai');document.documentElement.lang='th';document.addEventListener('DOMContentLoaded',function(){var b=document.querySelector('.lang-toggle');if(b)b.textContent='EN';});}})();</script>
 
 <!-- booking modal removed — restaurant booking demo now lives at https://www.siamepos.net -->
 
@@ -698,8 +698,8 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
     <div class="section-label lang-th" style="color:var(--gold);">ตัวเลขไม่โกหก</div>
     <h2 class="section-title white lang-en">What you're paying now<br>vs what you'd pay with SiamEPOS</h2>
     <h2 class="section-title white lang-th">ตอนนี้คุณจ่ายอยู่เท่าไหร่<br>เทียบกับถ้าใช้ SiamEPOS</h2>
-    <p class="section-sub lang-en" style="color:rgba(255,255,255,0.5); margin:0 auto 0; max-width:520px;">Based on a typical Thai restaurant doing 200 covers/week and £2,000/week in takeaway orders.</p>
-    <p class="section-sub lang-th" style="color:rgba(255,255,255,0.5); margin:0 auto 0; max-width:520px;">อ้างอิงจากร้านอาหารไทยทั่วไปที่รับลูกค้า 200 คน/สัปดาห์ และยอดสั่งกลับบ้าน £2,000/สัปดาห์</p>
+    <p class="section-sub lang-en" style="color:rgba(255,255,255,0.5); margin:0 auto 0; max-width:520px;">Based on a busy Thai restaurant doing 200 covers/week and £2,000/week in takeaway orders.</p>
+    <p class="section-sub lang-th" style="color:rgba(255,255,255,0.5); margin:0 auto 0; max-width:520px;">อ้างอิงจากร้านอาหารไทยที่ขายดี รับลูกค้า 200 คน/สัปดาห์ และยอดสั่งกลับบ้าน £2,000/สัปดาห์</p>
   </div>
   <div class="cost-table-wrap">
     <div class="cost-versus">
@@ -774,8 +774,8 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
       </div>
     </div>
     <div class="cost-saving-banner">
-      <div class="cost-saving-text lang-en">That's a saving of <strong>over £3,200 every month</strong> — more than <strong>£38,400 a year</strong> — going back into your restaurant instead of into OpenTable's and Deliveroo's pockets.</div>
-      <div class="cost-saving-text lang-th">เท่ากับประหยัดได้ <strong>กว่า £3,200 ทุกเดือน</strong> — หรือมากกว่า <strong>£38,400 ต่อปี</strong> — เงินก้อนนี้กลับเข้าร้านของคุณ แทนที่จะเข้ากระเป๋า OpenTable กับ Deliveroo</div>
+      <div class="cost-saving-text lang-en">For a busy restaurant like this, that's a saving of <strong>over £3,000 every month</strong>. Most restaurants save <strong>£440–£1,440 a month</strong> — every pound going back into your restaurant instead of OpenTable's and Deliveroo's pockets.</div>
+      <div class="cost-saving-text lang-th">ร้านที่ขายดีแบบนี้ประหยัดได้ <strong>กว่า £3,000 ทุกเดือน</strong> ส่วนร้านทั่วไปประหยัด <strong>£440–£1,440 ต่อเดือน</strong> — เงินทุกปอนด์กลับเข้าร้านของคุณ แทนที่จะเข้ากระเป๋า OpenTable กับ Deliveroo</div>
       <a href="book-demo.html" class="cost-saving-pill lang-en">See it in a demo</a>
       <a href="book-demo.html" class="cost-saving-pill lang-th">ดูของจริงในเดโม</a>
     </div>

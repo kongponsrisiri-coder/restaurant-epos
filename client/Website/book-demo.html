@@ -178,7 +178,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
 </style>
 </head>
 <body>
-<script>(function(){var th=false;try{th=localStorage.getItem('siamLang')==='th'}catch(e){}if(th){document.body.classList.add('thai');document.documentElement.lang='th';document.addEventListener('DOMContentLoaded',function(){var b=document.querySelector('.lang-toggle');if(b)b.textContent='EN';});}})();</script>
+<script>(function(){var s=null;try{s=localStorage.getItem('siamLang')}catch(e){}var th=(s==='th')||(s===null&&/^th/i.test((navigator.language||navigator.userLanguage||'')));if(th){document.body.classList.add('thai');document.documentElement.lang='th';document.addEventListener('DOMContentLoaded',function(){var b=document.querySelector('.lang-toggle');if(b)b.textContent='EN';});}})();</script>
 
 <div class="wa-float">
   <a href="https://wa.me/447896036386?text=Hello%2C%20I%27d%20like%20to%20book%20a%20demo%20of%20SiamEPOS" target="_blank" class="wa-btn">💬 <span class="lang-en">Book via WhatsApp</span><span class="lang-th">จองผ่าน WhatsApp</span></a>

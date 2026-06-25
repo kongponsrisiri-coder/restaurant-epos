@@ -6,6 +6,14 @@ const getServerURL = () => {
     return 'http://localhost:3001';
   }
 
+  // SEPOS-ANDROID-001 — Capacitor native app (Android). The bundle is served
+  // from https://localhost, so without this it would wrongly hit :3001. Use the
+  // per-device tenant URL chosen on first launch (empty → SetupScreen gates the app).
+  if (typeof window !== 'undefined' && window.Capacitor &&
+      typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
+    try { return (localStorage.getItem('siamepos_tenant_url') || '').replace(/\/+$/, ''); } catch { return ''; }
+  }
+
   const host = window.location.hostname;
   // If running on localhost or local IP (192.168.x.x or 10.x.x.x)
   if (

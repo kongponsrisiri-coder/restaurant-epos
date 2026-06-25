@@ -4,6 +4,8 @@ import { getRestaurant, getLicenseState } from './api';
 import { canAccessReservations, canAccessKitchen, canAccessFullEPOS } from './utils/plan';
 import UpgradeLocked from './components/UpgradeLocked';
 import LoginScreen from './screens/LoginScreen';
+import SetupScreen from './screens/SetupScreen';          // SEPOS-ANDROID-001
+import { needsTenantSetup } from './native/tenant';       // SEPOS-ANDROID-001
 import TableMapScreen from './screens/TableMapScreen';
 import OrderScreen from './screens/OrderScreen';
 import KitchenScreen from './screens/KitchenScreen';
@@ -222,6 +224,13 @@ export default function App() {
   // re-issues a valid token). Only ever set on a desktop till past its grace.
   if (licenseLock) {
     return <LockScreen state={licenseLock} onUnlocked={() => setLicenseLock(null)} />;
+  }
+
+  // SEPOS-ANDROID-001 — first launch on the Android app: point this device at a
+  // restaurant/spa before anything else (no backend is baked into the bundle).
+  // No-op on web/desktop.
+  if (needsTenantSetup()) {
+    return <SetupScreen onConfigured={() => window.location.reload()} />;
   }
 
   // ── Determine body ────────────────────────────────────────────

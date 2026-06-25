@@ -1,0 +1,6 @@
+{
+  "appId": "uk.co.siamepos.app",
+  "appName": "SiamEPOS",
+  "webDir": "dist",
+  "android": { "allowMixedContent": false }
+}

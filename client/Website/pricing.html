@@ -616,5 +616,6 @@ document.querySelectorAll('.nav-links a').forEach(function(a){a.addEventListener
   syncTable();
 })();
 </script>
+  <script>document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest('a[href*="wa.me"]'):null;if(a&&typeof gtag==="function"){gtag("event","whatsapp_click",{link_url:a.href});}},true);</script>
 </body>
 </html>

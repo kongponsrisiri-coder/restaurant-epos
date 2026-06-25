@@ -1042,5 +1042,6 @@ document.querySelectorAll('a[href^="#"]').forEach(a=>a.addEventListener('click',
 })();
 </script>
 <script>document.querySelectorAll('.nav-burger').forEach(function(b){b.addEventListener('click',function(){document.body.classList.toggle('menu-open');});});document.querySelectorAll('.nav-links a').forEach(function(a){a.addEventListener('click',function(){document.body.classList.remove('menu-open');});});</script>
+  <script>document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest('a[href*="wa.me"]'):null;if(a&&typeof gtag==="function"){gtag("event","whatsapp_click",{link_url:a.href});}},true);</script>
 </body>
 </html>

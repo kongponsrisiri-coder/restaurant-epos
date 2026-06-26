@@ -6,6 +6,14 @@ const getServerURL = () => {
     return 'http://localhost:3001';
   }
 
+  // SEPOS-ANDROID-001 — Capacitor native app (Android). The bundle is served
+  // from https://localhost, so without this it would wrongly hit :3001. Use the
+  // per-device tenant URL chosen on first launch (empty → SetupScreen gates the app).
+  if (typeof window !== 'undefined' && window.Capacitor &&
+      typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
+    try { return (localStorage.getItem('siamepos_tenant_url') || '').replace(/\/+$/, ''); } catch { return ''; }
+  }
+
   const host = window.location.hostname;
   // If running on localhost or local IP (192.168.x.x or 10.x.x.x)
   if (
@@ -126,6 +134,13 @@ export const getRestaurant = () => get('/api/restaurant');
 
 // SEPOS-025/026 — Network printing (server-side ESC/POS to TCP port 9100)
 export const testNetworkPrinter   = (ip, port, printer_name) => post('/api/print/test',    { ip, port, printer_name });
+// SEPOS-ANDROID-001 — ESC/POS buffers (base64) for the native app to send itself.
+export const getPrintTestBuffer   = () => get('/api/print/buffers/test');
+export const getReceiptBuffer     = (order_id, payment_details) => post('/api/print/buffers/receipt', { order_id, payment_details });
+export const getKitchenBuffer     = (order_id) => post('/api/print/buffers/kitchen', { order_id });
+// SEPOS-ANDROID-001 — dine-in kitchen/bar/fire-notice buffer (firing device pushes it to the LAN printer)
+export const getKitchenTicketBuffer = ({ order_id, items, course, kind }) =>
+  post('/api/print/buffers/kitchen-ticket', { order_id, items, course, kind });
 export const cupsQueueForIp       = (ip) => get(`/api/print/cups-queue-for-ip?ip=${encodeURIComponent(ip)}`);
 // SEPOS-PRINT-HEALTH-001 — TCP reachability check, returns { ok, latency_ms, error? }
 export const printerHealth        = (ip, port) => get(`/api/print/health?ip=${encodeURIComponent(ip)}&port=${port || 9100}`);

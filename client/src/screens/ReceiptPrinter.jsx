@@ -10,9 +10,25 @@
  *  3. Browser print dialog — universal fallback.
  */
 
-import { serverPrintReceipt } from '../api';
+import { serverPrintReceipt, getReceiptBuffer } from '../api';
+import { isNativeApp, sendRawToPrinter } from '../native/printer';   // SEPOS-ANDROID-001
 
 export function printReceipt({ order, items, settings, paymentDetails = {} }) {
+  // ── 0. Native Android app — the cloud can't reach a LAN printer, so fetch the
+  // server's ESC/POS bytes and send them to the configured printer ourselves
+  // (byte-identical to the desktop path). Falls back to the browser popup.
+  if (isNativeApp() && settings.printer_receipt_ip) {
+    getReceiptBuffer(order.id, paymentDetails)
+      .then((b) => {
+        if (!b || !b.data) throw new Error(b?.error || 'no buffer');
+        return sendRawToPrinter(settings.printer_receipt_ip, settings.printer_receipt_port || 9100, b.data);
+      })
+      .catch((e) => {
+        console.warn('[receipt] native print failed, falling back:', e?.message || e);
+        _clientPrint({ order, items, settings, paymentDetails });
+      });
+    return;
+  }
   // ── 1. Server-side print (ESC/POS — crisp black + silent) ─────────────────
   // Use it for a network printer (IP) OR — SEPOS-058 — a USB printer addressed
   // by name on the desktop. The HTML/GDI fallback (_clientPrint) prints faint

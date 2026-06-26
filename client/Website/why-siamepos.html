@@ -331,8 +331,8 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
           <td class="lang-en">Monthly price</td><td class="lang-th">ราคา/เดือน</td>
           <td style="font-weight:800;color:var(--text-muted);" class="lang-en">£150–500+ (+ per-cover fees)</td>
           <td style="font-weight:800;color:var(--text-muted);" class="lang-th">£150–500+ (+ ค่าธรรมเนียมต่อหัว)</td>
-          <td class="us-col" style="color:var(--gold);font-weight:800;">£89 <span style="font-size:12px;font-weight:600;">all-in</span></td>
-          <td class="us-col" style="color:var(--gold);font-weight:800;">£89 <span style="font-size:12px;font-weight:600;">ครบทุกฟีเจอร์</span></td>
+          <td class="us-col" style="color:var(--gold);font-weight:800;">£59 <span style="font-size:12px;font-weight:600;">Founder's Rate · all-in</span></td>
+          <td class="us-col" style="color:var(--gold);font-weight:800;">£59 <span style="font-size:12px;font-weight:600;">Founder's Rate · ครบทุกฟีเจอร์</span></td>
         </tr>
       </tbody>
     </table>
@@ -398,5 +398,6 @@ const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)e.targ
 document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
 </script>
 <script>document.querySelectorAll('.nav-burger').forEach(function(b){b.addEventListener('click',function(){document.body.classList.toggle('menu-open');});});document.querySelectorAll('.nav-links a').forEach(function(a){a.addEventListener('click',function(){document.body.classList.remove('menu-open');});});</script>
+  <script>document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest('a[href*="wa.me"]'):null;if(a&&typeof gtag==="function"){gtag("event","whatsapp_click",{link_url:a.href});}},true);</script>
 </body>
 </html>

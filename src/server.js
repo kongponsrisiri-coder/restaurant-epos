@@ -7054,6 +7054,110 @@ app.post('/api/print/report-text', async (req, res) => {
   }
 });
 
+// ── SEPOS-ANDROID-001 — ESC/POS buffers for the native Android app ──────────
+// The cloud can't reach a LAN printer, so the Android app PULLS the bytes and
+// sends them to the printer itself (native TCP plugin). Same builders as the
+// desktop path → byte-identical formatting (Thai, £, logo, cut). Returns base64.
+app.get('/api/print/buffers/test', async (req, res) => {
+  try {
+    const buf = printService.buildTestPage();
+    res.json({ ok: true, data: Buffer.from(buf).toString('base64'), bytes: buf.length });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/print/buffers/receipt', async (req, res) => {
+  const { order_id, payment_details } = req.body || {};
+  try {
+    const settings = await loadSettings();
+    const orderRes = await pool.query(
+      `SELECT orders.*, tables.table_number
+       FROM orders LEFT JOIN tables ON orders.table_id = tables.id
+       WHERE orders.id = $1`, [order_id]);
+    if (!orderRes.rows.length) return res.status(404).json({ ok: false, error: 'Order not found' });
+    const itemsRes = await pool.query(
+      `SELECT order_items.*, menu_items.name, menu_items.name_alt
+       FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
+       WHERE order_items.order_id = $1`, [order_id]);
+    const buf = printService.buildReceipt({
+      order: orderRes.rows[0], items: itemsRes.rows, settings, paymentDetails: payment_details || {},
+    });
+    res.json({ ok: true, data: Buffer.from(buf).toString('base64'), bytes: buf.length });
+  } catch (err) {
+    console.error('[print/buffers/receipt]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Kitchen ticket buffer (same builder/settings as printFullKitchenTicket) — for
+// the Android app to auto-print incoming online orders to its kitchen printer.
+app.post('/api/print/buffers/kitchen', async (req, res) => {
+  const { order_id } = req.body || {};
+  try {
+    const settings = await loadSettings();
+    const orderRes = await pool.query(
+      `SELECT orders.*, tables.table_number
+       FROM orders LEFT JOIN tables ON orders.table_id = tables.id
+       WHERE orders.id = $1`, [order_id]);
+    if (!orderRes.rows.length) return res.status(404).json({ ok: false, error: 'Order not found' });
+    const itemsRes = await pool.query(
+      `SELECT order_items.*, menu_items.name, menu_items.name_alt
+       FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
+       WHERE order_items.order_id = $1`, [order_id]);
+    const bilingual    = settings.kitchen_language === 'en_th';
+    const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
+    const buf = printService.buildFullKitchenTicket({ order: orderRes.rows[0], items: itemsRes.rows, bilingual, thaiCodepage });
+    res.json({ ok: true, data: Buffer.from(buf).toString('base64'), bytes: buf.length });
+  } catch (err) {
+    console.error('[print/buffers/kitchen]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// SEPOS-ANDROID-001 — dine-in kitchen/bar/fire-notice ESC/POS buffers (base64)
+// for the native app's FIRING device to push to its LAN printer itself. Mirrors
+// the serverPrint* endpoints exactly (same builders, same client-supplied delta
+// items) but returns the bytes instead of printing from the cloud — Railway
+// can't reach a printer on the restaurant's LAN. `kind`: course | full | bar |
+// fire-notice. Order is re-fetched server-side for the authoritative heading /
+// table number; the items list is the delta the firing screen already passes to
+// serverPrintKitchen, so the chef sees only what was just fired.
+app.post('/api/print/buffers/kitchen-ticket', async (req, res) => {
+  const { order_id, items, course, kind } = req.body || {};
+  try {
+    const settings = await loadSettings();
+    const orderRes = await pool.query(
+      `SELECT orders.*, tables.table_number
+       FROM orders LEFT JOIN tables ON orders.table_id = tables.id
+       WHERE orders.id = $1`, [order_id]);
+    if (!orderRes.rows.length) return res.status(404).json({ ok: false, error: 'Order not found' });
+    const order        = orderRes.rows[0];
+    const list         = items || [];
+    const bilingual    = settings.kitchen_language === 'en_th';
+    const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
+    let buf;
+    switch (kind) {
+      case 'full':
+        buf = printService.buildFullKitchenTicket({ order, items: list, bilingual, thaiCodepage });
+        break;
+      case 'bar':
+        buf = printService.buildKitchenTicket({ order, items: list, course: 4, bilingual, thaiCodepage });
+        break;
+      case 'fire-notice':
+        buf = printService.buildFireNotice({ order, course: course || 1, bilingual });
+        break;
+      case 'course':
+      default:
+        buf = printService.buildKitchenTicket({ order, items: list, course: course || 1, bilingual, thaiCodepage });
+    }
+    res.json({ ok: true, data: Buffer.from(buf).toString('base64'), bytes: buf.length });
+  } catch (err) {
+    console.error('[print/buffers/kitchen-ticket]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post('/api/print/receipt', async (req, res) => {
   const { order_id, payment_details, printer_name } = req.body;
   try {

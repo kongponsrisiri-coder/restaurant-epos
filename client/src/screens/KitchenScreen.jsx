@@ -130,9 +130,24 @@ function CourierControls({ order, onChange }) {
   );
 }
 
+// SEPOS-ANDROID-001 — ONE shared AudioContext, resumed on demand. The Android
+// WebView (and browsers) start audio "suspended" until a user gesture, so the
+// kitchen ding would be swallowed; primeAudio() (wired to the first tap) resumes
+// it. Sharing one context also avoids leaking a new context per ding, which over
+// a long shift hits the browser's hardware-context cap and throws.
+let _audioCtx = null;
+function getAudioCtx() {
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
+    return _audioCtx;
+  } catch { return null; }
+}
+
 const playSound = (type) => {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = getAudioCtx();
+    if (!ctx) return;
     const oscillator = ctx.createOscillator();
     const gainNode = ctx.createGain();
     oscillator.connect(gainNode);
@@ -236,6 +251,18 @@ export default function KitchenScreen() {
     if (saved === 'true') setShowAlt(true);
     if (savedLang) setAltLang(savedLang);
     if (savedDirect === '1') setDirectMode(true);
+  }, []);
+
+  // SEPOS-ANDROID-001 — unlock audio on the first interaction so the new-order
+  // ding plays on a kitchen tablet (WebView/browsers block audio pre-gesture).
+  useEffect(() => {
+    const unlock = () => getAudioCtx();
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('touchstart', unlock, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('touchstart', unlock);
+    };
   }, []);
   useEffect(() => {
     localStorage.setItem('kitchen_direct_mode', directMode ? '1' : '0');

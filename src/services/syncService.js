@@ -315,9 +315,17 @@ async function applyToCloud(actionType, payload) {
       // SEPOS-049 part-2 — drain KV settings push (printer_*, delivery_*,
       // kitchen_print_mode, service_charge_*, etc). Idempotent: server
       // upserts by key, so replay after a successful immediate-push is
-      // harmless.
+      // harmless. PUT /api/settings is SYNC_SECRET-gated on the cloud — send
+      // the header; if SYNC_SECRET isn't configured yet, throw so the queue
+      // retries once it is (rather than 401-failing into a dropped change).
+      if (!process.env.SYNC_SECRET) {
+        console.warn('[sync] update_kv_settings: SYNC_SECRET not configured — settings push will retry once it is set');
+        throw new Error('SYNC_SECRET missing');
+      }
       const r = await fetch(url('/api/settings'), {
-        method: 'PUT', ...json(payload.updates || {}),
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'x-sync-secret': process.env.SYNC_SECRET },
+        body: JSON.stringify(payload.updates || {}),
       });
       if (!r.ok) throw new Error(`update_kv_settings ${r.status}`);
       return r.json();

@@ -1866,7 +1866,7 @@ app.get('/api/settings', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.put('/api/settings', async (req, res) => {
+app.put('/api/settings', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     const updates = req.body;
     for (const [key, value] of Object.entries(updates)) {
@@ -1886,10 +1886,15 @@ app.put('/api/settings', async (req, res) => {
       const offlineQueue = require('./services/offlineQueue');
       const queueId = await offlineQueue.enqueue('update_kv_settings', { updates });
       console.log(`[sync] KV settings PUT enqueued as queueId=${queueId} (${Object.keys(updates).length} keys)`);
-      if (queueId && cloudUrl) {
+      if (queueId && cloudUrl && process.env.SYNC_SECRET) {
         fetch(`${cloudUrl}/api/settings`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          // PUT /api/settings is gated (requireStaffAuthOrSyncSecret) — the
+          // desktop relay can't mint a cloud Bearer token, so it authenticates
+          // with the install's SYNC_SECRET like the other sync feeds. Without
+          // SYNC_SECRET the push is skipped (stays queued) — same as closed/
+          // active-order sync — and the drain retries once it's set.
+          headers: { 'Content-Type': 'application/json', 'x-sync-secret': process.env.SYNC_SECRET },
           body: JSON.stringify(updates),
         })
           .then(async r => {

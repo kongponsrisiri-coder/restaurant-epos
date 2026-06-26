@@ -2498,6 +2498,15 @@ app.delete('/api/orders/:id', async (req, res) => {
     await offlineQueue.enqueue('delete_order', {
       localOrderId: orderId,
       cloudOrderId: order.cloud_id || null,
+      // SEPOS-PRO-002 follow-up — fallback match keys. When cloud_id was never
+      // bound (order made offline, or the link was lost on a restart) the cloud
+      // copy used to be orphaned forever and pullActiveOrders kept re-seeding it
+      // (the zombie-table bug). These let the cloud resolve the open order by
+      // (table_id, opened_at) — the SAME heuristic the pull trusts — so the
+      // delete still lands. Safe: table_id is dine-in-only and one table has one
+      // open order, matched within a tight time window.
+      matchTableId:  order.table_id ?? null,
+      matchOpenedAt: order.opened_at ?? null,
       staff_name:   staff.name,
       staff_role:   staff.role,
       reason:       String(reason).trim(),
@@ -2525,8 +2534,31 @@ app.post('/api/sync/delete-order', async (req, res) => {
   if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
 
   try {
-    const orderId = parseInt(req.body?.order_id, 10);
-    if (!orderId) return res.status(400).json({ error: 'order_id required' });
+    let orderId = parseInt(req.body?.order_id, 10) || 0;
+    const match = req.body?.match;
+    if (!orderId && !(match && match.table_id != null && match.opened_at)) {
+      return res.status(400).json({ error: 'order_id or match required' });
+    }
+    // SEPOS-PRO-002 follow-up — resolve an orphaned cloud order by (table_id,
+    // opened_at) when the Mac couldn't bind a cloud_id, instead of leaving it to
+    // resurrect via pullActiveOrders. Same heuristic the pull uses to bind.
+    // DB-agnostic time math (no EXTRACT/julianday) so it's safe on PG + SQLite.
+    // A table holds one open order, matched within 120s, so it can't hit a
+    // different live order.
+    if (!orderId && match) {
+      const cand = await pool.query(
+        `SELECT id, opened_at FROM orders WHERE status='open' AND table_id = $1`,
+        [match.table_id]
+      );
+      const target = new Date(match.opened_at).getTime();
+      let best = null, bestDiff = Infinity;
+      for (const row of cand.rows) {
+        const diff = Math.abs(new Date(row.opened_at).getTime() - target);
+        if (diff < 120000 && diff < bestDiff) { best = row.id; bestDiff = diff; }
+      }
+      if (best) orderId = best;
+      if (!orderId) return res.json({ success: true, already_deleted: true, matched: false });
+    }
     const staffName = String(req.body?.staff_name || 'unknown').trim();
     const staffRole = String(req.body?.staff_role || '').trim();
     const reason    = String(req.body?.reason || '').trim() || '(synced from desktop app)';

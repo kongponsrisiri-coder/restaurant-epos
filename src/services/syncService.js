@@ -351,9 +351,14 @@ async function applyToCloud(actionType, payload) {
       // by local id hits a different cloud order). null → the order never
       // reached the cloud, so there's nothing to delete there.
       const cloudId = payload.cloudOrderId;
-      if (!cloudId) {
-        console.warn(`[sync] delete_order: local order ${payload.localOrderId} had no cloud_id — never synced, skipping cloud delete`);
-        return { skipped: true, reason: 'never synced to cloud' };
+      // Fallback match keys for when cloud_id was never bound — see the enqueue
+      // in DELETE /api/orders/:id. Without these an unbound delete used to skip
+      // the cloud entirely, orphaning the cloud copy so the pull kept re-seeding
+      // it (the zombie-table bug).
+      const canMatch = payload.matchTableId != null && payload.matchOpenedAt;
+      if (!cloudId && !canMatch) {
+        console.warn(`[sync] delete_order: local order ${payload.localOrderId} had no cloud_id and no match keys — skipping cloud delete`);
+        return { skipped: true, reason: 'no cloud id or match keys' };
       }
       if (!process.env.SYNC_SECRET) {
         // Throw so the queue entry stays pending and retries — the moment
@@ -371,7 +376,10 @@ async function applyToCloud(actionType, payload) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-sync-secret': process.env.SYNC_SECRET },
         body: JSON.stringify({
-          order_id:   cloudId,
+          order_id:   cloudId || null,
+          // Only sent when cloud_id is missing — the cloud resolves the open
+          // order by table + open-time instead of giving up.
+          match:      cloudId ? null : { table_id: payload.matchTableId, opened_at: payload.matchOpenedAt },
           staff_name: payload.staff_name,
           staff_role: payload.staff_role,
           reason:     payload.reason,

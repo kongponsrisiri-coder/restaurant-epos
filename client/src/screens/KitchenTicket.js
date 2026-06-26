@@ -21,7 +21,8 @@
  *  'both'  — print AND KDS
  */
 
-import { serverPrintKitchen, serverPrintKitchenFull, serverPrintBar, serverPrintFireNotice, getSettings } from '../api';
+import { serverPrintKitchen, serverPrintKitchenFull, serverPrintBar, serverPrintFireNotice, getSettings, getKitchenTicketBuffer } from '../api';
+import { isNativeApp, sendRawToPrinter } from '../native/printer';
 
 const COURSE_LABELS_EN = { 1: 'STARTERS', 2: 'MAINS', 3: 'DESSERTS', 4: 'EXTRAS' };
 const COURSE_LABELS_TH = { 1: 'กับแกล้ม', 2: 'อาหารหลัก', 3: 'ของหวาน',  4: 'เพิ่มเติม' };
@@ -80,12 +81,44 @@ function openPrintPopup(html, preWin = null) {
 
 function closeWin(win) { try { if (win && !win.closed) win.close(); } catch {} }
 
+// ── SEPOS-ANDROID-001 — native (Android) print path ──────────────────────────
+// On the native app the FIRING device pushes the server-built ESC/POS buffer
+// straight to the LAN printer's TCP port — the cloud can't reach it. Bytes come
+// from the same printService builders as the desktop, so the ticket is
+// byte-identical. `native` = { order_id, items?, course?, kind }. Returns true
+// when it handled the print (so the dispatcher stops), false to fall through.
+async function nativeKitchenPrint({ native, copies = 1, ip, port }) {
+  if (!ip) { console.warn('[kitchen-ticket] native: no printer IP configured'); return; }
+  try {
+    const buf = await getKitchenTicketBuffer(native);
+    if (buf && buf.data) {
+      for (let i = 0; i < Math.max(1, copies); i++) {
+        await sendRawToPrinter(ip, port || 9100, buf.data);
+      }
+    } else {
+      console.warn('[kitchen-ticket] native: empty buffer', buf && buf.error);
+    }
+  } catch (e) {
+    console.warn('[kitchen-ticket] native print error:', e?.message);
+  }
+}
+
 // ── Core dispatcher — tries server → Electron → popup ────────────────────────
 // popupWin: a pre-opened window (opened synchronously before any awaits in
 // the calling code). Closed when server/Electron handles print; used for popup
 // fallback so the window.open() bypass is preserved.
-async function dispatchPrint({ settings, serverFn, html, copies = 1, popupWin = null }) {
+async function dispatchPrint({ settings, serverFn, html, copies = 1, popupWin = null, native = null }) {
   if (!shouldPrint(settings)) { closeWin(popupWin); return; }
+
+  // 0. Native Android app — the firing device pushes the buffer to the kitchen
+  // printer itself (single-printer Sunmi falls back to the receipt printer IP).
+  if (native && isNativeApp()) {
+    closeWin(popupWin);
+    const ip   = settings?.printer_kitchen_ip   || settings?.printer_receipt_ip;
+    const port = settings?.printer_kitchen_port || settings?.printer_receipt_port || 9100;
+    await nativeKitchenPrint({ native, copies, ip, port });
+    return;
+  }
 
   // Desktop's chosen kitchen device — falls back to the receipt printer for
   // single-printer setups. SEPOS-058: when set with no IP, print via the
@@ -156,6 +189,7 @@ export async function printFullOrderTicket({ order, items, popupWin = null }) {
     html:     buildFullOrderTicketHTML({ order, items: active, copies, bilingual }),
     copies,
     popupWin,
+    native:   { order_id: order.id, items: active, kind: 'full' },
   });
 }
 
@@ -175,6 +209,7 @@ export async function printKitchenTicket({ order, items, course, popupWin = null
     html:     buildKitchenTicketHTML({ order, items: active, course, copies, bilingual }),
     copies,
     popupWin,
+    native:   { order_id: order.id, items: active, course, kind: 'course' },
   });
 }
 
@@ -183,6 +218,17 @@ export async function printKitchenTicket({ order, items, course, popupWin = null
 // shows a minimal notice page.
 export async function printFireNoticeTicket({ order, course, popupWin = null }) {
   const settings = await getCachedSettings();
+
+  // 0. Native Android — firing device pushes the fire-notice to the LAN printer.
+  if (isNativeApp()) {
+    closeWin(popupWin);
+    if (!shouldPrint(settings)) return;
+    const ip   = settings?.printer_kitchen_ip   || settings?.printer_receipt_ip;
+    const port = settings?.printer_kitchen_port || settings?.printer_receipt_port || 9100;
+    await nativeKitchenPrint({ native: { order_id: order.id, course, kind: 'fire-notice' }, ip, port });
+    return;
+  }
+
   const deviceName = (typeof localStorage !== 'undefined' &&
     (localStorage.getItem('kitchen_printer_name') || localStorage.getItem('receipt_printer_name'))) || '';
   const usbName    = (!settings?.printer_kitchen_ip && deviceName && window.siamepos?.isElectron) ? deviceName : null;
@@ -225,6 +271,17 @@ export async function printBarOrderTicket({ order, items, popupWin = null }) {
 
   const settings = await getCachedSettings();
   const bilingual = isBilingual(settings);
+
+  // 0. Native Android — firing device pushes bar items to the bar printer
+  // (falls back to kitchen, then receipt, for single-printer setups).
+  if (isNativeApp()) {
+    closeWin(popupWin);
+    if (!shouldPrint(settings)) return;
+    const ip   = settings?.printer_bar_ip   || settings?.printer_kitchen_ip   || settings?.printer_receipt_ip;
+    const port = settings?.printer_bar_port || settings?.printer_kitchen_port || settings?.printer_receipt_port || 9100;
+    await nativeKitchenPrint({ native: { order_id: order.id, items: barItems, kind: 'bar' }, ip, port });
+    return;
+  }
 
   const deviceName = (typeof localStorage !== 'undefined' &&
     (localStorage.getItem('bar_printer_name') || localStorage.getItem('kitchen_printer_name') || localStorage.getItem('receipt_printer_name'))) || '';

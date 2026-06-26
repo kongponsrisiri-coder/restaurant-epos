@@ -809,8 +809,8 @@
         : `✓ Place order · ${fmt(cartTotal())}`;
     }
     const cls = state.step === 4 ? 'tw-btn-gold' : 'tw-btn-primary';
-    // On mobile step 2, the cart bar handles checkout — hide the footer next button
-    const hideNext = state.step === 2 ? 'style="display:none" class="tw-btn ' + cls + ' tw-next-hidden"' : `class="tw-btn ${cls}"`;
+    // Step 2: render the footer Next button hidden, then render() un-hides it on
+    // desktop (the mobile cart bar handles checkout on small screens).
     return `${back}<button ${state.step === 2 ? `class="tw-btn ${cls}" style="display:none"` : `class="tw-btn ${cls}"`} id="tw-next" ${nextEnabled ? '' : 'disabled'}>${nextLabel}</button>`;
   }
 

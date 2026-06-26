@@ -5156,10 +5156,19 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
 // confirm, then confirms client-side, then posts the order with the
 // verified payment_intent_id.
 
-app.get('/api/takeaway/stripe-config', widgetCors, (req, res) => {
+app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
+  // A restaurant can force mock/demo pay (no card field) even with Stripe keys
+  // present, via the `takeaway_mock_pay` setting ('1'). Used for the sales-demo
+  // tenant (Baan Siam) so any prospect can complete a takeaway order — the order
+  // still reaches the till + sends the confirmation email, just no card charge —
+  // regardless of ad blockers that block Stripe.js. Per-restaurant: real client
+  // deployments (no flag) keep real Stripe untouched.
+  let mock = false;
+  try { const s = await loadSettings(); mock = String(s.takeaway_mock_pay || '') === '1'; } catch {}
+  const configured = !mock && !!process.env.STRIPE_PUBLISHABLE_KEY && !!process.env.STRIPE_SECRET_KEY;
   res.json({
-    configured:      !!process.env.STRIPE_PUBLISHABLE_KEY && !!process.env.STRIPE_SECRET_KEY,
-    publishable_key: process.env.STRIPE_PUBLISHABLE_KEY || null,
+    configured,
+    publishable_key: configured ? (process.env.STRIPE_PUBLISHABLE_KEY || null) : null,
   });
 });
 

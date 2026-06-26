@@ -409,7 +409,12 @@
       side.querySelectorAll('[data-inc]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(Number(b.dataset.inc), 1); }));
       side.querySelectorAll('[data-dec]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(Number(b.dataset.dec), -1); }));
     }
-    const next = $('tw-next'); if (next) next.disabled = count === 0;
+    // Keep the desktop footer Checkout button's TOTAL in sync. updateCartUI is a
+    // PARTIAL re-render (used so adding a dish doesn't scroll the menu back to the
+    // top) — without refreshing the label here it stays frozen at its last
+    // full-render value, i.e. "Checkout · £0.00" until you change step.
+    const next = $('tw-next');
+    if (next) { next.disabled = count === 0; next.textContent = `Checkout · ${fmt(cartTotal())}`; }
   }
   function computePickupISO() {
     // SEPOS-047 — pickup is now derived from the server's load-aware

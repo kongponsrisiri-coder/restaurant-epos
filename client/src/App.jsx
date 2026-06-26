@@ -6,6 +6,7 @@ import UpgradeLocked from './components/UpgradeLocked';
 import LoginScreen from './screens/LoginScreen';
 import SetupScreen from './screens/SetupScreen';          // SEPOS-ANDROID-001
 import { needsTenantSetup } from './native/tenant';       // SEPOS-ANDROID-001
+import OnlineOrderPrinter from './native/OnlineOrderPrinter'; // SEPOS-ANDROID-001
 import TableMapScreen from './screens/TableMapScreen';
 import OrderScreen from './screens/OrderScreen';
 import KitchenScreen from './screens/KitchenScreen';
@@ -425,6 +426,7 @@ export default function App() {
   return (
     <>
       {body}
+      <OnlineOrderPrinter />{/* SEPOS-ANDROID-001 — auto-print incoming online orders (native, headless) */}
       <InstallBanner />
       {updateReady && updateBannerAllowed && (
         <div style={{

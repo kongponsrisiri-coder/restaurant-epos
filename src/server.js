@@ -7090,6 +7090,31 @@ app.post('/api/print/buffers/receipt', async (req, res) => {
   }
 });
 
+// Kitchen ticket buffer (same builder/settings as printFullKitchenTicket) — for
+// the Android app to auto-print incoming online orders to its kitchen printer.
+app.post('/api/print/buffers/kitchen', async (req, res) => {
+  const { order_id } = req.body || {};
+  try {
+    const settings = await loadSettings();
+    const orderRes = await pool.query(
+      `SELECT orders.*, tables.table_number
+       FROM orders LEFT JOIN tables ON orders.table_id = tables.id
+       WHERE orders.id = $1`, [order_id]);
+    if (!orderRes.rows.length) return res.status(404).json({ ok: false, error: 'Order not found' });
+    const itemsRes = await pool.query(
+      `SELECT order_items.*, menu_items.name, menu_items.name_alt
+       FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
+       WHERE order_items.order_id = $1`, [order_id]);
+    const bilingual    = settings.kitchen_language === 'en_th';
+    const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
+    const buf = printService.buildFullKitchenTicket({ order: orderRes.rows[0], items: itemsRes.rows, bilingual, thaiCodepage });
+    res.json({ ok: true, data: Buffer.from(buf).toString('base64'), bytes: buf.length });
+  } catch (err) {
+    console.error('[print/buffers/kitchen]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post('/api/print/receipt', async (req, res) => {
   const { order_id, payment_details, printer_name } = req.body;
   try {

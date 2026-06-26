@@ -16,6 +16,15 @@ import { isNativeApp, sendRawToPrinter } from '../../native/printer'; // SEPOS-A
 // ── Network Printers card (IP-based, RAW + LPR + CUPS fallback chain) ──
 function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
   const [testStates, setTestStates] = useState({});  // { receipt|kitchen|bar: idle|testing|ok|fail }
+  // SEPOS-ANDROID-001 — which device auto-prints incoming online orders (native app).
+  const [onlinePrint, setOnlinePrint] = useState(() => {
+    try { return localStorage.getItem('print_online_orders') === '1'; } catch { return false; }
+  });
+  const toggleOnlinePrint = () => setOnlinePrint(v => {
+    const next = !v;
+    try { localStorage.setItem('print_online_orders', next ? '1' : '0'); } catch {}
+    return next;
+  });
   // SEPOS-PRINT-HEALTH-001 — per-printer reachability cache. Auto-checks
   // on settings load + on manual refresh, so the operator sees online /
   // slow / offline status BEFORE firing a test print.
@@ -241,6 +250,20 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
       {printerRow('🧾 Receipt Printer', 'printer_receipt_ip', 'printer_receipt_port', 'receipt', 'printer_receipt_name', 'printer_receipt_mac')}
       {printerRow('🍳 Kitchen Printer', 'printer_kitchen_ip', 'printer_kitchen_port', 'kitchen', 'printer_kitchen_name', 'printer_kitchen_mac')}
       {printerRow('🍹 Bar Printer',     'printer_bar_ip',     'printer_bar_port',     'bar',     'printer_bar_name',     'printer_bar_mac')}
+
+      {/* SEPOS-ANDROID-001 — auto-print online orders (Android app only). Turn ON for the ONE device at the kitchen/counter so each online order prints once. */}
+      {isNativeApp() && (
+        <div onClick={toggleOnlinePrint} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', margin:'4px 0 16px',
+          border:'1px solid var(--border)', borderRadius:10, cursor:'pointer', background: onlinePrint ? '#ecfeff' : 'transparent' }}>
+          <div style={{ width:44, height:26, borderRadius:13, background: onlinePrint ? '#0891b2' : '#cbd5e1', position:'relative', transition:'background .15s', flexShrink:0 }}>
+            <div style={{ position:'absolute', top:3, left: onlinePrint ? 21 : 3, width:20, height:20, borderRadius:'50%', background:'#fff', transition:'left .15s' }} />
+          </div>
+          <div>
+            <div style={{ fontSize:14, fontWeight:700, color:'#0D1B3E' }}>🥡 Auto-print online orders on this device</div>
+            <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>Turn ON for one device only — incoming website orders print to the kitchen printer automatically.</div>
+          </div>
+        </div>
+      )}
 
       {settings.printer_kitchen_ip && (
         <div style={{ marginTop:-8, marginBottom:16 }}>

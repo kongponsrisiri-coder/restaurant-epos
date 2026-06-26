@@ -1036,7 +1036,16 @@
     if (!container) return;
     if (!window.Stripe) {
       try { await loadScript('https://js.stripe.com/v3/'); }
-      catch (e) { state.error = 'Could not load payment library. Please refresh and try again.'; render(); return; }
+      catch (e) { /* fall through to the guard below for one consistent message */ }
+    }
+    // Stripe.js is a very common ad/privacy-blocker target. Even when the <script>
+    // tag "loads" (or a previously-blocked tag is already in the DOM, so loadScript
+    // resolves instantly), window.Stripe can be undefined — calling it would throw
+    // "window.Stripe is not a function" and leave a dead Pay button with no card
+    // field. Guard and tell the customer the real cause.
+    if (typeof window.Stripe !== 'function') {
+      state.error = 'Payment couldn’t load — an ad blocker or privacy extension is likely blocking Stripe. Turn it off for this site (or use a private/incognito window) and try again.';
+      render(); return;
     }
     if (!_stripe) {
       _stripe = window.Stripe(state.stripePublishableKey);

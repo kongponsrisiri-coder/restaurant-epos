@@ -116,7 +116,7 @@ While stress-testing the spa I found `spa-api.siamepos.co.uk` had **no `JWT_SECR
 | Agent | Working On | Ticket | Started |
 |-------|-----------|--------|---------|
 | Krit | **SEPOS-ANDROID-001 — v1 BUILT (branch `android-app`)**; ready to publish now Play is verified. Awaiting Sunmi for built-in printer + offline engine (ANDROID-002) | SEPOS-ANDROID-001 | 2026-06-25 |
-| Krit | SPA-TREATWELL-001 — BUILT + deployed (inert until env set); awaiting `INBOUND_EMAIL_SECRET`/`ANTHROPIC_API_KEY` + Highbury forward rule | SPA-TREATWELL-001 | 2026-06-24 |
+| Krit | SPA-TREATWELL-001 — ✅ BUILT + deployed + env set + **LIVE-TESTED end-to-end on the demo spa**; only Highbury inbound plumbing left for real bookings | SPA-TREATWELL-001 | 2026-06-24 |
 
 ### 📌 SEPOS-ANDROID-001 — native Android app: ✅ v1 BUILT (Krit, 25–26 Jun) — branch `android-app`, not yet merged
 SiamEPOS as a **native Android app** (Capacitor wrap of `client/`) for the Sunmi + any Android tablet. Desktop/web untouched. **All verified:**
@@ -128,8 +128,13 @@ SiamEPOS as a **native Android app** (Capacitor wrap of `client/`) for the Sunmi
 
 > **🔑 Korakot put Krit FULLY in charge of the spa (25 Jun) — no Sam sign-off needed for spa changes.**
 
-### 📌 SPA-TREATWELL-001 — Treatwell email ingestion — ✅ BUILT + DEPLOYED 25 Jun (Krit)
-**Goal:** read the Treatwell booking emails a venue forwards us → auto-create CRM client + place appointment in SiamSpa. One-way, email-only (no Treatwell portal/timetable access). **Built + merged to spa `main` + deployed to spa-api.siamepos.co.uk (25 Jun); booted clean, route mounted, schema migrated; inert until env set.** Parser verified 35/35 against the 3 real Highbury emails (pulled from Korakot's Gmail). **AI fallback = Sonnet** (`claude-sonnet-4-6`). New files only (parser, `treatwellIngest` engine, `treatwellAi`, `routes/treatwellEmail`, `ingestion_log`+`clients.source`, admin **Treatwell** review tab); Sam's `treatwell.js` untouched. **TO SWITCH ON (Korakot):** set `INBOUND_EMAIL_SECRET` + `ANTHROPIC_API_KEY` on spa Railway → POST a sample (`test/fixtures/treatwell-*.txt`) to `/api/treatwell-email/inbound` to verify → then Highbury Gmail auto-forward rule. **Nook:** QA the place-on-timetable path once the secret's set.
+### 📌 SPA-TREATWELL-001 — Treatwell email ingestion — ✅ BUILT + DEPLOYED + LIVE-TESTED (Krit, 25 Jun)
+**Goal:** read the Treatwell booking emails a venue forwards us → auto-create CRM client + place appointment in SiamSpa. One-way, email-only (no Treatwell portal/timetable access). Repo `~/Desktop/siamepos-spa`.
+- **DONE + LIVE on spa-api.siamepos.co.uk.** Built + merged to spa `main` + deployed; parser verified 35/35 against the 3 real Highbury emails (pulled from Korakot's Gmail). New files only (parser, `treatwellIngest` engine, `treatwellAi` = **Sonnet** `claude-sonnet-4-6`, `routes/treatwellEmail`, `ingestion_log`+`clients.source`, admin **Treatwell** review tab); Sam's `treatwell.js` untouched.
+- **✅ Env set + END-TO-END LIVE TEST passed** (24 Jun, `INBOUND_EMAIL_SECRET`+`ANTHROPIC_API_KEY` set): posted the 3 real emails to `/api/treatwell-email/inbound` → **new → placed (appointment #191, Babette Stephens), reschedule → moved, cancel(unknown ref) → needs_review, marketing(no ref) → ignored.** All correct. (⚠️ test data #191 + Babette + 1 review item left on the demo spa — harmless; clear when convenient.)
+- **✅ Shipped in spa v0.2.17** alongside the **distinct timetable colour fix** (Treatwell = cyan, no more green clash with Online/Voucher).
+- **📘 Ops manual written:** `~/Documents/SiamEPOS-Docs/manuals/SiamSpa-Treatwell-Email-Setup-Guide.md`.
+- **ONLY REMAINING = the Highbury inbound plumbing for REAL bookings:** provision an inbound-parse address (Brevo in-stack / Mailgun) → POSTs `/api/treatwell-email/inbound?secret=…`, + Highbury's Gmail auto-forward rule (`from:noreply@treatwell.co.uk`). That's config, not code. Optional later: dedup-refactor of Sam's webhook into the shared engine (deferred, low value — his webhook is unfed).
 - **KEY:** NOT greenfield — **Sam already built the engine** (`src/routes/treatwell.js` `POST /api/treatwell/webhook`: client match/create, treatment match, appointment insert `source='treatwell'`, auto-assign+conflict, **dedup on `treatwell_booking_id`**, cancel-by-ref, prepay). It's structured-JSON and **currently unfed** (Treatwell has no API). ~60% done.
 - **Real scope = the email→JSON adapter that drives Sam's engine** + 3 gaps: reschedule/UPDATE path (engine does create+cancel only), `ingestion_log` table, review-queue admin tab.
 - **Decided:** skip iCal (email-only); deterministic-first parse of the email's "Booking Details" block, Claude **Haiku** fallback only (AI net-new — no Anthropic in spa repo); shop's only step = a Gmail auto-forward rule.

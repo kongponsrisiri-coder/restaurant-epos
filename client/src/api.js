@@ -169,6 +169,8 @@ export const createKitchenTemplate = (body) => post('/api/kitchen-templates', bo
 export const updateKitchenTemplate = (id, body) => put(`/api/kitchen-templates/${id}`, body);
 export const deleteKitchenTemplate = (id) => del(`/api/kitchen-templates/${id}`);
 export const sendKitchenMessage   = (body) => post('/api/print/kitchen-message', body);
+// SEPOS-ANDROID-001 — kitchen-message buffer for the native app to print on-device
+export const getKitchenMessageBuffer = (body) => post('/api/print/buffers/kitchen-message', body);
 export const serverPrintReceipt   = (order_id, payment_details, printer_name) => post('/api/print/receipt', { order_id, payment_details, printer_name });
 // SEPOS-REPORTS-001 — ESC/POS print for admin reports (Sales / Items /
 // Z / VAT / Bills). Takes a line DSL — see printService.buildReportText.

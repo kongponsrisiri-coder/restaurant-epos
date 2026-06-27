@@ -5,7 +5,8 @@
 // endpoint which prints the distinctive 📢 ticket + emits a KDS banner.
 
 import { useState, useEffect } from 'react';
-import { getKitchenTemplates, sendKitchenMessage } from '../api';
+import { getKitchenTemplates, sendKitchenMessage, getKitchenMessageBuffer, getSettings } from '../api';
+import { isNativeApp, sendRawToPrinter } from '../native/printer';
 
 export default function KitchenMessageModal({ orderId, tableNumber, customerName, waiterName, onClose, onSent }) {
   const [templates, setTemplates] = useState([]);
@@ -27,13 +28,28 @@ export default function KitchenMessageModal({ orderId, tableNumber, customerName
     if (!text) { setError('Type a message or pick a template'); return; }
     setSending(true); setError('');
     try {
-      await sendKitchenMessage({
+      const payload = {
         order_id:      orderId || null,
         table_number:  tableNumber || null,
         customer_name: customerName || null,
         message:       text,
         waiter_name:   waiterName || '',
-      });
+      };
+      // Always send — this emits the KDS banner and (on web/desktop) prints.
+      await sendKitchenMessage(payload);
+      // SEPOS-ANDROID-001 — on the native app the cloud can't reach the LAN
+      // printer, so print the 📢 message on this device from the server buffer.
+      if (isNativeApp()) {
+        try {
+          const s = await getSettings();
+          const ip   = s?.printer_kitchen_ip   || s?.printer_receipt_ip;
+          const port = s?.printer_kitchen_port || s?.printer_receipt_port || 9100;
+          if (ip) {
+            const buf = await getKitchenMessageBuffer(payload);
+            if (buf?.data) await sendRawToPrinter(ip, port, buf.data);
+          }
+        } catch (e) { console.warn('[kitchen-message] native print failed:', e?.message); }
+      }
       onSent?.();
       onClose?.();
     } catch (e) {

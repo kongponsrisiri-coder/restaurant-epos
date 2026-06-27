@@ -7204,6 +7204,34 @@ app.post('/api/print/buffers/kitchen-ticket', async (req, res) => {
   }
 });
 
+// SEPOS-ANDROID-001 — kitchen-message ESC/POS buffer (base64) so the native
+// app's device prints the 📢 message itself (cloud can't reach the LAN printer).
+// The KDS banner is still emitted by POST /api/print/kitchen-message as usual.
+app.post('/api/print/buffers/kitchen-message', async (req, res) => {
+  try {
+    const { order_id, table_number, customer_name, message, waiter_name } = req.body || {};
+    const text = String(message || '').trim();
+    if (!text) return res.status(400).json({ ok: false, error: 'message required' });
+    let resolvedTable = table_number || '', resolvedType = 'dine_in', resolvedCustomer = customer_name || '';
+    if (order_id && !resolvedTable) {
+      const r = await pool.query(
+        `SELECT o.order_type, o.customer_name, t.table_number
+         FROM orders o LEFT JOIN tables t ON t.id = o.table_id WHERE o.id = $1`, [order_id]
+      ).catch(() => ({ rows: [] }));
+      const o = r.rows[0];
+      if (o) { resolvedTable = o.table_number || ''; resolvedType = o.order_type || 'dine_in'; resolvedCustomer = o.customer_name || customer_name || ''; }
+    }
+    const buf = printService.buildKitchenMessage({
+      order_id, table_number: resolvedTable, order_type: resolvedType,
+      customer_name: resolvedCustomer, message: text, waiter_name: waiter_name || '',
+    });
+    res.json({ ok: true, data: Buffer.from(buf).toString('base64'), bytes: buf.length });
+  } catch (err) {
+    console.error('[print/buffers/kitchen-message]', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.post('/api/print/receipt', async (req, res) => {
   const { order_id, payment_details, printer_name } = req.body;
   try {

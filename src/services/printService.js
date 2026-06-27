@@ -1251,5 +1251,6 @@ module.exports = {
   buildKitchenTicket,     // SEPOS-ANDROID-001
   buildFullKitchenTicket, // SEPOS-ANDROID-001
   buildFireNotice,        // SEPOS-ANDROID-001 — native fire-notice buffer
+  buildKitchenMessage,    // SEPOS-ANDROID-001 — native kitchen-message buffer
   printReportText,        // SEPOS-REPORTS-001 — admin report ESC/POS
 };

@@ -415,7 +415,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         .then(() => hasBar     ? printBarOrderTicket({ order: orderSnap, items: justAdded, popupWin: barWin }) : null)
         .catch(e => console.error('[sendOrder] print chain error:', e));
 
-      alert('Order saved! Use 🔥 Fire buttons to send courses to kitchen.');
+      // No success popup — the items are already in the Order Summary and the
+      // 🔥 Fire buttons are right there; a blocking confirm on every send is noise.
     } catch (err) {
       // Clean up pre-opened window on error
       try { if (barWin && !barWin.closed) barWin.close(); } catch {}

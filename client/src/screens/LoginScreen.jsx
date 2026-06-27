@@ -203,9 +203,10 @@ export default function LoginScreen({ onLogin }) {
         borderRadius: 20,
         padding: '28px 28px 24px',
         width: '100%',
-        // SEPOS-055 — widen to fit name-list (left) + PIN pad (right);
-        // wider still when the name list goes 2-up for a big team.
-        maxWidth: manyStaff ? 760 : (mode === 'pin' && staffList.length > 0) ? 600 : 320,
+        // SEPOS-055 — widen to fit name-list (left) + PIN pad (right).
+        // SEPOS-055b — operator request: give the staff names real room so they
+        // aren't squeezed beside the keypad. Wider card + a 3-up name grid.
+        maxWidth: manyStaff ? 1040 : (mode === 'pin' && staffList.length > 0) ? 640 : 320,
       }}>
 
         {/* SEPOS-055 — two-column staff login: name list (left) + PIN pad
@@ -217,11 +218,11 @@ export default function LoginScreen({ onLogin }) {
 
           {/* LEFT — staff name list (2-up + wider for a big team) */}
           {staffList.length > 0 && (
-            <div style={{ flex: manyStaff ? '1 1 380px' : '1 1 180px', minWidth: manyStaff ? 320 : 170, maxWidth: manyStaff ? 400 : 230, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: manyStaff ? '2 1 560px' : '1 1 180px', minWidth: manyStaff ? 460 : 170, maxWidth: manyStaff ? 680 : 230, display: 'flex', flexDirection: 'column' }}>
               <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginBottom: 10, letterSpacing: '0.06em', textTransform: 'uppercase', textAlign: 'center' }}>
                 Tap your name{staffList.length > 6 ? ` (${staffList.length})` : ''}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: manyStaff ? '1fr 1fr' : '1fr', gap: 8, maxHeight: 392, overflowY: 'auto', paddingRight: 4 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: manyStaff ? 'repeat(3, 1fr)' : '1fr', gap: 10, maxHeight: 460, overflowY: 'auto', paddingRight: 4 }}>
                 {staffList.map(s => {
                   const sel = selectedStaff?.id === s.id;
                   return (
@@ -229,11 +230,11 @@ export default function LoginScreen({ onLogin }) {
                       key={s.id}
                       onClick={() => { setSelectedStaff(s); setPin(''); setError(''); setSuccess(''); }}
                       style={{
-                        minHeight: 50, borderRadius: 11, cursor: 'pointer', padding: '8px 12px', textAlign: 'left',
+                        minHeight: 64, borderRadius: 12, cursor: 'pointer', padding: '10px 14px', textAlign: 'center',
                         border: sel ? '1px solid #C9A84C' : '1px solid rgba(201,168,76,0.22)',
                         background: sel ? 'rgba(201,168,76,0.18)' : 'rgba(255,255,255,0.05)',
-                        color: 'white', fontSize: 15, fontWeight: 700,
-                        display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 1,
+                        color: 'white', fontSize: 16, fontWeight: 700,
+                        display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 2,
                         transition: 'background 0.1s, border-color 0.1s',
                       }}
                     >

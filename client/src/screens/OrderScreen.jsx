@@ -309,8 +309,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     setResendPopup(null);
     if (item.id < 0) return alert('Still sending — try again in a second.');
     // Open the popup window BEFORE awaits so the browser doesn't block it
-    // (popup blocker requires user-gesture context, lost across awaits).
-    const popupWin = window.open('', '_blank', 'width=400,height=600,scrollbars=yes');
+    // (popup blocker requires user-gesture context, lost across awaits) — but
+    // ONLY when we'd need the browser fallback. With a network kitchen printer
+    // (or the desktop app) the resend prints silently, so skip the empty popup.
+    const popupWin = (!settings?.printer_kitchen_ip && !window.siamepos?.isElectron)
+      ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
     // SEPOS-046z — optimistic: the row flips back to 🔥 cooking instantly.
     setOrder(prev => prev ? { ...prev, items: (prev.items || []).map(i =>
       i.id === item.id ? { ...i, status: 'cooking' } : i) } : prev);
@@ -366,7 +369,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     // Chrome allows only ONE window.open() per user gesture. Kitchen always uses
     // server-side TCP or Electron print, so we give the one popup slot to bar.
     // If bar also uses server/Electron print the window is closed immediately.
-    const barWin = hasBar ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
+    // Only when we'd need the browser fallback — a network bar printer (or the
+    // desktop app) prints silently, so don't flash an empty popup.
+    const barWin = (hasBar && !settings?.printer_bar_ip && !window.siamepos?.isElectron)
+      ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
 
     // SEPOS-046z — optimistic send: the cart lines appear in the order
     // panel as ⏳ PENDING rows immediately (negative temp ids), and the
@@ -425,8 +431,12 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
 
   const handleFireCourse = async (course) => {
     setFiringCourse(course);
-    // Pre-open popup before awaits so browser doesn't block it (used only if no TCP printer)
-    const coursePopupWin = window.open('', '_blank', 'width=400,height=600,scrollbars=yes');
+    // Only pre-open the browser-print popup when we'd actually need the fallback —
+    // i.e. NO network kitchen printer and not the desktop app. With a printer set
+    // the fire notice prints silently server-side, so this blank window was just
+    // flashing an empty popup on every fire (the operator complaint).
+    const coursePopupWin = (!settings?.printer_kitchen_ip && !window.siamepos?.isElectron)
+      ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
     // SEPOS-046z — optimistic: mirror the server's UPDATE (non-bar, unfired,
     // unvoided items of this course flip to fired/cooking). The pulsing
     // PENDING cards settle instantly; fetchOrder reconciles/rolls back.
@@ -440,7 +450,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
       fetchOrder();
       // Fire notice — just "TABLE X / FIRE MAINS", no item list
       printFireNoticeTicket({ order, course, popupWin: coursePopupWin });
-      alert(`🔥 ${COURSE_LABELS[course]} fired to kitchen!`);
+      // No success popup — the course already flipped to 🔥 cooking on screen and
+      // the ticket prints silently; a blocking confirm on every fire is just noise.
     } catch (err) {
       try { if (coursePopupWin && !coursePopupWin.closed) coursePopupWin.close(); } catch {}
       alert('Failed to fire course.');

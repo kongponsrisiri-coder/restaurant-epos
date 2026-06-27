@@ -408,6 +408,10 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
         // English item line exactly. Korakot 2026-06-07: second language,
         // options, and messages must print at primary-language size.
         item.notes ? [CMD.BOLD_ON, CMD.SIZE_BIG, txt('  > ' + item.notes), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
+        // SEPOS-024b — the free-text special request (item_note, e.g. "Mild",
+        // "no peanuts") was dropped from the kitchen ticket; the chef never saw
+        // it. Print it boldly so it stands out from the modifier line above.
+        item.item_note ? [CMD.BOLD_ON, CMD.SIZE_BIG, txt('  ** ' + item.item_note + ' **'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
       ];
     }),
     rule('='), lf(),
@@ -457,6 +461,10 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
         // English item line exactly. Korakot 2026-06-07: second language,
         // options, and messages must print at primary-language size.
         item.notes ? [CMD.BOLD_ON, CMD.SIZE_BIG, txt('  > ' + item.notes), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
+        // SEPOS-024b — the free-text special request (item_note, e.g. "Mild",
+        // "no peanuts") was dropped from the kitchen ticket; the chef never saw
+        // it. Print it boldly so it stands out from the modifier line above.
+        item.item_note ? [CMD.BOLD_ON, CMD.SIZE_BIG, txt('  ** ' + item.item_note + ' **'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
       ];
     }),
     idx < arr.length - 1 ? [rule('-'), lf()] : [],

@@ -352,7 +352,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     // Snapshot cart before clearing.  Detect bar/kitchen split now (before any await)
     // so we can pre-open popup windows while the user-gesture context is still live.
     const cartAsItems   = cart.map(c => ({
-      name: c.name, name_alt: c.name_alt || '', quantity: c.quantity, course: c.course || 1, notes: c.notes || '', is_bar: !!c.is_bar,
+      name: c.name, name_alt: c.name_alt || '', quantity: c.quantity, course: c.course || 1, notes: c.notes || '', item_note: c.item_note || '', is_bar: !!c.is_bar,
     }));
     // Print ONLY what was just added — not the entire order. When a
     // table has 3 dishes already cooking and the waiter adds a 4th,

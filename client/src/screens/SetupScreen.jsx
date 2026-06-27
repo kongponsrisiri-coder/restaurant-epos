@@ -18,15 +18,20 @@ export default function SetupScreen({ onConfigured }) {
     if (!u) { setError('Enter your SiamEPOS address.'); return; }
     if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
     setBusy(true); setError('');
+    // AbortController + setTimeout instead of AbortSignal.timeout() — the latter
+    // needs a 2022+ browser and throws on older Android WebViews (Sunmi A9),
+    // which made setup fail with "couldn't connect" even on a healthy network.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12000);
     try {
-      const res = await fetch(u + '/api/restaurant', { signal: AbortSignal.timeout(12000) });
+      const res = await fetch(u + '/api/restaurant', { signal: ctrl.signal });
       if (!res.ok) throw new Error('status ' + res.status);
       const data = await res.json().catch(() => ({}));
       setTenantUrl(u);
       onConfigured ? onConfigured(data) : window.location.reload();
     } catch (e) {
       setError("Couldn't connect to that address. Check it's correct and the device is online.");
-    } finally { setBusy(false); }
+    } finally { clearTimeout(timer); setBusy(false); }
   }
 
   return (

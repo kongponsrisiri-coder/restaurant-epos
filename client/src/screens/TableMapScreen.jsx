@@ -649,6 +649,10 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
             background: 'white', borderRadius: 20,
             padding: isMobile ? '28px 20px' : '32px 28px',
             width: 300, maxWidth: '90vw',
+            // Keep the popup fully on-screen and centred even when the device
+            // scales the UI up (Sunmi): cap the height and let it scroll rather
+            // than overflow off the top so it always sits in the middle.
+            maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box',
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20
           }}>
             <div style={{ textAlign: 'center' }}>

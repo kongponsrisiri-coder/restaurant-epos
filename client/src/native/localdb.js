@@ -21,6 +21,11 @@ async function getDb() {
       await conn.execute(
         'CREATE TABLE IF NOT EXISTS api_cache (url TEXT PRIMARY KEY, json TEXT, ts INTEGER);'
       );
+      // Offline PIN login — keyed by a HASH of the PIN (never the raw PIN),
+      // value is the last successful online login result for that PIN.
+      await conn.execute(
+        'CREATE TABLE IF NOT EXISTS staff_auth (pin_hash TEXT PRIMARY KEY, staff_json TEXT, ts INTEGER);'
+      );
       _db = conn;
       return conn;
     })().catch((e) => { _initPromise = null; throw e; });
@@ -47,5 +52,27 @@ export async function cacheGet(url) {
     const res = await db.query('SELECT json FROM api_cache WHERE url = ?', [url]);
     const row = res?.values?.[0];
     return row ? JSON.parse(row.json) : undefined;
+  } catch { return undefined; }
+}
+
+// Store a successful online login so the same PIN works offline (hashed key).
+export async function cacheLogin(pinHash, staff) {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await db.run('INSERT OR REPLACE INTO staff_auth (pin_hash, staff_json, ts) VALUES (?,?,?)', [
+      pinHash, JSON.stringify(staff), Date.now(),
+    ]);
+  } catch { /* best-effort */ }
+}
+
+// Look up a cached login by PIN hash (for offline login). undefined if none.
+export async function lookupLogin(pinHash) {
+  try {
+    const db = await getDb();
+    if (!db) return undefined;
+    const res = await db.query('SELECT staff_json FROM staff_auth WHERE pin_hash = ?', [pinHash]);
+    const row = res?.values?.[0];
+    return row ? JSON.parse(row.json ?? row.staff_json) : undefined;
   } catch { return undefined; }
 }

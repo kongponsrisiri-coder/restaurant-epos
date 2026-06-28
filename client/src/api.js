@@ -1,4 +1,4 @@
-import { cachePut, cacheGet } from './native/localdb';
+import { cachePut, cacheGet, cacheLogin, lookupLogin } from './native/localdb';
 
 const getServerURL = () => {
   // Electron desktop: the bundled local server lives on :3001 regardless of
@@ -112,7 +112,30 @@ export const addOrderItems = (orderId, items) => post(`/api/orders/${orderId}/it
 export const payOrder = (orderId, amount, method, tenders) =>
   post(`/api/orders/${orderId}/pay`, tenders && tenders.length ? { payments: tenders } : { amount, method });
 export const updateItemStatus = (itemId, status) => put(`/api/order-items/${itemId}/status`, { status });
-export const loginStaff = (pin) => post('/api/staff/login', { pin });
+// SEPOS-ANDROID-002 — offline PIN login. Online: validate at the cloud + cache
+// the result keyed by a hash of the PIN. Offline: validate against that cache so
+// staff who've signed in once on this device can still log in with no internet.
+async function hashPin(pin) {
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('siampos-pin:' + pin));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch { return 'p:' + pin; }
+}
+export const loginStaff = async (pin) => {
+  try {
+    const r = await fetch(SERVER_URL + '/api/staff/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ pin }),
+    });
+    const json = await r.json();
+    if (json && json.id && !json.error) hashPin(pin).then(h => cacheLogin(h, json)); // enable offline re-login
+    return json;
+  } catch (e) {
+    const cached = await lookupLogin(await hashPin(pin));
+    if (cached && cached.id) return { ...cached, offline: true };
+    return { error: "No internet — and this PIN hasn't signed in on this device yet. Connect once, then it works offline." };
+  }
+};
 // SEPOS-LITE-003 — email + password login (Lite restaurant owners).
 export const emailLogin = (email, password) => post('/api/auth/email-login', { email, password });
 export const getDailyReport = (date) => get(`/api/reports/daily${date ? `?date=${date}` : ''}`);

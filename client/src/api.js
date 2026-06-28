@@ -1,4 +1,7 @@
-import { cachePut, cacheGet, cacheLogin, lookupLogin } from './native/localdb';
+import { cachePut, cacheGet, cacheLogin, lookupLogin, localOrderCreate, localOrderGet, localOrderUpdate, localOrderListOpen } from './native/localdb';
+
+// SEPOS-ANDROID-002 — offline orders carry a temp string id like "L1719…".
+const isLocalId = (id) => typeof id === 'string' && String(id).startsWith('L');
 
 const getServerURL = () => {
   // Electron desktop: the bundled local server lives on :3001 regardless of
@@ -99,13 +102,64 @@ export const getMenu = () => get('/api/menu');
 export const getAllMenu = () => get('/api/menu/all');
 export const addMenuItem = (item) => post('/api/menu/items', item);
 export const updateMenuItem = (id, item) => put(`/api/menu/items/${id}`, item);
-export const getOrders = () => get('/api/orders');
-export const getOrder = (id) => get(`/api/orders/${id}`);
-export const createOrder = (table_id, covers, staff_id) => post('/api/orders', { table_id, covers, staff_id });
+// Open orders = cloud (or cache) PLUS any orders created offline on this device.
+export const getOrders = async () => {
+  const base = await get('/api/orders');
+  let locals = [];
+  try { locals = await localOrderListOpen(); } catch {}
+  const arr = Array.isArray(base) ? base : [];
+  return locals.length ? [...arr, ...locals] : arr;
+};
+export const getOrder = async (id) => {
+  if (isLocalId(id)) { const d = await localOrderGet(id); return d || { error: 'Order not found' }; }
+  return get(`/api/orders/${id}`);
+};
+// Online → cloud. Offline (network fail) → create the order locally with a temp
+// id so the floor + order screen work; it syncs to the cloud later.
+export const createOrder = async (table_id, covers, staff_id) => {
+  try {
+    return await post('/api/orders', { table_id, covers, staff_id });
+  } catch (e) {
+    let table_number = table_id;
+    try { const tbls = await cacheGet('/api/tables'); const t = (tbls || []).find(x => x.id === table_id); if (t) table_number = t.table_number; } catch {}
+    const now = new Date().toISOString();
+    const id = 'L' + Date.now();
+    const doc = { id, table_id, table_number, covers, staff_id, status: 'open', total: 0,
+      items: [], opened_at: now, created_at: now, order_type: 'dine_in', offline: true };
+    await localOrderCreate(doc);
+    return { id };
+  }
+};
 // SEPOS-045 — counter mode: tableless order, paid at the till.
 export const createCounterOrder = (staff_id) =>
   post('/api/orders', { table_id: null, covers: 1, staff_id, order_type: 'counter' });
-export const addOrderItems = (orderId, items) => post(`/api/orders/${orderId}/items`, { items });
+export const addOrderItems = async (orderId, items) => {
+  if (isLocalId(orderId)) {
+    const doc = await localOrderGet(orderId);
+    if (!doc) return { error: 'Order not found' };
+    (items || []).forEach((it, i) => {
+      doc.items.push({
+        id: 'LI' + Date.now() + '_' + i,
+        order_id: orderId,
+        menu_item_id: it.menu_item_id ?? null,
+        item_name: it.name, name: it.name, name_alt: it.name_alt || '',
+        quantity: it.quantity || 1,
+        unit_price: it.unit_price ?? it.server_price ?? it.price ?? 0,
+        notes: it.notes || '', item_note: it.item_note || '',
+        course: it.course || 1,
+        is_bar: it.is_bar ? 1 : 0,
+        status: it.is_bar ? 'cooking' : 'pending',
+        is_fired: it.is_bar ? 1 : 0,
+        voided: 0,
+      });
+    });
+    doc.total = doc.items.filter(x => !x.voided)
+      .reduce((s, x) => s + (Number(x.unit_price) || 0) * (Number(x.quantity) || 1), 0);
+    await localOrderUpdate(orderId, doc);
+    return { success: true };
+  }
+  return post(`/api/orders/${orderId}/items`, { items });
+};
 // SEPOS-062 — `tenders` (optional) is an array of {amount, method} for split
 // bills, so each tender is recorded as its own payment row with its real method
 // (Cash/Card) instead of one lumped 'Split' row. Single payments omit it.
@@ -245,7 +299,20 @@ export const deleteSubcategory = (id) => del(`/api/subcategories/${id}`);
 // SEPOS-046ab — same contract as updateCategorySortOrder
 export const updateSubcategorySortOrder = (items) => put('/api/subcategories/sort-order', { items });
 export const fireCourse = (orderId, course) => put(`/api/orders/${orderId}/fire-course/${course}`, {});
-export const getTableStatus = () => get('/api/tables/status');
+export const getTableStatus = async () => {
+  const base = await get('/api/tables/status');
+  let locals = [];
+  try { locals = await localOrderListOpen(); } catch {}
+  if (!locals.length) return base;
+  const arr = Array.isArray(base) ? [...base] : [];
+  for (const o of locals) {
+    if (o.table_id != null && !arr.some(s => s.table_id === o.table_id)) {
+      const anyFired = (o.items || []).some(it => it.is_fired && !it.voided);
+      arr.push({ table_id: o.table_id, colour_status: anyFired ? 'starters_fired' : 'occupied' });
+    }
+  }
+  return arr;
+};
 export const markBillPrinted = (orderId) => put(`/api/orders/${orderId}/bill-printed`, {});
 export const moveTable = (orderId, newTableId) => put(`/api/orders/${orderId}/move`, { new_table_id: newTableId });
 export const mergeTables = (targetOrderId, mergeOrderId) => put(`/api/orders/${targetOrderId}/merge`, { merge_order_id: mergeOrderId });

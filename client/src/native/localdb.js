@@ -26,6 +26,11 @@ async function getDb() {
       await conn.execute(
         'CREATE TABLE IF NOT EXISTS staff_auth (pin_hash TEXT PRIMARY KEY, staff_json TEXT, ts INTEGER);'
       );
+      // Orders created/edited offline, stored as JSON docs. id is a temp 'L…'
+      // string. synced=0 until replayed to the cloud.
+      await conn.execute(
+        'CREATE TABLE IF NOT EXISTS local_orders (id TEXT PRIMARY KEY, data TEXT, ts INTEGER, synced INTEGER DEFAULT 0);'
+      );
       _db = conn;
       return conn;
     })().catch((e) => { _initPromise = null; throw e; });
@@ -73,6 +78,35 @@ export async function lookupLogin(pinHash) {
     if (!db) return undefined;
     const res = await db.query('SELECT staff_json FROM staff_auth WHERE pin_hash = ?', [pinHash]);
     const row = res?.values?.[0];
-    return row ? JSON.parse(row.json ?? row.staff_json) : undefined;
+    return row ? JSON.parse(row.staff_json) : undefined;
   } catch { return undefined; }
+}
+
+// ── Offline orders (JSON docs) ────────────────────────────────────────
+export async function localOrderCreate(doc) {
+  const db = await getDb(); if (!db) return null;
+  await db.run('INSERT OR REPLACE INTO local_orders (id, data, ts, synced) VALUES (?,?,?,0)', [
+    doc.id, JSON.stringify(doc), Date.now(),
+  ]);
+  return doc.id;
+}
+export async function localOrderGet(id) {
+  try {
+    const db = await getDb(); if (!db) return undefined;
+    const res = await db.query('SELECT data FROM local_orders WHERE id = ?', [id]);
+    const row = res?.values?.[0];
+    return row ? JSON.parse(row.data) : undefined;
+  } catch { return undefined; }
+}
+export async function localOrderUpdate(id, doc) {
+  const db = await getDb(); if (!db) return;
+  await db.run('UPDATE local_orders SET data = ?, ts = ? WHERE id = ?', [JSON.stringify(doc), Date.now(), id]);
+}
+// Open, not-yet-synced local orders (for floor merge + sync).
+export async function localOrderListOpen() {
+  try {
+    const db = await getDb(); if (!db) return [];
+    const res = await db.query('SELECT data FROM local_orders WHERE synced = 0', []);
+    return (res?.values || []).map(r => JSON.parse(r.data)).filter(o => o && o.status === 'open');
+  } catch { return []; }
 }

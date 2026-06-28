@@ -560,11 +560,11 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           zIndex: 1000, padding: 16
         }}>
           <div style={{
-            background: 'white', borderRadius: 20, padding: 28,
-            width: 320, maxWidth: '90vw',
-            display: 'flex', flexDirection: 'column', gap: 12
+            background: 'white', borderRadius: 20, padding: '32px 28px',
+            width: 360, maxWidth: '92vw',
+            display: 'flex', flexDirection: 'column', gap: 16
           }}>
-            <div style={{ textAlign: 'center', marginBottom: 8 }}>
+            <div style={{ textAlign: 'center', marginBottom: 12 }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: '#1a1a2e' }}>
                 Table {tableActionPopup.table.table_number}
               </div>

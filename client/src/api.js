@@ -1,3 +1,5 @@
+import { cachePut, cacheGet } from './native/localdb';
+
 const getServerURL = () => {
   // Electron desktop: the bundled local server lives on :3001 regardless of
   // how the renderer was loaded (file:// in prod, http://localhost:5173 in dev).
@@ -56,7 +58,22 @@ export const storePinSession = (r) => {
   } catch {}
 };
 
-const get = (url) => fetch(SERVER_URL + url, { headers: authHeaders() }).then(r => r.json());
+// SEPOS-ANDROID-002 — offline read cache (native only, additive). Try cloud
+// first; cache good responses; on a network failure serve the last cached copy
+// so the till keeps working with no internet. On web/desktop cachePut/cacheGet
+// no-op, so behaviour is unchanged.
+const get = async (url) => {
+  try {
+    const r = await fetch(SERVER_URL + url, { headers: authHeaders() });
+    const json = await r.json();
+    if (json && !json.error) cachePut(url, json);   // fire-and-forget
+    return json;
+  } catch (e) {
+    const cached = await cacheGet(url);
+    if (cached !== undefined) return cached;
+    throw e;
+  }
+};
 const post = (url, data) => fetch(SERVER_URL + url, {
   method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
   body: JSON.stringify(data)

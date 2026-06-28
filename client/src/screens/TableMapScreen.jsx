@@ -562,9 +562,9 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           <div style={{
             background: 'white', borderRadius: 20, padding: '32px 28px',
             width: 360, maxWidth: '92vw',
-            display: 'flex', flexDirection: 'column', gap: 16
+            display: 'flex', flexDirection: 'column', gap: 22
           }}>
-            <div style={{ textAlign: 'center', marginBottom: 12 }}>
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: '#1a1a2e' }}>
                 Table {tableActionPopup.table.table_number}
               </div>

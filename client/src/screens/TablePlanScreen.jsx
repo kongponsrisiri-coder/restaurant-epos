@@ -132,7 +132,7 @@ export default function TablePlanScreen() {
           ))}
 
           {tables.length === 0 && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb', fontSize: 16 }}>
+            <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb', fontSize: 16 }}>
               Click "+ Add Table" to start building your floor plan
             </div>
           )}

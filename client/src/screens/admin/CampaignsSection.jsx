@@ -29,7 +29,7 @@ function PreviewModal({ subject, body, onClose }) {
   const personalised = body.replace(/\{\{\s*name\s*\}\}/gi, 'Sample Guest');
   return (
     <div style={{
-      position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:1000,
+      position:'fixed', top: 0, right: 0, bottom: 0, left: 0, background:'rgba(0,0,0,0.6)', zIndex:1000,
       display:'flex', alignItems:'center', justifyContent:'center', padding:20
     }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{

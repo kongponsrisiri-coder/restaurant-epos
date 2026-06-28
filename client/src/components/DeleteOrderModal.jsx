@@ -52,7 +52,7 @@ export default function DeleteOrderModal({ order, onClose, onDeleted }) {
   return (
     <div
       style={{
-        position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)',
+        position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 1000,
       }}
       onClick={(e) => e.target === e.currentTarget && onClose()}

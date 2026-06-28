@@ -387,7 +387,7 @@ export default function TablePlanSection() {
             backgroundSize: '30px 30px', overflow: 'hidden',
           }}
         >
-          <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1 }}>
+          <svg style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1 }}>
             {combos.map(c => {
               const a = tableCenter(c.table_id_a);
               const b = tableCenter(c.table_id_b);
@@ -467,7 +467,7 @@ export default function TablePlanSection() {
           })}
 
           {tables.length === 0 && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb', fontSize: 15 }}>
+            <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb', fontSize: 15 }}>
               Click "+ Table" to start building your floor plan
             </div>
           )}

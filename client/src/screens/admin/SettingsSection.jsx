@@ -81,7 +81,7 @@ function KitchenTemplatesCard({ cardStyle }) {
       </div>
 
       {editing && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+        <div style={{ position:'fixed', top: 0, right: 0, bottom: 0, left: 0, background:'rgba(0,0,0,0.6)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
           <div style={{ background:'white', borderRadius:14, maxWidth:480, width:'100%', padding:'20px 22px' }}>
             <h3 style={{ fontSize:17, fontWeight:800, margin:'0 0 14px', color:'#1a1a2e' }}>{editing.id ? 'Edit template' : 'New template'}</h3>
             <div style={{ display:'grid', gap:12 }}>

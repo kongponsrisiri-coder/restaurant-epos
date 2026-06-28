@@ -101,7 +101,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   }, [scanning]);
 
   if (loading) return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999 }}>
+    <div style={{ position:'fixed', top: 0, right: 0, bottom: 0, left: 0, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999 }}>
       <div style={{ color:'white', fontSize:18 }}>Loading bill...</div>
     </div>
   );
@@ -344,7 +344,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     // SEPOS-062 — print only; staff taps 💵 Cash / 💳 Card to settle this person.
   };
 
-  const overlay = { position:'fixed', inset:0, background:isMobile?'white':'rgba(0,0,0,0.75)', display:'flex', alignItems:isMobile?'flex-start':'center', justifyContent:'center', zIndex:9999, padding:isMobile?0:16, overflowY:'auto' };
+  const overlay = { position:'fixed', top: 0, right: 0, bottom: 0, left: 0, background:isMobile?'white':'rgba(0,0,0,0.75)', display:'flex', alignItems:isMobile?'flex-start':'center', justifyContent:'center', zIndex:9999, padding:isMobile?0:16, overflowY:'auto' };
   const card    = { background:'white', borderRadius:isMobile?0:20, width:'100%', maxWidth:isMobile?'100%':(stage==='amount'?820:stage==='split_items'?600:480), maxHeight:isMobile?'none':'95vh', overflowY:isMobile?'visible':'auto', boxShadow:isMobile?'none':'0 20px 60px rgba(0,0,0,0.5)' };
 
   const mobileTopBar = (title, onBack, backLabel='← Back') => isMobile && (
@@ -359,7 +359,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     <div style={overlay}>
       {/* SEPOS-VOUCHER-SCAN-001 — camera scanner overlay */}
       {scanning && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.95)', zIndex:10001, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:20 }}>
+        <div style={{ position:'fixed', top: 0, right: 0, bottom: 0, left: 0, background:'rgba(0,0,0,0.95)', zIndex:10001, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:20 }}>
           <div style={{ color:'white', fontSize:18, fontWeight:700, marginBottom:6, textAlign:'center' }}>Scan voucher QR</div>
           <div style={{ color:'#ccc', fontSize:13, marginBottom:18, textAlign:'center', maxWidth:340 }}>Point the camera at the QR on the customer's Apple Wallet pass</div>
           <div id="voucher-qr-reader" style={{ width:'min(90vw, 360px)', background:'black', borderRadius:14, overflow:'hidden', border:'2px solid #C9A84C' }} />

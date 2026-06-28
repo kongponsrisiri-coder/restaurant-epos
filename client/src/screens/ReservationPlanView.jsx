@@ -435,7 +435,7 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
                 {slots.map(m => <div key={m} style={{ position: 'absolute', left: ((m - timeStart) / totalMins) * (slots.length * COL_W), top: 0, bottom: 0, width: 1, background: m % 60 === 0 ? '#e5e7eb' : '#f3f4f6' }} />)}
                 {showNow && <div style={{ position: 'absolute', left: nowX, top: 0, bottom: 0, width: 2, background: '#e94560', opacity: 0.7, zIndex: 4, pointerEvents: 'none' }} />}
                 {/* Overlap warning band */}
-                {laneCount > 1 && <div style={{ position: 'absolute', inset: 0, background: 'rgba(239,68,68,0.04)', pointerEvents: 'none' }} />}
+                {laneCount > 1 && <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(239,68,68,0.04)', pointerEvents: 'none' }} />}
                 {row.entries.map(({ res: r, isPrimary }) => {
                   const c = STATUS_COLORS[r.status] || STATUS_COLORS.pending;
                   const isSel = selectedRes?.id === r.id;
@@ -641,7 +641,7 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
               </div>
             );
           })}
-          {tables.length === 0 && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: '#888' }}><div style={{ fontSize: 36 }}>🗺</div><div>Set up your floor plan in Admin → Table Plan first</div></div>}
+          {tables.length === 0 && <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: '#888' }}><div style={{ fontSize: 36 }}>🗺</div><div>Set up your floor plan in Admin → Table Plan first</div></div>}
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { getTables, createOrder, getOrders, getTableStatus, moveTable, mergeTables, getReservations, assertOk } from '../api';
 import TakeawayStrip    from '../components/TakeawayStrip';
 import BillPeek         from '../components/BillPeek';
@@ -551,9 +552,9 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           TABLE ACTION POPUP
           Added maxWidth: 90vw for small phones
           ════════════════════════════════════════ */}
-      {tableActionPopup && !moveMode && !mergeMode && (
+      {tableActionPopup && !moveMode && !mergeMode && createPortal((
         <div style={{
-          position: 'fixed', inset: 0,
+          position: 'fixed', top: 0, right: 0, bottom: 0, left: 0,
           background: 'rgba(0,0,0,0.6)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 1000, padding: 16
@@ -632,15 +633,15 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
             </button>
           </div>
         </div>
-      )}
+      ), document.body)}
 
       {/* ════════════════════════════════════════
           COVERS NUMPAD POPUP
           Added maxWidth: 90vw, bigger buttons on mobile
           ════════════════════════════════════════ */}
-      {showCoversPopup && (
+      {showCoversPopup && createPortal((
         <div style={{
-          position: 'fixed', inset: 0,
+          position: 'fixed', top: 0, right: 0, bottom: 0, left: 0,
           background: 'rgba(0,0,0,0.6)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 1000, padding: 16
@@ -709,7 +710,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
             </button>
           </div>
         </div>
-      )}
+      ), document.body)}
 
       {/* SEPOS-044 — BillPeek modal (shared by takeaway strip + tap menu). */}
       {billPeekOrderId && (

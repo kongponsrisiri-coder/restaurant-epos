@@ -31,7 +31,7 @@ export default function LockScreen({ state, onUnlocked }) {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 100000,
+      position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, zIndex: 100000,
       background: 'linear-gradient(160deg, #1a1a2e 0%, #2d1b3d 100%)',
       color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: 24, textAlign: 'center',

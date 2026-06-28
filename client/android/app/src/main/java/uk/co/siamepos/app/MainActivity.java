@@ -14,5 +14,11 @@ public class MainActivity extends BridgeActivity {
         // kitchen display: a KDS must stay lit through service and a till must not
         // sleep mid-order. Devices are mains-powered, so no battery trade-off.
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // SEPOS-ANDROID-001 — ignore the device's system font-scale. Sunmi tills
+        // ship with a large system font that the WebView follows by default,
+        // which blew the whole UI up ("everything looks big") even though the
+        // viewport is full 1920px. Pin text to 100% so the app renders at its
+        // designed size regardless of the device's font setting.
+        try { this.bridge.getWebView().getSettings().setTextZoom(100); } catch (Exception e) {}
     }
 }

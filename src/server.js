@@ -6390,24 +6390,45 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
 // powers the per-row delete and the "delete all matching filter" button.
 app.post('/api/customers/delete', requireStaffAuth(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
-    const emails = Array.isArray(req.body?.emails) ? req.body.emails : [];
-    const clean = [...new Set(emails
-      .map(e => String(e || '').trim().toLowerCase())
-      .filter(Boolean))];
-    if (clean.length === 0) return res.status(400).json({ error: 'No customer emails provided' });
+    // Accept the new contacts:[{email,phone}] shape; fall back to the legacy
+    // emails:[...] array. A customer is identified by email, or by phone when
+    // they have no email (phone-only / walk-in bookings).
+    let contacts = Array.isArray(req.body?.contacts) ? req.body.contacts : [];
+    if (contacts.length === 0 && Array.isArray(req.body?.emails)) {
+      contacts = req.body.emails.map(e => ({ email: e }));
+    }
+    const norm = contacts.map(c => ({
+      email: String(c?.email || '').trim().toLowerCase(),
+      phone: String(c?.phone || '').trim(),
+    })).filter(c => c.email || c.phone);
+    if (norm.length === 0) return res.status(400).json({ error: 'No customers provided' });
 
-    let reservationsRemoved = 0, ordersAnonymised = 0;
-    for (const email of clean) {
-      const del = await pool.query(
-        `DELETE FROM reservations WHERE LOWER(TRIM(customer_email)) = $1`, [email]);
-      reservationsRemoved += del.rowCount || 0;
-      const anon = await pool.query(
-        `UPDATE orders SET customer_name = NULL, customer_email = NULL, customer_phone = NULL
-          WHERE order_type = 'takeaway' AND LOWER(TRIM(customer_email)) = $1`, [email]);
-      ordersAnonymised += anon.rowCount || 0;
+    let deleted = 0, reservationsRemoved = 0, ordersAnonymised = 0;
+    for (const c of norm) {
+      if (c.email) {
+        const del = await pool.query(
+          `DELETE FROM reservations WHERE LOWER(TRIM(customer_email)) = $1`, [c.email]);
+        reservationsRemoved += del.rowCount || 0;
+        const anon = await pool.query(
+          `UPDATE orders SET customer_name = NULL, customer_email = NULL, customer_phone = NULL
+            WHERE order_type = 'takeaway' AND LOWER(TRIM(customer_email)) = $1`, [c.email]);
+        ordersAnonymised += anon.rowCount || 0;
+      } else {
+        // Phone-only: target rows with that phone AND no email (its CRM grouping).
+        const del = await pool.query(
+          `DELETE FROM reservations WHERE TRIM(customer_phone) = $1
+             AND (customer_email IS NULL OR TRIM(customer_email) = '')`, [c.phone]);
+        reservationsRemoved += del.rowCount || 0;
+        const anon = await pool.query(
+          `UPDATE orders SET customer_name = NULL, customer_email = NULL, customer_phone = NULL
+            WHERE order_type = 'takeaway' AND TRIM(customer_phone) = $1
+              AND (customer_email IS NULL OR TRIM(customer_email) = '')`, [c.phone]);
+        ordersAnonymised += anon.rowCount || 0;
+      }
+      deleted++;
     }
 
-    res.json({ deleted: clean.length, reservations_removed: reservationsRemoved, orders_anonymised: ordersAnonymised });
+    res.json({ deleted, reservations_removed: reservationsRemoved, orders_anonymised: ordersAnonymised });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

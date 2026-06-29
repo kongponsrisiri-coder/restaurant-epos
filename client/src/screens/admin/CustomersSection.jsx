@@ -58,11 +58,12 @@ export default function CustomersSection() {
   // SEPOS-056 — delete one customer (per-row) or every customer currently
   // shown by the search/status filter. The CRM is derived, so the server
   // removes their reservations and strips their PII from takeaway orders.
-  async function removeCustomers(emails, singleLabel) {
-    const list = [...new Set(emails.filter(Boolean))];
+  // contacts: [{ email, phone }] — identifies by email, or phone for phone-only.
+  async function removeCustomers(contacts, singleLabel) {
+    const list = (contacts || []).filter(c => c && (c.email || c.phone));
     if (list.length === 0) return;
     const msg = list.length === 1
-      ? `Delete ${singleLabel || list[0]}?\n\nThis removes their bookings and clears their details from any takeaway orders. This cannot be undone.`
+      ? `Delete ${singleLabel || list[0].email || list[0].phone}?\n\nThis removes their bookings and clears their details from any takeaway orders. This cannot be undone.`
       : `Delete ${list.length} customers matching the current filter?\n\nThis removes their bookings and clears their details from any takeaway orders. This cannot be undone.`;
     if (!await confirm(msg)) return;
     try {
@@ -177,7 +178,7 @@ export default function CustomersSection() {
           color:'#0D1B3E', fontWeight:700, fontSize:13,
           cursor: filtered.length ? 'pointer' : 'not-allowed'
         }}>⬇ Export CSV</button>
-        <button onClick={() => removeCustomers(filtered.map(c => c.customer_email), null)} disabled={filtered.length === 0} style={{
+        <button onClick={() => removeCustomers(filtered.map(c => ({ email: c.customer_email, phone: c.customer_phone })), null)} disabled={filtered.length === 0} style={{
           padding:'10px 18px', borderRadius:8, border:'none',
           background: filtered.length ? '#fee2e2' : '#f3e3e3',
           color: filtered.length ? '#991b1b' : '#c9a3a3', fontWeight:700, fontSize:13,
@@ -258,10 +259,10 @@ export default function CustomersSection() {
                     </td>
                     <td style={{ padding:'10px 6px', textAlign:'right' }}>
                       <button
-                        onClick={() => removeCustomers([c.customer_email], c.customer_name || c.customer_email)}
-                        disabled={!c.customer_email}
+                        onClick={() => removeCustomers([{ email: c.customer_email, phone: c.customer_phone }], c.customer_name || c.customer_email || c.customer_phone)}
+                        disabled={!c.customer_email && !c.customer_phone}
                         title="Delete this customer"
-                        style={{ background:'#fee2e2', color:'#991b1b', padding:'4px 9px', borderRadius:6, fontSize:12, fontWeight:700, border:'none', cursor: c.customer_email ? 'pointer' : 'not-allowed' }}
+                        style={{ background:'#fee2e2', color:'#991b1b', padding:'4px 9px', borderRadius:6, fontSize:12, fontWeight:700, border:'none', cursor: (c.customer_email || c.customer_phone) ? 'pointer' : 'not-allowed' }}
                       >🗑</button>
                     </td>
                   </tr>

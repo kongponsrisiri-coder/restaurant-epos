@@ -2408,7 +2408,6 @@ app.put('/api/orders/:id/merge', async (req, res) => {
 // SEPOS-042 — manager-gated order deletion.
 // Used by Admin → Bills → Delete to remove a fault transaction.
 // Validates the supplied PIN belongs to a manager / admin / supervisor,
-// writes an audit row to order_deletions BEFORE the destructive deletes,
 // then wipes order_items + payments + sale-source stock_movements, then
 // the order itself. Each delete is independent (no transaction) so the
 // per-step result tells us exactly what cleared.
@@ -2467,16 +2466,6 @@ app.delete('/api/orders/:id', async (req, res) => {
       if (ordRes.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
       order = ordRes.rows[0];
     }
-
-    // Audit row goes in FIRST so we have the record even if a later
-    // step partially fails.
-    await pool.query(
-      `INSERT INTO order_deletions
-       (order_id, staff_id, staff_name, reason, deleted_total, order_type, opened_at, closed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [order.id, staff.id, staff.name, String(reason).trim(),
-       order.total, order.order_type, order.opened_at, order.closed_at]
-    );
 
     // Step-by-step cleanup. Errors logged per step; the final response
     // tells the UI what cleared.
@@ -2597,12 +2586,6 @@ app.post('/api/sync/delete-order', async (req, res) => {
       return res.json({ success: true, already_deleted: true, order_id: orderId });
     }
     const order = ordRes.rows[0];
-
-    await pool.query(
-      `INSERT INTO order_deletions (order_id, staff_id, staff_name, reason, deleted_total, order_type, opened_at, closed_at)
-       VALUES ($1, NULL, $2, $3, $4, $5, $6, $7)`,
-      [order.id, `${staffName} (sync)`, reason, order.total, order.order_type, order.opened_at, order.closed_at]
-    );
 
     // SEPOS-046i — per-step try/catch so a missing table (e.g. tenant
     // never had stock_movements migrated) doesn't strand the order in a

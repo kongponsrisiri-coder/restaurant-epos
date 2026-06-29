@@ -24,3 +24,7 @@ client/dist/
 # macOS Finder metadata
 .DS_Store
 **/.DS_Store
+
+# Embedded-Node host build (lives on the android-host branch; its working-tree
+# files/binaries get left here after a branch switch — never track on main).
+client/android/node-host/

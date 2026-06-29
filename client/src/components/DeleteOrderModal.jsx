@@ -19,11 +19,15 @@ export default function DeleteOrderModal({ order, onClose, onDeleted }) {
 
   if (!order) return null;
 
+  // Number(...) guard: bill rows come back from the API with numeric columns
+  // serialised as STRINGS (e.g. total: "42.50"). `"42.50".toFixed(2)` throws a
+  // TypeError, which — with no boundary — unmounted the app to a blank screen.
+  const totalStr = Number(order.total || 0).toFixed(2);
   const summary = (() => {
     if (order.order_type === 'takeaway') {
-      return `🥡 Online Order #${order.id}${order.customer_name ? ' · ' + order.customer_name : ''} · £${(order.total || 0).toFixed(2)}`;
+      return `🥡 Online Order #${order.id}${order.customer_name ? ' · ' + order.customer_name : ''} · £${totalStr}`;
     }
-    return `Table ${order.table_number ?? '—'} · Order #${order.id} · £${(order.total || 0).toFixed(2)}${order.method ? ' · ' + order.method : ''}`;
+    return `Table ${order.table_number ?? '—'} · Order #${order.id} · £${totalStr}${order.method ? ' · ' + order.method : ''}`;
   })();
 
   const submit = async (e) => {

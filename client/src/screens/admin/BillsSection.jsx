@@ -286,7 +286,7 @@ export default function BillsSection() {
                             {itemsByCourse[course].map(item => (
                               <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #e0edff' }}>
                                 <span>{item.quantity}× {item.name}{item.notes && <span style={{ color: '#aaa', marginLeft: 6 }}>({item.notes})</span>}{item.item_note && <span style={{ color: '#3b82f6', marginLeft: 6 }}>📝 {item.item_note}</span>}</span>
-                                <span style={{ fontWeight: 600, marginLeft: 12 }}>£{(item.unit_price * item.quantity).toFixed(2)}</span>
+                                <span style={{ fontWeight: 600, marginLeft: 12 }}>£{(Number(item.unit_price || 0) * Number(item.quantity || 0)).toFixed(2)}</span>
                               </div>
                             ))}
                           </div>

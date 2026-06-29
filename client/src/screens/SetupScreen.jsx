@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { setTenantUrl } from '../native/tenant';
+import { CapacitorHttp } from '@capacitor/core';
 
 // SEPOS-ANDROID-001 — first-launch setup for the Android app. Point this device
 // at its restaurant/spa by entering (or scanning, later) the cloud address the
@@ -48,24 +49,59 @@ export default function SetupScreen({ onConfigured }) {
   }, [scanning]);
 
   async function connect(override) {
-    let u = String(override ?? url).trim().replace(/\/+$/, '');
+    // GOTCHA (v1.4.4 connect bug): the Connect button used to be
+    // onClick={connect}, which passed React's click EVENT as `override` →
+    // String(event) became "[object Object]" and the URL was garbage. The
+    // button is now onClick={() => connect()}; this guard is belt-and-braces
+    // so only a real string override (the QR-scan path) is honoured.
+    const raw = (typeof override === 'string' && override) ? override : url;
+    let u = String(raw).trim().replace(/\/+$/, '');
     if (!u) { setError('Enter your SiamEPOS address.'); return; }
     if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
     setBusy(true); setError('');
-    // AbortController + setTimeout instead of AbortSignal.timeout() — the latter
-    // needs a 2022+ browser and throws on older Android WebViews (Sunmi A9),
-    // which made setup fail with "couldn't connect" even on a healthy network.
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 12000);
+
+    const isNative = (() => {
+      try {
+        return !!(typeof window !== 'undefined' && window.Capacitor &&
+          typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+      } catch { return false; }
+    })();
+
     try {
-      const res = await fetch(u + '/api/restaurant', { signal: ctrl.signal });
-      if (!res.ok) throw new Error('status ' + res.status);
-      const data = await res.json().catch(() => ({}));
-      setTenantUrl(u);
-      onConfigured ? onConfigured(data) : window.location.reload();
+      if (isNative) {
+        // On-device: go through the native HTTP stack so the check matches the
+        // app's real request path (old Sunmi WebView `fetch` can fail where the
+        // native stack succeeds). Surface the REAL error so onboarding isn't a
+        // black box.
+        let res;
+        try {
+          res = await CapacitorHttp.get({ url: u + '/api/restaurant', connectTimeout: 12000, readTimeout: 12000 });
+        } catch (err) {
+          setError(`Couldn't connect — ${err.name || 'Error'}: ${err.message || err}`);
+          return;
+        }
+        if (!res || res.status !== 200) { setError(`Couldn't connect — status ${res ? res.status : '?'}`); return; }
+        const data = (res.data && typeof res.data === 'object') ? res.data : {};
+        setTenantUrl(u);
+        onConfigured ? onConfigured(data) : window.location.reload();
+        return;
+      }
+      // Web / desktop: keep the fetch + AbortController path.
+      // AbortController + setTimeout instead of AbortSignal.timeout() — the latter
+      // needs a 2022+ browser and throws on older Android WebViews (Sunmi A9),
+      // which made setup fail with "couldn't connect" even on a healthy network.
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 12000);
+      try {
+        const res = await fetch(u + '/api/restaurant', { signal: ctrl.signal });
+        if (!res.ok) throw new Error('status ' + res.status);
+        const data = await res.json().catch(() => ({}));
+        setTenantUrl(u);
+        onConfigured ? onConfigured(data) : window.location.reload();
+      } finally { clearTimeout(timer); }
     } catch (e) {
       setError("Couldn't connect to that address. Check it's correct and the device is online.");
-    } finally { clearTimeout(timer); setBusy(false); }
+    } finally { setBusy(false); }
   }
 
   return (
@@ -103,7 +139,7 @@ export default function SetupScreen({ onConfigured }) {
           <div style={{ marginTop: 12, background: 'rgba(239,68,68,0.14)', border: '1px solid rgba(239,68,68,0.35)',
             color: '#fca5a5', borderRadius: 8, padding: '9px 14px', fontSize: 13, textAlign: 'center' }}>{error}</div>
         )}
-        <button onClick={connect} disabled={busy || !url}
+        <button onClick={() => connect()} disabled={busy || !url}
           style={{ width: '100%', height: 52, marginTop: 16, borderRadius: 12, border: 'none',
             background: (url && !busy) ? GOLD : 'rgba(255,255,255,0.08)',
             color: (url && !busy) ? NAVY : 'rgba(255,255,255,0.3)',
@@ -135,6 +171,9 @@ export default function SetupScreen({ onConfigured }) {
 
         <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 16, textAlign: 'center' }}>
           Not sure? Your SiamEPOS team sent this at setup — or email info@siamepos.co.uk
+        </div>
+        <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 14, textAlign: 'center', letterSpacing: '0.1em' }}>
+          v1.4.5
         </div>
       </div>
     </div>

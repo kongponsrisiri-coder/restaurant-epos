@@ -1,4 +1,15 @@
 import { cachePut, cacheGet, cacheLogin, lookupLogin, localOrderCreate, localOrderGet, localOrderUpdate, localOrderListOpen, localItemPatch, localOrderListUnsynced, localOrderMarkSynced } from './native/localdb';
+import { nativeRequest } from './native/http';
+
+// SEPOS-ANDROID — old Sunmi WebViews choke on `fetch` against some tenant
+// backends; route every request through the native Android HTTP stack
+// (CapacitorHttp) on-device. Web POS / Electron desktop keep `fetch` untouched.
+const useNativeHttp = () => {
+  try {
+    return !!(typeof window !== 'undefined' && window.Capacitor &&
+      typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+  } catch { return false; }
+};
 
 // SEPOS-ANDROID-002 — offline orders carry a temp string id like "L1719…".
 const isLocalId = (id) => typeof id === 'string' && String(id).startsWith('L');
@@ -70,8 +81,9 @@ export const storePinSession = (r) => {
 // no-op, so behaviour is unchanged.
 const get = async (url) => {
   try {
-    const r = await fetch(SERVER_URL + url, { headers: authHeaders() });
-    const json = await r.json();
+    const json = useNativeHttp()
+      ? await nativeRequest('GET', SERVER_URL + url, { headers: authHeaders() })
+      : await (await fetch(SERVER_URL + url, { headers: authHeaders() })).json();
     if (json && !json.error) cachePut(url, json);   // fire-and-forget
     return json;
   } catch (e) {
@@ -80,15 +92,21 @@ const get = async (url) => {
     throw e;
   }
 };
-const post = (url, data) => fetch(SERVER_URL + url, {
-  method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
-  body: JSON.stringify(data)
-}).then(r => r.json());
-const put = (url, data) => fetch(SERVER_URL + url, {
-  method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() },
-  body: JSON.stringify(data)
-}).then(r => r.json());
-const del = (url) => fetch(SERVER_URL + url, { method: 'DELETE', headers: authHeaders() }).then(r => r.json());
+const post = (url, data) => useNativeHttp()
+  ? nativeRequest('POST', SERVER_URL + url, { headers: { 'Content-Type': 'application/json', ...authHeaders() }, data })
+  : fetch(SERVER_URL + url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(data)
+    }).then(r => r.json());
+const put = (url, data) => useNativeHttp()
+  ? nativeRequest('PUT', SERVER_URL + url, { headers: { 'Content-Type': 'application/json', ...authHeaders() }, data })
+  : fetch(SERVER_URL + url, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(data)
+    }).then(r => r.json());
+const del = (url) => useNativeHttp()
+  ? nativeRequest('DELETE', SERVER_URL + url, { headers: authHeaders() })
+  : fetch(SERVER_URL + url, { method: 'DELETE', headers: authHeaders() }).then(r => r.json());
 
 // SEPOS-046y — the helpers above resolve (not reject) on HTTP 4xx/5xx, so a
 // try/catch around them only sees network failures. Optimistic-UI handlers
@@ -207,8 +225,9 @@ export const getOrder = async (id) => {
     try { const p = await localOrderGet(String(id)); if (p && p.synced === 0) return p; } catch {}
   }
   try {
-    const r = await fetch(SERVER_URL + `/api/orders/${id}`, { headers: authHeaders() });
-    const json = await r.json();
+    const json = useNativeHttp()
+      ? await nativeRequest('GET', SERVER_URL + `/api/orders/${id}`, { headers: authHeaders() })
+      : await (await fetch(SERVER_URL + `/api/orders/${id}`, { headers: authHeaders() })).json();
     if (json && !json.error) cachePut(`/api/orders/${id}`, json);
     return json;
   } catch (e) {
@@ -375,11 +394,12 @@ async function hashPin(pin) {
 }
 export const loginStaff = async (pin) => {
   try {
-    const r = await fetch(SERVER_URL + '/api/staff/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ pin }),
-    });
-    const json = await r.json();
+    const json = useNativeHttp()
+      ? await nativeRequest('POST', SERVER_URL + '/api/staff/login', { headers: { 'Content-Type': 'application/json', ...authHeaders() }, data: { pin } })
+      : await (await fetch(SERVER_URL + '/api/staff/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ pin }),
+        })).json();
     if (json && json.id && !json.error) hashPin(pin).then(h => cacheLogin(h, json)); // enable offline re-login
     return json;
   } catch (e) {
@@ -645,6 +665,8 @@ export const deleteStaff = (id) => del(`/api/staff/${id}`);
 // ─────────────────────────────────────────────
 
 export const importMenuBatch = async (items) => {
+  if (useNativeHttp())
+    return nativeRequest('POST', `${SERVER_URL}/api/menu/import-batch`, { headers: { 'Content-Type': 'application/json' }, data: { items } });
   const res = await fetch(`${SERVER_URL}/api/menu/import-batch`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -653,6 +675,8 @@ export const importMenuBatch = async (items) => {
   return res.json();
 };
 export const deleteMenuItem = async (id) => {
+  if (useNativeHttp())
+    return nativeRequest('DELETE', `${SERVER_URL}/api/menu/items/${id}`, {});
   const res = await fetch(`${SERVER_URL}/api/menu/items/${id}`, {
     method: 'DELETE',
   });
@@ -753,11 +777,13 @@ export const runSyncNow = () => post('/api/sync/run-now', {});
 // Backend requires PIN to belong to a staff row with role manager/admin/supervisor,
 // writes an audit row to order_deletions, then cascade-deletes the order.
 export const deleteOrder = (orderId, pin, reason) =>
-  fetch(`${SERVER_URL}/api/orders/${orderId}`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pin, reason }),
-  }).then(r => r.json());
+  useNativeHttp()
+    ? nativeRequest('DELETE', `${SERVER_URL}/api/orders/${orderId}`, { headers: { 'Content-Type': 'application/json' }, data: { pin, reason } })
+    : fetch(`${SERVER_URL}/api/orders/${orderId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin, reason }),
+      }).then(r => r.json());
 
 // ── SEPOS-VOUCHER-001 — gift voucher API ─────────────────────────
 export const getVoucher    = (code) => get(`/api/widget/voucher/${encodeURIComponent(code)}`);

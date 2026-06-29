@@ -2,5 +2,6 @@
   "appId": "uk.co.siamepos.app",
   "appName": "SiamEPOS",
   "webDir": "dist",
-  "android": { "allowMixedContent": false }
+  "android": { "allowMixedContent": false },
+  "plugins": { "CapacitorHttp": { "enabled": true } }
 }

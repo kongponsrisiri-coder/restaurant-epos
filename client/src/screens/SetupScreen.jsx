@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { setTenantUrl } from '../native/tenant';
 
 // SEPOS-ANDROID-001 — first-launch setup for the Android app. Point this device
@@ -12,9 +12,43 @@ export default function SetupScreen({ onConfigured }) {
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [scanning, setScanning] = useState(false);
 
-  async function connect() {
-    let u = url.trim().replace(/\/+$/, '');
+  // SEPOS-028 — "any device as a till": scan the QR shown on a configured
+  // device (Admin → Settings) to point this one at the same till. Camera scanner
+  // (html5-qrcode), dynamic-imported so it's out of the main bundle.
+  useEffect(() => {
+    if (!scanning) return;
+    let scanner; let cancelled = false;
+    (async () => {
+      try {
+        const { Html5Qrcode } = await import('html5-qrcode');
+        if (cancelled) return;
+        await new Promise(r => setTimeout(r, 60));
+        if (cancelled) return;
+        scanner = new Html5Qrcode('setup-qr-reader');
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 230, height: 230 } },
+          async (decoded) => {
+            try { await scanner.stop(); } catch {}
+            const v = String(decoded || '').trim();
+            if (!v) return;
+            setScanning(false);
+            setUrl(v);
+            connect(v);   // auto-connect with the scanned address
+          },
+          () => { /* ignore per-frame decode errors */ }
+        );
+      } catch (e) {
+        if (!cancelled) { setError('Camera unavailable — type the address instead.'); setScanning(false); }
+      }
+    })();
+    return () => { cancelled = true; if (scanner) { try { scanner.stop().catch(() => {}); } catch {} } };
+  }, [scanning]);
+
+  async function connect(override) {
+    let u = String(override ?? url).trim().replace(/\/+$/, '');
     if (!u) { setError('Enter your SiamEPOS address.'); return; }
     if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
     setBusy(true); setError('');
@@ -76,6 +110,29 @@ export default function SetupScreen({ onConfigured }) {
             fontWeight: 800, fontSize: 16, cursor: (url && !busy) ? 'pointer' : 'default' }}>
           {busy ? 'Connecting…' : 'Connect'}
         </button>
+
+        {/* Scan QR — "any device as a till": scan the code on a set-up device */}
+        {!scanning ? (
+          <button onClick={() => { setError(''); setScanning(true); }} disabled={busy}
+            style={{ width: '100%', height: 50, marginTop: 12, borderRadius: 12,
+              border: '1px solid rgba(201,168,76,0.5)', background: 'transparent', color: GOLD,
+              fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+            📷 Scan QR code
+          </button>
+        ) : (
+          <div style={{ marginTop: 12 }}>
+            <div id="setup-qr-reader" style={{ width: '100%', borderRadius: 12, overflow: 'hidden' }} />
+            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
+              Point at the QR on a set-up till (Admin → Settings)
+            </div>
+            <button onClick={() => setScanning(false)}
+              style={{ width: '100%', height: 44, marginTop: 10, borderRadius: 10, border: 'none',
+                background: 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        )}
+
         <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 16, textAlign: 'center' }}>
           Not sure? Your SiamEPOS team sent this at setup — or email info@siamepos.co.uk
         </div>

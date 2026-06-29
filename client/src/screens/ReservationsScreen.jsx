@@ -330,8 +330,8 @@ export default function ReservationsScreen() {
 
   return (
     <div style={ !isMobile
-      ? { height: 'calc(100vh - 56px)', overflow: 'hidden', background: '#F4F1EA', fontFamily: "'Archivo', system-ui, sans-serif" }
-      : { ...(isPlanView ? { height: 'calc(100vh - 56px)', overflow: 'hidden' } : { minHeight: '100vh' }), background: '#f5f5f5', fontFamily: 'system-ui, -apple-system, sans-serif' }
+      ? { height: 'calc(100vh - 60px)', overflow: 'hidden', background: '#F4F1EA', fontFamily: "'Archivo', system-ui, sans-serif" }
+      : { ...(isPlanView ? { height: 'calc(100vh - 60px)', overflow: 'hidden' } : { minHeight: '100vh' }), background: '#f5f5f5', fontFamily: 'system-ui, -apple-system, sans-serif' }
     }>
 
       {/* Toast */}
@@ -362,7 +362,7 @@ export default function ReservationsScreen() {
         const kpis = [['Covers booked', coversBooked], ['Bookings', dayList.length], ['Tables held', tablesHeld], ['Next arrival', nextArr]];
         const railBtn = { height: 44, border: '1px solid #E7E2D6', background: '#fff', borderRadius: 10, fontWeight: 700, fontSize: 13, color: '#1a1a2e', cursor: 'pointer' };
         return (
-          <div style={{ display: 'flex', height: '100%' }}>
+          <div style={{ display: 'flex', height: 'calc(100vh - 60px)' }}>
             {/* AGENDA */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>

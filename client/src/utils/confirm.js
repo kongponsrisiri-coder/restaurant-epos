@@ -25,7 +25,7 @@ export function confirm(message, options = {}) {
 
     const overlay = document.createElement('div');
     overlay.style.cssText = `
-      position:fixed; top: 0, right: 0, bottom: 0, left: 0; background:rgba(13,27,62,0.55);
+      position:fixed; top:0; right:0; bottom:0; left:0; background:rgba(13,27,62,0.55);
       z-index:${Z}; display:flex; align-items:center; justify-content:center;
       font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       padding:20px; box-sizing:border-box;

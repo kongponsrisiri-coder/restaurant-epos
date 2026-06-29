@@ -6278,7 +6278,7 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
     // which we accept for v1.
     const r = await pool.query(`
       SELECT
-        LOWER(TRIM(r.customer_email)) AS email_key,
+        COALESCE(NULLIF(LOWER(TRIM(r.customer_email)), ''), 'p:' || NULLIF(TRIM(r.customer_phone), '')) AS contact_key,
         MIN(r.customer_email) AS customer_email,
         MIN(r.customer_name) AS customer_name,
         MIN(r.customer_phone) AS customer_phone,
@@ -6295,8 +6295,9 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
              o.reservation_id = r.id
           OR (o.reservation_id IS NULL AND o.table_id = r.table_id AND DATE(o.opened_at) = r.reservation_date)
            )
-      WHERE r.customer_email IS NOT NULL AND TRIM(r.customer_email) <> ''
-      GROUP BY LOWER(TRIM(r.customer_email))
+      WHERE (r.customer_email IS NOT NULL AND TRIM(r.customer_email) <> '')
+         OR (r.customer_phone IS NOT NULL AND TRIM(r.customer_phone) <> '')
+      GROUP BY COALESCE(NULLIF(LOWER(TRIM(r.customer_email)), ''), 'p:' || NULLIF(TRIM(r.customer_phone), ''))
       ORDER BY MAX(r.reservation_date) DESC
     `);
 
@@ -6307,7 +6308,7 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
     // derived view, now spanning both bookings AND takeaway.
     const takeawayRes = await pool.query(`
       SELECT
-        LOWER(TRIM(customer_email)) AS email_key,
+        COALESCE(NULLIF(LOWER(TRIM(customer_email)), ''), 'p:' || NULLIF(TRIM(customer_phone), '')) AS contact_key,
         MIN(customer_email) AS customer_email,
         MIN(customer_name)  AS customer_name,
         MIN(customer_phone) AS customer_phone,
@@ -6318,15 +6319,16 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
         COALESCE(SUM(total), 0) AS total_spend
       FROM orders
       WHERE order_type = 'takeaway'
-        AND customer_email IS NOT NULL AND TRIM(customer_email) <> ''
-      GROUP BY LOWER(TRIM(customer_email))
+        AND ((customer_email IS NOT NULL AND TRIM(customer_email) <> '')
+          OR (customer_phone IS NOT NULL AND TRIM(customer_phone) <> ''))
+      GROUP BY COALESCE(NULLIF(LOWER(TRIM(customer_email)), ''), 'p:' || NULLIF(TRIM(customer_phone), ''))
     `);
 
     // Merge: reservation customers first, then fold takeaway in.
     const byEmail = new Map();
-    for (const row of r.rows) byEmail.set(row.email_key, { ...row });
+    for (const row of r.rows) byEmail.set(row.contact_key, { ...row });
     for (const t of takeawayRes.rows) {
-      const ex = byEmail.get(t.email_key);
+      const ex = byEmail.get(t.contact_key);
       if (ex) {
         ex.total_visits = Number(ex.total_visits || 0) + Number(t.total_visits || 0);
         ex.total_spend  = Number(ex.total_spend  || 0) + Number(t.total_spend  || 0);
@@ -6336,7 +6338,7 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
         ex.customer_name  = ex.customer_name  || t.customer_name;
         ex.customer_phone = ex.customer_phone || t.customer_phone;
       } else {
-        byEmail.set(t.email_key, { ...t, unsubscribed: 0 });
+        byEmail.set(t.contact_key, { ...t, unsubscribed: 0 });
       }
     }
     const merged = [...byEmail.values()].sort((a, b) =>

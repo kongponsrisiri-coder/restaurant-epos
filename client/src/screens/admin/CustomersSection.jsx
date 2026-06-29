@@ -67,8 +67,13 @@ export default function CustomersSection() {
       : `Delete ${list.length} customers matching the current filter?\n\nThis removes their bookings and clears their details from any takeaway orders. This cannot be undone.`;
     if (!await confirm(msg)) return;
     try {
-      assertOk(await deleteCustomers(list));
+      const r = await deleteCustomers(list);
+      assertOk(r);
       await load();
+      const removed = (Number(r?.reservations_removed) || 0) + (Number(r?.orders_anonymised) || 0);
+      if (removed === 0) {
+        alert('Nothing was deleted — no matching bookings or orders were found for that customer. If you just updated the app, hard-refresh (Cmd/Ctrl+Shift+R) and try again.');
+      }
     } catch (err) {
       alert('Could not delete: ' + (err?.message || 'unknown'));
     }

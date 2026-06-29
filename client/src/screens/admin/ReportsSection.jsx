@@ -79,7 +79,7 @@ export default function ReportsSection() {
       const lines = (tab === 'sales')
         ? buildSalesLines(data, period, from, to, settings)
         : buildItemsLines(itemData, period, from, to, settings);
-      const r = await escPosPrint(lines);
+      const r = await escPosPrint(lines, settings);
       if (r && r.success) return;
       // Show fallback popup if there's no printer configured.
       const fallbackBody = (tab === 'sales')

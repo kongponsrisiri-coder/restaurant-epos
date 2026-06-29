@@ -195,7 +195,7 @@ export default function ZReportSection() {
     if (isThermal) {
       const lines = buildZReportLines(reportData, reportType, settings,
         { floatAmount: floatNum, pettyCash: pettyNum, actualCash: actualNum, difference });
-      const r = await escPosPrint(lines);
+      const r = await escPosPrint(lines, settings);
       if (r && r.success) return;
       const fallback = buildZReportBody(reportData, reportType, settings,
         { floatAmount: floatNum, pettyCash: pettyNum, actualCash: actualNum, difference }, true);
@@ -476,7 +476,7 @@ export default function ZReportSection() {
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={handleConfirmSave} style={{ flex: 2, padding: '16px', borderRadius: 12, border: 'none', background: reportType === 'day' ? '#e94560' : reportType === 'custom' ? '#2563eb' : '#16a34a', color: 'white', fontSize: 16, fontWeight: 800, cursor: 'pointer' }}>{reportType === 'day' ? '🌙 Confirm End of Day' : reportType === 'custom' ? '📅 Save Custom Report' : '✅ Confirm Close Shift'}</button>
-            <button onClick={() => window.print()} style={{ flex: 1, padding: '16px', borderRadius: 12, border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>🖨️ Print</button>
+            <button onClick={() => doPrintZ('thermal')} style={{ flex: 1, padding: '16px', borderRadius: 12, border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>🖨️ Print</button>
             <button onClick={() => setStep(2)} style={{ flex: 1, padding: '16px', borderRadius: 12, border: 'none', background: '#f0f0f0', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>← Back</button>
           </div>
         </div>

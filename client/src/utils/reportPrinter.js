@@ -18,6 +18,28 @@
  */
 
 import { serverPrintReportText } from '../api';
+import { isNativeApp, sendRawToPrinter } from '../native/printer';
+import { sunmiAvailable, sunmiPrintOps, printTarget } from '../native/sunmiPrinter';
+import { opsForSunmi, renderOpsToBytes } from '../native/escpos';
+
+// Map the report line-DSL → the shared escpos ops (compact 'r' receipt font).
+function reportLinesToOps(lines) {
+  const ops = [{ op: 'size', v: 'r' }];
+  for (const l of (lines || [])) {
+    switch (l.kind) {
+      case 'h1': ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: l.text || '' }, { op: 'size', v: 'r' }, { op: 'bold', v: false }, { op: 'align', v: 0 }); break;
+      case 'h2': ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'text', v: l.text || '' }, { op: 'bold', v: false }, { op: 'align', v: 0 }); break;
+      case 'small': ops.push({ op: 'align', v: 1 }, { op: 'text', v: l.text || '' }, { op: 'align', v: 0 }); break;
+      case 'div': case 'div-solid': ops.push({ op: 'rule' }); break;
+      case 'row': ops.push({ op: 'row', l: l.left || '', r: l.right || '' }); break;
+      case 'total': ops.push({ op: 'rule' }, { op: 'bold', v: true }, { op: 'row', l: l.left || '', r: l.right || '' }, { op: 'bold', v: false }); break;
+      case 'space': ops.push({ op: 'feed', v: 1 }); break;
+      default: if (l.text) ops.push({ op: 'text', v: l.text });
+    }
+  }
+  ops.push({ op: 'feed', v: 2 }, { op: 'cut' });
+  return ops;
+}
 
 // ── ESC/POS path ──────────────────────────────────────────────────
 // SEPOS-REPORTS-001 — when a receipt printer IP is configured we send
@@ -36,7 +58,28 @@ import { serverPrintReportText } from '../api';
 //   { kind:'total', left, right }       — bold, solid rule above
 //   { kind:'space' }                    — blank line
 // Returns a promise that resolves to { success, reason?, error? }.
-export async function escPosPrint(lines) {
+export async function escPosPrint(lines, settings = {}) {
+  // Native (Sunmi / Android): render the report ON-DEVICE and send it to the
+  // built-in or network printer — the cloud can't reach a LAN/built-in printer.
+  if (isNativeApp()) {
+    try {
+      const target = printTarget(settings, 'receipt');
+      if (target === 'off') return { success: true };
+      const ops = reportLinesToOps(lines);
+      const ip = settings.printer_receipt_ip;
+      const sunmiOk = (target === 'builtin' || target === 'auto') ? await sunmiAvailable() : false;
+      if (sunmiOk) { await sunmiPrintOps(opsForSunmi(ops)); return { success: true }; }
+      if ((target === 'network' || target === 'auto') && ip) {
+        await sendRawToPrinter(ip, settings.printer_receipt_port || 9100, renderOpsToBytes(ops, { thaiCp: settings.kitchen_thai_codepage }));
+        return { success: true };
+      }
+      return { success: false, reason: 'no printer configured' };
+    } catch (e) {
+      console.error('[report] native ESC/POS error:', e);
+      return { success: false, error: e.message };
+    }
+  }
+  // Web / desktop: the server pipeline (RAW → LPR → CUPS), unchanged.
   try {
     const r = await serverPrintReportText(lines);
     return r || { success: false };

@@ -102,7 +102,14 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
   const ops = [{ op: 'size', v: 'r' }];
   // Logo (base64 data URL → bare base64) — printed on the Sunmi via printBitmap.
   const logo = s.company_logo || '';
-  if (logo) { const b64 = logo.includes(',') ? logo.slice(logo.indexOf(',') + 1) : logo; ops.push({ op: 'align', v: 1 }, { op: 'image', v: b64 }, { op: 'feed', v: 1 }); }
+  if (logo) {
+    const b64 = logo.includes(',') ? logo.slice(logo.indexOf(',') + 1) : logo;
+    // Match the receipt logo-size setting (small/medium/large/full) → dots on the
+    // 576-dot (80mm) head, same choice as the HTML receipt.
+    const LOGO_W = { small: 160, medium: 300, large: 430, full: 560 };
+    const w = LOGO_W[s.receipt_logo_size] || LOGO_W.medium;
+    ops.push({ op: 'align', v: 1 }, { op: 'image', v: b64, w }, { op: 'feed', v: 1 });
+  }
   ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: name }, { op: 'size', v: 'r' }, { op: 'bold', v: false });
   if (addr)  ops.push({ op: 'text', v: addr });
   if (phone) ops.push({ op: 'text', v: 'Tel: ' + phone });

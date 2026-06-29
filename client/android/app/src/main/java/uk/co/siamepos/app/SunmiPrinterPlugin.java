@@ -119,7 +119,7 @@ public class SunmiPrinterPlugin extends Plugin {
                                 // transparent pixels as black → a solid block otherwise),
                                 // scale to ~380 dots, and CENTRE it on a full-width (576
                                 // dots = 80mm) white canvas so it prints centred.
-                                int head = 576, maxW = 380;
+                                int head = 576, maxW = Math.min(head, o.optInt("w", 380));
                                 int w = src.getWidth(), h = src.getHeight();
                                 float scale = w > maxW ? (float) maxW / w : 1f;
                                 int nw = Math.max(1, Math.round(w * scale));

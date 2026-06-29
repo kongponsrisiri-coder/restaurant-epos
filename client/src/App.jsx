@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { startMonitoring, onStatusChange, getServerStatus } from './utils/serverDetect';
 import { getRestaurant, getLicenseState, syncLocalOrders } from './api';
+import { backupSalesToDevice } from './native/salesBackup'; // SEPOS-ANDROID-003
 import { canAccessReservations, canAccessKitchen, canAccessFullEPOS } from './utils/plan';
 import UpgradeLocked from './components/UpgradeLocked';
 import LoginScreen from './screens/LoginScreen';
@@ -113,6 +114,22 @@ export default function App() {
     window.addEventListener('online', run);
     const id = setInterval(() => { if (alive) run(); }, 30 * 1000);
     return () => { alive = false; window.removeEventListener('online', run); clearInterval(id); };
+  }, []);
+
+  // SEPOS-ANDROID-003 — "keep all sales on this device". Proactively warm the
+  // on-device cache with a full 365-day copy of bills + reports so the till
+  // always has them offline (and as a local backup). Native Android only;
+  // no-op on web POS / desktop. Best-effort, never blocks: once shortly after
+  // load, again whenever connectivity returns, then on a 20-minute backstop.
+  useEffect(() => {
+    const native = (() => { try { return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch { return false; } })();
+    if (!native) return;
+    let alive = true;
+    const run = () => { backupSalesToDevice().catch(() => {}); };
+    const kick = setTimeout(run, 8 * 1000);   // let first paint + login settle
+    window.addEventListener('online', run);
+    const id = setInterval(() => { if (alive) run(); }, 20 * 60 * 1000);
+    return () => { alive = false; clearTimeout(kick); window.removeEventListener('online', run); clearInterval(id); };
   }, []);
 
   // SEPOS-060 phase 2 — desktop offline license lock. Poll the local license

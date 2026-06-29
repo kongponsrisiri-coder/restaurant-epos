@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { canAccessAdminSection } from '../utils/plan';
 import UpgradeLocked from '../components/UpgradeLocked';
+import SalesBackupIndicator from '../components/SalesBackupIndicator'; // SEPOS-ANDROID-003
 import TradingSection   from './admin/TradingSection';
 import MenuSection      from './admin/MenuSection';
 import TablePlanSection from './admin/TablePlanSection';
@@ -238,6 +239,7 @@ export default function AdminScreen({ plan }) {
             >✕</button>
           )}
         </div>
+        <SalesBackupIndicator />{/* SEPOS-ANDROID-003 — native-only: "Sales saved on this device · <time>" */}
         {GROUPS.map(group => {
           const isOpen = openGroups.has(group.title);
           // Section header — clickable, shows chevron + count of items.

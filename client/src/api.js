@@ -1,7 +1,10 @@
-import { cachePut, cacheGet, cacheLogin, lookupLogin, localOrderCreate, localOrderGet, localOrderUpdate, localOrderListOpen } from './native/localdb';
+import { cachePut, cacheGet, cacheLogin, lookupLogin, localOrderCreate, localOrderGet, localOrderUpdate, localOrderListOpen, localItemPatch, localOrderListUnsynced, localOrderMarkSynced } from './native/localdb';
 
 // SEPOS-ANDROID-002 — offline orders carry a temp string id like "L1719…".
 const isLocalId = (id) => typeof id === 'string' && String(id).startsWith('L');
+// Local order-item ids look like 'LI<ts>_<i>' (note: also pass isLocalId since
+// they start with 'L', so always test isLocalItemId FIRST where it matters).
+const isLocalItemId = (id) => typeof id === 'string' && String(id).startsWith('LI');
 
 const getServerURL = () => {
   // Electron desktop: the bundled local server lives on :3001 regardless of
@@ -98,21 +101,123 @@ export const assertOk = (res) => {
 
 export const getTables = () => get('/api/tables');
 export const updateTableStatus = (id, status) => put(`/api/tables/${id}`, { status });
-export const getMenu = () => get('/api/menu');
+// SEPOS-ANDROID-002 — when online, warm EVERY item's modifiers into the cache
+// (once) so offline taps still show modifier choices. Background, best-effort.
+const isNative = () => {
+  try { return !!(typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); }
+  catch { return false; }
+};
+let _modWarmed = false;
+async function warmModifiers(menu) {
+  if (_modWarmed || !Array.isArray(menu)) return;
+  if (!isNative()) return;   // only the on-device till caches modifiers; web/desktop skip
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  _modWarmed = true;
+  try {
+    const ids = [];
+    for (const cat of menu) for (const it of (cat.items || [])) if (it?.id != null) ids.push(it.id);
+    for (const id of ids) { try { await get(`/api/menu/items/${id}/modifiers`); } catch {} }
+  } catch {}
+}
+export const getMenu = async () => {
+  const menu = await get('/api/menu');
+  if (Array.isArray(menu)) warmModifiers(menu);
+  return menu;
+};
 export const getAllMenu = () => get('/api/menu/all');
 export const addMenuItem = (item) => post('/api/menu/items', item);
 export const updateMenuItem = (id, item) => put(`/api/menu/items/${id}`, item);
-// Open orders = cloud (or cache) PLUS any orders created offline on this device.
+// SEPOS-ANDROID-002 — "promote" a cloud order into the local store so a table
+// opened BEFORE the outage can still be edited offline. Keyed by its own
+// (stringified) cloud id and carries cloud_id, so the sync engine later pushes
+// the offline edits back as a DELTA to the existing cloud order rather than
+// creating a duplicate. Native-only; returns null (no-op) on web/desktop.
+async function promoteOrder(cloudId) {
+  if (!isNative()) return null;
+  try {
+    const existing = await localOrderGet(String(cloudId));
+    if (existing) return String(cloudId);          // already promoted
+    let snap = await cacheGet(`/api/orders/${cloudId}`);
+    if (!snap || snap.id == null) {
+      const list = await cacheGet('/api/orders');
+      snap = (list || []).find(o => o.id === cloudId);
+    }
+    if (!snap) return null;                          // never cached → can't promote
+    const doc = {
+      ...snap, id: String(cloudId), cloud_id: cloudId, promoted: true, offline: true, synced: 0,
+      status: snap.status || 'open',
+      items: Array.isArray(snap.items) ? snap.items.map(it => ({ ...it })) : [],
+    };
+    await localOrderCreate(doc);
+    return String(cloudId);
+  } catch { return null; }
+}
+// Resolve which local doc-key an order id maps to, or null to use the cloud.
+// 'L…' = born offline; a promoted cloud order is stored under its numeric id.
+async function localTarget(orderId) {
+  if (isLocalId(orderId)) return orderId;
+  if (!isNative()) return null;
+  try { const p = await localOrderGet(String(orderId)); if (p && p.synced === 0) return String(orderId); } catch {}
+  return null;
+}
+// Append cart items to a local order doc (shared by 'L…' and promoted orders).
+async function localAppendItems(lid, items) {
+  const doc = await localOrderGet(lid);
+  if (!doc) return { error: 'Order not found' };
+  if (!Array.isArray(doc.items)) doc.items = [];
+  (items || []).forEach((it, i) => {
+    doc.items.push({
+      id: 'LI' + Date.now() + '_' + i,
+      order_id: lid,
+      menu_item_id: it.menu_item_id ?? null,
+      item_name: it.name, name: it.name, name_alt: it.name_alt || '',
+      quantity: it.quantity || 1,
+      unit_price: it.unit_price ?? it.server_price ?? it.price ?? 0,
+      notes: it.notes || '', item_note: it.item_note || '',
+      course: it.course || 1,
+      is_bar: it.is_bar ? 1 : 0,
+      status: it.is_bar ? 'cooking' : 'pending',
+      is_fired: it.is_bar ? 1 : 0,
+      voided: 0,
+      modifiers: it.modifiers || [],   // kept so the cloud re-prices add-ons on sync
+    });
+  });
+  doc.total = doc.items.filter(x => !x.voided)
+    .reduce((s, x) => s + (Number(x.unit_price) || 0) * (Number(x.quantity) || 1), 0);
+  await localOrderUpdate(lid, doc);
+  return { success: true };
+}
+
+// Open orders = cloud (or cache) PLUS any orders created/promoted offline. Drop
+// the cached cloud copy of anything we've promoted locally to avoid duplicates.
 export const getOrders = async () => {
   const base = await get('/api/orders');
   let locals = [];
   try { locals = await localOrderListOpen(); } catch {}
   const arr = Array.isArray(base) ? base : [];
-  return locals.length ? [...arr, ...locals] : arr;
+  if (!locals.length) return arr;
+  const promoted = new Set(locals.filter(o => o.cloud_id != null).map(o => o.cloud_id));
+  const deduped = promoted.size ? arr.filter(o => !promoted.has(o.id)) : arr;
+  return [...deduped, ...locals];
 };
 export const getOrder = async (id) => {
   if (isLocalId(id)) { const d = await localOrderGet(id); return d || { error: 'Order not found' }; }
-  return get(`/api/orders/${id}`);
+  // Already promoted (has unsynced offline edits)? Show the local copy.
+  if (isNative()) {
+    try { const p = await localOrderGet(String(id)); if (p && p.synced === 0) return p; } catch {}
+  }
+  try {
+    const r = await fetch(SERVER_URL + `/api/orders/${id}`, { headers: authHeaders() });
+    const json = await r.json();
+    if (json && !json.error) cachePut(`/api/orders/${id}`, json);
+    return json;
+  } catch (e) {
+    if (!isNative()) throw e;
+    const pid = await promoteOrder(id);            // offline: make this table editable now
+    if (pid) { const p = await localOrderGet(pid); if (p) return p; }
+    const cached = await cacheGet(`/api/orders/${id}`);
+    return cached !== undefined ? cached : { error: 'Order not found' };
+  }
 };
 // Online → cloud. Offline (network fail) → create the order locally with a temp
 // id so the floor + order screen work; it syncs to the cloud later.
@@ -120,6 +225,7 @@ export const createOrder = async (table_id, covers, staff_id) => {
   try {
     return await post('/api/orders', { table_id, covers, staff_id });
   } catch (e) {
+    if (!isNative()) throw e;   // web POS / desktop: original behaviour — never create a local order
     let table_number = table_id;
     try { const tbls = await cacheGet('/api/tables'); const t = (tbls || []).find(x => x.id === table_id); if (t) table_number = t.table_number; } catch {}
     const now = new Date().toISOString();
@@ -131,41 +237,133 @@ export const createOrder = async (table_id, covers, staff_id) => {
   }
 };
 // SEPOS-045 — counter mode: tableless order, paid at the till.
-export const createCounterOrder = (staff_id) =>
-  post('/api/orders', { table_id: null, covers: 1, staff_id, order_type: 'counter' });
-export const addOrderItems = async (orderId, items) => {
-  if (isLocalId(orderId)) {
-    const doc = await localOrderGet(orderId);
-    if (!doc) return { error: 'Order not found' };
-    (items || []).forEach((it, i) => {
-      doc.items.push({
-        id: 'LI' + Date.now() + '_' + i,
-        order_id: orderId,
-        menu_item_id: it.menu_item_id ?? null,
-        item_name: it.name, name: it.name, name_alt: it.name_alt || '',
-        quantity: it.quantity || 1,
-        unit_price: it.unit_price ?? it.server_price ?? it.price ?? 0,
-        notes: it.notes || '', item_note: it.item_note || '',
-        course: it.course || 1,
-        is_bar: it.is_bar ? 1 : 0,
-        status: it.is_bar ? 'cooking' : 'pending',
-        is_fired: it.is_bar ? 1 : 0,
-        voided: 0,
-      });
-    });
-    doc.total = doc.items.filter(x => !x.voided)
-      .reduce((s, x) => s + (Number(x.unit_price) || 0) * (Number(x.quantity) || 1), 0);
-    await localOrderUpdate(orderId, doc);
-    return { success: true };
+export const createCounterOrder = async (staff_id) => {
+  try {
+    return await post('/api/orders', { table_id: null, covers: 1, staff_id, order_type: 'counter' });
+  } catch (e) {
+    if (!isNative()) throw e;   // web POS / desktop: original behaviour
+    const now = new Date().toISOString();
+    const id = 'L' + Date.now();
+    const doc = { id, table_id: null, table_number: null, covers: 1, staff_id, status: 'open',
+      total: 0, items: [], opened_at: now, created_at: now, order_type: 'counter', offline: true };
+    await localOrderCreate(doc);
+    return { id };
   }
-  return post(`/api/orders/${orderId}/items`, { items });
+};
+export const addOrderItems = async (orderId, items) => {
+  const lid = await localTarget(orderId);
+  if (lid) return localAppendItems(lid, items);
+  try { return await post(`/api/orders/${orderId}/items`, { items }); }
+  catch (e) {
+    if (!isNative()) throw e;
+    const pid = await promoteOrder(orderId);       // offline edit to a not-yet-promoted cloud table
+    if (!pid) throw e;
+    return localAppendItems(pid, items);
+  }
 };
 // SEPOS-062 — `tenders` (optional) is an array of {amount, method} for split
 // bills, so each tender is recorded as its own payment row with its real method
 // (Cash/Card) instead of one lumped 'Split' row. Single payments omit it.
-export const payOrder = (orderId, amount, method, tenders) =>
-  post(`/api/orders/${orderId}/pay`, tenders && tenders.length ? { payments: tenders } : { amount, method });
-export const updateItemStatus = (itemId, status) => put(`/api/order-items/${itemId}/status`, { status });
+const localPay = async (lid, amount, method, tenders) => {
+  const doc = await localOrderGet(lid);
+  if (!doc) return { error: 'Order not found' };
+  doc.status = 'closed';
+  doc.payment_method = method;
+  doc.amount_paid = amount;
+  if (tenders && tenders.length) doc.tenders = tenders;
+  doc.closed_at = new Date().toISOString();
+  await localOrderUpdate(lid, doc);
+  return { success: true };
+};
+export const payOrder = async (orderId, amount, method, tenders) => {
+  const lid = await localTarget(orderId);
+  if (lid) return localPay(lid, amount, method, tenders);
+  try { return await post(`/api/orders/${orderId}/pay`, tenders && tenders.length ? { payments: tenders } : { amount, method }); }
+  catch (e) {
+    if (!isNative()) throw e;
+    const pid = await promoteOrder(orderId);
+    if (!pid) throw e;
+    return localPay(pid, amount, method, tenders);
+  }
+};
+
+// SEPOS-ANDROID-002 — replay engine. When back online, push every order that was
+// created/edited offline up to the cloud, then mark it synced so the local copy
+// drops off the floor and the cloud copy takes over. Reconstructs from the final
+// state: create → add (non-voided) items → fire fired courses → pay/close.
+// Safe to call repeatedly; a no-op when offline or nothing is pending. Each order
+// is independent — one failure doesn't block the rest, it just retries next tick.
+const _payCloud = async (cid, doc) => {
+  if (doc.status !== 'closed') return;
+  if (doc.payment_method === 'cancelled') await post(`/api/orders/${cid}/close-zero`, {});
+  else if (doc.tenders && doc.tenders.length) await post(`/api/orders/${cid}/pay`, { payments: doc.tenders });
+  else await post(`/api/orders/${cid}/pay`, { amount: doc.amount_paid ?? doc.total, method: doc.payment_method || 'Cash' });
+};
+// A brand-new offline order ('L…'): create it, then add items / fire / pay.
+const syncNewLocal = async (doc) => {
+  const created = await post('/api/orders', {
+    table_id: doc.table_id, covers: doc.covers, staff_id: doc.staff_id,
+    order_type: doc.order_type || 'dine_in',
+  });
+  if (!created || created.error || created.id == null) return false;  // cloud rejected — retry next tick
+  const cid = created.id;
+  const items = (doc.items || []).filter(i => !i.voided).map(i => ({
+    menu_item_id: i.menu_item_id ?? null, name: i.name || i.item_name, name_alt: i.name_alt || '',
+    quantity: i.quantity || 1, unit_price: i.unit_price ?? 0,
+    notes: i.notes || '', item_note: i.item_note || '', course: i.course || 1, is_bar: !!i.is_bar, modifiers: i.modifiers || [],
+  }));
+  if (items.length) await post(`/api/orders/${cid}/items`, { items });
+  const fired = [...new Set((doc.items || []).filter(i => i.is_fired && !i.voided).map(i => Number(i.course) || 1))];
+  for (const c of fired) await put(`/api/orders/${cid}/fire-course/${c}`, {});
+  await _payCloud(cid, doc);
+  await localOrderMarkSynced(doc.id, cid);
+  return true;
+};
+// A promoted cloud order: push only the offline DELTA to the existing cloud
+// order (new items added, original items voided, courses fired, payment).
+const syncPromoted = async (doc) => {
+  const cid = doc.cloud_id;
+  const newItems = (doc.items || []).filter(i => isLocalItemId(i.id) && !i.voided).map(i => ({
+    menu_item_id: i.menu_item_id ?? null, name: i.name || i.item_name, name_alt: i.name_alt || '',
+    quantity: i.quantity || 1, unit_price: i.unit_price ?? 0,
+    notes: i.notes || '', item_note: i.item_note || '', course: i.course || 1, is_bar: !!i.is_bar, modifiers: i.modifiers || [],
+  }));
+  if (newItems.length) await post(`/api/orders/${cid}/items`, { items: newItems });
+  // original (cloud-id) items the operator voided while offline
+  for (const i of (doc.items || []).filter(i => !isLocalItemId(i.id) && i.voided)) {
+    try { await put(`/api/order-items/${i.id}/void`, { reason: i.void_reason || 'Offline void' }); } catch {}
+  }
+  const fired = [...new Set((doc.items || []).filter(i => i.is_fired && !i.voided).map(i => Number(i.course) || 1))];
+  for (const c of fired) { try { await put(`/api/orders/${cid}/fire-course/${c}`, {}); } catch {} }
+  await _payCloud(cid, doc);
+  await localOrderMarkSynced(doc.id, cid);
+  return true;
+};
+let _syncing = false;
+export async function syncLocalOrders() {
+  if (_syncing) return { synced: 0 };
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return { synced: 0 };
+  _syncing = true;
+  let count = 0;
+  try {
+    const pending = await localOrderListUnsynced();
+    for (const doc of pending) {
+      try {
+        const ok = doc.cloud_id != null ? await syncPromoted(doc) : await syncNewLocal(doc);
+        if (ok) count++;
+      } catch { /* leave this one unsynced; retry next tick */ }
+    }
+  } finally { _syncing = false; }
+  return { synced: count };
+}
+export const updateItemStatus = async (itemId, status) => {
+  // 'LI…' items, or items that live inside a promoted offline order, patch locally.
+  if (isNative()) {
+    const ok = await localItemPatch(itemId, { status, is_fired: 1 });
+    if (ok) return { success: true };
+  }
+  return put(`/api/order-items/${itemId}/status`, { status });
+};
 // SEPOS-ANDROID-002 — offline PIN login. Online: validate at the cloud + cache
 // the result keyed by a hash of the PIN. Offline: validate against that cache so
 // staff who've signed in once on this device can still log in with no internet.
@@ -193,7 +391,11 @@ export const loginStaff = async (pin) => {
 // SEPOS-LITE-003 — email + password login (Lite restaurant owners).
 export const emailLogin = (email, password) => post('/api/auth/email-login', { email, password });
 export const getDailyReport = (date) => get(`/api/reports/daily${date ? `?date=${date}` : ''}`);
-export const getItemModifiers = (itemId) => get(`/api/menu/items/${itemId}/modifiers`);
+export const getItemModifiers = async (itemId) => {
+  if (!isNative()) return get(`/api/menu/items/${itemId}/modifiers`);   // web/desktop: unchanged
+  try { const r = await get(`/api/menu/items/${itemId}/modifiers`); return Array.isArray(r) ? r : []; }
+  catch { return []; }   // offline + uncached: no modifiers, but the item still adds
+};
 export const addModifierGroup = (itemId, group) => post(`/api/menu/items/${itemId}/modifiers`, group);
 export const addModifierOption = (groupId, option) => post(`/api/modifier-groups/${groupId}/options`, option);
 export const deleteModifierGroup = (groupId) => del(`/api/modifier-groups/${groupId}`);
@@ -203,17 +405,45 @@ export const getModifierLibrary  = () => get('/api/modifier-library');
 export const createLibraryGroup  = (group) => post('/api/modifier-library', group);
 export const attachGroupToItem   = (itemId, groupId) => post(`/api/menu/items/${itemId}/modifier-groups/${groupId}`, {});
 export const detachGroupFromItem = (itemId, groupId) => del(`/api/menu/items/${itemId}/modifier-groups/${groupId}`);
-export const voidItem = (itemId, reason, quantity, void_type) => {
+export const voidItem = async (itemId, reason, quantity, void_type) => {
+  // 'LI…' items, or items inside a promoted offline order, void locally (whole
+  // line — partial-quantity void is a cloud-only refinement; total recomputes).
+  if (isNative()) {
+    const ok = await localItemPatch(itemId, { voided: 1, void_reason: reason || '', void_type: void_type || null });
+    if (ok) return { success: true };
+  }
   const body = { reason };
   if (quantity)  body.quantity  = quantity;
   if (void_type) body.void_type = void_type;
   return put(`/api/order-items/${itemId}/void`, body);
 };
-export const applyDiscount = (orderId, discount_type, discount_value, discount_reason) => put(`/api/orders/${orderId}/discount`, { discount_type, discount_value, discount_reason });
+export const applyDiscount = async (orderId, discount_type, discount_value, discount_reason) => {
+  const lid = await localTarget(orderId);
+  if (lid) {
+    const doc = await localOrderGet(lid);
+    if (!doc) return { error: 'Order not found' };
+    doc.discount_type = discount_type; doc.discount_value = discount_value; doc.discount_reason = discount_reason;
+    await localOrderUpdate(lid, doc);
+    return { success: true };
+  }
+  return put(`/api/orders/${orderId}/discount`, { discount_type, discount_value, discount_reason });
+};
 // SEPOS-VOUCHER-REMOVE-001 — undo a partial voucher redemption while bill is open
-export const removeVoucherFromBill = (orderId) => post(`/api/orders/${orderId}/voucher-remove`, {});
+export const removeVoucherFromBill = async (orderId) =>
+  (await localTarget(orderId)) ? { success: true } : post(`/api/orders/${orderId}/voucher-remove`, {});
 // SEPOS-CLOSE-ZERO — close an order that's at £0 (all voided / fully discounted)
-export const closeOrderZero       = (orderId) => post(`/api/orders/${orderId}/close-zero`, {});
+export const closeOrderZero       = async (orderId) => {
+  const lid = await localTarget(orderId);
+  if (lid) {
+    const doc = await localOrderGet(lid);
+    if (!doc) return { error: 'Order not found' };
+    doc.status = 'closed'; doc.amount_paid = 0; doc.payment_method = 'cancelled';
+    doc.closed_at = new Date().toISOString();
+    await localOrderUpdate(lid, doc);
+    return { success: true };
+  }
+  return post(`/api/orders/${orderId}/close-zero`, {});
+};
 // SEPOS-PAY-AMEND-001 — change payment method on a closed bill (manager PIN)
 export const amendBillMethod      = (orderId, body) => put(`/api/bills/${orderId}/amend-method`, body);
 export const getBillAmendments    = (orderId) => get(`/api/bills/${orderId}/amendments`);
@@ -284,8 +514,31 @@ export const getItemSalesReport = (from, to) => get(`/api/reports/items?from=${f
 export const updateTablePlan = (id, data) => put(`/api/tables/${id}/plan`, data);
 export const addTable = (table) => post('/api/tables', table);
 export const deleteTable = (id) => del(`/api/tables/${id}`);
-export const getBill = (orderId) => get(`/api/orders/${orderId}/bill`);
-export const getBarOrders = () => get('/api/orders/bar');
+export const getBill = async (orderId) => {
+  const lid = await localTarget(orderId);
+  if (lid) {
+    const order = await localOrderGet(lid);
+    if (!order) return { error: 'Order not found' };
+    let settings = {};
+    try { settings = (await cacheGet('/api/settings')) || {}; } catch {}
+    return { order, settings };
+  }
+  return get(`/api/orders/${orderId}/bill`);
+};
+export const getBarOrders = async () => {
+  if (!isNative()) return get('/api/orders/bar');   // web/desktop: unchanged
+  let base = [];
+  try { base = await get('/api/orders/bar'); } catch {}
+  let locals = [];
+  try {
+    const open = await localOrderListOpen();
+    locals = open
+      .map(o => ({ ...o, items: (o.items || []).filter(i => i.is_bar && i.is_fired && i.status !== 'served' && !i.voided) }))
+      .filter(o => o.items.length);
+  } catch {}
+  const arr = Array.isArray(base) ? base : [];
+  return locals.length ? [...arr, ...locals] : arr;
+};
 export const getCategories = () => get('/api/categories');
 export const updateCategoryBar = (id, is_bar) => put(`/api/categories/${id}/bar`, { is_bar });
 export const updateCategorySortOrder = (items) => put('/api/categories/sort-order', { items });
@@ -298,7 +551,26 @@ export const addSubcategory = (category_id, name) => post('/api/subcategories', 
 export const deleteSubcategory = (id) => del(`/api/subcategories/${id}`);
 // SEPOS-046ab — same contract as updateCategorySortOrder
 export const updateSubcategorySortOrder = (items) => put('/api/subcategories/sort-order', { items });
-export const fireCourse = (orderId, course) => put(`/api/orders/${orderId}/fire-course/${course}`, {});
+const localFire = async (lid, course) => {
+  const doc = await localOrderGet(lid);
+  if (!doc) return { error: 'Order not found' };
+  (doc.items || []).forEach(it => {
+    if (!it.voided && Number(it.course) === Number(course)) { it.is_fired = 1; it.status = 'cooking'; }
+  });
+  await localOrderUpdate(lid, doc);
+  return { success: true };
+};
+export const fireCourse = async (orderId, course) => {
+  const lid = await localTarget(orderId);
+  if (lid) return localFire(lid, course);
+  try { return await put(`/api/orders/${orderId}/fire-course/${course}`, {}); }
+  catch (e) {
+    if (!isNative()) throw e;
+    const pid = await promoteOrder(orderId);
+    if (!pid) throw e;
+    return localFire(pid, course);
+  }
+};
 export const getTableStatus = async () => {
   const base = await get('/api/tables/status');
   let locals = [];
@@ -313,9 +585,38 @@ export const getTableStatus = async () => {
   }
   return arr;
 };
-export const markBillPrinted = (orderId) => put(`/api/orders/${orderId}/bill-printed`, {});
-export const moveTable = (orderId, newTableId) => put(`/api/orders/${orderId}/move`, { new_table_id: newTableId });
-export const mergeTables = (targetOrderId, mergeOrderId) => put(`/api/orders/${targetOrderId}/merge`, { merge_order_id: mergeOrderId });
+export const markBillPrinted = async (orderId) =>
+  (await localTarget(orderId)) ? { success: true } : put(`/api/orders/${orderId}/bill-printed`, {});
+export const moveTable = async (orderId, newTableId) => {
+  const lid = await localTarget(orderId);
+  if (lid) {
+    const doc = await localOrderGet(lid);
+    if (!doc) return { error: 'Order not found' };
+    doc.table_id = newTableId;
+    try { const tbls = await cacheGet('/api/tables'); const t = (tbls || []).find(x => x.id === newTableId); if (t) doc.table_number = t.table_number; } catch {}
+    await localOrderUpdate(lid, doc);
+    return { success: true };
+  }
+  return put(`/api/orders/${orderId}/move`, { new_table_id: newTableId });
+};
+export const mergeTables = async (targetOrderId, mergeOrderId) => {
+  const tl = await localTarget(targetOrderId);
+  const ml = await localTarget(mergeOrderId);
+  if (tl || ml) {
+    if (!tl || !ml)
+      return { error: 'Cannot merge an offline table with a cloud table until back online' };
+    const tgt = await localOrderGet(tl);
+    const mrg = await localOrderGet(ml);
+    if (!tgt || !mrg) return { error: 'Order not found' };
+    tgt.items = [...(tgt.items || []), ...(mrg.items || [])];
+    tgt.total = tgt.items.filter(x => !x.voided).reduce((s, x) => s + (Number(x.unit_price) || 0) * (Number(x.quantity) || 1), 0);
+    mrg.status = 'merged';
+    await localOrderUpdate(tl, tgt);
+    await localOrderUpdate(ml, mrg);
+    return { success: true };
+  }
+  return put(`/api/orders/${targetOrderId}/merge`, { merge_order_id: mergeOrderId });
+};
 export const getZReportPreview = (from, to) => get(`/api/z-report/preview?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 export const saveZReport = (type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference) => 
   post('/api/z-report/save', { type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference });
@@ -329,9 +630,15 @@ export const getBills = (from, to, method) => get(`/api/bills?from=${from}&to=${
 export const getBillItems = (orderId) => get(`/api/bills/${orderId}/items`);
 export const getKitchenCompleted = () => get('/api/kitchen/completed');
 export const getBarCompleted = () => get('/api/bar/completed');
-export const resendToKitchen = (orderId, itemIds, reason) =>
-  post(`/api/orders/${orderId}/resend`, { item_ids: itemIds, reason });
-export const applyItemDiscount = (itemId, discount_type, discount_value) => put(`/api/order-items/${itemId}/discount`, { discount_type, discount_value });
+export const resendToKitchen = async (orderId, itemIds, reason) =>
+  (await localTarget(orderId)) ? { success: true } : post(`/api/orders/${orderId}/resend`, { item_ids: itemIds, reason });
+export const applyItemDiscount = async (itemId, discount_type, discount_value) => {
+  if (isNative()) {
+    const ok = await localItemPatch(itemId, { discount_type, discount_value });
+    if (ok) return { success: true };
+  }
+  return put(`/api/order-items/${itemId}/discount`, { discount_type, discount_value });
+};
 export const deleteStaff = (id) => del(`/api/staff/${id}`);
 // ─────────────────────────────────────────────
 // MENU BATCH IMPORT
@@ -415,7 +722,8 @@ export const setTakeawayStatus = (orderId, status) =>
 export const getActiveTakeaway = () => get('/api/takeaway/orders/active');
 
 // SEPOS-DELIVERY-001 — courier dispatch (Stuart / Uber Direct).
-export const dispatchDelivery = (orderId) => post('/api/delivery/dispatch', { order_id: orderId });
+export const dispatchDelivery = async (orderId) =>
+  (await localTarget(orderId)) ? { success: true } : post('/api/delivery/dispatch', { order_id: orderId });
 export const getDeliveryQuote = (orderId) => post('/api/delivery/quote', { order_id: orderId });
 
 // SEPOS-044 — Floor-Plan polish: seat a booking or a walk-in.

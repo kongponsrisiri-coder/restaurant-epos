@@ -12,17 +12,15 @@
 
 import { serverPrintReceipt, getReceiptBuffer } from '../api';
 import { isNativeApp, sendRawToPrinter } from '../native/printer';   // SEPOS-ANDROID-001
+import { sunmiAvailable, sunmiPrintOps, printTarget } from '../native/sunmiPrinter';
+import { buildReceiptOps, opsForSunmi, renderOpsToBytes } from '../native/escpos';
 
 export function printReceipt({ order, items, settings, paymentDetails = {} }) {
-  // ── 0. Native Android app — the cloud can't reach a LAN printer, so fetch the
-  // server's ESC/POS bytes and send them to the configured printer ourselves
-  // (byte-identical to the desktop path). Falls back to the browser popup.
-  if (isNativeApp() && settings.printer_receipt_ip) {
-    getReceiptBuffer(order.id, paymentDetails)
-      .then((b) => {
-        if (!b || !b.data) throw new Error(b?.error || 'no buffer');
-        return sendRawToPrinter(settings.printer_receipt_ip, settings.printer_receipt_port || 9100, b.data);
-      })
+  // ── 0. Native Android app — build the receipt ON-DEVICE (works offline) and
+  // send it to the destination chosen in Admin → Printers (built-in Sunmi /
+  // network / off). The cloud can't reach a LAN printer, so we never rely on it.
+  if (isNativeApp()) {
+    _nativePrintReceipt({ order, items, settings, paymentDetails })
       .catch((e) => {
         console.warn('[receipt] native print failed, falling back:', e?.message || e);
         _clientPrint({ order, items, settings, paymentDetails });
@@ -52,6 +50,32 @@ export function printReceipt({ order, items, settings, paymentDetails = {} }) {
   }
   // ── 2 + 3. Client-side (Electron silent or browser popup) ────────────────
   _clientPrint({ order, items, settings, paymentDetails });
+}
+
+// SEPOS-ANDROID-002 — native receipt: on-device ESC/POS → built-in / network.
+async function _nativePrintReceipt({ order, items, settings, paymentDetails }) {
+  const target = printTarget(settings, 'receipt');
+  if (target === 'off') return;                       // operator chose not to print the bill
+  const ip = settings?.printer_receipt_ip;
+  const port = settings?.printer_receipt_port || 9100;
+
+  // Resolve destination first — the Thai code page differs per printer.
+  let dest = null;
+  const sunmiOk = (target === 'builtin' || target === 'auto') ? await sunmiAvailable() : false;
+  if (sunmiOk) dest = 'builtin';
+  else if ((target === 'network' || target === 'auto') && ip) dest = 'network';
+  if (!dest) throw new Error('no printer for target ' + target);
+
+  const ops = buildReceiptOps({ order, items, settings, paymentDetails });
+  if (dest === 'builtin') { await sunmiPrintOps(opsForSunmi(ops)); return; } // UTF-8 + logo via printBitmap
+
+  // Network: prefer the cloud-built buffer (rasterises the LOGO + exact format)
+  // when reachable; fall back to on-device bytes (no logo) only when offline.
+  try {
+    const b = await getReceiptBuffer(order.id, paymentDetails);
+    if (b && b.data) { await sendRawToPrinter(ip, port, b.data); return; }
+  } catch { /* offline → on-device */ }
+  await sendRawToPrinter(ip, port, renderOpsToBytes(ops, { thaiCp: settings?.kitchen_thai_codepage }));
 }
 
 function _clientPrint({ order, items, settings, paymentDetails }) {

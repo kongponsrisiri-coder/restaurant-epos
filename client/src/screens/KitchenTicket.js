@@ -23,6 +23,8 @@
 
 import { serverPrintKitchen, serverPrintKitchenFull, serverPrintBar, serverPrintFireNotice, getSettings, getKitchenTicketBuffer } from '../api';
 import { isNativeApp, sendRawToPrinter } from '../native/printer';
+import { sunmiAvailable, sunmiPrintOps, printTarget } from '../native/sunmiPrinter';
+import { buildKitchenOps, opsForSunmi, renderOpsToBytes } from '../native/escpos';
 
 const COURSE_LABELS_EN = { 1: 'STARTERS', 2: 'MAINS', 3: 'DESSERTS', 4: 'EXTRAS' };
 const COURSE_LABELS_TH = { 1: 'กับแกล้ม', 2: 'อาหารหลัก', 3: 'ของหวาน',  4: 'เพิ่มเติม' };
@@ -87,20 +89,28 @@ function closeWin(win) { try { if (win && !win.closed) win.close(); } catch {} }
 // from the same printService builders as the desktop, so the ticket is
 // byte-identical. `native` = { order_id, items?, course?, kind }. Returns true
 // when it handled the print (so the dispatcher stops), false to fall through.
-async function nativeKitchenPrint({ native, copies = 1, ip, port }) {
-  if (!ip) { console.warn('[kitchen-ticket] native: no printer IP configured'); return; }
+async function nativeKitchenPrint({ native, copies = 1, ip, port, target = 'auto', settings = {} }) {
+  if (target === 'off') return;   // operator routed this ticket type to "off"
+
+  // Resolve the destination, then render the SAME layout the right way:
+  // built-in → Sunmi printText (UTF-8: £ + Thai); network → raw ESC/POS bytes.
+  let dest = null;
+  const sunmiOk = (target === 'builtin' || target === 'auto') ? await sunmiAvailable() : false;
+  if (sunmiOk) dest = 'builtin';
+  else if ((target === 'network' || target === 'auto') && ip) dest = 'network';
+  if (!dest) { console.warn('[kitchen-ticket] native: no printer for target', target); return; }
+
+  let ops = null;
+  try { ops = buildKitchenOps(native); } catch (e) { console.warn('[kitchen-ticket] build error:', e?.message); }
+  if (!ops) return;
+
+  const copyN = Math.max(1, copies);
   try {
-    const buf = await getKitchenTicketBuffer(native);
-    if (buf && buf.data) {
-      for (let i = 0; i < Math.max(1, copies); i++) {
-        await sendRawToPrinter(ip, port || 9100, buf.data);
-      }
-    } else {
-      console.warn('[kitchen-ticket] native: empty buffer', buf && buf.error);
+    for (let i = 0; i < copyN; i++) {
+      if (dest === 'builtin') await sunmiPrintOps(opsForSunmi(ops));
+      else await sendRawToPrinter(ip, port || 9100, renderOpsToBytes(ops, { thaiCp: settings.kitchen_thai_codepage }));
     }
-  } catch (e) {
-    console.warn('[kitchen-ticket] native print error:', e?.message);
-  }
+  } catch (e) { console.warn('[kitchen-ticket] print error:', e?.message); }
 }
 
 // ── Core dispatcher — tries server → Electron → popup ────────────────────────
@@ -114,9 +124,10 @@ async function dispatchPrint({ settings, serverFn, html, copies = 1, popupWin = 
   // printer itself (single-printer Sunmi falls back to the receipt printer IP).
   if (native && isNativeApp()) {
     closeWin(popupWin);
-    const ip   = settings?.printer_kitchen_ip   || settings?.printer_receipt_ip;
-    const port = settings?.printer_kitchen_port || settings?.printer_receipt_port || 9100;
-    await nativeKitchenPrint({ native, copies, ip, port });
+    const route = native.kind === 'bar' ? 'bar' : 'kitchen';
+    const ip   = settings?.[`printer_${route}_ip`]   || settings?.printer_receipt_ip;
+    const port = settings?.[`printer_${route}_port`] || settings?.printer_receipt_port || 9100;
+    await nativeKitchenPrint({ native, copies, ip, port, target: printTarget(settings, route), settings });
     return;
   }
 
@@ -189,7 +200,7 @@ export async function printFullOrderTicket({ order, items, popupWin = null }) {
     html:     buildFullOrderTicketHTML({ order, items: active, copies, bilingual }),
     copies,
     popupWin,
-    native:   { order_id: order.id, items: active, kind: 'full' },
+    native:   { order, items: active, kind: 'full' },
   });
 }
 
@@ -209,7 +220,7 @@ export async function printKitchenTicket({ order, items, course, popupWin = null
     html:     buildKitchenTicketHTML({ order, items: active, course, copies, bilingual }),
     copies,
     popupWin,
-    native:   { order_id: order.id, items: active, course, kind: 'course' },
+    native:   { order, items: active, course, kind: 'course' },
   });
 }
 
@@ -225,7 +236,7 @@ export async function printFireNoticeTicket({ order, course, popupWin = null }) 
     if (!shouldPrint(settings)) return;
     const ip   = settings?.printer_kitchen_ip   || settings?.printer_receipt_ip;
     const port = settings?.printer_kitchen_port || settings?.printer_receipt_port || 9100;
-    await nativeKitchenPrint({ native: { order_id: order.id, course, kind: 'fire-notice' }, ip, port });
+    await nativeKitchenPrint({ native: { order, course, kind: 'fire-notice' }, ip, port, target: printTarget(settings, 'kitchen'), settings });
     return;
   }
 
@@ -279,7 +290,7 @@ export async function printBarOrderTicket({ order, items, popupWin = null }) {
     if (!shouldPrint(settings)) return;
     const ip   = settings?.printer_bar_ip   || settings?.printer_kitchen_ip   || settings?.printer_receipt_ip;
     const port = settings?.printer_bar_port || settings?.printer_kitchen_port || settings?.printer_receipt_port || 9100;
-    await nativeKitchenPrint({ native: { order_id: order.id, items: barItems, kind: 'bar' }, ip, port });
+    await nativeKitchenPrint({ native: { order, items: barItems, kind: 'bar' }, ip, port, target: printTarget(settings, 'bar'), settings });
     return;
   }
 

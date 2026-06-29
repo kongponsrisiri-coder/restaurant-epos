@@ -61,7 +61,7 @@ export default function AllergenSection() {
       });
       setManualMap(map);
       setLoading(false);
-    });
+    }).catch(() => setLoading(false));
   }, []);
 
   // Build item lookup map

@@ -8,6 +8,11 @@ if (keystorePropsFile.exists()) { keystoreProps.load(new FileInputStream(keystor
 android {
     namespace = "uk.co.siamepos.app"
     compileSdk = rootProject.ext.compileSdkVersion
+    // SEPOS-ANDROID-002 — AGP 8.x disables AIDL by default; the Sunmi inner
+    // printer service (woyou.aidlservice.jiuiv5) needs the .aidl compiled.
+    buildFeatures {
+        aidl true
+    }
     defaultConfig {
         applicationId "uk.co.siamepos.app"
         minSdkVersion rootProject.ext.minSdkVersion

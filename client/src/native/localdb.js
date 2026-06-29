@@ -102,6 +102,26 @@ export async function localOrderUpdate(id, doc) {
   const db = await getDb(); if (!db) return;
   await db.run('UPDATE local_orders SET data = ?, ts = ? WHERE id = ?', [JSON.stringify(doc), Date.now(), id]);
 }
+// Patch a single item inside whichever open local order contains it (by local
+// item id 'LI…'). Recomputes the order total. Returns true if the item was found.
+export async function localItemPatch(itemId, patch) {
+  try {
+    const db = await getDb(); if (!db) return false;
+    const res = await db.query('SELECT id, data FROM local_orders WHERE synced = 0', []);
+    for (const row of (res?.values || [])) {
+      const doc = JSON.parse(row.data);
+      const it = (doc.items || []).find(x => x.id === itemId);
+      if (!it) continue;
+      Object.assign(it, patch);
+      doc.total = (doc.items || []).filter(x => !x.voided)
+        .reduce((s, x) => s + (Number(x.unit_price) || 0) * (Number(x.quantity) || 1), 0);
+      await db.run('UPDATE local_orders SET data = ?, ts = ? WHERE id = ?', [JSON.stringify(doc), Date.now(), row.id]);
+      return true;
+    }
+    return false;
+  } catch { return false; }
+}
+
 // Open, not-yet-synced local orders (for floor merge + sync).
 export async function localOrderListOpen() {
   try {
@@ -109,4 +129,21 @@ export async function localOrderListOpen() {
     const res = await db.query('SELECT data FROM local_orders WHERE synced = 0', []);
     return (res?.values || []).map(r => JSON.parse(r.data)).filter(o => o && o.status === 'open');
   } catch { return []; }
+}
+// ALL not-yet-synced local orders (open AND closed) — for the replay engine.
+export async function localOrderListUnsynced() {
+  try {
+    const db = await getDb(); if (!db) return [];
+    const res = await db.query('SELECT data FROM local_orders WHERE synced = 0', []);
+    return (res?.values || []).map(r => JSON.parse(r.data)).filter(Boolean);
+  } catch { return []; }
+}
+// Mark a local order as synced to the cloud (records the real cloud id).
+export async function localOrderMarkSynced(id, cloudId) {
+  try {
+    const db = await getDb(); if (!db) return;
+    const doc = await localOrderGet(id);
+    if (doc) { doc.synced = 1; doc.cloud_id = cloudId; await db.run('UPDATE local_orders SET data = ?, synced = 1, ts = ? WHERE id = ?', [JSON.stringify(doc), Date.now(), id]); }
+    else { await db.run('UPDATE local_orders SET synced = 1 WHERE id = ?', [id]); }
+  } catch { /* best-effort; retried next tick */ }
 }

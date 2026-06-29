@@ -12,7 +12,7 @@ export default function StockTab() {
 
   const MOVEMENT_TYPES = [{ id: 'all', label: 'All' }, { id: 'delivery', label: '📦 Delivery' }, { id: 'used', label: '🍳 Used' }, { id: 'waste', label: '🗑️ Waste' }, { id: 'adjustment', label: '✏️ Adjustment' }];
 
-  const loadAll = async () => { setLoading(true); const [movs, ings] = await Promise.all([invAPI.getMovements(), invAPI.getIngredients()]); setMovements(Array.isArray(movs) ? movs : []); setIngredients(Array.isArray(ings) ? ings : []); setLoading(false); };
+  const loadAll = async () => { setLoading(true); try { const [movs, ings] = await Promise.all([invAPI.getMovements(), invAPI.getIngredients()]); setMovements(Array.isArray(movs) ? movs : []); setIngredients(Array.isArray(ings) ? ings : []); } finally { setLoading(false); } };
   useEffect(() => { loadAll(); }, []);
 
   const filtered = movements.filter(m => filterType === 'all' || m.movement_type === filterType);

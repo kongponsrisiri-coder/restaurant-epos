@@ -16,7 +16,7 @@ export default function IngredientsTab() {
   const UNITS      = ['kg', 'g', 'L', 'ml', 'unit'];
   const ALLERGENS  = ['Gluten', 'Crustaceans', 'Eggs', 'Fish', 'Peanuts', 'Soybeans', 'Milk', 'Nuts', 'Sesame', 'Molluscs', 'Sulphites', 'Celery', 'Mustard'];
 
-  const load = async () => { setLoading(true); const data = await invAPI.getIngredients(); setIngredients(Array.isArray(data) ? data : []); setLoading(false); };
+  const load = async () => { setLoading(true); try { const data = await invAPI.getIngredients(); setIngredients(Array.isArray(data) ? data : []); } finally { setLoading(false); } };
   useEffect(() => { load(); }, []);
 
   const getStatus = (ing) => {

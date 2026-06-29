@@ -569,6 +569,50 @@ function PrinterCard({ cardStyle }) {
 }
 
 // ── Wrapper: loads settings, renders both printer cards, owns Save ──
+// SEPOS-ANDROID-002 — per-route print destination chooser. Each till decides
+// where each ticket type prints: the built-in (Sunmi) printer, a network
+// printer, or off. So one site prints Bill only, another Bar + Bill, etc.
+function PrintRoutingCard({ cardStyle, settings, setSettings }) {
+  const routes = [
+    ['receipt', '🧾 Bill / Receipt'],
+    ['kitchen', '🍳 Kitchen ticket'],
+    ['bar',     '🍹 Bar ticket'],
+  ];
+  const opts = [
+    ['off',     'Off'],
+    ['builtin', '🖨️ Built-in'],
+    ['network', '🌐 Network'],
+  ];
+  return (
+    <div style={cardStyle}>
+      <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:4 }}>🧭 Print Routing</h2>
+      <p style={{ fontSize:13, color:'#888', marginBottom:16 }}>
+        Choose where each ticket prints on <strong>this till</strong>. <strong>Built-in</strong> = the till's own printer ·
+        <strong> Network</strong> = a LAN printer (set its IP below) · <strong>Off</strong> = don't print.
+      </p>
+      {routes.map(([key, label]) => {
+        const cur = settings[`print_target_${key}`] || 'auto';
+        return (
+          <div key={key} style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12, flexWrap:'wrap' }}>
+            <div style={{ width:150, fontSize:14, fontWeight:600, color:'#555' }}>{label}</div>
+            <div style={{ display:'flex', gap:8 }}>
+              {opts.map(([val, txt]) => (
+                <button key={val} onClick={() => setSettings(s => ({ ...s, [`print_target_${key}`]: val }))}
+                  style={{ padding:'8px 14px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600,
+                    background: cur === val ? '#1a1a2e' : '#f0f0f0', color: cur === val ? 'white' : '#555' }}>
+                  {txt}
+                </button>
+              ))}
+            </div>
+            {cur === 'auto' && <span style={{ fontSize:12, color:'#aaa' }}>auto — built-in, then network</span>}
+          </div>
+        );
+      })}
+
+    </div>
+  );
+}
+
 export default function PrintersSection() {
   const [settings, setSettings] = useState({});
   const [loaded, setLoaded]     = useState(false);
@@ -576,7 +620,7 @@ export default function PrintersSection() {
   const [saved, setSaved]       = useState(false);
 
   useEffect(() => {
-    getSettings().then(s => { setSettings(s || {}); setLoaded(true); });
+    getSettings().then(s => { setSettings(s || {}); setLoaded(true); }).catch(() => setLoaded(true));
   }, []);
 
   const handleSave = async () => {
@@ -600,6 +644,7 @@ export default function PrintersSection() {
     <div style={{ padding:30, maxWidth:900 }}>
       <h1 style={{ fontSize:24, fontWeight:800, color:'#1a1a2e', marginBottom:24 }}>🖨️ Printers</h1>
 
+      <PrintRoutingCard cardStyle={cardStyle} settings={settings} setSettings={setSettings} />
       <NetworkPrinterCard cardStyle={cardStyle} settings={settings} setSettings={setSettings} />
       <PrinterCard cardStyle={cardStyle} />
 

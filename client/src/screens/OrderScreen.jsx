@@ -181,7 +181,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   };
 
   const addToCart = (item, chosenModifiers, course, isBar, note) => {
-    const extraPrice = chosenModifiers.reduce((sum, m) => sum + (m.extra_price || 0), 0);
+    // Prices can arrive as strings — coerce so we ADD, not string-concat (£NaN).
+    const extraPrice = chosenModifiers.reduce((sum, m) => sum + (Number(m.extra_price) || 0), 0);
     const modifierNames = chosenModifiers.map(m => m.name).join(', ');
     const cartKey = item.id + '_' + modifierNames + '_' + course;
     setCart(prev => {
@@ -191,7 +192,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
       }
       return [...prev, {
         cartKey, menu_item_id: item.id, name: item.name, name_alt: item.name_alt || '',
-        unit_price: item.price + extraPrice, quantity: 1,
+        unit_price: (Number(item.price) || 0) + extraPrice, quantity: 1,
         notes: modifierNames, item_note: note || '',
         course: isBar ? 0 : course,
         is_bar: isBar ? 1 : 0,

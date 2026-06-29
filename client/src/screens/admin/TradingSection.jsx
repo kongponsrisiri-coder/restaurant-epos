@@ -12,7 +12,7 @@ export default function TradingSection() {
   useEffect(() => {
     const { from, to } = getDateRange(period, customFrom, customTo);
     setLoading(true);
-    getSummaryReport(from, to).then(d => { setData(d); setLoading(false); });
+    getSummaryReport(from, to).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
   }, [period, customFrom, customTo]);
 
   const avgPerHead  = data?.total_covers > 0 ? data.total_sales / data.total_covers : 0;

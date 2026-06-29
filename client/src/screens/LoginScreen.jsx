@@ -20,6 +20,13 @@ export default function LoginScreen({ onLogin }) {
   const [staffList, setStaffList]         = useState([]);
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [restaurantName, setRestaurantName] = useState(''); // which restaurant this till is
+  const [now, setNow] = useState(() => new Date()); // live clock on the login screen
+
+  // Tick the clock every second.
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     getStaff()
@@ -194,6 +201,20 @@ export default function LoginScreen({ onLogin }) {
             {restaurantName}
           </div>
         )}
+
+        {/* Live clock — large time + date, gold on navy */}
+        <div style={{ marginTop: 18 }}>
+          <div style={{
+            color: '#C9A84C', fontWeight: 700,
+            fontVariantNumeric: 'tabular-nums',
+            fontSize: 44, lineHeight: 1, letterSpacing: '0.02em',
+          }}>
+            {now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+          </div>
+          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, marginTop: 6 }}>
+            {now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          </div>
+        </div>
       </div>
 
       {/* ── PIN card ───────────────────────────────────────────── */}

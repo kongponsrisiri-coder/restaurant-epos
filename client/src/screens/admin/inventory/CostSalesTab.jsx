@@ -18,17 +18,18 @@ export default function CostSalesTab() {
 
   const loadData = async () => {
     setLoading(true);
-    const [rev, movs, exps, waste] = await Promise.all([
-      getSummaryReport(from, to),
-      invAPI.getMovements(),
-      invAPI.getExpenses(),
-      getWastageReport(from + ' 00:00:00', to + ' 23:59:59').catch(() => null),
-    ]);
-    setRevenue(rev);
-    setMovements(Array.isArray(movs) ? movs : []);
-    setExpenses(Array.isArray(exps) ? exps : []);
-    setWastage(waste);
-    setLoading(false);
+    try {
+      const [rev, movs, exps, waste] = await Promise.all([
+        getSummaryReport(from, to),
+        invAPI.getMovements(),
+        invAPI.getExpenses(),
+        getWastageReport(from + ' 00:00:00', to + ' 23:59:59').catch(() => null),
+      ]);
+      setRevenue(rev);
+      setMovements(Array.isArray(movs) ? movs : []);
+      setExpenses(Array.isArray(exps) ? exps : []);
+      setWastage(waste);
+    } finally { setLoading(false); }
   };
   useEffect(() => { loadData(); }, []);
 

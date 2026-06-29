@@ -24,7 +24,7 @@ export default function ReportsSection() {
     setLoading(true);
     Promise.all([getSummaryReport(from, to), getItemSalesReport(from, to)]).then(([s, i]) => {
       setData(s); setItemData(i); setLoading(false);
-    });
+    }).catch(() => setLoading(false));
   }, [period, customFrom, customTo]);
 
   const { from, to } = getDateRange(period, customFrom, customTo);

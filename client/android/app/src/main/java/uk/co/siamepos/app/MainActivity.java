@@ -9,6 +9,8 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // SEPOS-ANDROID-001 — register the native raw-ESC/POS printer plugin.
         registerPlugin(PrinterPlugin.class);
+        // SEPOS-ANDROID-002 — register the Sunmi built-in (inner) printer plugin.
+        registerPlugin(SunmiPrinterPlugin.class);
         super.onCreate(savedInstanceState);
         // SEPOS-ANDROID-001 — keep the screen on. This app runs as a fixed till /
         // kitchen display: a KDS must stay lit through service and a till must not

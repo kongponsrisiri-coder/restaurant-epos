@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { startMonitoring, onStatusChange, getServerStatus } from './utils/serverDetect';
-import { getRestaurant, getLicenseState } from './api';
+import { getRestaurant, getLicenseState, syncLocalOrders } from './api';
 import { canAccessReservations, canAccessKitchen, canAccessFullEPOS } from './utils/plan';
 import UpgradeLocked from './components/UpgradeLocked';
 import LoginScreen from './screens/LoginScreen';
@@ -15,6 +15,7 @@ import BarScreen from './screens/BarScreen';
 import ReservationsScreen from './screens/ReservationsScreen';
 import CounterScreen from './screens/CounterScreen';
 import SyncQueuePill from './components/SyncQueuePill';
+import OfflineBanner from './components/OfflineBanner';
 import LockScreen from './screens/LockScreen';
 import './App.css';
 
@@ -95,6 +96,22 @@ export default function App() {
     if (window.siamepos && window.siamepos.onUpdateReady) {
       window.siamepos.onUpdateReady(() => setUpdateReady(true));
     }
+  }, []);
+
+  // SEPOS-ANDROID-002 — push offline-created orders to the cloud whenever we're
+  // online: once on launch, again the moment connectivity returns, and on a
+  // 30s heartbeat as a backstop. No-op on web/desktop and when nothing pending.
+  useEffect(() => {
+    // Native Android till only — on web POS / desktop there are never any local
+    // orders to replay, so we don't even start the timer.
+    const native = (() => { try { return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch { return false; } })();
+    if (!native) return;
+    let alive = true;
+    const run = () => { syncLocalOrders().catch(() => {}); };
+    run();
+    window.addEventListener('online', run);
+    const id = setInterval(() => { if (alive) run(); }, 30 * 1000);
+    return () => { alive = false; window.removeEventListener('online', run); clearInterval(id); };
   }, []);
 
   // SEPOS-060 phase 2 — desktop offline license lock. Poll the local license
@@ -425,6 +442,7 @@ export default function App() {
 
   return (
     <>
+      <OfflineBanner />{/* SEPOS-ANDROID-002 — only visible when internet drops */}
       {body}
       <OnlineOrderPrinter />{/* SEPOS-ANDROID-001 — auto-print incoming online orders (native, headless) */}
       <InstallBanner />

@@ -37,7 +37,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
-    getBill(orderId).then(data => { setBill(data); setLoading(false); markBillPrinted(orderId); });
+    getBill(orderId)
+      .then(data => { setBill(data); setLoading(false); markBillPrinted(orderId); })
+      .catch(() => setLoading(false));   // never hang on a fetch failure (offline / cloud error)
   }, [orderId]);
 
   useEffect(() => {

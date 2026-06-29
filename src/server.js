@@ -864,7 +864,24 @@ app.post('/api/orders/:id/items', requireValidLicense, async (req, res) => {
       // flows don't 500.
       const lookup = await client.query('SELECT name, price FROM menu_items WHERE id = $1', [item.menu_item_id]);
       const itemName  = lookup.rows[0]?.name || item.name || 'Unknown item';
-      const unitPrice = lookup.rows[0]?.price ?? item.unit_price;
+      let unitPrice = lookup.rows[0]?.price ?? item.unit_price;
+      // BUG-EPOS-MODPRICE — add the chosen modifiers' surcharges. Prices are
+      // looked up server-side (anti-tamper, same reason we re-price the base),
+      // falling back to the client value only when the modifier row is missing
+      // (custom / deleted options). Without this, "Chicken +£1" was dropped.
+      if (Array.isArray(item.modifiers) && item.modifiers.length) {
+        let extra = 0;
+        for (const m of item.modifiers) {
+          if (!m) continue;
+          if (m.id != null) {
+            const mr = await client.query('SELECT extra_price FROM modifiers WHERE id = $1', [m.id]);
+            extra += Number(mr.rows[0]?.extra_price ?? m.extra_price ?? 0) || 0;
+          } else {
+            extra += Number(m.extra_price) || 0;
+          }
+        }
+        unitPrice = (Number(unitPrice) || 0) + extra;
+      }
       const ins = await client.query(
         `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at, item_name) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
         [orderId, item.menu_item_id, item.quantity, unitPrice, item.notes || '', item.course || 1, item.item_note || '', isBar, firedAt, firedAt, itemName]
@@ -4987,6 +5004,19 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
         return res.status(400).json({ error: `"${mi.name}" is sold out — please remove it from your cart` });
       }
       it.server_price = Number(mi.price) || 0;
+      // BUG-EPOS-MODPRICE — include chosen modifier surcharges (server-side
+      // prices, anti-tamper), same as the dine-in add-items path.
+      if (Array.isArray(it.modifiers) && it.modifiers.length) {
+        for (const m of it.modifiers) {
+          if (!m) continue;
+          if (m.id != null) {
+            const mr = await pool.query('SELECT extra_price FROM modifiers WHERE id = $1', [m.id]);
+            it.server_price += Number(mr.rows[0]?.extra_price ?? m.extra_price ?? 0) || 0;
+          } else {
+            it.server_price += Number(m.extra_price) || 0;
+          }
+        }
+      }
       total += it.server_price * (Number(it.quantity) || 1);
     }
 

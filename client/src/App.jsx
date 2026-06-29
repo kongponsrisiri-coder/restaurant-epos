@@ -16,6 +16,7 @@ import ReservationsScreen from './screens/ReservationsScreen';
 import CounterScreen from './screens/CounterScreen';
 import SyncQueuePill from './components/SyncQueuePill';
 import OfflineBanner from './components/OfflineBanner';
+import Clock from './components/Clock';
 import LockScreen from './screens/LockScreen';
 import './App.css';
 
@@ -257,15 +258,16 @@ export default function App() {
   if (!staff) {
     body = <LoginScreen onLogin={setStaff} />;
   } else if (staff.role === 'kitchen') {
-    body = <KitchenScreen />;
+    body = <><Clock fixed /><KitchenScreen /></>;
   } else if (staff.role === 'bar') {
-    body = <BarScreen />;
+    body = <><Clock fixed /><BarScreen /></>;
   } else if (screen === 'order' && activeOrder) {
     body = (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f5f5f5' }}>
         <nav className="navbar">
           <LogoBrand />
           <div className="navbar-user">
+            <Clock />
             <StatusBadge />
             <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
             <button className="logout-btn" onClick={logout}>Log out</button>
@@ -355,6 +357,7 @@ export default function App() {
           )}
 
           <div className="navbar-user">
+            <Clock />
             <StatusBadge />
             {/* SEPOS-044 — always-visible pill when anything is queued. */}
             <SyncQueuePill compact={isMobile} />

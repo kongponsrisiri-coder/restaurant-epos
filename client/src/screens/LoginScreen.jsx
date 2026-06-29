@@ -161,10 +161,21 @@ export default function LoginScreen({ onLogin }) {
       justifyContent: 'center',
       fontFamily: 'system-ui, -apple-system, sans-serif',
       padding: 20,
+      overflowY: 'auto',
     }}>
 
+      {/* ── Live clock — fixed top-right, out of the centred flow ─── */}
+      <div style={{ position: 'fixed', top: 14, right: 20, zIndex: 10, textAlign: 'right' }}>
+        <div style={{ color: '#C9A84C', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: 28, lineHeight: 1 }}>
+          {now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+        </div>
+        <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, marginTop: 4 }}>
+          {now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+        </div>
+      </div>
+
       {/* ── Lotus badge + wordmark ─────────────────────────────── */}
-      <div style={{ marginBottom: 36, textAlign: 'center' }}>
+      <div style={{ marginBottom: 24, textAlign: 'center' }}>
         <svg
           viewBox="0 0 100 100"
           xmlns="http://www.w3.org/2000/svg"
@@ -197,24 +208,10 @@ export default function LoginScreen({ onLogin }) {
         </div>
 
         {restaurantName && (
-          <div style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 14 }}>
+          <div style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 12 }}>
             {restaurantName}
           </div>
         )}
-
-        {/* Live clock — large time + date, gold on navy */}
-        <div style={{ marginTop: 18 }}>
-          <div style={{
-            color: '#C9A84C', fontWeight: 700,
-            fontVariantNumeric: 'tabular-nums',
-            fontSize: 44, lineHeight: 1, letterSpacing: '0.02em',
-          }}>
-            {now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-          </div>
-          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, marginTop: 6 }}>
-            {now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-          </div>
-        </div>
       </div>
 
       {/* ── PIN card ───────────────────────────────────────────── */}

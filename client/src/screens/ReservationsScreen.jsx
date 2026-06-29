@@ -590,7 +590,7 @@ export default function ReservationsScreen() {
                 </div>
                 <input value={customerSearch} onChange={e => { setCustomerSearch(e.target.value); setSelectedCustomer(null); }}
                   placeholder="Search name or phone…"
-                  style={{ padding: '10px 16px', border: '1px solid #ddd', borderRadius: 10, fontSize: 14, width: 230 }} />
+                  style={{ padding: '10px 16px', border: '1px solid #ddd', borderRadius: 10, fontSize: 14, width: isMobile ? '100%' : 230, maxWidth: isMobile ? 'none' : 230, minWidth: 0, boxSizing: 'border-box' }} />
               </div>
               <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
                 {[{tag:'VIP',dot:'#C9A84C',color:'#92400e'},{tag:'Regular',dot:'#3b82f6',color:'#1e40af'},{tag:'New',dot:'#6b7280',color:'#4b5563'}].map(t => (

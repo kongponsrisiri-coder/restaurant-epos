@@ -43,10 +43,17 @@ export default function LoginScreen({ onLogin }) {
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [restaurantName, setRestaurantName] = useState('');
   const [now, setNow] = useState(() => new Date());
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const fn = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
   }, []);
 
   useEffect(() => {
@@ -143,7 +150,18 @@ export default function LoginScreen({ onLogin }) {
   );
 
   // ── left brand panel ───────────────────────────────────────────────────────
-  const brandPanel = (
+  // Mobile: compact full-width header strip above the login panel.
+  const brandPanel = isMobile ? (
+    <div style={{ width: '100%', flexShrink: 0, position: 'relative', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14, overflow: 'hidden' }}>
+      <Lotus size={44} />
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, letterSpacing: '-1px', lineHeight: 1 }}>
+          <span style={{ color: '#fff' }}>Siam</span><span style={{ color: GOLD }}>EPOS</span>
+        </div>
+        <div style={{ fontFamily: SERIF, fontSize: 14, color: '#fff', fontWeight: 700, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{restaurantName || 'Baan Siam'}</div>
+      </div>
+    </div>
+  ) : (
     <div style={{ width: 600, flexShrink: 0, position: 'relative', padding: '0 64px', display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', right: -60, bottom: -40, opacity: 0.05, pointerEvents: 'none' }}><Lotus size={420} /></div>
       <Lotus size={120} />
@@ -176,9 +194,9 @@ export default function LoginScreen({ onLogin }) {
   } else if (selectedStaff) {
     const mgr = isManagerRole(selectedStaff.role);
     panelContent = (
-      <div style={{ display: 'flex', gap: 48, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: isMobile ? 20 : 48, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
         {/* identity */}
-        <div style={{ width: 240 }}>
+        <div style={{ width: isMobile ? '100%' : 240, maxWidth: 280 }}>
           <button onClick={() => { setSelectedStaff(null); setPin(''); setError(''); }} style={linkBtn}>‹ Back to staff</button>
           <div style={{ width: 84, height: 84, borderRadius: '50%', marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: mgr ? NAVY : GOLD_TINT, color: mgr ? GOLD : GOLD_ON_LIGHT, fontWeight: 800, fontSize: 30 }}>
@@ -195,14 +213,14 @@ export default function LoginScreen({ onLogin }) {
           </div>
         </div>
         {/* numpad */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 96px)', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 96px)', gap: 12, width: isMobile ? '100%' : undefined, maxWidth: isMobile ? 320 : undefined }}>
           {['1','2','3','4','5','6','7','8','9'].map(d => (
-            <button key={d} onClick={() => pressDigit(d)} style={numKey}>{d}</button>
+            <button key={d} onClick={() => pressDigit(d)} style={isMobile ? mobileNumKey : numKey}>{d}</button>
           ))}
-          <button onClick={pressDelete} style={{ ...numKey, background: '#EFEAE0', fontSize: 22 }}>⌫</button>
-          <button onClick={() => pressDigit('0')} style={numKey}>0</button>
+          <button onClick={pressDelete} style={{ ...(isMobile ? mobileNumKey : numKey), background: '#EFEAE0', fontSize: 22 }}>⌫</button>
+          <button onClick={() => pressDigit('0')} style={isMobile ? mobileNumKey : numKey}>0</button>
           <button onClick={() => handleLogin()} disabled={loading || !pin}
-            style={{ ...numKey, background: GREEN, color: '#fff', opacity: (loading || !pin) ? 0.5 : 1 }}>✓</button>
+            style={{ ...(isMobile ? mobileNumKey : numKey), background: GREEN, color: '#fff', opacity: (loading || !pin) ? 0.5 : 1 }}>✓</button>
         </div>
       </div>
     );
@@ -217,7 +235,7 @@ export default function LoginScreen({ onLogin }) {
             Staff list unavailable — <button onClick={() => setSelectedStaff({ name: 'Staff', role: '' })} style={{ ...linkBtn, display: 'inline' }}>enter PIN directly ›</button>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, maxHeight: 420, overflowY: 'auto', padding: 2 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 14, maxHeight: 420, overflowY: 'auto', padding: 2 }}>
             {sorted.map(s => {
               const mgr = isManagerRole(s.role);
               return (
@@ -255,12 +273,12 @@ export default function LoginScreen({ onLogin }) {
   );
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', background: NAVY, fontFamily: UI_FONT, color: '#fff' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: isMobile ? 'column' : 'row', background: NAVY, fontFamily: UI_FONT, color: '#fff' }}>
       {brandPanel}
-      <div style={{ flex: 1, padding: 28, display: 'flex' }}>
-        <div style={{ position: 'relative', flex: 1, background: PAPER, borderRadius: 24, padding: 40,
+      <div style={{ flex: 1, padding: isMobile ? '0 12px 16px' : 28, display: 'flex', minWidth: 0 }}>
+        <div style={{ position: 'relative', flex: 1, background: PAPER, borderRadius: isMobile ? 18 : 24, padding: isMobile ? '24px 16px' : 40,
           boxShadow: '0 20px 50px rgba(0,0,0,.35)', display: 'flex', flexDirection: 'column', justifyContent: 'center', overflowY: 'auto' }}>
-          {clock}
+          {!isMobile && clock}
           <div style={{ width: '100%', maxWidth: 760, margin: '0 auto' }}>
             {panelContent}
             {mode !== 'email' && msg}
@@ -275,6 +293,11 @@ export default function LoginScreen({ onLogin }) {
 const numKey = {
   width: 96, height: 74, borderRadius: 16, border: 'none', background: '#fff', color: '#1a1a2e',
   fontSize: 26, fontWeight: 700, cursor: 'pointer', boxShadow: '0 1px 2px rgba(13,27,62,.06)',
+  fontVariantNumeric: 'tabular-nums',
+};
+const mobileNumKey = {
+  width: '100%', height: 64, borderRadius: 16, border: 'none', background: '#fff', color: '#1a1a2e',
+  fontSize: 24, fontWeight: 700, cursor: 'pointer', boxShadow: '0 1px 2px rgba(13,27,62,.06)',
   fontVariantNumeric: 'tabular-nums',
 };
 const inputStyle = {

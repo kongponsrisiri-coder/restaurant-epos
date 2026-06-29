@@ -44,7 +44,7 @@ async function getCachedSettings() {
   if (result && typeof result === 'object' && !result.error) {
     _settingsCache = result;
     _settingsFetched = true;
-    setTimeout(() => { _settingsFetched = false; }, 60000);
+    setTimeout(() => { _settingsFetched = false; }, 5000); // short TTL so print-routing changes take effect quickly
   }
   return _settingsCache;
 }

@@ -588,9 +588,12 @@ function buildZReportLines(r, type, settings, cash) {
   if (r.from) lines.push({ kind: 'small', text: `${r.from} -> ${r.to}` });
   lines.push({ kind: 'small', text: nowStamp() });
   lines.push({ kind: 'div' });
+  lines.push({ kind: 'h2', text: 'PAYMENTS' });
   lines.push({ kind: 'row', left: 'Cash',                    right: fmt(r.total_cash) });
   lines.push({ kind: 'row', left: 'Card',                    right: fmt(r.total_card) });
   lines.push({ kind: 'row', left: 'Other',                   right: fmt(r.total_other) });
+  lines.push({ kind: 'div' });
+  lines.push({ kind: 'h2', text: 'SALES' });
   lines.push({ kind: 'row', left: 'Food',                    right: fmt(r.total_food) });
   lines.push({ kind: 'row', left: 'Drink',                   right: fmt(r.total_drink) });
   lines.push({ kind: 'row', left: 'Service charge (12.5%)',  right: fmt(r.total_service) });

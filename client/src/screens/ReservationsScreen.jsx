@@ -370,7 +370,13 @@ export default function ReservationsScreen() {
                   <h1 style={{ margin: 0, fontFamily: 'Georgia, serif', fontSize: 30, fontWeight: 700, color: '#1a1a2e' }}>Reservations</h1>
                   <div style={{ color: '#7C766A', fontSize: 14, marginTop: 4 }}>{filterDate ? friendlyDate(filterDate) : 'All dates'} · Dinner service</div>
                 </div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {/* View toggle — top-right, consistent with the other views */}
+                  <div style={{ display: 'flex', background: '#EFEAE0', borderRadius: 10, padding: 3 }}>
+                    {[['list','List'],['timeline','Timeline'],['floorplan','Floor Plan'],['calendar','Calendar'],['customers','Guests']].map(([v, label]) => (
+                      <button key={v} onClick={() => setView(v)} style={{ height: 38, padding: '0 14px', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: view === v ? '#0D1B3E' : 'transparent', color: view === v ? '#fff' : '#7C766A' }}>{label}</button>
+                    ))}
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', background: '#fff', borderRadius: 12, border: '1px solid #E7E2D6', height: 46, overflow: 'hidden' }}>
                     <button onClick={() => setFilterDate(shiftDay(filterDate, -1))} style={{ width: 44, height: 46, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 20, color: '#0D1B3E' }}>‹</button>
                     <button onClick={() => setFilterDate(todayStr())} style={{ minWidth: 120, height: 46, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 14, fontWeight: 700, color: '#0D1B3E' }}>{filterDate ? friendlyDate(filterDate) : 'All'}</button>
@@ -387,13 +393,8 @@ export default function ReservationsScreen() {
                   </div>
                 ))}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 26, marginBottom: 12, borderBottom: '1px solid #E2DCCE', paddingBottom: 8 }}>
+              <div style={{ marginTop: 26, marginBottom: 12, borderBottom: '1px solid #E2DCCE', paddingBottom: 8 }}>
                 <div style={{ fontSize: 16, fontWeight: 800, color: '#1a1a2e', letterSpacing: '.4px' }}>{filterDate ? friendlyDate(filterDate).toUpperCase() : 'ALL BOOKINGS'}</div>
-                <div style={{ display: 'flex', background: '#EFEAE0', borderRadius: 10, padding: 3, flexWrap: 'wrap' }}>
-                  {[['list','List'],['timeline','Timeline'],['floorplan','Floor Plan'],['calendar','Calendar'],['customers','Guests']].map(([v, label]) => (
-                    <button key={v} onClick={() => setView(v)} style={{ height: 34, padding: '0 14px', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: view === v ? '#0D1B3E' : 'transparent', color: view === v ? '#fff' : '#7C766A' }}>{label}</button>
-                  ))}
-                </div>
               </div>
               {loading ? <div style={{ padding: 60, textAlign: 'center', color: '#9A9488' }}>Loading…</div>
                 : (

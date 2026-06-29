@@ -5,29 +5,20 @@ import TakeawayStrip    from '../components/TakeawayStrip';
 import BillPeek         from '../components/BillPeek';
 import SyncHealthBanner from '../components/SyncHealthBanner';
 
-// Redesign palette (design_handoff): calm 5-status scheme — gold for any "food
-// in progress" stage (label keeps the specific course). bg = status accent
-// colour (used as fill in the plan view + accent/pill in the grid cards).
+// Previous colour code (restored per operator request) — kept with the new
+// white-card + coloured-accent grid design. bg = status colour (plan-view fill +
+// grid accent/pill).
 const COLOUR_MAP = {
-  available:      { bg: '#2E9E6E', border: '#27905f', text: '#fff',     label: 'Open' },
-  occupied:       { bg: '#0D1B3E', border: '#0b1733', text: '#fff',     label: 'Seated' },
-  starters_fired: { bg: '#C9A84C', border: '#b9983f', text: '#1a1a2e', label: 'Starters' },
-  starters_done:  { bg: '#C9A84C', border: '#b9983f', text: '#1a1a2e', label: 'Starters done' },
-  mains_fired:    { bg: '#C9A84C', border: '#b9983f', text: '#1a1a2e', label: 'Mains' },
-  mains_done:     { bg: '#C9A84C', border: '#b9983f', text: '#1a1a2e', label: 'Mains done' },
-  desserts_fired: { bg: '#C9A84C', border: '#b9983f', text: '#1a1a2e', label: 'Desserts' },
-  desserts_done:  { bg: '#C9A84C', border: '#b9983f', text: '#1a1a2e', label: 'Desserts done' },
-  bill_printed:   { bg: '#e94560', border: '#d23250', text: '#fff',     label: 'Bill due' },
-  reserved:       { bg: '#9C968A', border: '#857f74', text: '#fff',     label: 'Reserved' },
+  available:      { bg: '#22c55e', border: '#16a34a', text: 'white',   label: 'Available' },
+  occupied:       { bg: '#ef4444', border: '#dc2626', text: 'white',   label: 'Occupied' },
+  starters_fired: { bg: '#eab308', border: '#ca8a04', text: 'white',   label: 'Starters Called' },
+  starters_done:  { bg: '#f97316', border: '#ea580c', text: 'white',   label: 'Starters Done' },
+  mains_fired:    { bg: '#38bdf8', border: '#0284c7', text: 'white',   label: 'Mains Called' },
+  mains_done:     { bg: '#1e3a8a', border: '#1e40af', text: 'white',   label: 'Mains Done' },
+  desserts_fired: { bg: '#f9a8d4', border: '#ec4899', text: '#1a1a2e', label: 'Desserts Called' },
+  desserts_done:  { bg: '#6b7280', border: '#4b5563', text: 'white',   label: 'Desserts Done' },
+  bill_printed:   { bg: '#f8fafc', border: '#cbd5e1', text: '#1a1a2e', label: 'Bill Printed' },
 };
-// Distinct buckets for the legend (the gold food stages collapse to one chip).
-const LEGEND = [
-  { bg: '#2E9E6E', label: 'Open' },
-  { bg: '#0D1B3E', label: 'Seated' },
-  { bg: '#C9A84C', label: 'Food in' },
-  { bg: '#e94560', label: 'Bill due' },
-  { bg: '#9C968A', label: 'Reserved' },
-];
 
 export default function TableMapScreen({ staff, onOpenOrder }) {
   const [tables, setTables] = useState([]);
@@ -244,9 +235,9 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           {/* Legend — desktop only. Moves to strip below on mobile. */}
           {!isMobile && (
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-              {LEGEND.map(val => (
+              {Object.values(COLOUR_MAP).map(val => (
                 <div key={val.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: 999, background: val.bg }} />
+                  <div style={{ width: 10, height: 10, borderRadius: 999, background: val.bg, border: `1px solid ${val.border}` }} />
                   <span style={{ fontSize: 12, color: '#7C766A', fontWeight: 600 }}>{val.label}</span>
                 </div>
               ))}
@@ -288,9 +279,9 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           borderBottom: '1px solid #eee',
           flexShrink: 0
         }}>
-          {LEGEND.map(val => (
+          {Object.values(COLOUR_MAP).map(val => (
             <div key={val.label} style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-              <div style={{ width: 12, height: 12, borderRadius: 999, background: val.bg, flexShrink: 0 }} />
+              <div style={{ width: 12, height: 12, borderRadius: 999, background: val.bg, border: `1px solid ${val.border}`, flexShrink: 0 }} />
               <span style={{ fontSize: 11, color: '#7C766A', whiteSpace: 'nowrap', fontWeight: 600 }}>{val.label}</span>
             </div>
           ))}

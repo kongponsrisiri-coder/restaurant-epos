@@ -121,7 +121,6 @@ export default function ReservationsScreen() {
   // Desktop redesign (design_handoff) — agenda + detail rail. UI-only state.
   const [isMobile, setIsMobile]                 = useState(typeof window !== 'undefined' && window.innerWidth < 900);
   const [selectedId, setSelectedId]             = useState(null);
-  const [agendaView, setAgendaView]             = useState('list');
   useEffect(() => {
     const onR = () => setIsMobile(window.innerWidth < 900);
     window.addEventListener('resize', onR);
@@ -349,7 +348,7 @@ export default function ReservationsScreen() {
         </div>
       )}
 
-      {!isMobile ? (() => {
+      {(!isMobile && view === 'list') ? (() => {
         const dayList = [...planReservations]
           .filter(r => r.status !== 'cancelled')
           .sort((a, b) => (a.reservation_time || '').localeCompare(b.reservation_time || ''));
@@ -390,14 +389,14 @@ export default function ReservationsScreen() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 26, marginBottom: 12, borderBottom: '1px solid #E2DCCE', paddingBottom: 8 }}>
                 <div style={{ fontSize: 16, fontWeight: 800, color: '#1a1a2e', letterSpacing: '.4px' }}>{filterDate ? friendlyDate(filterDate).toUpperCase() : 'ALL BOOKINGS'}</div>
-                <div style={{ display: 'flex', background: '#EFEAE0', borderRadius: 10, padding: 3 }}>
-                  {['list', 'plan'].map(v => (
-                    <button key={v} onClick={() => setAgendaView(v)} style={{ height: 34, padding: '0 16px', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: agendaView === v ? '#0D1B3E' : 'transparent', color: agendaView === v ? '#fff' : '#7C766A' }}>{v === 'list' ? 'List' : 'Table plan'}</button>
+                <div style={{ display: 'flex', background: '#EFEAE0', borderRadius: 10, padding: 3, flexWrap: 'wrap' }}>
+                  {[['list','List'],['timeline','Timeline'],['floorplan','Floor Plan'],['calendar','Calendar'],['customers','Guests']].map(([v, label]) => (
+                    <button key={v} onClick={() => setView(v)} style={{ height: 34, padding: '0 14px', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: view === v ? '#0D1B3E' : 'transparent', color: view === v ? '#fff' : '#7C766A' }}>{label}</button>
                   ))}
                 </div>
               </div>
               {loading ? <div style={{ padding: 60, textAlign: 'center', color: '#9A9488' }}>Loading…</div>
-                : agendaView === 'list' ? (
+                : (
                   dayList.length === 0 ? <div style={{ padding: 60, textAlign: 'center', color: '#9A9488' }}>No bookings for this day.</div>
                     : <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                         {dayList.map(r => {
@@ -424,30 +423,6 @@ export default function ReservationsScreen() {
                           );
                         })}
                       </div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px,1fr))', gap: 14 }}>
-                    {tables.map(t => {
-                      const bk = dayList.filter(r => String(r.table_id) === String(t.id)).sort((a, b) => (a.reservation_time || '').localeCompare(b.reservation_time || ''));
-                      const first = bk[0];
-                      const sc = first ? (STATUS_CONFIG[first.status] || STATUS_CONFIG.pending) : null;
-                      return (
-                        <div key={t.id} onClick={() => first && setSelectedId(first.id)} style={{ background: '#fff', border: '1px solid #E7E2D6', borderLeft: `5px solid ${sc ? sc.dot : '#2E9E6E'}`, borderRadius: 14, padding: '12px 14px', minHeight: 122, cursor: first ? 'pointer' : 'default', display: 'flex', flexDirection: 'column' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div style={{ fontSize: 24, fontWeight: 800, color: '#1a1a2e' }}>{t.name || `T${t.table_number}`}</div>
-                            {sc && <div style={{ background: sc.bg, color: sc.color, borderRadius: 999, padding: '3px 8px', fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>{sc.label}</div>}
-                          </div>
-                          <div style={{ fontSize: 12, color: '#9A9488', marginTop: 4 }}>{t.capacity} seats</div>
-                          <div style={{ flex: 1 }} />
-                          {first ? (
-                            <div>
-                              <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>{(first.reservation_time || '').slice(0, 5)} · {first.customer_name}</div>
-                              <div style={{ fontSize: 12, color: '#7C766A' }}>{first.covers} guests{bk.length > 1 ? ` · +${bk.length - 1} more` : ''}</div>
-                            </div>
-                          ) : <div style={{ fontSize: 14, fontWeight: 700, color: '#2E9E6E' }}>Free</div>}
-                        </div>
-                      );
-                    })}
-                  </div>
                 )}
             </div>
             {/* DETAIL RAIL */}

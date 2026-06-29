@@ -850,27 +850,36 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               {/* category rail */}
               <div style={{ width: 172, flexShrink: 0, background: '#fff', borderRight: '1px solid #E7E2D6', overflowY: 'auto', padding: '14px 12px' }}>
                 <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.5px', color: '#9A9488', textTransform: 'uppercase', padding: '0 4px 10px' }}>Menu</div>
-                {menu.map(cat => (
-                  <button key={cat.id} onClick={() => { setActiveCategory(cat.id); setActiveCourse(cat.default_course || 1); setActiveSubcat(null); }}
-                    style={{ display: 'block', width: '100%', textAlign: 'left', minHeight: 52, padding: '0 16px', marginBottom: 8, borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 14,
-                      border: activeCategory === cat.id ? 'none' : '1px solid #E7E2D6',
-                      background: activeCategory === cat.id ? '#0D1B3E' : '#fff',
-                      color: activeCategory === cat.id ? '#fff' : '#1a1a2e' }}>
-                    {cat.name}{cat.is_bar ? ' 🍹' : ''}
-                  </button>
-                ))}
+                {menu.map(cat => {
+                  const subs = cat.subcategories || [];
+                  const catActive = activeCategory === cat.id;
+                  const railBtn = (active) => ({ display: 'block', width: '100%', textAlign: 'left', minHeight: 46, padding: '0 14px', marginBottom: 6, borderRadius: 10, cursor: 'pointer', fontWeight: 600, fontSize: 13.5,
+                    border: active ? 'none' : '1px solid #E7E2D6', background: active ? '#0D1B3E' : '#fff', color: active ? '#fff' : '#1a1a2e' });
+                  return (
+                    <div key={cat.id} style={{ marginBottom: 14 }}>
+                      <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.5px', color: '#9A9488', textTransform: 'uppercase', padding: '0 4px 6px' }}>{cat.name}{cat.is_bar ? ' 🍹' : ''}</div>
+                      <button onClick={() => { setActiveCategory(cat.id); setActiveCourse(cat.default_course || 1); setActiveSubcat(null); }} style={railBtn(catActive && !activeSubcat)}>All {cat.name}</button>
+                      {subs.map(sub => (
+                        <button key={sub.id} onClick={() => { setActiveCategory(cat.id); setActiveCourse(cat.default_course || 1); setActiveSubcat(sub.id); }} style={railBtn(catActive && activeSubcat === sub.id)}>{sub.name}</button>
+                      ))}
+                    </div>
+                  );
+                })}
               </div>
               {/* menu grid */}
               <div style={{ flex: 1, overflowY: 'auto', padding: '22px 24px' }}>
                 <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 24, fontWeight: 700, color: '#1a1a2e', marginBottom: 14 }}>Tap a dish to add</div>
-                {activeSubs.length > 0 && (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-                    <button onClick={() => setActiveSubcat(null)} style={{ padding: '7px 16px', borderRadius: 20, border: '1px solid #E7E2D6', cursor: 'pointer', fontWeight: 600, fontSize: 13, background: !activeSubcat ? '#0D1B3E' : '#fff', color: !activeSubcat ? '#fff' : '#1a1a2e' }}>All</button>
-                    {activeSubs.map(sub => (
-                      <button key={sub.id} onClick={() => setActiveSubcat(sub.id)} style={{ padding: '7px 16px', borderRadius: 20, border: '1px solid #E7E2D6', cursor: 'pointer', fontWeight: 600, fontSize: 13, background: activeSubcat === sub.id ? '#0D1B3E' : '#fff', color: activeSubcat === sub.id ? '#fff' : '#1a1a2e' }}>{sub.name}</button>
-                    ))}
-                  </div>
-                )}
+                {/* Course bar — staff pick the target course (override the dish's
+                    admin default, e.g. serve a starter as a main). */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#9A9488' }}>Course:</span>
+                  {[1, 2, 3, 4].map(c => (
+                    <button key={c} onClick={() => setActiveCourse(c)} style={{ padding: '8px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                      background: activeCourse === c ? COURSE_COLORS[c] : '#ECE7DA', color: activeCourse === c ? '#fff' : '#7C766A' }}>
+                      {COURSE_LABELS[c]}
+                    </button>
+                  ))}
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
                   {activeItems.filter(item => !activeSubcat || item.subcategory_id === activeSubcat).map(item => {
                     const inCart = cart.filter(c => c.menu_item_id === item.id);

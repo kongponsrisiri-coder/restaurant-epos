@@ -1,5 +1,8 @@
 include ':app'
 include ':capacitor-cordova-android-plugins'
 project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins/')
+// SEPOS host spike — embedded Node.js runtime module (Phase 0).
+include ':node-host'
+project(':node-host').projectDir = new File('./node-host/')
 
 apply from: 'capacitor.settings.gradle'

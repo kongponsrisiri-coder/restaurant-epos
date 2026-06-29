@@ -6,6 +6,19 @@ const isLocalId = (id) => typeof id === 'string' && String(id).startsWith('L');
 // they start with 'L', so always test isLocalItemId FIRST where it matters).
 const isLocalItemId = (id) => typeof id === 'string' && String(id).startsWith('LI');
 
+// SEPOS host spike — "host mode": this Android device runs the embedded Node
+// host server and the POS UI talks to it over loopback instead of the cloud.
+// The flag is persisted in localStorage by SettingsSection's "Run this device
+// as the host till" toggle. On web/desktop it is never set, so this is a no-op.
+export const HOST_MODE_KEY = 'siamepos_host_mode';
+export const isHostMode = () => {
+  try {
+    return (typeof window !== 'undefined' && window.Capacitor &&
+      typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform() &&
+      localStorage.getItem(HOST_MODE_KEY) === '1');
+  } catch { return false; }
+};
+
 const getServerURL = () => {
   // Electron desktop: the bundled local server lives on :3001 regardless of
   // how the renderer was loaded (file:// in prod, http://localhost:5173 in dev).
@@ -19,6 +32,10 @@ const getServerURL = () => {
   // per-device tenant URL chosen on first launch (empty → SetupScreen gates the app).
   if (typeof window !== 'undefined' && window.Capacitor &&
       typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
+    // Host mode: talk to this device's own embedded host server over loopback
+    // (127.0.0.1 is the most reliable on-device; localhost can resolve oddly in
+    // the Android WebView). The host serves the same backend as the cloud.
+    if (isHostMode()) return 'http://127.0.0.1:3001';
     try { return (localStorage.getItem('siamepos_tenant_url') || '').replace(/\/+$/, ''); } catch { return ''; }
   }
 
@@ -103,9 +120,18 @@ export const getTables = () => get('/api/tables');
 export const updateTableStatus = (id, status) => put(`/api/tables/${id}`, { status });
 // SEPOS-ANDROID-002 — when online, warm EVERY item's modifiers into the cache
 // (once) so offline taps still show modifier choices. Background, best-effort.
+// `isNative()` doubles as the master gate for the client-side single-device
+// offline engine (local 'L…' orders, localdb, promote/replay). In HOST MODE the
+// embedded local host server is the authoritative backend (its own SQLite +
+// cloud sync), so the WebView offline engine must NOT double up — return false
+// so every offline branch (createOrder/payOrder/promoteOrder/localTarget/…)
+// falls back to talking straight to the host server. Cloud-mode Android keeps
+// the offline engine; web/desktop were never native.
 const isNative = () => {
-  try { return !!(typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); }
-  catch { return false; }
+  try {
+    if (!(typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) return false;
+    return !isHostMode();
+  } catch { return false; }
 };
 let _modWarmed = false;
 async function warmModifiers(menu) {

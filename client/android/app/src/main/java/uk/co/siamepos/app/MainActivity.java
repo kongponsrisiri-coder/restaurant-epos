@@ -3,6 +3,7 @@ package uk.co.siamepos.app;
 import android.os.Bundle;
 import android.view.WindowManager;
 import com.getcapacitor.BridgeActivity;
+import uk.co.siamepos.nodehost.NodeHostPlugin;
 
 public class MainActivity extends BridgeActivity {
     @Override
@@ -11,6 +12,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(PrinterPlugin.class);
         // SEPOS-ANDROID-002 — register the Sunmi built-in (inner) printer plugin.
         registerPlugin(SunmiPrinterPlugin.class);
+        // SEPOS host spike (Phase 0) — embedded Node.js HTTP server.
+        registerPlugin(NodeHostPlugin.class);
         super.onCreate(savedInstanceState);
         // SEPOS-ANDROID-001 — keep the screen on. This app runs as a fixed till /
         // kitchen display: a KDS must stay lit through service and a till must not

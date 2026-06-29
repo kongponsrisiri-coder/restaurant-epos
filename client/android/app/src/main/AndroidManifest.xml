@@ -6,6 +6,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:theme="@style/AppTheme">
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
@@ -27,6 +28,21 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- SEPOS host (Phase 1 step 4) — foreground service that anchors the
+             embedded Node.js LAN host so Android does not kill it when the till
+             is backgrounded / the screen sleeps. targetSdk 36 (>=34) requires a
+             foregroundServiceType; the host is a long-running on-device LAN
+             server so "specialUse" is the correct category (it is neither a
+             completing dataSync transfer nor media/location/etc.). -->
+        <service
+            android:name="uk.co.siamepos.nodehost.NodeHostService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Embedded LAN POS host server keeping satellite tills connected while backgrounded." />
+        </service>
     </application>
 
     <!-- Permissions -->
@@ -34,6 +50,21 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- SEPOS-028 — scan a QR on setup to point this device at its till. -->
     <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- SEPOS host (Phase 1 step 4) — foreground service to keep the embedded
+         Node host alive. FOREGROUND_SERVICE is always required (API 28+);
+         FOREGROUND_SERVICE_SPECIAL_USE is required for the specialUse type on
+         targetSdk 34+. POST_NOTIFICATIONS lets the ongoing host notification
+         show on Android 13+ (Sunmi T2s is Android 9 so it is auto-granted
+         there, but harmless to declare for newer devices). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Allow asking the user to exempt SiamEPOS from battery optimisation /
+         Doze so Android keeps the host service running unattended. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Read the device's own Wi-Fi IPv4 to show the LAN URL in the notification. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <!-- SEPOS-ANDROID-002 — keep the Sunmi inner-printer service visible/bindable

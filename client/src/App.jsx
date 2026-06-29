@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { startMonitoring, onStatusChange, getServerStatus } from './utils/serverDetect';
-import { getRestaurant, getLicenseState, syncLocalOrders } from './api';
+import { getRestaurant, getLicenseState, syncLocalOrders, isHostMode } from './api';
+import { startHost } from './native/nodeHost';        // SEPOS host spike
 import { canAccessReservations, canAccessKitchen, canAccessFullEPOS } from './utils/plan';
 import UpgradeLocked from './components/UpgradeLocked';
 import LoginScreen from './screens/LoginScreen';
@@ -97,6 +98,20 @@ export default function App() {
     if (window.siamepos && window.siamepos.onUpdateReady) {
       window.siamepos.onUpdateReady(() => setUpdateReady(true));
     }
+  }, []);
+
+  // SEPOS host spike — host till boots straight into host mode. Auto-start the
+  // embedded server on launch so the client never has to tap Start. startHost()
+  // launches the foreground service / Node off the main thread, so this does NOT
+  // block or ANR the UI on the ~78MB first-launch unpack. If the server is
+  // already running the native plugin no-ops. Host-only + native-only; web,
+  // desktop, and cloud-mode Android never reach this.
+  useEffect(() => {
+    if (!isHostMode()) return;
+    let alive = true;
+    // Defer one tick so first paint isn't held by the bridge call.
+    const id = setTimeout(() => { if (alive) startHost().catch(() => {}); }, 0);
+    return () => { alive = false; clearTimeout(id); };
   }, []);
 
   // SEPOS-ANDROID-002 — push offline-created orders to the cloud whenever we're

@@ -357,6 +357,156 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     </div>
   );
 
+  // ── Redesigned two-column Bill / Pay (design_handoff screen 5) ───────────────
+  // Uses ONLY existing state + handlers; all other stages render via the modal
+  // return below, unchanged. On a small screen it stacks (still works).
+  if (stage === 'bill' && !isMobile) {
+    const NAVY = '#0D1B3E', GOLD = '#C9A84C', RED = '#e94560', PAPER = '#F4F1EA';
+    const INK = '#1a1a2e', MUTED = '#7C766A', FAINT = '#9A9488', BORDER = '#E7E2D6';
+    const GREENB = '#5FD39B', GOLD_L = '#9A7B1F';
+    const SERIF = "Georgia, 'Times New Roman', serif";
+    const tkPaid = isTakeaway(order) && (order.payment_status === 'paid' || order.payment_status === 'mock');
+    const courseNames = { 1: 'Starters', 2: 'Mains', 3: 'Sides', 4: 'Drinks', 5: 'Desserts' };
+    const byCourse = {};
+    billItems.forEach(it => { const c = it.course || 1; (byCourse[c] = byCourse[c] || []).push(it); });
+    const courses = Object.keys(byCourse).map(Number).sort((a, b) => a - b);
+    const quickTenders = [billTotal, Math.ceil(billTotal / 5) * 5, Math.ceil(billTotal / 10) * 10, Math.ceil(billTotal / 20) * 20].filter((v, i, a) => a.indexOf(v) === i);
+    const seg = (label, active, onClick) => (
+      <button onClick={onClick} style={{ flex: 1, height: 56, borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 15,
+        background: active ? GOLD : 'transparent', color: active ? NAVY : '#fff',
+        border: active ? 'none' : '1.5px solid rgba(255,255,255,.4)' }}>{label}</button>
+    );
+    const outlineBtn = { height: 50, borderRadius: 12, border: `1.5px solid ${BORDER}`, background: '#fff', color: INK, fontWeight: 700, fontSize: 14, cursor: 'pointer' };
+
+    return (
+      <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', background: PAPER, zIndex: 9999, fontFamily: "'Archivo', system-ui, sans-serif" }}>
+        {/* LEFT — bill */}
+        <div style={{ flex: 1, padding: '28px 36px', overflowY: 'auto' }}>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: GOLD_L, fontWeight: 600, fontSize: 14, cursor: 'pointer', padding: 0 }}>‹ Back to order</button>
+          <div style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 700, color: INK, marginTop: 8 }}>Bill · {orderShortLabelPlain(order)}</div>
+          <div style={{ color: MUTED, fontSize: 13.5, marginTop: 4, marginBottom: 18 }}>
+            {isTakeaway(order) ? (orderSubLabel(order) || '') : `${order.covers || 1} covers`} · {dateStr} {timeStr}
+          </div>
+
+          {hasVoucherDiscount && (
+            <div style={{ background: '#FBF4DF', border: `1px solid ${GOLD}`, borderRadius: 12, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ fontSize: 13.5, color: GOLD_L, fontWeight: 700 }}>🎁 {order.discount_reason}</div>
+              <button onClick={handleRemoveVoucher} disabled={removingVoucher} style={{ ...outlineBtn, height: 38, borderColor: '#dc2626', color: '#dc2626' }}>{removingVoucher ? '…' : '✕ Remove'}</button>
+            </div>
+          )}
+
+          <div style={{ background: '#fff', borderRadius: 16, border: `1px solid ${BORDER}`, padding: 24, boxShadow: '0 1px 2px rgba(13,27,62,.05)' }}>
+            {courses.map(c => (
+              <div key={c} style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.5px', textTransform: 'uppercase', color: GOLD_L, marginBottom: 8 }}>{courseNames[c] || 'Items'}</div>
+                {byCourse[c].map(item => {
+                  const p = item.unit_price * item.quantity;
+                  const d = item.discount_value > 0 ? item.discount_type === 'percent' ? p * (item.discount_value / 100) : Math.min(item.discount_value, p) : 0;
+                  return (
+                    <div key={item.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+                      <span style={{ fontSize: 16, fontWeight: 800, color: FAINT, fontVariantNumeric: 'tabular-nums', minWidth: 34 }}>{item.quantity}×</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 16, fontWeight: 600, color: INK }}>{item.name}</div>
+                        {item.notes && <div style={{ fontSize: 12.5, fontWeight: 600, color: GOLD_L }}>{item.notes}</div>}
+                        {item.item_note && <div style={{ fontSize: 12.5, color: '#3b82f6' }}>📝 {item.item_note}</div>}
+                      </div>
+                      <span style={{ fontSize: 16, fontWeight: 800, color: INK, fontVariantNumeric: 'tabular-nums' }}>£{(p - d).toFixed(2)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+            <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14, marginTop: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: MUTED, marginBottom: 6 }}><span>Subtotal</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>£{subtotal.toFixed(2)}</span></div>
+              {discountAmount > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#2E9E6E', marginBottom: 6 }}><span>Discount</span><span>-£{discountAmount.toFixed(2)}</span></div>}
+              {serviceChargeEnabled && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: MUTED, marginBottom: 6 }}><span>Service charge ({parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5)}%)</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>£{serviceCharge.toFixed(2)}</span></div>}
+              {vatTotal > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: FAINT, marginBottom: 6 }}><span>Includes VAT</span><span>£{vatTotal.toFixed(2)}</span></div>}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: `2px solid ${INK}`, marginTop: 10, paddingTop: 10 }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: INK }}>Total due</span>
+                <span style={{ fontSize: 34, fontWeight: 800, color: INK, fontVariantNumeric: 'tabular-nums' }}>£{billTotal.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+            <button onClick={() => { setSplitPaid([]); setSplitTenders([]); setStage('split_equal'); }} style={{ ...outlineBtn, flex: 1 }}>Split equally</button>
+            <button onClick={() => { setItemAssignments({}); setSplitItemPaid([]); setSplitTenders([]); setActivePerson(0); setStage('split_items'); }} style={{ ...outlineBtn, flex: 1 }}>Split by item</button>
+            <button onClick={handlePrintBill} style={{ ...outlineBtn, flex: 1 }}>🖨 Print</button>
+          </div>
+        </div>
+
+        {/* RIGHT — pay panel */}
+        <div style={{ width: 480, flexShrink: 0, background: NAVY, color: '#fff', padding: 28, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+          <div style={{ color: GOLD, fontSize: 12.5, fontWeight: 800, letterSpacing: '.8px', textTransform: 'uppercase' }}>Take payment</div>
+
+          {tkPaid ? (
+            <div style={{ marginTop: 24, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ fontSize: 15, color: 'rgba(255,255,255,.7)' }}>Already paid online</div>
+              <div style={{ fontSize: 54, fontWeight: 800, fontVariantNumeric: 'tabular-nums', margin: '6px 0 24px' }}>£{billTotal.toFixed(2)}</div>
+              <button onClick={() => { const method = order.payment_status === 'paid' ? 'Online (Stripe)' : 'Online (mock)'; setPaymentDetails({ method, amountPaid: billTotal, tip: 0, change: 0 }); setStage('receipt'); }}
+                style={{ height: 68, borderRadius: 14, border: 'none', background: RED, color: '#fff', fontWeight: 800, fontSize: 18, cursor: 'pointer', boxShadow: '0 8px 18px rgba(233,69,96,.28)' }}>
+                ✓ Confirm collection · £{billTotal.toFixed(2)}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', gap: 10, margin: '18px 0' }}>
+                {seg('Card', selectedMethod === 'Card', () => { setSelectedMethod('Card'); setPaymentInput(billTotal.toFixed(2)); })}
+                {seg('Cash', selectedMethod === 'Cash', () => { setSelectedMethod('Cash'); setPaymentInput(''); })}
+                {seg('Split', false, () => { setSplitPaid([]); setSplitTenders([]); setStage('split_equal'); })}
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 6 }}>
+                <button onClick={() => { setSelectedMethod('Other'); setPaymentInput(billTotal.toFixed(2)); }} style={{ flex: 1, height: 44, borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 14, background: selectedMethod === 'Other' ? GOLD : 'transparent', color: selectedMethod === 'Other' ? NAVY : '#fff', border: selectedMethod === 'Other' ? 'none' : '1.5px solid rgba(255,255,255,.4)' }}>Other</button>
+                <button onClick={() => { setVoucherCode(''); setVoucherDetails(null); setVoucherErr(''); setStage('voucher'); }} style={{ flex: 1, height: 44, borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 14, background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,.4)' }}>🎁 Voucher</button>
+              </div>
+
+              {selectedMethod === 'Cash' ? (
+                <>
+                  <div style={{ marginTop: 14, fontSize: 13, color: 'rgba(255,255,255,.6)' }}>Cash tendered</div>
+                  <div style={{ fontSize: 38, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>£{paymentInput || '0.00'}</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8, margin: '12px 0' }}>
+                    {quickTenders.map(a => (
+                      <button key={a} onClick={() => setPaymentInput(a.toFixed(2))} style={{ height: 46, borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15, fontVariantNumeric: 'tabular-nums',
+                        background: paymentInput === a.toFixed(2) ? GOLD : 'rgba(255,255,255,.08)', color: paymentInput === a.toFixed(2) ? NAVY : '#fff', border: 'none' }}>£{a.toFixed(2)}</button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+                    {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(b => (
+                      <button key={b} onClick={() => handleNumpad(b)} style={{ height: 52, borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 20, fontWeight: 700, background: 'rgba(255,255,255,.08)', color: '#fff' }}>{b}</button>
+                    ))}
+                  </div>
+                  {canPay && change > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 16 }}>
+                      <span style={{ fontSize: 14, color: 'rgba(255,255,255,.6)' }}>Change due</span>
+                      <span style={{ fontSize: 40, fontWeight: 800, color: GREENB, fontVariantNumeric: 'tabular-nums' }}>£{change.toFixed(2)}</span>
+                    </div>
+                  )}
+                </>
+              ) : selectedMethod ? (
+                <div style={{ marginTop: 18 }}>
+                  <div style={{ fontSize: 54, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>£{billTotal.toFixed(2)}</div>
+                  <div style={{ border: '1.5px dashed rgba(255,255,255,.35)', borderRadius: 14, padding: '18px 16px', marginTop: 14, color: 'rgba(255,255,255,.7)', fontSize: 14, lineHeight: 1.5 }}>
+                    Present {selectedMethod === 'Card' ? 'card' : 'the'} payment on the reader, then confirm.
+                  </div>
+                  {actualTip > 0 && <div style={{ marginTop: 10, fontSize: 14, color: '#C9A84C' }}>Incl. tip £{actualTip.toFixed(2)}</div>}
+                </div>
+              ) : (
+                <div style={{ marginTop: 24, color: 'rgba(255,255,255,.6)', fontSize: 15 }}>Choose a payment method to continue.</div>
+              )}
+
+              <button onClick={handleConfirmPayment} disabled={!canPay}
+                style={{ marginTop: 'auto', height: 68, borderRadius: 14, border: 'none', cursor: canPay ? 'pointer' : 'not-allowed',
+                  background: canPay ? RED : 'rgba(255,255,255,.15)', color: canPay ? '#fff' : 'rgba(255,255,255,.4)',
+                  fontWeight: 800, fontSize: 18, boxShadow: canPay ? '0 8px 18px rgba(233,69,96,.28)' : 'none' }}>
+                {canPay ? `Confirm payment · £${billTotal.toFixed(2)}` : 'Enter payment'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={overlay}>
       {/* SEPOS-VOUCHER-SCAN-001 — camera scanner overlay */}

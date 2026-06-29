@@ -602,14 +602,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         width: '100%'
       }}>
 
-        {/* ════════════════════════════════
-            LEFT — Menu
-            Desktop: always visible, flex: 1
-            Mobile:  visible only on 'menu' tab
-            ════════════════════════════════ */}
+        {/* LEFT — mobile keeps the stacked menu; desktop uses the rail+grid (else branch) */}
+        {isMobile ? (
         <div style={{
           flex: 1,
-          display: isMobile && mobileTab !== 'menu' ? 'none' : 'flex',
+          display: mobileTab !== 'menu' ? 'none' : 'flex',
           flexDirection: 'column',
           overflow: 'hidden'
         }}>
@@ -824,6 +821,85 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             </div>
           </div>
         </div>
+        ) : (
+          /* ── DESKTOP — category rail + menu grid (design handoff) ── */
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#F4F1EA', fontFamily: "'Archivo', system-ui, sans-serif" }}>
+            {/* slim top bar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', background: '#fff', borderBottom: '1px solid #E7E2D6', flexShrink: 0 }}>
+              <button onClick={async () => {
+                if (!sendBusy) {
+                  const allVoided = existingItems.length > 0 && existingItems.every(i => i.voided);
+                  const isEmpty = existingItems.length === 0 && cart.length === 0;
+                  if (allVoided || isEmpty) await payOrder(orderId, 0, 'cancelled');
+                }
+                onClose();
+              }} style={{ background: '#F4F1EA', border: '1px solid #E7E2D6', borderRadius: 10, padding: '10px 16px', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: '#1a1a2e' }}>← Back</button>
+              <div style={{ flex: 1, fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>
+                Table {order?.table_number}
+                {order?.covers ? <span style={{ fontFamily: "'Archivo', sans-serif", fontSize: 13, color: '#9A9488', marginLeft: 10, fontWeight: 600 }}>{order.covers} covers</span> : null}
+              </div>
+              <button onClick={() => setShowKitchenMsg(true)} style={{ background: '#fff', color: '#0D1B3E', border: '1px solid #0D1B3E', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>📢 Message</button>
+              {cart.length > 0 && (
+                <button onClick={sendOrder} disabled={sendBusy} style={{ background: '#e94560', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', cursor: sendBusy ? 'wait' : 'pointer', fontWeight: 700, fontSize: 14, boxShadow: '0 6px 14px rgba(233,69,96,.28)' }}>
+                  {sendBusy ? 'Sending…' : 'Send to kitchen'}
+                </button>
+              )}
+            </div>
+            {/* rail + grid */}
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+              {/* category rail */}
+              <div style={{ width: 172, flexShrink: 0, background: '#fff', borderRight: '1px solid #E7E2D6', overflowY: 'auto', padding: '14px 12px' }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.5px', color: '#9A9488', textTransform: 'uppercase', padding: '0 4px 10px' }}>Menu</div>
+                {menu.map(cat => (
+                  <button key={cat.id} onClick={() => { setActiveCategory(cat.id); setActiveCourse(cat.default_course || 1); setActiveSubcat(null); }}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', minHeight: 52, padding: '0 16px', marginBottom: 8, borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 14,
+                      border: activeCategory === cat.id ? 'none' : '1px solid #E7E2D6',
+                      background: activeCategory === cat.id ? '#0D1B3E' : '#fff',
+                      color: activeCategory === cat.id ? '#fff' : '#1a1a2e' }}>
+                    {cat.name}{cat.is_bar ? ' 🍹' : ''}
+                  </button>
+                ))}
+              </div>
+              {/* menu grid */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '22px 24px' }}>
+                <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 24, fontWeight: 700, color: '#1a1a2e', marginBottom: 14 }}>Tap a dish to add</div>
+                {activeSubs.length > 0 && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                    <button onClick={() => setActiveSubcat(null)} style={{ padding: '7px 16px', borderRadius: 20, border: '1px solid #E7E2D6', cursor: 'pointer', fontWeight: 600, fontSize: 13, background: !activeSubcat ? '#0D1B3E' : '#fff', color: !activeSubcat ? '#fff' : '#1a1a2e' }}>All</button>
+                    {activeSubs.map(sub => (
+                      <button key={sub.id} onClick={() => setActiveSubcat(sub.id)} style={{ padding: '7px 16px', borderRadius: 20, border: '1px solid #E7E2D6', cursor: 'pointer', fontWeight: 600, fontSize: 13, background: activeSubcat === sub.id ? '#0D1B3E' : '#fff', color: activeSubcat === sub.id ? '#fff' : '#1a1a2e' }}>{sub.name}</button>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+                  {activeItems.filter(item => !activeSubcat || item.subcategory_id === activeSubcat).map(item => {
+                    const inCart = cart.filter(c => c.menu_item_id === item.id);
+                    const totalQty = inCart.reduce((s, c) => s + c.quantity, 0);
+                    return (
+                      <div key={item.id} onClick={() => handleItemClick(item)} style={{ background: '#fff', borderRadius: 14, border: `1px solid ${totalQty > 0 ? '#0D1B3E' : '#E7E2D6'}`, padding: 14, cursor: 'pointer', minHeight: 104, display: 'flex', flexDirection: 'column', boxShadow: '0 1px 2px rgba(13,27,62,.05)' }}>
+                        <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1a2e', lineHeight: 1.25 }}>{item.name}</div>
+                        <AllergenChips list={allergensByItemId[item.id]} />
+                        <div style={{ flex: 1 }} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                          <span style={{ fontSize: 17, fontWeight: 800, color: '#9A7B1F', fontVariantNumeric: 'tabular-nums' }}>£{Number(item.price || 0).toFixed(2)}</span>
+                          {totalQty > 0 ? (
+                            <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', background: '#0D1B3E', color: '#C9A84C', borderRadius: 10, height: 32 }}>
+                              <button onClick={e => { e.stopPropagation(); decrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: '#C9A84C', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>−</button>
+                              <span style={{ fontWeight: 800, fontSize: 14, minWidth: 18, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{totalQty}</span>
+                              <button onClick={e => { e.stopPropagation(); incrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: '#C9A84C', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>+</button>
+                            </div>
+                          ) : (
+                            <div style={{ width: 32, height: 32, borderRadius: 9, background: '#0D1B3E', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700 }}>+</div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ════════════════════════════════
             RIGHT — Order Summary
@@ -831,7 +907,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             Mobile:  full width, visible only on 'order' tab
             ════════════════════════════════ */}
         <div style={{
-          width: isMobile ? '100%' : 340,
+          width: isMobile ? '100%' : 420,
           flex: isMobile && mobileTab === 'order' ? '1 1 0' : undefined,
           background: 'white',
           borderLeft: isMobile ? 'none' : '1px solid #eee',
@@ -868,7 +944,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 )}
               </div>
             ) : (
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Order Summary</h3>
+              <h3 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>Order Summary</h3>
             )}
           </div>
 

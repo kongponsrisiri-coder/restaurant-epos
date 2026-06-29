@@ -5,17 +5,29 @@ import TakeawayStrip    from '../components/TakeawayStrip';
 import BillPeek         from '../components/BillPeek';
 import SyncHealthBanner from '../components/SyncHealthBanner';
 
+// Redesign palette (design_handoff): calm 5-status scheme — gold for any "food
+// in progress" stage (label keeps the specific course). bg = status accent
+// colour (used as fill in the plan view + accent/pill in the grid cards).
 const COLOUR_MAP = {
-  available:      { bg: '#22c55e', border: '#16a34a', text: 'white', label: 'Available' },
-  occupied:       { bg: '#ef4444', border: '#dc2626', text: 'white', label: 'Occupied' },
-  starters_fired: { bg: '#eab308', border: '#ca8a04', text: 'white', label: 'Starters Called' },
-  starters_done:  { bg: '#f97316', border: '#ea580c', text: 'white', label: 'Starters Done' },
-  mains_fired:    { bg: '#38bdf8', border: '#0284c7', text: 'white', label: 'Mains Called' },
-  mains_done:     { bg: '#1e3a8a', border: '#1e40af', text: 'white', label: 'Mains Done' },
-  desserts_fired: { bg: '#f9a8d4', border: '#ec4899', text: '#1a1a2e', label: 'Desserts Called' },
-  desserts_done:  { bg: '#6b7280', border: '#4b5563', text: 'white', label: 'Desserts Done' },
-  bill_printed:   { bg: '#f8fafc', border: '#cbd5e1', text: '#1a1a2e', label: 'Bill Printed' },
+  available:      { bg: '#2E9E6E', border: '#27905f', text: '#fff',     label: 'Open' },
+  occupied:       { bg: '#0D1B3E', border: '#0b1733', text: '#fff',     label: 'Seated' },
+  starters_fired: { bg: '#C9A84C', border: '#b9983f', text: '#1a1a2e', label: 'Starters' },
+  starters_done:  { bg: '#C9A84C', border: '#b9983f', text: '#1a1a2e', label: 'Starters done' },
+  mains_fired:    { bg: '#C9A84C', border: '#b9983f', text: '#1a1a2e', label: 'Mains' },
+  mains_done:     { bg: '#C9A84C', border: '#b9983f', text: '#1a1a2e', label: 'Mains done' },
+  desserts_fired: { bg: '#C9A84C', border: '#b9983f', text: '#1a1a2e', label: 'Desserts' },
+  desserts_done:  { bg: '#C9A84C', border: '#b9983f', text: '#1a1a2e', label: 'Desserts done' },
+  bill_printed:   { bg: '#e94560', border: '#d23250', text: '#fff',     label: 'Bill due' },
+  reserved:       { bg: '#9C968A', border: '#857f74', text: '#fff',     label: 'Reserved' },
 };
+// Distinct buckets for the legend (the gold food stages collapse to one chip).
+const LEGEND = [
+  { bg: '#2E9E6E', label: 'Open' },
+  { bg: '#0D1B3E', label: 'Seated' },
+  { bg: '#C9A84C', label: 'Food in' },
+  { bg: '#e94560', label: 'Bill due' },
+  { bg: '#9C968A', label: 'Reserved' },
+];
 
 export default function TableMapScreen({ staff, onOpenOrder }) {
   const [tables, setTables] = useState([]);
@@ -225,17 +237,17 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
         gap: 12
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 700, color: '#1a1a2e', flexShrink: 0 }}>
-            Table Map
+          <h1 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: isMobile ? 22 : 30, fontWeight: 700, color: '#1a1a2e', flexShrink: 0 }}>
+            Floor map
           </h1>
 
-          {/* Sandy: Legend — desktop only. Moves to strip below on mobile. */}
+          {/* Legend — desktop only. Moves to strip below on mobile. */}
           {!isMobile && (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {Object.entries(COLOUR_MAP).map(([key, val]) => (
-                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: 3, background: val.bg, border: `1px solid ${val.border}` }} />
-                  <span style={{ fontSize: 10, color: '#555' }}>{val.label}</span>
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+              {LEGEND.map(val => (
+                <div key={val.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: 999, background: val.bg }} />
+                  <span style={{ fontSize: 12, color: '#7C766A', fontWeight: 600 }}>{val.label}</span>
                 </div>
               ))}
             </div>
@@ -276,14 +288,10 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           borderBottom: '1px solid #eee',
           flexShrink: 0
         }}>
-          {Object.entries(COLOUR_MAP).map(([key, val]) => (
-            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-              <div style={{
-                width: 12, height: 12, borderRadius: 3,
-                background: val.bg, border: `1px solid ${val.border}`,
-                flexShrink: 0
-              }} />
-              <span style={{ fontSize: 11, color: '#555', whiteSpace: 'nowrap' }}>{val.label}</span>
+          {LEGEND.map(val => (
+            <div key={val.label} style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+              <div style={{ width: 12, height: 12, borderRadius: 999, background: val.bg, flexShrink: 0 }} />
+              <span style={{ fontSize: 11, color: '#7C766A', whiteSpace: 'nowrap', fontWeight: 600 }}>{val.label}</span>
             </div>
           ))}
         </div>
@@ -435,13 +443,13 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                    larger text, bigger touch targets.
           ════════════════════════════════════════ */}
       {viewMode === 'grid' && (
-        <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? 12 : 20 }}>
+        <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? 14 : 24, background: '#F4F1EA' }}>
           <div style={{
             display: 'grid',
             gridTemplateColumns: isMobile
               ? 'repeat(2, 1fr)'
-              : 'repeat(auto-fill, minmax(140px, 1fr))',
-            gap: isMobile ? 10 : 12
+              : 'repeat(auto-fill, minmax(200px, 1fr))',
+            gap: 16
           }}>
             {tables
               .sort((a, b) => String(a.table_number).localeCompare(String(b.table_number), undefined, { numeric: true }))
@@ -452,82 +460,57 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                 const isSelected = tableActionPopup?.table.id === table.id;
                 const upcoming = getUpcomingReservation(table.id);
 
+                const fromTime = order ? new Date(order.opened_at || order.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null;
                 return (
                   <div key={table.id} onClick={() => handleTableClick(table)} style={{
-                    background: colours.bg,
-                    border: `3px solid ${isSelected ? '#1a1a2e' : colours.border}`,
-                    borderRadius: 14,
-                    padding: isMobile ? '20px 12px' : 16,
+                    background: '#fff',
+                    border: `1.5px solid ${isSelected ? '#1a1a2e' : '#E7E2D6'}`,
+                    borderLeft: `5px solid ${colours.bg}`,
+                    borderRadius: 16,
+                    padding: '14px 16px',
+                    minHeight: 148,
                     cursor: 'pointer',
-                    textAlign: 'center',
-                    transition: 'transform 0.15s',
-                    boxShadow: isSelected ? '0 0 20px rgba(0,0,0,0.3)' : 'none',
-                    minHeight: isMobile ? 110 : 'auto',
                     position: 'relative',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    boxShadow: isSelected ? '0 8px 20px rgba(13,27,62,.12)' : '0 1px 2px rgba(13,27,62,.05)',
+                    transition: 'transform .15s, box-shadow .15s',
                   }}
-                    onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.04)'}
-                    onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = ''; }}
                   >
-                    {/* Table number — bigger on mobile */}
+                    {/* Status pill (top-right) */}
                     <div style={{
-                      fontSize: isMobile ? 36 : 28,
-                      fontWeight: 800,
-                      color: colours.text,
-                      lineHeight: 1
-                    }}>
-                      {table.table_number}
-                    </div>
-
-                    {/* Capacity */}
-                    <div style={{
-                      fontSize: isMobile ? 12 : 11,
-                      color: colours.text,
-                      opacity: 0.8,
-                      marginTop: 4,
-                      marginBottom: 2
-                    }}>
-                      {table.capacity} seats
-                    </div>
-
-                    {/* Status label */}
-                    <div style={{
-                      fontSize: isMobile ? 12 : 11,
-                      color: colours.text,
-                      opacity: 0.7,
-                      marginBottom: 4,
-                      fontWeight: 600
+                      position: 'absolute', top: 12, right: 12,
+                      background: colours.bg, color: colours.text,
+                      fontSize: 10.5, fontWeight: 800, letterSpacing: '.4px',
+                      textTransform: 'uppercase', borderRadius: 999, padding: '3px 9px',
                     }}>
                       {colours.label}
                     </div>
 
-                    {/* Timer — larger on mobile, easier to read */}
-                    {time && (
-                      <div style={{
-                        fontSize: isMobile ? 15 : 12,
-                        fontWeight: 800,
-                        color: colours.text,
-                        opacity: 0.95,
-                        background: 'rgba(0,0,0,0.12)',
-                        borderRadius: 8,
-                        padding: isMobile ? '4px 10px' : '2px 6px',
-                        display: 'inline-block',
-                        marginBottom: 2
-                      }}>
-                        ⏱ {time}
-                      </div>
-                    )}
+                    {/* Table number */}
+                    <div style={{ fontSize: 30, fontWeight: 800, color: '#1a1a2e', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+                      {table.table_number}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: '#9A9488', marginTop: 6, fontWeight: 600 }}>
+                      {table.capacity} seats
+                    </div>
 
-                    {/* Covers + running total */}
-                    {order && (
-                      <div style={{
-                        fontSize: isMobile ? 12 : 11,
-                        color: colours.text,
-                        opacity: 0.85,
-                        marginTop: 4,
-                        fontWeight: 600
-                      }}>
-                        {order.covers} cvr · £{Number(order.total || 0).toFixed(2)}
+                    <div style={{ flex: 1 }} />
+
+                    {/* Bottom — status specific */}
+                    {order ? (
+                      <div>
+                        <div style={{ fontSize: 12.5, color: '#7C766A', fontWeight: 600 }}>
+                          {order.covers} covers · from {fromTime}{time ? ` · ${time}` : ''}
+                        </div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: '#9A7B1F', marginTop: 3, fontVariantNumeric: 'tabular-nums' }}>
+                          £{Number(order.total || 0).toFixed(2)}
+                        </div>
                       </div>
+                    ) : (
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#2E9E6E' }}>Open</div>
                     )}
                     {/* SEPOS-044 — pre-claim badge on grid tile */}
                     {upcoming && (

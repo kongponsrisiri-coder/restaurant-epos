@@ -126,6 +126,7 @@ async function initDB() {
         discount_type VARCHAR(50),
         discount_value DECIMAL(10,2),
         discount_reason TEXT,
+        no_service_charge INTEGER DEFAULT 0,
         bill_printed INTEGER DEFAULT 0,
         opened_at TIMESTAMP DEFAULT NOW(),
         closed_at TIMESTAMP,
@@ -190,6 +191,10 @@ async function initDB() {
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_url TEXT`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_eta TIMESTAMP`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS deliveroo_order_id VARCHAR(255)`);
+    // SEPOS — per-order service-charge removal. Persists the Order screen's
+    // "Remove service charge" toggle so the Bill / receipt / splits honour it
+    // (was local React state only, so the Bill re-added it from settings).
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS no_service_charge INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE orders ALTER COLUMN table_id DROP NOT NULL`).catch(() => {});
 
     // SEPOS-033 Phase 2 — campaign audit log

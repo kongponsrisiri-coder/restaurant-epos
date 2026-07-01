@@ -107,6 +107,7 @@ function initSchema() {
       discount_type TEXT,
       discount_value REAL,
       discount_reason TEXT,
+      no_service_charge INTEGER DEFAULT 0,
       bill_printed INTEGER DEFAULT 0,
       opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       closed_at TIMESTAMP,
@@ -655,6 +656,8 @@ function runMigrations() {
   addColumnIfMissing('orders', 'delivery_status', 'TEXT');
   addColumnIfMissing('orders', 'tracking_url', 'TEXT');
   addColumnIfMissing('orders', 'delivery_eta', 'TIMESTAMP');
+  // SEPOS — per-order service-charge removal (persists the Order screen toggle).
+  addColumnIfMissing('orders', 'no_service_charge', 'INTEGER DEFAULT 0');
 
   // SEPOS-PRO-002: bidirectional active-order sync.
   // cloud_id maps a local row to its mirror on the cloud Postgres backend.

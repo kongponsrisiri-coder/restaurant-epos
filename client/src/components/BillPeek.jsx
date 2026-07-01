@@ -66,7 +66,9 @@ function BillBody({ bill }) {
   const { order, settings } = bill;
   const billItems = (order.items || []).filter(i => !i.voided);
   const serviceChargePercent = parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5) / 100;
-  const serviceChargeEnabled = settings.service_charge_enabled !== '0' && settings.service_charge_enabled !== 'false' && !isTakeaway(order);
+  // SEPOS — honour the per-order "Remove service charge" flag (persisted from
+  // the Order screen) so this preview total matches what the Bill will charge.
+  const serviceChargeEnabled = settings.service_charge_enabled !== '0' && settings.service_charge_enabled !== 'false' && !isTakeaway(order) && !order.no_service_charge;
 
   const subtotal = billItems.reduce((s, i) => {
     const p = i.unit_price * i.quantity;

@@ -149,7 +149,11 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     : 0;
   const discountRate  = subtotal > 0 ? discountAmount / subtotal : 0;
   const afterDiscount = subtotal - discountAmount;
-  const serviceCharge = serviceChargeEnabled ? afterDiscount * serviceChargePercent : 0;
+  // SEPOS — honour the per-order "Remove service charge" flag persisted from
+  // the Order screen. Previously the Bill recomputed SC from the global setting
+  // only and silently re-added it after staff removed it on the Order screen.
+  const noServiceCharge = !!order.no_service_charge;
+  const serviceCharge = (serviceChargeEnabled && !noServiceCharge) ? afterDiscount * serviceChargePercent : 0;
   const billTotalPence = Math.round(afterDiscount * 100) + Math.round(serviceCharge * 100);
   const billTotal      = billTotalPence / 100;
 
@@ -176,7 +180,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     }, 0);
     const personDiscount     = personSubtotal * discountRate;
     const personAfterDiscount = personSubtotal - personDiscount;
-    const personService      = serviceChargeEnabled ? personAfterDiscount * serviceChargePercent : 0;
+    const personService      = (serviceChargeEnabled && !noServiceCharge) ? personAfterDiscount * serviceChargePercent : 0;
     return { items: personItems, subtotal: personSubtotal, discount: personDiscount, afterDiscount: personAfterDiscount, service: personService, total: personAfterDiscount + personService };
   };
 
@@ -419,7 +423,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
             <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14, marginTop: 6 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: MUTED, marginBottom: 6 }}><span>Subtotal</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>£{subtotal.toFixed(2)}</span></div>
               {discountAmount > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#2E9E6E', marginBottom: 6 }}><span>Discount</span><span>-£{discountAmount.toFixed(2)}</span></div>}
-              {serviceChargeEnabled && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: MUTED, marginBottom: 6 }}><span>Service charge ({parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5)}%)</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>£{serviceCharge.toFixed(2)}</span></div>}
+              {serviceChargeEnabled && !noServiceCharge && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: MUTED, marginBottom: 6 }}><span>Service charge ({parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5)}%)</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>£{serviceCharge.toFixed(2)}</span></div>}
               {vatTotal > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: FAINT, marginBottom: 6 }}><span>Includes VAT</span><span>£{vatTotal.toFixed(2)}</span></div>}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: `2px solid ${INK}`, marginTop: 10, paddingTop: 10 }}>
                 <span style={{ fontSize: 15, fontWeight: 700, color: INK }}>Total due</span>
@@ -558,7 +562,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
               <div style={{ borderTop:'1px dashed #ccc', paddingTop:12, marginBottom:16 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:14, marginBottom:6, color:'#555' }}><span>Subtotal</span><span>£{subtotal.toFixed(2)}</span></div>
                 {discountAmount>0 && <div style={{ display:'flex', justifyContent:'space-between', fontSize:14, marginBottom:6, color:'#22c55e' }}><span>Discount ({order.discount_reason})</span><span>-£{discountAmount.toFixed(2)}</span></div>}
-                {serviceChargeEnabled && <div style={{ display:'flex', justifyContent:'space-between', fontSize:14, marginBottom:6, color:'#555' }}><span>Service charge ({parseFloat(settings.service_charge_rate||settings.service_charge_percent||12.5)}%)</span><span>£{serviceCharge.toFixed(2)}</span></div>}
+                {serviceChargeEnabled && !noServiceCharge && <div style={{ display:'flex', justifyContent:'space-between', fontSize:14, marginBottom:6, color:'#555' }}><span>Service charge ({parseFloat(settings.service_charge_rate||settings.service_charge_percent||12.5)}%)</span><span>£{serviceCharge.toFixed(2)}</span></div>}
                 {/* SEPOS-021 VAT breakdown — informational; prices are VAT-inclusive */}
                 {vatTotal > 0 && (
                   <div style={{ marginTop:8, padding:'8px 10px', background:'#f8f8f8', borderRadius:8, fontSize:12, color:'#555' }}>

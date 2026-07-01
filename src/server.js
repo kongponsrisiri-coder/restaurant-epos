@@ -1067,6 +1067,17 @@ app.put('/api/orders/:id/discount', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS — persist the Order screen's "Remove service charge" toggle per order.
+// Was local React state only, so the Bill / receipt / splits re-added service
+// charge from the global setting. Body: { no_service_charge: 0 | 1 }.
+app.put('/api/orders/:id/service-charge', async (req, res) => {
+  try {
+    const flag = req.body.no_service_charge ? 1 : 0;
+    await pool.query('UPDATE orders SET no_service_charge = $1 WHERE id = $2', [flag, req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // SEPOS-CLOSE-ZERO — close an order that's at £0 (everything voided OR
 // fully discounted by manager). Operators were stuck after voiding every
 // item because the "View Bill & Pay" button hid itself at £0 and there

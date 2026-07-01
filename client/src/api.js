@@ -448,6 +448,19 @@ export const applyDiscount = async (orderId, discount_type, discount_value, disc
   }
   return put(`/api/orders/${orderId}/discount`, { discount_type, discount_value, discount_reason });
 };
+// SEPOS — persist per-order "Remove service charge" toggle so the Bill honours it.
+export const setOrderServiceCharge = async (orderId, removed) => {
+  const flag = removed ? 1 : 0;
+  const lid = await localTarget(orderId);
+  if (lid) {
+    const doc = await localOrderGet(lid);
+    if (!doc) return { error: 'Order not found' };
+    doc.no_service_charge = flag;
+    await localOrderUpdate(lid, doc);
+    return { ok: true };
+  }
+  return put(`/api/orders/${orderId}/service-charge`, { no_service_charge: flag });
+};
 // SEPOS-VOUCHER-REMOVE-001 — undo a partial voucher redemption while bill is open
 export const removeVoucherFromBill = async (orderId) =>
   (await localTarget(orderId)) ? { success: true } : post(`/api/orders/${orderId}/voucher-remove`, {});

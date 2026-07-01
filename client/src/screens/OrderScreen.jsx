@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, assertOk, getSettings, SERVER_URL } from '../api';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL } from '../api';
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
 // SEPOS — DeleteOrderModal removed from OrderScreen 2026-06-01 (Korakot's
@@ -64,6 +64,25 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     if (seq === fetchSeqRef.current) setOrder(orderData);
   };
 
+  // SEPOS — toggle + PERSIST the per-order service-charge removal. Optimistic:
+  // flip local state immediately, then write the flag so the Bill / receipt /
+  // splits honour it (previously this was local-only and the Bill re-added SC).
+  // If there's no order id yet (brand-new unsent order), we skip the write —
+  // the item send creates the order, and the persisted flag then rides the
+  // useEffect hydrate on the next fetchOrder / snapshot.
+  const toggleServiceCharge = () => {
+    const next = !serviceChargeRemoved;
+    setServiceChargeRemoved(next);                              // optimistic
+    setOrder(prev => prev ? { ...prev, no_service_charge: next ? 1 : 0 } : prev);
+    if (!orderId) return;                                       // no id yet — persisted once it exists
+    setOrderServiceCharge(orderId, next).catch(() => {
+      // Roll back the toggle if the write failed so the Order screen doesn't
+      // lie about what the Bill will charge.
+      setServiceChargeRemoved(!next);
+      setOrder(prev => prev ? { ...prev, no_service_charge: !next ? 1 : 0 } : prev);
+    });
+  };
+
   // Load settings once for the configured service-charge rate (the running
   // total below previously hard-coded 12.5%, so any client on a different rate
   // — or with service charge disabled — saw a wrong "View Bill & Pay" amount).
@@ -101,6 +120,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     };
     fetchData();
   }, [orderId]);
+
+  // SEPOS — hydrate the "Remove service charge" toggle from the persisted
+  // per-order flag whenever the order (re)loads. Keeps the Order screen in
+  // step with what the Bill / receipt will actually charge.
+  useEffect(() => {
+    if (order) setServiceChargeRemoved(order.no_service_charge === 1 || order.no_service_charge === true);
+  }, [order?.id, order?.no_service_charge]);
 
   // SEPOS — menu-button allergen chips render ONLY from confirmed
   // entries in dish_allergens (the Allergen Matrix). AI-scanner output
@@ -1323,7 +1349,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 13, color: '#555' }}>Service ({parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5)}%)</span>
-                <button onClick={() => setServiceChargeRemoved(!serviceChargeRemoved)} style={{
+                <button onClick={toggleServiceCharge} style={{
                   background: serviceChargeRemoved ? '#fee2e2' : '#dcfce7',
                   border: 'none', borderRadius: 6, padding: '3px 10px',
                   cursor: 'pointer', fontSize: 11, fontWeight: 700,

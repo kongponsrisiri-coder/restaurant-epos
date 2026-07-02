@@ -29,6 +29,9 @@ export default function ClientDetailPage() {
   const [noteCategory, setNoteCategory] = useState('general');
   const [noteText, setNoteText] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [payLink, setPayLink] = useState('');
+  const [linking, setLinking] = useState(false);
+  const [copiedPay, setCopiedPay] = useState(false);
 
   const me = (() => {
     try { return JSON.parse(localStorage.getItem('ops_user') || 'null'); } catch { return null; }
@@ -82,6 +85,23 @@ export default function ClientDetailPage() {
       await load();
     } catch (e) { window.alert(e.message); }
     finally { setCancelling(false); }
+  };
+
+  // BO-BILLING-001 — generate a Stripe Checkout link for this client's plan.
+  // Send it to a remote client, or open it on your iPad on-site to enter their
+  // card. Paying flips them to 'active' automatically (via the webhook).
+  const createPayLink = async () => {
+    setLinking(true); setCopiedPay(false);
+    try {
+      const r = await api.createCheckoutLink(id);
+      if (r?.url) setPayLink(r.url);
+      else window.alert(r?.error || 'Could not create payment link');
+    } catch (e) { window.alert(e.message); }
+    finally { setLinking(false); }
+  };
+  const copyPayLink = async () => {
+    try { await navigator.clipboard.writeText(payLink); setCopiedPay(true); setTimeout(() => setCopiedPay(false), 2000); }
+    catch { /* clipboard blocked — the link is visible to copy by hand */ }
   };
 
   return (
@@ -232,10 +252,28 @@ export default function ClientDetailPage() {
                   </div>
                 </>
               ) : (
-                <div style={{ fontSize: 13, color: C.textFaint }}>
-                  No Stripe subscription on file. {client.metadata?.signed_up_via === 'kiosk'
-                    ? 'This client signed up before billing linkage was added, or pays another way.'
-                    : 'Added manually — bill them outside Stripe, or have them self-pay via the kiosk link.'}
+                <div>
+                  <div style={{ fontSize: 13, color: C.textFaint, marginBottom: 10 }}>
+                    No active subscription yet. Create a payment link — <strong>send it to the client</strong>, or <strong>open it on your iPad on-site</strong> to enter their card. Paying activates them automatically.
+                  </div>
+                  <button
+                    onClick={createPayLink}
+                    disabled={linking}
+                    style={{ ...btn.gold, fontSize: 13, opacity: linking ? 0.6 : 1, cursor: linking ? 'wait' : 'pointer' }}
+                    title={`Create a Stripe Checkout link for the ${PLAN_LABEL[client.plan] || client.plan || 'current'} plan`}
+                  >
+                    {linking ? 'Creating…' : `💳 Create payment link${client.plan ? ` (${PLAN_LABEL[client.plan] || client.plan})` : ''}`}
+                  </button>
+                  {payLink && (
+                    <div style={{ marginTop: 12, padding: 12, background: C.surfaceAlt || '#f6f7fb', borderRadius: 10, border: `1px solid ${C.border}` }}>
+                      <div style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all', color: C.text, marginBottom: 10 }}>{payLink}</div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button onClick={copyPayLink} style={{ ...btn.ghost, fontSize: 12 }}>{copiedPay ? '✓ Copied!' : '📋 Copy link'}</button>
+                        <a href={payLink} target="_blank" rel="noopener noreferrer" style={{ ...btn.gold, fontSize: 12, textDecoration: 'none' }}>Open to pay now ↗</a>
+                      </div>
+                      <div style={{ fontSize: 11, color: C.textMuted, marginTop: 8 }}>Open it on the iPad in front of the client, or send it to them. They enter the card; the client flips to “active” once paid.</div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

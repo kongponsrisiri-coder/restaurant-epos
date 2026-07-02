@@ -337,6 +337,57 @@ router.post('/:id/cancel-subscription', adminOnly, async (req, res) => {
   }
 });
 
+// BO-BILLING-001 — create a Stripe Checkout link for a client's subscription.
+// Covers both flows: send the URL to a remote client, OR open it on your iPad
+// on-site and enter their card there. On payment, the webhook
+// (checkout.session.completed) writes the Stripe ids back to this client row
+// and flips them to 'active'. Skippable — nothing is charged until they pay.
+const BILLING_PLAN_PRICE = {
+  pro:           process.env.STRIPE_PRICE_PRO,
+  founder:       process.env.STRIPE_PRICE_FOUNDER,
+  lite_booking:  process.env.STRIPE_PRICE_LITE_BOOKING,
+  lite_ordering: process.env.STRIPE_PRICE_LITE_ORDERING,
+  lite_bundle:   process.env.STRIPE_PRICE_LITE_BUNDLE,
+  spa:           process.env.STRIPE_PRICE_SPA,
+};
+
+router.post('/:id/billing/checkout-link', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { rows } = await pool.query(
+      'SELECT id, restaurant_name, owner_name, email, plan FROM clients WHERE id = $1',
+      [id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Client not found' });
+    const client = rows[0];
+
+    const plan = (req.body && req.body.plan) || client.plan;
+    const priceId = BILLING_PLAN_PRICE[plan];
+    if (!priceId) {
+      return res.status(400).json({
+        error: `No Stripe price for plan "${plan}". Set STRIPE_PRICE_${String(plan || '').toUpperCase()} on the back-office Railway service.`,
+      });
+    }
+
+    const base = process.env.OPS_PUBLIC_URL || 'https://ops.siamepos.co.uk';
+    const session = await stripe().checkout.sessions.create({
+      mode: 'subscription',
+      line_items: [{ price: priceId, quantity: 1 }],
+      customer_email: client.email || undefined,
+      client_reference_id: String(id),
+      metadata: { client_id: String(id), plan },
+      subscription_data: { metadata: { client_id: String(id), plan } },
+      success_url: `${base}/clients/${id}?paid=1`,
+      cancel_url:  `${base}/clients/${id}?paid=0`,
+    });
+
+    res.json({ url: session.url, plan });
+  } catch (err) {
+    console.error('[ops-clients] checkout-link error', err.message);
+    res.status(500).json({ error: err.message || 'Could not create payment link' });
+  }
+});
+
 // ── SEPOS-029 — onboarding wizard endpoints ────────────────────────
 
 /**

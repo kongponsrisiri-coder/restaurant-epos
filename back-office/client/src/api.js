@@ -143,6 +143,14 @@ export const api = {
       headers: { 'Content-Type': 'application/json', ...tokenHeader() },
     }).then(handle),
 
+  // BO-BILLING-001 — Stripe Checkout link for a client's subscription.
+  createCheckoutLink: (id, plan) =>
+    fetch(`${API}/api/clients/${id}/billing/checkout-link`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify(plan ? { plan } : {}),
+    }).then(handle),
+
   runHealth: (clientId) =>
     fetch(`${API}/api/health/run`, {
       method: 'POST',

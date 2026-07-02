@@ -57,6 +57,30 @@ router.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
     const obj = event.data.object;
 
     switch (event.type) {
+      // BO-BILLING-001 — a client paid an ops-generated Checkout link. Write
+      // the Stripe ids back to the (wizard-created) client row and activate it.
+      case 'checkout.session.completed': {
+        const clientId = obj.metadata && obj.metadata.client_id;
+        const subscriptionId = obj.subscription || null;
+        const customerId = obj.customer || null;
+        if (clientId) {
+          const r = await pool.query(
+            `UPDATE clients SET status = 'active',
+               stripe_customer_id     = COALESCE($2, stripe_customer_id),
+               stripe_subscription_id = COALESCE($3, stripe_subscription_id),
+               sub_start    = COALESCE(sub_start, CURRENT_DATE),
+               next_billing = (CURRENT_DATE + INTERVAL '1 month')
+             WHERE id = $1 RETURNING id, restaurant_name`,
+            [parseInt(clientId, 10), customerId, subscriptionId]
+          );
+          console.log(`[stripe-webhook] checkout.session.completed → active (client ${clientId}, ${r.rows.length} matched)`);
+        } else {
+          const r = await setClientStatus({ subscriptionId, customerId }, 'active');
+          console.log(`[stripe-webhook] checkout.session.completed (no client_id) → active (${r.rows.length} matched)`);
+        }
+        break;
+      }
+
       // Recurring charge failed → flag the client so the team can chase it.
       case 'invoice.payment_failed': {
         const r = await setClientStatus(

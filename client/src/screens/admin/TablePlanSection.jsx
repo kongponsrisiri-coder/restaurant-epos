@@ -188,6 +188,20 @@ export default function TablePlanSection() {
     }
   };
 
+  // SEPOS-TAKEAWAY-TABLE — a takeaway "table": sits on the floor like a table
+  // but orders rung up on it are takeaway (no service charge, kitchen ticket
+  // says "Takeaway {number}").
+  const handleAddTakeaway = async () => {
+    const maxNum = Math.max(...tablesRef.current.map(t => Number(t.table_number) || 0), 0);
+    const newNum = maxNum + 1;
+    const newTable = { table_number: newNum, capacity: 1, pos_x: 40, pos_y: 40, shape: 'square', width: 80, height: 80, is_takeaway: 1 };
+    const result = await addTable(newTable);
+    if (result?.id) {
+      setTables(prev => [...prev, { ...newTable, id: result.id, status: 'available' }]);
+    }
+    showToast('🥡 Takeaway table added');
+  };
+
   const handleDeleteTable = async (id) => {
     if (!await confirm('Delete this table?')) return;
     const related = combos.filter(c => c.table_id_a === id || c.table_id_b === id);
@@ -209,6 +223,7 @@ export default function TablePlanSection() {
       shape: u.shape, width: u.width, height: u.height,
       name: u.name, capacity: u.capacity,
       table_number: u.table_number,
+      is_takeaway: u.is_takeaway ? 1 : 0,
     });
   };
 
@@ -341,6 +356,10 @@ export default function TablePlanSection() {
             style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
             + Table</button>
 
+          <button onClick={handleAddTakeaway}
+            style={{ padding: '8px 12px', borderRadius: 8, border: '2px solid #f59e0b', background: '#fff', color: '#b45309', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+            🥡 Takeaway</button>
+
           <button onClick={() => handleAddWall('vertical')}
             style={{ padding: '8px 10px', borderRadius: 8, border: 'none', background: '#555', color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
             | Wall</button>
@@ -447,8 +466,8 @@ export default function TablePlanSection() {
                   left: table.pos_x, top: table.pos_y,
                   width: table.width || 80, height: table.height || 80,
                   borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,
-                  background: isLinkFirst ? '#C9A84C' : isSelected ? '#1a1a2e' : isLinked ? '#fef9c3' : '#fff',
-                  border: `3px solid ${isLinkFirst ? '#C9A84C' : isSelected ? '#e94560' : isLinked ? '#C9A84C' : '#1a1a2e'}`,
+                  background: isLinkFirst ? '#C9A84C' : isSelected ? '#1a1a2e' : isLinked ? '#fef9c3' : (table.is_takeaway ? '#fffbeb' : '#fff'),
+                  border: `3px solid ${isLinkFirst ? '#C9A84C' : isSelected ? '#e94560' : isLinked ? '#C9A84C' : (table.is_takeaway ? '#f59e0b' : '#1a1a2e')}`,
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
                   cursor: mode === 'link' ? 'crosshair' : 'grab',
@@ -456,11 +475,11 @@ export default function TablePlanSection() {
                   boxShadow: isSelected ? '0 4px 20px rgba(0,0,0,0.2)' : '0 2px 8px rgba(0,0,0,0.1)',
                 }}
               >
-                <div style={{ fontSize: 15, fontWeight: 800, color: isLinkFirst || isSelected ? 'white' : '#1a1a2e', textAlign: 'center' }}>
-                  {table.table_number}
+                <div style={{ fontSize: 15, fontWeight: 800, color: isLinkFirst || isSelected ? 'white' : (table.is_takeaway ? '#b45309' : '#1a1a2e'), textAlign: 'center' }}>
+                  {table.is_takeaway ? '🥡' : ''}{table.table_number}
                 </div>
                 <div style={{ fontSize: 10, color: isLinkFirst || isSelected ? 'rgba(255,255,255,0.7)' : '#888' }}>
-                  {table.capacity}p
+                  {table.is_takeaway ? 'Takeaway' : `${table.capacity}p`}
                 </div>
               </div>
             );
@@ -478,7 +497,7 @@ export default function TablePlanSection() {
 
           {selectedTable && (
             <div style={{ background: 'white', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 14 }}>Table {selectedTable.table_number}</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 14 }}>{selectedTable.is_takeaway ? `🥡 Takeaway ${selectedTable.table_number}` : `Table ${selectedTable.table_number}`}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
                   <label style={lbl}>Table Number / Name</label>
@@ -515,6 +534,13 @@ export default function TablePlanSection() {
                   style={{ padding: '8px', borderRadius: 8, border: '1.5px solid #1a1a2e', background: 'white', color: '#1a1a2e', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
                   ↻ Rotate Table
                 </button>
+
+                {/* SEPOS-TAKEAWAY-TABLE — flag this table as a takeaway table */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', borderRadius: 8, background: selectedTable.is_takeaway ? '#fffbeb' : '#f8f8f8', border: `1px solid ${selectedTable.is_takeaway ? '#f59e0b' : '#eee'}`, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={!!selectedTable.is_takeaway} onChange={e => updateSelectedTable({ is_takeaway: e.target.checked ? 1 : 0 })} style={{ width: 16, height: 16 }} />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#b45309' }}>🥡 Takeaway table</span>
+                </label>
+                <div style={{ fontSize: 11, color: '#999', marginTop: -4 }}>Orders here skip service charge and print as “Takeaway {selectedTable.table_number}”.</div>
 
                 <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: '#555', marginBottom: 8 }}>Can combine with</div>

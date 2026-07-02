@@ -152,7 +152,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   // SEPOS — honour the per-order "Remove service charge" flag persisted from
   // the Order screen. Previously the Bill recomputed SC from the global setting
   // only and silently re-added it after staff removed it on the Order screen.
-  const noServiceCharge = !!order.no_service_charge;
+  // SEPOS-TAKEAWAY-TABLE — only dine-in carries a service charge. Takeaway
+  // (walk-in table or online) and counter orders never do.
+  const noServiceCharge = !!order.no_service_charge || (order.order_type && order.order_type !== 'dine_in');
   const serviceCharge = (serviceChargeEnabled && !noServiceCharge) ? afterDiscount * serviceChargePercent : 0;
   const billTotalPence = Math.round(afterDiscount * 100) + Math.round(serviceCharge * 100);
   const billTotal      = billTotalPence / 100;

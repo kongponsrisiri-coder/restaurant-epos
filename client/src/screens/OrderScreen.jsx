@@ -560,7 +560,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   // Mirror BillScreen's logic exactly (single source of truth for the rate).
   const scRate = parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5) / 100;
   const scEnabled = settings.service_charge_enabled !== '0' && settings.service_charge_enabled !== 'false';
-  const serviceChargeAmount = (serviceChargeRemoved || !scEnabled) ? 0 : afterDiscount * scRate;
+  // SEPOS-TAKEAWAY-TABLE — service charge is dine-in only. Takeaway (walk-in
+  // table or online) and counter orders never carry it.
+  const isNonDineIn = !!(order && order.order_type && order.order_type !== 'dine_in');
+  const serviceChargeAmount = (serviceChargeRemoved || !scEnabled || isNonDineIn) ? 0 : afterDiscount * scRate;
   const orderTotal = afterDiscount + serviceChargeAmount;
 
   const activeItems = menu.find(c => c.id === activeCategory)?.items || [];
@@ -1343,7 +1346,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               <span>Subtotal</span><span>£{afterDiscount.toFixed(2)}</span>
             </div>
 
-            {scEnabled && <div style={{
+            {scEnabled && !isNonDineIn && <div style={{
               display: 'flex', justifyContent: 'space-between',
               alignItems: 'center', marginBottom: 10
             }}>

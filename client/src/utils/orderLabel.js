@@ -8,6 +8,14 @@ export function isTakeaway(order) {
   return order && order.order_type === 'takeaway';
 }
 
+// SEPOS-TAKEAWAY-TABLE — a takeaway order rung up at the till sits on a
+// takeaway "table", so it carries a table_number. Website orders are
+// tableless. We use the presence of a table number to tell the two apart
+// and label the walk-in one "Takeaway {n}" instead of "Online Order #id".
+export function isTakeawayTable(order) {
+  return isTakeaway(order) && order.table_number != null && order.table_number !== '';
+}
+
 // SEPOS-DELIVERY-002 — a takeaway order is either collection (default)
 // or delivery. Delivery orders get the 🚗 treatment so the kitchen +
 // expo bag them differently and know a courier/driver is involved.
@@ -21,6 +29,7 @@ export function isDelivery(order) {
 //   dine-in  → "Table 5"
 export function orderShortLabel(order) {
   if (!order) return '—';
+  if (isTakeawayTable(order)) return `🥡 Takeaway ${order.table_number}`;
   if (isTakeaway(order)) {
     const id = order.id ?? order.order_id ?? '—';
     return isDelivery(order)
@@ -33,6 +42,7 @@ export function orderShortLabel(order) {
 // Same but for plain-text contexts (receipts, alerts) — no emoji.
 export function orderShortLabelPlain(order) {
   if (!order) return '—';
+  if (isTakeawayTable(order)) return `Takeaway ${order.table_number}`;
   if (isTakeaway(order)) {
     const id = order.id ?? order.order_id ?? '—';
     return isDelivery(order)

@@ -189,6 +189,16 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
 
     if (existingOrder) {
       setTableActionPopup({ table, order: existingOrder });
+    } else if (table.is_takeaway) {
+      // SEPOS-TAKEAWAY-TABLE — no covers prompt; ring straight into a takeaway
+      // order (order_type='takeaway' → skips service charge, kitchen labels it).
+      try {
+        const data = await createOrder(table.id, 1, staff?.id, 'takeaway');
+        if (!data?.id) throw new Error(data?.error || 'No order id returned');
+        onOpenOrder(data.id, table.id);
+      } catch (err) {
+        alert(`Failed to start takeaway: ${err.message || 'please try again'}`);
+      }
     } else {
       setShowCoversPopup(table);
       setCoversInput('');
@@ -391,7 +401,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                   onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
                 >
                   <div style={{ fontSize: w > 90 ? 16 : 13, fontWeight: 800, color: colours.text, textAlign: 'center', padding: '0 4px' }}>
-                    {table.table_number}
+                    {table.is_takeaway ? '🥡 ' : ''}{table.table_number}
                   </div>
                   {time && (
                     <div style={{
@@ -482,10 +492,10 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
 
                     {/* Table number */}
                     <div style={{ fontSize: 30, fontWeight: 800, color: '#1a1a2e', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-                      {table.table_number}
+                      {table.is_takeaway ? '🥡 ' : ''}{table.table_number}
                     </div>
                     <div style={{ fontSize: 12.5, color: '#9A9488', marginTop: 6, fontWeight: 600 }}>
-                      {table.capacity} seats
+                      {table.is_takeaway ? 'Takeaway' : `${table.capacity} seats`}
                     </div>
 
                     <div style={{ flex: 1 }} />

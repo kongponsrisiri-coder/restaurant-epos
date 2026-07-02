@@ -223,7 +223,7 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Receipt - ${order.order_type === 'takeaway' ? `Online Order #${order.id}` : `Table ${order.table_number}`}</title>
+  <title>Receipt - ${order.order_type === 'takeaway' ? (order.table_number != null ? `Takeaway ${order.table_number}` : `Online Order #${order.id}`) : `Table ${order.table_number}`}</title>
   <style>
     *    { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:'Courier New',Courier,monospace; font-size:12px; color:#000; background:white; width:80mm; margin:0 auto; padding:4mm 2mm; }
@@ -252,7 +252,7 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
 
   <table>
     ${order.order_type === 'takeaway'
-      ? `<tr><td>Type</td><td style="text-align:right;font-weight:700;">🥡 Online Order</td></tr>
+      ? `<tr><td>Type</td><td style="text-align:right;font-weight:700;">${order.table_number != null ? `🥡 Takeaway ${order.table_number}` : '🥡 Online Order'}</td></tr>
          ${order.customer_name ? `<tr><td>Customer</td><td style="text-align:right;">${order.customer_name}</td></tr>` : ''}
          ${order.pickup_time   ? `<tr><td>Pickup</td><td style="text-align:right;">${new Date(order.pickup_time).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/London'})}</td></tr>` : ''}`
       : `<tr><td>Table</td>  <td style="text-align:right;font-weight:700;">${order.table_number||'—'}</td></tr>

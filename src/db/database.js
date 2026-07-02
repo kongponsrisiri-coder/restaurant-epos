@@ -38,9 +38,14 @@ async function initDB() {
         pos_y INTEGER DEFAULT 0,
         shape VARCHAR(50) DEFAULT 'square',
         width INTEGER DEFAULT 80,
-        height INTEGER DEFAULT 80
+        height INTEGER DEFAULT 80,
+        is_takeaway INTEGER DEFAULT 0
       )
     `);
+    // SEPOS-TAKEAWAY-TABLE — a table flagged is_takeaway rings up takeaway
+    // orders (no service charge, kitchen ticket labelled Takeaway) instead
+    // of dine-in. Added after the CREATE for existing deployments.
+    await pool.query(`ALTER TABLE tables ADD COLUMN IF NOT EXISTS is_takeaway INTEGER DEFAULT 0`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS categories (

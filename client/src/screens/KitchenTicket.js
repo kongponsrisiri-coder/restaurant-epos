@@ -491,9 +491,12 @@ function buildFireNoticeHTML({ order, course, bilingual = true }) {
 function orderHeading(order) {
   if (!order) return 'ORDER';
   if (order.order_type === 'takeaway') {
+    // SEPOS-TAKEAWAY-TABLE — walk-in takeaway sits on a takeaway table, so
+    // print its table number; website orders are tableless → use the id.
+    const ref = order.table_number != null ? order.table_number : `#${order.id}`;
     return order.order_subtype === 'delivery'
       ? `DELIVERY #${order.id}`
-      : `TAKEAWAY #${order.id}`;
+      : `TAKEAWAY ${ref}`;
   }
   return `TABLE ${order.table_number != null ? order.table_number : '—'}`;
 }

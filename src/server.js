@@ -189,10 +189,12 @@ app.put('/api/tables/:id', async (req, res) => {
 app.put('/api/tables/:id/plan', async (req, res) => {
   if (await maybeForwardTableWriteToCloud(req, res)) return;
   try {
-    const { pos_x, pos_y, shape, width, height, name, capacity, table_number } = req.body;
+    const { pos_x, pos_y, shape, width, height, name, capacity, table_number, is_takeaway } = req.body;
+    // COALESCE keeps the existing is_takeaway flag when a partial plan update
+    // (e.g. drag/resize) doesn't include it — only an explicit toggle changes it.
     await pool.query(
-      'UPDATE tables SET pos_x=$1, pos_y=$2, shape=$3, width=$4, height=$5, name=$6, capacity=$7, table_number=$8 WHERE id=$9',
-      [pos_x, pos_y, shape, width, height, name, capacity, table_number, req.params.id]
+      'UPDATE tables SET pos_x=$1, pos_y=$2, shape=$3, width=$4, height=$5, name=$6, capacity=$7, table_number=$8, is_takeaway=COALESCE($9, is_takeaway) WHERE id=$10',
+      [pos_x, pos_y, shape, width, height, name, capacity, table_number, (is_takeaway == null ? null : (is_takeaway ? 1 : 0)), req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -201,10 +203,10 @@ app.put('/api/tables/:id/plan', async (req, res) => {
 app.post('/api/tables', async (req, res) => {
   if (await maybeForwardTableWriteToCloud(req, res)) return;
   try {
-    const { table_number, capacity, pos_x, pos_y, shape } = req.body;
+    const { table_number, capacity, pos_x, pos_y, shape, is_takeaway } = req.body;
     const result = await pool.query(
-      'INSERT INTO tables (table_number, capacity, pos_x, pos_y, shape) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-      [table_number, capacity || 4, pos_x || 0, pos_y || 0, shape || 'square']
+      'INSERT INTO tables (table_number, capacity, pos_x, pos_y, shape, is_takeaway) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+      [table_number, capacity || 4, pos_x || 0, pos_y || 0, shape || 'square', is_takeaway ? 1 : 0]
     );
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }

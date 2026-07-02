@@ -39,7 +39,8 @@ function initSchema() {
       pos_y INTEGER DEFAULT 0,
       shape TEXT DEFAULT 'square',
       width INTEGER DEFAULT 80,
-      height INTEGER DEFAULT 80
+      height INTEGER DEFAULT 80,
+      is_takeaway INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS categories (
@@ -621,6 +622,7 @@ function runMigrations() {
   // SEPOS-050: per-restaurant online-booking party-size cap + contact phone
   addColumnIfMissing('restaurant_settings', 'max_party_size', 'INTEGER DEFAULT 8');
   addColumnIfMissing('restaurant_settings', 'restaurant_phone', 'TEXT');
+  addColumnIfMissing('tables', 'is_takeaway', 'INTEGER DEFAULT 0'); // SEPOS-TAKEAWAY-TABLE
   addColumnIfMissing('restaurant_settings', 'timezone',                     "TEXT DEFAULT 'Europe/London'");
   addColumnIfMissing('restaurant_settings', 'takeaway_busy_threshold',      'INTEGER DEFAULT 5');
   addColumnIfMissing('restaurant_settings', 'takeaway_very_busy_threshold', 'INTEGER DEFAULT 10');

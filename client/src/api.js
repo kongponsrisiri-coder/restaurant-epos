@@ -240,9 +240,12 @@ export const getOrder = async (id) => {
 };
 // Online → cloud. Offline (network fail) → create the order locally with a temp
 // id so the floor + order screen work; it syncs to the cloud later.
-export const createOrder = async (table_id, covers, staff_id) => {
+// SEPOS-TAKEAWAY-TABLE — order_type defaults to dine_in; a takeaway-flagged
+// table passes 'takeaway' so the order skips service charge and is labelled
+// as a takeaway (it still carries the table_id / table_number).
+export const createOrder = async (table_id, covers, staff_id, order_type = 'dine_in') => {
   try {
-    return await post('/api/orders', { table_id, covers, staff_id });
+    return await post('/api/orders', { table_id, covers, staff_id, order_type });
   } catch (e) {
     if (!isNative()) throw e;   // web POS / desktop: original behaviour — never create a local order
     let table_number = table_id;
@@ -250,7 +253,7 @@ export const createOrder = async (table_id, covers, staff_id) => {
     const now = new Date().toISOString();
     const id = 'L' + Date.now();
     const doc = { id, table_id, table_number, covers, staff_id, status: 'open', total: 0,
-      items: [], opened_at: now, created_at: now, order_type: 'dine_in', offline: true };
+      items: [], opened_at: now, created_at: now, order_type: order_type || 'dine_in', offline: true };
     await localOrderCreate(doc);
     return { id };
   }

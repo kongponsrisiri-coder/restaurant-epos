@@ -34,6 +34,7 @@ export default function ClientDetailPage() {
   const [copiedPay, setCopiedPay] = useState(false);
   const [billingPlans, setBillingPlans] = useState([]);
   const [deleting, setDeleting] = useState(false);
+  const [linkingSub, setLinkingSub] = useState(false);
 
   const me = (() => {
     try { return JSON.parse(localStorage.getItem('ops_user') || 'null'); } catch { return null; }
@@ -106,6 +107,17 @@ export default function ClientDetailPage() {
   const copyPayLink = async () => {
     try { await navigator.clipboard.writeText(payLink); setCopiedPay(true); setTimeout(() => setCopiedPay(false), 2000); }
     catch { /* clipboard blocked — the link is visible to copy by hand */ }
+  };
+
+  // Link a subscription created outside ops (matched by client email in Stripe).
+  const linkSub = async () => {
+    setLinkingSub(true);
+    try {
+      const r = await api.linkSubscription(id);
+      if (r?.linked) { await load(); window.alert('Linked the existing Stripe subscription ✓'); }
+      else window.alert(r?.error || 'No matching Stripe subscription found.');
+    } catch (e) { window.alert(e.message); }
+    finally { setLinkingSub(false); }
   };
 
   // Delete a client record (admin only). Blocks if a live Stripe subscription
@@ -281,14 +293,24 @@ export default function ClientDetailPage() {
                   <div style={{ fontSize: 13, color: C.textFaint, marginBottom: 10 }}>
                     No active subscription yet. Create a payment link — <strong>send it to the client</strong>, or <strong>open it on your iPad on-site</strong> to enter their card. Paying activates them automatically.
                   </div>
-                  <button
-                    onClick={createPayLink}
-                    disabled={linking}
-                    style={{ ...btn.gold, fontSize: 13, opacity: linking ? 0.6 : 1, cursor: linking ? 'wait' : 'pointer' }}
-                    title={`Create a Stripe Checkout link for the ${PLAN_LABEL[client.plan] || client.plan || 'current'} plan`}
-                  >
-                    {linking ? 'Creating…' : `💳 Create payment link${client.plan ? ` (${PLAN_LABEL[client.plan] || client.plan})` : ''}`}
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      onClick={createPayLink}
+                      disabled={linking}
+                      style={{ ...btn.gold, fontSize: 13, opacity: linking ? 0.6 : 1, cursor: linking ? 'wait' : 'pointer' }}
+                      title={`Create a Stripe Checkout link for the ${PLAN_LABEL[client.plan] || client.plan || 'current'} plan`}
+                    >
+                      {linking ? 'Creating…' : `💳 Create payment link${client.plan ? ` (${PLAN_LABEL[client.plan] || client.plan})` : ''}`}
+                    </button>
+                    <button
+                      onClick={linkSub}
+                      disabled={linkingSub}
+                      style={{ ...btn.ghost, fontSize: 13, opacity: linkingSub ? 0.6 : 1, cursor: linkingSub ? 'wait' : 'pointer' }}
+                      title="Already subscribed in Stripe (paid outside ops)? Match by email and link it."
+                    >
+                      {linkingSub ? 'Linking…' : '🔗 Link existing subscription'}
+                    </button>
+                  </div>
                   {payLink && (
                     <div style={{ marginTop: 12, padding: 12, background: C.surfaceAlt || '#f6f7fb', borderRadius: 10, border: `1px solid ${C.border}` }}>
                       <div style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all', color: C.text, marginBottom: 10 }}>{payLink}</div>

@@ -151,6 +151,13 @@ export const api = {
   getBillingPlans: () =>
     fetch(`${API}/api/clients/billing/plans`, { headers: tokenHeader() }).then(handle),
 
+  // BO-BILLING-001 — link an existing (manually-created) Stripe subscription by email.
+  linkSubscription: (id) =>
+    fetch(`${API}/api/clients/${id}/billing/link-subscription`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+    }).then(handle),
+
   // BO-BILLING-001 — Stripe Checkout link for a client's subscription.
   createCheckoutLink: (id, plan) =>
     fetch(`${API}/api/clients/${id}/billing/checkout-link`, {

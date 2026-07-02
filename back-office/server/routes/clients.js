@@ -431,6 +431,50 @@ router.post('/:id/billing/checkout-link', async (req, res) => {
   }
 });
 
+// BO-BILLING-001 — link an EXISTING Stripe subscription (created outside ops,
+// e.g. by hand in the dashboard) to this client, matched by the client's email.
+// Fixes clients billed before the payment-link flow — their row had no Stripe
+// ids so ops showed "no subscription". Writes the ids (+ next billing) only;
+// leaves the client's status untouched so the go-live label isn't disturbed.
+router.post('/:id/billing/link-subscription', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { rows } = await pool.query('SELECT id, email FROM clients WHERE id = $1', [id]);
+    if (!rows.length) return res.status(404).json({ error: 'Client not found' });
+    const email = rows[0].email;
+    if (!email) return res.status(400).json({ error: 'Client has no email to match against Stripe.' });
+
+    const s = stripe();
+    const customers = await s.customers.list({ email, limit: 20 });
+    let found = null, customerId = null;
+    for (const c of customers.data) {
+      const subs = await s.subscriptions.list({ customer: c.id, status: 'all', limit: 20 });
+      const live = subs.data.find(su => ['active', 'trialing', 'past_due'].includes(su.status));
+      if (live) { found = live; customerId = c.id; break; }
+    }
+    if (!found) {
+      return res.status(404).json({ error: `No active Stripe subscription found for ${email}. Check the customer's email in Stripe matches this client.` });
+    }
+
+    // current_period_end lives on the sub (older APIs) or its first item (newer).
+    const periodEnd = found.current_period_end
+      || (found.items && found.items.data && found.items.data[0] && found.items.data[0].current_period_end);
+    const nextBilling = periodEnd ? new Date(periodEnd * 1000).toISOString().slice(0, 10) : null;
+
+    const upd = await pool.query(
+      `UPDATE clients SET stripe_customer_id = $2, stripe_subscription_id = $3,
+         next_billing = COALESCE($4, next_billing),
+         sub_start = COALESCE(sub_start, CURRENT_DATE)
+       WHERE id = $1 RETURNING id, restaurant_name`,
+      [id, customerId, found.id, nextBilling]
+    );
+    res.json({ linked: true, client: upd.rows[0], subscription_id: found.id, customer_id: customerId });
+  } catch (err) {
+    console.error('[ops-clients] link-subscription error', err.message);
+    res.status(500).json({ error: err.message || 'Could not link subscription' });
+  }
+});
+
 // ── SEPOS-029 — onboarding wizard endpoints ────────────────────────
 
 /**

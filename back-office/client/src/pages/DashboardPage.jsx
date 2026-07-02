@@ -8,7 +8,6 @@ import HealthDot from '../components/HealthDot.jsx';
 export default function DashboardPage() {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [productFilter, setProductFilter] = useState('all');
@@ -83,9 +82,6 @@ export default function DashboardPage() {
           >
             {copiedLink ? '✓ Copied!' : '🔗 Founder link'}
           </button>
-          <button onClick={() => setShowAdd(true)} style={btn.ghost} title="Add a placeholder row only">
-            + Quick add
-          </button>
           {/* SEPOS-029 — primary CTA → full onboarding wizard. */}
           <Link to="/clients/new" style={{ ...btn.gold, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
             🚀 Onboard new client
@@ -139,7 +135,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {showAdd && <AddClientModal onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); load(); }} />}
     </div>
   );
 }

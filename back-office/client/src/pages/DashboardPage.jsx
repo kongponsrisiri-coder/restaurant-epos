@@ -57,7 +57,12 @@ export default function DashboardPage() {
 
   const counts = clients.reduce((a, c) => ({ ...a, [c.status]: (a[c.status] || 0) + 1 }), {});
   const onlineCount = clients.filter(c => c.last_is_online).length;
-  const totalMRR = clients.filter(c => c.status === 'active').reduce((s, c) => s + (Number(c.monthly_fee) || 0), 0);
+  // A paying client shows as 'active' (billing) OR 'live' (went live via the
+  // go-live gate) — both are subscribed & using the till, so count both.
+  const PAYING = ['active', 'live'];
+  const payingClients = clients.filter(c => PAYING.includes(c.status));
+  const activeSubs = payingClients.length;
+  const totalMRR = payingClients.reduce((s, c) => s + (Number(c.monthly_fee) || 0), 0);
 
   return (
     <div>
@@ -90,7 +95,7 @@ export default function DashboardPage() {
 
       {/* Stat tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 28 }}>
-        <StatTile label="Active subs"  value={counts.active || 0} sub={`${fmtMoney(totalMRR)} MRR`}    accent={C.success} />
+        <StatTile label="Active subs"  value={activeSubs}         sub={`${fmtMoney(totalMRR)} MRR`}    accent={C.success} />
         <StatTile label="On trial"     value={counts.trial  || 0}                                      accent={C.info} />
         <StatTile label="In setup"     value={counts.setup  || 0}                                      accent={C.warning} />
         <StatTile label="Online now"   value={onlineCount}        sub={`/ ${clients.length} total`}    accent={C.gold} />

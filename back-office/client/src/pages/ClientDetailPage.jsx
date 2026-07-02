@@ -190,8 +190,9 @@ export default function ClientDetailPage() {
               <select value={client.plan || 'trial'} onChange={(e) => saveField('plan', e.target.value)} disabled={saving} style={miniInput}>
                 {isSpa
                   ? <option value="spa">Spa £49/mo</option>
-                  : <><option value="trial">Trial</option><option value="cloud">Cloud</option><option value="pro">Pro</option><option value="founder">Founder's Pack £59/mo</option></>
+                  : <><option value="trial">Trial</option><option value="cloud">Cloud</option><option value="lite_ordering">Lite — Ordering £39/mo</option><option value="lite_booking">Lite — Booking £29/mo</option><option value="lite_bundle">Lite — Bundle £49/mo</option><option value="pro">Pro £89/mo</option><option value="founder">Founder's Pack £59/mo</option></>
                 }
+                <option value="test">Test 30p/mo</option>
               </select>
             </FormRow>
             <FormRow label="Status">

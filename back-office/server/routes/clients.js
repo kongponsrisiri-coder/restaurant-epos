@@ -349,6 +349,7 @@ const BILLING_PLAN_PRICE = {
   lite_ordering: process.env.STRIPE_PRICE_LITE_ORDERING,
   lite_bundle:   process.env.STRIPE_PRICE_LITE_BUNDLE,
   spa:           process.env.STRIPE_PRICE_SPA,
+  test:          process.env.STRIPE_PRICE_TEST,   // 30p/mo end-to-end test price (unset in normal use)
 };
 
 router.post('/:id/billing/checkout-link', async (req, res) => {

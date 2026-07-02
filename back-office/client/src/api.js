@@ -143,6 +143,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json', ...tokenHeader() },
     }).then(handle),
 
+  // Delete a client record (admin only). For test/mistaken entries.
+  deleteClient: (id) =>
+    fetch(`${API}/api/clients/${id}`, { method: 'DELETE', headers: tokenHeader() }).then(handle),
+
   // BO-BILLING-001 — live billable plans discovered from Stripe.
   getBillingPlans: () =>
     fetch(`${API}/api/clients/billing/plans`, { headers: tokenHeader() }).then(handle),

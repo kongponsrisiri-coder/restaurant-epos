@@ -33,6 +33,7 @@ export default function ClientDetailPage() {
   const [linking, setLinking] = useState(false);
   const [copiedPay, setCopiedPay] = useState(false);
   const [billingPlans, setBillingPlans] = useState([]);
+  const [deleting, setDeleting] = useState(false);
 
   const me = (() => {
     try { return JSON.parse(localStorage.getItem('ops_user') || 'null'); } catch { return null; }
@@ -105,6 +106,22 @@ export default function ClientDetailPage() {
   const copyPayLink = async () => {
     try { await navigator.clipboard.writeText(payLink); setCopiedPay(true); setTimeout(() => setCopiedPay(false), 2000); }
     catch { /* clipboard blocked — the link is visible to copy by hand */ }
+  };
+
+  // Delete a client record (admin only). Blocks if a live Stripe subscription
+  // is still attached — cancel that first so we don't orphan a paying sub.
+  const deleteClient = async () => {
+    if (data.client.stripe_subscription_id && data.client.status !== 'churned') {
+      window.alert('This client still has an active Stripe subscription. Cancel the subscription first (in the Subscription card), then delete.');
+      return;
+    }
+    if (!window.confirm(
+      `Permanently delete ${data.client.restaurant_name} from the back office?\n\n` +
+      `This removes the client record only. It does NOT delete their Stripe data or any provisioned Railway/Netlify — handle those separately if needed.`
+    )) return;
+    setDeleting(true);
+    try { await api.deleteClient(id); nav('/'); }
+    catch (e) { window.alert(e.message); setDeleting(false); }
   };
 
   return (
@@ -286,6 +303,21 @@ export default function ClientDetailPage() {
               )}
             </div>
           </SectionCard>
+
+          {isAdmin && (
+            <SectionCard title="Danger zone">
+              <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 10 }}>
+                Permanently remove this client record from the back office (e.g. a test or mistaken entry). Cancel any Stripe subscription first.
+              </div>
+              <button
+                onClick={deleteClient}
+                disabled={deleting}
+                style={{ ...btn.ghost, fontSize: 13, color: C.danger || '#991b1b', borderColor: C.danger || '#fecaca', opacity: deleting ? 0.6 : 1, cursor: deleting ? 'wait' : 'pointer' }}
+              >
+                {deleting ? 'Deleting…' : '🗑 Delete client'}
+              </button>
+            </SectionCard>
+          )}
 
           <SectionCard title="Recent health">
             {health.length === 0 ? (

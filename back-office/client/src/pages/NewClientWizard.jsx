@@ -6,7 +6,7 @@
 // of automated vs still-manual steps, and a link straight to the new
 // client's detail page where the operator works through the rest.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { C, card, btn, input, label } from '../theme.js';
@@ -281,6 +281,9 @@ function Step0({ f, set }) {
 function Step1({ f, set, errors }) {
   const isSpa = f.product === 'spa';
   const nameLbl = isSpa ? 'Spa name *' : 'Restaurant name *';
+  // BO-BILLING-001 — plans live from Stripe so new products appear automatically.
+  const [plans, setPlans] = useState([]);
+  useEffect(() => { api.getBillingPlans().then(r => setPlans(r?.plans || [])).catch(() => {}); }, []);
   return (
     <Stepped
       title={`Step 1 · ${isSpa ? 'Spa' : 'Restaurant'} details`}
@@ -306,14 +309,12 @@ function Step1({ f, set, errors }) {
             {isSpa
               ? <option value="spa">Spa £49/mo</option>
               : <>
-                  {/* Values MUST match the Stripe price keys (STRIPE_PRICE_*)
-                      so "Create payment link" works. 'trial' is free/unbilled. */}
+                  {/* Live from Stripe — new recurring products appear here
+                      automatically, no code change. 'trial' is free/unbilled. */}
                   <option value="trial">Trial (no charge)</option>
-                  <option value="lite_ordering">Lite — Ordering £39/mo</option>
-                  <option value="lite_booking">Lite — Booking £29/mo</option>
-                  <option value="lite_bundle">Lite — Bundle £49/mo</option>
-                  <option value="pro">Pro £89/mo</option>
-                  <option value="founder">Founder's Pack £59/mo</option>
+                  {plans.map(p => (
+                    <option key={p.value} value={p.value}>{p.name} — £{((p.amount || 0) / 100).toFixed(2)}/{p.interval || 'mo'}</option>
+                  ))}
                 </>
             }
           </select>

@@ -32,6 +32,7 @@ export default function ClientDetailPage() {
   const [payLink, setPayLink] = useState('');
   const [linking, setLinking] = useState(false);
   const [copiedPay, setCopiedPay] = useState(false);
+  const [billingPlans, setBillingPlans] = useState([]);
 
   const me = (() => {
     try { return JSON.parse(localStorage.getItem('ops_user') || 'null'); } catch { return null; }
@@ -43,6 +44,8 @@ export default function ClientDetailPage() {
     catch (e) { console.error(e); }
   };
   useEffect(() => { load(); }, [id]);
+  // BO-BILLING-001 — live plans from Stripe so new products appear automatically.
+  useEffect(() => { api.getBillingPlans().then(r => setBillingPlans(r?.plans || [])).catch(() => {}); }, []);
 
   if (!data) return <div style={{ color: C.textMuted }}>Loading…</div>;
   const { client, health, notes, tills = [] } = data;
@@ -188,11 +191,15 @@ export default function ClientDetailPage() {
           <SectionCard title="Subscription">
             <FormRow label="Plan">
               <select value={client.plan || 'trial'} onChange={(e) => saveField('plan', e.target.value)} disabled={saving} style={miniInput}>
-                {isSpa
-                  ? <option value="spa">Spa £49/mo</option>
-                  : <><option value="trial">Trial</option><option value="lite_ordering">Lite — Ordering £39/mo</option><option value="lite_booking">Lite — Booking £29/mo</option><option value="lite_bundle">Lite — Bundle £49/mo</option><option value="pro">Pro £89/mo</option><option value="founder">Founder's Pack £59/mo</option><option value="starter">Starter (legacy — no Stripe price)</option><option value="cloud">Cloud (legacy — no Stripe price)</option></>
-                }
-                <option value="test">Test 30p/mo</option>
+                <option value="trial">Trial (no charge)</option>
+                {/* Live from Stripe — new products appear here automatically */}
+                {billingPlans.map(p => (
+                  <option key={p.value} value={p.value}>{p.name} — {fmtMoney((p.amount || 0) / 100)}/{p.interval || 'mo'}</option>
+                ))}
+                {/* keep the current plan visible even if it's a legacy value not in Stripe */}
+                {client.plan && client.plan !== 'trial' && !billingPlans.some(p => p.value === client.plan) && (
+                  <option value={client.plan}>{client.plan} (legacy — no Stripe price)</option>
+                )}
               </select>
             </FormRow>
             <FormRow label="Status">

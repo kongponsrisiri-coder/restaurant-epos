@@ -342,6 +342,9 @@ router.post('/:id/cancel-subscription', adminOnly, async (req, res) => {
 // on-site and enter their card there. On payment, the webhook
 // (checkout.session.completed) writes the Stripe ids back to this client row
 // and flips them to 'active'. Skippable — nothing is charged until they pay.
+// Legacy env-var → price mapping. Still honoured for existing plan keys, but
+// plans are now primarily discovered LIVE from Stripe (see GET /billing/plans
+// and resolvePriceId) so adding a product in Stripe needs no code/env change.
 const BILLING_PLAN_PRICE = {
   pro:           process.env.STRIPE_PRICE_PRO,
   founder:       process.env.STRIPE_PRICE_FOUNDER,
@@ -349,8 +352,47 @@ const BILLING_PLAN_PRICE = {
   lite_ordering: process.env.STRIPE_PRICE_LITE_ORDERING,
   lite_bundle:   process.env.STRIPE_PRICE_LITE_BUNDLE,
   spa:           process.env.STRIPE_PRICE_SPA,
-  test:          process.env.STRIPE_PRICE_TEST,   // 30p/mo end-to-end test price (unset in normal use)
+  test:          process.env.STRIPE_PRICE_TEST,
 };
+
+// Resolve a plan value to a Stripe price id, most specific first:
+//   1. it already IS a price id ("price_…")   2. a Stripe lookup_key
+//   3. a legacy env-mapped key                 → else null (caller 400s)
+async function resolvePriceId(plan) {
+  if (!plan) return null;
+  const v = String(plan);
+  if (v.startsWith('price_')) return v;
+  try {
+    const r = await stripe().prices.list({ lookup_keys: [v], active: true, limit: 1 });
+    if (r.data[0]) return r.data[0].id;
+  } catch (e) { console.warn('[billing] lookup_key resolve failed:', e.message); }
+  return BILLING_PLAN_PRICE[v] || null;
+}
+
+// GET /api/clients/billing/plans — live list of billable plans straight from
+// Stripe. Adding a recurring product/price in Stripe makes it appear here (and
+// in the ops dropdowns) automatically. Two-segment path can't collide with the
+// one-segment /:id routes.
+router.get('/billing/plans', async (req, res) => {
+  try {
+    const r = await stripe().prices.list({ active: true, type: 'recurring', limit: 100, expand: ['data.product'] });
+    const plans = r.data
+      .filter(p => p.product && p.product.active !== false && p.unit_amount != null)
+      .map(p => ({
+        value:    p.lookup_key || p.id,      // stored on the client + sent to checkout-link
+        price_id: p.id,
+        name:     (p.product && p.product.name) || p.nickname || p.id,
+        amount:   p.unit_amount,             // pence
+        currency: p.currency,
+        interval: p.recurring && p.recurring.interval,
+      }))
+      .sort((a, b) => (a.amount || 0) - (b.amount || 0));
+    res.json({ plans });
+  } catch (err) {
+    console.error('[ops-clients] billing/plans error', err.message);
+    res.status(500).json({ error: err.message || 'Could not load plans from Stripe' });
+  }
+});
 
 router.post('/:id/billing/checkout-link', async (req, res) => {
   try {
@@ -363,10 +405,10 @@ router.post('/:id/billing/checkout-link', async (req, res) => {
     const client = rows[0];
 
     const plan = (req.body && req.body.plan) || client.plan;
-    const priceId = BILLING_PLAN_PRICE[plan];
+    const priceId = await resolvePriceId(plan);
     if (!priceId) {
       return res.status(400).json({
-        error: `No Stripe price for plan "${plan}". Set STRIPE_PRICE_${String(plan || '').toUpperCase()} on the back-office Railway service.`,
+        error: `No Stripe price found for plan "${plan}". Create a recurring product in Stripe (optionally give it lookup_key "${plan}") — it'll appear in the plan list automatically.`,
       });
     }
 

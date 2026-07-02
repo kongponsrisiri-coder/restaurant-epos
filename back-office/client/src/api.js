@@ -143,6 +143,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json', ...tokenHeader() },
     }).then(handle),
 
+  // BO-BILLING-001 — live billable plans discovered from Stripe.
+  getBillingPlans: () =>
+    fetch(`${API}/api/clients/billing/plans`, { headers: tokenHeader() }).then(handle),
+
   // BO-BILLING-001 — Stripe Checkout link for a client's subscription.
   createCheckoutLink: (id, plan) =>
     fetch(`${API}/api/clients/${id}/billing/checkout-link`, {

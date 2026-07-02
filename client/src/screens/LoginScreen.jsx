@@ -45,12 +45,22 @@ export default function LoginScreen({ onLogin }) {
   const [restaurantName, setRestaurantName] = useState('');
   const [now, setNow] = useState(() => new Date());
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
-  // SEPOS-RESET-001 — hidden long-press (top-left corner, ~5s) opens the
-  // "reset this till for a new client" dialog. No visible control.
+  // SEPOS-RESET-001 — hidden trigger on the top-left corner opens the
+  // "reset this till for a new client" dialog. No visible control. Two ways
+  // in: long-press ~5s (touch tills), or 5 quick clicks (easier with a mouse
+  // on PC/Mac). Both are deliberate, and the dialog still asks to confirm.
   const [showReset, setShowReset] = useState(false);
   const holdTimer = useRef(null);
+  const clickCount = useRef(0);
+  const lastClick = useRef(0);
   const startHold = () => { holdTimer.current = setTimeout(() => setShowReset(true), 5000); };
   const cancelHold = () => { if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null; } };
+  const onHotspotClick = () => {
+    const t = Date.now();
+    clickCount.current = (t - lastClick.current > 1200) ? 1 : clickCount.current + 1;
+    lastClick.current = t;
+    if (clickCount.current >= 5) { clickCount.current = 0; setShowReset(true); }
+  };
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -289,6 +299,7 @@ export default function LoginScreen({ onLogin }) {
           <div
             onPointerDown={startHold} onPointerUp={cancelHold}
             onPointerLeave={cancelHold} onPointerCancel={cancelHold}
+            onClick={onHotspotClick}
             aria-hidden="true"
             style={{ position: 'absolute', top: 0, left: 0, width: 60, height: 60, zIndex: 5 }}
           />

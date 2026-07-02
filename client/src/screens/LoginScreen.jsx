@@ -45,11 +45,11 @@ export default function LoginScreen({ onLogin }) {
   const [restaurantName, setRestaurantName] = useState('');
   const [now, setNow] = useState(() => new Date());
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
-  // SEPOS-RESET-001 — hidden long-press (top-left corner, ~1.5s) opens the
+  // SEPOS-RESET-001 — hidden long-press (top-left corner, ~5s) opens the
   // "reset this till for a new client" dialog. No visible control.
   const [showReset, setShowReset] = useState(false);
   const holdTimer = useRef(null);
-  const startHold = () => { holdTimer.current = setTimeout(() => setShowReset(true), 1500); };
+  const startHold = () => { holdTimer.current = setTimeout(() => setShowReset(true), 5000); };
   const cancelHold = () => { if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null; } };
 
   useEffect(() => {

@@ -5297,7 +5297,8 @@ app.get('/api/takeaway/orders/active', async (req, res) => {
       FROM orders o
       WHERE o.order_type = 'takeaway'
         AND COALESCE(o.takeaway_status, 'pending') <> 'collected'
-        AND o.status <> 'closed'
+        AND o.status NOT IN ('closed', 'cancelled')
+        AND o.table_id IS NULL
       ORDER BY o.pickup_time ASC NULLS LAST, o.id ASC
     `);
     res.json(r.rows);

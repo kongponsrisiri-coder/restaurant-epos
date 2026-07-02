@@ -95,6 +95,7 @@ export const label = {
 
 export const STATUS_STYLE = {
   setup:   { bg: '#fef3c7', color: '#92400e', label: 'Setup' },
+  live:    { bg: '#dcfce7', color: '#166534', label: 'Live' },
   active:  { bg: '#dcfce7', color: '#166534', label: 'Active' },
   trial:   { bg: '#dbeafe', color: '#1e40af', label: 'Trial' },
   past_due:{ bg: '#ffedd5', color: '#9a3412', label: 'Past due' },

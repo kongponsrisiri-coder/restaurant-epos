@@ -56,6 +56,27 @@ ipcMain.handle('save-config', async (event, data) => {
   return { success: true };
 });
 
+// SEPOS-RESET-001 — reset this install so it can be handed to a different
+// client. Deletes config.json + the local SQLite DB, then relaunches into the
+// first-run setup wizard. Safe: all real data lives on the client's cloud.
+ipcMain.handle('reset-config', async () => {
+  try {
+    const cfg = getConfigPath();
+    if (fs.existsSync(cfg)) fs.unlinkSync(cfg);
+    const dbBase = path.join(app.getPath('userData'), 'siamepos-local.db');
+    for (const suffix of ['', '-wal', '-shm']) {
+      const f = dbBase + suffix;
+      try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch (e) { console.warn('[reset] db unlink failed:', f, e.message); }
+    }
+    app.relaunch();
+    app.exit(0);
+    return { success: true };
+  } catch (err) {
+    console.error('[reset] failed:', err);
+    return { success: false, error: err.message };
+  }
+});
+
 // ── Printing (SEPOS-025 receipts / SEPOS-026 kitchen tickets) ────────
 // The renderer enumerates the OS printers and prints HTML silently —
 // no print dialog — to a chosen device. Printing goes through the

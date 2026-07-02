@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { loginStaff, clockIn, clockOut, emailLogin, storePinSession, getStaff, getRestaurant, getSettings } from '../api';
+import { resetDevice, currentTillTarget, canSwitchClient } from '../utils/deviceReset';
 
 // SiamEPOS — LoginScreen (redesign per design_handoff_siamepos).
 // Split layout: left navy brand panel, right inset Paper panel with the staff
@@ -44,6 +45,12 @@ export default function LoginScreen({ onLogin }) {
   const [restaurantName, setRestaurantName] = useState('');
   const [now, setNow] = useState(() => new Date());
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+  // SEPOS-RESET-001 — hidden long-press (top-left corner, ~1.5s) opens the
+  // "reset this till for a new client" dialog. No visible control.
+  const [showReset, setShowReset] = useState(false);
+  const holdTimer = useRef(null);
+  const startHold = () => { holdTimer.current = setTimeout(() => setShowReset(true), 1500); };
+  const cancelHold = () => { if (holdTimer.current) { clearTimeout(holdTimer.current); holdTimer.current = null; } };
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -278,6 +285,13 @@ export default function LoginScreen({ onLogin }) {
       <div style={{ flex: 1, padding: isMobile ? '0 12px 16px' : 28, display: 'flex', minWidth: 0 }}>
         <div style={{ position: 'relative', flex: 1, background: PAPER, borderRadius: isMobile ? 18 : 24, padding: isMobile ? '24px 16px' : 40,
           boxShadow: '0 20px 50px rgba(0,0,0,.35)', display: 'flex', flexDirection: 'column', justifyContent: 'center', overflowY: 'auto' }}>
+          {/* SEPOS-RESET-001 — invisible long-press hotspot (top-left) → reset dialog */}
+          <div
+            onPointerDown={startHold} onPointerUp={cancelHold}
+            onPointerLeave={cancelHold} onPointerCancel={cancelHold}
+            aria-hidden="true"
+            style={{ position: 'absolute', top: 0, left: 0, width: 60, height: 60, zIndex: 5 }}
+          />
           {!isMobile && clock}
           <div style={{ width: '100%', maxWidth: 760, margin: '0 auto' }}>
             {panelContent}
@@ -286,6 +300,25 @@ export default function LoginScreen({ onLogin }) {
           </div>
         </div>
       </div>
+
+      {/* SEPOS-RESET-001 — reset-for-new-client confirm dialog */}
+      {showReset && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000, padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 18, padding: '26px 24px', width: 400, maxWidth: '92vw', color: '#1a1a2e', fontFamily: UI_FONT }}>
+            <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 10 }}>🔄 Reset this till?</div>
+            <div style={{ fontSize: 14, color: '#555', lineHeight: 1.6, marginBottom: 8 }}>
+              {canSwitchClient()
+                ? <>This disconnects the till from<br /><b style={{ wordBreak: 'break-all' }}>{currentTillTarget()}</b><br />and returns it to first-time setup, ready for a new client.</>
+                : <>This logs the till out. A browser till is fixed to its web address, so it can’t be pointed at a different client from here.</>}
+            </div>
+            <div style={{ fontSize: 12.5, color: '#16a34a', fontWeight: 600, marginBottom: 20 }}>✓ Nothing is lost — all data is saved on the cloud.</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowReset(false)} style={{ flex: 1, padding: '13px', borderRadius: 12, border: '1px solid #ddd', background: '#fff', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => resetDevice()} style={{ flex: 1, padding: '13px', borderRadius: 12, border: 'none', background: RED, color: '#fff', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>{canSwitchClient() ? 'Reset till' : 'Log out'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

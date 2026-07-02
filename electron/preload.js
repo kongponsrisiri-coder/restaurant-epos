@@ -5,6 +5,9 @@ contextBridge.exposeInMainWorld('siamepos', {
   isElectron: true,
   // Used by the first-time setup wizard to persist electron/config.json
   saveConfig: (data) => ipcRenderer.invoke('save-config', data),
+  // SEPOS-RESET-001 — wipe config.json + local DB and relaunch to the wizard
+  // (hand this install to a different client). Triggered by the hidden reset.
+  resetConfig: () => ipcRenderer.invoke('reset-config'),
   onUpdateReady: (cb) => {
     ipcRenderer.on('siamepos:update-ready', () => cb && cb());
   },

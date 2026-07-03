@@ -14,7 +14,7 @@ export default function Clock({ fixed = false }) {
 
   const body = (
     <div style={{ textAlign: 'right', lineHeight: 1.05 }}>
-      <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: fixed ? 22 : 16, color: '#C9A84C' }}>{time}</div>
+      <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: fixed ? 22 : 16, color: 'var(--brand-accent,#C9A84C)' }}>{time}</div>
       <div style={{ fontSize: fixed ? 11 : 10, color: 'rgba(255,255,255,0.6)' }}>{date}</div>
     </div>
   );

@@ -56,7 +56,7 @@ export default function LockScreen({ state, onUnlocked }) {
           disabled={checking}
           style={{
             padding: '16px 28px', borderRadius: 12, border: 'none',
-            background: checking ? '#6b5b7a' : '#C9A84C', color: '#1a1a2e',
+            background: checking ? '#6b5b7a' : 'var(--brand-accent,#C9A84C)', color: '#1a1a2e',
             fontSize: 17, fontWeight: 800, cursor: checking ? 'default' : 'pointer',
             minWidth: 240,
           }}

@@ -367,7 +367,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   // Uses ONLY existing state + handlers; all other stages render via the modal
   // return below, unchanged. On a small screen it stacks (still works).
   if (stage === 'bill' && !isMobile) {
-    const NAVY = '#0D1B3E', GOLD = '#C9A84C', RED = '#e94560', PAPER = '#F4F1EA';
+    const NAVY = 'var(--brand-primary,#0D1B3E)', GOLD = 'var(--brand-accent,#C9A84C)', RED = '#e94560', PAPER = '#F4F1EA';
     const INK = '#1a1a2e', MUTED = '#7C766A', FAINT = '#9A9488', BORDER = '#E7E2D6';
     const GREENB = '#5FD39B', GOLD_L = '#9A7B1F';
     const SERIF = "Georgia, 'Times New Roman', serif";
@@ -494,7 +494,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   <div style={{ border: '1.5px dashed rgba(255,255,255,.35)', borderRadius: 14, padding: '18px 16px', marginTop: 14, color: 'rgba(255,255,255,.7)', fontSize: 14, lineHeight: 1.5 }}>
                     Present {selectedMethod === 'Card' ? 'card' : 'the'} payment on the reader, then confirm.
                   </div>
-                  {actualTip > 0 && <div style={{ marginTop: 10, fontSize: 14, color: '#C9A84C' }}>Incl. tip £{actualTip.toFixed(2)}</div>}
+                  {actualTip > 0 && <div style={{ marginTop: 10, fontSize: 14, color: 'var(--brand-accent,#C9A84C)' }}>Incl. tip £{actualTip.toFixed(2)}</div>}
                 </div>
               ) : (
                 <div style={{ marginTop: 24, color: 'rgba(255,255,255,.6)', fontSize: 15 }}>Choose a payment method to continue.</div>
@@ -520,7 +520,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
         <div style={{ position:'fixed', top: 0, right: 0, bottom: 0, left: 0, background:'rgba(0,0,0,0.95)', zIndex:10001, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:20 }}>
           <div style={{ color:'white', fontSize:18, fontWeight:700, marginBottom:6, textAlign:'center' }}>Scan voucher QR</div>
           <div style={{ color:'#ccc', fontSize:13, marginBottom:18, textAlign:'center', maxWidth:340 }}>Point the camera at the QR on the customer's Apple Wallet pass</div>
-          <div id="voucher-qr-reader" style={{ width:'min(90vw, 360px)', background:'black', borderRadius:14, overflow:'hidden', border:'2px solid #C9A84C' }} />
+          <div id="voucher-qr-reader" style={{ width:'min(90vw, 360px)', background:'black', borderRadius:14, overflow:'hidden', border:'2px solid var(--brand-accent,#C9A84C)' }} />
           <button onClick={handleStopScan}
             style={{ marginTop:22, padding:'14px 28px', borderRadius:10, border:'none', background:'#dc2626', color:'white', fontWeight:700, fontSize:16, cursor:'pointer' }}>
             ✕ Cancel
@@ -602,7 +602,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
               ) : (
                 <>
                   <button onClick={() => setStage('method')} style={{ padding:'18px', borderRadius:12, border:'none', background:'#1a1a2e', color:'white', fontSize:18, fontWeight:800, cursor:'pointer' }}>💳 Take Payment — £{billTotal.toFixed(2)}</button>
-                  <button onClick={() => { setSplitPaid([]); setSplitTenders([]); setStage('split_equal'); }} style={{ padding:'14px', borderRadius:12, border:'2px solid #C9A84C', background:'white', color:'#C9A84C', fontSize:15, fontWeight:700, cursor:'pointer' }}>✂️ Split Equally</button>
+                  <button onClick={() => { setSplitPaid([]); setSplitTenders([]); setStage('split_equal'); }} style={{ padding:'14px', borderRadius:12, border:'2px solid var(--brand-accent,#C9A84C)', background:'white', color:'var(--brand-accent,#C9A84C)', fontSize:15, fontWeight:700, cursor:'pointer' }}>✂️ Split Equally</button>
                   <button onClick={() => { setItemAssignments({}); setSplitItemPaid([]); setSplitTenders([]); setActivePerson(0); setStage('split_items'); }} style={{ padding:'14px', borderRadius:12, border:'2px solid #3b82f6', background:'white', color:'#3b82f6', fontSize:15, fontWeight:700, cursor:'pointer' }}>🍽️ Split by Item</button>
                 </>
               )}
@@ -673,7 +673,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                       {!isPaid
                         ? <div style={{ display:'flex', gap:8 }}>
                             <button onClick={() => handleSplitEqualPayment(i, 'Cash')} style={{ padding:isMobile?'12px 14px':'10px 14px', borderRadius:8, border:'none', background:'#1a1a2e', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>💵 Cash</button>
-                            <button onClick={() => handleSplitEqualPayment(i, 'Card')} style={{ padding:isMobile?'12px 14px':'10px 14px', borderRadius:8, border:'none', background:'#C9A84C', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>💳 Card</button>
+                            <button onClick={() => handleSplitEqualPayment(i, 'Card')} style={{ padding:isMobile?'12px 14px':'10px 14px', borderRadius:8, border:'none', background:'var(--brand-accent,#C9A84C)', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>💳 Card</button>
                             <button onClick={() => handleSplitEqualPrint(i)} style={{ padding:isMobile?'12px 14px':'10px 14px', borderRadius:8, border:'2px solid #1a1a2e', background:'white', color:'#1a1a2e', fontWeight:700, fontSize:13, cursor:'pointer' }}>🖨️ Print</button>
                           </div>
                         : <div style={{ color:'#22c55e', fontWeight:700 }}>Paid ✓</div>
@@ -783,7 +783,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 {serviceChargeEnabled&&serviceCharge>0 && <div style={{ fontSize:13, color:'#888', marginTop:4 }}>Incl. service charge £{serviceCharge.toFixed(2)}</div>}
               </div>
               {hasVoucherDiscount && (
-                <div style={{ background:'#fdf6ec', border:'2px solid #C9A84C', borderRadius:12, padding:'12px 16px', marginBottom:16, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+                <div style={{ background:'#fdf6ec', border:'2px solid var(--brand-accent,#C9A84C)', borderRadius:12, padding:'12px 16px', marginBottom:16, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontSize:11, color:'#5b4a2a', textTransform:'uppercase', letterSpacing:0.5, fontWeight:700 }}>🎁 Voucher applied</div>
                     <div style={{ fontSize:14, color:'#5b4a2a', fontFamily:'Menlo,Consolas,monospace', fontWeight:700, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{order.discount_reason}</div>
@@ -799,7 +799,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 {[{method:'Cash',icon:'💵'},{method:'Card',icon:'💳'},{method:'Other',icon:'🔄'}].map(({method,icon}) => (
                   <button key={method} onClick={() => { setSelectedMethod(method); setPaymentInput(''); setStage('amount'); }} style={{ padding:isMobile?'22px':'20px', borderRadius:12, border:'2px solid #1a1a2e', background:'white', color:'#1a1a2e', fontSize:isMobile?22:20, fontWeight:700, cursor:'pointer' }}>{icon} {method}</button>
                 ))}
-                <button onClick={() => { setVoucherCode(''); setVoucherDetails(null); setVoucherErr(''); setStage('voucher'); }} style={{ padding:isMobile?'22px':'20px', borderRadius:12, border:'2px solid #C9A84C', background:'#fdf6ec', color:'#5b4a2a', fontSize:isMobile?22:20, fontWeight:700, cursor:'pointer' }}>🎁 Voucher</button>
+                <button onClick={() => { setVoucherCode(''); setVoucherDetails(null); setVoucherErr(''); setStage('voucher'); }} style={{ padding:isMobile?'22px':'20px', borderRadius:12, border:'2px solid var(--brand-accent,#C9A84C)', background:'#fdf6ec', color:'#5b4a2a', fontSize:isMobile?22:20, fontWeight:700, cursor:'pointer' }}>🎁 Voucher</button>
               </div>
               {!isMobile && <button onClick={() => setStage('bill')} style={{ width:'100%', padding:'14px', borderRadius:10, border:'none', background:'#f0f0f0', cursor:'pointer', fontWeight:700, fontSize:15 }}>← Back to Bill</button>}
             </div>
@@ -816,14 +816,14 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 <div style={{ fontSize: 36, fontWeight: 800, color: '#1a1a2e' }}>£{billTotal.toFixed(2)}</div>
               </div>
 
-              <div style={{ background: '#fdf6ec', border: '2px solid #C9A84C', borderRadius: 12, padding: 18, marginBottom: 16 }}>
+              <div style={{ background: '#fdf6ec', border: '2px solid var(--brand-accent,#C9A84C)', borderRadius: 12, padding: 18, marginBottom: 16 }}>
                 <label style={{ fontSize: 12, color: '#5b4a2a', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, display: 'block', marginBottom: 8 }}>Voucher code</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input type="text" autoFocus value={voucherCode}
                     onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleVoucherLookup(); }}
                     placeholder="GIFT-XXXXXXXX"
-                    style={{ flex: 1, padding: '14px', border: '1px solid #C9A84C', borderRadius: 8, fontFamily: 'Menlo,Consolas,monospace', fontSize: 18, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', background: 'white' }} />
+                    style={{ flex: 1, padding: '14px', border: '1px solid var(--brand-accent,#C9A84C)', borderRadius: 8, fontFamily: 'Menlo,Consolas,monospace', fontSize: 18, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', background: 'white' }} />
                   <button onClick={() => { setVoucherErr(''); setScanning(true); }} title="Scan QR from customer's Apple Wallet pass"
                     style={{ padding: '14px 16px', borderRadius: 8, border: '2px solid #1e3a6e', background: 'white', color: '#1e3a6e', fontWeight: 700, fontSize: 18, cursor: 'pointer' }}>
                     📷
@@ -864,7 +864,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                     </div>
                   )}
                   <button onClick={handleVoucherApply} disabled={voucherLoading}
-                    style={{ marginTop: 14, width: '100%', padding: 16, borderRadius: 10, border: 'none', background: '#C9A84C', color: '#1a1a2e', fontWeight: 800, fontSize: 16, cursor: 'pointer', opacity: voucherLoading ? 0.5 : 1 }}>
+                    style={{ marginTop: 14, width: '100%', padding: 16, borderRadius: 10, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: '#1a1a2e', fontWeight: 800, fontSize: 16, cursor: 'pointer', opacity: voucherLoading ? 0.5 : 1 }}>
                     {voucherLoading
                       ? 'Processing…'
                       : Number(voucherDetails.balance) >= billTotal
@@ -886,7 +886,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
             {isMobile && (
               <div style={{ display:'flex', flexDirection:'column', minHeight:'100vh' }}>
                 {mobileTopBar(`${selectedMethod==='Cash'?'💵 Cash':selectedMethod==='Card'?'💳 Card':'🔄 Other'} — £${billTotal.toFixed(2)}`, () => setStage('method'), '← Back')}
-                <div style={{ background:'#0D1B3E', padding:'20px 20px 16px', display:'flex', flexDirection:'column' }}>
+                <div style={{ background:'var(--brand-primary,#0D1B3E)', padding:'20px 20px 16px', display:'flex', flexDirection:'column' }}>
                   <div style={{ fontSize:12, color:'rgba(255,255,255,0.5)', marginBottom:4 }}>Amount received</div>
                   <div style={{ fontSize:46, fontWeight:800, color:'white', fontFamily:'monospace', letterSpacing:1 }}>£{paymentInput||'0.00'}</div>
                   {canPay&&selectedMethod==='Cash'&&change>0 && <div style={{ marginTop:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}><span style={{ fontSize:13, color:'rgba(255,255,255,0.5)' }}>Change to give</span><span style={{ fontSize:22, fontWeight:800, color:'#22c55e' }}>£{change.toFixed(2)}</span></div>}
@@ -895,7 +895,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 <div style={{ padding:'12px 16px 8px' }}>
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
                     {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(btn => (
-                      <button key={btn} onClick={() => handleNumpad(btn)} style={{ height:72, borderRadius:12, border:'none', fontSize:26, fontWeight:700, cursor:'pointer', background:btn==='⌫'?'#fee2e2':'#f8f8f8', color:btn==='⌫'?'#ef4444':'#0D1B3E' }}>{btn}</button>
+                      <button key={btn} onClick={() => handleNumpad(btn)} style={{ height:72, borderRadius:12, border:'none', fontSize:26, fontWeight:700, cursor:'pointer', background:btn==='⌫'?'#fee2e2':'#f8f8f8', color:btn==='⌫'?'#ef4444':'var(--brand-primary,#0D1B3E)' }}>{btn}</button>
                     ))}
                   </div>
                   <button onClick={() => handleNumpad('C')} style={{ width:'100%', marginTop:10, padding:'14px', borderRadius:12, border:'none', background:'#f0f0f0', color:'#555', fontSize:16, fontWeight:700, cursor:'pointer' }}>Clear</button>
@@ -904,7 +904,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   <div style={{ fontSize:12, fontWeight:600, color:'#aaa', marginBottom:8 }}>Quick amounts</div>
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8 }}>
                     {[billTotal,Math.ceil(billTotal/5)*5,Math.ceil(billTotal/10)*10,Math.ceil(billTotal/20)*20].filter((v,i,a)=>a.indexOf(v)===i).map(amount => (
-                      <button key={amount} onClick={() => setPaymentInput(amount.toFixed(2))} style={{ padding:'13px', borderRadius:10, border:`2px solid ${paymentInput===amount.toFixed(2)?'#C9A84C':'#e0e0e0'}`, background:paymentInput===amount.toFixed(2)?'#C9A84C':'white', color:paymentInput===amount.toFixed(2)?'white':'#0D1B3E', fontWeight:700, cursor:'pointer', fontSize:16 }}>£{amount.toFixed(2)}</button>
+                      <button key={amount} onClick={() => setPaymentInput(amount.toFixed(2))} style={{ padding:'13px', borderRadius:10, border:`2px solid ${paymentInput===amount.toFixed(2)?'var(--brand-accent,#C9A84C)':'#e0e0e0'}`, background:paymentInput===amount.toFixed(2)?'var(--brand-accent,#C9A84C)':'white', color:paymentInput===amount.toFixed(2)?'white':'var(--brand-primary,#0D1B3E)', fontWeight:700, cursor:'pointer', fontSize:16 }}>£{amount.toFixed(2)}</button>
                     ))}
                   </div>
                 </div>
@@ -933,7 +933,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                     <div style={{ fontSize:13, fontWeight:600, color:'#888', marginBottom:10 }}>Quick amounts</div>
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8 }}>
                       {[billTotal,Math.ceil(billTotal/5)*5,Math.ceil(billTotal/10)*10,Math.ceil(billTotal/20)*20].filter((v,i,a)=>a.indexOf(v)===i).map(amount => (
-                        <button key={amount} onClick={() => setPaymentInput(amount.toFixed(2))} style={{ padding:'12px', borderRadius:10, border:`2px solid ${paymentInput===amount.toFixed(2)?'#C9A84C':'#1a1a2e'}`, background:paymentInput===amount.toFixed(2)?'#C9A84C':'white', color:paymentInput===amount.toFixed(2)?'white':'#1a1a2e', fontWeight:700, cursor:'pointer', fontSize:15 }}>£{amount.toFixed(2)}</button>
+                        <button key={amount} onClick={() => setPaymentInput(amount.toFixed(2))} style={{ padding:'12px', borderRadius:10, border:`2px solid ${paymentInput===amount.toFixed(2)?'var(--brand-accent,#C9A84C)':'#1a1a2e'}`, background:paymentInput===amount.toFixed(2)?'var(--brand-accent,#C9A84C)':'white', color:paymentInput===amount.toFixed(2)?'white':'#1a1a2e', fontWeight:700, cursor:'pointer', fontSize:15 }}>£{amount.toFixed(2)}</button>
                       ))}
                     </div>
                   </div>

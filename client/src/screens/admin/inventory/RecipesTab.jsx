@@ -100,7 +100,7 @@ export default function RecipesTab() {
             {/* Dish header */}
             <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div><div style={{ fontSize: 18, fontWeight: 800, color: '#1a1a2e' }}>{selectedItem.name}</div>{selectedItem.name_alt && <div style={{ fontSize: 13, color: '#C9A84C', marginTop: 2 }}>{selectedItem.name_alt}</div>}</div>
+                <div><div style={{ fontSize: 18, fontWeight: 800, color: '#1a1a2e' }}>{selectedItem.name}</div>{selectedItem.name_alt && <div style={{ fontSize: 13, color: 'var(--brand-accent,#C9A84C)', marginTop: 2 }}>{selectedItem.name_alt}</div>}</div>
                 <div style={{ textAlign: 'right' }}><div style={{ fontSize: 22, fontWeight: 800, color: '#e94560' }}>£{Number(selectedItem.price).toFixed(2)}</div><div style={{ fontSize: 12, color: '#888' }}>menu price</div></div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
@@ -117,7 +117,7 @@ export default function RecipesTab() {
               {lines.length === 0 && <div style={{ padding: '24px 16px', textAlign: 'center', color: '#bbb', fontSize: 13 }}>No ingredients added yet</div>}
               {lines.map((line, i) => (
                 <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 90px 36px', padding: '10px 16px', borderBottom: '1px solid #f0f0f0', fontSize: 13, alignItems: 'center' }}>
-                  <div><div style={{ fontWeight: 600, color: '#1a1a2e' }}>{ingredients.find(i => i.id === line.ingredient_id)?.is_batch && <span title="Batch ingredient — cost from kitchen prep">🥣 </span>}{line.ingredient_name}</div>{line.ingredient_name_th && <div style={{ fontSize: 11, color: '#C9A84C' }}>{line.ingredient_name_th}</div>}<div style={{ fontSize: 10, color: '#aaa' }}>yield {line.yield_percentage}% · £{Number(line.cost_per_unit).toFixed(2)}/{line.unit}</div></div>
+                  <div><div style={{ fontWeight: 600, color: '#1a1a2e' }}>{ingredients.find(i => i.id === line.ingredient_id)?.is_batch && <span title="Batch ingredient — cost from kitchen prep">🥣 </span>}{line.ingredient_name}</div>{line.ingredient_name_th && <div style={{ fontSize: 11, color: 'var(--brand-accent,#C9A84C)' }}>{line.ingredient_name_th}</div>}<div style={{ fontSize: 10, color: '#aaa' }}>yield {line.yield_percentage}% · £{Number(line.cost_per_unit).toFixed(2)}/{line.unit}</div></div>
                   <span style={{ textAlign: 'right', color: '#555' }}>{line.quantity_used}</span>
                   <span style={{ textAlign: 'center', color: '#555' }}>{line.unit}</span>
                   <span style={{ textAlign: 'right', fontWeight: 700, color: '#1a1a2e' }}>£{Number(line.line_cost).toFixed(2)}</span>

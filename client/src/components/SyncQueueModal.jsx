@@ -87,7 +87,7 @@ export default function SyncQueueModal({ onClose }) {
       <div style={panel}>
         <div style={header}>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#0d1b3e' }}>Sync queue</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--brand-primary,#0d1b3e)' }}>Sync queue</div>
             <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
               {entries === null ? 'Loading…'
                 : entries.length === 0 ? 'Queue is empty.'
@@ -116,7 +116,7 @@ export default function SyncQueueModal({ onClose }) {
               <div key={e.id} style={row}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: '#0d1b3e' }}>{label}</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--brand-primary,#0d1b3e)' }}>{label}</span>
                     <span style={{ fontSize: 11, color: '#94a3b8' }}>#{e.id} · {ago(e.created_at)}</span>
                   </div>
                   <div style={{ fontSize: 12, color: '#475569', marginTop: 3, fontFamily: 'ui-monospace, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -163,7 +163,7 @@ const refreshBtn = {
   width: 32, height: 32, borderRadius: 8, fontSize: 16, cursor: 'pointer',
 };
 const syncNowBtn = {
-  background: '#0d1b3e', color: 'white', border: 'none',
+  background: 'var(--brand-primary,#0d1b3e)', color: 'white', border: 'none',
   padding: '7px 12px', borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: 'pointer',
   whiteSpace: 'nowrap',
 };

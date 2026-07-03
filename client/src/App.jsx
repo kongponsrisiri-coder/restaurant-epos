@@ -24,7 +24,7 @@ import './App.css';
 
 // ── Sandy: Lotus badge logo mark — replaces SVG flags ─────────────
 // Used in both navbars (order screen + main layout)
-// Brand CI: Thai Gold #C9A84C on Deep Navy #0D1B3E
+// Brand CI: Thai Gold var(--brand-accent,#C9A84C) on Deep Navy var(--brand-primary,#0D1B3E)
 const LogoBrand = () => (
   <span className="navbar-brand" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
     {/* Lotus badge icon mark */}
@@ -34,21 +34,21 @@ const LogoBrand = () => (
       style={{ width: 32, height: 32, flexShrink: 0 }}
       aria-hidden="true"
     >
-      <circle cx="50" cy="50" r="45" fill="none" stroke="#C9A84C" strokeWidth="1.8"/>
-      <circle cx="50" cy="50" r="39" fill="none" stroke="#C9A84C" strokeWidth="0.6" opacity="0.28"/>
+      <circle cx="50" cy="50" r="45" fill="none" stroke="var(--brand-accent,#C9A84C)" strokeWidth="1.8"/>
+      <circle cx="50" cy="50" r="39" fill="none" stroke="var(--brand-accent,#C9A84C)" strokeWidth="0.6" opacity="0.28"/>
       <g transform="translate(50,50)">
-        <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C"/>
-        <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/>
-        <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/>
-        <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/>
-        <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/>
-        <circle cx="0" cy="0" r="9" fill="#0D1B3E"/>
-        <circle cx="0" cy="0" r="5" fill="#C9A84C"/>
+        <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="var(--brand-accent,#C9A84C)"/>
+        <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="var(--brand-accent,#C9A84C)" opacity="0.82" transform="rotate(72)"/>
+        <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="var(--brand-accent,#C9A84C)" opacity="0.62" transform="rotate(144)"/>
+        <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="var(--brand-accent,#C9A84C)" opacity="0.62" transform="rotate(216)"/>
+        <path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="var(--brand-accent,#C9A84C)" opacity="0.82" transform="rotate(288)"/>
+        <circle cx="0" cy="0" r="9" fill="var(--brand-primary,#0D1B3E)"/>
+        <circle cx="0" cy="0" r="5" fill="var(--brand-accent,#C9A84C)"/>
       </g>
     </svg>
     {/* Wordmark */}
     <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, letterSpacing: '-0.5px' }}>
-      <span style={{ color: 'white' }}>Siam</span><span style={{ color: '#C9A84C' }}>EPOS</span>
+      <span style={{ color: 'white' }}>Siam</span><span style={{ color: 'var(--brand-accent,#C9A84C)' }}>EPOS</span>
     </span>
   </span>
 );
@@ -249,7 +249,7 @@ export default function App() {
         </span>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={handleInstall} style={{
-            background: '#C9A84C', color: '#0D1B3E', border: 'none',
+            background: 'var(--brand-accent,#C9A84C)', color: 'var(--brand-primary,#0D1B3E)', border: 'none',
             padding: '6px 14px', borderRadius: 6,
             fontWeight: 700, fontSize: 13, cursor: 'pointer',
           }}>Install</button>
@@ -392,8 +392,8 @@ export default function App() {
                 onClick={toggleCounterMode}
                 title={counterMode ? 'Switch to floor (dine-in) mode' : 'Switch to counter (till) mode'}
                 style={{
-                  background: counterMode ? '#C9A84C' : 'rgba(255,255,255,0.12)',
-                  color: counterMode ? '#0D1B3E' : 'white',
+                  background: counterMode ? 'var(--brand-accent,#C9A84C)' : 'rgba(255,255,255,0.12)',
+                  color: counterMode ? 'var(--brand-primary,#0D1B3E)' : 'white',
                   border: '1px solid rgba(255,255,255,0.2)',
                   borderRadius: 6, padding: isMobile ? '5px 9px' : '6px 12px',
                   fontSize: isMobile ? 11 : 12, fontWeight: 800, cursor: 'pointer',
@@ -422,7 +422,7 @@ export default function App() {
                 style={{
                   background: screen === item.key ? 'rgba(201,168,76,0.2)' : 'transparent',
                   border: 'none',
-                  color: screen === item.key ? '#C9A84C' : 'rgba(255,255,255,0.8)',
+                  color: screen === item.key ? 'var(--brand-accent,#C9A84C)' : 'rgba(255,255,255,0.8)',
                   padding: '12px 16px', borderRadius: 8,
                   textAlign: 'left', fontSize: 15, fontWeight: 600, cursor: 'pointer',
                   opacity: item.locked ? 0.5 : 1,
@@ -476,7 +476,7 @@ export default function App() {
       {updateReady && updateBannerAllowed && (
         <div style={{
           position: 'fixed', bottom: 16, left: 16, right: 16, maxWidth: 460, margin: '0 auto',
-          zIndex: 100001, background: '#0D1B3E', color: 'white', borderRadius: 12,
+          zIndex: 100001, background: 'var(--brand-primary,#0D1B3E)', color: 'white', borderRadius: 12,
           padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12,
           boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
         }}>
@@ -485,7 +485,7 @@ export default function App() {
             <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13 }}>A new version of SiamEPOS has downloaded.</span>
           </div>
           <button onClick={() => { window.siamepos && window.siamepos.restartToUpdate && window.siamepos.restartToUpdate(); }}
-            style={{ background: '#C9A84C', color: '#0D1B3E', border: 'none', borderRadius: 8, padding: '10px 16px', fontWeight: 800, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            style={{ background: 'var(--brand-accent,#C9A84C)', color: 'var(--brand-primary,#0D1B3E)', border: 'none', borderRadius: 8, padding: '10px 16px', fontWeight: 800, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap' }}>
             Restart now
           </button>
           <button onClick={() => setUpdateReady(false)} aria-label="Dismiss"

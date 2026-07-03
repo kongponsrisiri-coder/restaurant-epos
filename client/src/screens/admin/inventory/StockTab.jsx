@@ -85,7 +85,7 @@ export default function StockTab() {
                     ? <div style={{ fontWeight: 500, color: '#ef4444', opacity: 0.6, fontStyle: 'italic' }}>Deleted ingredient</div>
                     : <div style={{ fontWeight: 600, color: '#1a1a2e' }}>{displayName}</div>
                   }
-                  {ing?.name_th && <div style={{ fontSize: 11, color: '#C9A84C' }}>{ing.name_th}</div>}
+                  {ing?.name_th && <div style={{ fontSize: 11, color: 'var(--brand-accent,#C9A84C)' }}>{ing.name_th}</div>}
                 </div>
                 <div style={{ textAlign: 'center' }}><span style={{ background: ts.bg, color: ts.color, fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 20 }}>{ts.label}</span></div>
                 <span style={{ textAlign: 'right', fontWeight: 700, color: Number(m.quantity) >= 0 ? '#22c55e' : '#ef4444' }}>{Number(m.quantity) >= 0 ? '+' : ''}{Number(m.quantity).toFixed(2)}</span>

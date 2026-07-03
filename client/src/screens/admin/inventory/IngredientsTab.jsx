@@ -70,7 +70,7 @@ export default function IngredientsTab() {
               <div key={ing.id} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 80px 70px 80px 100px 90px', padding: '12px 16px', borderBottom: '1px solid #f0f0f0', fontSize: 13, alignItems: 'center' }}>
                 <div>
                   <div style={{ fontWeight: 600, color: '#1a1a2e' }}>{ing.name_en}</div>
-                  {ing.name_th && <div style={{ fontSize: 11, color: '#C9A84C', marginTop: 1 }}>{ing.name_th}</div>}
+                  {ing.name_th && <div style={{ fontSize: 11, color: 'var(--brand-accent,#C9A84C)', marginTop: 1 }}>{ing.name_th}</div>}
                   {allergens.length > 0 && <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>{allergens.map(a => <span key={a} style={{ background: '#fee2e2', color: '#991b1b', fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4 }}>{a}</span>)}</div>}
                   {ing.supplier_name && <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📦 {ing.supplier_name}</div>}
                 </div>

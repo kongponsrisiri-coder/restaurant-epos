@@ -259,7 +259,7 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
             <div style={{ position:'absolute', top:3, left: onlinePrint ? 21 : 3, width:20, height:20, borderRadius:'50%', background:'#fff', transition:'left .15s' }} />
           </div>
           <div>
-            <div style={{ fontSize:14, fontWeight:700, color:'#0D1B3E' }}>🥡 Auto-print online orders on this device</div>
+            <div style={{ fontSize:14, fontWeight:700, color:'var(--brand-primary,#0D1B3E)' }}>🥡 Auto-print online orders on this device</div>
             <div style={{ fontSize:12, color:'#64748b', marginTop:2 }}>Turn ON for one device only — incoming website orders print to the kitchen printer automatically.</div>
           </div>
         </div>
@@ -554,7 +554,7 @@ function PrinterCard({ cardStyle }) {
           <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
             <button onClick={testPrint} disabled={testState==='printing'} style={{
               padding:'10px 20px', borderRadius:8, border:'none',
-              background: testState==='ok' ? '#22c55e' : testState==='fail' ? '#ef4444' : '#0D1B3E',
+              background: testState==='ok' ? '#22c55e' : testState==='fail' ? '#ef4444' : 'var(--brand-primary,#0D1B3E)',
               color:'white', fontWeight:700, fontSize:13,
               cursor: testState==='printing' ? 'wait' : 'pointer', transition:'background 0.2s',
             }}>{testLabel}</button>

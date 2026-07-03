@@ -49,7 +49,7 @@ export function confirm(message, options = {}) {
     const msg = document.createElement('div');
     msg.textContent = String(message ?? '');
     msg.style.cssText = `
-      font-size:15px; color:#0D1B3E; line-height:1.5;
+      font-size:15px; color:var(--brand-primary,#0D1B3E); line-height:1.5;
       white-space:pre-wrap; margin-bottom:22px;
     `;
 
@@ -68,7 +68,7 @@ export function confirm(message, options = {}) {
     okBtn.textContent = okLabel;
     okBtn.style.cssText = `
       padding:10px 20px; border:none; border-radius:8px;
-      background:${danger ? '#dc2626' : '#0D1B3E'};
+      background:${danger ? '#dc2626' : 'var(--brand-primary,#0D1B3E)'};
       color:white; font-size:14px; font-weight:700;
       cursor:pointer; font-family:inherit;
     `;

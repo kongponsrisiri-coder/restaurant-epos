@@ -81,7 +81,7 @@ function deriveCustomers(reservations) {
     const sortedAll  = [...c.visits].sort((a, b) => (b.reservation_date || '').localeCompare(a.reservation_date || ''));
     const visitCount = seated.length;
     const tag        = visitCount >= 5 ? 'VIP' : visitCount >= 2 ? 'Regular' : 'New';
-    const tagColor   = tag === 'VIP'     ? { bg: '#fef9c3', color: '#92400e', dot: '#C9A84C' }
+    const tagColor   = tag === 'VIP'     ? { bg: '#fef9c3', color: '#92400e', dot: 'var(--brand-accent,#C9A84C)' }
                      : tag === 'Regular' ? { bg: '#dbeafe', color: '#1e40af', dot: '#3b82f6' }
                      :                    { bg: '#f3f4f6', color: '#4b5563', dot: '#6b7280' };
     return { ...c, visitCount, totalBookings: c.visits.length, lastVisit: sortedAll[0]?.reservation_date || '', lastNotes: sortedAll[0]?.notes || '', tag, tagColor, sortedVisits: sortedAll };
@@ -92,7 +92,7 @@ function Initials({ name, size = 42 }) {
   const parts   = (name || '?').trim().split(' ');
   const letters = parts.length >= 2 ? parts[0][0] + parts[parts.length - 1][0] : (parts[0][0] || '?');
   return (
-    <div style={{ width: size, height: size, borderRadius: '50%', background: '#0D1B3E', color: '#C9A84C', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: size * 0.38, flexShrink: 0, fontFamily: 'Georgia, serif' }}>
+    <div style={{ width: size, height: size, borderRadius: '50%', background: 'var(--brand-primary,#0D1B3E)', color: 'var(--brand-accent,#C9A84C)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: size * 0.38, flexShrink: 0, fontFamily: 'Georgia, serif' }}>
       {letters.toUpperCase()}
     </div>
   );
@@ -343,7 +343,7 @@ export default function ReservationsScreen() {
 
       {/* New booking banner */}
       {newAlert && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9998, background: '#0D1B3E', color: 'white', padding: '12px 24px', textAlign: 'center', fontWeight: 700, fontSize: 15, boxShadow: '0 2px 12px rgba(0,0,0,0.3)', borderBottom: '2px solid #C9A84C' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9998, background: 'var(--brand-primary,#0D1B3E)', color: 'white', padding: '12px 24px', textAlign: 'center', fontWeight: 700, fontSize: 15, boxShadow: '0 2px 12px rgba(0,0,0,0.3)', borderBottom: '2px solid var(--brand-accent,#C9A84C)' }}>
           🔔 {newAlert}
         </div>
       )}
@@ -364,12 +364,12 @@ export default function ReservationsScreen() {
         return (
           <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 60px)' }}>
             {/* Shared top bar — identical to the other views so switching views never shifts the toggle */}
-            <div style={{ background: '#0D1B3E', color: 'white', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, borderBottom: '2px solid rgba(201,168,76,0.3)', flexShrink: 0 }}>
+            <div style={{ background: 'var(--brand-primary,#0D1B3E)', color: 'white', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, borderBottom: '2px solid rgba(201,168,76,0.3)', flexShrink: 0 }}>
               <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, fontFamily: 'Georgia, serif' }}>🗓️ Reservations</h1>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', background: 'rgba(255,255,255,0.12)', borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(201,168,76,0.3)' }}>
                   {[['list','📋 List'],['timeline','⏱ Timeline'],['floorplan','🗺 Floor Plan'],['calendar','📅 Calendar'],['customers','👥 Guests']].map(([v, label]) => (
-                    <button key={v} onClick={() => setView(v)} style={{ padding: '8px 14px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: view === v ? 700 : 400, background: view === v ? '#C9A84C' : 'transparent', color: view === v ? '#0D1B3E' : 'white' }}>{label}</button>
+                    <button key={v} onClick={() => setView(v)} style={{ padding: '8px 14px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: view === v ? 700 : 400, background: view === v ? 'var(--brand-accent,#C9A84C)' : 'transparent', color: view === v ? 'var(--brand-primary,#0D1B3E)' : 'white' }}>{label}</button>
                   ))}
                 </div>
                 <button onClick={loadData} style={{ background: 'rgba(255,255,255,0.12)', color: 'white', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, padding: '9px 14px', cursor: 'pointer', fontSize: 16 }}>↻</button>
@@ -391,9 +391,9 @@ export default function ReservationsScreen() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 26, marginBottom: 12, borderBottom: '1px solid #E2DCCE', paddingBottom: 8, gap: 12, flexWrap: 'wrap' }}>
                 <div style={{ fontSize: 16, fontWeight: 800, color: '#1a1a2e', letterSpacing: '.4px' }}>{filterDate ? friendlyDate(filterDate).toUpperCase() : 'ALL BOOKINGS'}</div>
                 <div style={{ display: 'flex', alignItems: 'center', background: '#fff', borderRadius: 12, border: '1px solid #E7E2D6', height: 40, overflow: 'hidden' }}>
-                  <button onClick={() => setFilterDate(shiftDay(filterDate, -1))} style={{ width: 40, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 18, color: '#0D1B3E' }}>‹</button>
-                  <button onClick={() => setFilterDate(todayStr())} style={{ minWidth: 116, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#0D1B3E' }}>{filterDate ? friendlyDate(filterDate) : 'All'}</button>
-                  <button onClick={() => setFilterDate(shiftDay(filterDate, 1))} style={{ width: 40, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 18, color: '#0D1B3E' }}>›</button>
+                  <button onClick={() => setFilterDate(shiftDay(filterDate, -1))} style={{ width: 40, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 18, color: 'var(--brand-primary,#0D1B3E)' }}>‹</button>
+                  <button onClick={() => setFilterDate(todayStr())} style={{ minWidth: 116, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--brand-primary,#0D1B3E)' }}>{filterDate ? friendlyDate(filterDate) : 'All'}</button>
+                  <button onClick={() => setFilterDate(shiftDay(filterDate, 1))} style={{ width: 40, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 18, color: 'var(--brand-primary,#0D1B3E)' }}>›</button>
                 </div>
               </div>
               {loading ? <div style={{ padding: 60, textAlign: 'center', color: '#9A9488' }}>Loading…</div>
@@ -405,7 +405,7 @@ export default function ReservationsScreen() {
                           const sel = r.id === selectedId;
                           const tn = tableName(r.table_id);
                           return (
-                            <div key={r.id} onClick={() => setSelectedId(r.id)} style={{ background: sel ? '#FFFDF4' : '#fff', border: `1.5px solid ${sel ? '#C9A84C' : '#E7E2D6'}`, borderRadius: 14, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer', minHeight: 72 }}>
+                            <div key={r.id} onClick={() => setSelectedId(r.id)} style={{ background: sel ? '#FFFDF4' : '#fff', border: `1.5px solid ${sel ? 'var(--brand-accent,#C9A84C)' : '#E7E2D6'}`, borderRadius: 14, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer', minHeight: 72 }}>
                               <div style={{ width: 64 }}>
                                 <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a2e', fontVariantNumeric: 'tabular-nums' }}>{(r.reservation_time || '').slice(0, 5)}</div>
                                 <div style={{ fontSize: 11, color: '#9A9488' }}>Dinner</div>
@@ -471,12 +471,12 @@ export default function ReservationsScreen() {
       })() : (
       <>
       {/* Header */}
-      <div style={{ background: '#0D1B3E', color: 'white', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, borderBottom: '2px solid rgba(201,168,76,0.3)' }}>
+      <div style={{ background: 'var(--brand-primary,#0D1B3E)', color: 'white', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, borderBottom: '2px solid rgba(201,168,76,0.3)' }}>
         <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, fontFamily: 'Georgia, serif' }}>🗓️ Reservations</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', background: 'rgba(255,255,255,0.12)', borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(201,168,76,0.3)' }}>
             {[['list','📋 List'],['timeline','⏱ Timeline'],['floorplan','🗺 Floor Plan'],['calendar','📅 Calendar'],['customers','👥 Guests']].map(([v, label]) => (
-              <button key={v} onClick={() => setView(v)} style={{ padding: '8px 14px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: view === v ? 700 : 400, background: view === v ? '#C9A84C' : 'transparent', color: view === v ? '#0D1B3E' : 'white' }}>{label}</button>
+              <button key={v} onClick={() => setView(v)} style={{ padding: '8px 14px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: view === v ? 700 : 400, background: view === v ? 'var(--brand-accent,#C9A84C)' : 'transparent', color: view === v ? 'var(--brand-primary,#0D1B3E)' : 'white' }}>{label}</button>
             ))}
           </div>
           <button onClick={loadData} style={{ background: 'rgba(255,255,255,0.12)', color: 'white', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, padding: '9px 14px', cursor: 'pointer', fontSize: 16 }}>↻</button>
@@ -488,21 +488,21 @@ export default function ReservationsScreen() {
       {view === 'list' && (
         <div style={{ background: 'white', padding: '10px 20px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', borderBottom: '1px solid #eee', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
           <div style={{ display: 'flex', alignItems: 'center', background: '#f5f5f5', borderRadius: 10, border: '1px solid #e0e0e0', overflow: 'hidden' }}>
-            <button onClick={() => setFilterDate(shiftDay(filterDate, -1))} title="Previous day" style={{ padding: '0 14px', height: 44, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: '#0D1B3E', fontWeight: 700, display: 'flex', alignItems: 'center' }}>◀</button>
+            <button onClick={() => setFilterDate(shiftDay(filterDate, -1))} title="Previous day" style={{ padding: '0 14px', height: 44, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--brand-primary,#0D1B3E)', fontWeight: 700, display: 'flex', alignItems: 'center' }}>◀</button>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '6px 4px', minWidth: 116, borderLeft: '1px solid #e0e0e0', borderRight: '1px solid #e0e0e0' }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: isToday ? '#e94560' : '#0D1B3E', lineHeight: 1.3 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: isToday ? '#e94560' : 'var(--brand-primary,#0D1B3E)', lineHeight: 1.3 }}>
                 {filterDate ? friendlyDate(filterDate) : 'All Dates'}
               </span>
               <input type="date" value={filterDate || ''} onChange={e => setFilterDate(e.target.value)}
                 style={{ fontSize: 10, color: '#aaa', border: 'none', background: 'transparent', width: '100%', textAlign: 'center', cursor: 'pointer', padding: 0, marginTop: 1 }} />
             </div>
-            <button onClick={() => setFilterDate(shiftDay(filterDate, 1))} title="Next day" style={{ padding: '0 14px', height: 44, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: '#0D1B3E', fontWeight: 700, display: 'flex', alignItems: 'center' }}>▶</button>
+            <button onClick={() => setFilterDate(shiftDay(filterDate, 1))} title="Next day" style={{ padding: '0 14px', height: 44, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--brand-primary,#0D1B3E)', fontWeight: 700, display: 'flex', alignItems: 'center' }}>▶</button>
           </div>
-          <button onClick={() => setFilterDate(todayStr())} style={{ padding: '8px 14px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: isToday ? 700 : 500, background: isToday ? '#0D1B3E' : 'white', color: isToday ? '#C9A84C' : '#555' }}>Today</button>
-          <button onClick={() => setFilterDate('')} style={{ padding: '8px 14px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, cursor: 'pointer', background: !filterDate ? '#0D1B3E' : 'white', color: !filterDate ? 'white' : '#555' }}>All</button>
+          <button onClick={() => setFilterDate(todayStr())} style={{ padding: '8px 14px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: isToday ? 700 : 500, background: isToday ? 'var(--brand-primary,#0D1B3E)' : 'white', color: isToday ? 'var(--brand-accent,#C9A84C)' : '#555' }}>Today</button>
+          <button onClick={() => setFilterDate('')} style={{ padding: '8px 14px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, cursor: 'pointer', background: !filterDate ? 'var(--brand-primary,#0D1B3E)' : 'white', color: !filterDate ? 'white' : '#555' }}>All</button>
           <div style={{ width: 1, height: 28, background: '#eee', margin: '0 2px' }} />
           {ALL_STATUSES.map(s => (
-            <button key={s} onClick={() => setFilterStatus(s)} style={{ padding: '6px 12px', border: 'none', borderRadius: 20, cursor: 'pointer', fontWeight: filterStatus === s ? 700 : 500, fontSize: 13, background: filterStatus === s ? '#0D1B3E' : '#f0f0f0', color: filterStatus === s ? 'white' : '#555', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <button key={s} onClick={() => setFilterStatus(s)} style={{ padding: '6px 12px', border: 'none', borderRadius: 20, cursor: 'pointer', fontWeight: filterStatus === s ? 700 : 500, fontSize: 13, background: filterStatus === s ? 'var(--brand-primary,#0D1B3E)' : '#f0f0f0', color: filterStatus === s ? 'white' : '#555', display: 'flex', alignItems: 'center', gap: 5 }}>
               {s === 'all' ? 'All' : STATUS_CONFIG[s]?.label || s}
               {counts[s] > 0 && <span style={{ background: filterStatus === s ? 'rgba(255,255,255,0.25)' : '#ddd', borderRadius: 10, padding: '1px 6px', fontSize: 11 }}>{counts[s]}</span>}
             </button>
@@ -515,15 +515,15 @@ export default function ReservationsScreen() {
       {isPlanView && (
         <div style={{ background: 'white', padding: '10px 20px', display: 'flex', gap: 8, alignItems: 'center', borderBottom: '1px solid #eee', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
           <div style={{ display: 'flex', alignItems: 'center', background: '#f5f5f5', borderRadius: 10, border: '1px solid #e0e0e0', overflow: 'hidden' }}>
-            <button onClick={() => setFilterDate(shiftDay(filterDate, -1))} style={{ padding: '0 14px', height: 40, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: '#0D1B3E', fontWeight: 700, display: 'flex', alignItems: 'center' }}>◀</button>
+            <button onClick={() => setFilterDate(shiftDay(filterDate, -1))} style={{ padding: '0 14px', height: 40, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--brand-primary,#0D1B3E)', fontWeight: 700, display: 'flex', alignItems: 'center' }}>◀</button>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '6px 4px', minWidth: 116, borderLeft: '1px solid #e0e0e0', borderRight: '1px solid #e0e0e0' }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: isToday ? '#e94560' : '#0D1B3E' }}>{filterDate ? friendlyDate(filterDate) : 'All Dates'}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: isToday ? '#e94560' : 'var(--brand-primary,#0D1B3E)' }}>{filterDate ? friendlyDate(filterDate) : 'All Dates'}</span>
               <input type="date" value={filterDate || ''} onChange={e => setFilterDate(e.target.value)}
                 style={{ fontSize: 10, color: '#aaa', border: 'none', background: 'transparent', width: '100%', textAlign: 'center', cursor: 'pointer', padding: 0, marginTop: 1 }} />
             </div>
-            <button onClick={() => setFilterDate(shiftDay(filterDate, 1))} style={{ padding: '0 14px', height: 40, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: '#0D1B3E', fontWeight: 700, display: 'flex', alignItems: 'center' }}>▶</button>
+            <button onClick={() => setFilterDate(shiftDay(filterDate, 1))} style={{ padding: '0 14px', height: 40, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--brand-primary,#0D1B3E)', fontWeight: 700, display: 'flex', alignItems: 'center' }}>▶</button>
           </div>
-          <button onClick={() => setFilterDate(todayStr())} style={{ padding: '7px 14px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: isToday ? 700 : 500, background: isToday ? '#0D1B3E' : 'white', color: isToday ? '#C9A84C' : '#555' }}>Today</button>
+          <button onClick={() => setFilterDate(todayStr())} style={{ padding: '7px 14px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: isToday ? 700 : 500, background: isToday ? 'var(--brand-primary,#0D1B3E)' : 'white', color: isToday ? 'var(--brand-accent,#C9A84C)' : '#555' }}>Today</button>
         </div>
       )}
 
@@ -550,7 +550,7 @@ export default function ReservationsScreen() {
             <div style={{ background: 'white', borderRadius: 14, padding: 28, boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
                 <button onClick={() => setCalDate(new Date(calYear, calMonth-1, 1))} style={calNavBtn}>‹</button>
-                <h2 style={{ margin: 0, color: '#0D1B3E', fontSize: 22, fontFamily: 'Georgia, serif' }}>{MONTH_NAMES[calMonth]} {calYear}</h2>
+                <h2 style={{ margin: 0, color: 'var(--brand-primary,#0D1B3E)', fontSize: 22, fontFamily: 'Georgia, serif' }}>{MONTH_NAMES[calMonth]} {calYear}</h2>
                 <button onClick={() => setCalDate(new Date(calYear, calMonth+1, 1))} style={calNavBtn}>›</button>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4, marginBottom: 6 }}>
@@ -566,8 +566,8 @@ export default function ReservationsScreen() {
                   const ds     = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
                   const isSel  = filterDate === ds;
                   return (
-                    <div key={day} onClick={() => calDayClick(day)} style={{ minHeight: 80, padding: '6px 8px', borderRadius: 10, cursor: 'pointer', border: `2px solid ${isSel ? '#0D1B3E' : isTdy ? '#C9A84C' : '#f0f0f0'}`, background: isSel ? '#f0f4ff' : isTdy ? '#fffdf0' : 'white' }}>
-                      <div style={{ fontWeight: isTdy||isSel ? 800 : 400, color: isTdy ? '#C9A84C' : isSel ? '#0D1B3E' : '#333', fontSize: 15, marginBottom: 4 }}>{day}</div>
+                    <div key={day} onClick={() => calDayClick(day)} style={{ minHeight: 80, padding: '6px 8px', borderRadius: 10, cursor: 'pointer', border: `2px solid ${isSel ? 'var(--brand-primary,#0D1B3E)' : isTdy ? 'var(--brand-accent,#C9A84C)' : '#f0f0f0'}`, background: isSel ? '#f0f4ff' : isTdy ? '#fffdf0' : 'white' }}>
+                      <div style={{ fontWeight: isTdy||isSel ? 800 : 400, color: isTdy ? 'var(--brand-accent,#C9A84C)' : isSel ? 'var(--brand-primary,#0D1B3E)' : '#333', fontSize: 15, marginBottom: 4 }}>{day}</div>
                       {dayRes.slice(0,3).map(r => (
                         <div key={r.id} style={{ fontSize: 11, borderRadius: 4, padding: '2px 5px', marginBottom: 2, background: STATUS_CONFIG[r.status]?.bg||'#f0f0f0', color: STATUS_CONFIG[r.status]?.color||'#333', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {(r.reservation_time||'').slice(0,5)} {r.customer_name}
@@ -585,7 +585,7 @@ export default function ReservationsScreen() {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
                 <div>
-                  <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0D1B3E' }}>Guest Records</h2>
+                  <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--brand-primary,#0D1B3E)' }}>Guest Records</h2>
                   <p style={{ margin: '2px 0 0', fontSize: 13, color: '#888' }}>{customers.length} guests · sorted by bookings · built from history</p>
                 </div>
                 <input value={customerSearch} onChange={e => { setCustomerSearch(e.target.value); setSelectedCustomer(null); }}
@@ -593,7 +593,7 @@ export default function ReservationsScreen() {
                   style={{ padding: '10px 16px', border: '1px solid #ddd', borderRadius: 10, fontSize: 14, width: isMobile ? '100%' : 230, maxWidth: isMobile ? 'none' : 230, minWidth: 0, boxSizing: 'border-box' }} />
               </div>
               <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
-                {[{tag:'VIP',dot:'#C9A84C',color:'#92400e'},{tag:'Regular',dot:'#3b82f6',color:'#1e40af'},{tag:'New',dot:'#6b7280',color:'#4b5563'}].map(t => (
+                {[{tag:'VIP',dot:'var(--brand-accent,#C9A84C)',color:'#92400e'},{tag:'Regular',dot:'#3b82f6',color:'#1e40af'},{tag:'New',dot:'#6b7280',color:'#4b5563'}].map(t => (
                   <div key={t.tag} style={{ background: 'white', borderRadius: 10, padding: '10px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: t.dot }} />
                     <span style={{ fontWeight: 700, fontSize: 18, color: t.color }}>{customers.filter(c => c.tag === t.tag).length}</span>
@@ -601,7 +601,7 @@ export default function ReservationsScreen() {
                   </div>
                 ))}
                 <div style={{ background: 'white', borderRadius: 10, padding: '10px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontWeight: 700, fontSize: 18, color: '#0D1B3E' }}>{customers.reduce((s,c) => s+c.visitCount, 0)}</span>
+                  <span style={{ fontWeight: 700, fontSize: 18, color: 'var(--brand-primary,#0D1B3E)' }}>{customers.reduce((s,c) => s+c.visitCount, 0)}</span>
                   <span style={{ fontSize: 13, color: '#888' }}>total seated</span>
                 </div>
               </div>
@@ -647,7 +647,7 @@ export default function ReservationsScreen() {
       {showModal && (
         <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
           <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-            <div style={{ background: '#0D1B3E', padding: '20px 28px', borderRadius: '16px 16px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid rgba(201,168,76,0.4)' }}>
+            <div style={{ background: 'var(--brand-primary,#0D1B3E)', padding: '20px 28px', borderRadius: '16px 16px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid rgba(201,168,76,0.4)' }}>
               <h2 style={{ margin: 0, color: 'white', fontSize: 20, fontFamily: 'Georgia, serif' }}>{editingId ? '✏️ Edit Booking' : '➕ New Booking'}</h2>
               <button onClick={closeModal} style={{ background: 'rgba(255,255,255,0.12)', color: 'white', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontSize: 18 }}>✕</button>
             </div>
@@ -665,7 +665,7 @@ export default function ReservationsScreen() {
                   <label style={labelSt}>Covers *</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <button type="button" onClick={() => setForm(f => ({ ...f, covers: Math.max(1, f.covers-1) }))} style={ctrBtnSt}>−</button>
-                    <span style={{ fontSize: 20, fontWeight: 800, minWidth: 36, textAlign: 'center', color: '#0D1B3E' }}>{form.covers}</span>
+                    <span style={{ fontSize: 20, fontWeight: 800, minWidth: 36, textAlign: 'center', color: 'var(--brand-primary,#0D1B3E)' }}>{form.covers}</span>
                     <button type="button" onClick={() => setForm(f => ({ ...f, covers: Math.min(50, f.covers+1) }))} style={ctrBtnSt}>+</button>
                     <span style={{ color: '#888', fontSize: 13 }}>guests</span>
                   </div>
@@ -701,7 +701,7 @@ function ReservationCard({ r, onEdit, onSeat, onConfirm, onNoShow, onCancel, onC
   return (
     <div style={{ background: 'white', borderRadius: 10, padding: '10px 16px', marginBottom: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.07)', borderLeft: `4px solid ${sc.dot}`, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
       <div style={{ width: 8, height: 8, borderRadius: '50%', background: sc.dot, flexShrink: 0 }} />
-      <span style={{ fontWeight: 700, fontSize: 14, color: '#0D1B3E', minWidth: 120 }}>{r.customer_name}</span>
+      <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--brand-primary,#0D1B3E)', minWidth: 120 }}>{r.customer_name}</span>
       <span style={{ fontSize: 13, color: '#555' }}>🕐 <strong>{time}</strong></span>
       <span style={{ fontSize: 13, color: '#555' }}>📅 {date}</span>
       <span style={{ fontSize: 13, color: '#555' }}>👥 <strong>{r.covers}</strong></span>
@@ -724,22 +724,22 @@ function ReservationCard({ r, onEdit, onSeat, onConfirm, onNoShow, onCancel, onC
 function CustomerCard({ customer: c, isSelected, onToggle, onNewBooking, formatDate }) {
   const { tag, tagColor } = c;
   return (
-    <div style={{ background: 'white', borderRadius: 14, boxShadow: isSelected ? '0 4px 20px rgba(13,27,62,0.15)' : '0 1px 4px rgba(0,0,0,0.08)', border: isSelected ? '2px solid #0D1B3E' : '2px solid transparent', overflow: 'hidden' }}>
+    <div style={{ background: 'white', borderRadius: 14, boxShadow: isSelected ? '0 4px 20px rgba(13,27,62,0.15)' : '0 1px 4px rgba(0,0,0,0.08)', border: isSelected ? '2px solid var(--brand-primary,#0D1B3E)' : '2px solid transparent', overflow: 'hidden' }}>
       <div onClick={onToggle} style={{ padding: '16px 18px', cursor: 'pointer', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
         <Initials name={c.name} size={46} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-            <span style={{ fontWeight: 700, fontSize: 16, color: '#0D1B3E' }}>{c.name}</span>
+            <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--brand-primary,#0D1B3E)' }}>{c.name}</span>
             <span style={{ background: tagColor.bg, color: tagColor.color, fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20 }}>{tag}</span>
           </div>
           {c.phone && <div style={{ fontSize: 13, color: '#555', marginBottom: 2 }}>📞 {c.phone}</div>}
           {c.email && <div style={{ fontSize: 12, color: '#888', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉️ {c.email}</div>}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
-            <span style={{ fontSize: 12, color: '#555' }}><strong style={{ color: '#0D1B3E' }}>{c.visitCount}</strong> seated</span>
-            <span style={{ fontSize: 12, color: '#555' }}><strong style={{ color: '#0D1B3E' }}>{c.totalBookings}</strong> total</span>
+            <span style={{ fontSize: 12, color: '#555' }}><strong style={{ color: 'var(--brand-primary,#0D1B3E)' }}>{c.visitCount}</strong> seated</span>
+            <span style={{ fontSize: 12, color: '#555' }}><strong style={{ color: 'var(--brand-primary,#0D1B3E)' }}>{c.totalBookings}</strong> total</span>
             {c.lastVisit && <span style={{ fontSize: 12, color: '#888' }}>Last: {formatDate(c.lastVisit)}</span>}
           </div>
-          {c.lastNotes && <div style={{ fontSize: 12, color: '#888', fontStyle: 'italic', marginTop: 6, borderLeft: '2px solid #C9A84C', paddingLeft: 8 }}>{c.lastNotes}</div>}
+          {c.lastNotes && <div style={{ fontSize: 12, color: '#888', fontStyle: 'italic', marginTop: 6, borderLeft: '2px solid var(--brand-accent,#C9A84C)', paddingLeft: 8 }}>{c.lastNotes}</div>}
         </div>
         <span style={{ color: '#bbb', fontSize: 14, flexShrink: 0, marginTop: 4 }}>{isSelected ? '▲' : '▼'}</span>
       </div>
@@ -772,6 +772,6 @@ function CustomerCard({ customer: c, isSelected, onToggle, onNewBooking, formatD
 
 const labelSt  = { display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 5 };
 const inputSt  = { width: '100%', padding: '10px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, boxSizing: 'border-box', fontFamily: 'system-ui, -apple-system, sans-serif', outline: 'none' };
-const ctrBtnSt = { width: 36, height: 36, border: '2px solid #0D1B3E', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 18, background: 'white', color: '#0D1B3E' };
-const calNavBtn = { background: '#f0f0f0', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer', fontSize: 20, color: '#0D1B3E' };
+const ctrBtnSt = { width: 36, height: 36, border: '2px solid var(--brand-primary,#0D1B3E)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 18, background: 'white', color: 'var(--brand-primary,#0D1B3E)' };
+const calNavBtn = { background: '#f0f0f0', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer', fontSize: 20, color: 'var(--brand-primary,#0D1B3E)' };
 function actionBtn(bg) { return { background: bg, color: 'white', border: 'none', borderRadius: 7, padding: '8px 13px', cursor: 'pointer', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }; }

@@ -17,7 +17,7 @@ function AddTillCard({ cardStyle }) {
   useEffect(() => {
     let cancelled = false;
     if (!tenant) return;
-    QRCode.toDataURL(tenant, { width: 220, margin: 1, errorCorrectionLevel: 'M', color: { dark: '#0D1B3E', light: '#FFFFFF' } })
+    QRCode.toDataURL(tenant, { width: 220, margin: 1, errorCorrectionLevel: 'M', color: { dark: 'var(--brand-primary,#0D1B3E)', light: '#FFFFFF' } })
       .then(d => { if (!cancelled) setQr(d); }).catch(() => {});
     return () => { cancelled = true; };
   }, [tenant]);
@@ -41,8 +41,8 @@ function AddTillCard({ cardStyle }) {
       </p>
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 240 }}>
-          <div style={{ background: '#0D1B3E', color: '#C9A84C', padding: '14px 18px', borderRadius: 10, fontFamily: 'Menlo, Consolas, monospace', fontSize: 15, fontWeight: 800, textAlign: 'center', marginBottom: 12, userSelect: 'text', wordBreak: 'break-all' }}>{tenant || '—'}</div>
-          <button onClick={test} disabled={testState === 'testing' || !tenant} style={{ padding: '10px 20px', borderRadius: 8, border: (testState === 'ok' || testState === 'fail') ? 'none' : '1px solid #0D1B3E', background: testState === 'ok' ? '#22c55e' : testState === 'fail' ? '#ef4444' : 'transparent', color: (testState === 'ok' || testState === 'fail') ? 'white' : '#0D1B3E', fontWeight: 700, cursor: testState === 'testing' ? 'wait' : 'pointer', fontSize: 13 }}>{label}</button>
+          <div style={{ background: 'var(--brand-primary,#0D1B3E)', color: 'var(--brand-accent,#C9A84C)', padding: '14px 18px', borderRadius: 10, fontFamily: 'Menlo, Consolas, monospace', fontSize: 15, fontWeight: 800, textAlign: 'center', marginBottom: 12, userSelect: 'text', wordBreak: 'break-all' }}>{tenant || '—'}</div>
+          <button onClick={test} disabled={testState === 'testing' || !tenant} style={{ padding: '10px 20px', borderRadius: 8, border: (testState === 'ok' || testState === 'fail') ? 'none' : '1px solid var(--brand-primary,#0D1B3E)', background: testState === 'ok' ? '#22c55e' : testState === 'fail' ? '#ef4444' : 'transparent', color: (testState === 'ok' || testState === 'fail') ? 'white' : 'var(--brand-primary,#0D1B3E)', fontWeight: 700, cursor: testState === 'testing' ? 'wait' : 'pointer', fontSize: 13 }}>{label}</button>
           <div style={{ fontSize: 12, color: '#888', marginTop: 12, lineHeight: 1.5 }}>The new device must be online (any internet — not necessarily the same Wi-Fi).</div>
         </div>
         {qr && <div style={{ background: 'white', padding: 10, borderRadius: 10, border: '1px solid #eee', flexShrink: 0 }}><img src={qr} alt="Till QR" style={{ width: 200, height: 200, display: 'block' }} /></div>}
@@ -103,7 +103,7 @@ function KitchenTemplatesCard({ cardStyle }) {
     <div style={cardStyle}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
         <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>📢 Kitchen Message Templates</h2>
-        <button onClick={startNew} style={{ padding:'8px 14px', borderRadius:8, border:'1px solid #0D1B3E', background:'#0D1B3E', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>+ New</button>
+        <button onClick={startNew} style={{ padding:'8px 14px', borderRadius:8, border:'1px solid var(--brand-primary,#0D1B3E)', background:'var(--brand-primary,#0D1B3E)', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>+ New</button>
       </div>
       <p style={{ fontSize:13, color:'#888', marginBottom:14, lineHeight:1.5 }}>
         One-tap pills for waiters to send common messages to the kitchen — allergies, holds, VIP, birthdays.
@@ -163,7 +163,7 @@ function KitchenTemplatesCard({ cardStyle }) {
               <button onClick={() => setEditing(null)}
                 style={{ flex:1, padding:12, borderRadius:8, border:'none', background:'#f0f0f0', fontWeight:700, fontSize:14, cursor:'pointer' }}>Cancel</button>
               <button onClick={save}
-                style={{ flex:2, padding:12, borderRadius:8, border:'none', background:'#0D1B3E', color:'white', fontWeight:800, fontSize:14, cursor:'pointer' }}>
+                style={{ flex:2, padding:12, borderRadius:8, border:'none', background:'var(--brand-primary,#0D1B3E)', color:'white', fontWeight:800, fontSize:14, cursor:'pointer' }}>
                 Save
               </button>
             </div>
@@ -535,7 +535,7 @@ function LocalArchiveCard({ cardStyle }) {
               📂 Open Folder
             </button>
             <button onClick={() => doRun('Today', 0)} disabled={busy}
-              style={{ padding:'9px 16px', borderRadius:8, border:'1px solid #C9A84C', background:'white', color:'#5b4a2a', fontWeight:700, fontSize:13, cursor:'pointer', opacity: busy ? 0.5 : 1 }}>
+              style={{ padding:'9px 16px', borderRadius:8, border:'1px solid var(--brand-accent,#C9A84C)', background:'white', color:'#5b4a2a', fontWeight:700, fontSize:13, cursor:'pointer', opacity: busy ? 0.5 : 1 }}>
               🗄️ Re-archive Today
             </button>
             <button onClick={() => doRun('Yesterday', 1)} disabled={busy}
@@ -589,7 +589,7 @@ function NetworkSetupCard({ cardStyle }) {
         try {
           const dataUrl = await QRCode.toDataURL(n.url, {
             width: 220, margin: 1, errorCorrectionLevel: 'M',
-            color: { dark: '#0D1B3E', light: '#FFFFFF' },
+            color: { dark: 'var(--brand-primary,#0D1B3E)', light: '#FFFFFF' },
           });
           if (!cancelled) setQr(dataUrl);
         } catch (err) { console.warn('[network-setup] QR failed:', err); }
@@ -632,8 +632,8 @@ function NetworkSetupCard({ cardStyle }) {
   const testBg    = testState === 'ok'   ? '#22c55e'
                   : testState === 'fail' ? '#ef4444'
                   : 'rgba(255,255,255,0)';
-  const testColor = testState === 'ok' || testState === 'fail' ? 'white' : '#0D1B3E';
-  const testBorder = testState === 'ok' || testState === 'fail' ? 'none' : '1px solid #0D1B3E';
+  const testColor = testState === 'ok' || testState === 'fail' ? 'white' : 'var(--brand-primary,#0D1B3E)';
+  const testBorder = testState === 'ok' || testState === 'fail' ? 'none' : '1px solid var(--brand-primary,#0D1B3E)';
 
   return (
     <div style={cardStyle}>
@@ -644,7 +644,7 @@ function NetworkSetupCard({ cardStyle }) {
       <div style={{ display:'flex', gap:20, alignItems:'flex-start', flexWrap:'wrap' }}>
         <div style={{ flex:1, minWidth:240 }}>
           <div style={{
-            background:'#0D1B3E', color:'#C9A84C', padding:'14px 18px',
+            background:'var(--brand-primary,#0D1B3E)', color:'var(--brand-accent,#C9A84C)', padding:'14px 18px',
             borderRadius:10, fontFamily:'Menlo, Consolas, monospace',
             fontSize:16, fontWeight:800, textAlign:'center',
             marginBottom:12, userSelect:'text', wordBreak:'break-all'
@@ -654,8 +654,8 @@ function NetworkSetupCard({ cardStyle }) {
           <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
             <button onClick={copy} style={{
               padding:'10px 20px', borderRadius:8, border:'none',
-              background: copied ? '#22c55e' : '#C9A84C',
-              color: copied ? 'white' : '#0D1B3E',
+              background: copied ? '#22c55e' : 'var(--brand-accent,#C9A84C)',
+              color: copied ? 'white' : 'var(--brand-primary,#0D1B3E)',
               fontWeight:700, cursor:'pointer', fontSize:13
             }}>
               {copied ? '✓ Copied' : 'Copy URL'}

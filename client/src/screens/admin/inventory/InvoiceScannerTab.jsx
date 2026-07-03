@@ -84,10 +84,10 @@ function InvoiceHistory() {
 
       {/* Stat cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
-        <div style={hStatCard}><div style={hStatLabel}>Total Spend</div><div style={{ fontSize: 26, fontWeight: 800, color: '#0D1B3E' }}>{fmtCurrency(stats.total)}</div><div style={hStatSub}>{filterMonth || 'all time'}</div></div>
-        <div style={hStatCard}><div style={hStatLabel}>Invoices</div><div style={{ fontSize: 26, fontWeight: 800, color: '#0D1B3E' }}>{stats.count}</div><div style={hStatSub}>{stats.uniqueSuppliers} supplier{stats.uniqueSuppliers !== 1 ? 's' : ''}</div></div>
-        <div style={hStatCard}><div style={hStatLabel}>Avg Invoice</div><div style={{ fontSize: 26, fontWeight: 800, color: '#0D1B3E' }}>{fmtCurrency(stats.count > 0 ? stats.total / stats.count : 0)}</div><div style={hStatSub}>per invoice</div></div>
-        {stats.topSupplier && <div style={{ ...hStatCard, borderTop: '3px solid #C9A84C' }}><div style={hStatLabel}>Top Supplier</div><div style={{ fontSize: 15, fontWeight: 700, color: '#0D1B3E', marginTop: 4 }}>{stats.topSupplier[0]}</div><div style={hStatSub}>{fmtCurrency(stats.topSupplier[1])}</div></div>}
+        <div style={hStatCard}><div style={hStatLabel}>Total Spend</div><div style={{ fontSize: 26, fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)' }}>{fmtCurrency(stats.total)}</div><div style={hStatSub}>{filterMonth || 'all time'}</div></div>
+        <div style={hStatCard}><div style={hStatLabel}>Invoices</div><div style={{ fontSize: 26, fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)' }}>{stats.count}</div><div style={hStatSub}>{stats.uniqueSuppliers} supplier{stats.uniqueSuppliers !== 1 ? 's' : ''}</div></div>
+        <div style={hStatCard}><div style={hStatLabel}>Avg Invoice</div><div style={{ fontSize: 26, fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)' }}>{fmtCurrency(stats.count > 0 ? stats.total / stats.count : 0)}</div><div style={hStatSub}>per invoice</div></div>
+        {stats.topSupplier && <div style={{ ...hStatCard, borderTop: '3px solid var(--brand-accent,#C9A84C)' }}><div style={hStatLabel}>Top Supplier</div><div style={{ fontSize: 15, fontWeight: 700, color: 'var(--brand-primary,#0D1B3E)', marginTop: 4 }}>{stats.topSupplier[0]}</div><div style={hStatSub}>{fmtCurrency(stats.topSupplier[1])}</div></div>}
       </div>
 
       {/* Supplier spend breakdown */}
@@ -99,11 +99,11 @@ function InvoiceHistory() {
             return (
               <div key={name} style={{ marginBottom: 10 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
-                  <span style={{ fontWeight: 600, color: '#0D1B3E' }}>{name}</span>
+                  <span style={{ fontWeight: 600, color: 'var(--brand-primary,#0D1B3E)' }}>{name}</span>
                   <span style={{ color: '#555' }}>{fmtCurrency(amount)} · {pct.toFixed(0)}%</span>
                 </div>
                 <div style={{ height: 6, background: '#f0f0f0', borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${pct}%`, background: '#C9A84C', borderRadius: 3, transition: 'width 0.3s' }} />
+                  <div style={{ height: '100%', width: `${pct}%`, background: 'var(--brand-accent,#C9A84C)', borderRadius: 3, transition: 'width 0.3s' }} />
                 </div>
               </div>
             );
@@ -124,14 +124,14 @@ function InvoiceHistory() {
             const isOpen = expandedId === inv.id;
             const sc     = STATUS_STYLE[inv.status] || STATUS_STYLE.processed;
             return (
-              <div key={inv.id} style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: isOpen ? '0 4px 16px rgba(13,27,62,0.1)' : '0 1px 4px rgba(0,0,0,0.06)', border: isOpen ? '2px solid #0D1B3E' : '2px solid transparent', transition: 'box-shadow 0.15s, border 0.15s' }}>
+              <div key={inv.id} style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: isOpen ? '0 4px 16px rgba(13,27,62,0.1)' : '0 1px 4px rgba(0,0,0,0.06)', border: isOpen ? '2px solid var(--brand-primary,#0D1B3E)' : '2px solid transparent', transition: 'box-shadow 0.15s, border 0.15s' }}>
                 <div onClick={() => setExpandedId(isOpen ? null : inv.id)} style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flexWrap: 'wrap' }}>
-                  <span style={{ color: '#0D1B3E', fontSize: 13, fontWeight: 700, flexShrink: 0, width: 14 }}>{isOpen ? '▼' : '▶'}</span>
+                  <span style={{ color: 'var(--brand-primary,#0D1B3E)', fontSize: 13, fontWeight: 700, flexShrink: 0, width: 14 }}>{isOpen ? '▼' : '▶'}</span>
                   <span style={{ fontSize: 13, color: '#888', minWidth: 100 }}>{fmtDate(inv.invoice_date || inv.created_at)}</span>
-                  <span style={{ fontWeight: 700, fontSize: 14, color: '#0D1B3E', flex: 1, minWidth: 120 }}>{inv.supplier_name || '—'}</span>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--brand-primary,#0D1B3E)', flex: 1, minWidth: 120 }}>{inv.supplier_name || '—'}</span>
                   {inv.invoice_number && <span style={{ fontSize: 12, color: '#aaa', fontFamily: 'monospace', minWidth: 90 }}>#{inv.invoice_number}</span>}
                   <span style={{ background: sc.bg, color: sc.color, fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 20 }}>{sc.label}</span>
-                  <span style={{ fontWeight: 800, fontSize: 16, color: '#0D1B3E', marginLeft: 'auto', minWidth: 80, textAlign: 'right' }}>{fmtCurrency(inv.total_amount)}</span>
+                  <span style={{ fontWeight: 800, fontSize: 16, color: 'var(--brand-primary,#0D1B3E)', marginLeft: 'auto', minWidth: 80, textAlign: 'right' }}>{fmtCurrency(inv.total_amount)}</span>
                 </div>
                 {isOpen && (
                   <div style={{ borderTop: '1px solid #f0f0f0', background: '#f8f9fb', padding: '16px 20px' }}>
@@ -139,7 +139,7 @@ function InvoiceHistory() {
                       {[{ label: 'Supplier', value: inv.supplier_name || '—' }, { label: 'Invoice Date', value: fmtDate(inv.invoice_date) }, { label: 'Invoice Number', value: `#${inv.invoice_number || '—'}`, mono: true }, { label: 'Recorded', value: fmtDate(inv.created_at) }].map(f => (
                         <div key={f.label}><div style={hDetLbl}>{f.label}</div><div style={{ ...hDetVal, fontFamily: f.mono ? 'monospace' : 'inherit' }}>{f.value}</div></div>
                       ))}
-                      <div><div style={hDetLbl}>Total Amount</div><div style={{ ...hDetVal, fontSize: 20, fontWeight: 800, color: '#0D1B3E' }}>{fmtCurrency(inv.total_amount)}</div></div>
+                      <div><div style={hDetLbl}>Total Amount</div><div style={{ ...hDetVal, fontSize: 20, fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)' }}>{fmtCurrency(inv.total_amount)}</div></div>
                       <div><div style={hDetLbl}>Status</div><span style={{ background: sc.bg, color: sc.color, fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>{sc.label}</span></div>
                     </div>
                     <div style={{ background: 'white', borderRadius: 8, padding: '10px 14px', border: '1px dashed #e0e0e0', display: 'flex', alignItems: 'center', gap: 10 }}>

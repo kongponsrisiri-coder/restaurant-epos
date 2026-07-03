@@ -116,10 +116,10 @@ function openPopup(html, { thermal }) {
   // the actual print job via @media print { display:none; }.
   const actionBarHtml = `
     <div id="__rp_bar__" style="position:sticky;top:0;left:0;right:0;z-index:9999;
-      background:#0D1B3E;color:white;padding:10px 14px;display:flex;gap:10px;
+      background:var(--brand-primary,#0D1B3E);color:white;padding:10px 14px;display:flex;gap:10px;
       justify-content:center;align-items:center;
       font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;">
-      <button onclick="window.print()" style="background:#C9A84C;color:#0D1B3E;
+      <button onclick="window.print()" style="background:var(--brand-accent,#C9A84C);color:var(--brand-primary,#0D1B3E);
         border:none;padding:8px 16px;border-radius:6px;font-weight:800;cursor:pointer;
         font-size:13px;">🖨 Print</button>
       <button onclick="window.close()" style="background:transparent;color:white;

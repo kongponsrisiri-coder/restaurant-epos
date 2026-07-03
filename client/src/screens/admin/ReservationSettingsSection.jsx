@@ -50,7 +50,7 @@ export default function ReservationSettingsSection() {
   const [settings, setSettings] = useState({
     restaurant_name:      '',
     restaurant_phone:     '',
-    brand_colour:         '#C9A84C',
+    brand_colour:         'var(--brand-accent,#C9A84C)',
     service_type:         'all_day',
     opening_time:         '11:00',
     last_booking_time:    '21:30',
@@ -170,7 +170,7 @@ export default function ReservationSettingsSection() {
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <input type="color" value={settings.brand_colour} onChange={e => set('brand_colour', e.target.value)}
               style={{ width: 48, height: 40, border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer', padding: 2 }} />
-            <input value={settings.brand_colour} onChange={e => set('brand_colour', e.target.value)} placeholder="#C9A84C" style={{ ...inp, flex: 1 }} />
+            <input value={settings.brand_colour} onChange={e => set('brand_colour', e.target.value)} placeholder="var(--brand-accent,#C9A84C)" style={{ ...inp, flex: 1 }} />
           </div>
         </Field>
       </Card>
@@ -259,7 +259,7 @@ export default function ReservationSettingsSection() {
           <div>1–4 covers → 90 min sitting</div>
           <div>5–8 covers → 120 min sitting</div>
           <div>9+ covers → 150 min sitting</div>
-          <div style={{ marginTop: 8, color: '#C9A84C', fontWeight: 600 }}>
+          <div style={{ marginTop: 8, color: 'var(--brand-accent,#C9A84C)', fontWeight: 600 }}>
             Edit dining durations in Admin → Table Plan (right panel when nothing selected)
           </div>
         </div>

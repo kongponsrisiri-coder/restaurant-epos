@@ -120,8 +120,8 @@ export default function VATReportSection() {
         }}>📄 Export</button>
         <button onClick={exportCsv} disabled={!data || !data.breakdown?.length} style={{
           padding:'10px 18px', borderRadius:8, border:'none',
-          background: data?.breakdown?.length ? '#C9A84C' : '#e5d9b2',
-          color:'#0D1B3E', fontWeight:700, fontSize:13,
+          background: data?.breakdown?.length ? 'var(--brand-accent,#C9A84C)' : '#e5d9b2',
+          color:'var(--brand-primary,#0D1B3E)', fontWeight:700, fontSize:13,
           cursor: data?.breakdown?.length ? 'pointer' : 'not-allowed'
         }}>⬇ CSV</button>
       </div>
@@ -168,8 +168,8 @@ export default function VATReportSection() {
             {data.by_kind && (
               <div style={{ marginTop:18, display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                 {[
-                  { key:'food',  label:'🍽️ Food',  tone:'#0D1B3E' },
-                  { key:'drink', label:'🍺 Drink', tone:'#0D1B3E' },
+                  { key:'food',  label:'🍽️ Food',  tone:'var(--brand-primary,#0D1B3E)' },
+                  { key:'drink', label:'🍺 Drink', tone:'var(--brand-primary,#0D1B3E)' },
                 ].map(k => {
                   const b = data.by_kind[k.key] || { net:0, vat:0, gross:0, items:0 };
                   return (

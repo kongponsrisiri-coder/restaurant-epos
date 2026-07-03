@@ -346,7 +346,7 @@ export default function TablePlanSection() {
           <button
             onClick={() => { setMode(m => m === 'link' ? 'select' : 'link'); setLinkFrom(null); setSelected(null); }}
             style={{ padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13,
-              background: mode === 'link' ? '#C9A84C' : '#f0f0f0',
+              background: mode === 'link' ? 'var(--brand-accent,#C9A84C)' : '#f0f0f0',
               color:      mode === 'link' ? 'white'   : '#555' }}
           >⊕ {mode === 'link' && linkFrom ? 'Click 2nd table…' : 'Link Tables'}</button>
 
@@ -400,7 +400,7 @@ export default function TablePlanSection() {
           style={{
             flex: 1, height: 600,
             background: '#f0ede8', borderRadius: 16, position: 'relative',
-            border: `2px solid ${mode === 'link' ? '#C9A84C' : '#ddd'}`,
+            border: `2px solid ${mode === 'link' ? 'var(--brand-accent,#C9A84C)' : '#ddd'}`,
             cursor: mode === 'link' ? 'crosshair' : dragging ? 'grabbing' : 'default',
             backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)',
             backgroundSize: '30px 30px', overflow: 'hidden',
@@ -413,8 +413,8 @@ export default function TablePlanSection() {
               if (!a || !b) return null;
               return (
                 <g key={c.id}>
-                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#C9A84C" strokeWidth="2.5" strokeDasharray="6 4" />
-                  <circle cx={(a.x + b.x) / 2} cy={(a.y + b.y) / 2} r="6" fill="#C9A84C" />
+                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--brand-accent,#C9A84C)" strokeWidth="2.5" strokeDasharray="6 4" />
+                  <circle cx={(a.x + b.x) / 2} cy={(a.y + b.y) / 2} r="6" fill="var(--brand-accent,#C9A84C)" />
                 </g>
               );
             })}
@@ -430,7 +430,7 @@ export default function TablePlanSection() {
               const my    = maxY + 10;
               return (
                 <g key={gi}>
-                  <rect x={mx - tw/2} y={my} width={tw} height={22} rx="11" fill="#FAEEDA" stroke="#C9A84C" strokeWidth="1" />
+                  <rect x={mx - tw/2} y={my} width={tw} height={22} rx="11" fill="#FAEEDA" stroke="var(--brand-accent,#C9A84C)" strokeWidth="1" />
                   <text x={mx} y={my + 14.5} textAnchor="middle" fontSize="11" fill="#854F0B" fontWeight="500" fontFamily="system-ui, -apple-system, sans-serif">{label}</text>
                 </g>
               );
@@ -466,8 +466,8 @@ export default function TablePlanSection() {
                   left: table.pos_x, top: table.pos_y,
                   width: table.width || 80, height: table.height || 80,
                   borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,
-                  background: isLinkFirst ? '#C9A84C' : isSelected ? '#1a1a2e' : isLinked ? '#fef9c3' : (table.is_takeaway ? '#fffbeb' : '#fff'),
-                  border: `3px solid ${isLinkFirst ? '#C9A84C' : isSelected ? '#e94560' : isLinked ? '#C9A84C' : (table.is_takeaway ? '#f59e0b' : '#1a1a2e')}`,
+                  background: isLinkFirst ? 'var(--brand-accent,#C9A84C)' : isSelected ? '#1a1a2e' : isLinked ? '#fef9c3' : (table.is_takeaway ? '#fffbeb' : '#fff'),
+                  border: `3px solid ${isLinkFirst ? 'var(--brand-accent,#C9A84C)' : isSelected ? '#e94560' : isLinked ? 'var(--brand-accent,#C9A84C)' : (table.is_takeaway ? '#f59e0b' : '#1a1a2e')}`,
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
                   cursor: mode === 'link' ? 'crosshair' : 'grab',
@@ -566,7 +566,7 @@ export default function TablePlanSection() {
                     return null;
                   })()}
                   <button onClick={() => { setMode('link'); setLinkFrom(selectedTable.id); setSelected(null); }}
-                    style={{ width: '100%', marginTop: 8, padding: '8px', border: '1.5px dashed #C9A84C', borderRadius: 8, background: 'none', cursor: 'pointer', fontSize: 12, color: '#854F0B', fontWeight: 600 }}>
+                    style={{ width: '100%', marginTop: 8, padding: '8px', border: '1.5px dashed var(--brand-accent,#C9A84C)', borderRadius: 8, background: 'none', cursor: 'pointer', fontSize: 12, color: '#854F0B', fontWeight: 600 }}>
                     ⊕ Link with adjacent table
                   </button>
                 </div>
@@ -649,7 +649,7 @@ export default function TablePlanSection() {
                         <div style={{ fontSize: 13, fontWeight: 700, color: '#854F0B' }}>{names}</div>
                         <div style={{ fontSize: 11, color: '#BA7517', marginTop: 2 }}>max combined capacity</div>
                       </div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#C9A84C' }}>{cap}p</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--brand-accent,#C9A84C)' }}>{cap}p</div>
                       <button onClick={() => handleRemoveGroup(group)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444', fontWeight: 700, fontSize: 16, padding: 0 }}>×</button>
                     </div>
                   );

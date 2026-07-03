@@ -128,7 +128,7 @@ export default function VouchersSection() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => setSellOpen(true)}
-            style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: '#C9A84C', color: '#1a1a2e', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+            style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: '#1a1a2e', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
             + Sell voucher
           </button>
           <button onClick={exportCsv}
@@ -244,7 +244,7 @@ export default function VouchersSection() {
                 </div>
 
                 {detail.voucher.message && (
-                  <div style={{ background: '#fdf6ec', borderLeft: '3px solid #C9A84C', padding: '10px 14px', borderRadius: '0 8px 8px 0', fontSize: 13, color: '#5b4a2a', fontStyle: 'italic', marginBottom: 16 }}>
+                  <div style={{ background: '#fdf6ec', borderLeft: '3px solid var(--brand-accent,#C9A84C)', padding: '10px 14px', borderRadius: '0 8px 8px 0', fontSize: 13, color: '#5b4a2a', fontStyle: 'italic', marginBottom: 16 }}>
                     "{detail.voucher.message}"
                   </div>
                 )}
@@ -365,7 +365,7 @@ function SellVoucherModal({ onClose, onSold }) {
           {err && <div style={{ marginTop: 14, background: '#fee2e2', color: '#991b1b', padding: '10px 12px', borderRadius: 8, fontSize: 13 }}>⚠️ {err}</div>}
 
           <button onClick={submit} disabled={!valid || busy}
-            style={{ marginTop: 20, width: '100%', padding: 16, borderRadius: 10, border: 'none', background: '#C9A84C', color: '#1a1a2e', fontWeight: 800, fontSize: 16, cursor: 'pointer', opacity: (!valid || busy) ? 0.5 : 1 }}>
+            style={{ marginTop: 20, width: '100%', padding: 16, borderRadius: 10, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: '#1a1a2e', fontWeight: 800, fontSize: 16, cursor: 'pointer', opacity: (!valid || busy) ? 0.5 : 1 }}>
             {busy ? 'Creating…' : `Sell £${amount} voucher`}
           </button>
           <p style={{ fontSize: 11, color: '#888', marginTop: 10, lineHeight: 1.4 }}>
@@ -404,7 +404,7 @@ function SoldSuccessModal({ voucher, onClose }) {
               : 'No email on file — write the code on a printed card or read it to the customer'}
           </p>
           <div style={{ background: 'linear-gradient(135deg,#1e3a6e,#2a4d8a)', borderRadius: 12, padding: 22, color: 'white' }}>
-            <div style={{ color: '#C9A84C', fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, marginBottom: 6 }}>Voucher value</div>
+            <div style={{ color: 'var(--brand-accent,#C9A84C)', fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, marginBottom: 6 }}>Voucher value</div>
             <div style={{ fontSize: 36, fontWeight: 800, marginBottom: 14 }}>£{Number(voucher.original_amount).toFixed(2)}</div>
             <div style={{ background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.4)', borderRadius: 8, padding: 12, fontFamily: 'Menlo,Consolas,monospace', fontSize: 20, letterSpacing: 3, fontWeight: 700 }}>
               {voucher.code}

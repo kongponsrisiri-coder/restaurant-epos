@@ -170,8 +170,8 @@ export default function BarScreen() {
           <button onClick={toggleAlt} style={{
             padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
             fontWeight: 800, fontSize: 14,
-            background: showAlt ? '#C9A84C' : '#1e293b',
-            color: showAlt ? '#0D1B3E' : '#aaa',
+            background: showAlt ? 'var(--brand-accent,#C9A84C)' : '#1e293b',
+            color: showAlt ? 'var(--brand-primary,#0D1B3E)' : '#aaa',
             transition: 'all 0.2s'
           }}>
             {showAlt ? `🌐 EN + ภาษา` : `🌐 EN only`}
@@ -196,7 +196,7 @@ export default function BarScreen() {
             </div>
           ))}
           {showAlt && (
-            <div style={{ marginLeft: 'auto', background: '#C9A84C', color: '#0D1B3E', padding: '3px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800 }}>
+            <div style={{ marginLeft: 'auto', background: 'var(--brand-accent,#C9A84C)', color: 'var(--brand-primary,#0D1B3E)', padding: '3px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800 }}>
               🌐 Bilingual ON
             </div>
           )}
@@ -254,7 +254,7 @@ export default function BarScreen() {
                                   {isReady ? '✅' : '🍹'} {item.quantity}× {item.name}
                                 </div>
                                 {showAlt && item.name_alt && (
-                                  <div style={{ color: '#C9A84C', fontWeight: 600, fontSize: 14, marginTop: 2, marginLeft: 22 }}>
+                                  <div style={{ color: 'var(--brand-accent,#C9A84C)', fontWeight: 600, fontSize: 14, marginTop: 2, marginLeft: 22 }}>
                                     {item.quantity}× {item.name_alt}
                                   </div>
                                 )}
@@ -351,7 +351,7 @@ export default function BarScreen() {
                           ✅ {item.quantity}× {item.name}
                         </div>
                         {showAlt && item.name_alt && (
-                          <div style={{ color: '#C9A84C', fontSize: 13, marginTop: 2 }}>
+                          <div style={{ color: 'var(--brand-accent,#C9A84C)', fontSize: 13, marginTop: 2 }}>
                             {item.quantity}× {item.name_alt}
                           </div>
                         )}

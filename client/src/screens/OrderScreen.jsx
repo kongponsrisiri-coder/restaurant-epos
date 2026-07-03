@@ -670,7 +670,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             </h2>
             {/* SEPOS-KITCHEN-MSG-001 — one-tap kitchen message */}
             <button onClick={() => setShowKitchenMsg(true)} style={{
-              background: 'white', color: '#0D1B3E', border: '1px solid #0D1B3E',
+              background: 'white', color: 'var(--brand-primary,#0D1B3E)', border: '1px solid var(--brand-primary,#0D1B3E)',
               borderRadius: 10, padding: '10px 14px', cursor: 'pointer',
               fontWeight: 700, fontSize: 14
             }}>
@@ -815,14 +815,14 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                             onClick={(e) => e.stopPropagation()}
                             style={{
                               display: 'flex', alignItems: 'center',
-                              background: '#0D1B3E', color: '#C9A84C',
+                              background: 'var(--brand-primary,#0D1B3E)', color: 'var(--brand-accent,#C9A84C)',
                               borderRadius: 16, height: 28, overflow: 'hidden',
                               boxShadow: '0 1px 4px rgba(13,27,62,0.25)',
                             }}>
                             <button
                               onClick={(e) => { e.stopPropagation(); decrementInCart(item); }}
                               style={{
-                                background: 'transparent', border: 'none', color: '#C9A84C',
+                                background: 'transparent', border: 'none', color: 'var(--brand-accent,#C9A84C)',
                                 cursor: 'pointer', width: 28, height: 28,
                                 fontWeight: 800, fontSize: 18, lineHeight: 1,
                               }}
@@ -835,7 +835,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                             <button
                               onClick={(e) => { e.stopPropagation(); incrementInCart(item); }}
                               style={{
-                                background: 'transparent', border: 'none', color: '#C9A84C',
+                                background: 'transparent', border: 'none', color: 'var(--brand-accent,#C9A84C)',
                                 cursor: 'pointer', width: 28, height: 28,
                                 fontWeight: 800, fontSize: 18, lineHeight: 1,
                               }}
@@ -867,7 +867,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 Table {order?.table_number}
                 {order?.covers ? <span style={{ fontFamily: "'Archivo', sans-serif", fontSize: 13, color: '#9A9488', marginLeft: 10, fontWeight: 600 }}>{order.covers} covers</span> : null}
               </div>
-              <button onClick={() => setShowKitchenMsg(true)} style={{ background: '#fff', color: '#0D1B3E', border: '1px solid #0D1B3E', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>📢 Message</button>
+              <button onClick={() => setShowKitchenMsg(true)} style={{ background: '#fff', color: 'var(--brand-primary,#0D1B3E)', border: '1px solid var(--brand-primary,#0D1B3E)', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>📢 Message</button>
               {cart.length > 0 && (
                 <button onClick={sendOrder} disabled={sendBusy} style={{ background: '#e94560', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', cursor: sendBusy ? 'wait' : 'pointer', fontWeight: 700, fontSize: 14, boxShadow: '0 6px 14px rgba(233,69,96,.28)' }}>
                   {sendBusy ? 'Sending…' : 'Send to kitchen'}
@@ -883,7 +883,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   const subs = cat.subcategories || [];
                   const catActive = activeCategory === cat.id;
                   const railBtn = (active) => ({ display: 'block', width: '100%', textAlign: 'left', minHeight: 46, padding: '0 14px', marginBottom: 6, borderRadius: 10, cursor: 'pointer', fontWeight: 600, fontSize: 13.5,
-                    border: active ? 'none' : '1px solid #E7E2D6', background: active ? '#0D1B3E' : '#fff', color: active ? '#fff' : '#1a1a2e' });
+                    border: active ? 'none' : '1px solid #E7E2D6', background: active ? 'var(--brand-primary,#0D1B3E)' : '#fff', color: active ? '#fff' : '#1a1a2e' });
                   return (
                     <div key={cat.id} style={{ marginBottom: 14 }}>
                       <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.5px', color: '#9A9488', textTransform: 'uppercase', padding: '0 4px 6px' }}>{cat.name}{cat.is_bar ? ' 🍹' : ''}</div>
@@ -914,20 +914,20 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                     const inCart = cart.filter(c => c.menu_item_id === item.id);
                     const totalQty = inCart.reduce((s, c) => s + c.quantity, 0);
                     return (
-                      <div key={item.id} onClick={() => handleItemClick(item)} style={{ background: '#fff', borderRadius: 14, border: `1px solid ${totalQty > 0 ? '#0D1B3E' : '#E7E2D6'}`, padding: 14, cursor: 'pointer', minHeight: 104, display: 'flex', flexDirection: 'column', boxShadow: '0 1px 2px rgba(13,27,62,.05)' }}>
+                      <div key={item.id} onClick={() => handleItemClick(item)} style={{ background: '#fff', borderRadius: 14, border: `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : '#E7E2D6'}`, padding: 14, cursor: 'pointer', minHeight: 104, display: 'flex', flexDirection: 'column', boxShadow: '0 1px 2px rgba(13,27,62,.05)' }}>
                         <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1a2e', lineHeight: 1.25 }}>{item.name}</div>
                         <AllergenChips list={allergensByItemId[item.id]} />
                         <div style={{ flex: 1 }} />
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                           <span style={{ fontSize: 17, fontWeight: 800, color: '#9A7B1F', fontVariantNumeric: 'tabular-nums' }}>£{Number(item.price || 0).toFixed(2)}</span>
                           {totalQty > 0 ? (
-                            <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', background: '#0D1B3E', color: '#C9A84C', borderRadius: 10, height: 32 }}>
-                              <button onClick={e => { e.stopPropagation(); decrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: '#C9A84C', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>−</button>
+                            <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', background: 'var(--brand-primary,#0D1B3E)', color: 'var(--brand-accent,#C9A84C)', borderRadius: 10, height: 32 }}>
+                              <button onClick={e => { e.stopPropagation(); decrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: 'var(--brand-accent,#C9A84C)', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>−</button>
                               <span style={{ fontWeight: 800, fontSize: 14, minWidth: 18, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{totalQty}</span>
-                              <button onClick={e => { e.stopPropagation(); incrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: '#C9A84C', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>+</button>
+                              <button onClick={e => { e.stopPropagation(); incrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: 'var(--brand-accent,#C9A84C)', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>+</button>
                             </div>
                           ) : (
-                            <div style={{ width: 32, height: 32, borderRadius: 9, background: '#0D1B3E', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700 }}>+</div>
+                            <div style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--brand-primary,#0D1B3E)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700 }}>+</div>
                           )}
                         </div>
                       </div>
@@ -973,7 +973,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 </div>
                 {cart.length > 0 && (
                   <button onClick={sendOrder} style={{
-                    background: '#0D1B3E', color: 'white', border: 'none',
+                    background: 'var(--brand-primary,#0D1B3E)', color: 'white', border: 'none',
                     borderRadius: 10, padding: '10px 18px', cursor: 'pointer',
                     fontWeight: 700, fontSize: 14
                   }}>
@@ -1446,8 +1446,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               style={{
                 flex: 1,
                 border: 'none',
-                borderTop: mobileTab === 'menu' ? '3px solid #C9A84C' : '3px solid transparent',
-                background: mobileTab === 'menu' ? '#0D1B3E' : '#f8f8f8',
+                borderTop: mobileTab === 'menu' ? '3px solid var(--brand-accent,#C9A84C)' : '3px solid transparent',
+                background: mobileTab === 'menu' ? 'var(--brand-primary,#0D1B3E)' : '#f8f8f8',
                 color: mobileTab === 'menu' ? 'white' : '#888',
                 fontWeight: 700,
                 fontSize: 15,
@@ -1469,8 +1469,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 flex: 1,
                 border: 'none',
                 borderLeft: '1px solid #e0e0e0',
-                borderTop: mobileTab === 'order' ? '3px solid #C9A84C' : '3px solid transparent',
-                background: mobileTab === 'order' ? '#0D1B3E' : '#f8f8f8',
+                borderTop: mobileTab === 'order' ? '3px solid var(--brand-accent,#C9A84C)' : '3px solid transparent',
+                background: mobileTab === 'order' ? 'var(--brand-primary,#0D1B3E)' : '#f8f8f8',
                 color: mobileTab === 'order' ? 'white' : '#888',
                 fontWeight: 700,
                 fontSize: 15,

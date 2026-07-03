@@ -78,7 +78,7 @@ const dismissBtn = {
   opacity: 0.6,
 };
 const inspectBtn = {
-  background: '#0d1b3e', color: 'white', border: 'none',
+  background: 'var(--brand-primary,#0d1b3e)', color: 'white', border: 'none',
   padding: '6px 12px', borderRadius: 6,
   fontWeight: 800, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap',
 };

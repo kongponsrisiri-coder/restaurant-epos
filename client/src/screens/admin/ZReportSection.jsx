@@ -352,7 +352,7 @@ export default function ZReportSection() {
                 <span>🍺 Drink</span>
                 <span style={{ fontWeight: 700 }}>£{Number(reportData.total_drink || 0).toFixed(2)}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0f0f0', fontSize: 14, color: '#0D1B3E' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0f0f0', fontSize: 14, color: 'var(--brand-primary,#0D1B3E)' }}>
                 <span style={{ fontWeight: 600 }}>Service charge (12.5%)</span>
                 <span style={{ fontWeight: 800 }}>£{Number(reportData.total_service || 0).toFixed(2)}</span>
               </div>
@@ -366,7 +366,7 @@ export default function ZReportSection() {
                   </div>
                   <div>
                     <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>🥡 Online Takeaway</div>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: '#C9A84C' }}>£{Number(reportData.total_takeaway || 0).toFixed(2)}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--brand-accent,#C9A84C)' }}>£{Number(reportData.total_takeaway || 0).toFixed(2)}</div>
                     <div style={{ fontSize: 11, color: '#888' }}>{reportData.takeaway_count || 0} orders</div>
                   </div>
                 </div>

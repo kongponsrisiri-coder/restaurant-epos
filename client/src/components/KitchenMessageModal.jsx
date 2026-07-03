@@ -62,7 +62,7 @@ export default function KitchenMessageModal({ orderId, tableNumber, customerName
   return (
     <div style={{ position:'fixed', top: 0, right: 0, bottom: 0, left: 0, background:'rgba(0,0,0,0.7)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:'white', borderRadius:14, maxWidth:560, width:'100%', maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
-        <div style={{ background:'#0D1B3E', color:'white', padding:'16px 20px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <div style={{ background:'var(--brand-primary,#0D1B3E)', color:'white', padding:'16px 20px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div>
             <div style={{ fontSize:18, fontWeight:800, letterSpacing:0.3 }}>📢 Message Kitchen</div>
             {(tableNumber || customerName) && (
@@ -115,7 +115,7 @@ export default function KitchenMessageModal({ orderId, tableNumber, customerName
             Cancel
           </button>
           <button onClick={handleSend} disabled={sending || !message.trim()}
-            style={{ flex:2, padding:14, borderRadius:10, border:'none', background:'#0D1B3E', color:'white', cursor:'pointer', fontWeight:800, fontSize:15, opacity: sending || !message.trim() ? 0.5 : 1 }}>
+            style={{ flex:2, padding:14, borderRadius:10, border:'none', background:'var(--brand-primary,#0D1B3E)', color:'white', cursor:'pointer', fontWeight:800, fontSize:15, opacity: sending || !message.trim() ? 0.5 : 1 }}>
             {sending ? 'Sending…' : '📢 Send to Kitchen'}
           </button>
         </div>

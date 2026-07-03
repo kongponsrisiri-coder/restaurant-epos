@@ -17,7 +17,7 @@ export default function UpgradeLocked({ feature }) {
         Upgrade to unlock it — along with the rest of the full SiamEPOS system.
       </p>
       <div style={{
-        background: '#0D1B3E', color: '#C9A84C',
+        background: 'var(--brand-primary,#0D1B3E)', color: 'var(--brand-accent,#C9A84C)',
         padding: '12px 22px', borderRadius: 10, fontWeight: 700, fontSize: 14,
       }}>
         Contact us at info@siamepos.co.uk to upgrade

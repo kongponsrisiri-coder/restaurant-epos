@@ -217,7 +217,7 @@ export default function BatchesTab() {
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                       <button onClick={() => setMaking(br)}
-                        style={{ padding: '8px 12px', borderRadius: 6, border: 'none', background: '#C9A84C', color: '#1a1a2e', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>
+                        style={{ padding: '8px 12px', borderRadius: 6, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: '#1a1a2e', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>
                         🥣 Make
                       </button>
                       <button onClick={() => setEditing(br)}
@@ -434,7 +434,7 @@ function MakeBatchModal({ recipe, onClose, onMade }) {
           Cancel
         </button>
         <button onClick={make} disabled={busy}
-          style={{ padding: '12px 22px', borderRadius: 8, border: 'none', background: '#C9A84C', color: '#1a1a2e', fontWeight: 800, fontSize: 14, cursor: 'pointer', opacity: busy ? 0.5 : 1 }}>
+          style={{ padding: '12px 22px', borderRadius: 8, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: '#1a1a2e', fontWeight: 800, fontSize: 14, cursor: 'pointer', opacity: busy ? 0.5 : 1 }}>
           {busy ? 'Making…' : '🥣 Make batch'}
         </button>
       </div>

@@ -149,8 +149,8 @@ export default function ClockRecordsSection() {
         }}>{loading ? 'Loading…' : 'Refresh'}</button>
         <button onClick={exportCsv} disabled={summary.length === 0} style={{
           padding:'10px 18px', borderRadius:8, border:'none',
-          background: summary.length ? '#C9A84C' : '#e5d9b2',
-          color:'#0D1B3E', fontWeight:700, fontSize:13,
+          background: summary.length ? 'var(--brand-accent,#C9A84C)' : '#e5d9b2',
+          color:'var(--brand-primary,#0D1B3E)', fontWeight:700, fontSize:13,
           cursor: summary.length ? 'pointer' : 'not-allowed'
         }}>⬇ Export CSV</button>
       </div>

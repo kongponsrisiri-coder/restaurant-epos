@@ -328,7 +328,7 @@ export default function AllergenSection() {
                         <tr key={item.id} style={{ background: rowBg }}>
                           <td style={{ padding: '9px 16px', fontWeight: 600, color: '#1a1a2e', fontSize: 13, position: 'sticky', left: 0, zIndex: 2, background: rowBg, borderRight: '2px solid #eee', boxShadow: '2px 0 4px rgba(0,0,0,0.04)', borderBottom: '1px solid #f3f3f3' }}>
                             <div style={{ lineHeight: 1.3 }}>{item.name}</div>
-                            {item.name_alt && <div style={{ fontSize: 10, color: '#C9A84C', marginTop: 1 }}>{item.name_alt}</div>}
+                            {item.name_alt && <div style={{ fontSize: 10, color: 'var(--brand-accent,#C9A84C)', marginTop: 1 }}>{item.name_alt}</div>}
                             {isSaving && <div style={{ fontSize: 9, color: '#aaa', marginTop: 2 }}>saving...</div>}
                           </td>
                           {UK14.map(a => {

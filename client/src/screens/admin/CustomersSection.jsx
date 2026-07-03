@@ -179,8 +179,8 @@ export default function CustomersSection() {
         }}>{loading ? 'Loading…' : 'Refresh'}</button>
         <button onClick={exportCsv} disabled={filtered.length === 0} style={{
           padding:'10px 18px', borderRadius:8, border:'none',
-          background: filtered.length ? '#C9A84C' : '#e5d9b2',
-          color:'#0D1B3E', fontWeight:700, fontSize:13,
+          background: filtered.length ? 'var(--brand-accent,#C9A84C)' : '#e5d9b2',
+          color:'var(--brand-primary,#0D1B3E)', fontWeight:700, fontSize:13,
           cursor: filtered.length ? 'pointer' : 'not-allowed'
         }}>⬇ Export CSV</button>
         <button onClick={() => removeCustomers(filtered.map(c => ({ email: c.customer_email, phone: c.customer_phone })), null)} disabled={filtered.length === 0} style={{
@@ -257,7 +257,7 @@ export default function CustomersSection() {
                       ) : (
                         <button
                           onClick={() => applyConsent(c, true)}
-                          style={{ background:'#0D1B3E', color:'#C9A84C', padding:'3px 9px', borderRadius:6, fontSize:10, fontWeight:700, border:'none', cursor:'pointer' }}
+                          style={{ background:'var(--brand-primary,#0D1B3E)', color:'var(--brand-accent,#C9A84C)', padding:'3px 9px', borderRadius:6, fontSize:10, fontWeight:700, border:'none', cursor:'pointer' }}
                           title="Only opt in when you have legitimate consent (verbal, signed, etc.)"
                         >+ Opt in</button>
                       )}
@@ -281,7 +281,7 @@ export default function CustomersSection() {
           Spend estimate joins orders on table_id + reservation date — accuracy will improve once orders are explicitly linked to reservations.
           <br/><br/>
           <strong>Marketing consent:</strong> only <span style={{ background:'#dcfce7', color:'#166534', padding:'1px 6px', borderRadius:4, fontWeight:700 }}>OPTED IN</span> customers receive campaigns.
-          New widget bookings can tick consent themselves; for off-widget bookings (phone, walk-in) click <span style={{ background:'#0D1B3E', color:'#C9A84C', padding:'1px 6px', borderRadius:4, fontWeight:700 }}>+ Opt in</span> only when you have legitimate consent.
+          New widget bookings can tick consent themselves; for off-widget bookings (phone, walk-in) click <span style={{ background:'var(--brand-primary,#0D1B3E)', color:'var(--brand-accent,#C9A84C)', padding:'1px 6px', borderRadius:4, fontWeight:700 }}>+ Opt in</span> only when you have legitimate consent.
         </div>
       </div>
     </div>

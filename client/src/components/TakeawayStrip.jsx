@@ -75,7 +75,7 @@ function Card({ order, onPeek }) {
   return (
     <button onClick={() => onPeek?.(order.id)} style={card}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 14, fontWeight: 800, color: '#0d1b3e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 130 }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--brand-primary,#0d1b3e)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 130 }}>
           {order.customer_name || 'Takeaway'}
         </span>
         {statusBadge}

@@ -164,14 +164,14 @@ export default function ReportsSection() {
                       </div>
                       <div style={{ padding: '10px 20px' }}>
                         <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>🥡 Online Takeaway</div>
-                        <div style={{ fontWeight: 800, color: '#C9A84C' }}>£{Number(data.total_takeaway || 0).toFixed(2)} <span style={{ color: '#888', fontSize: 12, fontWeight: 400 }}>· {data.takeaway_count || 0} orders</span></div>
+                        <div style={{ fontWeight: 800, color: 'var(--brand-accent,#C9A84C)' }}>£{Number(data.total_takeaway || 0).toFixed(2)} <span style={{ color: '#888', fontSize: 12, fontWeight: 400 }}>· {data.takeaway_count || 0} orders</span></div>
                       </div>
                     </div>
                   )}
                   <div style={{ padding: '10px 20px', background: '#fafafa', display:'flex', flexDirection:'column', gap:4, fontSize:13 }}>
                     <div style={{ display:'flex', justifyContent:'space-between', color:'#555' }}><span>🍽️ Food</span><span>£{Number(data.total_food || 0).toFixed(2)}</span></div>
                     <div style={{ display:'flex', justifyContent:'space-between', color:'#555' }}><span>🍺 Drink</span><span>£{Number(data.total_drink || 0).toFixed(2)}</span></div>
-                    <div style={{ display:'flex', justifyContent:'space-between', color:'#0D1B3E', fontWeight:600 }}><span>Service charge (12.5%)</span><span>£{Number(data.total_service || 0).toFixed(2)}</span></div>
+                    <div style={{ display:'flex', justifyContent:'space-between', color:'var(--brand-primary,#0D1B3E)', fontWeight:600 }}><span>Service charge (12.5%)</span><span>£{Number(data.total_service || 0).toFixed(2)}</span></div>
                   </div>
                   <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', background: '#f8f8f8', fontWeight: 700 }}>
                     <span>Total ({data.order_count} orders · {data.total_covers} covers)</span>

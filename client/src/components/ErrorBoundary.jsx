@@ -6,8 +6,8 @@ import { Component } from 'react';
 // out but force-quitting. This catches the crash and shows a recoverable card
 // with a Reload button instead, so the till is never bricked mid-service.
 //
-// Brand CI: Thai Gold #C9A84C on Deep Navy #0D1B3E.
-const NAVY = '#0D1B3E', GOLD = '#C9A84C';
+// Brand CI: Thai Gold var(--brand-accent,#C9A84C) on Deep Navy var(--brand-primary,#0D1B3E).
+const NAVY = 'var(--brand-primary,#0D1B3E)', GOLD = 'var(--brand-accent,#C9A84C)';
 
 export default class ErrorBoundary extends Component {
   constructor(props) {

@@ -419,7 +419,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                   {upcoming && (
                     <div title={`${upcoming.customer_name} · ${upcoming.covers} covers · ${upcoming._time}`} style={{
                       position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)',
-                      background: upcoming._delta < 0 ? '#dc2626' : '#0d1b3e', color: 'white',
+                      background: upcoming._delta < 0 ? '#dc2626' : 'var(--brand-primary,#0d1b3e)', color: 'white',
                       fontSize: 10, fontWeight: 800,
                       padding: '2px 8px', borderRadius: 999,
                       whiteSpace: 'nowrap', boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
@@ -517,7 +517,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                     {upcoming && (
                       <div style={{
                         position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)',
-                        background: upcoming._delta < 0 ? '#dc2626' : '#0d1b3e', color: 'white',
+                        background: upcoming._delta < 0 ? '#dc2626' : 'var(--brand-primary,#0d1b3e)', color: 'white',
                         fontSize: 11, fontWeight: 800,
                         padding: '3px 10px', borderRadius: 999,
                         whiteSpace: 'nowrap', boxShadow: '0 2px 6px rgba(0,0,0,0.25)',

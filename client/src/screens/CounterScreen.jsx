@@ -42,7 +42,7 @@ export default function CounterScreen({ staff }) {
       <div style={{ padding: 24, textAlign: 'center' }}>
         <div style={{ color: '#991b1b', marginBottom: 16, fontWeight: 700 }}>{err}</div>
         <button onClick={startNewOrder} style={{
-          background: '#0d1b3e', color: 'white', border: 'none',
+          background: 'var(--brand-primary,#0d1b3e)', color: 'white', border: 'none',
           padding: '10px 20px', borderRadius: 8, fontWeight: 700, cursor: 'pointer',
         }}>Retry</button>
       </div>

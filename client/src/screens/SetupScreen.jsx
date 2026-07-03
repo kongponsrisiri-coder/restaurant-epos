@@ -7,7 +7,7 @@ import { CapacitorHttp } from '@capacitor/core';
 // SiamEPOS team provides at onboarding. We verify it reaches a live SiamEPOS
 // backend, save it, and reload into the normal login.
 
-const NAVY = '#0D1B3E', GOLD = '#C9A84C';
+const NAVY = 'var(--brand-primary,#0D1B3E)', GOLD = 'var(--brand-accent,#C9A84C)';
 
 export default function SetupScreen({ onConfigured }) {
   const [url, setUrl] = useState('');

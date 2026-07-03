@@ -260,7 +260,7 @@ export default function BillsSection() {
                   <button
                     onClick={(e) => { e.stopPropagation(); setAmendTarget(bill); }}
                     title="Change payment method"
-                    style={{ background:'#0D1B3E', border:'none', color:'white', cursor:'pointer', fontSize:11, fontWeight:700, padding:'5px 9px', borderRadius:6, whiteSpace:'nowrap' }}
+                    style={{ background:'var(--brand-primary,#0D1B3E)', border:'none', color:'white', cursor:'pointer', fontSize:11, fontWeight:700, padding:'5px 9px', borderRadius:6, whiteSpace:'nowrap' }}
                   >🔄 Change</button>
                   {/* Delete still hidden until a manager unlocks (top-right
                       🔒). Destructive — different gate than the amend.
@@ -296,7 +296,7 @@ export default function BillsSection() {
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 10 }}>
                           <div style={{ fontWeight: 700, fontSize: 13, color: '#1e40af' }}>Bill Summary</div>
                           <button onClick={() => doReprintReceipt(bill)} style={{
-                            background:'#0D1B3E', color:'white', border:'none',
+                            background:'var(--brand-primary,#0D1B3E)', color:'white', border:'none',
                             padding:'6px 12px', borderRadius:6, fontWeight:700,
                             fontSize:11, cursor:'pointer', letterSpacing:0.5,
                           }}>🖨 Re-print receipt</button>
@@ -320,8 +320,8 @@ export default function BillsSection() {
                                 <span style={{ fontWeight: 600 }}>£{subtotal.toFixed(2)}</span>
                               </div>
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #e0edff' }}>
-                                <span style={{ color: '#0D1B3E' }}>Service charge (12.5%)</span>
-                                <span style={{ fontWeight: 700, color: '#0D1B3E' }}>£{serviceCharge.toFixed(2)}</span>
+                                <span style={{ color: 'var(--brand-primary,#0D1B3E)' }}>Service charge (12.5%)</span>
+                                <span style={{ fontWeight: 700, color: 'var(--brand-primary,#0D1B3E)' }}>£{serviceCharge.toFixed(2)}</span>
                               </div>
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 800, paddingTop: 8, borderTop: '2px solid #3b82f6', marginTop: 4 }}>
                                 <span>Total Paid</span><span style={{ color: '#e94560' }}>£{paid.toFixed(2)}</span>
@@ -370,7 +370,7 @@ export default function BillsSection() {
         />
       )}
       {amendToast && (
-        <div style={{ position:'fixed', bottom:24, right:24, background:'#0D1B3E', color:'white', padding:'12px 18px', borderRadius:10, fontWeight:600, fontSize:13, boxShadow:'0 8px 30px rgba(0,0,0,0.3)', zIndex:9000 }}>
+        <div style={{ position:'fixed', bottom:24, right:24, background:'var(--brand-primary,#0D1B3E)', color:'white', padding:'12px 18px', borderRadius:10, fontWeight:600, fontSize:13, boxShadow:'0 8px 30px rgba(0,0,0,0.3)', zIndex:9000 }}>
           {amendToast}
         </div>
       )}
@@ -440,7 +440,7 @@ function UnlockModal({ onClose, onUnlocked }) {
         )}
         <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={{ background: 'transparent', color: '#475569', border: '1px solid #cbd5e1', padding: '10px 16px', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Cancel</button>
-          <button onClick={submit} disabled={busy} style={{ background: '#0D1B3E', color: 'white', border: 'none', padding: '10px 18px', borderRadius: 8, fontWeight: 800, fontSize: 14, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
+          <button onClick={submit} disabled={busy} style={{ background: 'var(--brand-primary,#0D1B3E)', color: 'white', border: 'none', padding: '10px 18px', borderRadius: 8, fontWeight: 800, fontSize: 14, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
             {busy ? 'Checking…' : 'Unlock'}
           </button>
         </div>

@@ -45,7 +45,7 @@ function PreviewModal({ subject, body, onClose }) {
         </div>
         <div style={{ background:'#f5f5f5', padding:24 }}>
           <div style={{ background:'white', borderRadius:12, maxWidth:600, margin:'0 auto', boxShadow:'0 2px 8px rgba(0,0,0,0.06)' }}>
-            <div style={{ background:'#0D1B3E', color:'#C9A84C', padding:'24px 30px', fontFamily:'Georgia, serif', fontSize:24, fontWeight:700, borderRadius:'12px 12px 0 0' }}>
+            <div style={{ background:'var(--brand-primary,#0D1B3E)', color:'var(--brand-accent,#C9A84C)', padding:'24px 30px', fontFamily:'Georgia, serif', fontSize:24, fontWeight:700, borderRadius:'12px 12px 0 0' }}>
               Your Restaurant Name
             </div>
             <div style={{ padding:30, lineHeight:1.6, fontSize:15, color:'#1a1a2e' }} dangerouslySetInnerHTML={{ __html: personalised }} />

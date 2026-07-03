@@ -38,16 +38,18 @@ function headerOps(ops, order, title) {
   ops.push({ op: 'align', v: 0 }, { op: 'text', v: rule() });
 }
 
-function kitchenItemOps(ops, it) {
+function kitchenItemOps(ops, it, bilingual = true) {
   ops.push({ op: 'size', v: 'b' }, { op: 'text', v: `${it.quantity || 1} x ${it.name || it.item_name || ''}` }, { op: 'size', v: 'n' });
-  if (it.name_alt)  ops.push({ op: 'size', v: 't' }, { op: 'text', v: '  ' + it.name_alt }, { op: 'size', v: 'n' });
+  // Second-language line only when the kitchen runs bilingual tickets.
+  // kitchen_language='en' → English only (matches the HTML/server path).
+  if (bilingual && it.name_alt)  ops.push({ op: 'size', v: 't' }, { op: 'text', v: '  ' + it.name_alt }, { op: 'size', v: 'n' });
   if (it.item_note) ops.push({ op: 'bold', v: true }, { op: 'size', v: 't' }, { op: 'text', v: '  ** ' + it.item_note + ' **' }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
   if (it.notes)     ops.push({ op: 'size', v: 't' }, { op: 'text', v: '  ' + it.notes }, { op: 'size', v: 'n' });
 }
 
 // ── Kitchen / bar / fire-notice layout → ops ──────────────────────────────────
 export function buildKitchenOps(native) {
-  const { order, items, course, kind } = native || {};
+  const { order, items, course, kind, bilingual = true } = native || {};
   const ops = [];
   if (kind === 'fire-notice') {
     headerOps(ops, order, 'FIRE');
@@ -58,7 +60,7 @@ export function buildKitchenOps(native) {
   }
   if (kind === 'bar') {
     headerOps(ops, order, 'BAR');
-    for (const it of (items || []).filter(i => i && !i.voided)) kitchenItemOps(ops, it);
+    for (const it of (items || []).filter(i => i && !i.voided)) kitchenItemOps(ops, it, bilingual);
     ops.push({ op: 'feed', v: 2 }, { op: 'cut' });
     return ops;
   }
@@ -68,7 +70,7 @@ export function buildKitchenOps(native) {
   for (const it of list) { const c = Number(it.course) || 1; (byCourse[c] = byCourse[c] || []).push(it); }
   for (const c of Object.keys(byCourse).map(Number).sort((a, b) => a - b)) {
     ops.push({ op: 'bold', v: true }, { op: 'text', v: COURSE[c] || ('COURSE ' + c) }, { op: 'bold', v: false });
-    for (const it of byCourse[c]) kitchenItemOps(ops, it);
+    for (const it of byCourse[c]) kitchenItemOps(ops, it, bilingual);
     ops.push({ op: 'feed', v: 1 });
   }
   ops.push({ op: 'feed', v: 1 }, { op: 'cut' });

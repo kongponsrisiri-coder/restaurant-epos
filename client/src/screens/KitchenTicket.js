@@ -200,7 +200,7 @@ export async function printFullOrderTicket({ order, items, popupWin = null }) {
     html:     buildFullOrderTicketHTML({ order, items: active, copies, bilingual }),
     copies,
     popupWin,
-    native:   { order, items: active, kind: 'full' },
+    native:   { order, items: active, kind: 'full', bilingual },
   });
 }
 
@@ -220,7 +220,7 @@ export async function printKitchenTicket({ order, items, course, popupWin = null
     html:     buildKitchenTicketHTML({ order, items: active, course, copies, bilingual }),
     copies,
     popupWin,
-    native:   { order, items: active, course, kind: 'course' },
+    native:   { order, items: active, course, kind: 'course', bilingual },
   });
 }
 
@@ -290,7 +290,7 @@ export async function printBarOrderTicket({ order, items, popupWin = null }) {
     if (!shouldPrint(settings)) return;
     const ip   = settings?.printer_bar_ip   || settings?.printer_kitchen_ip   || settings?.printer_receipt_ip;
     const port = settings?.printer_bar_port || settings?.printer_kitchen_port || settings?.printer_receipt_port || 9100;
-    await nativeKitchenPrint({ native: { order, items: barItems, kind: 'bar' }, ip, port, target: printTarget(settings, 'bar'), settings });
+    await nativeKitchenPrint({ native: { order, items: barItems, kind: 'bar', bilingual }, ip, port, target: printTarget(settings, 'bar'), settings });
     return;
   }
 

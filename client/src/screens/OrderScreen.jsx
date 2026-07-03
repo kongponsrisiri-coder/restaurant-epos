@@ -163,8 +163,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const handleItemClick = async (item) => {
     const modifiers = await getItemModifiers(item.id);
     const isBar = getItemIsBar(item);
-    const cat = menu.find(c => c.id === item.category_id);
-    const course = isBar ? 0 : (cat?.default_course || activeCourse);
+    // Use the operator's current course selection. activeCourse already defaults
+    // to the category's default_course when a category is tapped (see the tab /
+    // rail handlers), so tapping "Mains" on the course bar correctly overrides
+    // the category default instead of being ignored by it.
+    const course = isBar ? 0 : activeCourse;
     if (modifiers && modifiers.length > 0) {
       setSelectedModifiers({});
       setModifierPopup({ item, modifiers, course, isBar });

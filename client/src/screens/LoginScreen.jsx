@@ -175,7 +175,7 @@ export default function LoginScreen({ onLogin }) {
         <div style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, letterSpacing: '-1px', lineHeight: 1 }}>
           <span style={{ color: '#fff' }}>Siam</span><span style={{ color: GOLD }}>EPOS</span>
         </div>
-        <div style={{ fontFamily: SERIF, fontSize: 14, color: '#fff', fontWeight: 700, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{restaurantName || 'Baan Siam'}</div>
+        <div style={{ fontFamily: SERIF, fontSize: 14, color: '#fff', fontWeight: 700, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{restaurantName || 'SiamEPOS'}</div>
       </div>
     </div>
   ) : (
@@ -186,7 +186,7 @@ export default function LoginScreen({ onLogin }) {
         <span style={{ color: '#fff' }}>Siam</span><span style={{ color: GOLD }}>EPOS</span>
       </div>
       <div style={{ width: 64, height: 3, background: GOLD, borderRadius: 2, margin: '22px 0' }} />
-      <div style={{ fontFamily: SERIF, fontSize: 24, color: '#fff', fontWeight: 700 }}>{restaurantName || 'Baan Siam'}</div>
+      <div style={{ fontFamily: SERIF, fontSize: 24, color: '#fff', fontWeight: 700 }}>{restaurantName || 'SiamEPOS'}</div>
       <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 8, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Point of sale</div>
     </div>
   );

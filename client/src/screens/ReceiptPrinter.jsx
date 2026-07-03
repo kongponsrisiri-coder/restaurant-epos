@@ -104,6 +104,10 @@ function _clientPrint({ order, items, settings, paymentDetails }) {
 }
 
 function openPrintPopup(html) {
+  // Never open an external browser window on the native app (Sunmi/Android):
+  // window.open launches system Chrome, which can't reach the thermal head and
+  // just confuses the operator. Native printing goes via built-in/network only.
+  if (isNativeApp()) { console.warn('[receipt] no printer available on native — skipping browser popup'); return; }
   const win = window.open('', '_blank', 'width=400,height=700,scrollbars=yes');
   if (!win) { alert('Pop-up blocked. Please allow pop-ups for this site to print receipts.'); return; }
   win.document.write(html);

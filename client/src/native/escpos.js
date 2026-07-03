@@ -11,6 +11,7 @@
 
 const WIDTH = 32;                 // network printer: 32 chars per 80mm line (Font A)
 const SUNMI_BILL_WIDTH = 46;      // Sunmi bill at the small 'r' font: ~46 chars per 80mm
+const SUNMI_KITCHEN_WIDTH = 26;   // Sunmi kitchen at the big 'n' font: ~28 chars fit — 26 stays clear of wrapping (a full 32 wraps to a stray '----')
 const COURSE = { 1: 'STARTERS', 2: 'MAINS', 3: 'DESSERTS', 4: 'EXTRAS' };
 // Sunmi printText font sizes. KITCHEN uses the big ones (n/t/b/h). The BILL uses
 // 'r' (compact receipt font) and fills the width via more columns, not a bigger
@@ -35,7 +36,9 @@ function headerOps(ops, order, title) {
   else label = 'TABLE ' + ((order && (order.table_number ?? order.table_id)) ?? '');
   ops.push({ op: 'size', v: 'h' }, { op: 'text', v: label }, { op: 'size', v: 'n' }, { op: 'bold', v: false }); // big table no.
   if (order && order.id != null) ops.push({ op: 'text', v: 'Order #' + order.id });
-  ops.push({ op: 'align', v: 0 }, { op: 'text', v: rule() });
+  // 'krule' = a rule sized per printer (kitchen font is big, so the Sunmi needs a
+  // shorter dash run than the network 32 or it wraps). See renderers below.
+  ops.push({ op: 'align', v: 0 }, { op: 'krule' });
 }
 
 function kitchenItemOps(ops, it, bilingual = true) {
@@ -68,11 +71,15 @@ export function buildKitchenOps(native) {
   const list = (items || []).filter(i => i && !i.voided && (course == null || (Number(i.course) || 1) === Number(course)));
   const byCourse = {};
   for (const it of list) { const c = Number(it.course) || 1; (byCourse[c] = byCourse[c] || []).push(it); }
-  for (const c of Object.keys(byCourse).map(Number).sort((a, b) => a - b)) {
+  const courseKeys = Object.keys(byCourse).map(Number).sort((a, b) => a - b);
+  courseKeys.forEach((c, idx) => {
+    // Separator between courses so the chef can eye-scan where one course ends
+    // and the next begins (matches the HTML/desktop ticket's rule between courses).
+    if (idx > 0) ops.push({ op: 'krule' });
     ops.push({ op: 'bold', v: true }, { op: 'text', v: COURSE[c] || ('COURSE ' + c) }, { op: 'bold', v: false });
     for (const it of byCourse[c]) kitchenItemOps(ops, it, bilingual);
     ops.push({ op: 'feed', v: 1 });
-  }
+  });
   ops.push({ op: 'feed', v: 1 }, { op: 'cut' });
   return ops;
 }
@@ -165,6 +172,7 @@ export function opsForSunmi(ops) {
     if (o.op === 'size') out.push({ op: 'size', v: SUNMI_SIZE[o.v] || SUNMI_SIZE.n });
     else if (o.op === 'row') out.push({ op: 'text', v: pad(o.l, o.r, SUNMI_BILL_WIDTH) });
     else if (o.op === 'rule') out.push({ op: 'text', v: '-'.repeat(SUNMI_BILL_WIDTH) });
+    else if (o.op === 'krule') out.push({ op: 'text', v: '-'.repeat(SUNMI_KITCHEN_WIDTH) });
     else out.push(o);
   }
   return out;
@@ -200,6 +208,7 @@ export function renderOpsToBytes(ops, { thaiCp = null } = {}) {
       case 'text':  enc(o.v); b.push(LF); break;
       case 'row':   enc(pad(o.l, o.r, WIDTH)); b.push(LF); break;
       case 'rule':  enc('-'.repeat(WIDTH)); b.push(LF); break;
+      case 'krule': enc('-'.repeat(WIDTH)); b.push(LF); break;
       case 'feed':  for (let i = 0; i < (o.v || 1); i++) b.push(LF); break;
       case 'cut':   b.push(GS, 0x56, 0x42, 0x00); break;
     }

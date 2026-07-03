@@ -199,7 +199,10 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
       api('/api/dining-duration-tiers').catch(() => []),
       api('/api/reservations/settings').catch(() => null),
     ]).then(([tabs, combs, trs, sett]) => {
-      setTables(Array.isArray(tabs) ? tabs : []);
+      // Takeaway tables (is_takeaway) are ring-up-only for walk-in/collection
+      // orders — they are NOT bookable seats, so exclude them from every
+      // reservation view (floor plan, timeline, and auto-assign/combinations).
+      setTables(Array.isArray(tabs) ? tabs.filter(t => !t.is_takeaway) : []);
       setCombinations(Array.isArray(combs) ? combs : []);
       setTiers(Array.isArray(trs) ? trs : []);
       setSettings(sett);

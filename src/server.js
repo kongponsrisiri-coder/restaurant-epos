@@ -3898,17 +3898,40 @@ app.post('/api/menu/import-batch', async (req, res) => {
       return match ? match.id : null;
     }
     await client.query('BEGIN');
+    // Ensure a category exists for every item. Previously the importer only
+    // matched EXISTING categories; a scanned menu's categories rarely match the
+    // seeded ones, so items were inserted with category_id=NULL and vanished
+    // from the menu tree. Create the category on the fly (keeps the in-memory
+    // list in sync so we don't duplicate within a batch).
+    async function ensureCategoryId(categoryName) {
+      const existing = findCategoryId(categoryName);
+      if (existing) return existing;
+      const name = (categoryName && String(categoryName).trim()) || 'Menu';
+      const dup = categories.find(c => c.name.toLowerCase() === name.toLowerCase());
+      if (dup) return dup.id;
+      const created = await client.query('INSERT INTO categories (name, sort_order) VALUES ($1, $2) RETURNING id, name', [name, categories.length + 1]);
+      categories.push({ id: created.rows[0].id, name: created.rows[0].name });
+      return created.rows[0].id;
+    }
     const results = { inserted: [], skipped: [], errors: [] };
     for (const item of items) {
       try {
-        if (!item.name_en || !item.name_en.trim()) { results.skipped.push({ item, reason: 'Missing name_en' }); continue; }
-        const price = parseFloat(item.price);
+        // Name: prefer English, fall back to Thai / generic name so a Thai-only
+        // menu still imports (was silently dropping "Missing name_en").
+        const nameEn = (item.name_en && item.name_en.trim())
+          || (item.name_th && item.name_th.trim())
+          || (item.name && String(item.name).trim()) || '';
+        if (!nameEn) { results.skipped.push({ item, reason: 'Missing name' }); continue; }
+        // Price: strip currency symbols / spaces (฿, £, "120.-") before parsing.
+        const price = parseFloat(String(item.price == null ? '' : item.price).replace(/[^0-9.]/g, ''));
         if (isNaN(price) || price < 0) { results.skipped.push({ item, reason: 'Invalid price' }); continue; }
-        const categoryId = findCategoryId(item.category);
+        const categoryId = await ensureCategoryId(item.category);
+        const nameTh = (item.name_th && item.name_th.trim()) || null;
+        const nameAlt = (nameTh && nameTh !== nameEn) ? nameTh : null;
         let allergensStr = null;
         if (Array.isArray(item.allergens) && item.allergens.length > 0) allergensStr = JSON.stringify(item.allergens);
         else if (typeof item.allergens === 'string' && item.allergens.trim()) allergensStr = JSON.stringify([item.allergens]);
-        const insertRes = await client.query(`INSERT INTO menu_items (category_id, name, name_alt, description, price, allergens, is_available) VALUES ($1,$2,$3,$4,$5,$6,1) RETURNING id, name`, [categoryId, item.name_en.trim(), item.name_th ? item.name_th.trim() : null, item.description ? item.description.trim() : null, price, allergensStr]);
+        const insertRes = await client.query(`INSERT INTO menu_items (category_id, name, name_alt, description, price, allergens, is_available) VALUES ($1,$2,$3,$4,$5,$6,1) RETURNING id, name`, [categoryId, nameEn, nameAlt, item.description ? item.description.trim() : null, price, allergensStr]);
         results.inserted.push({ id: insertRes.rows[0].id, name: insertRes.rows[0].name, category_id: categoryId, category_name: item.category || null });
       } catch (itemErr) { results.errors.push({ item, error: itemErr.message }); }
     }

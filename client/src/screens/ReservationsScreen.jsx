@@ -133,7 +133,9 @@ export default function ReservationsScreen() {
       const [res, tbls] = await Promise.all([apiFetch('/api/reservations'), apiFetch('/api/tables')]);
       if (seq !== loadSeqRef.current) return;
       setReservations(Array.isArray(res) ? res : []);
-      setTables(Array.isArray(tbls) ? tbls : []);
+      // Takeaway tables are ring-up-only, never bookable seats — keep them out
+      // of the reservation table picker / assignment.
+      setTables(Array.isArray(tbls) ? tbls.filter(t => !t.is_takeaway) : []);
     } catch { showToast('Error loading data', 'error'); }
     finally { setLoading(false); }
   }, []);

@@ -70,6 +70,10 @@ function isBilingual(settings) {
 // Accepts an optional pre-opened window (opened before async work to keep
 // the browser's user-gesture context, preventing popup blocking).
 function openPrintPopup(html, preWin = null) {
+  // Native app (Sunmi/Android) never opens system Chrome — it prints via the
+  // built-in/network path (dispatchPrint step 0). This is a hard backstop so a
+  // fallthrough can't pop a browser window on the till.
+  if (isNativeApp()) { try { closeWin(preWin); } catch {} return; }
   const win = preWin || window.open('', '_blank', 'width=400,height=600,scrollbars=yes');
   if (!win) return;
   win.document.write(html);

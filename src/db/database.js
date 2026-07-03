@@ -1,4 +1,12 @@
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+
+// SEPOS-048b — read TIMESTAMP WITHOUT TIME ZONE (OID 1114) as UTC, regardless
+// of the container's TZ env. We store UTC wall-clock (SET timezone='UTC'
+// below), but node-postgres otherwise parses these tz-naive columns using the
+// process TZ — so TZ=Europe/London read every opened_at/closed_at 1h off in
+// BST, making open-table timers wrong. Pinning the parser to UTC makes the read
+// correct no matter what TZ is set (and is a no-op when TZ is already UTC).
+types.setTypeParser(1114, (v) => (v == null ? null : new Date(String(v).replace(' ', 'T') + 'Z')));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,

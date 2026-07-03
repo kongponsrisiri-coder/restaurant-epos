@@ -89,7 +89,15 @@ export default function LoginScreen({ onLogin }) {
     Promise.all([getRestaurant().catch(() => null), getSettings().catch(() => null)])
       .then(([r, settings]) => {
         const generic = (n) => !n || /^siamepos$/i.test(String(n).trim());
-        const name = (r && r.name) || (settings && !generic(settings.restaurant_name) && settings.restaurant_name) || (r && r.restaurant_id) || '';
+        // Name priority: restaurants.name → settings.restaurant_name →
+        // settings.company_name (the owner-editable "Restaurant Name" field in
+        // Admin → Settings) → restaurant_id slug as a last resort. company_name
+        // is included so a new tenant whose DB name is still null can set its
+        // display name in-app without a DB edit.
+        const name = (r && r.name)
+          || (settings && !generic(settings.restaurant_name) && settings.restaurant_name)
+          || (settings && !generic(settings.company_name) && settings.company_name)
+          || (r && r.restaurant_id) || '';
         setRestaurantName(String(name || '').trim());
         if (settings && settings.brand_logo) setBrandLogo(settings.brand_logo); // SEPOS-BRAND-001
       })

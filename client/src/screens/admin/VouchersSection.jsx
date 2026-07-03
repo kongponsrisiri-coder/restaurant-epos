@@ -123,16 +123,16 @@ export default function VouchersSection() {
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>🎁 Gift Vouchers</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 4 }}>🎁 Gift Vouchers</h1>
           <p style={{ fontSize: 13, color: '#888', margin: 0 }}>Vouchers sold via the public widget — redeemed at checkout</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => setSellOpen(true)}
-            style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: '#1a1a2e', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+            style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
             + Sell voucher
           </button>
           <button onClick={exportCsv}
-            style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             ⬇ Export CSV
           </button>
         </div>
@@ -141,7 +141,7 @@ export default function VouchersSection() {
       {/* Stats */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         {[
-          { label: 'Total sold',         value: fmtMoney(stats.soldTotal),     color: '#1a1a2e' },
+          { label: 'Total sold',         value: fmtMoney(stats.soldTotal),     color: 'var(--brand-primary, #1a1a2e)' },
           { label: 'Sold last 30 days',  value: fmtMoney(stats.sold30),        color: '#3b82f6' },
           { label: 'Active vouchers',    value: stats.activeCount,             color: '#22c55e' },
           { label: 'Outstanding balance',value: fmtMoney(stats.activeBalance), color: '#eab308' },
@@ -161,12 +161,12 @@ export default function VouchersSection() {
           placeholder="Search code, email or name…"
           style={{ flex: 1, minWidth: 220, padding: '10px 14px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}/>
         <button onClick={load}
-          style={{ padding: '10px 16px', borderRadius: 8, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+          style={{ padding: '10px 16px', borderRadius: 8, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
           Search
         </button>
         {['', 'active', 'depleted', 'expired', 'voided'].map(s => (
           <button key={s || 'all'} onClick={() => setStatusFilter(s)}
-            style={{ padding: '8px 14px', borderRadius: 20, border: 'none', background: statusFilter === s ? '#1a1a2e' : '#e0e0e0', color: statusFilter === s ? 'white' : '#555', fontWeight: 600, fontSize: 12, cursor: 'pointer', textTransform: 'capitalize' }}>
+            style={{ padding: '8px 14px', borderRadius: 20, border: 'none', background: statusFilter === s ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0', color: statusFilter === s ? 'white' : '#555', fontWeight: 600, fontSize: 12, cursor: 'pointer', textTransform: 'capitalize' }}>
             {s || 'all'}
           </button>
         ))}
@@ -333,7 +333,7 @@ function SellVoucherModal({ onClose, onSold }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 8 }}>
             {PRESETS.map(p => (
               <button key={p} onClick={() => setAmount(p)}
-                style={{ padding: '14px 8px', borderRadius: 8, border: `2px solid ${amount === p ? '#1e3a6e' : '#e0e0e0'}`, background: amount === p ? '#fdf6ec' : 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 16, cursor: 'pointer' }}>
+                style={{ padding: '14px 8px', borderRadius: 8, border: `2px solid ${amount === p ? '#1e3a6e' : '#e0e0e0'}`, background: amount === p ? '#fdf6ec' : 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, fontSize: 16, cursor: 'pointer' }}>
                 £{p}
               </button>
             ))}
@@ -356,7 +356,7 @@ function SellVoucherModal({ onClose, onSold }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {[{ k: 'cash', label: '💵 Cash' }, { k: 'card', label: '💳 Card' }].map(m => (
               <button key={m.k} onClick={() => setMethod(m.k)}
-                style={{ padding: '14px', borderRadius: 8, border: `2px solid ${method === m.k ? '#1e3a6e' : '#e0e0e0'}`, background: method === m.k ? '#fdf6ec' : 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+                style={{ padding: '14px', borderRadius: 8, border: `2px solid ${method === m.k ? '#1e3a6e' : '#e0e0e0'}`, background: method === m.k ? '#fdf6ec' : 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
                 {m.label}
               </button>
             ))}
@@ -365,7 +365,7 @@ function SellVoucherModal({ onClose, onSold }) {
           {err && <div style={{ marginTop: 14, background: '#fee2e2', color: '#991b1b', padding: '10px 12px', borderRadius: 8, fontSize: 13 }}>⚠️ {err}</div>}
 
           <button onClick={submit} disabled={!valid || busy}
-            style={{ marginTop: 20, width: '100%', padding: 16, borderRadius: 10, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: '#1a1a2e', fontWeight: 800, fontSize: 16, cursor: 'pointer', opacity: (!valid || busy) ? 0.5 : 1 }}>
+            style={{ marginTop: 20, width: '100%', padding: 16, borderRadius: 10, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 800, fontSize: 16, cursor: 'pointer', opacity: (!valid || busy) ? 0.5 : 1 }}>
             {busy ? 'Creating…' : `Sell £${amount} voucher`}
           </button>
           <p style={{ fontSize: 11, color: '#888', marginTop: 10, lineHeight: 1.4 }}>
@@ -411,7 +411,7 @@ function SoldSuccessModal({ voucher, onClose }) {
             </div>
           </div>
           <button onClick={onClose}
-            style={{ marginTop: 20, width: '100%', padding: 14, borderRadius: 10, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+            style={{ marginTop: 20, width: '100%', padding: 14, borderRadius: 10, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
             Done
           </button>
         </div>
@@ -424,7 +424,7 @@ function KV({ label, value, big, highlight }) {
   return (
     <div style={{ background: highlight ? '#fdf6ec' : '#fafaf7', borderRadius: 8, padding: '10px 14px' }}>
       <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: big ? 18 : 13, fontWeight: big ? 800 : 600, color: highlight ? '#5b4a2a' : '#1a1a2e' }}>{value}</div>
+      <div style={{ fontSize: big ? 18 : 13, fontWeight: big ? 800 : 600, color: highlight ? '#5b4a2a' : 'var(--brand-primary, #1a1a2e)' }}>{value}</div>
     </div>
   );
 }

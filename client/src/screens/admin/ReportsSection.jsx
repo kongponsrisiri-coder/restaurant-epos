@@ -97,17 +97,17 @@ export default function ReportsSection() {
 
   const periodBtn = { padding: '6px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, textTransform: 'capitalize' };
   const tabBtn    = { padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600 };
-  const actionBtn = { padding: '8px 14px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 13, cursor: 'pointer' };
+  const actionBtn = { padding: '8px 14px', borderRadius: 8, border: '1px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, fontSize: 13, cursor: 'pointer' };
 
   return (
     <div style={{ padding: 'clamp(14px, 4vw, 24px)' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 16 }}>Reports</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 16 }}>Reports</h1>
       {/* Period strip — horizontal scroll on narrow viewports (same
           pattern as TradingSection). */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {['today', 'weekly', 'monthly', 'custom'].map(p => (
           <button key={p} onClick={() => setPeriod(p)}
-            style={{ ...periodBtn, background: period === p ? '#1a1a2e' : '#e0e0e0', color: period === p ? 'white' : '#555' }}>
+            style={{ ...periodBtn, background: period === p ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0', color: period === p ? 'white' : '#555' }}>
             {p}
           </button>
         ))}
@@ -129,7 +129,7 @@ export default function ReportsSection() {
           </button>
         ))}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <button onClick={() => doPrint('thermal')} style={{ ...actionBtn, background: '#1a1a2e', color: 'white', border: '1px solid #1a1a2e' }}>🖨 Print</button>
+          <button onClick={() => doPrint('thermal')} style={{ ...actionBtn, background: 'var(--brand-primary, #1a1a2e)', color: 'white', border: '1px solid var(--brand-primary, #1a1a2e)' }}>🖨 Print</button>
           <button onClick={() => doPrint('full')}    style={actionBtn}>📄 Export</button>
           <button onClick={exportCsv}                style={actionBtn}>⬇ CSV</button>
         </div>
@@ -160,7 +160,7 @@ export default function ReportsSection() {
                     <div style={{ background: '#fffbeb', borderTop: '1px solid #fde68a', display: 'grid', gridTemplateColumns: '1fr 1fr', fontSize: 13 }}>
                       <div style={{ padding: '10px 20px', borderRight: '1px solid #fde68a' }}>
                         <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>Dine-in</div>
-                        <div style={{ fontWeight: 800, color: '#1a1a2e' }}>£{Number(data.total_dine_in || 0).toFixed(2)} <span style={{ color: '#888', fontSize: 12, fontWeight: 400 }}>· {data.dine_in_count || 0} orders</span></div>
+                        <div style={{ fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>£{Number(data.total_dine_in || 0).toFixed(2)} <span style={{ color: '#888', fontSize: 12, fontWeight: 400 }}>· {data.dine_in_count || 0} orders</span></div>
                       </div>
                       <div style={{ padding: '10px 20px' }}>
                         <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>🥡 Online Takeaway</div>
@@ -196,11 +196,11 @@ export default function ReportsSection() {
                 </div>
                 <div>
                   <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>Via till (cash/card)</div>
-                  <div style={{ fontWeight: 800, color: '#1a1a2e', fontSize: 18 }}>£{Number(data.vouchers_sold?.till_total || 0).toFixed(2)}</div>
+                  <div style={{ fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)', fontSize: 18 }}>£{Number(data.vouchers_sold?.till_total || 0).toFixed(2)}</div>
                 </div>
                 <div>
                   <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>Online (Stripe)</div>
-                  <div style={{ fontWeight: 800, color: '#1a1a2e', fontSize: 18 }}>£{Number(data.vouchers_sold?.stripe_total || 0).toFixed(2)}</div>
+                  <div style={{ fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)', fontSize: 18 }}>£{Number(data.vouchers_sold?.stripe_total || 0).toFixed(2)}</div>
                 </div>
               </div>
               {data?.vouchers_redeemed?.count > 0 && (

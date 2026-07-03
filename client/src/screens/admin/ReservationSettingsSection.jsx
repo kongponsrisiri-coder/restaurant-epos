@@ -9,7 +9,7 @@ import { SERVER_URL } from '../../api';
 const inp = {
   width: '100%', padding: '10px 12px', borderRadius: 8,
   border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box',
-  fontFamily: 'inherit', color: '#1a1a2e',
+  fontFamily: 'inherit', color: 'var(--brand-primary, #1a1a2e)',
 };
 const lbl = { fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 };
 const hint = { fontSize: 12, color: '#aaa', marginTop: 4 };
@@ -27,7 +27,7 @@ function Field({ label, hint: hintText, children }) {
 function Card({ title, emoji, children }) {
   return (
     <div style={{ background: 'white', borderRadius: 14, padding: 24, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-      <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 20, marginTop: 0 }}>{emoji} {title}</h2>
+      <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 20, marginTop: 0 }}>{emoji} {title}</h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>{children}</div>
     </div>
   );
@@ -131,7 +131,7 @@ export default function ReservationSettingsSection() {
 
   return (
     <div style={{ padding: 24, maxWidth: 640 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>Reservation Settings</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 6 }}>Reservation Settings</h1>
       <p style={{ fontSize: 13, color: '#888', marginBottom: 24 }}>Configure your online booking widget and availability rules.</p>
 
       {error && (
@@ -189,7 +189,7 @@ export default function ReservationSettingsSection() {
               <button key={opt.value} onClick={() => set('service_type', opt.value)}
                 style={{
                   flex: 1, padding: '12px', borderRadius: 10, border: 'none', cursor: 'pointer', textAlign: 'center',
-                  background: settings.service_type === opt.value ? '#1a1a2e' : '#f0f0f0',
+                  background: settings.service_type === opt.value ? 'var(--brand-primary, #1a1a2e)' : '#f0f0f0',
                   color: settings.service_type === opt.value ? 'white' : '#555',
                   fontWeight: 700, fontSize: 13,
                 }}>
@@ -341,7 +341,7 @@ export default function ReservationSettingsSection() {
 
       {/* Save */}
       <button onClick={handleSave} disabled={saving}
-        style={{ width: '100%', padding: '16px', borderRadius: 12, border: 'none', background: saved ? '#22c55e' : saving ? '#9ca3af' : '#1a1a2e', color: 'white', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 16, transition: 'background .2s' }}>
+        style={{ width: '100%', padding: '16px', borderRadius: 12, border: 'none', background: saved ? '#22c55e' : saving ? '#9ca3af' : 'var(--brand-primary, #1a1a2e)', color: 'white', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 16, transition: 'background .2s' }}>
         {saving ? 'Saving…' : saved ? '✓ Settings Saved!' : 'Save Reservation Settings'}
       </button>
     </div>

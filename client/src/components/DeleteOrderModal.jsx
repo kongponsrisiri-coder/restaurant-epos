@@ -65,7 +65,7 @@ export default function DeleteOrderModal({ order, onClose, onDeleted }) {
         <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 16, gap: 12 }}>
           <div style={{ fontSize: 28 }}>🗑️</div>
           <div style={{ flex: 1 }}>
-            <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, color: '#1a1a2e' }}>Delete this order?</h2>
+            <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>Delete this order?</h2>
             <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{summary}</div>
           </div>
           <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, color: '#94a3b8', cursor: 'pointer' }}>×</button>

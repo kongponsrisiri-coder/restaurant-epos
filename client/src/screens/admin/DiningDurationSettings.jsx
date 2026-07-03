@@ -71,7 +71,7 @@ export default function DiningDurationSettings() {
 
       {/* Header */}
       <div style={{ marginBottom: 6 }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Dining Duration Tiers</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Dining Duration Tiers</div>
         <div style={{ fontSize: 13, color: '#888', marginTop: 3, lineHeight: 1.5 }}>
           How long each booking occupies a table. Applied automatically by party size when checking availability.
         </div>
@@ -109,7 +109,7 @@ export default function DiningDurationSettings() {
                   background: tier.covers_min <= 4 ? '#3b82f6' : tier.covers_min <= 8 ? '#f59e0b' : '#e94560',
                   flexShrink: 0,
                 }} />
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#1a1a2e' }}>{coverLabel(tier)}</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--brand-primary, #1a1a2e)' }}>{coverLabel(tier)}</span>
               </div>
 
               {/* Duration input */}
@@ -125,7 +125,7 @@ export default function DiningDurationSettings() {
                   style={{
                     flex: 1, padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8,
                     fontSize: 15, fontWeight: 700, textAlign: 'center',
-                    color: '#1a1a2e', fontFamily: 'inherit',
+                    color: 'var(--brand-primary, #1a1a2e)', fontFamily: 'inherit',
                     outline: 'none',
                   }}
                 />
@@ -139,7 +139,7 @@ export default function DiningDurationSettings() {
                 style={{
                   padding: '8px 0', borderRadius: 8, border: 'none', cursor: saving[tier.id] ? 'not-allowed' : 'pointer',
                   fontWeight: 700, fontSize: 13, width: '100%',
-                  background: saved[tier.id]  ? '#dcfce7' : saving[tier.id] ? '#f0f0f0' : '#1a1a2e',
+                  background: saved[tier.id]  ? '#dcfce7' : saving[tier.id] ? '#f0f0f0' : 'var(--brand-primary, #1a1a2e)',
                   color:      saved[tier.id]  ? '#14532d' : saving[tier.id] ? '#aaa'    : 'white',
                   transition: 'background .15s, color .15s',
                 }}

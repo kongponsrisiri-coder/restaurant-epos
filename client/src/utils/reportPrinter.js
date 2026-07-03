@@ -201,25 +201,25 @@ ${bodyHtml}
 <meta charset="UTF-8"><title>${title}</title>
 <style>
   *    { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Arial, sans-serif; font-size:13px; color:#1a1a2e; background:white; padding:24px 32px; line-height:1.5; }
+  body { font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Arial, sans-serif; font-size:13px; color:var(--brand-primary, #1a1a2e); background:white; padding:24px 32px; line-height:1.5; }
   @media print { body { padding:14mm 12mm; } @page { size:A4 portrait; margin:0; } }
-  h1 { font-size:24px; font-weight:800; color:#1a1a2e; margin-bottom:6px; }
-  h2 { font-size:14px; font-weight:700; color:#1a1a2e; margin:18px 0 6px; padding-bottom:4px; border-bottom:1.5px solid #1a1a2e; text-transform:uppercase; letter-spacing:1px; }
+  h1 { font-size:24px; font-weight:800; color:var(--brand-primary, #1a1a2e); margin-bottom:6px; }
+  h2 { font-size:14px; font-weight:700; color:var(--brand-primary, #1a1a2e); margin:18px 0 6px; padding-bottom:4px; border-bottom:1.5px solid var(--brand-primary, #1a1a2e); text-transform:uppercase; letter-spacing:1px; }
   .sub { font-size:12px; color:#666; margin-bottom:16px; }
   table { width:100%; border-collapse:collapse; margin-top:6px; }
   th, td { padding:7px 6px; text-align:left; }
-  th { border-bottom:2px solid #1a1a2e; font-weight:700; font-size:12px; color:#1a1a2e; text-transform:uppercase; letter-spacing:0.5px; }
+  th { border-bottom:2px solid var(--brand-primary, #1a1a2e); font-weight:700; font-size:12px; color:var(--brand-primary, #1a1a2e); text-transform:uppercase; letter-spacing:0.5px; }
   td { border-bottom:1px solid #eee; }
   .right { text-align:right; }
   .center { text-align:center; }
   .muted { color:#666; }
-  .total-row td { border-top:2.5px solid #1a1a2e; border-bottom:none; padding-top:9px; font-weight:800; font-size:15px; }
-  .pill { display:inline-block; padding:2px 8px; background:#1a1a2e; color:white; border-radius:4px; font-size:10px; letter-spacing:1px; font-weight:600; text-transform:uppercase; }
+  .total-row td { border-top:2.5px solid var(--brand-primary, #1a1a2e); border-bottom:none; padding-top:9px; font-weight:800; font-size:15px; }
+  .pill { display:inline-block; padding:2px 8px; background:var(--brand-primary, #1a1a2e); color:white; border-radius:4px; font-size:10px; letter-spacing:1px; font-weight:600; text-transform:uppercase; }
   .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
   .grid-3 { display:grid; grid-template-columns:repeat(3, 1fr); gap:18px; }
   .card { background:#f8f8fa; border-radius:8px; padding:12px 14px; }
   .card .lbl { font-size:11px; color:#666; text-transform:uppercase; letter-spacing:0.5px; }
-  .card .val { font-size:22px; font-weight:800; color:#1a1a2e; margin-top:4px; }
+  .card .val { font-size:22px; font-weight:800; color:var(--brand-primary, #1a1a2e); margin-top:4px; }
   .footer { margin-top:24px; padding-top:10px; border-top:1px dashed #ccc; font-size:11px; color:#888; text-align:center; }
 </style>
 </head><body>

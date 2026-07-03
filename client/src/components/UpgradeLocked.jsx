@@ -6,7 +6,7 @@ export default function UpgradeLocked({ feature }) {
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', textAlign: 'center',
-      padding: '48px 24px', minHeight: 320, color: '#1a1a2e',
+      padding: '48px 24px', minHeight: 320, color: 'var(--brand-primary, #1a1a2e)',
     }}>
       <div style={{ fontSize: 56, marginBottom: 12 }}>🔒</div>
       <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 8px' }}>

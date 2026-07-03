@@ -6,7 +6,7 @@ import { NAVY, GOLD, RED, GREEN } from '../theme'; // SEPOS-BRAND-001 — per-cl
 // SiamEPOS — LoginScreen (redesign per design_handoff_siamepos).
 // Split layout: left navy brand panel, right inset Paper panel with the staff
 // grid → PIN pad. Brand colours (NAVY/GOLD) come from the per-client theme.
-const PAPER = '#F4F1EA', INK = '#1a1a2e', MUTED = '#7C766A';
+const PAPER = '#F4F1EA', INK = 'var(--brand-primary, #1a1a2e)', MUTED = '#7C766A';
 const GOLD_TINT = '#FBF4DF', GOLD_ON_LIGHT = '#9A7B1F', CARD_BORDER = '#E7E2D6';
 const UI_FONT = "'Archivo', system-ui, -apple-system, sans-serif";
 const SERIF = "Georgia, 'Times New Roman', serif";
@@ -180,24 +180,29 @@ export default function LoginScreen({ onLogin }) {
   // Mobile: compact full-width header strip above the login panel.
   const brandPanel = isMobile ? (
     <div style={{ width: '100%', flexShrink: 0, position: 'relative', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14, overflow: 'hidden' }}>
-      <BrandMark size={44} logo={brandLogo} />
+      <BrandMark size={60} logo={brandLogo} />
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, letterSpacing: '-1px', lineHeight: 1 }}>
+        {/* Restaurant name is the headline; SiamEPOS sits under it as the platform credit. */}
+        <div style={{ fontFamily: SERIF, fontSize: 24, color: '#fff', fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.05, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{restaurantName || 'SiamEPOS'}</div>
+        <div style={{ fontFamily: SERIF, fontSize: 13, fontWeight: 700, marginTop: 3 }}>
+          <span style={{ color: 'rgba(255,255,255,0.55)' }}>Powered by </span>
           <span style={{ color: '#fff' }}>Siam</span><span style={{ color: GOLD }}>EPOS</span>
         </div>
-        <div style={{ fontFamily: SERIF, fontSize: 14, color: '#fff', fontWeight: 700, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{restaurantName || 'SiamEPOS'}</div>
       </div>
     </div>
   ) : (
     <div style={{ width: 600, flexShrink: 0, position: 'relative', padding: '0 64px', display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', right: -60, bottom: -40, opacity: 0.05, pointerEvents: 'none' }}><Lotus size={420} /></div>
-      <BrandMark size={120} logo={brandLogo} />
-      <div style={{ fontFamily: SERIF, fontSize: 66, fontWeight: 700, letterSpacing: '-1.5px', lineHeight: 1, marginTop: 28 }}>
+      <BrandMark size={168} logo={brandLogo} />
+      {/* Restaurant name is the hero wordmark; wordBreak so a long name wraps rather than overflow. */}
+      <div style={{ fontFamily: SERIF, fontSize: 60, color: '#fff', fontWeight: 700, letterSpacing: '-1.5px', lineHeight: 1.05, marginTop: 28, wordBreak: 'break-word' }}>{restaurantName || 'SiamEPOS'}</div>
+      <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 10, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Point of sale</div>
+      <div style={{ width: 64, height: 3, background: GOLD, borderRadius: 2, margin: '22px 0' }} />
+      {/* Our platform credit, under the client's name. */}
+      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 5, fontWeight: 600 }}>Powered by</div>
+      <div style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1 }}>
         <span style={{ color: '#fff' }}>Siam</span><span style={{ color: GOLD }}>EPOS</span>
       </div>
-      <div style={{ width: 64, height: 3, background: GOLD, borderRadius: 2, margin: '22px 0' }} />
-      <div style={{ fontFamily: SERIF, fontSize: 24, color: '#fff', fontWeight: 700 }}>{restaurantName || 'SiamEPOS'}</div>
-      <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 8, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Point of sale</div>
     </div>
   );
 
@@ -325,7 +330,7 @@ export default function LoginScreen({ onLogin }) {
       {/* SEPOS-RESET-001 — reset-for-new-client confirm dialog */}
       {showReset && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000, padding: 16 }}>
-          <div style={{ background: '#fff', borderRadius: 18, padding: '26px 24px', width: 400, maxWidth: '92vw', color: '#1a1a2e', fontFamily: UI_FONT }}>
+          <div style={{ background: '#fff', borderRadius: 18, padding: '26px 24px', width: 400, maxWidth: '92vw', color: 'var(--brand-primary, #1a1a2e)', fontFamily: UI_FONT }}>
             <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 10 }}>🔄 Reset this till?</div>
             <div style={{ fontSize: 14, color: '#555', lineHeight: 1.6, marginBottom: 8 }}>
               {canSwitchClient()
@@ -345,18 +350,18 @@ export default function LoginScreen({ onLogin }) {
 }
 
 const numKey = {
-  width: 96, height: 74, borderRadius: 16, border: 'none', background: '#fff', color: '#1a1a2e',
+  width: 96, height: 74, borderRadius: 16, border: 'none', background: '#fff', color: 'var(--brand-primary, #1a1a2e)',
   fontSize: 26, fontWeight: 700, cursor: 'pointer', boxShadow: '0 1px 2px rgba(13,27,62,.06)',
   fontVariantNumeric: 'tabular-nums',
 };
 const mobileNumKey = {
-  width: '100%', height: 64, borderRadius: 16, border: 'none', background: '#fff', color: '#1a1a2e',
+  width: '100%', height: 64, borderRadius: 16, border: 'none', background: '#fff', color: 'var(--brand-primary, #1a1a2e)',
   fontSize: 24, fontWeight: 700, cursor: 'pointer', boxShadow: '0 1px 2px rgba(13,27,62,.06)',
   fontVariantNumeric: 'tabular-nums',
 };
 const inputStyle = {
   width: '100%', padding: '14px 16px', borderRadius: 12, border: `1px solid ${CARD_BORDER}`,
-  fontSize: 16, background: '#fff', color: '#1a1a2e', boxSizing: 'border-box',
+  fontSize: 16, background: '#fff', color: 'var(--brand-primary, #1a1a2e)', boxSizing: 'border-box',
 };
 const primaryBtn = {
   width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: RED, color: '#fff',

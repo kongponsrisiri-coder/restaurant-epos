@@ -280,14 +280,14 @@ export default function ReservationPlanView({ reservations = [], selectedDate, o
             {[['timeline','⏱ Timeline'],['floorplan','🗺 Floor Plan']].map(([v, l]) => (
               <button key={v} onClick={() => setPlanView(v)}
                 style={{ padding: '7px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
-                  background: planView === v ? '#1a1a2e' : '#e5e7eb', color: planView === v ? 'white' : '#555' }}>
+                  background: planView === v ? 'var(--brand-primary, #1a1a2e)' : '#e5e7eb', color: planView === v ? 'white' : '#555' }}>
                 {l}
               </button>
             ))}
           </div>
         )}
         <div style={{ marginLeft: 'auto', fontSize: 13, color: '#555' }}>
-          <strong style={{ color: '#1a1a2e' }}>{active.length}</strong> bookings ·{' '}
+          <strong style={{ color: 'var(--brand-primary, #1a1a2e)' }}>{active.length}</strong> bookings ·{' '}
           <strong style={{ color: '#e94560' }}>{active.reduce((s, r) => s + r.covers, 0)}</strong> covers ·{' '}
           <span style={{ color: '#888' }}>max {maxCoversPerSlot}/slot</span>
         </div>
@@ -404,7 +404,7 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
     <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#fafafa' }}>
       <div style={{ minWidth: LBL_W + slots.length * COL_W + 20 }}>
         {/* Time header */}
-        <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 10, background: '#1a1a2e' }}>
+        <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 10, background: 'var(--brand-primary, #1a1a2e)' }}>
           <div style={{ width: LBL_W, flexShrink: 0, padding: '10px 12px', fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>Table</div>
           {slots.map(m => (
             <div key={m} style={{ width: COL_W, flexShrink: 0, padding: '10px 0', fontSize: 11, fontWeight: m % 60 === 0 ? 700 : 400, textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.07)', color: m % 60 === 0 ? 'white' : 'rgba(255,255,255,0.3)' }}>
@@ -423,7 +423,7 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
           return (
             <div key={row.key} style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', background: ri % 2 === 0 ? 'white' : '#fafafa', height: rowH }}>
               <div style={{ width: LBL_W, flexShrink: 0, padding: '0 12px', display: 'flex', flexDirection: 'column', justifyContent: 'center', borderRight: '2px solid #e5e7eb', position: 'sticky', left: 0, background: 'inherit', zIndex: 2 }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>
                   {row.label}
                   {row.linked && <span title="Can be linked with adjacent tables" style={{ marginLeft: 4, fontSize: 11 }}>🔗</span>}
                 </div>
@@ -450,7 +450,7 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
                       title={isPrimary ? undefined : `${r.customer_name} (${r.covers}p) — uses this table as part of a linked group`}
                       style={{ position: 'absolute', left: pxLeft(r.reservation_time) + 2, top, height: h,
                         width: Math.max(pxWidth(r.reservation_time, r.covers), 70),
-                        background: isSel ? '#1a1a2e' : isPrimary ? c.bg : 'repeating-linear-gradient(45deg, #f3f4f6, #f3f4f6 6px, #e8eaed 6px, #e8eaed 12px)',
+                        background: isSel ? 'var(--brand-primary, #1a1a2e)' : isPrimary ? c.bg : 'repeating-linear-gradient(45deg, #f3f4f6, #f3f4f6 6px, #e8eaed 6px, #e8eaed 12px)',
                         border: `2px ${isPrimary ? 'solid' : 'dashed'} ${isSel ? '#e94560' : laneCount > 1 ? '#ef4444' : isPrimary ? c.border : '#cbd5e1'}`,
                         borderRadius: 8, padding: '3px 8px', cursor: 'pointer', overflow: 'hidden', zIndex: isSel ? 5 : 3,
                         boxShadow: isSel ? '0 4px 16px rgba(0,0,0,0.25)' : '0 1px 3px rgba(0,0,0,0.08)', transition: 'all 0.15s' }}>
@@ -483,7 +483,7 @@ function TimelineView({ tables, reservations, tiers, tableGroups, settings, time
                 return (
                   <div key={r.id} onClick={() => onSelect(r)}
                     style={{ position: 'absolute', left: left + 2, top: 6, height: 42, width: Math.max(width, 70),
-                      background: isSel ? '#1a1a2e' : '#fff7ed', border: `2px dashed ${isSel ? '#e94560' : '#f59e0b'}`,
+                      background: isSel ? 'var(--brand-primary, #1a1a2e)' : '#fff7ed', border: `2px dashed ${isSel ? '#e94560' : '#f59e0b'}`,
                       borderRadius: 8, padding: '3px 8px', cursor: 'pointer', overflow: 'hidden', zIndex: isSel ? 5 : 3, transition: 'all 0.15s' }}>
                     <div style={{ fontSize: 11, fontWeight: 800, color: isSel ? 'white' : '#92400e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.customer_name}</div>
                     <div style={{ fontSize: 10, color: isSel ? 'rgba(255,255,255,0.7)' : '#92400e', opacity: 0.85 }}>{r.reservation_time} · {r.covers}p</div>
@@ -542,9 +542,9 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
               : '⚠ No table';
             return (
               <div key={r.id} onClick={() => onSelect(r)}
-                style={{ padding: '11px 14px', cursor: 'pointer', borderBottom: '1px solid #f3f4f6', borderLeft: `4px solid ${c.border}`, background: isSel ? '#1a1a2e' : 'white' }}>
+                style={{ padding: '11px 14px', cursor: 'pointer', borderBottom: '1px solid #f3f4f6', borderLeft: `4px solid ${c.border}`, background: isSel ? 'var(--brand-primary, #1a1a2e)' : 'white' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: isSel ? 'white' : '#1a1a2e' }}>{r.customer_name}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: isSel ? 'white' : 'var(--brand-primary, #1a1a2e)' }}>{r.customer_name}</div>
                   <div style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: isSel ? 'rgba(255,255,255,0.15)' : c.bg, color: isSel ? 'white' : c.text, textTransform: 'capitalize' }}>{r.status}</div>
                 </div>
                 <div style={{ fontSize: 11, color: isSel ? 'rgba(255,255,255,0.6)' : '#9ca3af' }}>
@@ -557,7 +557,7 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
       </div>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {/* Status legend — its own bar above the floor so it never sits on top of a table */}
-        <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: '8px 16px', background: selectedRes ? '#1a1a2e' : 'white', borderBottom: '1px solid #e5e7eb', fontSize: 11 }}>
+        <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: '8px 16px', background: selectedRes ? 'var(--brand-primary, #1a1a2e)' : 'white', borderBottom: '1px solid #e5e7eb', fontSize: 11 }}>
           <div style={{ fontWeight: 700, fontSize: 12, color: !selectedRes ? '#9ca3af' : enough ? '#34d399' : '#fbbf24' }}>
             {!selectedRes
               ? 'Tap a booking on the left, then tap a table to seat it'
@@ -612,12 +612,12 @@ function FloorPlanView({ tables, reservations, tiers, tableGroups, selectedRes, 
                 }}
                 style={{ position: 'absolute', left: table.pos_x||0, top: table.pos_y||0, width: table.width||80, height: table.height||80,
                   borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,
-                  background: isSel ? '#1a1a2e' : booking ? c.bg : 'white',
+                  background: isSel ? 'var(--brand-primary, #1a1a2e)' : booking ? c.bg : 'white',
                   border: `3px ${isGroupMember ? 'dashed' : 'solid'} ${isSel ? '#e94560' : booking ? c.border : '#cbd5e1'}`,
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                   cursor: booking ? 'pointer' : 'default', userSelect: 'none', zIndex: isSel ? 10 : 3,
                   boxShadow: isSel ? '0 4px 20px rgba(0,0,0,0.25)' : '0 2px 6px rgba(0,0,0,0.08)', transition: 'all 0.15s' }}>
-                <div style={{ fontSize: 16, fontWeight: 800, color: isSel ? 'white' : booking ? c.text : '#1a1a2e', lineHeight: 1 }}>{table.table_number}</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: isSel ? 'white' : booking ? c.text : 'var(--brand-primary, #1a1a2e)', lineHeight: 1 }}>{table.table_number}</div>
                 {isPrimary ? (
                   <>
                     <div style={{
@@ -717,7 +717,7 @@ function BookingPanel({ res, allReservations, tables, tableGroups, tiers, onAssi
 
   function btnStyle(isSel, warning) {
     if (isSel)    return { border: '2px solid #22c55e', background: '#dcfce7', color: '#166534' };
-    if (!warning) return { border: '2px solid #e5e7eb', background: 'white', color: '#1a1a2e' };
+    if (!warning) return { border: '2px solid #e5e7eb', background: 'white', color: 'var(--brand-primary, #1a1a2e)' };
     return { border: '2px solid #fca5a5', background: '#fef2f2', color: '#ef4444' };
   }
 
@@ -725,7 +725,7 @@ function BookingPanel({ res, allReservations, tables, tableGroups, tiers, onAssi
     <div style={{ width: 290, flexShrink: 0, minHeight: 0, background: 'white', borderLeft: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '14px 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
         <div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#1a1a2e' }}>{res.customer_name}</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>{res.customer_name}</div>
           <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{res.reservation_time} – {endTime} · {res.covers}p · {duration}min</div>
         </div>
         <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 6, border: 'none', background: '#f3f4f6', cursor: 'pointer', fontSize: 16, color: '#555' }}>×</button>
@@ -770,7 +770,7 @@ function BookingPanel({ res, allReservations, tables, tableGroups, tiers, onAssi
               <span style={{ color: '#888' }}>No table yet — tap one or more tables below to seat (and join) this party.</span>
             ) : (
               <>
-                <div style={{ fontWeight: 800, color: '#1a1a2e' }}>
+                <div style={{ fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>
                   {selectedIds.map(id => { const t = tables.find(t => t.id === id); return t ? `T${t.table_number}` : '?'; }).join(' + ')}
                 </div>
                 <div style={{ color: enough ? '#166534' : '#92400e', fontWeight: 700, marginTop: 2 }}>

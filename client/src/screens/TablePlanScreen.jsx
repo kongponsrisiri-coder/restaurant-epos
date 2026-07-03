@@ -93,7 +93,7 @@ export default function TablePlanScreen() {
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>Table Plan Editor</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Table Plan Editor</h1>
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={handleAddTakeaway} style={{ background: '#fff', color: '#b45309', border: '2px solid #f59e0b', padding: '9px 16px', borderRadius: 10, cursor: 'pointer', fontWeight: 700 }}>
             🥡 Add Takeaway
@@ -129,15 +129,15 @@ export default function TablePlanScreen() {
                 width: table.width || 80,
                 height: table.height || 80,
                 borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,
-                background: selected === table.id ? '#1a1a2e' : (table.is_takeaway ? '#fffbeb' : '#fff'),
-                border: `3px solid ${selected === table.id ? '#e94560' : (table.is_takeaway ? '#f59e0b' : '#1a1a2e')}`,
+                background: selected === table.id ? 'var(--brand-primary, #1a1a2e)' : (table.is_takeaway ? '#fffbeb' : '#fff'),
+                border: `3px solid ${selected === table.id ? '#e94560' : (table.is_takeaway ? '#f59e0b' : 'var(--brand-primary, #1a1a2e)')}`,
                 display: 'flex', flexDirection: 'column',
                 alignItems: 'center', justifyContent: 'center',
                 cursor: 'grab', userSelect: 'none',
                 boxShadow: selected === table.id ? '0 4px 20px rgba(0,0,0,0.2)' : '0 2px 8px rgba(0,0,0,0.1)',
               }}
             >
-              <div style={{ fontSize: 16, fontWeight: 800, color: selected === table.id ? 'white' : (table.is_takeaway ? '#b45309' : '#1a1a2e'), textAlign: 'center', padding: '0 4px' }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: selected === table.id ? 'white' : (table.is_takeaway ? '#b45309' : 'var(--brand-primary, #1a1a2e)'), textAlign: 'center', padding: '0 4px' }}>
                 {table.is_takeaway ? '🥡' : ''}{table.table_number}
               </div>
               <div style={{ fontSize: 10, color: selected === table.id ? 'rgba(255,255,255,0.7)' : '#888' }}>
@@ -155,7 +155,7 @@ export default function TablePlanScreen() {
 
         {/* Properties panel */}
         <div style={{ width: 240, background: 'white', borderRadius: 16, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', alignSelf: 'flex-start' }}>
-          <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 16 }}>
             {selectedTable ? (selectedTable.is_takeaway ? `🥡 Takeaway ${selectedTable.table_number}` : `Table ${selectedTable.table_number}`) : 'Select a table'}
           </div>
 

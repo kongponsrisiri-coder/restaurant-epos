@@ -275,12 +275,12 @@ export default function InvoiceScannerTab() {
         {mode === 'invoice' ? '💡 Photo your supplier delivery note or invoice. AI reads every line item — items not in your system are auto-created as ingredients.' : '💡 Photo any receipt, bill or expense document. AI extracts the cost and auto-categorises it.'}
       </div>
       {error && <div style={{ background: '#fee2e2', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: '#991b1b', fontSize: 14 }}>⚠️ {error}</div>}
-      <div onClick={() => fileInputRef.current?.click()} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }} style={{ border: `2px dashed ${file ? '#22c55e' : '#1a1a2e'}`, borderRadius: 16, padding: '44px 24px', textAlign: 'center', cursor: 'pointer', marginBottom: 20, background: file ? '#f0fdf4' : 'white' }}>
+      <div onClick={() => fileInputRef.current?.click()} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }} style={{ border: `2px dashed ${file ? '#22c55e' : 'var(--brand-primary, #1a1a2e)'}`, borderRadius: 16, padding: '44px 24px', textAlign: 'center', cursor: 'pointer', marginBottom: 20, background: file ? '#f0fdf4' : 'white' }}>
         <input ref={fileInputRef} type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={e => handleFile(e.target.files[0])} />
         {file ? (<div>{file.type.startsWith('image/') && fileData && <img src={fileData} alt="preview" style={{ maxHeight: 140, maxWidth: '100%', borderRadius: 8, marginBottom: 12, objectFit: 'contain' }} />}<div style={{ fontWeight: 700, color: '#15803d', fontSize: 15 }}>✅ {file.name}</div><div style={{ color: '#888', fontSize: 13, marginTop: 4 }}>{(file.size / 1024 / 1024).toFixed(1)} MB · Click to change</div></div>
         ) : (<div><div style={{ fontSize: 44, marginBottom: 12 }}>🧾</div><div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Drop {mode === 'invoice' ? 'invoice' : 'receipt'} photo here or click</div><div style={{ color: '#888', fontSize: 13 }}>JPG, PNG or PDF · Phone photo is fine</div></div>)}
       </div>
-      <button onClick={runScan} disabled={!file} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: file ? '#1a1a2e' : '#ddd', color: file ? 'white' : '#aaa', fontWeight: 700, fontSize: 16, cursor: file ? 'pointer' : 'not-allowed' }}>🤖 Scan with AI</button>
+      <button onClick={runScan} disabled={!file} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: file ? 'var(--brand-primary, #1a1a2e)' : '#ddd', color: file ? 'white' : '#aaa', fontWeight: 700, fontSize: 16, cursor: file ? 'pointer' : 'not-allowed' }}>🤖 Scan with AI</button>
     </div>
   );
 
@@ -289,7 +289,7 @@ export default function InvoiceScannerTab() {
       {/* Main tab selector */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '2px solid #f0f0f0', paddingBottom: 16 }}>
         {[{ id: 'scan', label: '📷 Scan Invoice' }, { id: 'history', label: '📋 Invoice History' }].map(t => (
-          <button key={t.id} onClick={() => setMainTab(t.id)} style={{ padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14, background: mainTab === t.id ? '#1a1a2e' : '#f0f0f0', color: mainTab === t.id ? 'white' : '#555' }}>{t.label}</button>
+          <button key={t.id} onClick={() => setMainTab(t.id)} style={{ padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14, background: mainTab === t.id ? 'var(--brand-primary, #1a1a2e)' : '#f0f0f0', color: mainTab === t.id ? 'white' : '#555' }}>{t.label}</button>
         ))}
       </div>
 
@@ -298,7 +298,7 @@ export default function InvoiceScannerTab() {
       {mainTab === 'scan' && <div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
           {[{ id: 'invoice', label: '📦 Supplier Invoice', desc: 'Records stock + delivery' }, { id: 'expense', label: '🏢 Expense / Receipt', desc: 'Records overhead cost' }].map(m => (
-            <button key={m.id} onClick={() => { setMode(m.id); resetAll(); }} style={{ flex: 1, padding: '12px 16px', borderRadius: 12, border: 'none', cursor: 'pointer', textAlign: 'left', background: mode === m.id ? '#1a1a2e' : 'white', color: mode === m.id ? 'white' : '#555', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            <button key={m.id} onClick={() => { setMode(m.id); resetAll(); }} style={{ flex: 1, padding: '12px 16px', borderRadius: 12, border: 'none', cursor: 'pointer', textAlign: 'left', background: mode === m.id ? 'var(--brand-primary, #1a1a2e)' : 'white', color: mode === m.id ? 'white' : '#555', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
               <div style={{ fontWeight: 700, fontSize: 14 }}>{m.label}</div><div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>{m.desc}</div>
             </button>
           ))}
@@ -308,7 +308,7 @@ export default function InvoiceScannerTab() {
 
         {stage === 'scanning' && (
           <div style={{ textAlign: 'center', padding: '60px 0' }}>
-            <div style={{ width: 56, height: 56, border: '5px solid #f0f0f0', borderTop: '5px solid #1a1a2e', borderRadius: '50%', margin: '0 auto 24px', animation: 'spin 0.8s linear infinite' }} />
+            <div style={{ width: 56, height: 56, border: '5px solid #f0f0f0', borderTop: '5px solid var(--brand-primary, #1a1a2e)', borderRadius: '50%', margin: '0 auto 24px', animation: 'spin 0.8s linear infinite' }} />
             <div style={{ fontWeight: 700, fontSize: 16 }}>Scanning with AI…</div>
             <div style={{ color: '#888', marginTop: 8, fontSize: 14 }}>Reading {mode === 'invoice' ? 'line items' : 'expense details'}…</div>
           </div>
@@ -317,7 +317,7 @@ export default function InvoiceScannerTab() {
         {stage === 'review' && mode === 'invoice' && (
           <div>
             <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 14 }}>📋 Invoice Details — confirm or correct before recording</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 14 }}>📋 Invoice Details — confirm or correct before recording</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))', gap: 12 }}>
                 <div><label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Supplier</label><input value={invoiceData.supplier_name} onChange={e => setInvoiceData(p => ({ ...p, supplier_name: e.target.value }))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
                 <div><label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Invoice Date</label><input type="date" value={invoiceData.invoice_date} onChange={e => setInvoiceData(p => ({ ...p, invoice_date: e.target.value }))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
@@ -353,7 +353,7 @@ export default function InvoiceScannerTab() {
                       </div>
                     ) : (
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 70px 80px 80px 1fr 80px', padding: '10px 16px', fontSize: 13, alignItems: 'center' }}>
-                        <span style={{ fontWeight: 600, color: '#1a1a2e' }}>{item.name_extracted || <span style={{ color: '#aaa' }}>—</span>}</span>
+                        <span style={{ fontWeight: 600, color: 'var(--brand-primary, #1a1a2e)' }}>{item.name_extracted || <span style={{ color: '#aaa' }}>—</span>}</span>
                         <span style={{ textAlign: 'right', color: '#555' }}>{item.quantity}</span>
                         <span style={{ textAlign: 'center', color: '#555' }}>{item.unit}</span>
                         <span style={{ textAlign: 'right', color: '#555' }}>£{Number(item.unit_price).toFixed(2)}</span>
@@ -377,9 +377,9 @@ export default function InvoiceScannerTab() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <div style={{ flex: 1, fontSize: 13, color: '#555' }}><span style={{ color: '#1a1a2e', fontWeight: 700 }}>📦 {lineItems.length} item{lineItems.length !== 1 ? 's' : ''} to record</span><span style={{ color: '#888', marginLeft: 8, fontSize: 12 }}>— new ingredients will be auto-created</span></div>
+              <div style={{ flex: 1, fontSize: 13, color: '#555' }}><span style={{ color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700 }}>📦 {lineItems.length} item{lineItems.length !== 1 ? 's' : ''} to record</span><span style={{ color: '#888', marginLeft: 8, fontSize: 12 }}>— new ingredients will be auto-created</span></div>
               <button onClick={resetAll} style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 600, color: '#555' }}>↩ Re-scan</button>
-              <button onClick={confirmInvoice} disabled={confirming || lineItems.length === 0} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 15, cursor: confirming || lineItems.length === 0 ? 'default' : 'pointer', background: confirming || lineItems.length === 0 ? '#ddd' : '#1a1a2e', color: 'white' }}>{confirming ? 'Recording...' : `✓ Confirm & Record ${lineItems.length} Item${lineItems.length !== 1 ? 's' : ''}`}</button>
+              <button onClick={confirmInvoice} disabled={confirming || lineItems.length === 0} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 15, cursor: confirming || lineItems.length === 0 ? 'default' : 'pointer', background: confirming || lineItems.length === 0 ? '#ddd' : 'var(--brand-primary, #1a1a2e)', color: 'white' }}>{confirming ? 'Recording...' : `✓ Confirm & Record ${lineItems.length} Item${lineItems.length !== 1 ? 's' : ''}`}</button>
             </div>
           </div>
         )}
@@ -387,7 +387,7 @@ export default function InvoiceScannerTab() {
         {stage === 'review' && mode === 'expense' && (
           <div>
             <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 14 }}>🧾 Expense Details — confirm or correct</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 14 }}>🧾 Expense Details — confirm or correct</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))', gap: 12 }}>
                 <div><label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Vendor / Source</label><input value={expenseData.vendor} onChange={e => setExpenseData(p => ({ ...p, vendor: e.target.value }))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
                 <div><label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Date</label><input type="date" value={expenseData.date} onChange={e => setExpenseData(p => ({ ...p, date: e.target.value }))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
@@ -417,7 +417,7 @@ export default function InvoiceScannerTab() {
             )}
             {confirmResult?.expense && <div style={{ fontSize: 14, color: '#888', marginBottom: 20 }}>£{Number(expenseData.total_amount).toFixed(2)} added to Cost vs Sales</div>}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 8 }}>
-              <button onClick={resetAll} style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, cursor: 'pointer' }}>📷 Scan Another</button>
+              <button onClick={resetAll} style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontWeight: 700, cursor: 'pointer' }}>📷 Scan Another</button>
             </div>
           </div>
         )}

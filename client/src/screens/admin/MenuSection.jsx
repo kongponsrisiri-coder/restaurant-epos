@@ -109,7 +109,7 @@ function AIScannerModal({ onClose, onImported }) {
   return (
     <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 20, width: '100%', maxWidth: 680, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 80px rgba(0,0,0,0.4)' }}>
-        <div style={{ background: 'linear-gradient(135deg,#1a1a2e,#2d2a4a)', padding: '20px 28px', borderRadius: '20px 20px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 }}>
+        <div style={{ background: 'linear-gradient(135deg,var(--brand-primary, #1a1a2e),#2d2a4a)', padding: '20px 28px', borderRadius: '20px 20px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 }}>
           <div><div style={{ color: 'white', fontWeight: 800, fontSize: 18 }}>🤖 AI Menu Scanner</div><div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 2 }}>Upload a menu photo → AI extracts dishes → Add items one by one</div></div>
           <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', borderRadius: 8, width: 34, height: 34, cursor: 'pointer', fontSize: 18 }}>✕</button>
         </div>
@@ -122,7 +122,7 @@ function AIScannerModal({ onClose, onImported }) {
                 {file ? (<div>{file.type.startsWith('image/') && fileData && <img src={fileData} alt="preview" style={{ maxHeight: 160, maxWidth: '100%', borderRadius: 10, marginBottom: 12, objectFit: 'contain' }} />}<div style={{ fontWeight: 700, color: '#15803d', fontSize: 15 }}>✅ {file.name}</div><div style={{ color: '#888', fontSize: 13, marginTop: 4 }}>{(file.size / 1024 / 1024).toFixed(1)} MB · Click to change</div></div>
                 ) : (<div><div style={{ fontSize: 40, marginBottom: 12 }}>📷</div><div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Drop menu photo here or click to upload</div><div style={{ color: '#888', fontSize: 13 }}>JPG, PNG, or PDF · Phone photos work great</div></div>)}
               </div>
-              <div style={{ display: 'flex', gap: 10 }}><button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 600, color: '#555' }}>Cancel</button><button onClick={runScan} disabled={!file} style={{ flex: 2, padding: '12px', borderRadius: 10, border: 'none', background: file ? '#1a1a2e' : '#ddd', color: file ? 'white' : '#aaa', cursor: file ? 'pointer' : 'not-allowed', fontWeight: 700, fontSize: 15 }}>🔍 Scan with AI</button></div>
+              <div style={{ display: 'flex', gap: 10 }}><button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 600, color: '#555' }}>Cancel</button><button onClick={runScan} disabled={!file} style={{ flex: 2, padding: '12px', borderRadius: 10, border: 'none', background: file ? 'var(--brand-primary, #1a1a2e)' : '#ddd', color: file ? 'white' : '#aaa', cursor: file ? 'pointer' : 'not-allowed', fontWeight: 700, fontSize: 15 }}>🔍 Scan with AI</button></div>
             </div>
           )}
           {stage === 'scanning' && (
@@ -145,11 +145,11 @@ function AIScannerModal({ onClose, onImported }) {
               </div>
               <div style={{ background: '#f0f7ff', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#1e40af' }}>💡 Click <strong>+</strong> to add each item to your menu. Assign categories in Menu Manager afterwards.</div>
               <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
-                {(() => { let globalIndex = 0; return scannedMenu.categories?.map(cat => (<div key={cat.name}><div style={{ background: '#1a1a2e', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ color: 'var(--brand-accent,#C9A84C)', fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>{cat.name}</span><span style={{ background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 11, padding: '1px 8px', borderRadius: 10 }}>{cat.dishes?.length} items</span></div>{cat.dishes?.map((dish) => { const idx = globalIndex++; const isAdded = addedItems.has(idx); const isLoading = loadingItem === idx; return (<div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid #f0f0f0', background: isAdded ? '#f0fdf4' : 'white' }}><div style={{ flex: 1 }}><div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}><span style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e' }}>{dish.name_en}</span>{dish.name_th && <span style={{ fontSize: 12, color: 'var(--brand-accent,#C9A84C)' }}>{dish.name_th}</span>}</div>{dish.description && <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{dish.description}</div>}<div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}><span style={{ fontWeight: 800, color: '#e94560', fontSize: 14 }}>£{(dish.price || 0).toFixed(2)}</span>{dish.allergens?.length > 0 && dish.allergens.map(a => (<span key={a} style={{ background: '#fee2e2', color: '#991b1b', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4 }}>{a}</span>))}</div></div><button onClick={() => !isAdded && !isLoading && handleAddItem(dish, idx)} disabled={isAdded || isLoading} style={{ width: 40, height: 40, borderRadius: 10, border: 'none', cursor: isAdded ? 'default' : 'pointer', fontWeight: 800, fontSize: 20, flexShrink: 0, background: isAdded ? '#dcfce7' : isLoading ? '#f0f0f0' : '#e94560', color: isAdded ? '#15803d' : isLoading ? '#aaa' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{isAdded ? '✓' : isLoading ? '⏳' : '+'}</button></div>); })}</div>)); })()}
+                {(() => { let globalIndex = 0; return scannedMenu.categories?.map(cat => (<div key={cat.name}><div style={{ background: 'var(--brand-primary, #1a1a2e)', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ color: 'var(--brand-accent,#C9A84C)', fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>{cat.name}</span><span style={{ background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 11, padding: '1px 8px', borderRadius: 10 }}>{cat.dishes?.length} items</span></div>{cat.dishes?.map((dish) => { const idx = globalIndex++; const isAdded = addedItems.has(idx); const isLoading = loadingItem === idx; return (<div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid #f0f0f0', background: isAdded ? '#f0fdf4' : 'white' }}><div style={{ flex: 1 }}><div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}><span style={{ fontWeight: 700, fontSize: 14, color: 'var(--brand-primary, #1a1a2e)' }}>{dish.name_en}</span>{dish.name_th && <span style={{ fontSize: 12, color: 'var(--brand-accent,#C9A84C)' }}>{dish.name_th}</span>}</div>{dish.description && <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{dish.description}</div>}<div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}><span style={{ fontWeight: 800, color: '#e94560', fontSize: 14 }}>£{(dish.price || 0).toFixed(2)}</span>{dish.allergens?.length > 0 && dish.allergens.map(a => (<span key={a} style={{ background: '#fee2e2', color: '#991b1b', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4 }}>{a}</span>))}</div></div><button onClick={() => !isAdded && !isLoading && handleAddItem(dish, idx)} disabled={isAdded || isLoading} style={{ width: 40, height: 40, borderRadius: 10, border: 'none', cursor: isAdded ? 'default' : 'pointer', fontWeight: 800, fontSize: 20, flexShrink: 0, background: isAdded ? '#dcfce7' : isLoading ? '#f0f0f0' : '#e94560', color: isAdded ? '#15803d' : isLoading ? '#aaa' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{isAdded ? '✓' : isLoading ? '⏳' : '+'}</button></div>); })}</div>)); })()}
               </div>
               <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                 <button onClick={() => { setStage('upload'); setScannedMenu(null); setAddedItems(new Set()); }} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 600, color: '#555' }}>↩ Scan Again</button>
-                <button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: addedCount > 0 ? '#1a1a2e' : '#f0f0f0', color: addedCount > 0 ? 'white' : '#aaa', cursor: 'pointer', fontWeight: 700 }}>{addedCount > 0 ? `✓ Done — ${addedCount} item${addedCount > 1 ? 's' : ''} added` : 'Close'}</button>
+                <button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: addedCount > 0 ? 'var(--brand-primary, #1a1a2e)' : '#f0f0f0', color: addedCount > 0 ? 'white' : '#aaa', cursor: 'pointer', fontWeight: 700 }}>{addedCount > 0 ? `✓ Done — ${addedCount} item${addedCount > 1 ? 's' : ''} added` : 'Close'}</button>
               </div>
             </div>
           )}
@@ -320,7 +320,7 @@ export default function MenuSection() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 20 }}>Menu Manager</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 20 }}>Menu Manager</h1>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         {menu.map((cat, catIdx) => {
           const itemCount = cat.items?.length || 0;
@@ -371,27 +371,27 @@ export default function MenuSection() {
                     onChange={e => setEditingCatName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') saveRename(); if (e.key === 'Escape') setEditingCatId(null); }}
                     onBlur={saveRename}
-                    style={{ padding: '8px 16px', border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 600, fontSize: 14, borderRadius: 20, outline: 'none', width: 140 }}
+                    style={{ padding: '8px 16px', border: '2px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 600, fontSize: 14, borderRadius: 20, outline: 'none', width: 140 }}
                   />
                 </>
               ) : (
                 <>
                   {canMoveLeft && (
-                    <button onClick={() => swapAt(catIdx - 1)} title="Move category left" style={{ padding: '0 10px', border: 'none', cursor: 'pointer', fontWeight: 800, background: '#1a1a2e', color: 'white', borderRadius: '20px 0 0 20px', fontSize: 12 }}>◀</button>
+                    <button onClick={() => swapAt(catIdx - 1)} title="Move category left" style={{ padding: '0 10px', border: 'none', cursor: 'pointer', fontWeight: 800, background: 'var(--brand-primary, #1a1a2e)', color: 'white', borderRadius: '20px 0 0 20px', fontSize: 12 }}>◀</button>
                   )}
-                  <button onClick={() => setActiveCategory(cat.id)} style={{ padding: '8px 20px', border: 'none', cursor: 'pointer', fontWeight: 600, background: isActive ? '#1a1a2e' : '#e0e0e0', color: isActive ? 'white' : '#555', borderRadius: canMoveLeft ? 0 : ((canEdit || canMoveRight) ? '20px 0 0 20px' : 20) }}>{isBar ? '🍹 ' : ''}{cat.name} ({itemCount})</button>
+                  <button onClick={() => setActiveCategory(cat.id)} style={{ padding: '8px 20px', border: 'none', cursor: 'pointer', fontWeight: 600, background: isActive ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0', color: isActive ? 'white' : '#555', borderRadius: canMoveLeft ? 0 : ((canEdit || canMoveRight) ? '20px 0 0 20px' : 20) }}>{isBar ? '🍹 ' : ''}{cat.name} ({itemCount})</button>
                   {canEdit && (
                     <button
                       onClick={toggleBar}
                       title={isBar ? 'Stop routing to bar printer (set is_bar=0)' : 'Send this category to the bar printer (set is_bar=1) — for Drinks, Cocktails, etc.'}
-                      style={{ padding: '0 10px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: isBar ? '#7c2d12' : '#1a1a2e', color: isBar ? '#fde68a' : '#888', fontSize: 13 }}
+                      style={{ padding: '0 10px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: isBar ? '#7c2d12' : 'var(--brand-primary, #1a1a2e)', color: isBar ? '#fde68a' : '#888', fontSize: 13 }}
                     >🍹</button>
                   )}
                   {canEdit && (
                     <button
                       onClick={() => { setEditingCatName(cat.name); setEditingCatId(cat.id); }}
                       title="Rename this category"
-                      style={{ padding: '0 10px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: '#1a1a2e', color: 'var(--brand-accent,#C9A84C)', fontSize: 13 }}
+                      style={{ padding: '0 10px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: 'var(--brand-primary, #1a1a2e)', color: 'var(--brand-accent,#C9A84C)', fontSize: 13 }}
                     >✎</button>
                   )}
                   {canDelete && (
@@ -412,7 +412,7 @@ export default function MenuSection() {
                     >🗑️</button>
                   )}
                   {canMoveRight && (
-                    <button onClick={() => swapAt(catIdx + 1)} title="Move category right" style={{ padding: '0 10px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: '#1a1a2e', color: 'white', borderRadius: '0 20px 20px 0', fontSize: 12 }}>▶</button>
+                    <button onClick={() => swapAt(catIdx + 1)} title="Move category right" style={{ padding: '0 10px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: 'var(--brand-primary, #1a1a2e)', color: 'white', borderRadius: '0 20px 20px 0', fontSize: 12 }}>▶</button>
                   )}
                 </>
               )}
@@ -433,8 +433,8 @@ export default function MenuSection() {
         })}
         {showAddCat ? (
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input autoFocus value={newCatName} onChange={e => setNewCatName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddCategory(); if (e.key === 'Escape') { setShowAddCat(false); setNewCatName(''); } }} placeholder="Category name…" style={{ padding: '7px 12px', borderRadius: 20, border: '2px solid #1a1a2e', fontSize: 13, outline: 'none', width: 160 }} />
-            <button onClick={handleAddCategory} style={{ padding: '7px 14px', borderRadius: 20, border: 'none', background: '#1a1a2e', color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>Add</button>
+            <input autoFocus value={newCatName} onChange={e => setNewCatName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddCategory(); if (e.key === 'Escape') { setShowAddCat(false); setNewCatName(''); } }} placeholder="Category name…" style={{ padding: '7px 12px', borderRadius: 20, border: '2px solid var(--brand-primary, #1a1a2e)', fontSize: 13, outline: 'none', width: 160 }} />
+            <button onClick={handleAddCategory} style={{ padding: '7px 14px', borderRadius: 20, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>Add</button>
             <button onClick={() => { setShowAddCat(false); setNewCatName(''); }} style={{ padding: '7px 12px', borderRadius: 20, border: 'none', background: '#e0e0e0', color: '#555', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>✕</button>
           </div>
         ) : (
@@ -552,7 +552,7 @@ export default function MenuSection() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div style={{ fontSize: 13, color: '#888' }}>{localItems.length > 0 && '≡ Drag to reorder'}</div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={() => setShowScanner(true)} style={{ background: 'linear-gradient(135deg,#1a1a2e,#2d2a4a)', color: 'white', border: 'none', padding: '10px 18px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>🤖 AI Scanner</button>
+          <button onClick={() => setShowScanner(true)} style={{ background: 'linear-gradient(135deg,var(--brand-primary, #1a1a2e),#2d2a4a)', color: 'white', border: 'none', padding: '10px 18px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>🤖 AI Scanner</button>
           <button onClick={openAddForm} style={{ background: '#e94560', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }}>+ Add Item</button>
         </div>
       </div>
@@ -566,7 +566,7 @@ export default function MenuSection() {
                 style={{ background: 'white', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.15)' : '0 1px 4px rgba(0,0,0,0.08)', opacity: isDragging ? 0.5 : 1, border: isOver ? '2px solid #3b82f6' : '2px solid transparent', cursor: 'grab' }}>
                 <div style={{ color: '#ccc', fontSize: 18, cursor: 'grab', userSelect: 'none', flexShrink: 0 }}><div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{[0,1,2].map(r => <div key={r} style={{ display: 'flex', gap: 3 }}><div style={{ width: 4, height: 4, borderRadius: '50%', background: '#ccc' }} /><div style={{ width: 4, height: 4, borderRadius: '50%', background: '#ccc' }} /></div>)}</div></div>
                 <div style={{ flex: 1, opacity: item.is_available ? 1 : 0.5 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: '#1a1a2e' }}>{item.name}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--brand-primary, #1a1a2e)' }}>{item.name}</div>
                   {item.name_alt && <div style={{ fontSize: 12, color: 'var(--brand-accent,#C9A84C)', marginTop: 1 }}>{item.name_alt}</div>}
                   {subcat && <div style={{ fontSize: 11, color: '#3b82f6', fontWeight: 600, marginTop: 2 }}>📁 {subcat.name}</div>}
                   {item.description && <div style={{ fontSize: 13, color: '#888' }}>{item.description}</div>}
@@ -606,7 +606,7 @@ export default function MenuSection() {
       {showForm && (
         <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: 16, padding: 32, width: 420, maxHeight: '90vh', overflowY: 'auto' }}>
-            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24, color: '#1a1a2e' }}>{editItem ? 'Edit Item' : 'Add New Item'}</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24, color: 'var(--brand-primary, #1a1a2e)' }}>{editItem ? 'Edit Item' : 'Add New Item'}</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Category</label><select value={form.category_id} onChange={e => setForm({ ...form, category_id: e.target.value, subcategory_id: null })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}>{menu.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}</select></div>
               {subcategories.filter(s => s.category_id === Number(form.category_id)).length > 0 && (<div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Sub-category</label><select value={form.subcategory_id || ''} onChange={e => setForm({ ...form, subcategory_id: e.target.value || null })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}><option value="">No sub-category</option>{subcategories.filter(s => s.category_id === Number(form.category_id)).map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}</select></div>)}
@@ -623,12 +623,12 @@ export default function MenuSection() {
       {modifierItem && (
         <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: 16, padding: 32, width: 520, maxHeight: '80vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}><h2 style={{ fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>Options — {modifierItem.name}</h2><button onClick={() => setModifierItem(null)} style={{ background: '#f0f0f0', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', fontWeight: 600 }}>Close</button></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}><h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Options — {modifierItem.name}</h2><button onClick={() => setModifierItem(null)} style={{ background: '#f0f0f0', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', fontWeight: 600 }}>Close</button></div>
             {modifiers.map(group => (
               <div key={group.id} style={{ background: '#f8f8f8', borderRadius: 12, padding: 16, marginBottom: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                   <div><span style={{ fontWeight: 700, fontSize: 15 }}>{group.name}</span>{group.menu_item_id == null && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, background: '#e0e7ff', color: '#3730a3', padding: '2px 6px', borderRadius: 4 }}>♻️ SHARED</span>}<span style={{ marginLeft: 8, fontSize: 12, color: '#888' }}>{group.required ? 'Required' : 'Optional'} · {group.multi_select ? 'Multi' : 'Pick one'}</span></div>
-                  <div style={{ display: 'flex', gap: 6 }}><button onClick={() => setActiveGroup(activeGroup === group.id ? null : group.id)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#1a1a2e', color: 'white', fontSize: 12, fontWeight: 600 }}>+ Add option</button>{group.menu_item_id == null ? <button onClick={() => toggleLibrary(group.id, true)} title="Remove from this dish (keeps the shared group for other dishes)" style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#fde68a', color: '#713f12', fontSize: 12, fontWeight: 600 }}>Remove</button> : <button onClick={() => handleDeleteGroup(group.id)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#fee2e2', color: '#991b1b', fontSize: 12, fontWeight: 600 }}>Delete</button>}</div>
+                  <div style={{ display: 'flex', gap: 6 }}><button onClick={() => setActiveGroup(activeGroup === group.id ? null : group.id)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontSize: 12, fontWeight: 600 }}>+ Add option</button>{group.menu_item_id == null ? <button onClick={() => toggleLibrary(group.id, true)} title="Remove from this dish (keeps the shared group for other dishes)" style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#fde68a', color: '#713f12', fontSize: 12, fontWeight: 600 }}>Remove</button> : <button onClick={() => handleDeleteGroup(group.id)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#fee2e2', color: '#991b1b', fontSize: 12, fontWeight: 600 }}>Delete</button>}</div>
                 </div>
                 {group.modifiers?.map(opt => (<div key={opt.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderTop: '1px solid #eee' }}><span style={{ fontSize: 14 }}>{opt.name} {opt.extra_price > 0 && <span style={{ color: '#e94560' }}>+£{Number(opt.extra_price).toFixed(2)}</span>}</span><button onClick={() => handleDeleteOption(opt.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 18 }}>×</button></div>))}
                 {activeGroup === group.id && <OptionAdder key={group.id} onAdd={handleAddOption} />}
@@ -645,7 +645,7 @@ export default function MenuSection() {
                       <option key={g.id} value={g.id}>{g.name} ({g.required ? 'Required' : 'Optional'}, {g.multi_select ? 'multi' : 'pick one'}) — {(g.modifiers || []).map(o => o.name).join(', ') || 'no options yet'}</option>
                     ))}
                   </select>
-                  <button disabled={!pickGroup} onClick={() => { toggleLibrary(Number(pickGroup), false); setPickGroup(''); }} style={{ flexShrink: 0, padding: '10px 16px', borderRadius: 8, border: 'none', cursor: pickGroup ? 'pointer' : 'default', background: pickGroup ? '#1a1a2e' : '#cbd5e1', color: 'white', fontWeight: 700, fontSize: 13 }}>Add</button>
+                  <button disabled={!pickGroup} onClick={() => { toggleLibrary(Number(pickGroup), false); setPickGroup(''); }} style={{ flexShrink: 0, padding: '10px 16px', borderRadius: 8, border: 'none', cursor: pickGroup ? 'pointer' : 'default', background: pickGroup ? 'var(--brand-primary, #1a1a2e)' : '#cbd5e1', color: 'white', fontWeight: 700, fontSize: 13 }}>Add</button>
                   <button disabled={!pickGroup} title="Delete this shared group everywhere" onClick={async () => { const g = library.find(x => String(x.id) === pickGroup); if (g) { await handleDeleteLibraryGroup(g); setPickGroup(''); } }} style={{ flexShrink: 0, padding: '10px 14px', borderRadius: 8, border: 'none', cursor: pickGroup ? 'pointer' : 'default', background: pickGroup ? '#fee2e2' : '#f1f5f9', color: '#991b1b', fontWeight: 700, fontSize: 13 }}>🗑️</button>
                 </div>
               </div>
@@ -654,7 +654,7 @@ export default function MenuSection() {
               <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>Add new option group</div>
               <input value={newGroup.name} onChange={e => setNewGroup({ ...newGroup, name: e.target.value })} placeholder="e.g. Choose Meat" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box', marginBottom: 10 }} />
               <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}><label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={newGroup.required} onChange={e => setNewGroup({ ...newGroup, required: e.target.checked })} /> Required</label><label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={newGroup.multi_select} onChange={e => setNewGroup({ ...newGroup, multi_select: e.target.checked })} /> Allow multiple</label><label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: '#3730a3', fontWeight: 600 }} title="Save to the shared library so you can reuse it on other dishes"><input type="checkbox" checked={newGroup.shared || false} onChange={e => setNewGroup({ ...newGroup, shared: e.target.checked })} /> ♻️ Reusable</label></div>
-              <button onClick={handleAddGroup} style={{ width: '100%', padding: '10px', borderRadius: 8, border: 'none', background: '#1a1a2e', color: 'white', cursor: 'pointer', fontWeight: 600 }}>Create Group</button>
+              <button onClick={handleAddGroup} style={{ width: '100%', padding: '10px', borderRadius: 8, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', cursor: 'pointer', fontWeight: 600 }}>Create Group</button>
             </div>
           </div>
         </div>

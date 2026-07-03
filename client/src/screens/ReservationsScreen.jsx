@@ -360,7 +360,7 @@ export default function ReservationsScreen() {
         const selected = dayList.find(r => r.id === selectedId) || null;
         const tableName = (id) => { const t = tables.find(x => String(x.id) === String(id)); return t ? (t.name || `T${t.table_number}`) : null; };
         const kpis = [['Covers booked', coversBooked], ['Bookings', dayList.length], ['Tables held', tablesHeld], ['Next arrival', nextArr]];
-        const railBtn = { height: 44, border: '1px solid #E7E2D6', background: '#fff', borderRadius: 10, fontWeight: 700, fontSize: 13, color: '#1a1a2e', cursor: 'pointer' };
+        const railBtn = { height: 44, border: '1px solid #E7E2D6', background: '#fff', borderRadius: 10, fontWeight: 700, fontSize: 13, color: 'var(--brand-primary, #1a1a2e)', cursor: 'pointer' };
         return (
           <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 60px)' }}>
             {/* Shared top bar — identical to the other views so switching views never shifts the toggle */}
@@ -384,12 +384,12 @@ export default function ReservationsScreen() {
                 {kpis.map(([label, val]) => (
                   <div key={label} style={{ background: '#fff', border: '1px solid #E7E2D6', borderRadius: 14, padding: '14px 16px', boxShadow: '0 1px 2px rgba(13,27,62,.05)' }}>
                     <div style={{ fontSize: 13, color: '#7C766A', fontWeight: 600 }}>{label}</div>
-                    <div style={{ fontSize: 30, fontWeight: 800, color: '#1a1a2e', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{val}</div>
+                    <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{val}</div>
                   </div>
                 ))}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 26, marginBottom: 12, borderBottom: '1px solid #E2DCCE', paddingBottom: 8, gap: 12, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 16, fontWeight: 800, color: '#1a1a2e', letterSpacing: '.4px' }}>{filterDate ? friendlyDate(filterDate).toUpperCase() : 'ALL BOOKINGS'}</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)', letterSpacing: '.4px' }}>{filterDate ? friendlyDate(filterDate).toUpperCase() : 'ALL BOOKINGS'}</div>
                 <div style={{ display: 'flex', alignItems: 'center', background: '#fff', borderRadius: 12, border: '1px solid #E7E2D6', height: 40, overflow: 'hidden' }}>
                   <button onClick={() => setFilterDate(shiftDay(filterDate, -1))} style={{ width: 40, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 18, color: 'var(--brand-primary,#0D1B3E)' }}>‹</button>
                   <button onClick={() => setFilterDate(todayStr())} style={{ minWidth: 116, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--brand-primary,#0D1B3E)' }}>{filterDate ? friendlyDate(filterDate) : 'All'}</button>
@@ -407,15 +407,15 @@ export default function ReservationsScreen() {
                           return (
                             <div key={r.id} onClick={() => setSelectedId(r.id)} style={{ background: sel ? '#FFFDF4' : '#fff', border: `1.5px solid ${sel ? 'var(--brand-accent,#C9A84C)' : '#E7E2D6'}`, borderRadius: 14, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer', minHeight: 72 }}>
                               <div style={{ width: 64 }}>
-                                <div style={{ fontSize: 20, fontWeight: 800, color: '#1a1a2e', fontVariantNumeric: 'tabular-nums' }}>{(r.reservation_time || '').slice(0, 5)}</div>
+                                <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)', fontVariantNumeric: 'tabular-nums' }}>{(r.reservation_time || '').slice(0, 5)}</div>
                                 <div style={{ fontSize: 11, color: '#9A9488' }}>Dinner</div>
                               </div>
                               <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1a2e' }}>{r.customer_name}{r.source === 'widget' && <span style={{ marginLeft: 8, fontSize: 11, color: '#1e40af', background: '#dbeafe', borderRadius: 10, padding: '1px 7px', fontWeight: 700 }}>Online</span>}</div>
+                                <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>{r.customer_name}{r.source === 'widget' && <span style={{ marginLeft: 8, fontSize: 11, color: '#1e40af', background: '#dbeafe', borderRadius: 10, padding: '1px 7px', fontWeight: 700 }}>Online</span>}</div>
                                 {r.notes && <div style={{ fontSize: 12.5, color: '#9A9488', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.notes}</div>}
                               </div>
                               <div style={{ textAlign: 'center', width: 70 }}>
-                                <div style={{ fontSize: 18, fontWeight: 800, color: '#1a1a2e' }}>{r.covers}</div>
+                                <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>{r.covers}</div>
                                 <div style={{ fontSize: 11, color: '#9A9488' }}>guests</div>
                               </div>
                               <div style={{ width: 54, textAlign: 'center', fontSize: 13, fontWeight: 700, color: '#7C766A', background: '#F7F5EF', borderRadius: 8, padding: '6px 0' }}>{tn || '—'}</div>
@@ -437,14 +437,14 @@ export default function ReservationsScreen() {
                 const field = (label, val) => (
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #F2EEE3', gap: 12 }}>
                     <span style={{ color: '#7C766A', fontSize: 14 }}>{label}</span>
-                    <span style={{ color: '#1a1a2e', fontSize: 14, fontWeight: 600, textAlign: 'right' }}>{val || '—'}</span>
+                    <span style={{ color: 'var(--brand-primary, #1a1a2e)', fontSize: 14, fontWeight: 600, textAlign: 'right' }}>{val || '—'}</span>
                   </div>
                 );
                 return (
                   <>
                     <div style={{ fontSize: 12, fontWeight: 800, color: '#9A7B1F', letterSpacing: '.5px', textTransform: 'uppercase' }}>Booking detail</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, gap: 10 }}>
-                      <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, fontWeight: 700, color: '#1a1a2e' }}>{selected.customer_name}</div>
+                      <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>{selected.customer_name}</div>
                       <div style={{ background: sc.bg, color: sc.color, borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 800, textTransform: 'uppercase' }}>{sc.label}</div>
                     </div>
                     <div style={{ marginTop: 14 }}>

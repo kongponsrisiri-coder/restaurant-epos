@@ -20,13 +20,13 @@ export default function TradingSection() {
 
   return (
     <div style={{ padding: 'clamp(14px, 4vw, 24px)' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 16 }}>Trading Summary</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 16 }}>Trading Summary</h1>
       {/* Period chips — horizontal-scroll strip on narrow screens so
           Today / Weekly / Monthly / Custom always sit on one line and
           the user can swipe instead of stacking vertically. */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {['today', 'weekly', 'monthly', 'custom'].map(p => (
-          <button key={p} onClick={() => setPeriod(p)} style={{ padding: '8px 18px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, textTransform: 'capitalize', whiteSpace: 'nowrap', flexShrink: 0, background: period === p ? '#1a1a2e' : '#e0e0e0', color: period === p ? 'white' : '#555' }}>{p}</button>
+          <button key={p} onClick={() => setPeriod(p)} style={{ padding: '8px 18px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, textTransform: 'capitalize', whiteSpace: 'nowrap', flexShrink: 0, background: period === p ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0', color: period === p ? 'white' : '#555' }}>{p}</button>
         ))}
         {period === 'custom' && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 6, flexShrink: 0 }}>
@@ -58,7 +58,7 @@ export default function TradingSection() {
           </div>
           {data?.by_method && Object.keys(data.by_method).length > 0 && (
             <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontWeight: 700, marginBottom: 12, color: '#1a1a2e' }}>Payment Methods</div>
+              <div style={{ fontWeight: 700, marginBottom: 12, color: 'var(--brand-primary, #1a1a2e)' }}>Payment Methods</div>
               {Object.entries(data.by_method).map(([method, amount]) => (
                 <div key={method} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
                   <span style={{ color: '#555' }}>{method}</span>
@@ -81,13 +81,13 @@ export default function TradingSection() {
                 {Number(data.vouchers_sold?.till_total || 0) > 0 && (
                   <div style={{ background: 'white', borderRadius: 8, padding: '10px 14px' }}>
                     <div style={{ fontSize: 11, color: '#888' }}>↳ Via till (cash/card)</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>£{Number(data.vouchers_sold.till_total).toFixed(2)}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>£{Number(data.vouchers_sold.till_total).toFixed(2)}</div>
                   </div>
                 )}
                 {Number(data.vouchers_sold?.stripe_total || 0) > 0 && (
                   <div style={{ background: 'white', borderRadius: 8, padding: '10px 14px' }}>
                     <div style={{ fontSize: 11, color: '#888' }}>↳ Online (Stripe)</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>£{Number(data.vouchers_sold.stripe_total).toFixed(2)}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>£{Number(data.vouchers_sold.stripe_total).toFixed(2)}</div>
                   </div>
                 )}
                 <div style={{ background: 'white', borderRadius: 8, padding: '10px 14px' }}>
@@ -99,14 +99,14 @@ export default function TradingSection() {
           )}
           {data?.orders?.length > 0 && (
             <div style={{ background: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontWeight: 700, marginBottom: 12, color: '#1a1a2e' }}>Recent Orders</div>
+              <div style={{ fontWeight: 700, marginBottom: 12, color: 'var(--brand-primary, #1a1a2e)' }}>Recent Orders</div>
               {data.orders.slice(0, 10).map(order => (
                 // Korakot 2026-06-02: dropped the · #{order.id} segment so
                 // the Trading summary's Recent Orders list matches Bills /
                 // Reports — operators reference by Table + time, not bill #.
                 <div key={order.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0', fontSize: 14 }}>
                   <span style={{ color: '#555' }}>Table {order.table_number} · {order.method}</span>
-                  <span style={{ fontWeight: 700, color: '#1a1a2e' }}>£{Number(order.paid_amount ?? order.total ?? 0).toFixed(2)}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>£{Number(order.paid_amount ?? order.total ?? 0).toFixed(2)}</span>
                 </div>
               ))}
             </div>

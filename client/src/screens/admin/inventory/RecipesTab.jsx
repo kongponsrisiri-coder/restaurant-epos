@@ -76,7 +76,7 @@ export default function RecipesTab() {
             const rec = recipeForItem(item.id); const isSelected = selectedItem?.id === item.id;
             return (
               <div key={item.id} onClick={() => loadRecipe(item)} style={{ padding: '12px 16px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', background: isSelected ? '#f0f7ff' : 'white', borderLeft: isSelected ? '4px solid #3b82f6' : '4px solid transparent' }}>
-                <div style={{ fontWeight: 600, fontSize: 13, color: '#1a1a2e' }}>{item.name}</div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--brand-primary, #1a1a2e)' }}>{item.name}</div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: '#e94560' }}>£{Number(item.price).toFixed(2)}</span>
                   {rec ? (<span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: fcBadge(rec.food_cost_pct).bg, color: fcBadge(rec.food_cost_pct).color }}>{rec.food_cost_pct ? `${Number(rec.food_cost_pct).toFixed(1)}%` : 'Has recipe'}</span>) : (<span style={{ fontSize: 11, color: '#eab308', fontWeight: 700 }}>⚠️ No recipe</span>)}
@@ -100,7 +100,7 @@ export default function RecipesTab() {
             {/* Dish header */}
             <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div><div style={{ fontSize: 18, fontWeight: 800, color: '#1a1a2e' }}>{selectedItem.name}</div>{selectedItem.name_alt && <div style={{ fontSize: 13, color: 'var(--brand-accent,#C9A84C)', marginTop: 2 }}>{selectedItem.name_alt}</div>}</div>
+                <div><div style={{ fontSize: 18, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>{selectedItem.name}</div>{selectedItem.name_alt && <div style={{ fontSize: 13, color: 'var(--brand-accent,#C9A84C)', marginTop: 2 }}>{selectedItem.name_alt}</div>}</div>
                 <div style={{ textAlign: 'right' }}><div style={{ fontSize: 22, fontWeight: 800, color: '#e94560' }}>£{Number(selectedItem.price).toFixed(2)}</div><div style={{ fontSize: 12, color: '#888' }}>menu price</div></div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
@@ -117,10 +117,10 @@ export default function RecipesTab() {
               {lines.length === 0 && <div style={{ padding: '24px 16px', textAlign: 'center', color: '#bbb', fontSize: 13 }}>No ingredients added yet</div>}
               {lines.map((line, i) => (
                 <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 90px 36px', padding: '10px 16px', borderBottom: '1px solid #f0f0f0', fontSize: 13, alignItems: 'center' }}>
-                  <div><div style={{ fontWeight: 600, color: '#1a1a2e' }}>{ingredients.find(i => i.id === line.ingredient_id)?.is_batch && <span title="Batch ingredient — cost from kitchen prep">🥣 </span>}{line.ingredient_name}</div>{line.ingredient_name_th && <div style={{ fontSize: 11, color: 'var(--brand-accent,#C9A84C)' }}>{line.ingredient_name_th}</div>}<div style={{ fontSize: 10, color: '#aaa' }}>yield {line.yield_percentage}% · £{Number(line.cost_per_unit).toFixed(2)}/{line.unit}</div></div>
+                  <div><div style={{ fontWeight: 600, color: 'var(--brand-primary, #1a1a2e)' }}>{ingredients.find(i => i.id === line.ingredient_id)?.is_batch && <span title="Batch ingredient — cost from kitchen prep">🥣 </span>}{line.ingredient_name}</div>{line.ingredient_name_th && <div style={{ fontSize: 11, color: 'var(--brand-accent,#C9A84C)' }}>{line.ingredient_name_th}</div>}<div style={{ fontSize: 10, color: '#aaa' }}>yield {line.yield_percentage}% · £{Number(line.cost_per_unit).toFixed(2)}/{line.unit}</div></div>
                   <span style={{ textAlign: 'right', color: '#555' }}>{line.quantity_used}</span>
                   <span style={{ textAlign: 'center', color: '#555' }}>{line.unit}</span>
-                  <span style={{ textAlign: 'right', fontWeight: 700, color: '#1a1a2e' }}>£{Number(line.line_cost).toFixed(2)}</span>
+                  <span style={{ textAlign: 'right', fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>£{Number(line.line_cost).toFixed(2)}</span>
                   <button onClick={() => removeLine(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 18, padding: 0, lineHeight: 1 }}>×</button>
                 </div>
               ))}
@@ -131,18 +131,18 @@ export default function RecipesTab() {
                 </select>
                 <input type="number" step="0.001" value={newLine.quantity_used} onChange={e => setNewLine({ ...newLine, quantity_used: e.target.value })} placeholder="Qty" style={{ padding: '7px 8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, textAlign: 'right' }} />
                 <select value={newLine.unit} onChange={e => setNewLine({ ...newLine, unit: e.target.value })} style={{ padding: '7px 6px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }}>{UNITS.map(u => <option key={u} value={u}>{u}</option>)}</select>
-                <button onClick={addLine} style={{ padding: '7px 10px', borderRadius: 8, border: 'none', background: '#1a1a2e', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>+ Add</button>
+                <button onClick={addLine} style={{ padding: '7px 10px', borderRadius: 8, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>+ Add</button>
                 <div />
               </div>
             </div>
             {/* Costing summary */}
             <div style={{ background: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: 16 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e', marginBottom: 14 }}>Recipe Costing Summary</div>
-              {[{ label: `Total recipe cost (${serves} portion${serves > 1 ? 's' : ''})`, value: `£${totalCost.toFixed(2)}`, color: '#555' }, { label: 'Cost per portion', value: `£${costPerPortion.toFixed(2)}`, color: '#1a1a2e', bold: true }, { label: 'Menu price', value: `£${menuPrice.toFixed(2)}`, color: '#e94560', bold: true }, { label: 'Gross profit per dish', value: `£${grossProfit.toFixed(2)}`, color: grossProfit >= 0 ? '#22c55e' : '#ef4444', bold: true }].map(row => (
+              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 14 }}>Recipe Costing Summary</div>
+              {[{ label: `Total recipe cost (${serves} portion${serves > 1 ? 's' : ''})`, value: `£${totalCost.toFixed(2)}`, color: '#555' }, { label: 'Cost per portion', value: `£${costPerPortion.toFixed(2)}`, color: 'var(--brand-primary, #1a1a2e)', bold: true }, { label: 'Menu price', value: `£${menuPrice.toFixed(2)}`, color: '#e94560', bold: true }, { label: 'Gross profit per dish', value: `£${grossProfit.toFixed(2)}`, color: grossProfit >= 0 ? '#22c55e' : '#ef4444', bold: true }].map(row => (
                 <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0', fontSize: 14 }}><span style={{ color: '#555' }}>{row.label}</span><span style={{ fontWeight: row.bold ? 800 : 400, color: row.color }}>{row.value}</span></div>
               ))}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0 0', marginTop: 4, borderTop: '2px solid #eee' }}>
-                <span style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e' }}>Food Cost %</span>
+                <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--brand-primary, #1a1a2e)' }}>Food Cost %</span>
                 <span style={{ background: fc.bg, color: fc.color, fontWeight: 800, fontSize: 18, padding: '6px 16px', borderRadius: 20 }}>{lines.length > 0 ? fc.label : '—'}</span>
               </div>
               {lines.length > 0 && foodCostPct >= 35 && (

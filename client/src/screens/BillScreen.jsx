@@ -358,7 +358,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const mobileTopBar = (title, onBack, backLabel='← Back') => isMobile && (
     <div style={{ padding:'14px 16px', borderBottom:'1px solid #eee', display:'flex', alignItems:'center', gap:12, background:'white', position:'sticky', top:0, zIndex:10, flexShrink:0 }}>
       <button onClick={onBack} style={{ background:'#f0f0f0', border:'none', borderRadius:8, padding:'8px 14px', fontWeight:700, fontSize:13, cursor:'pointer', color:'#555', flexShrink:0 }}>{backLabel}</button>
-      <div style={{ flex:1, textAlign:'center', fontWeight:700, fontSize:15, color:'#1a1a2e' }}>{title}</div>
+      <div style={{ flex:1, textAlign:'center', fontWeight:700, fontSize:15, color:'var(--brand-primary, #1a1a2e)' }}>{title}</div>
       <div style={{ width:70, flexShrink:0 }} />
     </div>
   );
@@ -368,7 +368,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   // return below, unchanged. On a small screen it stacks (still works).
   if (stage === 'bill' && !isMobile) {
     const NAVY = 'var(--brand-primary,#0D1B3E)', GOLD = 'var(--brand-accent,#C9A84C)', RED = '#e94560', PAPER = '#F4F1EA';
-    const INK = '#1a1a2e', MUTED = '#7C766A', FAINT = '#9A9488', BORDER = '#E7E2D6';
+    const INK = 'var(--brand-primary, #1a1a2e)', MUTED = '#7C766A', FAINT = '#9A9488', BORDER = '#E7E2D6';
     const GREENB = '#5FD39B', GOLD_L = '#9A7B1F';
     const SERIF = "Georgia, 'Times New Roman', serif";
     const tkPaid = isTakeaway(order) && (order.payment_status === 'paid' || order.payment_status === 'mock');
@@ -535,7 +535,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
             {mobileTopBar(orderShortLabelPlain(order), onClose, '✕ Close')}
             <div style={{ padding:isMobile?'20px 16px':'28px 24px' }}>
               <div style={{ textAlign:'center', marginBottom:20 }}>
-                <div style={{ fontSize:22, fontWeight:800, color:'#1a1a2e' }}>{settings.company_name || settings.restaurant_name || 'My Restaurant'}</div>
+                <div style={{ fontSize:22, fontWeight:800, color:'var(--brand-primary, #1a1a2e)' }}>{settings.company_name || settings.restaurant_name || 'My Restaurant'}</div>
                 {settings.company_address && <div style={{ fontSize:12, color:'#555', marginTop:4 }}>{settings.company_address}</div>}
                 {settings.company_phone   && <div style={{ fontSize:12, color:'#555' }}>Tel: {settings.company_phone}</div>}
                 {settings.company_vat     && <div style={{ fontSize:12, color:'#555' }}>VAT: {settings.company_vat}</div>}
@@ -568,7 +568,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 {/* SEPOS-021 VAT breakdown — informational; prices are VAT-inclusive */}
                 {vatTotal > 0 && (
                   <div style={{ marginTop:8, padding:'8px 10px', background:'#f8f8f8', borderRadius:8, fontSize:12, color:'#555' }}>
-                    <div style={{ fontWeight:700, marginBottom:4, color:'#1a1a2e' }}>VAT included</div>
+                    <div style={{ fontWeight:700, marginBottom:4, color:'var(--brand-primary, #1a1a2e)' }}>VAT included</div>
                     {vatBreakdown.map(b => (
                       <div key={b.rate} style={{ display:'flex', justifyContent:'space-between' }}>
                         <span>@ {b.rate}% on £{b.net.toFixed(2)} net</span>
@@ -580,7 +580,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                     </div>
                   </div>
                 )}
-                <div style={{ display:'flex', justifyContent:'space-between', fontSize:24, fontWeight:800, marginTop:10, color:'#1a1a2e' }}><span>TOTAL</span><span>£{billTotal.toFixed(2)}</span></div>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:24, fontWeight:800, marginTop:10, color:'var(--brand-primary, #1a1a2e)' }}><span>TOTAL</span><span>£{billTotal.toFixed(2)}</span></div>
               </div>
               <div style={{ textAlign:'center', fontSize:12, color:'#888', borderTop:'1px dashed #ccc', paddingTop:12 }}>{settings.receipt_footer||'Thank you for dining with us!'}</div>
             </div>
@@ -601,12 +601,12 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 </button>
               ) : (
                 <>
-                  <button onClick={() => setStage('method')} style={{ padding:'18px', borderRadius:12, border:'none', background:'#1a1a2e', color:'white', fontSize:18, fontWeight:800, cursor:'pointer' }}>💳 Take Payment — £{billTotal.toFixed(2)}</button>
+                  <button onClick={() => setStage('method')} style={{ padding:'18px', borderRadius:12, border:'none', background:'var(--brand-primary, #1a1a2e)', color:'white', fontSize:18, fontWeight:800, cursor:'pointer' }}>💳 Take Payment — £{billTotal.toFixed(2)}</button>
                   <button onClick={() => { setSplitPaid([]); setSplitTenders([]); setStage('split_equal'); }} style={{ padding:'14px', borderRadius:12, border:'2px solid var(--brand-accent,#C9A84C)', background:'white', color:'var(--brand-accent,#C9A84C)', fontSize:15, fontWeight:700, cursor:'pointer' }}>✂️ Split Equally</button>
                   <button onClick={() => { setItemAssignments({}); setSplitItemPaid([]); setSplitTenders([]); setActivePerson(0); setStage('split_items'); }} style={{ padding:'14px', borderRadius:12, border:'2px solid #3b82f6', background:'white', color:'#3b82f6', fontSize:15, fontWeight:700, cursor:'pointer' }}>🍽️ Split by Item</button>
                 </>
               )}
-              <button onClick={handlePrintBill} style={{ padding:'12px', borderRadius:10, border:'2px solid #1a1a2e', background:'white', color:'#1a1a2e', fontSize:14, fontWeight:600, cursor:'pointer' }}>🖨️ Print Bill</button>
+              <button onClick={handlePrintBill} style={{ padding:'12px', borderRadius:10, border:'2px solid var(--brand-primary, #1a1a2e)', background:'white', color:'var(--brand-primary, #1a1a2e)', fontSize:14, fontWeight:600, cursor:'pointer' }}>🖨️ Print Bill</button>
               {!isMobile && <button onClick={onClose} style={{ padding:'12px', borderRadius:10, border:'none', background:'#f0f0f0', color:'#555', fontSize:14, cursor:'pointer' }}>Close</button>}
             </div>
           </div>
@@ -619,7 +619,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
             <div style={{ padding:isMobile?'32px 20px':40, textAlign:'center' }}>
               <div style={{ fontSize:72, marginBottom:16 }}>✅</div>
               <div style={{ fontSize:24, fontWeight:800, color:'#22c55e', marginBottom:8 }}>Payment Confirmed!</div>
-              <div style={{ fontSize:32, fontWeight:800, color:'#1a1a2e', marginBottom:4 }}>£{billTotal.toFixed(2)}</div>
+              <div style={{ fontSize:32, fontWeight:800, color:'var(--brand-primary, #1a1a2e)', marginBottom:4 }}>£{billTotal.toFixed(2)}</div>
               <div style={{ fontSize:14, color:'#888', marginBottom:28 }}>{paymentDetails?.method} · {orderShortLabelPlain(order)}</div>
               {paymentDetails?.change > 0 && (
                 <div style={{ background:'#f0fdf4', border:'2px solid #22c55e', borderRadius:14, padding:'16px 20px', marginBottom:24 }}>
@@ -634,8 +634,8 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 </div>
               )}
               <div style={{ display:'flex', flexDirection:'column', gap:12, maxWidth:340, margin:'0 auto' }}>
-                <button onClick={handlePrintReceipt} style={{ padding:'16px 24px', borderRadius:12, border:'2px solid #1a1a2e', background:'white', color:'#1a1a2e', fontSize:16, fontWeight:700, cursor:'pointer' }}>🖨️ Print Receipt</button>
-                <button onClick={handleFinish} style={{ padding:'18px 24px', borderRadius:12, border:'none', background:'#1a1a2e', color:'white', fontSize:17, fontWeight:800, cursor:'pointer' }}>✓ Done — Close</button>
+                <button onClick={handlePrintReceipt} style={{ padding:'16px 24px', borderRadius:12, border:'2px solid var(--brand-primary, #1a1a2e)', background:'white', color:'var(--brand-primary, #1a1a2e)', fontSize:16, fontWeight:700, cursor:'pointer' }}>🖨️ Print Receipt</button>
+                <button onClick={handleFinish} style={{ padding:'18px 24px', borderRadius:12, border:'none', background:'var(--brand-primary, #1a1a2e)', color:'white', fontSize:17, fontWeight:800, cursor:'pointer' }}>✓ Done — Close</button>
               </div>
               <p style={{ fontSize:11, color:'#bbb', marginTop:20 }}>Printer not shown? Set your thermal printer as the default printer in your browser settings.</p>
             </div>
@@ -647,18 +647,18 @@ export default function BillScreen({ orderId, onClose, onPay }) {
           <div>
             {mobileTopBar('Split Equally', () => setStage('bill'), '← Bill')}
             <div style={{ padding:isMobile?'20px 16px':32 }}>
-              {!isMobile && <div style={{ textAlign:'center', marginBottom:24 }}><div style={{ fontSize:22, fontWeight:800, color:'#1a1a2e' }}>✂️ Split Equally</div><div style={{ fontSize:14, color:'#888', marginTop:4 }}>Total: £{billTotal.toFixed(2)}</div></div>}
-              {isMobile  && <div style={{ textAlign:'center', marginBottom:20 }}><div style={{ fontSize:15, color:'#888' }}>Total: <span style={{ fontWeight:800, color:'#1a1a2e', fontSize:20 }}>£{billTotal.toFixed(2)}</span></div></div>}
+              {!isMobile && <div style={{ textAlign:'center', marginBottom:24 }}><div style={{ fontSize:22, fontWeight:800, color:'var(--brand-primary, #1a1a2e)' }}>✂️ Split Equally</div><div style={{ fontSize:14, color:'#888', marginTop:4 }}>Total: £{billTotal.toFixed(2)}</div></div>}
+              {isMobile  && <div style={{ textAlign:'center', marginBottom:20 }}><div style={{ fontSize:15, color:'#888' }}>Total: <span style={{ fontWeight:800, color:'var(--brand-primary, #1a1a2e)', fontSize:20 }}>£{billTotal.toFixed(2)}</span></div></div>}
               <div style={{ marginBottom:24 }}>
                 <div style={{ fontSize:14, fontWeight:700, color:'#555', marginBottom:12, textAlign:'center' }}>Split between how many people?</div>
                 <div style={{ display:'grid', gridTemplateColumns:isMobile?'repeat(3,1fr)':'repeat(5,1fr)', gap:8 }}>
                   {[2,3,4,5,6,7,8,9,10].map(n => (
-                    <button key={n} onClick={() => { setSplitCount(n); setSplitPaid([]); }} style={{ padding:isMobile?'16px 8px':'14px 8px', borderRadius:10, border:'none', cursor:'pointer', fontWeight:700, fontSize:18, background:splitCount===n?'#1a1a2e':'#f0f0f0', color:splitCount===n?'white':'#1a1a2e' }}>{n}</button>
+                    <button key={n} onClick={() => { setSplitCount(n); setSplitPaid([]); }} style={{ padding:isMobile?'16px 8px':'14px 8px', borderRadius:10, border:'none', cursor:'pointer', fontWeight:700, fontSize:18, background:splitCount===n?'var(--brand-primary, #1a1a2e)':'#f0f0f0', color:splitCount===n?'white':'var(--brand-primary, #1a1a2e)' }}>{n}</button>
                   ))}
                 </div>
               </div>
               <div style={{ background:'#f8f8f8', borderRadius:14, padding:20, marginBottom:24 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', fontSize:15, color:'#555', marginBottom:8 }}><span>Each person pays</span><span style={{ fontWeight:800, fontSize:24, color:'#1a1a2e' }}>£{splitAmount.toFixed(2)}</span></div>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:15, color:'#555', marginBottom:8 }}><span>Each person pays</span><span style={{ fontWeight:800, fontSize:24, color:'var(--brand-primary, #1a1a2e)' }}>£{splitAmount.toFixed(2)}</span></div>
                 {serviceChargeEnabled && serviceCharge>0 && <div style={{ fontSize:12, color:'#888', marginBottom:4 }}>Includes service charge (£{(serviceCharge/splitCount).toFixed(2)} each)</div>}
                 {discountAmount>0 && <div style={{ fontSize:12, color:'#22c55e', marginBottom:4 }}>Includes discount (-£{(discountAmount/splitCount).toFixed(2)} each)</div>}
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, color:'#888', marginTop:8 }}><span>Paid so far</span><span>{paidCount} of {splitCount} people</span></div>
@@ -669,12 +669,12 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   const isPaid = splitPaid.includes(i);
                   return (
                     <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 18px', borderRadius:12, background:isPaid?'#f0fdf4':'white', border:`2px solid ${isPaid?'#22c55e':'#e0e0e0'}` }}>
-                      <div><div style={{ fontWeight:700, color:isPaid?'#22c55e':'#1a1a2e' }}>{isPaid?'✅':'👤'} Person {i+1}</div><div style={{ fontSize:13, color:'#888' }}>£{splitAmount.toFixed(2)}</div></div>
+                      <div><div style={{ fontWeight:700, color:isPaid?'#22c55e':'var(--brand-primary, #1a1a2e)' }}>{isPaid?'✅':'👤'} Person {i+1}</div><div style={{ fontSize:13, color:'#888' }}>£{splitAmount.toFixed(2)}</div></div>
                       {!isPaid
                         ? <div style={{ display:'flex', gap:8 }}>
-                            <button onClick={() => handleSplitEqualPayment(i, 'Cash')} style={{ padding:isMobile?'12px 14px':'10px 14px', borderRadius:8, border:'none', background:'#1a1a2e', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>💵 Cash</button>
+                            <button onClick={() => handleSplitEqualPayment(i, 'Cash')} style={{ padding:isMobile?'12px 14px':'10px 14px', borderRadius:8, border:'none', background:'var(--brand-primary, #1a1a2e)', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>💵 Cash</button>
                             <button onClick={() => handleSplitEqualPayment(i, 'Card')} style={{ padding:isMobile?'12px 14px':'10px 14px', borderRadius:8, border:'none', background:'var(--brand-accent,#C9A84C)', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>💳 Card</button>
-                            <button onClick={() => handleSplitEqualPrint(i)} style={{ padding:isMobile?'12px 14px':'10px 14px', borderRadius:8, border:'2px solid #1a1a2e', background:'white', color:'#1a1a2e', fontWeight:700, fontSize:13, cursor:'pointer' }}>🖨️ Print</button>
+                            <button onClick={() => handleSplitEqualPrint(i)} style={{ padding:isMobile?'12px 14px':'10px 14px', borderRadius:8, border:'2px solid var(--brand-primary, #1a1a2e)', background:'white', color:'var(--brand-primary, #1a1a2e)', fontWeight:700, fontSize:13, cursor:'pointer' }}>🖨️ Print</button>
                           </div>
                         : <div style={{ color:'#22c55e', fontWeight:700 }}>Paid ✓</div>
                       }
@@ -692,12 +692,12 @@ export default function BillScreen({ orderId, onClose, onPay }) {
           <div>
             {mobileTopBar('Split by Item', () => setStage('bill'), '← Bill')}
             <div style={{ padding:isMobile?'16px 16px':28 }}>
-              {!isMobile && <div style={{ textAlign:'center', marginBottom:20 }}><div style={{ fontSize:22, fontWeight:800, color:'#1a1a2e' }}>🍽️ Split by Item</div><div style={{ fontSize:13, color:'#888', marginTop:4 }}>Assign each item to a person</div></div>}
+              {!isMobile && <div style={{ textAlign:'center', marginBottom:20 }}><div style={{ fontSize:22, fontWeight:800, color:'var(--brand-primary, #1a1a2e)' }}>🍽️ Split by Item</div><div style={{ fontSize:13, color:'#888', marginTop:4 }}>Assign each item to a person</div></div>}
               <div style={{ marginBottom:20 }}>
                 <div style={{ fontSize:13, fontWeight:700, color:'#555', marginBottom:10 }}>How many people?</div>
                 <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                   {[2,3,4,5,6,7,8].map(n => (
-                    <button key={n} onClick={() => { setSplitItemCount(n); setItemAssignments({}); setSplitItemPaid([]); setActivePerson(0); }} style={{ padding:isMobile?'12px 18px':'10px 16px', borderRadius:8, border:'none', cursor:'pointer', fontWeight:700, fontSize:16, background:splitItemCount===n?'#1a1a2e':'#f0f0f0', color:splitItemCount===n?'white':'#1a1a2e' }}>{n}</button>
+                    <button key={n} onClick={() => { setSplitItemCount(n); setItemAssignments({}); setSplitItemPaid([]); setActivePerson(0); }} style={{ padding:isMobile?'12px 18px':'10px 16px', borderRadius:8, border:'none', cursor:'pointer', fontWeight:700, fontSize:16, background:splitItemCount===n?'var(--brand-primary, #1a1a2e)':'#f0f0f0', color:splitItemCount===n?'white':'var(--brand-primary, #1a1a2e)' }}>{n}</button>
                   ))}
                 </div>
               </div>
@@ -723,12 +723,12 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                     <div key={item.id} onClick={() => { if(splitItemPaid.includes(assignedTo)) return; setItemAssignments(prev=>({...prev,[item.id]:activePerson})); }}
                       style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:isMobile?'14px 16px':'12px 16px', borderRadius:10, marginBottom:8, border:`2px solid ${isAssigned?ac:'#e0e0e0'}`, background:isAssigned?`${ac}15`:'white', cursor:'pointer' }}>
                       <div style={{ flex:1 }}>
-                        <div style={{ fontWeight:600, fontSize:isMobile?15:14, color:'#1a1a2e' }}>{item.quantity}× {item.name}</div>
+                        <div style={{ fontWeight:600, fontSize:isMobile?15:14, color:'var(--brand-primary, #1a1a2e)' }}>{item.quantity}× {item.name}</div>
                         {item.notes && <div style={{ fontSize:11, color:'#888' }}>{item.notes}</div>}
                         {item.discount_value>0 && <div style={{ fontSize:11, color:'#22c55e' }}>🏷️ -£{d.toFixed(2)}</div>}
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                        <span style={{ fontWeight:700, color:'#1a1a2e' }}>£{(p-d).toFixed(2)}</span>
+                        <span style={{ fontWeight:700, color:'var(--brand-primary, #1a1a2e)' }}>£{(p-d).toFixed(2)}</span>
                         {isAssigned
                           ? <div style={{ background:ac, color:'white', borderRadius:20, padding:'3px 10px', fontSize:11, fontWeight:700 }}>P{assignedTo+1}</div>
                           : <div style={{ background:personColors[activePerson], color:'white', borderRadius:20, padding:'3px 10px', fontSize:11, fontWeight:700, opacity:0.4 }}>P{activePerson+1}</div>
@@ -748,7 +748,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                       <div key={i} style={{ borderRadius:12, padding:16, marginBottom:10, border:`2px solid ${isPaid?'#22c55e':personColors[i]}`, background:isPaid?'#f0fdf4':`${personColors[i]}08` }}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
                           <div style={{ fontWeight:700, color:isPaid?'#22c55e':personColors[i], fontSize:15 }}>{isPaid?'✅':'👤'} Person {i+1}</div>
-                          <div style={{ fontWeight:800, fontSize:18, color:'#1a1a2e' }}>£{p.total.toFixed(2)}</div>
+                          <div style={{ fontWeight:800, fontSize:18, color:'var(--brand-primary, #1a1a2e)' }}>£{p.total.toFixed(2)}</div>
                         </div>
                         {p.items.map(item => <div key={item.id} style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#555', marginBottom:2 }}><span>{item.quantity}× {item.name}</span><span>£{(item.unit_price*item.quantity).toFixed(2)}</span></div>)}
                         <div style={{ borderTop:'1px dashed #ccc', marginTop:8, paddingTop:8 }}>
@@ -757,9 +757,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                           {serviceChargeEnabled&&p.service>0 && <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#555', marginBottom:3 }}><span>Service ({parseFloat(settings.service_charge_rate||12.5)}%)</span><span>£{p.service.toFixed(2)}</span></div>}
                         </div>
                         {!isPaid && <div style={{ display:'flex', gap:8, marginTop:12 }}>
-                          <button onClick={() => handleSplitItemPayment(i, 'Cash')} style={{ flex:1, padding:isMobile?'14px':'10px', borderRadius:8, border:'none', background:'#1a1a2e', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>💵 Cash</button>
+                          <button onClick={() => handleSplitItemPayment(i, 'Cash')} style={{ flex:1, padding:isMobile?'14px':'10px', borderRadius:8, border:'none', background:'var(--brand-primary, #1a1a2e)', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>💵 Cash</button>
                           <button onClick={() => handleSplitItemPayment(i, 'Card')} style={{ flex:1, padding:isMobile?'14px':'10px', borderRadius:8, border:'none', background:personColors[i], color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>💳 Card</button>
-                          <button onClick={() => handleSplitItemPrint(i)} style={{ flex:1, padding:isMobile?'14px':'10px', borderRadius:8, border:'2px solid #1a1a2e', background:'white', color:'#1a1a2e', fontWeight:700, fontSize:13, cursor:'pointer' }}>🖨️ Print</button>
+                          <button onClick={() => handleSplitItemPrint(i)} style={{ flex:1, padding:isMobile?'14px':'10px', borderRadius:8, border:'2px solid var(--brand-primary, #1a1a2e)', background:'white', color:'var(--brand-primary, #1a1a2e)', fontWeight:700, fontSize:13, cursor:'pointer' }}>🖨️ Print</button>
                         </div>}
                       </div>
                     );
@@ -779,7 +779,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
             <div style={{ padding:isMobile?'24px 16px 32px':32 }}>
               <div style={{ textAlign:'center', marginBottom:28 }}>
                 <div style={{ fontSize:13, color:'#888', marginBottom:8 }}>Bill total</div>
-                <div style={{ fontSize:42, fontWeight:800, color:'#1a1a2e' }}>£{billTotal.toFixed(2)}</div>
+                <div style={{ fontSize:42, fontWeight:800, color:'var(--brand-primary, #1a1a2e)' }}>£{billTotal.toFixed(2)}</div>
                 {serviceChargeEnabled&&serviceCharge>0 && <div style={{ fontSize:13, color:'#888', marginTop:4 }}>Incl. service charge £{serviceCharge.toFixed(2)}</div>}
               </div>
               {hasVoucherDiscount && (
@@ -797,7 +797,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
               <div style={{ fontSize:16, fontWeight:700, color:'#555', marginBottom:16, textAlign:'center' }}>Select payment method</div>
               <div style={{ display:'flex', flexDirection:'column', gap:12, marginBottom:16 }}>
                 {[{method:'Cash',icon:'💵'},{method:'Card',icon:'💳'},{method:'Other',icon:'🔄'}].map(({method,icon}) => (
-                  <button key={method} onClick={() => { setSelectedMethod(method); setPaymentInput(''); setStage('amount'); }} style={{ padding:isMobile?'22px':'20px', borderRadius:12, border:'2px solid #1a1a2e', background:'white', color:'#1a1a2e', fontSize:isMobile?22:20, fontWeight:700, cursor:'pointer' }}>{icon} {method}</button>
+                  <button key={method} onClick={() => { setSelectedMethod(method); setPaymentInput(''); setStage('amount'); }} style={{ padding:isMobile?'22px':'20px', borderRadius:12, border:'2px solid var(--brand-primary, #1a1a2e)', background:'white', color:'var(--brand-primary, #1a1a2e)', fontSize:isMobile?22:20, fontWeight:700, cursor:'pointer' }}>{icon} {method}</button>
                 ))}
                 <button onClick={() => { setVoucherCode(''); setVoucherDetails(null); setVoucherErr(''); setStage('voucher'); }} style={{ padding:isMobile?'22px':'20px', borderRadius:12, border:'2px solid var(--brand-accent,#C9A84C)', background:'#fdf6ec', color:'#5b4a2a', fontSize:isMobile?22:20, fontWeight:700, cursor:'pointer' }}>🎁 Voucher</button>
               </div>
@@ -813,7 +813,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
             <div style={{ padding: isMobile ? '24px 16px 32px' : 32 }}>
               <div style={{ textAlign: 'center', marginBottom: 22 }}>
                 <div style={{ fontSize: 13, color: '#888', marginBottom: 6 }}>Bill total</div>
-                <div style={{ fontSize: 36, fontWeight: 800, color: '#1a1a2e' }}>£{billTotal.toFixed(2)}</div>
+                <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>£{billTotal.toFixed(2)}</div>
               </div>
 
               <div style={{ background: '#fdf6ec', border: '2px solid var(--brand-accent,#C9A84C)', borderRadius: 12, padding: 18, marginBottom: 16 }}>
@@ -864,7 +864,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                     </div>
                   )}
                   <button onClick={handleVoucherApply} disabled={voucherLoading}
-                    style={{ marginTop: 14, width: '100%', padding: 16, borderRadius: 10, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: '#1a1a2e', fontWeight: 800, fontSize: 16, cursor: 'pointer', opacity: voucherLoading ? 0.5 : 1 }}>
+                    style={{ marginTop: 14, width: '100%', padding: 16, borderRadius: 10, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 800, fontSize: 16, cursor: 'pointer', opacity: voucherLoading ? 0.5 : 1 }}>
                     {voucherLoading
                       ? 'Processing…'
                       : Number(voucherDetails.balance) >= billTotal
@@ -925,7 +925,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   </div>
                   <div style={{ background:'#f8f8f8', borderRadius:12, padding:16, marginBottom:20 }}>
                     <div style={{ display:'flex', justifyContent:'space-between', fontSize:15, color:'#555', marginBottom:10 }}><span>Bill total</span><span style={{ fontWeight:700 }}>£{billTotal.toFixed(2)}</span></div>
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:15, color:'#555', marginBottom:10 }}><span>Amount received</span><span style={{ fontWeight:800, color:'#1a1a2e', fontSize:18 }}>£{amountPaid>0?amountPaid.toFixed(2):'—'}</span></div>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:15, color:'#555', marginBottom:10 }}><span>Amount received</span><span style={{ fontWeight:800, color:'var(--brand-primary, #1a1a2e)', fontSize:18 }}>£{amountPaid>0?amountPaid.toFixed(2):'—'}</span></div>
                     {canPay&&selectedMethod==='Cash' && <div style={{ display:'flex', justifyContent:'space-between', fontSize:20, fontWeight:800, color:'#22c55e', borderTop:'2px solid #eee', paddingTop:10, marginTop:4 }}><span>💚 Change</span><span>£{Math.max(0,change).toFixed(2)}</span></div>}
                     {canPay&&amountPaid>billTotal&&selectedMethod!=='Cash' && <div style={{ display:'flex', justifyContent:'space-between', fontSize:20, fontWeight:800, color:'#8b5cf6', borderTop:'2px solid #eee', paddingTop:10, marginTop:4 }}><span>💜 Tip</span><span>£{actualTip.toFixed(2)}</span></div>}
                   </div>
@@ -933,7 +933,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                     <div style={{ fontSize:13, fontWeight:600, color:'#888', marginBottom:10 }}>Quick amounts</div>
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8 }}>
                       {[billTotal,Math.ceil(billTotal/5)*5,Math.ceil(billTotal/10)*10,Math.ceil(billTotal/20)*20].filter((v,i,a)=>a.indexOf(v)===i).map(amount => (
-                        <button key={amount} onClick={() => setPaymentInput(amount.toFixed(2))} style={{ padding:'12px', borderRadius:10, border:`2px solid ${paymentInput===amount.toFixed(2)?'var(--brand-accent,#C9A84C)':'#1a1a2e'}`, background:paymentInput===amount.toFixed(2)?'var(--brand-accent,#C9A84C)':'white', color:paymentInput===amount.toFixed(2)?'white':'#1a1a2e', fontWeight:700, cursor:'pointer', fontSize:15 }}>£{amount.toFixed(2)}</button>
+                        <button key={amount} onClick={() => setPaymentInput(amount.toFixed(2))} style={{ padding:'12px', borderRadius:10, border:`2px solid ${paymentInput===amount.toFixed(2)?'var(--brand-accent,#C9A84C)':'var(--brand-primary, #1a1a2e)'}`, background:paymentInput===amount.toFixed(2)?'var(--brand-accent,#C9A84C)':'white', color:paymentInput===amount.toFixed(2)?'white':'var(--brand-primary, #1a1a2e)', fontWeight:700, cursor:'pointer', fontSize:15 }}>£{amount.toFixed(2)}</button>
                       ))}
                     </div>
                   </div>
@@ -943,13 +943,13 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   <button onClick={() => setStage('method')} style={{ width:'100%', padding:'12px', borderRadius:10, border:'none', background:'#f0f0f0', cursor:'pointer', fontWeight:700, fontSize:14 }}>← Back</button>
                 </div>
                 <div style={{ width:280, padding:24, display:'flex', flexDirection:'column', gap:10 }}>
-                  <div style={{ background:'#1a1a2e', borderRadius:14, padding:'20px', textAlign:'right', marginBottom:8 }}>
+                  <div style={{ background:'var(--brand-primary, #1a1a2e)', borderRadius:14, padding:'20px', textAlign:'right', marginBottom:8 }}>
                     <div style={{ fontSize:13, color:'#aaa', marginBottom:6 }}>Amount received</div>
                     <div style={{ fontSize:36, fontWeight:800, color:'white', fontFamily:'monospace' }}>£{paymentInput||'0.00'}</div>
                   </div>
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8 }}>
                     {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(btn => (
-                      <button key={btn} onClick={() => handleNumpad(btn)} style={{ height:68, borderRadius:12, border:'none', fontSize:22, fontWeight:700, cursor:'pointer', background:btn==='⌫'?'#fee2e2':'#f8f8f8', color:btn==='⌫'?'#ef4444':'#1a1a2e' }}>{btn}</button>
+                      <button key={btn} onClick={() => handleNumpad(btn)} style={{ height:68, borderRadius:12, border:'none', fontSize:22, fontWeight:700, cursor:'pointer', background:btn==='⌫'?'#fee2e2':'#f8f8f8', color:btn==='⌫'?'#ef4444':'var(--brand-primary, #1a1a2e)' }}>{btn}</button>
                     ))}
                   </div>
                   <button onClick={() => handleNumpad('C')} style={{ padding:'16px', borderRadius:12, border:'none', background:'#f0f0f0', color:'#555', fontSize:16, fontWeight:700, cursor:'pointer' }}>Clear</button>

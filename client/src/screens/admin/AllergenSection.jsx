@@ -218,7 +218,7 @@ export default function AllergenSection() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }} className="no-print">
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>🌿 Allergen Menu</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 4 }}>🌿 Allergen Menu</h1>
           <p style={{ fontSize: 13, color: '#888', marginBottom: 0 }}>UK 14 mandatory allergens — compliant with Natasha's Law (2021)</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -229,11 +229,11 @@ export default function AllergenSection() {
             </button>
           )}
           <button onClick={exportCsv}
-            style={{ padding: '12px 20px', borderRadius: 10, border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
+            style={{ padding: '12px 20px', borderRadius: 10, border: '2px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
             ⬇ Export CSV
           </button>
           <button onClick={() => window.print()}
-            style={{ padding: '12px 24px', borderRadius: 10, border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
+            style={{ padding: '12px 24px', borderRadius: 10, border: '2px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
             🖨️ Print Allergen Sheet
           </button>
         </div>
@@ -242,7 +242,7 @@ export default function AllergenSection() {
       {/* Stats */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }} className="no-print">
         {[
-          { label: 'Total dishes',       value: totalDishes, color: '#1a1a2e' },
+          { label: 'Total dishes',       value: totalDishes, color: 'var(--brand-primary, #1a1a2e)' },
           { label: '✅ Auto (recipe)',    value: withRecipe,  color: '#22c55e' },
           { label: '✏️ Set manually',     value: withManual,  color: '#eab308' },
           { label: '🤖 AI scanned',       value: withScanned, color: '#3b82f6' },
@@ -283,22 +283,22 @@ export default function AllergenSection() {
         <div style={{ textAlign: 'center', padding: 60, color: '#888' }}>Loading allergen data...</div>
       ) : (
         <div className="allergen-table-wrap" style={{ background: 'white', borderRadius: 12, overflow: 'auto', maxHeight: 'calc(100vh - 320px)', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-          <div className="print-only" style={{ padding: '16px 20px 0', borderBottom: '2px solid #1a1a2e', marginBottom: 4 }}>
-            <div style={{ fontWeight: 900, fontSize: 22, color: '#1a1a2e' }}>ALLERGEN INFORMATION</div>
+          <div className="print-only" style={{ padding: '16px 20px 0', borderBottom: '2px solid var(--brand-primary, #1a1a2e)', marginBottom: 4 }}>
+            <div style={{ fontWeight: 900, fontSize: 22, color: 'var(--brand-primary, #1a1a2e)' }}>ALLERGEN INFORMATION</div>
             <div style={{ fontSize: 11, color: '#555', marginTop: 4, marginBottom: 12 }}>Please inform a member of staff of any food allergies or intolerances before ordering. Dishes are prepared in a kitchen where all 14 allergens are handled.</div>
           </div>
 
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 11 }}>
             <thead>
               <tr>
-                <th style={{ padding: '14px 16px', textAlign: 'left', color: 'white', fontWeight: 700, fontSize: 13, minWidth: 220, position: 'sticky', top: 0, left: 0, zIndex: 5, background: '#1a1a2e', borderRight: '2px solid rgba(255,255,255,0.2)', boxShadow: '2px 2px 0 rgba(0,0,0,0.1)' }}>DISH</th>
+                <th style={{ padding: '14px 16px', textAlign: 'left', color: 'white', fontWeight: 700, fontSize: 13, minWidth: 220, position: 'sticky', top: 0, left: 0, zIndex: 5, background: 'var(--brand-primary, #1a1a2e)', borderRight: '2px solid rgba(255,255,255,0.2)', boxShadow: '2px 2px 0 rgba(0,0,0,0.1)' }}>DISH</th>
                 {UK14.map(a => (
-                  <th key={a.code} style={{ padding: '8px 4px', textAlign: 'center', color: 'white', width: 46, minWidth: 46, position: 'sticky', top: 0, zIndex: 4, background: '#1a1a2e', boxShadow: '0 2px 0 rgba(0,0,0,0.1)' }}>
+                  <th key={a.code} style={{ padding: '8px 4px', textAlign: 'center', color: 'white', width: 46, minWidth: 46, position: 'sticky', top: 0, zIndex: 4, background: 'var(--brand-primary, #1a1a2e)', boxShadow: '0 2px 0 rgba(0,0,0,0.1)' }}>
                     <div style={{ fontWeight: 900, fontSize: 12, lineHeight: 1.2 }}>{a.code}</div>
                     <div style={{ fontSize: 8, opacity: 0.6, fontWeight: 400, marginTop: 3, lineHeight: 1.3 }}>{a.name}</div>
                   </th>
                 ))}
-                <th style={{ padding: '14px 8px', color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: 400, whiteSpace: 'nowrap', minWidth: 90, position: 'sticky', top: 0, zIndex: 4, background: '#1a1a2e', boxShadow: '0 2px 0 rgba(0,0,0,0.1)' }} className="no-print">SOURCE</th>
+                <th style={{ padding: '14px 8px', color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: 400, whiteSpace: 'nowrap', minWidth: 90, position: 'sticky', top: 0, zIndex: 4, background: 'var(--brand-primary, #1a1a2e)', boxShadow: '0 2px 0 rgba(0,0,0,0.1)' }} className="no-print">SOURCE</th>
               </tr>
             </thead>
             <tbody>
@@ -326,7 +326,7 @@ export default function AllergenSection() {
 
                       return (
                         <tr key={item.id} style={{ background: rowBg }}>
-                          <td style={{ padding: '9px 16px', fontWeight: 600, color: '#1a1a2e', fontSize: 13, position: 'sticky', left: 0, zIndex: 2, background: rowBg, borderRight: '2px solid #eee', boxShadow: '2px 0 4px rgba(0,0,0,0.04)', borderBottom: '1px solid #f3f3f3' }}>
+                          <td style={{ padding: '9px 16px', fontWeight: 600, color: 'var(--brand-primary, #1a1a2e)', fontSize: 13, position: 'sticky', left: 0, zIndex: 2, background: rowBg, borderRight: '2px solid #eee', boxShadow: '2px 0 4px rgba(0,0,0,0.04)', borderBottom: '1px solid #f3f3f3' }}>
                             <div style={{ lineHeight: 1.3 }}>{item.name}</div>
                             {item.name_alt && <div style={{ fontSize: 10, color: 'var(--brand-accent,#C9A84C)', marginTop: 1 }}>{item.name_alt}</div>}
                             {isSaving && <div style={{ fontSize: 9, color: '#aaa', marginTop: 2 }}>saving...</div>}

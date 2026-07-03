@@ -181,14 +181,14 @@ export default function AdminScreen({ plan }) {
         transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
         transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         boxShadow: drawerOpen ? '2px 0 14px rgba(0,0,0,0.35)' : 'none',
-        background: '#1a1a2e',
+        background: 'var(--brand-primary, #1a1a2e)',
         display: 'flex', flexDirection: 'column',
         padding: '20px 0',
         overflowY: 'auto',
       }
     : {
         width: 200,
-        background: '#1a1a2e',
+        background: 'var(--brand-primary, #1a1a2e)',
         display: 'flex', flexDirection: 'column',
         padding: '20px 0',
         overflowY: 'auto',
@@ -203,7 +203,7 @@ export default function AdminScreen({ plan }) {
           aria-label="Open menu"
           style={{
             position: 'absolute', top: 10, left: 10, zIndex: 90,
-            background: '#1a1a2e', color: 'white',
+            background: 'var(--brand-primary, #1a1a2e)', color: 'white',
             border: 'none', borderRadius: 8,
             width: 44, height: 44,
             fontSize: 22, cursor: 'pointer',

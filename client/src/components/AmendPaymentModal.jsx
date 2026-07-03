@@ -62,7 +62,7 @@ export default function AmendPaymentModal({ bill, onClose, onDone }) {
         <div style={{ padding:'18px 20px' }}>
           <div style={{ background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:8, padding:'10px 12px', marginBottom:14, fontSize:13 }}>
             <span style={{ color:'#888' }}>Currently:</span>{' '}
-            <strong style={{ color:'#1a1a2e' }}>{currentMethod}</strong>
+            <strong style={{ color:'var(--brand-primary, #1a1a2e)' }}>{currentMethod}</strong>
           </div>
 
           <div style={{ fontSize:12, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:0.5, marginBottom:6 }}>Change to</div>
@@ -73,7 +73,7 @@ export default function AmendPaymentModal({ bill, onClose, onDone }) {
                 style={{
                   padding:'10px 14px', borderRadius:8, border: newMethod === m.value ? '2px solid var(--brand-primary,#0D1B3E)' : '1px solid #ddd',
                   background: newMethod === m.value ? 'var(--brand-primary,#0D1B3E)' : 'white',
-                  color: newMethod === m.value ? 'white' : '#1a1a2e',
+                  color: newMethod === m.value ? 'white' : 'var(--brand-primary, #1a1a2e)',
                   fontWeight:700, fontSize:14, cursor:'pointer',
                 }}>
                 {m.label}

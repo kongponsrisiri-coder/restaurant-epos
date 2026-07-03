@@ -120,15 +120,15 @@ export default function CustomersSection() {
 
   return (
     <div style={{ padding:24, maxWidth:1180 }}>
-      <h1 style={{ fontSize:22, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>👥 Customers</h1>
+      <h1 style={{ fontSize:22, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>👥 Customers</h1>
 
       {/* Status tiles */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:10, marginBottom:16 }}>
         {/* Always-visible "All" reset — clicking a status tile filters; this
             clears it back to the full list without leaving the tab. */}
         <button onClick={() => setStatusFilter('All')} style={{
-          background: statusFilter === 'All' ? '#1a1a2e' : '#f1f5f9',
-          color: statusFilter === 'All' ? 'white' : '#1a1a2e',
+          background: statusFilter === 'All' ? 'var(--brand-primary, #1a1a2e)' : '#f1f5f9',
+          color: statusFilter === 'All' ? 'white' : 'var(--brand-primary, #1a1a2e)',
           border: 'none', borderRadius: 10, padding: '14px 16px',
           textAlign: 'left', cursor: 'pointer',
           transition: 'background 0.15s, color 0.15s',
@@ -174,7 +174,7 @@ export default function CustomersSection() {
         </select>
         <button onClick={load} disabled={loading} style={{
           padding:'10px 18px', borderRadius:8, border:'none',
-          background:'#1a1a2e', color:'white', fontWeight:700, fontSize:13,
+          background:'var(--brand-primary, #1a1a2e)', color:'white', fontWeight:700, fontSize:13,
           cursor: loading ? 'wait' : 'pointer'
         }}>{loading ? 'Loading…' : 'Refresh'}</button>
         <button onClick={exportCsv} disabled={filtered.length === 0} style={{
@@ -217,7 +217,7 @@ export default function CustomersSection() {
                 const st = STATUS_STYLE[c.status] || STATUS_STYLE.New;
                 return (
                   <tr key={c.customer_email || i} style={{ borderTop:'1px solid #f0f0f0' }}>
-                    <td style={{ padding:'10px 6px', fontWeight:600, color:'#1a1a2e' }}>{c.customer_name || '—'}</td>
+                    <td style={{ padding:'10px 6px', fontWeight:600, color:'var(--brand-primary, #1a1a2e)' }}>{c.customer_name || '—'}</td>
                     <td style={{ padding:'10px 6px', fontSize:12, color:'#555' }}>
                       <div>{c.customer_email}</div>
                       {c.customer_phone && <div style={{ color:'#888' }}>{c.customer_phone}</div>}

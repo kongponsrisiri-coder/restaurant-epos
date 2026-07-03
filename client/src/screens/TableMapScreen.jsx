@@ -15,9 +15,9 @@ const COLOUR_MAP = {
   starters_done:  { bg: '#f97316', border: '#ea580c', text: 'white',   label: 'Starters Done' },
   mains_fired:    { bg: '#38bdf8', border: '#0284c7', text: 'white',   label: 'Mains Called' },
   mains_done:     { bg: '#1e3a8a', border: '#1e40af', text: 'white',   label: 'Mains Done' },
-  desserts_fired: { bg: '#f9a8d4', border: '#ec4899', text: '#1a1a2e', label: 'Desserts Called' },
+  desserts_fired: { bg: '#f9a8d4', border: '#ec4899', text: 'var(--brand-primary, #1a1a2e)', label: 'Desserts Called' },
   desserts_done:  { bg: '#6b7280', border: '#4b5563', text: 'white',   label: 'Desserts Done' },
-  bill_printed:   { bg: '#f8fafc', border: '#cbd5e1', text: '#1a1a2e', label: 'Bill Printed' },
+  bill_printed:   { bg: '#f8fafc', border: '#cbd5e1', text: 'var(--brand-primary, #1a1a2e)', label: 'Bill Printed' },
 };
 
 export default function TableMapScreen({ staff, onOpenOrder }) {
@@ -238,7 +238,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
         gap: 12
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: isMobile ? 22 : 30, fontWeight: 700, color: '#1a1a2e', flexShrink: 0 }}>
+          <h1 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: isMobile ? 22 : 30, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', flexShrink: 0 }}>
             Floor map
           </h1>
 
@@ -269,7 +269,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           <button
             onClick={fetchData}
             style={{
-              background: '#1a1a2e', color: 'white', border: 'none',
+              background: 'var(--brand-primary, #1a1a2e)', color: 'white', border: 'none',
               padding: isMobile ? '10px 14px' : '8px 16px',
               borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600
             }}>
@@ -391,7 +391,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                   borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,
                   background: colours.bg,
                   border: `3px solid ${isSelected ? '#ffffff' : colours.border}`,
-                  outline: isSelected ? '3px solid #1a1a2e' : 'none',
+                  outline: isSelected ? '3px solid var(--brand-primary, #1a1a2e)' : 'none',
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                   cursor: 'pointer', userSelect: 'none',
                   boxShadow: isSelected ? '0 0 20px rgba(0,0,0,0.5)' : '0 2px 8px rgba(0,0,0,0.15)',
@@ -465,7 +465,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                 return (
                   <div key={table.id} onClick={() => handleTableClick(table)} style={{
                     background: '#fff',
-                    border: `1.5px solid ${isSelected ? '#1a1a2e' : '#E7E2D6'}`,
+                    border: `1.5px solid ${isSelected ? 'var(--brand-primary, #1a1a2e)' : '#E7E2D6'}`,
                     borderLeft: `5px solid ${colours.bg}`,
                     borderRadius: 16,
                     padding: '14px 16px',
@@ -491,7 +491,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                     </div>
 
                     {/* Table number */}
-                    <div style={{ fontSize: 30, fontWeight: 800, color: '#1a1a2e', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+                    <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
                       {table.is_takeaway ? '🥡 ' : ''}{table.table_number}
                     </div>
                     <div style={{ fontSize: 12.5, color: '#9A9488', marginTop: 6, fontWeight: 600 }}>
@@ -549,7 +549,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
             display: 'flex', flexDirection: 'column', gap: 22
           }}>
             <div style={{ textAlign: 'center', marginBottom: 16 }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: '#1a1a2e' }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>
                 Table {tableActionPopup.table.table_number}
               </div>
               <div style={{ color: '#888', fontSize: 14 }}>
@@ -563,7 +563,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
             }} style={{
               padding: isMobile ? '18px' : '16px',
               borderRadius: 12, border: 'none',
-              background: '#1a1a2e', color: 'white',
+              background: 'var(--brand-primary, #1a1a2e)', color: 'white',
               fontSize: 16, fontWeight: 700, cursor: 'pointer'
             }}>
               📋 Open Order
@@ -641,13 +641,13 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20
           }}>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
                 Table {showCoversPopup.table_number}
               </div>
               <div style={{ color: '#888', fontSize: 14 }}>How many covers?</div>
             </div>
 
-            <div style={{ fontSize: 48, fontWeight: 800, color: '#1a1a2e', minHeight: 60 }}>
+            <div style={{ fontSize: 48, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)', minHeight: 60 }}>
               {coversInput || '0'}
             </div>
 
@@ -681,7 +681,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                   fontSize: isMobile ? 26 : 22,
                   fontWeight: 700, cursor: 'pointer',
                   background: btn === '✓' ? '#e94560' : btn === 'C' ? '#f0f0f0' : '#f8f8f8',
-                  color: btn === '✓' ? 'white' : '#1a1a2e',
+                  color: btn === '✓' ? 'white' : 'var(--brand-primary, #1a1a2e)',
                 }}>{btn}</button>
               ))}
             </div>

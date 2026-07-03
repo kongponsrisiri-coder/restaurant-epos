@@ -69,16 +69,16 @@ export default function IngredientsTab() {
             return (
               <div key={ing.id} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 80px 70px 80px 100px 90px', padding: '12px 16px', borderBottom: '1px solid #f0f0f0', fontSize: 13, alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontWeight: 600, color: '#1a1a2e' }}>{ing.name_en}</div>
+                  <div style={{ fontWeight: 600, color: 'var(--brand-primary, #1a1a2e)' }}>{ing.name_en}</div>
                   {ing.name_th && <div style={{ fontSize: 11, color: 'var(--brand-accent,#C9A84C)', marginTop: 1 }}>{ing.name_th}</div>}
                   {allergens.length > 0 && <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>{allergens.map(a => <span key={a} style={{ background: '#fee2e2', color: '#991b1b', fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4 }}>{a}</span>)}</div>}
                   {ing.supplier_name && <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📦 {ing.supplier_name}</div>}
                 </div>
                 <span style={{ fontSize: 12, color: '#555' }}>{ing.category}</span>
                 <span style={{ fontSize: 12, color: '#555' }}>{ing.unit}</span>
-                <span style={{ textAlign: 'right', fontWeight: 700, color: '#1a1a2e' }}>£{Number(ing.cost_per_unit || 0).toFixed(2)}</span>
+                <span style={{ textAlign: 'right', fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>£{Number(ing.cost_per_unit || 0).toFixed(2)}</span>
                 <span style={{ textAlign: 'right', color: '#555' }}>{ing.yield_percentage}%</span>
-                <span style={{ textAlign: 'right', fontWeight: 600, color: Number(ing.current_stock) <= 0 ? '#ef4444' : '#1a1a2e' }}>{Number(ing.current_stock || 0).toFixed(1)}{ing.unit}</span>
+                <span style={{ textAlign: 'right', fontWeight: 600, color: Number(ing.current_stock) <= 0 ? '#ef4444' : 'var(--brand-primary, #1a1a2e)' }}>{Number(ing.current_stock || 0).toFixed(1)}{ing.unit}</span>
                 <div style={{ textAlign: 'center' }}><span style={{ background: status.bg, color: status.color, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 20 }}>{status.label}</span></div>
                 <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
                   <button onClick={() => openEdit(ing)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Edit</button>
@@ -92,7 +92,7 @@ export default function IngredientsTab() {
       {showForm && (
         <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
           <div style={{ background: 'white', borderRadius: 16, padding: 28, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto' }}>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', marginBottom: 20 }}>{editItem ? '✏️ Edit Ingredient' : '+ New Ingredient'}</h2>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 20 }}>{editItem ? '✏️ Edit Ingredient' : '+ New Ingredient'}</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div><label style={labelStyle}>Name (English) *</label><input value={form.name_en} onChange={e => setForm({ ...form, name_en: e.target.value })} placeholder="e.g. Chicken Breast" style={inputStyle} /></div>

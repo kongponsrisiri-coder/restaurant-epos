@@ -182,7 +182,7 @@ export default function BillsSection() {
             staff. userSelect off so multi-taps don't select text. */}
         <h1
           onClick={handleHeadingTap}
-          style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', margin: 0, cursor: 'default', userSelect: 'none' }}
+          style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', margin: 0, cursor: 'default', userSelect: 'none' }}
         >
           🧾 Bill Records
         </h1>
@@ -213,10 +213,10 @@ export default function BillsSection() {
             <select value={method} onChange={e => setMethod(e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}>
               <option value="all">All Methods</option><option value="Cash">Cash</option><option value="Card">Card</option><option value="Other">Other</option>
             </select></div>
-          <button onClick={fetchBills} style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Search</button>
-          <button onClick={() => doPrintBills('thermal')} disabled={!bills.length} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #1a1a2e', background: bills.length ? '#1a1a2e' : '#bbb', color: 'white', fontWeight: 700, fontSize: 14, cursor: bills.length ? 'pointer' : 'not-allowed' }}>🖨 Print</button>
-          <button onClick={() => doPrintBills('full')}    disabled={!bills.length} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 14, cursor: bills.length ? 'pointer' : 'not-allowed', opacity: bills.length ? 1 : 0.5 }}>📄 Export</button>
-          <button onClick={exportCsv} disabled={!bills.length} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 14, cursor: bills.length ? 'pointer' : 'not-allowed', opacity: bills.length ? 1 : 0.5 }}>⬇ CSV</button>
+          <button onClick={fetchBills} style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Search</button>
+          <button onClick={() => doPrintBills('thermal')} disabled={!bills.length} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid var(--brand-primary, #1a1a2e)', background: bills.length ? 'var(--brand-primary, #1a1a2e)' : '#bbb', color: 'white', fontWeight: 700, fontSize: 14, cursor: bills.length ? 'pointer' : 'not-allowed' }}>🖨 Print</button>
+          <button onClick={() => doPrintBills('full')}    disabled={!bills.length} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, fontSize: 14, cursor: bills.length ? 'pointer' : 'not-allowed', opacity: bills.length ? 1 : 0.5 }}>📄 Export</button>
+          <button onClick={exportCsv} disabled={!bills.length} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, fontSize: 14, cursor: bills.length ? 'pointer' : 'not-allowed', opacity: bills.length ? 1 : 0.5 }}>⬇ CSV</button>
         </div>
       </div>
       {/* Summary cards — minmax(140px) so 2 cards fit on phones; clamp
@@ -245,12 +245,12 @@ export default function BillsSection() {
           {bills.map(bill => (
             <div key={bill.id}>
               <div onClick={() => handleSelectBill(bill)} style={{ display: 'grid', gridTemplateColumns: '80px 60px 1fr 110px 100px 100px 90px', padding: '12px 20px', borderBottom: selectedBill?.id === bill.id ? 'none' : '1px solid #f0f0f0', fontSize: 14, cursor: 'pointer', background: selectedBill?.id === bill.id ? '#f0f7ff' : 'white', alignItems: 'center' }}>
-                <span style={{ fontWeight: 700, color:'#1a1a2e' }}>T{bill.table_number}</span>
+                <span style={{ fontWeight: 700, color:'var(--brand-primary, #1a1a2e)' }}>T{bill.table_number}</span>
                 <span style={{ color: '#555' }}>{bill.covers || '—'}</span>
                 <span style={{ color: '#555' }}>{formatDateTime(bill.closed_at)}</span>
                 <span><span style={{ background: bill.method === 'Cash' ? '#dcfce7' : bill.method === 'Card' ? '#dbeafe' : '#f3f4f6', color: bill.method === 'Cash' ? '#14532d' : bill.method === 'Card' ? '#1e40af' : '#374151', padding: '2px 8px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{bill.method === 'Cash' ? '💵' : bill.method === 'Card' ? '💳' : '🔄'} {bill.method}</span></span>
                 <span style={{ textAlign: 'right', color: bill.discount_value > 0 ? '#22c55e' : '#bbb', fontSize: 13 }}>{bill.discount_value > 0 ? bill.discount_type === 'percent' ? `-${bill.discount_value}%` : `-£${bill.discount_value}` : '—'}</span>
-                <span style={{ textAlign: 'right', fontWeight: 700, color: '#1a1a2e' }}>£{Number(bill.paid_amount || bill.total || 0).toFixed(2)}</span>
+                <span style={{ textAlign: 'right', fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>£{Number(bill.paid_amount || bill.total || 0).toFixed(2)}</span>
                 <span style={{ textAlign: 'center', display:'flex', justifyContent:'center', alignItems:'center', gap:6 }}>
                   {/* SEPOS-PAY-AMEND-001 — labelled and always visible per
                       Korakot 2026-06-02: "i dont want the amend button need
@@ -421,7 +421,7 @@ function UnlockModal({ onClose, onUnlocked }) {
       onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div style={{ background: 'white', borderRadius: 14, padding: 28, width: 'min(380px, 100%)', boxShadow: '0 30px 80px rgba(0,0,0,0.35)' }}>
         <div style={{ fontSize: 30, marginBottom: 6 }}>🔒</div>
-        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#1a1a2e' }}>Unlock manager actions</h2>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>Unlock manager actions</h2>
         <p style={{ margin: '6px 0 18px', fontSize: 13, color: '#666' }}>
           Enter a manager PIN to show delete buttons on closed bills for the next 5 minutes. PIN is re-checked when you actually hit delete — this just reveals the buttons.
         </p>

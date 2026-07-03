@@ -661,7 +661,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             }}>
               ← Back
             </button>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', flex: 1 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', flex: 1 }}>
               Table {order?.table_number} — Order #{orderId}
               {order?.covers && (
                 <span style={{ fontSize: 14, fontWeight: 400, color: '#888', marginLeft: 8 }}>
@@ -679,7 +679,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             </button>
             {cart.length > 0 && (
               <button onClick={sendOrder} style={{
-                background: '#1a1a2e', color: 'white', border: 'none',
+                background: 'var(--brand-primary, #1a1a2e)', color: 'white', border: 'none',
                 borderRadius: 10, padding: '10px 18px', cursor: 'pointer',
                 fontWeight: 700, fontSize: 14
               }}>
@@ -734,7 +734,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               }} style={{
                 padding: '10px 20px', borderRadius: 20, border: 'none', cursor: 'pointer',
                 fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap',
-                background: activeCategory === cat.id ? (cat.is_bar ? '#1e40af' : '#1a1a2e') : '#f0f0f0',
+                background: activeCategory === cat.id ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary, #1a1a2e)') : '#f0f0f0',
                 color: activeCategory === cat.id ? 'white' : '#555',
               }}>
                 {cat.name} {cat.is_bar ? '🍹' : ''}
@@ -751,7 +751,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               <button onClick={() => setActiveSubcat(null)} style={{
                 padding: '7px 16px', borderRadius: 16, border: 'none', cursor: 'pointer',
                 fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap',
-                background: !activeSubcat ? '#1a1a2e' : '#e0e0e0',
+                background: !activeSubcat ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0',
                 color: !activeSubcat ? 'white' : '#555'
               }}>All</button>
               {activeSubs.map(sub => (
@@ -795,7 +795,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'}
                       onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                     >
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 4 }}>
                         {item.name}
                       </div>
                       {item.description && (
@@ -863,8 +863,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   if (allVoided || isEmpty) await payOrder(orderId, 0, 'cancelled');
                 }
                 onClose();
-              }} style={{ background: '#F4F1EA', border: '1px solid #E7E2D6', borderRadius: 10, padding: '10px 16px', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: '#1a1a2e' }}>← Back</button>
-              <div style={{ flex: 1, fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>
+              }} style={{ background: '#F4F1EA', border: '1px solid #E7E2D6', borderRadius: 10, padding: '10px 16px', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: 'var(--brand-primary, #1a1a2e)' }}>← Back</button>
+              <div style={{ flex: 1, fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
                 Table {order?.table_number}
                 {order?.covers ? <span style={{ fontFamily: "'Archivo', sans-serif", fontSize: 13, color: '#9A9488', marginLeft: 10, fontWeight: 600 }}>{order.covers} covers</span> : null}
               </div>
@@ -884,7 +884,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   const subs = cat.subcategories || [];
                   const catActive = activeCategory === cat.id;
                   const railBtn = (active) => ({ display: 'block', width: '100%', textAlign: 'left', minHeight: 46, padding: '0 14px', marginBottom: 6, borderRadius: 10, cursor: 'pointer', fontWeight: 600, fontSize: 13.5,
-                    border: active ? 'none' : '1px solid #E7E2D6', background: active ? 'var(--brand-primary,#0D1B3E)' : '#fff', color: active ? '#fff' : '#1a1a2e' });
+                    border: active ? 'none' : '1px solid #E7E2D6', background: active ? 'var(--brand-primary,#0D1B3E)' : '#fff', color: active ? '#fff' : 'var(--brand-primary, #1a1a2e)' });
                   return (
                     <div key={cat.id} style={{ marginBottom: 14 }}>
                       <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.5px', color: '#9A9488', textTransform: 'uppercase', padding: '0 4px 6px' }}>{cat.name}{cat.is_bar ? ' 🍹' : ''}</div>
@@ -898,7 +898,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               </div>
               {/* menu grid */}
               <div style={{ flex: 1, overflowY: 'auto', padding: '22px 24px' }}>
-                <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 24, fontWeight: 700, color: '#1a1a2e', marginBottom: 14 }}>Tap a dish to add</div>
+                <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 24, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 14 }}>Tap a dish to add</div>
                 {/* Course bar — staff pick the target course (override the dish's
                     admin default, e.g. serve a starter as a main). */}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
@@ -916,7 +916,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                     const totalQty = inCart.reduce((s, c) => s + c.quantity, 0);
                     return (
                       <div key={item.id} onClick={() => handleItemClick(item)} style={{ background: '#fff', borderRadius: 14, border: `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : '#E7E2D6'}`, padding: 14, cursor: 'pointer', minHeight: 104, display: 'flex', flexDirection: 'column', boxShadow: '0 1px 2px rgba(13,27,62,.05)' }}>
-                        <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1a2e', lineHeight: 1.25 }}>{item.name}</div>
+                        <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
                         <AllergenChips list={allergensByItemId[item.id]} />
                         <div style={{ flex: 1 }} />
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
@@ -965,7 +965,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             {isMobile ? (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
                     Table {order?.table_number}
                   </div>
                   <div style={{ fontSize: 12, color: '#888', marginTop: 1 }}>
@@ -983,7 +983,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 )}
               </div>
             ) : (
-              <h3 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>Order Summary</h3>
+              <h3 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Order Summary</h3>
             )}
           </div>
 
@@ -1012,7 +1012,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       display: 'flex', justifyContent: 'space-between',
                       alignItems: 'center', fontSize: 13
                     }}>
-                      <span style={{ flex: 1, color: '#1a1a2e', fontWeight: 600 }}>
+                      <span style={{ flex: 1, color: 'var(--brand-primary, #1a1a2e)', fontWeight: 600 }}>
                         {item.quantity}× {item.name}
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1099,7 +1099,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       display: 'flex', justifyContent: 'space-between',
                       alignItems: 'center', fontSize: 13
                     }}>
-                      <span style={{ flex: 1, color: '#1a1a2e', fontWeight: 600 }}>
+                      <span style={{ flex: 1, color: 'var(--brand-primary, #1a1a2e)', fontWeight: 600 }}>
                         {item.quantity}× {item.name}
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1520,7 +1520,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 display: 'flex', justifyContent: 'space-between',
                 alignItems: 'center', marginBottom: 8
               }}>
-                <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>
+                <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
                   {modifierPopup.item.name}
                 </h2>
                 {modifierPopup.isBar ? (
@@ -1542,7 +1542,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               </p>
               {modifierPopup.modifiers.map(group => (
                 <div key={group.id} style={{ marginBottom: 20 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 8 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 8 }}>
                     {group.name}
                     <span style={{ fontWeight: 400, fontSize: 12, color: '#e94560', marginLeft: 8 }}>
                       {group.required ? 'Required' : 'Optional'} · {group.multi_select ? 'Choose multiple' : 'Choose one'}
@@ -1598,7 +1598,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 display: 'flex', justifyContent: 'space-between',
                 alignItems: 'center', marginBottom: 12
               }}>
-                <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>
+                <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
                   {notePopup.item.name}
                 </h2>
                 {notePopup.isBar ? (
@@ -1685,7 +1685,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             alignItems:'center', justifyContent:'center', zIndex:1000
           }}>
             <div style={{ background:'white', borderRadius:16, padding:24, width:400, maxWidth:'92vw' }}>
-              <h2 style={{ fontSize:18, fontWeight:700, color:'#1a1a2e', marginBottom:6 }}>
+              <h2 style={{ fontSize:18, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:6 }}>
                 Resend to kitchen
               </h2>
               <div style={{ fontSize:14, color:'#555', marginBottom:18 }}>
@@ -1722,7 +1722,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               background: 'white', borderRadius: 16, padding: 24,
               width: 380, maxWidth: '92vw'
             }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 6 }}>
                 {discountPopup.scope === 'item' ? 'Item discount' : 'Bill discount'}
               </h2>
               {discountPopup.scope === 'item' && (
@@ -1740,8 +1740,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       onClick={() => setDiscountPopup({ ...discountPopup, type: t })}
                       style={{
                         padding: '10px 12px', borderRadius: 8,
-                        border: '2px solid ' + (discountPopup.type === t ? '#1a1a2e' : '#e0e0e0'),
-                        background: discountPopup.type === t ? '#1a1a2e' : 'white',
+                        border: '2px solid ' + (discountPopup.type === t ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0'),
+                        background: discountPopup.type === t ? 'var(--brand-primary, #1a1a2e)' : 'white',
                         color: discountPopup.type === t ? 'white' : '#555',
                         cursor: 'pointer', fontWeight: 700, fontSize: 13,
                       }}>{label}</button>
@@ -1808,7 +1808,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               background: 'white', borderRadius: 16, padding: 24,
               width: 380, maxWidth: '92vw'
             }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 6 }}>
                 Void item
               </h2>
               <div style={{ fontSize: 14, color: '#555', marginBottom: 16 }}>
@@ -1830,8 +1830,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                         onClick={() => setVoidPopup({ ...voidPopup, type: t, authError: '' })}
                         style={{
                           padding: '10px 12px', borderRadius: 8,
-                          border: '2px solid ' + (sel ? (isComp ? '#8b5cf6' : '#1a1a2e') : '#e0e0e0'),
-                          background: sel ? (isComp ? '#ede9fe' : '#1a1a2e') : 'white',
+                          border: '2px solid ' + (sel ? (isComp ? '#8b5cf6' : 'var(--brand-primary, #1a1a2e)') : '#e0e0e0'),
+                          background: sel ? (isComp ? '#ede9fe' : 'var(--brand-primary, #1a1a2e)') : 'white',
                           color: sel ? (isComp ? '#5b21b6' : 'white') : '#555',
                           cursor: 'pointer', fontWeight: 700, fontSize: 13,
                         }}>

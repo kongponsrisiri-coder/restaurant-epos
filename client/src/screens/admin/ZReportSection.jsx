@@ -217,7 +217,7 @@ export default function ZReportSection() {
   return (
     <div style={{ padding: 24, maxWidth: 700 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>🔐 Z Report / Close Shift</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>🔐 Z Report / Close Shift</h1>
         <button onClick={() => setShowHistory(!showHistory)} style={{ background: '#f0f0f0', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>{showHistory ? 'Hide History' : '📋 View History'}</button>
       </div>
 
@@ -267,7 +267,7 @@ export default function ZReportSection() {
         <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <div style={{ fontWeight: 700, fontSize: 15 }}>Past Z Reports</div>
-            <button onClick={exportHistoryCsv} disabled={!history.length} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 12, cursor: history.length ? 'pointer' : 'not-allowed', opacity: history.length ? 1 : 0.5 }}>⬇ Export CSV</button>
+            <button onClick={exportHistoryCsv} disabled={!history.length} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, fontSize: 12, cursor: history.length ? 'pointer' : 'not-allowed', opacity: history.length ? 1 : 0.5 }}>⬇ Export CSV</button>
           </div>
           {history.length === 0 ? <div style={{ color: '#aaa', fontSize: 14 }}>No Z reports yet</div> : history.map(r => (
             <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f0f0f0', fontSize: 14 }}>
@@ -333,7 +333,7 @@ export default function ZReportSection() {
           })()}
           <div style={{ background: 'white', borderRadius: 16, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: 20 }}>
             <div style={{ textAlign: 'center', paddingBottom: 16, marginBottom: 16, borderBottom: '2px dashed #eee' }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#1a1a2e' }}>{reportType === 'day' ? '🌙 END OF DAY' : reportType === 'custom' ? '📅 CUSTOM RANGE' : '⏰ SHIFT CLOSE'}</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>{reportType === 'day' ? '🌙 END OF DAY' : reportType === 'custom' ? '📅 CUSTOM RANGE' : '⏰ SHIFT CLOSE'}</div>
               <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>{formatDateTime(reportData.from)} — {formatDateTime(reportData.to)}</div>
             </div>
             <div style={{ marginBottom: 20 }}>
@@ -361,7 +361,7 @@ export default function ZReportSection() {
                 <div style={{ marginTop: 4, marginBottom: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
                     <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>Dine-in</div>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: '#1a1a2e' }}>£{Number(reportData.total_dine_in || 0).toFixed(2)}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>£{Number(reportData.total_dine_in || 0).toFixed(2)}</div>
                     <div style={{ fontSize: 11, color: '#888' }}>{reportData.dine_in_count || 0} orders</div>
                   </div>
                   <div>
@@ -444,7 +444,7 @@ export default function ZReportSection() {
             )}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => setStep(3)} style={{ flex: 2, padding: '16px', borderRadius: 12, border: 'none', background: '#1a1a2e', color: 'white', fontSize: 16, fontWeight: 800, cursor: 'pointer' }}>Next — Till Reconciliation →</button>
+            <button onClick={() => setStep(3)} style={{ flex: 2, padding: '16px', borderRadius: 12, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontSize: 16, fontWeight: 800, cursor: 'pointer' }}>Next — Till Reconciliation →</button>
             <button onClick={() => { setStep(1); setReportData(null); }} style={{ flex: 1, padding: '16px', borderRadius: 12, border: 'none', background: '#f0f0f0', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>← Back</button>
           </div>
         </div>
@@ -453,7 +453,7 @@ export default function ZReportSection() {
       {step === 3 && reportData && (
         <div>
           <div style={{ background: 'white', borderRadius: 16, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: 20 }}>
-            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 20, color: '#1a1a2e' }}>💵 Till Reconciliation</div>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 20, color: 'var(--brand-primary, #1a1a2e)' }}>💵 Till Reconciliation</div>
             <div style={{ background: '#f0f7ff', borderRadius: 10, padding: 14, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 14, color: '#555' }}>Cash Sales from System</span><span style={{ fontSize: 20, fontWeight: 800, color: '#1e40af' }}>£{Number(reportData.total_cash || 0).toFixed(2)}</span></div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div><label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>💰 Float at Start of Shift</label><div style={{ position: 'relative' }}><span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span><input type="number" step="0.01" value={floatAmount} onChange={e => setFloatAmount(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} /></div></div>
@@ -462,7 +462,7 @@ export default function ZReportSection() {
             </div>
             {actualCash !== '' && (
               <div style={{ marginTop: 20, background: '#f8f8f8', borderRadius: 12, padding: 16 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: '#1a1a2e' }}>📊 Cash Calculation</div>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: 'var(--brand-primary, #1a1a2e)' }}>📊 Cash Calculation</div>
                 {[{ label: 'Cash Sales', val: `£${Number(reportData.total_cash || 0).toFixed(2)}` }, floatNum > 0 && { label: 'Less Float', val: `-£${floatNum.toFixed(2)}` }, pettyNum > 0 && { label: 'Less Petty Cash', val: `-£${pettyNum.toFixed(2)}` }].filter(Boolean).map(r => (
                   <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 8, color: '#555' }}><span>{r.label}</span><span>{r.val}</span></div>
                 ))}
@@ -476,7 +476,7 @@ export default function ZReportSection() {
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={handleConfirmSave} style={{ flex: 2, padding: '16px', borderRadius: 12, border: 'none', background: reportType === 'day' ? '#e94560' : reportType === 'custom' ? '#2563eb' : '#16a34a', color: 'white', fontSize: 16, fontWeight: 800, cursor: 'pointer' }}>{reportType === 'day' ? '🌙 Confirm End of Day' : reportType === 'custom' ? '📅 Save Custom Report' : '✅ Confirm Close Shift'}</button>
-            <button onClick={() => doPrintZ('thermal')} style={{ flex: 1, padding: '16px', borderRadius: 12, border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>🖨️ Print</button>
+            <button onClick={() => doPrintZ('thermal')} style={{ flex: 1, padding: '16px', borderRadius: 12, border: '2px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>🖨️ Print</button>
             <button onClick={() => setStep(2)} style={{ flex: 1, padding: '16px', borderRadius: 12, border: 'none', background: '#f0f0f0', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>← Back</button>
           </div>
         </div>
@@ -501,9 +501,9 @@ export default function ZReportSection() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button onClick={() => doPrintZ('thermal')} style={{ flex: 2, minWidth: 180, padding: '16px', borderRadius: 12, border: '2px solid #1a1a2e', background: '#1a1a2e', color: 'white', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>🖨 Print (80mm)</button>
-            <button onClick={() => doPrintZ('full')}    style={{ flex: 1, minWidth: 110, padding: '16px', borderRadius: 12, border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>📄 Export</button>
-            <button onClick={exportReportCsv}            style={{ flex: 1, minWidth: 90, padding: '16px', borderRadius: 12, border: '2px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>⬇ CSV</button>
+            <button onClick={() => doPrintZ('thermal')} style={{ flex: 2, minWidth: 180, padding: '16px', borderRadius: 12, border: '2px solid var(--brand-primary, #1a1a2e)', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>🖨 Print (80mm)</button>
+            <button onClick={() => doPrintZ('full')}    style={{ flex: 1, minWidth: 110, padding: '16px', borderRadius: 12, border: '2px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>📄 Export</button>
+            <button onClick={exportReportCsv}            style={{ flex: 1, minWidth: 90, padding: '16px', borderRadius: 12, border: '2px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>⬇ CSV</button>
             <button onClick={() => { setStep(1); setReportData(null); setSaved(false); setFloatAmount(''); setPettyCash(''); setPettyCashReason(''); setActualCash(''); }} style={{ flex: 1, minWidth: 90, padding: '16px', borderRadius: 12, border: 'none', background: '#f0f0f0', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Done</button>
           </div>
         </div>

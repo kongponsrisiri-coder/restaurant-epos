@@ -35,7 +35,7 @@ function AddTillCard({ cardStyle }) {
   const label = testState === 'testing' ? 'Testing…' : testState === 'ok' ? '✓ Reachable' : testState === 'fail' ? '✗ No response' : 'Test connection';
   return (
     <div style={cardStyle}>
-      <h2 style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>📱 Add a till (any device)</h2>
+      <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 6 }}>📱 Add a till (any device)</h2>
       <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
         Turn any phone or tablet into a till: open the SiamEPOS app on it → <strong>Scan QR code</strong> → it joins this restaurant.
       </p>
@@ -102,7 +102,7 @@ function KitchenTemplatesCard({ cardStyle }) {
   return (
     <div style={cardStyle}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>📢 Kitchen Message Templates</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', margin:0 }}>📢 Kitchen Message Templates</h2>
         <button onClick={startNew} style={{ padding:'8px 14px', borderRadius:8, border:'1px solid var(--brand-primary,#0D1B3E)', background:'var(--brand-primary,#0D1B3E)', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>+ New</button>
       </div>
       <p style={{ fontSize:13, color:'#888', marginBottom:14, lineHeight:1.5 }}>
@@ -118,7 +118,7 @@ function KitchenTemplatesCard({ cardStyle }) {
           <div key={t.id} style={{ padding:'10px 14px', borderBottom:'1px solid #f0f0f0', display:'flex', alignItems:'center', gap:12 }}>
             <span style={{ fontSize:20, width:28, textAlign:'center' }}>{t.icon || '·'}</span>
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:14, fontWeight:700, color:'#1a1a2e' }}>{t.label}</div>
+              <div style={{ fontSize:14, fontWeight:700, color:'var(--brand-primary, #1a1a2e)' }}>{t.label}</div>
               <div style={{ fontSize:12, color:'#666', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.message}</div>
             </div>
             <button onClick={() => setEditing({ ...t })} style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #ddd', background:'white', fontSize:12, fontWeight:600, cursor:'pointer' }}>Edit</button>
@@ -130,7 +130,7 @@ function KitchenTemplatesCard({ cardStyle }) {
       {editing && (
         <div style={{ position:'fixed', top: 0, right: 0, bottom: 0, left: 0, background:'rgba(0,0,0,0.6)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
           <div style={{ background:'white', borderRadius:14, maxWidth:480, width:'100%', padding:'20px 22px' }}>
-            <h3 style={{ fontSize:17, fontWeight:800, margin:'0 0 14px', color:'#1a1a2e' }}>{editing.id ? 'Edit template' : 'New template'}</h3>
+            <h3 style={{ fontSize:17, fontWeight:800, margin:'0 0 14px', color:'var(--brand-primary, #1a1a2e)' }}>{editing.id ? 'Edit template' : 'New template'}</h3>
             <div style={{ display:'grid', gap:12 }}>
               <label style={{ fontSize:12, fontWeight:700, color:'#555' }}>
                 Label (waiter sees this)
@@ -240,7 +240,7 @@ function DataStorageCard({ cardStyle }) {
   if (!stats) {
     return (
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:8 }}>📊 Data Storage</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:8 }}>📊 Data Storage</h2>
         <p style={{ fontSize:13, color:'#888' }}>Loading…</p>
       </div>
     );
@@ -253,14 +253,14 @@ function DataStorageCard({ cardStyle }) {
   const row = (label, l, c) => (
     <div key={label} style={{ display:'grid', gridTemplateColumns:'1.2fr 1fr 1fr', alignItems:'center', padding:'8px 12px', borderBottom:'1px solid #f0f0f0', fontSize:13 }}>
       <span style={{ color:'#555' }}>{label}</span>
-      <span style={{ color:'#1a1a2e', fontFamily:'Menlo,Consolas,monospace', textAlign:'right' }}>{l ?? '—'}</span>
+      <span style={{ color:'var(--brand-primary, #1a1a2e)', fontFamily:'Menlo,Consolas,monospace', textAlign:'right' }}>{l ?? '—'}</span>
       <span style={{ color:'#888',     fontFamily:'Menlo,Consolas,monospace', textAlign:'right' }}>{c ?? '—'}</span>
     </div>
   );
   return (
     <div style={cardStyle}>
       <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>📊 Data Storage</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', margin:0 }}>📊 Data Storage</h2>
         <span style={{ fontSize:11, fontWeight:700, color:modeColor, background:modeColor === '#15803d' ? '#dcfce7' : '#fef3c7', padding:'3px 9px', borderRadius:12 }}>
           {modeLabel}
         </span>
@@ -350,7 +350,7 @@ function AppUpdatesCard({ cardStyle }) {
   return (
     <div style={cardStyle}>
       <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8, flexWrap:'wrap' }}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>⬆️ App &amp; Updates</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', margin:0 }}>⬆️ App &amp; Updates</h2>
         <span style={{ fontSize:11, fontWeight:700, color:badge.fg, background:badge.bg, padding:'3px 9px', borderRadius:12 }}>
           {badge.text}
         </span>
@@ -365,7 +365,7 @@ function AppUpdatesCard({ cardStyle }) {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap' }}>
           <div>
             <div style={{ fontSize:12, color:'#888' }}>Installed version</div>
-            <div style={{ fontSize:18, fontWeight:800, color:'#1a1a2e' }}>v{version || '—'}</div>
+            <div style={{ fontSize:18, fontWeight:800, color:'var(--brand-primary, #1a1a2e)' }}>v{version || '—'}</div>
             {lastChecked && (
               <div style={{ fontSize:11, color:'#aaa', marginTop:2 }}>
                 Last checked {lastChecked.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}
@@ -380,7 +380,7 @@ function AppUpdatesCard({ cardStyle }) {
             </button>
           ) : (
             <button onClick={check} disabled={busy}
-              style={{ padding:'10px 18px', borderRadius:8, border:'1px solid #1a1a2e', background:'white', color:'#1a1a2e', fontWeight:700, fontSize:13, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1 }}>
+              style={{ padding:'10px 18px', borderRadius:8, border:'1px solid var(--brand-primary, #1a1a2e)', background:'white', color:'var(--brand-primary, #1a1a2e)', fontWeight:700, fontSize:13, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1 }}>
               {status === 'checking' ? 'Checking…' : '🔄 Check for updates'}
             </button>
           )}
@@ -428,7 +428,7 @@ function RemoteAccessCard({ cardStyle }) {
   return (
     <div style={cardStyle}>
       <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>🌐 Remote Access</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', margin:0 }}>🌐 Remote Access</h2>
         <span style={{ fontSize:11, fontWeight:700, color: running ? '#15803d' : '#888', background: running ? '#dcfce7' : '#f0f0f0', padding:'3px 9px', borderRadius:12 }}>
           {running ? '🟢 Tunnel active' : enabled ? '🟡 Starting…' : '⚫ Disabled'}
         </span>
@@ -444,10 +444,10 @@ function RemoteAccessCard({ cardStyle }) {
       {enabled && (
         <div style={{ background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:10, padding:14 }}>
           <div style={{ fontSize:12, color:'#888', marginBottom:4 }}>Your remote URL</div>
-          <div style={{ fontSize:14, fontFamily:'Menlo,Consolas,monospace', color:'#1a1a2e', wordBreak:'break-all' }}>{url || '—'}</div>
+          <div style={{ fontSize:14, fontFamily:'Menlo,Consolas,monospace', color:'var(--brand-primary, #1a1a2e)', wordBreak:'break-all' }}>{url || '—'}</div>
           {url && (
             <button onClick={() => navigator.clipboard?.writeText(url)}
-              style={{ marginTop:10, padding:'8px 14px', borderRadius:8, border:'1px solid #1a1a2e', background:'white', color:'#1a1a2e', fontWeight:700, fontSize:12, cursor:'pointer' }}>
+              style={{ marginTop:10, padding:'8px 14px', borderRadius:8, border:'1px solid var(--brand-primary, #1a1a2e)', background:'white', color:'var(--brand-primary, #1a1a2e)', fontWeight:700, fontSize:12, cursor:'pointer' }}>
               🔗 Copy link
             </button>
           )}
@@ -476,7 +476,7 @@ function LocalArchiveCard({ cardStyle }) {
   if (!status) {
     return (
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:8 }}>🗄️ Local Archive</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:8 }}>🗄️ Local Archive</h2>
         <p style={{ fontSize:13, color:'#888' }}>Checking…</p>
       </div>
     );
@@ -502,7 +502,7 @@ function LocalArchiveCard({ cardStyle }) {
   return (
     <div style={cardStyle}>
       <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>🗄️ Local Archive</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', margin:0 }}>🗄️ Local Archive</h2>
         <span style={{ fontSize:11, fontWeight:700, color:'#15803d', background:'#dcfce7', padding:'3px 9px', borderRadius:12 }}>
           {isLocal ? 'Auto-archive: ON' : 'Cloud install'}
         </span>
@@ -521,7 +521,7 @@ function LocalArchiveCard({ cardStyle }) {
           <div style={{ background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:10, padding:14, marginBottom:14 }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
               <span style={{ fontSize:12, color:'#888' }}>Last archived</span>
-              <span style={{ fontSize:13, fontWeight:600, color:'#1a1a2e' }}>{lastStr}</span>
+              <span style={{ fontSize:13, fontWeight:600, color:'var(--brand-primary, #1a1a2e)' }}>{lastStr}</span>
             </div>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
               <span style={{ fontSize:12, color:'#888' }}>Folder</span>
@@ -531,7 +531,7 @@ function LocalArchiveCard({ cardStyle }) {
 
           <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:12 }}>
             <button onClick={async () => { try { await openArchiveFolder(); } catch {} }}
-              style={{ padding:'9px 16px', borderRadius:8, border:'1px solid #1a1a2e', background:'#1a1a2e', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              style={{ padding:'9px 16px', borderRadius:8, border:'1px solid var(--brand-primary, #1a1a2e)', background:'var(--brand-primary, #1a1a2e)', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>
               📂 Open Folder
             </button>
             <button onClick={() => doRun('Today', 0)} disabled={busy}
@@ -558,7 +558,7 @@ function LocalArchiveCard({ cardStyle }) {
               <div style={{ background:'white', border:'1px solid #f0f0f0', borderRadius:8 }}>
                 {status.recent.slice(0, 6).map((f, i) => (
                   <div key={f.path} style={{ padding:'9px 12px', borderBottom: i < Math.min(status.recent.length, 6) - 1 ? '1px solid #f0f0f0' : 'none', fontSize:13, display:'flex', justifyContent:'space-between' }}>
-                    <span style={{ color:'#1a1a2e', fontFamily:'Menlo,Consolas,monospace' }}>{f.file}</span>
+                    <span style={{ color:'var(--brand-primary, #1a1a2e)', fontFamily:'Menlo,Consolas,monospace' }}>{f.file}</span>
                     <span style={{ color:'#888', fontSize:11 }}>{new Date(f.mtime).toLocaleDateString('en-GB', { day:'numeric', month:'short' })}</span>
                   </div>
                 ))}
@@ -637,7 +637,7 @@ function NetworkSetupCard({ cardStyle }) {
 
   return (
     <div style={cardStyle}>
-      <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:6 }}>📱 Network Setup</h2>
+      <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:6 }}>📱 Network Setup</h2>
       <p style={{ fontSize:13, color:'#888', marginBottom:16 }}>
         Connect kitchen and bar tablets on the same Wi-Fi.
       </p>
@@ -710,7 +710,7 @@ function BarCategoryManager() {
       {categories.map(cat => (
         <div key={cat.id} style={{ background:'#f8f8f8', borderRadius:10, padding:'12px 16px' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:cat.is_bar?0:10 }}>
-            <span style={{ fontSize:14, fontWeight:700, color:'#1a1a2e' }}>{cat.name}</span>
+            <span style={{ fontSize:14, fontWeight:700, color:'var(--brand-primary, #1a1a2e)' }}>{cat.name}</span>
             <button onClick={() => toggleBar(cat)} style={{ padding:'6px 16px', borderRadius:8, border:'none', cursor:'pointer', fontWeight:600, fontSize:12, background:cat.is_bar?'#dbeafe':'#f0f0f0', color:cat.is_bar?'#1e40af':'#555' }}>{cat.is_bar?'🍹 Bar ✓':'Not bar'}</button>
           </div>
           {!cat.is_bar && (
@@ -1045,11 +1045,11 @@ export default function SettingsSection() {
 
   return (
     <div style={{ padding:24, maxWidth:640 }}>
-      <h1 style={{ fontSize:22, fontWeight:700, color:'#1a1a2e', marginBottom:24 }}>Settings</h1>
+      <h1 style={{ fontSize:22, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:24 }}>Settings</h1>
 
       {/* ── Branding (app appearance) ── SEPOS-BRAND-001 ── */}
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:6 }}>🎨 Branding</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:6 }}>🎨 Branding</h2>
         <div style={{ fontSize:12.5, color:'#888', marginBottom:16 }}>Your logo + colours across the app. This is the <strong>on-screen</strong> logo — separate from the receipt logo further down, so a light or colourful logo here still prints cleanly on bills.</div>
 
         {/* Brand logo */}
@@ -1061,7 +1061,7 @@ export default function SettingsSection() {
               : <span style={{ color:'#fff', opacity:0.5, fontSize:11 }}>no logo</span>}
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            <label style={{ padding:'8px 16px', borderRadius:8, background:'#1a1a2e', color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer' }}>
+            <label style={{ padding:'8px 16px', borderRadius:8, background:'var(--brand-primary, #1a1a2e)', color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer' }}>
               📁 Choose logo
               <input type="file" accept="image/*" onChange={handleBrandLogoUpload} style={{ display:'none' }} />
             </label>
@@ -1079,7 +1079,7 @@ export default function SettingsSection() {
               && (settings.brand_accent || DEFAULT_ACCENT).toLowerCase() === p.accent.toLowerCase();
             return (
               <button key={p.name} title={p.name} onClick={() => setSettings(prev => ({ ...prev, brand_primary:p.primary, brand_accent:p.accent }))}
-                style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 9px', borderRadius:8, border:`2px solid ${active ? '#1a1a2e' : '#e5e5e5'}`, background:'#fff', cursor:'pointer' }}>
+                style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 9px', borderRadius:8, border:`2px solid ${active ? 'var(--brand-primary, #1a1a2e)' : '#e5e5e5'}`, background:'#fff', cursor:'pointer' }}>
                 <span style={{ width:15, height:15, borderRadius:4, background:p.primary }} />
                 <span style={{ width:15, height:15, borderRadius:4, background:p.accent }} />
               </button>
@@ -1115,7 +1115,7 @@ export default function SettingsSection() {
 
       {/* ── Business Details ── */}
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>🏢 Business Details</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🏢 Business Details</h2>
         <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
           {/* Logo upload */}
@@ -1138,7 +1138,7 @@ export default function SettingsSection() {
                   style={{ display:'none' }}
                   id="logo-upload"
                 />
-                <label htmlFor="logo-upload" style={{ display:'inline-block', padding:'10px 16px', borderRadius:8, border:'2px solid #1a1a2e', background:'white', color:'#1a1a2e', fontSize:13, fontWeight:700, cursor:'pointer', textAlign:'center' }}>
+                <label htmlFor="logo-upload" style={{ display:'inline-block', padding:'10px 16px', borderRadius:8, border:'2px solid var(--brand-primary, #1a1a2e)', background:'white', color:'var(--brand-primary, #1a1a2e)', fontSize:13, fontWeight:700, cursor:'pointer', textAlign:'center' }}>
                   📁 Choose Logo File
                 </label>
                 {logoPreview && (
@@ -1182,8 +1182,8 @@ export default function SettingsSection() {
                           } catch (err) { console.warn('size change conversion failed:', err); }
                         }}
                           style={{ padding:'6px 12px', borderRadius:7, border:'2px solid', cursor:'pointer', fontWeight:700, fontSize:12,
-                            borderColor: settings.receipt_logo_size === val ? '#1a1a2e' : '#ddd',
-                            background:  settings.receipt_logo_size === val ? '#1a1a2e' : 'white',
+                            borderColor: settings.receipt_logo_size === val ? 'var(--brand-primary, #1a1a2e)' : '#ddd',
+                            background:  settings.receipt_logo_size === val ? 'var(--brand-primary, #1a1a2e)' : 'white',
                             color:       settings.receipt_logo_size === val ? 'white'   : '#555',
                           }}>{label}</button>
                       ))}
@@ -1219,7 +1219,7 @@ export default function SettingsSection() {
       {/* ── Receipt Preview ── */}
       {(settings.company_name || logoPreview) && (
         <div style={cardStyle}>
-          <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>🖨️ Receipt Preview</h2>
+          <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🖨️ Receipt Preview</h2>
           <div style={{ background:'white', border:'1px solid #e5e7eb', borderRadius:8, padding:'16px 20px', maxWidth:300, margin:'0 auto', fontFamily:'Courier New, monospace', fontSize:12 }}>
             {logoPreview && (
               <div style={{ textAlign:'center', marginBottom:8 }}>
@@ -1250,7 +1250,7 @@ export default function SettingsSection() {
 
       {/* ── Service Charge ── */}
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>💳 Service Charge</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>💳 Service Charge</h2>
         <div style={{ display:'flex', alignItems:'center', gap:16, marginBottom:16 }}>
           <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:14 }}>
             <input type="checkbox" checked={settings.service_charge_enabled==='1'} onChange={e => setSettings({...settings, service_charge_enabled:e.target.checked?'1':'0'})} />
@@ -1266,7 +1266,7 @@ export default function SettingsSection() {
 
       {/* ── Delivery (SEPOS-DELIVERY-002) ── */}
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>🚗 Online Delivery</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🚗 Online Delivery</h2>
         <div style={{ fontSize:12, color:'#888', marginBottom:16 }}>
           Set both fields to offer delivery on the takeaway widget. The widget checks each customer's postcode against this radius — anyone outside is offered collection instead. Leave blank to keep takeaway collection-only.
         </div>
@@ -1298,7 +1298,7 @@ export default function SettingsSection() {
 
       {/* ── Courier Dispatch (SEPOS-DELIVERY-001) ── */}
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>🛵 Courier Dispatch</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🛵 Courier Dispatch</h2>
         <div style={{ fontSize:12, color:'#888', marginBottom:16 }}>
           When the kitchen marks a delivery order ready, SiamEPOS can automatically book a courier to collect and deliver it — the customer gets a live tracking link. Set up Online Delivery (above) first.
         </div>
@@ -1349,13 +1349,13 @@ export default function SettingsSection() {
       </div>
 
       {/* ── Save ── */}
-      <button onClick={handleSave} style={{ width:'100%', padding:'14px', borderRadius:10, border:'none', background:saved?'#22c55e':'#1a1a2e', color:'white', cursor:'pointer', fontWeight:700, fontSize:16, marginBottom:20, transition:'background 0.3s' }}>
+      <button onClick={handleSave} style={{ width:'100%', padding:'14px', borderRadius:10, border:'none', background:saved?'#22c55e':'var(--brand-primary, #1a1a2e)', color:'white', cursor:'pointer', fontWeight:700, fontSize:16, marginBottom:20, transition:'background 0.3s' }}>
         {saved ? '✓ Saved!' : 'Save All Settings'}
       </button>
 
       {/* ── Discount Reasons ── */}
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>🏷️ Discount Reasons</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🏷️ Discount Reasons</h2>
         <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:16 }}>
           {reasons.map(r => (
             <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', background:'#f8f8f8', borderRadius:8 }}>
@@ -1376,7 +1376,7 @@ export default function SettingsSection() {
 
       {/* ── Bar Categories ── */}
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:8 }}>🍹 Bar Categories</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:8 }}>🍹 Bar Categories</h2>
         <p style={{ fontSize:13, color:'#888', marginBottom:16 }}>Select which categories show on the Bar screen</p>
         <BarCategoryManager />
       </div>

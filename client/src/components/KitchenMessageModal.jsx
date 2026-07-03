@@ -83,7 +83,7 @@ export default function KitchenMessageModal({ orderId, tableNumber, customerName
               <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:18 }}>
                 {templates.map(t => (
                   <button key={t.id} onClick={() => pickTemplate(t)}
-                    style={{ padding:'10px 14px', borderRadius:999, border:'1px solid #e5e7eb', background:'white', fontSize:13, fontWeight:600, color:'#1a1a2e', cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+                    style={{ padding:'10px 14px', borderRadius:999, border:'1px solid #e5e7eb', background:'white', fontSize:13, fontWeight:600, color:'var(--brand-primary, #1a1a2e)', cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
                     {t.icon && <span style={{ fontSize:15 }}>{t.icon}</span>}
                     {t.label}
                   </button>

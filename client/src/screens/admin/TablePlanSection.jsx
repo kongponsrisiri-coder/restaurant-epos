@@ -333,13 +333,13 @@ export default function TablePlanSection() {
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1a1a2e', margin: 0 }}>Table Plan</h2>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', margin: 0 }}>Table Plan</h2>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
 
           <button
             onClick={() => { setMode('select'); setLinkFrom(null); }}
             style={{ padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13,
-              background: mode === 'select' ? '#1a1a2e' : '#f0f0f0',
+              background: mode === 'select' ? 'var(--brand-primary, #1a1a2e)' : '#f0f0f0',
               color:      mode === 'select' ? 'white'   : '#555' }}
           >✥ Select</button>
 
@@ -466,8 +466,8 @@ export default function TablePlanSection() {
                   left: table.pos_x, top: table.pos_y,
                   width: table.width || 80, height: table.height || 80,
                   borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,
-                  background: isLinkFirst ? 'var(--brand-accent,#C9A84C)' : isSelected ? '#1a1a2e' : isLinked ? '#fef9c3' : (table.is_takeaway ? '#fffbeb' : '#fff'),
-                  border: `3px solid ${isLinkFirst ? 'var(--brand-accent,#C9A84C)' : isSelected ? '#e94560' : isLinked ? 'var(--brand-accent,#C9A84C)' : (table.is_takeaway ? '#f59e0b' : '#1a1a2e')}`,
+                  background: isLinkFirst ? 'var(--brand-accent,#C9A84C)' : isSelected ? 'var(--brand-primary, #1a1a2e)' : isLinked ? '#fef9c3' : (table.is_takeaway ? '#fffbeb' : '#fff'),
+                  border: `3px solid ${isLinkFirst ? 'var(--brand-accent,#C9A84C)' : isSelected ? '#e94560' : isLinked ? 'var(--brand-accent,#C9A84C)' : (table.is_takeaway ? '#f59e0b' : 'var(--brand-primary, #1a1a2e)')}`,
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
                   cursor: mode === 'link' ? 'crosshair' : 'grab',
@@ -475,7 +475,7 @@ export default function TablePlanSection() {
                   boxShadow: isSelected ? '0 4px 20px rgba(0,0,0,0.2)' : '0 2px 8px rgba(0,0,0,0.1)',
                 }}
               >
-                <div style={{ fontSize: 15, fontWeight: 800, color: isLinkFirst || isSelected ? 'white' : (table.is_takeaway ? '#b45309' : '#1a1a2e'), textAlign: 'center' }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: isLinkFirst || isSelected ? 'white' : (table.is_takeaway ? '#b45309' : 'var(--brand-primary, #1a1a2e)'), textAlign: 'center' }}>
                   {table.is_takeaway ? '🥡' : ''}{table.table_number}
                 </div>
                 <div style={{ fontSize: 10, color: isLinkFirst || isSelected ? 'rgba(255,255,255,0.7)' : '#888' }}>
@@ -497,7 +497,7 @@ export default function TablePlanSection() {
 
           {selectedTable && (
             <div style={{ background: 'white', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 14 }}>{selectedTable.is_takeaway ? `🥡 Takeaway ${selectedTable.table_number}` : `Table ${selectedTable.table_number}`}</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 14 }}>{selectedTable.is_takeaway ? `🥡 Takeaway ${selectedTable.table_number}` : `Table ${selectedTable.table_number}`}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
                   <label style={lbl}>Table Number / Name</label>
@@ -531,7 +531,7 @@ export default function TablePlanSection() {
                 </div>
 
                 <button onClick={handleRotateTable}
-                  style={{ padding: '8px', borderRadius: 8, border: '1.5px solid #1a1a2e', background: 'white', color: '#1a1a2e', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+                  style={{ padding: '8px', borderRadius: 8, border: '1.5px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
                   ↻ Rotate Table
                 </button>
 
@@ -581,7 +581,7 @@ export default function TablePlanSection() {
 
           {selectedWall && (
             <div style={{ background: 'white', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 14 }}>Partition Wall</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 14 }}>Partition Wall</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
                   <label style={lbl}>Orientation</label>
@@ -637,7 +637,7 @@ export default function TablePlanSection() {
           {!selectedTable && !selectedWall && (
             <>
               <div style={{ background: 'white', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e', marginBottom: 12 }}>Linked Groups</div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 12 }}>Linked Groups</div>
                 {groups.length === 0 ? (
                   <div style={{ fontSize: 12, color: '#aaa', lineHeight: 1.6 }}>No combinations set yet.<br />Use ⊕ Link Tables to connect adjacent tables.</div>
                 ) : groups.map((group, gi) => {
@@ -657,7 +657,7 @@ export default function TablePlanSection() {
               </div>
 
               <div style={{ background: 'white', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e', marginBottom: 4 }}>Dining Duration</div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 4 }}>Dining Duration</div>
                 <div style={{ fontSize: 11, color: '#888', marginBottom: 12 }}>Applied automatically by party size when checking availability</div>
                 {tiers.map((tier, i) => (
                   <div key={tier.id || i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>

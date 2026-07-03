@@ -666,7 +666,7 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                     {item.resend_reason && (
                       <div style={{
                         display:'inline-block', marginTop:6, padding:'3px 10px',
-                        background:'#fbbf24', color:'#1a1a2e', borderRadius:6,
+                        background:'#fbbf24', color:'var(--brand-primary, #1a1a2e)', borderRadius:6,
                         fontSize:11, fontWeight:800, letterSpacing:0.5
                       }}>🔄 RESEND · {item.resend_reason}</div>
                     )}

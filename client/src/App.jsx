@@ -237,7 +237,7 @@ export default function App() {
       <div style={{
         position: 'fixed', bottom: 16, left: 16, right: 16,
         maxWidth: 480, margin: '0 auto',
-        background: '#1a1a2e', color: 'white',
+        background: 'var(--brand-primary, #1a1a2e)', color: 'white',
         padding: '12px 16px', borderRadius: 12,
         boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
         border: '1px solid rgba(201,168,76,0.4)',
@@ -411,7 +411,7 @@ export default function App() {
         {/* Mobile dropdown */}
         {isMobile && menuOpen && (
           <div style={{
-            background: '#1a1a2e', padding: '8px 16px',
+            background: 'var(--brand-primary, #1a1a2e)', padding: '8px 16px',
             display: 'flex', flexDirection: 'column', gap: 4,
             borderBottom: '2px solid rgba(201,168,76,0.3)',
           }}>

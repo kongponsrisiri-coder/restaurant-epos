@@ -219,7 +219,7 @@ export default function BarScreen() {
 
                 return (
                   <div key={order.id} style={{
-                    background: '#1a1a2e', borderRadius: 16, overflow: 'hidden',
+                    background: 'var(--brand-primary, #1a1a2e)', borderRadius: 16, overflow: 'hidden',
                     border: `2px solid ${allReady ? '#22c55e' : someReady ? '#eab308' : '#1e293b'}`,
                     boxShadow: allReady ? '0 0 20px rgba(34,197,94,0.3)' : 'none',
                     transition: 'all 0.3s'
@@ -336,7 +336,7 @@ export default function BarScreen() {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
               {Object.values(completedByOrder).map(group => (
-                <div key={group.order_id} style={{ background: '#1a1a2e', borderRadius: 16, overflow: 'hidden' }}>
+                <div key={group.order_id} style={{ background: 'var(--brand-primary, #1a1a2e)', borderRadius: 16, overflow: 'hidden' }}>
                   <div style={{ background: '#1e293b', padding: '12px 16px', display: 'flex', justifyContent: 'space-between' }}>
                     <div style={{ color: 'white', fontWeight: 800, fontSize: 18 }}>
                       {orderShortLabel(groupAsOrder(group))}

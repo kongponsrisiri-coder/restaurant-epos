@@ -93,7 +93,7 @@ export default function BatchesTab() {
       <div style={{ background: 'white', borderRadius: 12, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: '#1a1a2e' }}>🥣 Active batches</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>🥣 Active batches</div>
             <div style={{ fontSize: 12, color: '#888' }}>{activeBatches.length} in the fridge</div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -102,7 +102,7 @@ export default function BatchesTab() {
               {showHistory ? '← Active' : `History (${historyBatches.length})`}
             </button>
             <button onClick={exportCsv}
-              style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+              style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
               ⬇ CSV
             </button>
           </div>
@@ -132,7 +132,7 @@ export default function BatchesTab() {
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
                         {b.recipe_name || `Batch #${b.id}`} <span style={{ color: '#888', fontWeight: 500 }}>· #{b.id}</span>
                       </div>
                       <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
@@ -185,11 +185,11 @@ export default function BatchesTab() {
       <div style={{ background: 'white', borderRadius: 12, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: '#1a1a2e' }}>📜 Batch recipes</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>📜 Batch recipes</div>
             <div style={{ fontSize: 12, color: '#888' }}>{batchRecipes.length} on file</div>
           </div>
           <button onClick={() => setEditing({ new: true, name: '', output_quantity: 1, output_unit: 'kg', shelf_life_days: 3, lines: [] })}
-            style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+            style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
             + New recipe
           </button>
         </div>
@@ -204,7 +204,7 @@ export default function BatchesTab() {
                 <div key={br.id} style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, background: '#fafafa' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
                         {br.name}
                         {hasInStock && <span style={{ marginLeft: 6, fontSize: 10, color: '#15803d', background: '#dcfce7', padding: '1px 6px', borderRadius: 10 }}>in stock</span>}
                       </div>
@@ -217,7 +217,7 @@ export default function BatchesTab() {
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                       <button onClick={() => setMaking(br)}
-                        style={{ padding: '8px 12px', borderRadius: 6, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: '#1a1a2e', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>
+                        style={{ padding: '8px 12px', borderRadius: 6, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>
                         🥣 Make
                       </button>
                       <button onClick={() => setEditing(br)}
@@ -354,7 +354,7 @@ function BatchRecipeModal({ recipe, ingredients, onClose, onSaved }) {
             <input type="number" min="0" step="0.001" value={l.quantity_used}
               onChange={(e) => onQtyChange(i, parseFloat(e.target.value) || 0)} style={modalInput}/>
             <span style={{ fontSize: 13, color: '#555' }}>{l.unit}</span>
-            <span style={{ fontSize: 13, color: '#1a1a2e', fontWeight: 700, textAlign: 'right' }}>{fmtMoney(l.line_cost)}</span>
+            <span style={{ fontSize: 13, color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, textAlign: 'right' }}>{fmtMoney(l.line_cost)}</span>
             <button onClick={() => rmLine(i)} style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: 18 }}>×</button>
           </div>
         ))}
@@ -387,7 +387,7 @@ function BatchRecipeModal({ recipe, ingredients, onClose, onSaved }) {
           Cancel
         </button>
         <button onClick={save} disabled={busy}
-          style={{ padding: '12px 22px', borderRadius: 8, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 800, fontSize: 14, cursor: 'pointer', opacity: busy ? 0.5 : 1 }}>
+          style={{ padding: '12px 22px', borderRadius: 8, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontWeight: 800, fontSize: 14, cursor: 'pointer', opacity: busy ? 0.5 : 1 }}>
           {busy ? 'Saving…' : 'Save'}
         </button>
       </div>
@@ -434,7 +434,7 @@ function MakeBatchModal({ recipe, onClose, onMade }) {
           Cancel
         </button>
         <button onClick={make} disabled={busy}
-          style={{ padding: '12px 22px', borderRadius: 8, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: '#1a1a2e', fontWeight: 800, fontSize: 14, cursor: 'pointer', opacity: busy ? 0.5 : 1 }}>
+          style={{ padding: '12px 22px', borderRadius: 8, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 800, fontSize: 14, cursor: 'pointer', opacity: busy ? 0.5 : 1 }}>
           {busy ? 'Making…' : '🥣 Make batch'}
         </button>
       </div>

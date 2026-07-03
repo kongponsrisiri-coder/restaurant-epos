@@ -231,7 +231,7 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
 
   return (
     <div style={cardStyle}>
-      <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:4 }}>🌐 Network Printers</h2>
+      <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:4 }}>🌐 Network Printers</h2>
       <p style={{ fontSize:13, color:'#888', marginBottom:20, lineHeight:1.6 }}>
         Enter the IP address of each printer (via a USB print server or built-in LAN port).
         Once set, <strong>all devices on the same Wi-Fi</strong> — including iPads — print
@@ -272,7 +272,7 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
             {[1, 2, 3].map(n => (
               <button key={n} onClick={() => setSettings(s => ({ ...s, printer_kitchen_copies: String(n) }))}
                 style={{ width:56, height:44, borderRadius:8, border:'none', fontWeight:700, fontSize:15, cursor:'pointer',
-                  background: (settings.printer_kitchen_copies || '1') === String(n) ? '#1a1a2e' : '#f0f0f0',
+                  background: (settings.printer_kitchen_copies || '1') === String(n) ? 'var(--brand-primary, #1a1a2e)' : '#f0f0f0',
                   color:      (settings.printer_kitchen_copies || '1') === String(n) ? 'white'   : '#555',
                 }}>
                 {n}×
@@ -300,7 +300,7 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
               onClick={() => setSettings(s => ({ ...s, kitchen_print_mode: opt.value }))}
               style={{
                 flex:1, height:44, borderRadius:8, border:'none', fontWeight:700, fontSize:13, cursor:'pointer',
-                background: (settings.kitchen_print_mode || 'print') === opt.value ? '#1a1a2e' : '#f0f0f0',
+                background: (settings.kitchen_print_mode || 'print') === opt.value ? 'var(--brand-primary, #1a1a2e)' : '#f0f0f0',
                 color:      (settings.kitchen_print_mode || 'print') === opt.value ? 'white'   : '#555',
               }}>
               {opt.label}
@@ -328,7 +328,7 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
               onClick={() => setSettings(s => ({ ...s, kitchen_language: opt.value }))}
               style={{
                 flex:1, height:44, borderRadius:8, border:'none', fontWeight:700, fontSize:13, cursor:'pointer',
-                background: (settings.kitchen_language || 'en_th') === opt.value ? '#1a1a2e' : '#f0f0f0',
+                background: (settings.kitchen_language || 'en_th') === opt.value ? 'var(--brand-primary, #1a1a2e)' : '#f0f0f0',
                 color:      (settings.kitchen_language || 'en_th') === opt.value ? 'white'   : '#555',
               }}>
               {opt.label}
@@ -478,7 +478,7 @@ function PrinterCard({ cardStyle }) {
 
   return (
     <div style={cardStyle}>
-      <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:6 }}>🖨️ Printer (this device)</h2>
+      <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:6 }}>🖨️ Printer (this device)</h2>
       {!isElectron ? (
         <p style={{ fontSize:13, color:'#888', lineHeight:1.6, margin:0 }}>
           Direct printer selection is available in the <strong>SiamEPOS desktop app</strong>.
@@ -515,7 +515,7 @@ function PrinterCard({ cardStyle }) {
                 {[1, 2, 3].map(n => (
                   <button key={n} onClick={() => saveKitchenCopies(n)} style={{
                     width:56, height:44, borderRadius:8, border:'none', fontWeight:700, fontSize:15, cursor:'pointer',
-                    background: kitchenCopies === n ? '#1a1a2e' : '#f0f0f0',
+                    background: kitchenCopies === n ? 'var(--brand-primary, #1a1a2e)' : '#f0f0f0',
                     color:       kitchenCopies === n ? 'white'   : '#555',
                   }}>
                     {n}×
@@ -585,7 +585,7 @@ function PrintRoutingCard({ cardStyle, settings, setSettings }) {
   ];
   return (
     <div style={cardStyle}>
-      <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:4 }}>🧭 Print Routing</h2>
+      <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:4 }}>🧭 Print Routing</h2>
       <p style={{ fontSize:13, color:'#888', marginBottom:16 }}>
         Choose where each ticket prints on <strong>this till</strong>. <strong>Built-in</strong> = the till's own printer ·
         <strong> Network</strong> = a LAN printer (set its IP below) · <strong>Off</strong> = don't print.
@@ -599,7 +599,7 @@ function PrintRoutingCard({ cardStyle, settings, setSettings }) {
               {opts.map(([val, txt]) => (
                 <button key={val} onClick={() => setSettings(s => ({ ...s, [`print_target_${key}`]: val }))}
                   style={{ padding:'8px 14px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600,
-                    background: cur === val ? '#1a1a2e' : '#f0f0f0', color: cur === val ? 'white' : '#555' }}>
+                    background: cur === val ? 'var(--brand-primary, #1a1a2e)' : '#f0f0f0', color: cur === val ? 'white' : '#555' }}>
                   {txt}
                 </button>
               ))}
@@ -642,7 +642,7 @@ export default function PrintersSection() {
 
   return (
     <div style={{ padding:30, maxWidth:900 }}>
-      <h1 style={{ fontSize:24, fontWeight:800, color:'#1a1a2e', marginBottom:24 }}>🖨️ Printers</h1>
+      <h1 style={{ fontSize:24, fontWeight:800, color:'var(--brand-primary, #1a1a2e)', marginBottom:24 }}>🖨️ Printers</h1>
 
       <PrintRoutingCard cardStyle={cardStyle} settings={settings} setSettings={setSettings} />
       <NetworkPrinterCard cardStyle={cardStyle} settings={settings} setSettings={setSettings} />
@@ -650,7 +650,7 @@ export default function PrintersSection() {
 
       <button onClick={handleSave} disabled={saving}
         style={{ width:'100%', padding:'14px', borderRadius:10, border:'none',
-                 background: saved ? '#22c55e' : '#1a1a2e', color:'white',
+                 background: saved ? '#22c55e' : 'var(--brand-primary, #1a1a2e)', color:'white',
                  cursor:'pointer', fontWeight:700, fontSize:16,
                  transition:'background 0.3s' }}>
         {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Printer Settings'}

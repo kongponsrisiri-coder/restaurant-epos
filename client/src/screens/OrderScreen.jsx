@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL } from '../api';
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
+import { isNativeApp } from '../native/printer';
 // SEPOS — DeleteOrderModal removed from OrderScreen 2026-06-01 (Korakot's
 // call). Order screen / kitchen screen no longer expose a delete button;
 // closed-bill delete still lives in Admin → Bills for managers.
@@ -339,7 +340,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     // (popup blocker requires user-gesture context, lost across awaits) — but
     // ONLY when we'd need the browser fallback. With a network kitchen printer
     // (or the desktop app) the resend prints silently, so skip the empty popup.
-    const popupWin = (!settings?.printer_kitchen_ip && !window.siamepos?.isElectron)
+    const popupWin = (!settings?.printer_kitchen_ip && !window.siamepos?.isElectron && !isNativeApp())
       ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
     // SEPOS-046z — optimistic: the row flips back to 🔥 cooking instantly.
     setOrder(prev => prev ? { ...prev, items: (prev.items || []).map(i =>
@@ -398,7 +399,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     // If bar also uses server/Electron print the window is closed immediately.
     // Only when we'd need the browser fallback — a network bar printer (or the
     // desktop app) prints silently, so don't flash an empty popup.
-    const barWin = (hasBar && !settings?.printer_bar_ip && !window.siamepos?.isElectron)
+    const barWin = (hasBar && !settings?.printer_bar_ip && !window.siamepos?.isElectron && !isNativeApp())
       ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
 
     // SEPOS-046z — optimistic send: the cart lines appear in the order
@@ -463,7 +464,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     // i.e. NO network kitchen printer and not the desktop app. With a printer set
     // the fire notice prints silently server-side, so this blank window was just
     // flashing an empty popup on every fire (the operator complaint).
-    const coursePopupWin = (!settings?.printer_kitchen_ip && !window.siamepos?.isElectron)
+    const coursePopupWin = (!settings?.printer_kitchen_ip && !window.siamepos?.isElectron && !isNativeApp())
       ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
     // SEPOS-046z — optimistic: mirror the server's UPDATE (non-bar, unfired,
     // unvoided items of this course flip to fired/cooking). The pulsing

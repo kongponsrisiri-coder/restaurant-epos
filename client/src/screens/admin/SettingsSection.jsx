@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, getArchiveStatus, openArchiveFolder, runArchive, getMigrationStatus, getStorageStats, getTunnelStatus, getKitchenTemplates, createKitchenTemplate, updateKitchenTemplate, deleteKitchenTemplate, assertOk, SERVER_URL } from '../../api';
+import { applyBrandTheme, BRAND_PRESETS, DEFAULT_PRIMARY, DEFAULT_ACCENT } from '../../theme'; // SEPOS-BRAND-001
 import DiningDurationSettings from './DiningDurationSettings';
 import { confirm } from '../../utils/confirm';
 import { getTenantUrl } from '../../native/tenant';
@@ -744,6 +745,9 @@ export default function SettingsSection() {
     service_charge_enabled:  '1',
     kitchen_print_mode:      'print',   // 'print' | 'kds' | 'both'
     kitchen_language:        'en_th',  // 'en_th' | 'en'
+    brand_logo:              '',   // SEPOS-BRAND-001 — on-screen logo (separate from receipt logo)
+    brand_primary:           '',   // theme primary colour (blank = default navy)
+    brand_accent:            '',   // theme accent colour (blank = default gold)
   });
   const [reasons, setReasons]     = useState([]);
   const [newReason, setNewReason] = useState('');
@@ -826,6 +830,7 @@ export default function SettingsSection() {
   // desktop). Surface an alert only if the request fails outright.
   const handleSave = () => {
     setSaved(true);
+    applyBrandTheme(settings); // SEPOS-BRAND-001 — repaint the app immediately on save
     setTimeout(() => setSaved(false), 2500);
     updateSettings(settings).then(assertOk).catch(err => {
       setSaved(false);
@@ -1024,12 +1029,89 @@ export default function SettingsSection() {
   };
 
   const inputStyle = { width:'100%', padding:'10px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14, boxSizing:'border-box' };
+  // SEPOS-BRAND-001 — on-screen brand logo (base64 data URL, no thermal
+  // conversion — this one's for the app, not the receipt).
+  const handleBrandLogoUpload = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (file.size > 400 * 1024) alert('That logo is a bit large — a PNG/SVG under ~400KB works best.');
+    const reader = new FileReader();
+    reader.onload = () => setSettings(prev => ({ ...prev, brand_logo: reader.result }));
+    reader.readAsDataURL(file);
+  };
+
   const labelStyle = { fontSize:13, fontWeight:600, color:'#555', display:'block', marginBottom:6 };
   const cardStyle  = { background:'white', borderRadius:12, padding:24, marginBottom:20, boxShadow:'0 1px 4px rgba(0,0,0,0.08)' };
 
   return (
     <div style={{ padding:24, maxWidth:640 }}>
       <h1 style={{ fontSize:22, fontWeight:700, color:'#1a1a2e', marginBottom:24 }}>Settings</h1>
+
+      {/* ── Branding (app appearance) ── SEPOS-BRAND-001 ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:6 }}>🎨 Branding</h2>
+        <div style={{ fontSize:12.5, color:'#888', marginBottom:16 }}>Your logo + colours across the app. This is the <strong>on-screen</strong> logo — separate from the receipt logo further down, so a light or colourful logo here still prints cleanly on bills.</div>
+
+        {/* Brand logo */}
+        <label style={labelStyle}>App logo (login &amp; headers)</label>
+        <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:20 }}>
+          <div style={{ width:80, height:80, borderRadius:12, background: settings.brand_primary || DEFAULT_PRIMARY, display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', flexShrink:0 }}>
+            {settings.brand_logo
+              ? <img src={settings.brand_logo} alt="" style={{ maxWidth:'86%', maxHeight:'86%', objectFit:'contain' }} />
+              : <span style={{ color:'#fff', opacity:0.5, fontSize:11 }}>no logo</span>}
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            <label style={{ padding:'8px 16px', borderRadius:8, background:'#1a1a2e', color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer' }}>
+              📁 Choose logo
+              <input type="file" accept="image/*" onChange={handleBrandLogoUpload} style={{ display:'none' }} />
+            </label>
+            {settings.brand_logo && (
+              <button onClick={() => setSettings(prev => ({ ...prev, brand_logo:'' }))} style={{ padding:'6px 14px', borderRadius:8, border:'none', background:'#fee2e2', color:'#ef4444', fontSize:12, fontWeight:700, cursor:'pointer' }}>🗑 Remove</button>
+            )}
+          </div>
+        </div>
+
+        {/* Colour presets */}
+        <label style={labelStyle}>Colour theme</label>
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:14 }}>
+          {BRAND_PRESETS.map(p => {
+            const active = (settings.brand_primary || DEFAULT_PRIMARY).toLowerCase() === p.primary.toLowerCase()
+              && (settings.brand_accent || DEFAULT_ACCENT).toLowerCase() === p.accent.toLowerCase();
+            return (
+              <button key={p.name} title={p.name} onClick={() => setSettings(prev => ({ ...prev, brand_primary:p.primary, brand_accent:p.accent }))}
+                style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 9px', borderRadius:8, border:`2px solid ${active ? '#1a1a2e' : '#e5e5e5'}`, background:'#fff', cursor:'pointer' }}>
+                <span style={{ width:15, height:15, borderRadius:4, background:p.primary }} />
+                <span style={{ width:15, height:15, borderRadius:4, background:p.accent }} />
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Custom colours */}
+        <div style={{ display:'flex', gap:20, alignItems:'flex-end', flexWrap:'wrap' }}>
+          <div>
+            <label style={labelStyle}>Primary</label>
+            <input type="color" value={settings.brand_primary || DEFAULT_PRIMARY} onChange={e => setSettings(prev => ({ ...prev, brand_primary:e.target.value }))} style={{ width:52, height:40, border:'1px solid #ddd', borderRadius:8, cursor:'pointer', background:'none' }} />
+          </div>
+          <div>
+            <label style={labelStyle}>Accent</label>
+            <input type="color" value={settings.brand_accent || DEFAULT_ACCENT} onChange={e => setSettings(prev => ({ ...prev, brand_accent:e.target.value }))} style={{ width:52, height:40, border:'1px solid #ddd', borderRadius:8, cursor:'pointer', background:'none' }} />
+          </div>
+          <button onClick={() => setSettings(prev => ({ ...prev, brand_primary:'', brand_accent:'' }))} style={{ padding:'8px 14px', borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:12, fontWeight:600, cursor:'pointer' }}>Reset to default</button>
+        </div>
+
+        {/* Live preview */}
+        <div style={{ marginTop:16, borderRadius:12, overflow:'hidden', border:'1px solid #eee' }}>
+          <div style={{ background: settings.brand_primary || DEFAULT_PRIMARY, padding:'18px 20px', display:'flex', alignItems:'center', gap:12 }}>
+            {settings.brand_logo
+              ? <img src={settings.brand_logo} alt="" style={{ height:32, maxWidth:80, objectFit:'contain' }} />
+              : <span style={{ width:28, height:28, borderRadius:'50%', background: settings.brand_accent || DEFAULT_ACCENT, display:'inline-block' }} />}
+            <span style={{ color:'#fff', fontWeight:800, fontFamily:'Georgia, serif' }}>{settings.company_name || 'Your Restaurant'}</span>
+            <span style={{ marginLeft:'auto', background: settings.brand_accent || DEFAULT_ACCENT, color: settings.brand_primary || DEFAULT_PRIMARY, fontWeight:800, fontSize:12, padding:'5px 12px', borderRadius:999 }}>Preview</span>
+          </div>
+        </div>
+        <div style={{ fontSize:11.5, color:'#999', marginTop:8 }}>Hit <strong>Save</strong> (bottom of Settings) to apply. Leave colours unset for the default SiamEPOS look.</div>
+      </div>
 
       {/* ── Business Details ── */}
       <div style={cardStyle}>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { startMonitoring, onStatusChange, getServerStatus } from './utils/serverDetect';
-import { getRestaurant, getLicenseState, syncLocalOrders } from './api';
+import { getRestaurant, getLicenseState, syncLocalOrders, getSettings } from './api';
+import { applyBrandTheme } from './theme'; // SEPOS-BRAND-001 — per-client theme
 import { backupSalesToDevice } from './native/salesBackup'; // SEPOS-ANDROID-003
 import { canAccessReservations, canAccessKitchen, canAccessFullEPOS } from './utils/plan';
 import UpgradeLocked from './components/UpgradeLocked';
@@ -98,6 +99,12 @@ export default function App() {
     if (window.siamepos && window.siamepos.onUpdateReady) {
       window.siamepos.onUpdateReady(() => setUpdateReady(true));
     }
+  }, []);
+
+  // SEPOS-BRAND-001 — apply the tenant's brand colours app-wide at load. Safe
+  // if it fails / is unset (falls back to the default SiamEPOS navy+gold).
+  useEffect(() => {
+    getSettings().then(s => { if (s && !s.error) applyBrandTheme(s); }).catch(() => {});
   }, []);
 
   // SEPOS-ANDROID-002 — push offline-created orders to the cloud whenever we're

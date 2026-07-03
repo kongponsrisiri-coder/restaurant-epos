@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { loginStaff, clockIn, clockOut, emailLogin, storePinSession, getStaff, getRestaurant, getSettings } from '../api';
 import { resetDevice, currentTillTarget, canSwitchClient } from '../utils/deviceReset';
+import { NAVY, GOLD, RED, GREEN } from '../theme'; // SEPOS-BRAND-001 — per-client brand colours
 
 // SiamEPOS — LoginScreen (redesign per design_handoff_siamepos).
 // Split layout: left navy brand panel, right inset Paper panel with the staff
-// grid → PIN pad. Brand: Navy #0D1B3E · Gold #C9A84C · Action Red #e94560.
-const NAVY = '#0D1B3E', GOLD = '#C9A84C', RED = '#e94560', GREEN = '#2E9E6E';
+// grid → PIN pad. Brand colours (NAVY/GOLD) come from the per-client theme.
 const PAPER = '#F4F1EA', INK = '#1a1a2e', MUTED = '#7C766A';
 const GOLD_TINT = '#FBF4DF', GOLD_ON_LIGHT = '#9A7B1F', CARD_BORDER = '#E7E2D6';
 const UI_FONT = "'Archivo', system-ui, -apple-system, sans-serif";
@@ -29,6 +29,14 @@ function Lotus({ size = 120 }) {
   );
 }
 
+// SEPOS-BRAND-001 — show the client's uploaded brand logo if set, else the
+// default lotus mark. (This is the on-screen logo, separate from the receipt
+// logo — it can be light/colour since it never gets thermal-printed.)
+function BrandMark({ size = 120, logo }) {
+  if (logo) return <img src={logo} alt="" style={{ height: size, maxWidth: size * 2.4, objectFit: 'contain', display: 'block' }} />;
+  return <Lotus size={size} />;
+}
+
 const initials = (name) => String(name || '?').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
 const isManagerRole = (role) => role === 'admin' || role === 'manager';
 
@@ -43,6 +51,7 @@ export default function LoginScreen({ onLogin }) {
   const [staffList, setStaffList]         = useState([]);
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [restaurantName, setRestaurantName] = useState('');
+  const [brandLogo, setBrandLogo] = useState(''); // SEPOS-BRAND-001
   const [now, setNow] = useState(() => new Date());
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
   // SEPOS-RESET-001 — hidden trigger on the top-left corner opens the
@@ -82,6 +91,7 @@ export default function LoginScreen({ onLogin }) {
         const generic = (n) => !n || /^siamepos$/i.test(String(n).trim());
         const name = (r && r.name) || (settings && !generic(settings.restaurant_name) && settings.restaurant_name) || (r && r.restaurant_id) || '';
         setRestaurantName(String(name || '').trim());
+        if (settings && settings.brand_logo) setBrandLogo(settings.brand_logo); // SEPOS-BRAND-001
       })
       .catch(() => {});
   }, []);
@@ -170,7 +180,7 @@ export default function LoginScreen({ onLogin }) {
   // Mobile: compact full-width header strip above the login panel.
   const brandPanel = isMobile ? (
     <div style={{ width: '100%', flexShrink: 0, position: 'relative', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14, overflow: 'hidden' }}>
-      <Lotus size={44} />
+      <BrandMark size={44} logo={brandLogo} />
       <div style={{ minWidth: 0 }}>
         <div style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, letterSpacing: '-1px', lineHeight: 1 }}>
           <span style={{ color: '#fff' }}>Siam</span><span style={{ color: GOLD }}>EPOS</span>
@@ -181,7 +191,7 @@ export default function LoginScreen({ onLogin }) {
   ) : (
     <div style={{ width: 600, flexShrink: 0, position: 'relative', padding: '0 64px', display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', right: -60, bottom: -40, opacity: 0.05, pointerEvents: 'none' }}><Lotus size={420} /></div>
-      <Lotus size={120} />
+      <BrandMark size={120} logo={brandLogo} />
       <div style={{ fontFamily: SERIF, fontSize: 66, fontWeight: 700, letterSpacing: '-1.5px', lineHeight: 1, marginTop: 28 }}>
         <span style={{ color: '#fff' }}>Siam</span><span style={{ color: GOLD }}>EPOS</span>
       </div>

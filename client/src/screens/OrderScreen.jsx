@@ -938,13 +938,18 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                     (no big "All" list). "General" holds any un-filed items so
                     nothing is ever hidden. The first tab auto-selects on tap. */}
                 {subTabs.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 18, paddingBottom: 14, borderBottom: '1px solid #E7E2D6' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 18, padding: '12px 14px', background: '#F3EEE3', borderRadius: 12, border: '1.5px solid #E2D8C4' }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: '#9A7B1F', textTransform: 'uppercase', letterSpacing: '.6px', marginRight: 2 }}>
+                      {menu.find(c => c.id === activeCategory)?.name} ▸
+                    </span>
                     {subTabs.map(sub => {
                       const active = activeSubcat === sub.id;
                       return (
                         <button key={sub.id} onClick={() => setActiveSubcat(sub.id)} style={{
-                          padding: '13px 24px', borderRadius: 26, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 17,
-                          background: active ? '#3b82f6' : '#ECE7DA', color: active ? '#fff' : '#7C766A' }}>
+                          padding: '12px 22px', borderRadius: 24, cursor: 'pointer', fontWeight: 800, fontSize: 16,
+                          border: active ? '2px solid var(--brand-accent,#C9A84C)' : '2px solid #D9CDB2',
+                          background: active ? 'var(--brand-accent,#C9A84C)' : '#fff',
+                          color: 'var(--brand-primary, #0D1B3E)' }}>
                           {sub.name}
                         </button>
                       );

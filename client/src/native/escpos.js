@@ -9,6 +9,8 @@
 // {op:'bold',v} {op:'text',v} {op:'feed',v} {op:'cut'}. Size tokens:
 // n=normal · t=tall · b=big · h=huge (table number).
 
+import { APP_VERSION } from '../version';
+
 const WIDTH = 32;                 // network printer: 32 chars per 80mm line (Font A)
 const SUNMI_BILL_WIDTH = 36;      // Sunmi bill at the 'r' font (30px): ~37 chars per 80mm (bumped bigger per operator feedback)
 const SUNMI_KITCHEN_WIDTH = 26;   // Sunmi kitchen at the big 'n' font: ~28 chars fit — 26 stays clear of wrapping (a full 32 wraps to a stray '----')
@@ -93,6 +95,7 @@ export function buildKitchenOps(native) {
     for (const it of byCourse[c]) kitchenItemOps(ops, it, bilingual);
     ops.push({ op: 'feed', v: 1 });
   });
+  ops.push({ op: 'align', v: 1 }, { op: 'text', v: 'v' + APP_VERSION }, { op: 'align', v: 0 });
   ops.push({ op: 'feed', v: 1 }, { op: 'cut' });
   return ops;
 }
@@ -193,7 +196,7 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
     }
   }
   ops.push({ op: 'rule' });
-  ops.push({ op: 'align', v: 1 }, { op: 'text', v: footer }, { op: 'text', v: 'ขอบคุณที่มาใช้บริการ' }, { op: 'align', v: 0 }, { op: 'feed', v: 2 }, { op: 'cut' });
+  ops.push({ op: 'align', v: 1 }, { op: 'text', v: footer }, { op: 'text', v: 'ขอบคุณที่มาใช้บริการ' }, { op: 'text', v: 'v' + APP_VERSION }, { op: 'align', v: 0 }, { op: 'feed', v: 2 }, { op: 'cut' });
   return ops;
 }
 

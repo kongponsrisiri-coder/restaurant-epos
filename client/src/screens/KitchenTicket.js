@@ -22,6 +22,7 @@
  */
 
 import { serverPrintKitchen, serverPrintKitchenFull, serverPrintBar, serverPrintFireNotice, getSettings, getKitchenTicketBuffer } from '../api';
+import { APP_VERSION } from '../version';
 import { isNativeApp, sendRawToPrinter } from '../native/printer';
 import { sunmiAvailable, sunmiPrintOps, printTarget } from '../native/sunmiPrinter';
 import { buildKitchenOps, opsForSunmi, renderOpsToBytes } from '../native/escpos';
@@ -390,7 +391,7 @@ function buildSingleCourseBody({ order, items, course, bilingual = true }) {
     <div class="rule"></div>
     ${itemsHTML(items, bilingual)}
     <div class="rule"></div>
-    <div class="foot">${now} &middot; Order #${order?.id ?? '—'}</div>
+    <div class="foot">${now} &middot; Order #${order?.id ?? '—'} &middot; v${APP_VERSION}</div>
   `;
 }
 
@@ -442,7 +443,7 @@ function buildFullOrderBody({ order, items, bilingual = true }) {
     <div class="rule"></div>
     ${courseBlocks}
     <div class="rule"></div>
-    <div class="foot">${now} &middot; Order #${order?.id ?? '—'}</div>
+    <div class="foot">${now} &middot; Order #${order?.id ?? '—'} &middot; v${APP_VERSION}</div>
   `;
 }
 
@@ -485,7 +486,7 @@ function buildFireNoticeHTML({ order, course, bilingual = true }) {
     <div class="course-en">${courseEN}</div>
     ${courseTH ? `<div class="course-th">${courseTH}</div>` : ''}
     <div class="rule"></div>
-    <div class="foot">${now} &middot; Order #${order?.id ?? '—'}</div>
+    <div class="foot">${now} &middot; Order #${order?.id ?? '—'} &middot; v${APP_VERSION}</div>
     <div style="height:12mm;"></div>
   `;
 

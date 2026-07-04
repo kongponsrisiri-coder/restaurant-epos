@@ -94,6 +94,10 @@ async function initDB() {
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS is_online INTEGER DEFAULT 1`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS name_alt VARCHAR(255)`);
+    // Per-item course override (1 Starter · 2 Main · 3 Dessert · 4 Extra).
+    // NULL = inherit the category's default_course — lets a mixed category
+    // (e.g. "Lunch" holding both starters and mains) file each dish correctly.
+    await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS default_course INTEGER`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS modifier_groups (

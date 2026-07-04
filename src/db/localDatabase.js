@@ -70,7 +70,8 @@ function initSchema() {
       is_online INTEGER DEFAULT 1,
       allergens TEXT DEFAULT NULL,
       sort_order INTEGER DEFAULT 0,
-      vat_rate REAL DEFAULT 20.0
+      vat_rate REAL DEFAULT 20.0,
+      default_course INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS modifier_groups (
@@ -606,6 +607,8 @@ function runMigrations() {
   // Card reconciliation on the Z report (actual card-machine takings + variance)
   addColumnIfMissing('z_reports', 'actual_card',     'REAL');
   addColumnIfMissing('z_reports', 'card_difference', 'REAL');
+  // Per-item course override (NULL = inherit the category default_course)
+  addColumnIfMissing('menu_items', 'default_course', 'INTEGER');
   // SEPOS-PAY-AMEND-001: audit columns on the payments row
   addColumnIfMissing('payments', 'amended_at',     'TIMESTAMP');
   addColumnIfMissing('payments', 'amended_by',     'INTEGER');

@@ -578,6 +578,9 @@ export const getBarOrders = async () => {
 export const getCategories = () => get('/api/categories');
 export const updateCategoryBar = (id, is_bar) => put(`/api/categories/${id}/bar`, { is_bar });
 export const updateCategorySortOrder = (items) => put('/api/categories/sort-order', { items });
+// Menu-item drag reorder — via the native-safe put() so it also persists on the
+// Sunmi app (a raw fetch from the native WebView silently fails → reorder reverts).
+export const updateMenuItemsSortOrder = (items) => put('/api/menu/items/sort-order', { items });
 export const updateCategoryDefaultCourse = (id, default_course) => put(`/api/categories/${id}/default-course`, { default_course });
 export const addCategory = (name) => post('/api/categories', { name });
 export const updateCategory = (id, name) => put(`/api/categories/${id}`, { name });

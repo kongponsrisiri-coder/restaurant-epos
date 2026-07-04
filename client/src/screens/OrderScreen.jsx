@@ -110,8 +110,16 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         });
         setAllergenOverrides(map);
         if (menuData.length > 0) {
-          setActiveCategory(menuData[0].id);
-          setActiveCourse(menuData[0].default_course || 1);
+          const first = menuData[0];
+          setActiveCategory(first.id);
+          setActiveCourse(first.default_course || 1);
+          // Auto-select the first sub-cat tab (or "General" for un-filed items)
+          // so the initial category shows dishes immediately, matching taps.
+          const subs = first.subcategories || [];
+          if (subs.length) {
+            const hasNone = (first.items || []).some(i => i.subcategory_id == null);
+            setActiveSubcat(hasNone ? '__none__' : subs[0].id);
+          }
         }
       } catch (err) {
         console.error(err);
@@ -578,6 +586,30 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const activeCatIsBar = !!menu.find(c => c.id === activeCategory)?.is_bar;
   const existingItems = order?.items || [];
 
+  // ── Menu navigation (redesign): category buttons → sub-category tabs ──────────
+  // Categories are big wrapping buttons; a category with sub-cats shows a tab
+  // strip (no big "All" list) and the first tab auto-selects. Items filed under
+  // no sub-cat surface under a leading "General" tab so nothing is ever hidden.
+  const NONE_SUBCAT = '__none__';
+  const activeHasUnfiled = activeItems.some(i => i.subcategory_id == null);
+  const subTabs = activeSubs.length
+    ? [...(activeHasUnfiled ? [{ id: NONE_SUBCAT, name: 'General' }] : []), ...activeSubs]
+    : [];
+  const dishesToShow = activeItems.filter(item =>
+    activeSubcat == null ? true
+      : activeSubcat === NONE_SUBCAT ? item.subcategory_id == null
+      : item.subcategory_id === activeSubcat
+  );
+  const selectCategory = (cat) => {
+    setActiveCategory(cat.id);
+    setActiveCourse(cat.default_course || 1);
+    const subs = cat.subcategories || [];
+    if (!subs.length) { setActiveSubcat(null); return; }
+    // Auto-select the first tab so dishes show immediately (no dead-end).
+    const hasNone = (cat.items || []).some(i => i.subcategory_id == null);
+    setActiveSubcat(hasNone ? NONE_SUBCAT : subs[0].id);
+  };
+
   const existingByCourse = {};
   existingItems.filter(item => !item.is_bar).forEach(item => {
     const course = item.course || 1;
@@ -881,43 +913,54 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 </button>
               )}
             </div>
-            {/* rail + grid */}
-            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-              {/* category rail */}
-              <div style={{ width: 172, flexShrink: 0, background: '#fff', borderRight: '1px solid #E7E2D6', overflowY: 'auto', padding: '14px 12px' }}>
-                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.5px', color: '#9A9488', textTransform: 'uppercase', padding: '0 4px 10px' }}>Menu</div>
-                {menu.map(cat => {
-                  const subs = cat.subcategories || [];
-                  const catActive = activeCategory === cat.id;
-                  const railBtn = (active) => ({ display: 'block', width: '100%', textAlign: 'left', minHeight: 46, padding: '0 14px', marginBottom: 6, borderRadius: 10, cursor: 'pointer', fontWeight: 600, fontSize: 13.5,
-                    border: active ? 'none' : '1px solid #E7E2D6', background: active ? 'var(--brand-primary,#0D1B3E)' : '#fff', color: active ? '#fff' : 'var(--brand-primary, #1a1a2e)' });
-                  return (
-                    <div key={cat.id} style={{ marginBottom: 14 }}>
-                      <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.5px', color: '#9A9488', textTransform: 'uppercase', padding: '0 4px 6px' }}>{cat.name}{cat.is_bar ? ' 🍹' : ''}</div>
-                      <button onClick={() => { setActiveCategory(cat.id); setActiveCourse(cat.default_course || 1); setActiveSubcat(null); }} style={railBtn(catActive && !activeSubcat)}>All {cat.name}</button>
-                      {subs.map(sub => (
-                        <button key={sub.id} onClick={() => { setActiveCategory(cat.id); setActiveCourse(cat.default_course || 1); setActiveSubcat(sub.id); }} style={railBtn(catActive && activeSubcat === sub.id)}>{sub.name}</button>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-              {/* menu grid */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: '22px 24px' }}>
-                <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 24, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 14 }}>Tap a dish to add</div>
+            {/* menu — full width; category buttons on top, sub-cat tabs below */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px' }}>
+                {/* Category buttons — wrap to multiple rows so every category is visible */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: subTabs.length ? 12 : 18 }}>
+                  {menu.map(cat => {
+                    const active = activeCategory === cat.id;
+                    return (
+                      <button key={cat.id} onClick={() => selectCategory(cat)} style={{
+                        padding: '18px 30px', borderRadius: 16, cursor: 'pointer', fontWeight: 800, fontSize: 20, whiteSpace: 'nowrap',
+                        border: active ? 'none' : '1.5px solid #E7E2D6',
+                        background: active ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary,#0D1B3E)') : '#fff',
+                        color: active ? '#fff' : 'var(--brand-primary, #1a1a2e)' }}>
+                        {cat.name}{cat.is_bar ? ' 🍹' : ''}
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* Sub-category tabs — shown only when the category has sub-cats
+                    (no big "All" list). "General" holds any un-filed items so
+                    nothing is ever hidden. The first tab auto-selects on tap. */}
+                {subTabs.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 18, paddingBottom: 14, borderBottom: '1px solid #E7E2D6' }}>
+                    {subTabs.map(sub => {
+                      const active = activeSubcat === sub.id;
+                      return (
+                        <button key={sub.id} onClick={() => setActiveSubcat(sub.id)} style={{
+                          padding: '13px 24px', borderRadius: 26, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 17,
+                          background: active ? '#3b82f6' : '#ECE7DA', color: active ? '#fff' : '#7C766A' }}>
+                          {sub.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
                 {/* Course bar — staff pick the target course (override the dish's
                     admin default, e.g. serve a starter as a main). */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#9A9488' }}>Course:</span>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 18 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#9A9488' }}>Course:</span>
                   {[1, 2, 3, 4].map(c => (
-                    <button key={c} onClick={() => setActiveCourse(c)} style={{ padding: '8px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                    <button key={c} onClick={() => setActiveCourse(c)} style={{ padding: '11px 20px', borderRadius: 22, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 15,
                       background: activeCourse === c ? COURSE_COLORS[c] : '#ECE7DA', color: activeCourse === c ? '#fff' : '#7C766A' }}>
                       {COURSE_LABELS[c]}
                     </button>
                   ))}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: 14 }}>
-                  {activeItems.filter(item => !activeSubcat || item.subcategory_id === activeSubcat).map(item => {
+                  {dishesToShow.map(item => {
                     const inCart = cart.filter(c => c.menu_item_id === item.id);
                     const totalQty = inCart.reduce((s, c) => s + c.quantity, 0);
                     return (

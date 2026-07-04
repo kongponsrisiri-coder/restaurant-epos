@@ -2815,10 +2815,10 @@ app.get('/api/z-report/preview', async (req, res) => {
 
 app.post('/api/z-report/save', async (req, res) => {
   try {
-    const { type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference } = req.body;
+    const { type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, actual_card, card_difference } = req.body;
     const result = await pool.query(
-      `INSERT INTO z_reports (type, opened_at, closed_at, total_sales, total_cash, total_card, total_other, total_covers, total_orders, discounts, voids, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, report_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
-      [type, from, to, data.total_sales, data.total_cash, data.total_card, data.total_other, data.total_covers, data.total_orders, data.total_discounts, data.void_count, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, JSON.stringify(data)]
+      `INSERT INTO z_reports (type, opened_at, closed_at, total_sales, total_cash, total_card, total_other, total_covers, total_orders, discounts, voids, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, actual_card, card_difference, report_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
+      [type, from, to, data.total_sales, data.total_cash, data.total_card, data.total_other, data.total_covers, data.total_orders, data.total_discounts, data.void_count, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, actual_card ?? null, card_difference ?? null, JSON.stringify(data)]
     );
 
     // SEPOS-LOCAL-001 Phase 1 — Z-report close is the natural end-of-day

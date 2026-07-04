@@ -397,10 +397,17 @@ async function initDB() {
         petty_cash_reason TEXT,
         actual_cash DECIMAL(10,2),
         cash_difference DECIMAL(10,2),
+        actual_card DECIMAL(10,2),
+        card_difference DECIMAL(10,2),
         report_data JSONB,
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    // Card reconciliation (operator enters the card-machine takings; card total
+    // from the terminal always differs slightly from the system). Added after
+    // the table existed on live tenants, so migrate in place.
+    await pool.query(`ALTER TABLE z_reports ADD COLUMN IF NOT EXISTS actual_card DECIMAL(10,2)`);
+    await pool.query(`ALTER TABLE z_reports ADD COLUMN IF NOT EXISTS card_difference DECIMAL(10,2)`);
 
     // SEPOS-053 — till trading sessions (EposNow-style Open Shift → Close
     // Shift). At most ONE open session per restaurant (partial unique index

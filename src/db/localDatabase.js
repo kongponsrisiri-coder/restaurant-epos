@@ -256,6 +256,8 @@ function initSchema() {
       petty_cash_reason TEXT,
       actual_cash REAL,
       cash_difference REAL,
+      actual_card REAL,
+      card_difference REAL,
       report_data TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -601,6 +603,9 @@ function addColumnIfMissing(table, column, definition) {
 function runMigrations() {
   // SEPOS-024: resend reason on order_items
   addColumnIfMissing('order_items', 'resend_reason', 'TEXT');
+  // Card reconciliation on the Z report (actual card-machine takings + variance)
+  addColumnIfMissing('z_reports', 'actual_card',     'REAL');
+  addColumnIfMissing('z_reports', 'card_difference', 'REAL');
   // SEPOS-PAY-AMEND-001: audit columns on the payments row
   addColumnIfMissing('payments', 'amended_at',     'TIMESTAMP');
   addColumnIfMissing('payments', 'amended_by',     'INTEGER');

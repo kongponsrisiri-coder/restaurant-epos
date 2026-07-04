@@ -29,6 +29,9 @@ function pad(left, right, width = WIDTH) {
 }
 
 function headerOps(ops, order, title) {
+  // Head room at the top so the KITCHEN/TABLE header clears the ticket-rail
+  // clip — otherwise the clip hides the table number when the ticket is hung.
+  ops.push({ op: 'feed', v: 4 });
   ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: title }, { op: 'size', v: 'n' });
   let label;
   const t = order && order.order_type;

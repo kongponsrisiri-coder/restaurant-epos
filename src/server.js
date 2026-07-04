@@ -549,15 +549,16 @@ app.get('/api/menu/all', async (req, res) => {
 app.post('/api/menu/items', async (req, res) => {
   if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
-    const { category_id, subcategory_id, name, name_alt, description, price, vat_rate, allergens } = req.body;
+    const { category_id, subcategory_id, name, name_alt, description, price, vat_rate, allergens, default_course } = req.body;
     // AI scanner sends allergens as ["Fish","Soybeans"]; normalise to JSON
     // string for the column so the Allergen Matrix sees the scanned source.
     let allergensStr = null;
     if (Array.isArray(allergens) && allergens.length > 0) allergensStr = JSON.stringify(allergens);
     else if (typeof allergens === 'string' && allergens.trim()) allergensStr = JSON.stringify([allergens]);
+    const dc = (default_course == null || default_course === '') ? null : (Number(default_course) || null);
     const result = await pool.query(
-      'INSERT INTO menu_items (category_id, subcategory_id, name, name_alt, description, price, vat_rate, allergens) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
-      [category_id, subcategory_id || null, name, name_alt || null, description, price, vat_rate ?? 20, allergensStr]
+      'INSERT INTO menu_items (category_id, subcategory_id, name, name_alt, description, price, vat_rate, allergens, default_course) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
+      [category_id, subcategory_id || null, name, name_alt || null, description, price, vat_rate ?? 20, allergensStr, dc]
     );
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -577,10 +578,12 @@ app.put('/api/menu/items/sort-order', async (req, res) => {
 app.put('/api/menu/items/:id', async (req, res) => {
   if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
-    const { name, name_alt, description, price, is_available, is_online, subcategory_id, category_id, vat_rate } = req.body;
+    const { name, name_alt, description, price, is_available, is_online, subcategory_id, category_id, vat_rate, default_course } = req.body;
+    // NULL / '' → inherit the category course; 1-4 → per-item override.
+    const dc = (default_course == null || default_course === '') ? null : (Number(default_course) || null);
     await pool.query(
-      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, is_online=COALESCE($6, is_online), subcategory_id=$7, category_id=$8, vat_rate=COALESCE($9, vat_rate) WHERE id=$10',
-      [name, name_alt || null, description, price, is_available, is_online ?? null, subcategory_id || null, category_id, vat_rate ?? null, req.params.id]
+      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, is_online=COALESCE($6, is_online), subcategory_id=$7, category_id=$8, vat_rate=COALESCE($9, vat_rate), default_course=$10 WHERE id=$11',
+      [name, name_alt || null, description, price, is_available, is_online ?? null, subcategory_id || null, category_id, vat_rate ?? null, dc, req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }

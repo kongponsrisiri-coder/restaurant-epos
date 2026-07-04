@@ -163,11 +163,14 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const handleItemClick = async (item) => {
     const modifiers = await getItemModifiers(item.id);
     const isBar = getItemIsBar(item);
-    // Use the operator's current course selection. activeCourse already defaults
-    // to the category's default_course when a category is tapped (see the tab /
-    // rail handlers), so tapping "Mains" on the course bar correctly overrides
-    // the category default instead of being ignored by it.
-    const course = isBar ? 0 : activeCourse;
+    // Course priority: a per-item override (menu_items.default_course) wins so a
+    // mixed category like "Lunch" files each dish correctly (its mains print as
+    // MAINS). Otherwise fall back to the operator's current course-bar selection,
+    // which already defaults to the category's default_course on tab tap.
+    const course = isBar ? 0
+      : (item.default_course != null && item.default_course !== '')
+        ? Number(item.default_course)
+        : activeCourse;
     if (modifiers && modifiers.length > 0) {
       setSelectedModifiers({});
       setModifierPopup({ item, modifiers, course, isBar });

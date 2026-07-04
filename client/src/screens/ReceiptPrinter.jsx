@@ -152,7 +152,16 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
   const activeItems = (items || []).filter(i => !i.voided);
   const courseNames = { 1:'STARTERS', 2:'MAINS', 3:'DESSERTS', 4:'EXTRAS' };
   const byCourse = {};
-  activeItems.forEach(item => { const c = item.course||1; if(!byCourse[c]) byCourse[c]=[]; byCourse[c].push(item); });
+  activeItems.forEach(item => {
+    const c = item.course||1; if(!byCourse[c]) byCourse[c]=[];
+    // Merge identical items (same dish + options + price, undiscounted) into one
+    // "N x" line — separate sends of the same dish shouldn't be multiple 1x rows.
+    if (Number(item.discount_value) > 0) { byCourse[c].push({ ...item, quantity: Number(item.quantity)||0 }); return; }
+    const key = [item.menu_item_id, item.name||item.item_name, item.notes||'', item.unit_price].join('|');
+    const existing = byCourse[c].find(x => x._key === key);
+    if (existing) existing.quantity += Number(item.quantity)||0;
+    else byCourse[c].push({ ...item, quantity: Number(item.quantity)||0, _key: key });
+  });
 
   const itemRows = Object.keys(byCourse).sort().map(course => {
     const rows = byCourse[course].map(item => {
@@ -254,13 +263,15 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
 
   <hr class="divider"/>
 
+  ${order.order_type !== 'takeaway' && order.table_number != null
+    ? `<div style="text-align:center;font-size:24px;font-weight:900;margin:2px 0 10px;">TABLE ${order.table_number}</div>` : ''}
+
   <table>
     ${order.order_type === 'takeaway'
       ? `<tr><td>Type</td><td style="text-align:right;font-weight:700;">${order.table_number != null ? `🥡 Takeaway ${order.table_number}` : '🥡 Online Order'}</td></tr>
          ${order.customer_name ? `<tr><td>Customer</td><td style="text-align:right;">${order.customer_name}</td></tr>` : ''}
          ${order.pickup_time   ? `<tr><td>Pickup</td><td style="text-align:right;">${new Date(order.pickup_time).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/London'})}</td></tr>` : ''}`
-      : `<tr><td>Table</td>  <td style="text-align:right;font-weight:700;">${order.table_number||'—'}</td></tr>
-         <tr><td>Covers</td> <td style="text-align:right;">${order.covers||'—'}</td></tr>`}
+      : `<tr><td>Covers</td> <td style="text-align:right;">${order.covers||'—'}</td></tr>`}
     <tr><td>Date</td>    <td style="text-align:right;">${date}</td></tr>
     <tr><td>Time</td>    <td style="text-align:right;">${time}</td></tr>
     <tr><td>Order #</td> <td style="text-align:right;">${order.id}</td></tr>

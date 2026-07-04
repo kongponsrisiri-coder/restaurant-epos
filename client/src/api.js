@@ -654,8 +654,8 @@ export const mergeTables = async (targetOrderId, mergeOrderId) => {
   return put(`/api/orders/${targetOrderId}/merge`, { merge_order_id: mergeOrderId });
 };
 export const getZReportPreview = (from, to) => get(`/api/z-report/preview?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-export const saveZReport = (type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference) => 
-  post('/api/z-report/save', { type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference });
+export const saveZReport = (type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, actual_card, card_difference) =>
+  post('/api/z-report/save', { type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, actual_card, card_difference });
 export const getZReportHistory = () => get('/api/z-report/history');
 // SEPOS-053 — till sessions (EposNow-style Open Shift → Close Shift)
 export const getZReportPreviewBySession = (sessionId) => get(`/api/z-report/preview?session_id=${encodeURIComponent(sessionId)}`);

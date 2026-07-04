@@ -19,10 +19,10 @@ export default function ZReportSection() {
   const [showHistory, setShowHistory] = useState(false);
   const [fromTime, setFromTime]   = useState('');
   const [toTime, setToTime]       = useState('');
-  const [floatAmount, setFloatAmount]       = useState('');
   const [pettyCash, setPettyCash]           = useState('');
   const [pettyCashReason, setPettyCashReason] = useState('');
   const [actualCash, setActualCash]         = useState('');
+  const [actualCard, setActualCard]         = useState('');   // card-machine takings for reconciliation
   // SEPOS-053 — current open trading session (EposNow-style shift)
   const [session, setSession]       = useState(null);   // { session, orders, takings } | null
   const [openFloat, setOpenFloat]   = useState('');
@@ -102,13 +102,16 @@ export default function ZReportSection() {
       ].filter(Boolean).join('');
       if (!await confirm(msg + '\n\nAre you sure you want to close the report?')) return;
     }
-    const floatNum = parseFloat(floatAmount) || 0;
     const pettyNum = parseFloat(pettyCash) || 0;
     const actualNum = parseFloat(actualCash) || 0;
-    const expectedCash = (reportData.total_cash || 0) - floatNum - pettyNum;
+    const expectedCash = (reportData.total_cash || 0) - pettyNum;
     const difference = actualNum - expectedCash;
+    // Card reconciliation: only compute a variance if the operator entered the
+    // card-machine takings (blank = not reconciled → null, not 0).
+    const actualCardNum = actualCard !== '' ? (parseFloat(actualCard) || 0) : null;
+    const cardDifference = actualCardNum != null ? actualCardNum - (reportData.total_card || 0) : null;
     try {
-      const saved = await saveZReport(reportType, reportData.from, reportData.to, reportData, floatNum, pettyNum, pettyCashReason, actualNum, difference);
+      const saved = await saveZReport(reportType, reportData.from, reportData.to, reportData, 0, pettyNum, pettyCashReason, actualNum, difference, actualCardNum, cardDifference);
       // SEPOS-053 — if this Z closed an open shift, mark the session closed and
       // link it to the saved z_report. Open tables stay open and will land in
       // the NEXT shift's Z (matches EposNow).
@@ -124,7 +127,7 @@ export default function ZReportSection() {
 
   const exportHistoryCsv = () => {
     if (!history.length) return;
-    const rows = [['Closed at', 'Type', 'Orders', 'Total sales £', 'Cash £', 'Card £', 'Other £', 'Float £', 'Petty cash £', 'Actual cash £', 'Cash difference £']];
+    const rows = [['Closed at', 'Type', 'Orders', 'Total sales £', 'Cash £', 'Card £', 'Other £', 'Petty cash £', 'Actual cash £', 'Cash difference £', 'Actual card £', 'Card difference £']];
     history.forEach(r => {
       rows.push([
         r.closed_at ? new Date(r.closed_at).toISOString() : '',
@@ -133,10 +136,11 @@ export default function ZReportSection() {
         Number(r.total_cash || 0).toFixed(2),
         Number(r.total_card || 0).toFixed(2),
         Number(r.total_other || 0).toFixed(2),
-        Number(r.float_amount || 0).toFixed(2),
         Number(r.petty_cash || 0).toFixed(2),
         Number(r.actual_cash || 0).toFixed(2),
         Number(r.cash_difference || 0).toFixed(2),
+        r.actual_card == null ? '' : Number(r.actual_card).toFixed(2),
+        r.card_difference == null ? '' : Number(r.card_difference).toFixed(2),
       ]);
     });
     downloadCsv(`z-report-history_${new Date().toISOString().slice(0,10)}.csv`, rows);
@@ -194,24 +198,25 @@ export default function ZReportSection() {
     const title = (reportType === 'day' ? 'End of Day' : reportType === 'custom' ? 'Custom Range Report' : 'Shift Close') + ' — ' + restaurantName(settings);
     if (isThermal) {
       const lines = buildZReportLines(reportData, reportType, settings,
-        { floatAmount: floatNum, pettyCash: pettyNum, actualCash: actualNum, difference });
+        { pettyCash: pettyNum, actualCash: actualNum, difference, actualCard: actualCardR, cardDifference: cardDiffR });
       const r = await escPosPrint(lines, settings);
       if (r && r.success) return;
       const fallback = buildZReportBody(reportData, reportType, settings,
-        { floatAmount: floatNum, pettyCash: pettyNum, actualCash: actualNum, difference }, true);
+        { pettyCash: pettyNum, actualCash: actualNum, difference, actualCard: actualCardR, cardDifference: cardDiffR }, true);
       thermalPrint(pageHtml(title, fallback, 'thermal'));
       return;
     }
     const body = buildZReportBody(reportData, reportType, settings,
-      { floatAmount: floatNum, pettyCash: pettyNum, actualCash: actualNum, difference }, false);
+      { pettyCash: pettyNum, actualCash: actualNum, difference, actualCard: actualCardR, cardDifference: cardDiffR }, false);
     fullPagePrint(pageHtml(title, body, 'full'));
   };
 
-  const floatNum     = parseFloat(floatAmount) || 0;
   const pettyNum     = parseFloat(pettyCash) || 0;
   const actualNum    = parseFloat(actualCash) || 0;
-  const expectedCash = reportData ? (reportData.total_cash || 0) - floatNum - pettyNum : 0;
+  const expectedCash = reportData ? (reportData.total_cash || 0) - pettyNum : 0;
   const difference   = actualNum - expectedCash;
+  const actualCardR  = actualCard !== '' ? (parseFloat(actualCard) || 0) : null;
+  const cardDiffR    = (reportData && actualCardR != null) ? actualCardR - (reportData.total_card || 0) : null;
   const inputStyle   = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, boxSizing: 'border-box' };
 
   return (
@@ -456,20 +461,34 @@ export default function ZReportSection() {
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 20, color: 'var(--brand-primary, #1a1a2e)' }}>💵 Till Reconciliation</div>
             <div style={{ background: '#f0f7ff', borderRadius: 10, padding: 14, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 14, color: '#555' }}>Cash Sales from System</span><span style={{ fontSize: 20, fontWeight: 800, color: '#1e40af' }}>£{Number(reportData.total_cash || 0).toFixed(2)}</span></div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div><label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>💰 Float at Start of Shift</label><div style={{ position: 'relative' }}><span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span><input type="number" step="0.01" value={floatAmount} onChange={e => setFloatAmount(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} /></div></div>
               <div><label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>🧾 Petty Cash Out</label><div style={{ position: 'relative', marginBottom: 8 }}><span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span><input type="number" step="0.01" value={pettyCash} onChange={e => setPettyCash(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} /></div><input value={pettyCashReason} onChange={e => setPettyCashReason(e.target.value)} placeholder="Reason e.g. Bought supplies..." style={inputStyle} /></div>
               <div><label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>🏦 Actual Cash Counted</label><div style={{ position: 'relative' }}><span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span><input type="number" step="0.01" value={actualCash} onChange={e => setActualCash(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} /></div></div>
             </div>
             {actualCash !== '' && (
               <div style={{ marginTop: 20, background: '#f8f8f8', borderRadius: 12, padding: 16 }}>
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: 'var(--brand-primary, #1a1a2e)' }}>📊 Cash Calculation</div>
-                {[{ label: 'Cash Sales', val: `£${Number(reportData.total_cash || 0).toFixed(2)}` }, floatNum > 0 && { label: 'Less Float', val: `-£${floatNum.toFixed(2)}` }, pettyNum > 0 && { label: 'Less Petty Cash', val: `-£${pettyNum.toFixed(2)}` }].filter(Boolean).map(r => (
+                {[{ label: 'Cash Sales', val: `£${Number(reportData.total_cash || 0).toFixed(2)}` }, pettyNum > 0 && { label: 'Less Petty Cash', val: `-£${pettyNum.toFixed(2)}` }].filter(Boolean).map(r => (
                   <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 8, color: '#555' }}><span>{r.label}</span><span>{r.val}</span></div>
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 700, marginBottom: 8, paddingTop: 8, borderTop: '1px solid #eee' }}><span>Expected Cash</span><span>£{expectedCash.toFixed(2)}</span></div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 700, marginBottom: 8 }}><span>Actual Counted</span><span>£{actualNum.toFixed(2)}</span></div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 20, fontWeight: 800, paddingTop: 10, borderTop: '2px solid #eee', color: difference === 0 ? '#22c55e' : difference > 0 ? '#3b82f6' : '#ef4444' }}>
                   <span>{difference === 0 ? '✅ Exact!' : difference > 0 ? '📈 Over' : '📉 Short'}</span><span>£{Math.abs(difference).toFixed(2)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <div style={{ background: 'white', borderRadius: 16, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: 20 }}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 20, color: 'var(--brand-primary, #1a1a2e)' }}>💳 Card Reconciliation</div>
+            <div style={{ background: '#eff6ff', borderRadius: 10, padding: 14, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 14, color: '#555' }}>Card Sales from System</span><span style={{ fontSize: 20, fontWeight: 800, color: '#3b82f6' }}>£{Number(reportData.total_card || 0).toFixed(2)}</span></div>
+            <div><label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>💳 Actual Card Takings <span style={{ fontWeight: 400, color: '#aaa' }}>(from the card machine)</span></label><div style={{ position: 'relative' }}><span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span><input type="number" step="0.01" value={actualCard} onChange={e => setActualCard(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} /></div></div>
+            {actualCard !== '' && (
+              <div style={{ marginTop: 20, background: '#f8f8f8', borderRadius: 12, padding: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: 'var(--brand-primary, #1a1a2e)' }}>📊 Card Calculation</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginBottom: 8, color: '#555' }}><span>Card Sales (system)</span><span>£{Number(reportData.total_card || 0).toFixed(2)}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 700, marginBottom: 8, paddingTop: 8, borderTop: '1px solid #eee' }}><span>Actual Takings</span><span>£{(actualCardR || 0).toFixed(2)}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 20, fontWeight: 800, paddingTop: 10, borderTop: '2px solid #eee', color: (cardDiffR || 0) === 0 ? '#22c55e' : (cardDiffR || 0) > 0 ? '#3b82f6' : '#ef4444' }}>
+                  <span>{(cardDiffR || 0) === 0 ? '✅ Exact!' : (cardDiffR || 0) > 0 ? '📈 Over (system under-recorded)' : '📉 Short'}</span><span>£{Math.abs(cardDiffR || 0).toFixed(2)}</span>
                 </div>
               </div>
             )}
@@ -504,7 +523,7 @@ export default function ZReportSection() {
             <button onClick={() => doPrintZ('thermal')} style={{ flex: 2, minWidth: 180, padding: '16px', borderRadius: 12, border: '2px solid var(--brand-primary, #1a1a2e)', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>🖨 Print (80mm)</button>
             <button onClick={() => doPrintZ('full')}    style={{ flex: 1, minWidth: 110, padding: '16px', borderRadius: 12, border: '2px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>📄 Export</button>
             <button onClick={exportReportCsv}            style={{ flex: 1, minWidth: 90, padding: '16px', borderRadius: 12, border: '2px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>⬇ CSV</button>
-            <button onClick={() => { setStep(1); setReportData(null); setSaved(false); setFloatAmount(''); setPettyCash(''); setPettyCashReason(''); setActualCash(''); }} style={{ flex: 1, minWidth: 90, padding: '16px', borderRadius: 12, border: 'none', background: '#f0f0f0', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Done</button>
+            <button onClick={() => { setStep(1); setReportData(null); setSaved(false); setPettyCash(''); setPettyCashReason(''); setActualCash(''); setActualCard(''); }} style={{ flex: 1, minWidth: 90, padding: '16px', borderRadius: 12, border: 'none', background: '#f0f0f0', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Done</button>
           </div>
         </div>
       )}
@@ -570,14 +589,21 @@ function buildZReportBody(r, type, settings, cash, thermal) {
     ${thermal ? '<hr class="divider-solid"/><div class="section-head">Cash Reconciliation</div>' : '<h2>Cash Reconciliation</h2>'}
     <table>
       <tr><td>Cash sales</td><td class="right">${fmt(r.total_cash)}</td></tr>
-      <tr><td>– Float kept</td><td class="right">${fmt(cash.floatAmount)}</td></tr>
       <tr><td>– Petty cash</td><td class="right">${fmt(cash.pettyCash)}</td></tr>
-      <tr><td>Expected in drawer</td><td class="right">${fmt((r.total_cash || 0) - cash.floatAmount - cash.pettyCash)}</td></tr>
+      <tr><td>Expected in drawer</td><td class="right">${fmt((r.total_cash || 0) - cash.pettyCash)}</td></tr>
       <tr><td>Actual counted</td><td class="right">${fmt(cash.actualCash)}</td></tr>
       <tr class="total-row"><td>${cash.difference === 0 ? '✅ Exact match' : cash.difference > 0 ? '📈 Over' : '📉 Short'}</td><td class="right">${fmt(Math.abs(cash.difference))}</td></tr>
     </table>`;
 
-  return head + summary + channels + stats + vat + voids + recon;
+  const cardRecon = (cash.actualCard == null) ? '' : `
+    ${thermal ? '<hr class="divider"/><div class="section-head">Card Reconciliation</div>' : '<h2>Card Reconciliation</h2>'}
+    <table>
+      <tr><td>Card sales (system)</td><td class="right">${fmt(r.total_card)}</td></tr>
+      <tr><td>Actual takings</td><td class="right">${fmt(cash.actualCard)}</td></tr>
+      <tr class="total-row"><td>${cash.cardDifference === 0 ? '✅ Exact match' : cash.cardDifference > 0 ? '📈 Over' : '📉 Short'}</td><td class="right">${fmt(Math.abs(cash.cardDifference || 0))}</td></tr>
+    </table>`;
+
+  return head + summary + channels + stats + vat + voids + recon + cardRecon;
 }
 
 // ── ESC/POS line builder ──────────────────────────────────────────
@@ -630,12 +656,21 @@ function buildZReportLines(r, type, settings, cash) {
   lines.push({ kind: 'div-solid' });
   lines.push({ kind: 'h2', text: 'CASH RECONCILIATION' });
   lines.push({ kind: 'row', left: 'Cash sales',       right: fmt(r.total_cash) });
-  lines.push({ kind: 'row', left: '- Float kept',     right: fmt(cash.floatAmount) });
   lines.push({ kind: 'row', left: '- Petty cash',     right: fmt(cash.pettyCash) });
-  lines.push({ kind: 'row', left: 'Expected drawer',  right: fmt((r.total_cash || 0) - cash.floatAmount - cash.pettyCash) });
+  lines.push({ kind: 'row', left: 'Expected drawer',  right: fmt((r.total_cash || 0) - cash.pettyCash) });
   lines.push({ kind: 'row', left: 'Actual counted',   right: fmt(cash.actualCash) });
   const label = cash.difference === 0 ? 'Exact match' : cash.difference > 0 ? 'Over by' : 'Short by';
   lines.push({ kind: 'total', left: label, right: fmt(Math.abs(cash.difference)) });
+
+  // Card reconciliation — only when the operator entered the card-machine takings.
+  if (cash.actualCard != null) {
+    lines.push({ kind: 'div' });
+    lines.push({ kind: 'h2', text: 'CARD RECONCILIATION' });
+    lines.push({ kind: 'row', left: 'Card sales (sys)', right: fmt(r.total_card) });
+    lines.push({ kind: 'row', left: 'Actual takings',   right: fmt(cash.actualCard) });
+    const clabel = cash.cardDifference === 0 ? 'Exact match' : cash.cardDifference > 0 ? 'Over by' : 'Short by';
+    lines.push({ kind: 'total', left: clabel, right: fmt(Math.abs(cash.cardDifference || 0)) });
+  }
 
   return lines;
 }

@@ -11,7 +11,6 @@
  */
 
 import { serverPrintReceipt, getReceiptBuffer } from '../api';
-import { APP_VERSION } from '../version';
 import { isNativeApp, sendRawToPrinter } from '../native/printer';   // SEPOS-ANDROID-001
 import { sunmiAvailable, sunmiPrintOps, printTarget } from '../native/sunmiPrinter';
 import { buildReceiptOps, opsForSunmi, renderOpsToBytes } from '../native/escpos';
@@ -286,7 +285,7 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
 
   <hr class="divider-solid"/>
 
-  <div class="center" style="font-size:11px;margin-top:8px;color:#333;">${footerMsg}<br/>ขอบคุณที่มาใช้บริการ<br/><span style="font-size:9px;color:#999;">v${APP_VERSION}</span></div>
+  <div class="center" style="font-size:11px;margin-top:8px;color:#333;">${footerMsg}<br/>ขอบคุณที่มาใช้บริการ</div>
 
   ${qrHtml}
   <div style="height:10mm;"></div>

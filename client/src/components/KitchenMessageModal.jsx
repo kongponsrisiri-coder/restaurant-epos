@@ -36,7 +36,10 @@ export default function KitchenMessageModal({ orderId, tableNumber, customerName
         waiter_name:   waiterName || '',
       };
       // Always send — this emits the KDS banner and (on web/desktop) prints.
-      await sendKitchenMessage(payload);
+      // api.js resolves with {error} on HTTP failure (no throw), so check it
+      // explicitly — otherwise a failed send would silently close the modal.
+      const res = await sendKitchenMessage(payload);
+      if (res && res.error) throw new Error(res.error);
       // SEPOS-ANDROID-001 — on the native app the cloud can't reach the LAN
       // printer, so print the 📢 message on this device from the server buffer.
       if (isNativeApp()) {

@@ -26,7 +26,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   // Loaded once on mount; merged with menu_items.allergens at render time.
   const [allergenOverrides, setAllergenOverrides] = useState({});
   const [order, setOrder] = useState(null);
-  const [cart, setCart] = useState([]);
+  // Cart persists per-order in localStorage so un-sent items aren't lost when
+  // the waiter leaves the table without sending — they're restored on return.
+  const cartKey = orderId ? `sepos_cart_${orderId}` : null;
+  const [cart, setCart] = useState(() => {
+    try { const raw = cartKey && localStorage.getItem(cartKey); return raw ? JSON.parse(raw) : []; }
+    catch { return []; }
+  });
   const [activeCategory, setActiveCategory] = useState(null);
   const [activeSubcat, setActiveSubcat] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -59,6 +65,17 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   // flight at once; only the latest response may win, or an older snapshot
   // would overwrite newer optimistic state.
   const fetchSeqRef = useRef(0);
+
+  // Persist the un-sent cart per order so it survives leaving the table and
+  // coming back (was lost on unmount). Cleared automatically once the cart
+  // empties — i.e. after a successful Send.
+  useEffect(() => {
+    if (!cartKey) return;
+    try {
+      if (cart.length) localStorage.setItem(cartKey, JSON.stringify(cart));
+      else localStorage.removeItem(cartKey);
+    } catch {}
+  }, [cart, cartKey]);
   const fetchOrder = async () => {
     const seq = ++fetchSeqRef.current;
     const orderData = await getOrder(orderId);
@@ -726,16 +743,6 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             )}
           </div>
 
-          {showKitchenMsg && (
-            <KitchenMessageModal
-              orderId={orderId}
-              tableNumber={order?.table_number}
-              customerName={order?.customer_name}
-              waiterName={order?.staff_name || ''}
-              onClose={() => setShowKitchenMsg(false)}
-              onSent={() => {}}
-            />
-          )}
 
           {/* Course selector */}
           {/* SEPOS-046w — course bar stays visible on bar categories too.
@@ -1552,6 +1559,20 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               )}
             </button>
           </div>
+        )}
+
+        {/* Kitchen message modal — shared so it works on BOTH desktop and mobile
+            tills (was inside the mobile-only branch, so the desktop 📢 Message
+            button did nothing). */}
+        {showKitchenMsg && (
+          <KitchenMessageModal
+            orderId={orderId}
+            tableNumber={order?.table_number}
+            customerName={order?.customer_name}
+            waiterName={order?.staff_name || ''}
+            onClose={() => setShowKitchenMsg(false)}
+            onSent={() => {}}
+          />
         )}
 
         {/* MODIFIER POPUP */}

@@ -726,16 +726,6 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             )}
           </div>
 
-          {showKitchenMsg && (
-            <KitchenMessageModal
-              orderId={orderId}
-              tableNumber={order?.table_number}
-              customerName={order?.customer_name}
-              waiterName={order?.staff_name || ''}
-              onClose={() => setShowKitchenMsg(false)}
-              onSent={() => {}}
-            />
-          )}
 
           {/* Course selector */}
           {/* SEPOS-046w — course bar stays visible on bar categories too.
@@ -1552,6 +1542,20 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               )}
             </button>
           </div>
+        )}
+
+        {/* Kitchen message modal — shared so it works on BOTH desktop and mobile
+            tills (was inside the mobile-only branch, so the desktop 📢 Message
+            button did nothing). */}
+        {showKitchenMsg && (
+          <KitchenMessageModal
+            orderId={orderId}
+            tableNumber={order?.table_number}
+            customerName={order?.customer_name}
+            waiterName={order?.staff_name || ''}
+            onClose={() => setShowKitchenMsg(false)}
+            onSent={() => {}}
+          />
         )}
 
         {/* MODIFIER POPUP */}

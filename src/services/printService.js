@@ -269,7 +269,7 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
 
     // Order header
     ...(order.order_type === 'takeaway' ? [
-      col2('Type', order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : `TAKEAWAY #${order.id}`), lf(),
+      col2('Type', order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`)), lf(),
       order.customer_name ? [col2('Customer', order.customer_name), lf()] : [],
       order.pickup_time   ? [col2('Pickup', new Date(order.pickup_time).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/London' })), lf()] : [],
     ] : [
@@ -344,7 +344,7 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
 
 function buildFireNotice({ order, course, bilingual = true }) {
   const heading  = order.order_type === 'takeaway'
-    ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : `TAKEAWAY #${order.id}`)
+    ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
     : `TABLE ${order.table_number != null ? order.table_number : '?'}`;
   const courseEN = COURSES_EN[course] || 'ITEMS';
   // Korakot 2026-06-02: no Thai on the category — English label only.
@@ -372,7 +372,7 @@ function buildFireNotice({ order, course, bilingual = true }) {
 
 function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepage = 30 }) {
   const heading = order.order_type === 'takeaway'
-    ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : `TAKEAWAY #${order.id}`)
+    ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
     : `TABLE ${order.table_number != null ? order.table_number : '?'}`;
   const courseEN = COURSES_EN[course] || 'ITEMS';
   // Korakot 2026-06-02: don't print Thai on the category (course)
@@ -427,7 +427,7 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
 
 function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage = 30 }) {
   const heading = order.order_type === 'takeaway'
-    ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : `TAKEAWAY #${order.id}`)
+    ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
     : `TABLE ${order.table_number != null ? order.table_number : '?'}`;
   const now = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
   const headSize = heading.length <= 10 ? CMD.SIZE_BIG : CMD.SIZE_TALL;

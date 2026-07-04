@@ -489,13 +489,23 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   )}
                 </>
               ) : selectedMethod ? (
-                <div style={{ marginTop: 18 }}>
-                  <div style={{ fontSize: 54, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>£{billTotal.toFixed(2)}</div>
-                  <div style={{ border: '1.5px dashed rgba(255,255,255,.35)', borderRadius: 14, padding: '18px 16px', marginTop: 14, color: 'rgba(255,255,255,.7)', fontSize: 14, lineHeight: 1.5 }}>
+                <>
+                  {/* Editable amount — the card reader / customer may take a different
+                      amount than the bill (rounding, a tip added on the terminal). */}
+                  <div style={{ marginTop: 14, fontSize: 13, color: 'rgba(255,255,255,.6)' }}>Amount {selectedMethod === 'Card' ? 'charged on card' : 'received'} — edit if it differs</div>
+                  <div style={{ fontSize: 38, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>£{paymentInput || '0.00'}</div>
+                  <button onClick={() => setPaymentInput(billTotal.toFixed(2))} style={{ width: '100%', height: 44, borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 14, margin: '12px 0', fontVariantNumeric: 'tabular-nums',
+                    background: paymentInput === billTotal.toFixed(2) ? GOLD : 'rgba(255,255,255,.08)', color: paymentInput === billTotal.toFixed(2) ? NAVY : '#fff', border: 'none' }}>Exact · £{billTotal.toFixed(2)}</button>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+                    {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(b => (
+                      <button key={b} onClick={() => handleNumpad(b)} style={{ height: 52, borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 20, fontWeight: 700, background: 'rgba(255,255,255,.08)', color: '#fff' }}>{b}</button>
+                    ))}
+                  </div>
+                  <div style={{ border: '1.5px dashed rgba(255,255,255,.35)', borderRadius: 14, padding: '12px 16px', marginTop: 14, color: 'rgba(255,255,255,.7)', fontSize: 13, lineHeight: 1.5 }}>
                     Present {selectedMethod === 'Card' ? 'card' : 'the'} payment on the reader, then confirm.
                   </div>
-                  {actualTip > 0 && <div style={{ marginTop: 10, fontSize: 14, color: 'var(--brand-accent,#C9A84C)' }}>Incl. tip £{actualTip.toFixed(2)}</div>}
-                </div>
+                  {actualTip > 0 && <div style={{ marginTop: 10, fontSize: 14, color: 'var(--brand-accent,#C9A84C)', display: 'flex', justifyContent: 'space-between' }}><span>Incl. tip / extra</span><span>£{actualTip.toFixed(2)}</span></div>}
+                </>
               ) : (
                 <div style={{ marginTop: 24, color: 'rgba(255,255,255,.6)', fontSize: 15 }}>Choose a payment method to continue.</div>
               )}
@@ -504,7 +514,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 style={{ marginTop: 'auto', height: 68, borderRadius: 14, border: 'none', cursor: canPay ? 'pointer' : 'not-allowed',
                   background: canPay ? RED : 'rgba(255,255,255,.15)', color: canPay ? '#fff' : 'rgba(255,255,255,.4)',
                   fontWeight: 800, fontSize: 18, boxShadow: canPay ? '0 8px 18px rgba(233,69,96,.28)' : 'none' }}>
-                {canPay ? `Confirm payment · £${billTotal.toFixed(2)}` : 'Enter payment'}
+                {canPay ? `Confirm payment · £${(selectedMethod === 'Cash' ? billTotal : amountPaid).toFixed(2)}` : 'Enter payment'}
               </button>
             </>
           )}

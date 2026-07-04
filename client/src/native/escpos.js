@@ -126,7 +126,14 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
   ops.push({ op: 'align', v: 0 }, { op: 'rule' });
 
   if (order && order.order_type && order.order_type !== 'dine_in') {
-    ops.push({ op: 'row', l: 'Type', r: order.order_type === 'counter' ? 'Counter' : 'Online Order' });
+    // A walk-in takeaway rung up at the till sits on a takeaway "table", so it
+    // carries a table_number — show "Takeaway N" (not "Online Order", which is
+    // for website orders that have no table).
+    const typeLabel = order.order_type === 'counter' ? 'Counter'
+      : (order.order_type === 'takeaway' && order.table_number != null && order.table_number !== '')
+        ? `Takeaway ${order.table_number}`
+        : 'Online Order';
+    ops.push({ op: 'row', l: 'Type', r: typeLabel });
     if (order.customer_name) ops.push({ op: 'row', l: 'Customer', r: order.customer_name });
   } else {
     ops.push({ op: 'row', l: 'Table', r: String((order && (order.table_number ?? order.table_id)) ?? '-') });

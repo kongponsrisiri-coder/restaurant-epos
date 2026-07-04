@@ -914,11 +914,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 {order?.covers ? <span style={{ fontFamily: "'Archivo', sans-serif", fontSize: 13, color: '#9A9488', marginLeft: 10, fontWeight: 600 }}>{order.covers} covers</span> : null}
               </div>
               <button onClick={() => setShowKitchenMsg(true)} style={{ background: '#fff', color: 'var(--brand-primary,#0D1B3E)', border: '1px solid var(--brand-primary,#0D1B3E)', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>📢 Message</button>
-              {cart.length > 0 && (
-                <button onClick={sendOrder} disabled={sendBusy} style={{ background: '#e94560', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', cursor: sendBusy ? 'wait' : 'pointer', fontWeight: 700, fontSize: 14, boxShadow: '0 6px 14px rgba(233,69,96,.28)' }}>
-                  {sendBusy ? 'Sending…' : 'Send to kitchen'}
-                </button>
-              )}
+              {/* Send Order moved to a full-width button above View Bill & Pay. */}
             </div>
             {/* menu — full width; category buttons on top, sub-cat tabs below */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -1430,6 +1426,20 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 £{orderTotal.toFixed(2)}
               </span>
             </div>
+
+            {/* Send Order — full-width, right above View Bill & Pay (moved out of
+                the small header button per operator feedback). Desktop only;
+                mobile keeps its own compact Send in the summary header. */}
+            {!isMobile && cart.length > 0 && (
+              <button onClick={sendOrder} disabled={sendBusy} style={{
+                width: '100%', padding: '14px', borderRadius: 12, border: 'none',
+                background: sendBusy ? '#9aa0b0' : 'var(--brand-primary, #0D1B3E)', color: 'white',
+                fontSize: 16, fontWeight: 800, cursor: sendBusy ? 'wait' : 'pointer',
+                marginBottom: 10, boxShadow: '0 6px 14px rgba(13,27,62,.24)'
+              }}>
+                {sendBusy ? 'Sending…' : `🔔 Send Order — ${cart.reduce((s, c) => s + c.quantity, 0)} item${cart.reduce((s, c) => s + c.quantity, 0) > 1 ? 's' : ''}`}
+              </button>
+            )}
 
             {/* SEPOS-CLOSE-ZERO 2026-06-02 — if there's at least one item on
                 the order and the live bill total is £0 (everything voided OR

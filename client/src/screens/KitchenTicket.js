@@ -347,7 +347,7 @@ function ticketCSS() {
     .rule-solid { border-top:2px solid #000; margin:8px 0; }
     .item   { display:flex; gap:8px; align-items:baseline; margin:7px 0; }
     .qty    { font-size:22px; font-weight:900; min-width:42px; }
-    .name   { font-size:20px; font-weight:800; line-height:1.2; }
+    .name   { font-size:20px; font-weight:900; line-height:1.2; -webkit-text-stroke:0.35px currentColor; }
     /* Modifier line + second-language line print at the same size as
        the primary item name (Korakot 2026-06-07). */
     .note     { font-size:20px; font-weight:800; margin:-2px 0 6px 50px; line-height:1.2; }

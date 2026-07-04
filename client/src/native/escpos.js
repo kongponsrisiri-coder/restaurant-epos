@@ -42,7 +42,8 @@ function headerOps(ops, order, title) {
 }
 
 function kitchenItemOps(ops, it, bilingual = true) {
-  ops.push({ op: 'size', v: 'b' }, { op: 'text', v: `${it.quantity || 1} x ${it.name || it.item_name || ''}` }, { op: 'size', v: 'n' });
+  // Item name in bold (emphasis) so the chef gets a thick, easy-to-read line.
+  ops.push({ op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: `${it.quantity || 1} x ${it.name || it.item_name || ''}` }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
   // Second-language line only when the kitchen runs bilingual tickets.
   // kitchen_language='en' → English only (matches the HTML/server path).
   if (bilingual && it.name_alt)  ops.push({ op: 'size', v: 't' }, { op: 'text', v: '  ' + it.name_alt }, { op: 'size', v: 'n' });

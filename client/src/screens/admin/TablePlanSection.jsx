@@ -132,9 +132,10 @@ export default function TablePlanSection() {
       ? tablesRef.current.find(t => t.id === id)
       : wallsRef.current.find(w => w.id === id);
     if (item) {
+      // +scrollLeft/Top so coords are in the (scrollable) canvas content space.
       setOffset({
-        x: e.clientX - rect.left - (item.pos_x || 0),
-        y: e.clientY - rect.top  - (item.pos_y || 0),
+        x: e.clientX - rect.left + canvasRef.current.scrollLeft - (item.pos_x || 0),
+        y: e.clientY - rect.top  + canvasRef.current.scrollTop  - (item.pos_y || 0),
       });
     }
   };
@@ -142,8 +143,8 @@ export default function TablePlanSection() {
   const handleMouseMove = (e) => {
     if (!draggingRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = Math.max(0, e.clientX - rect.left - offset.x);
-    const y = Math.max(0, e.clientY - rect.top  - offset.y);
+    const x = Math.max(0, e.clientX - rect.left + canvasRef.current.scrollLeft - offset.x);
+    const y = Math.max(0, e.clientY - rect.top  + canvasRef.current.scrollTop  - offset.y);
     if (draggingRef.current.type === 'table') {
       setTables(prev => prev.map(t => t.id === draggingRef.current.id ? { ...t, pos_x: x, pos_y: y } : t));
     } else {
@@ -295,6 +296,12 @@ export default function TablePlanSection() {
   const selectedWall  = selected?.type === 'wall'  ? walls.find(w => w.id === selected.id)  : null;
   const groups        = getAllGroups(combos, tables.map(t => t.id));
 
+  // Canvas content size — the floor can be wider/taller than the visible box,
+  // so size an inner area to the furthest table/wall and let the canvas scroll
+  // (otherwise tables on the right/bottom get cut off).
+  const contentW = Math.max(1100, ...[...tables, ...walls].map(e => (e.pos_x || 0) + (e.width || 80)), 0) + 80;
+  const contentH = Math.max(560,  ...[...tables, ...walls].map(e => (e.pos_y || 0) + (e.height || 80)), 0) + 80;
+
   function groupCap(ids) {
     return ids.reduce((s, id) => s + (tables.find(t => t.id === id)?.capacity || 0), 0);
   }
@@ -398,15 +405,17 @@ export default function TablePlanSection() {
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
           style={{
-            flex: 1, height: 600,
+            flex: 1, height: 640, minWidth: 0,
             background: '#f0ede8', borderRadius: 16, position: 'relative',
             border: `2px solid ${mode === 'link' ? 'var(--brand-accent,#C9A84C)' : '#ddd'}`,
             cursor: mode === 'link' ? 'crosshair' : dragging ? 'grabbing' : 'default',
             backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)',
-            backgroundSize: '30px 30px', overflow: 'hidden',
+            backgroundSize: '30px 30px', overflow: 'auto',
           }}
         >
-          <svg style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1 }}>
+          {/* SVG sized to the full floor so link lines + the scroll area cover
+              every table (a sized absolute child extends the scrollable width). */}
+          <svg style={{ position: 'absolute', top: 0, left: 0, width: contentW, height: contentH, pointerEvents: 'none', zIndex: 1 }}>
             {combos.map(c => {
               const a = tableCenter(c.table_id_a);
               const b = tableCenter(c.table_id_b);

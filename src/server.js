@@ -2357,7 +2357,12 @@ app.get('/api/tables/status', async (req, res) => {
       }
       // Existing per-table colour map so we don't double-up.
       const have = new Map(result.map(r => [r.table_id, r]));
-      for (const seedRow of result) {
+      // Snapshot the REAL occupied tables up front. We push pulled-in partner
+      // rows into `result` below, and iterating `result` directly would then
+      // re-seed those partners (same covers) and cascade until the WHOLE chain
+      // was taken — the "takes all linked tables" bug. Only genuine orders seed.
+      const seeds = result.slice();
+      for (const seedRow of seeds) {
         const primaryCap = capacityById[seedRow.table_id] || 0;
         const orderCovers = Number(seedRow.covers) || 0;
         // Single table is big enough → don't drag any linked table along.

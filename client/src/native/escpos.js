@@ -149,7 +149,10 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
     ops.push({ op: 'row', l: 'Type', r: typeLabel });
     if (order.customer_name) ops.push({ op: 'row', l: 'Customer', r: order.customer_name });
   } else {
-    ops.push({ op: 'row', l: 'Table', r: String((order && (order.table_number ?? order.table_id)) ?? '-') });
+    // Table number BIG + bold + centred so it's obvious at a glance.
+    ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' },
+             { op: 'text', v: `TABLE ${(order && (order.table_number ?? order.table_id)) ?? '-'}` },
+             { op: 'size', v: 'r' }, { op: 'bold', v: false }, { op: 'align', v: 0 });
     ops.push({ op: 'row', l: 'Covers', r: String((order && order.covers) || '-') });
   }
   ops.push({ op: 'row', l: 'Date', r: date }, { op: 'row', l: 'Time', r: time });
@@ -157,9 +160,18 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
   // Bold from here down (items + totals) so the receipt body prints thick.
   ops.push({ op: 'rule' }, { op: 'bold', v: true });
 
-  // Flat item list (no course headers) — matches the network receipt.
+  // Flat item list (no course headers). Merge identical order-items (same dish +
+  // options + price, no discount) into one "N x" line — separate sends of the
+  // same item must not print as multiple 1x rows.
   const active = (items || []).filter(i => !i.voided);
+  const aggMap = new Map(), aggList = [];
   for (const it of active) {
+    if (Number(it.discount_value) > 0) { aggList.push({ ...it, quantity: Number(it.quantity) || 0 }); continue; }
+    const key = [it.menu_item_id, it.name || it.item_name, it.notes || '', it.item_note || '', it.unit_price].join('|');
+    if (aggMap.has(key)) aggMap.get(key).quantity += (Number(it.quantity) || 0);
+    else { const e = { ...it, quantity: Number(it.quantity) || 0 }; aggMap.set(key, e); aggList.push(e); }
+  }
+  for (const it of aggList) {
     const itemTotal = (it.quantity || 0) * (it.unit_price || 0);
     let price = itemTotal;
     if (it.discount_type === 'percent') price = itemTotal * (1 - (it.discount_value || 0) / 100);

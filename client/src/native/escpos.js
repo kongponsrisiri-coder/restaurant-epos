@@ -42,7 +42,8 @@ function headerOps(ops, order, title) {
 }
 
 function kitchenItemOps(ops, it, bilingual = true) {
-  ops.push({ op: 'size', v: 'b' }, { op: 'text', v: `${it.quantity || 1} x ${it.name || it.item_name || ''}` }, { op: 'size', v: 'n' });
+  // Item name in bold (emphasis) so the chef gets a thick, easy-to-read line.
+  ops.push({ op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: `${it.quantity || 1} x ${it.name || it.item_name || ''}` }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
   // Second-language line only when the kitchen runs bilingual tickets.
   // kitchen_language='en' → English only (matches the HTML/server path).
   if (bilingual && it.name_alt)  ops.push({ op: 'size', v: 't' }, { op: 'text', v: '  ' + it.name_alt }, { op: 'size', v: 'n' });
@@ -126,7 +127,14 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
   ops.push({ op: 'align', v: 0 }, { op: 'rule' });
 
   if (order && order.order_type && order.order_type !== 'dine_in') {
-    ops.push({ op: 'row', l: 'Type', r: order.order_type === 'counter' ? 'Counter' : 'Online Order' });
+    // A walk-in takeaway rung up at the till sits on a takeaway "table", so it
+    // carries a table_number — show "Takeaway N" (not "Online Order", which is
+    // for website orders that have no table).
+    const typeLabel = order.order_type === 'counter' ? 'Counter'
+      : (order.order_type === 'takeaway' && order.table_number != null && order.table_number !== '')
+        ? `Takeaway ${order.table_number}`
+        : 'Online Order';
+    ops.push({ op: 'row', l: 'Type', r: typeLabel });
     if (order.customer_name) ops.push({ op: 'row', l: 'Customer', r: order.customer_name });
   } else {
     ops.push({ op: 'row', l: 'Table', r: String((order && (order.table_number ?? order.table_id)) ?? '-') });

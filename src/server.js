@@ -2346,30 +2346,37 @@ app.get('/api/tables/status', async (req, res) => {
       ]);
       const capacityById = {};
       for (const t of tablesRes.rows) capacityById[t.id] = Number(t.capacity) || 0;
-      // Union-find to compute connected components.
-      const parent = {};
-      const find = (x) => parent[x] == null ? x : (parent[x] = find(parent[x]));
-      const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; };
-      for (const c of combosRes.rows) union(c.table_id_a, c.table_id_b);
-      // Group → component members.
-      const members = {};
-      const allIds = new Set();
-      for (const c of combosRes.rows) { allIds.add(c.table_id_a); allIds.add(c.table_id_b); }
-      for (const id of allIds) (members[find(id)] ||= []).push(id);
+      // Adjacency list from the combos (undirected).
+      const adj = {};
+      for (const c of combosRes.rows) {
+        (adj[c.table_id_a] ||= []).push(c.table_id_b);
+        (adj[c.table_id_b] ||= []).push(c.table_id_a);
+      }
       // Existing per-table colour map so we don't double-up.
       const have = new Map(result.map(r => [r.table_id, r]));
       for (const seedRow of result) {
         const primaryCap = capacityById[seedRow.table_id] || 0;
         const orderCovers = Number(seedRow.covers) || 0;
-        // Single-table sitting → don't drag the rest of the group along.
+        // Single table is big enough → don't drag any linked table along.
         if (orderCovers <= primaryCap) continue;
-        const root = find(seedRow.table_id);
-        const groupMembers = members[root];
-        if (!groupMembers) continue;
-        for (const mId of groupMembers) {
-          if (have.has(mId)) continue;
-          have.set(mId, { ...seedRow, id: null, table_id: mId, linked_from: seedRow.table_id });
-          result.push(have.get(mId));
+        // Pull in adjacent linked tables ONLY until the party's covers are
+        // met — NOT the whole linked chain. e.g. a party of 4 on a 2-seat
+        // table takes 2 tables (2+2), leaving the rest of the group free for
+        // other walk-ins. BFS out from the seat so the tables taken are
+        // physically adjacent, and stop as soon as we have enough seats.
+        let cumCap = primaryCap;
+        const visited = new Set([seedRow.table_id]);
+        const queue = [...(adj[seedRow.table_id] || [])];
+        while (queue.length && cumCap < orderCovers) {
+          const mId = queue.shift();
+          if (visited.has(mId)) continue;
+          visited.add(mId);
+          cumCap += capacityById[mId] || 0;
+          if (!have.has(mId)) {
+            have.set(mId, { ...seedRow, id: null, table_id: mId, linked_from: seedRow.table_id });
+            result.push(have.get(mId));
+          }
+          for (const n of (adj[mId] || [])) if (!visited.has(n)) queue.push(n);
         }
       }
     } catch (err) {

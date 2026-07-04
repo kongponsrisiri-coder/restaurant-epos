@@ -6,7 +6,7 @@ import {
   deleteModifierGroup, deleteModifier,
   getModifierLibrary, createLibraryGroup, attachGroupToItem, detachGroupFromItem,
   getSubcategories, addSubcategory, deleteSubcategory, updateCategory, deleteCategory,
-  updateCategoryBar, updateCategorySortOrder, updateSubcategorySortOrder,
+  updateCategoryBar, updateCategorySortOrder, updateSubcategorySortOrder, updateMenuItemsSortOrder,
   addCategory, updateCategoryDefaultCourse,
   assertOk,
 } from '../../api';
@@ -312,8 +312,12 @@ export default function MenuSection() {
   }
   function handleDragEnd() { setDragIndex(null); setDragOverIndex(null); }
   async function saveSortOrder(items) {
-    try { await fetch(`${SERVER_URL}/api/menu/items/sort-order`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: items.map((item, index) => ({ id: item.id, sort_order: index })) }) }); }
-    catch (err) { console.error('Failed to save sort order:', err); }
+    // Use the api.js helper (native-safe) — a raw fetch from the Sunmi WebView
+    // silently fails, so the drag reorder never persisted and reverted on reload.
+    try {
+      const res = await updateMenuItemsSortOrder(items.map((item, index) => ({ id: item.id, sort_order: index })));
+      if (res && res.error) console.error('Failed to save sort order:', res.error);
+    } catch (err) { console.error('Failed to save sort order:', err); }
   }
 
   const activeCatSubs = subcategories.filter(s => s.category_id === activeCategory);

@@ -585,8 +585,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
       return sum + p - d;
     }, 0);
   const subtotal = existingItemsTotal + cartTotal;
-  const discountAmount = order?.discount_value > 0
-    ? order.discount_type === 'percent' ? subtotal * (order.discount_value / 100) : order.discount_value
+  // order.discount_value comes back from the server as a STRING (PG DECIMAL),
+  // so coerce — otherwise the fixed-discount branch returned a string and
+  // discountAmount.toFixed() crashed the screen ("ct.toFixed is not a function").
+  const discountAmount = Number(order?.discount_value) > 0
+    ? order.discount_type === 'percent' ? subtotal * (Number(order.discount_value) / 100) : (parseFloat(order.discount_value) || 0)
     : 0;
   const afterDiscount = Math.max(0, subtotal - discountAmount);
   // Mirror BillScreen's logic exactly (single source of truth for the rate).

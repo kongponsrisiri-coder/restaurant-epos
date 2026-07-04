@@ -52,9 +52,12 @@ function kitchenItemOps(ops, it, bilingual = true) {
   ops.push({ op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: `${it.quantity || 1} x ${it.name || it.item_name || ''}` }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
   // Second-language line only when the kitchen runs bilingual tickets.
   // kitchen_language='en' → English only (matches the HTML/server path).
-  if (bilingual && it.name_alt)  ops.push({ op: 'size', v: 't' }, { op: 'text', v: '  ' + it.name_alt }, { op: 'size', v: 'n' });
-  if (it.item_note) ops.push({ op: 'bold', v: true }, { op: 'size', v: 't' }, { op: 'text', v: '  ** ' + it.item_note + ' **' }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
-  if (it.notes)     ops.push({ op: 'size', v: 't' }, { op: 'text', v: '  ' + it.notes }, { op: 'size', v: 'n' });
+  // Option/modifier, 2nd-language, and special-request lines print at the SAME
+  // size as the item name ('b') so the chef reads them just as easily (matches
+  // the network-printer ticket; Korakot's request).
+  if (bilingual && it.name_alt)  ops.push({ op: 'size', v: 'b' }, { op: 'text', v: '  ' + it.name_alt }, { op: 'size', v: 'n' });
+  if (it.item_note) ops.push({ op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: '  ** ' + it.item_note + ' **' }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
+  if (it.notes)     ops.push({ op: 'size', v: 'b' }, { op: 'text', v: '  ' + it.notes }, { op: 'size', v: 'n' });
 }
 
 // ── Kitchen / bar / fire-notice layout → ops ──────────────────────────────────

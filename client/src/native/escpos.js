@@ -10,13 +10,13 @@
 // n=normal · t=tall · b=big · h=huge (table number).
 
 const WIDTH = 32;                 // network printer: 32 chars per 80mm line (Font A)
-const SUNMI_BILL_WIDTH = 46;      // Sunmi bill at the small 'r' font: ~46 chars per 80mm
+const SUNMI_BILL_WIDTH = 36;      // Sunmi bill at the 'r' font (30px): ~37 chars per 80mm (bumped bigger per operator feedback)
 const SUNMI_KITCHEN_WIDTH = 26;   // Sunmi kitchen at the big 'n' font: ~28 chars fit — 26 stays clear of wrapping (a full 32 wraps to a stray '----')
 const COURSE = { 1: 'STARTERS', 2: 'MAINS', 3: 'DESSERTS', 4: 'EXTRAS' };
 // Sunmi printText font sizes. KITCHEN uses the big ones (n/t/b/h). The BILL uses
 // 'r' (compact receipt font) and fills the width via more columns, not a bigger
 // font — at 40 the bill wrapped and looked oversized.
-const SUNMI_SIZE = { r: 24, n: 40, t: 48, b: 54, h: 74 };
+const SUNMI_SIZE = { r: 30, n: 40, t: 48, b: 54, h: 74 };  // 'r' bumped 24→30 for a bigger, more legible receipt
 const BYTE_SIZE  = { r: 0x00, n: 0x00, t: 0x01, b: 0x11, h: 0x22 };
 
 function money(n) { return '£' + (parseFloat(n || 0)).toFixed(2); }
@@ -148,7 +148,8 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
   }
   ops.push({ op: 'row', l: 'Date', r: date }, { op: 'row', l: 'Time', r: time });
   if (order && order.id != null) ops.push({ op: 'row', l: 'Order #', r: String(order.id) });
-  ops.push({ op: 'rule' });
+  // Bold from here down (items + totals) so the receipt body prints thick.
+  ops.push({ op: 'rule' }, { op: 'bold', v: true });
 
   // Flat item list (no course headers) — matches the network receipt.
   const active = (items || []).filter(i => !i.voided);

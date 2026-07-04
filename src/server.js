@@ -852,10 +852,18 @@ app.post('/api/orders/:id/items', requireValidLicense, async (req, res) => {
     // BUG-001 — adding items to a non-existent order used to throw a
     // raw FK violation → 500. Check the order exists first and return
     // a clean 404.
-    const orderCheck = await client.query('SELECT id FROM orders WHERE id = $1', [orderId]);
+    const orderCheck = await client.query('SELECT id, status FROM orders WHERE id = $1', [orderId]);
     if (orderCheck.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Order not found' });
+    }
+    // Never add items to an already-closed/cancelled order — that created the
+    // "closed order with items but no payment" phantom (inflates the sales
+    // report, never appears in Bills). The floor should open a fresh order.
+    const st = orderCheck.rows[0].status;
+    if (st === 'closed' || st === 'cancelled') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'This order is already closed — start a new order for the table.' });
     }
     const firedBarIds = []; // SEPOS-032: bar items deplete stock on add
     const queuedItems = [];  // SEPOS-PRO-002: paired with local row id for cloud_id mapping
@@ -2188,7 +2196,7 @@ app.get('/api/reports/daily', async (req, res) => {
     // payments.amount (the money actually taken, including 12.5%
     // service charge). Mirror the summary pattern so the two reports
     // agree to the penny.
-    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date = $1::date ORDER BY orders.closed_at DESC`, [date]);
+    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date = $1::date AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') ORDER BY orders.closed_at DESC`, [date]);
     const total = result.rows.reduce((sum, r) => sum + Number(r.paid_amount ?? r.total ?? 0), 0);
     // Dedupe order_count by orders.id — LEFT JOIN payments multiplies rows
     // on split-pay orders.
@@ -2204,7 +2212,7 @@ app.get('/api/reports/summary', async (req, res) => {
       // Korakot 2026-06-02: pull payments.amount as paid_amount so the
       // Reports tab can show what was actually collected (incl. service
       // charge) instead of the bare subtotal.
-      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date ORDER BY orders.closed_at DESC`, [from, to]),
+      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') ORDER BY orders.closed_at DESC`, [from, to]),
       // Korakot 2026-06-02: food vs drink split based on categories.is_bar.
       // Per-item discounts applied. Service charge + bill-level discounts
       // are handled separately above.
@@ -2376,7 +2384,10 @@ app.put('/api/orders/:id/merge', async (req, res) => {
     await pool.query('UPDATE order_items SET order_id=$1 WHERE order_id=$2', [targetOrderId, merge_order_id]);
     const mergeRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [merge_order_id]);
     if (mergeRes.rows[0]) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [mergeRes.rows[0].table_id]);
-    await pool.query(`UPDATE orders SET status='closed', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [merge_order_id]);
+    // Zero the merged (source) order's total — its items moved to the target,
+    // so leaving the old total made it a "closed, no payment" phantom that
+    // inflated the sales report. total=0 keeps it out of the figures.
+    await pool.query(`UPDATE orders SET status='closed', closed_at=NOW(), total=0, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [merge_order_id]);
     const totalRes = await pool.query(`SELECT ${ORDER_TOTAL_EXPR} as total FROM order_items WHERE order_id=$1 AND voided=0`, [targetOrderId]); // SEPOS-047c — keep per-item discounts
     await pool.query('UPDATE orders SET total=$1 WHERE id=$2', [totalRes.rows[0].total || 0, targetOrderId]);
     io.emit('table_merged', { target_order_id: targetOrderId, merged_order_id: merge_order_id });

@@ -32,8 +32,14 @@ function headerOps(ops, order, title) {
   ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: title }, { op: 'size', v: 'n' });
   let label;
   const t = order && order.order_type;
-  if (t && t !== 'dine_in') label = t === 'counter' ? 'COUNTER' : 'ONLINE ORDER';
-  else label = 'TABLE ' + ((order && (order.table_number ?? order.table_id)) ?? '');
+  if (t && t !== 'dine_in') {
+    // A walk-in takeaway rung up at the till sits on a takeaway table → show
+    // "TAKEAWAY N" so the kitchen knows which collection number it is.
+    // "ONLINE ORDER" is only for website orders that have no table.
+    label = t === 'counter' ? 'COUNTER'
+      : (t === 'takeaway' && order.table_number != null && order.table_number !== '') ? `TAKEAWAY ${order.table_number}`
+      : 'ONLINE ORDER';
+  } else label = 'TABLE ' + ((order && (order.table_number ?? order.table_id)) ?? '');
   ops.push({ op: 'size', v: 'h' }, { op: 'text', v: label }, { op: 'size', v: 'n' }, { op: 'bold', v: false }); // big table no.
   if (order && order.id != null) ops.push({ op: 'text', v: 'Order #' + order.id });
   // 'krule' = a rule sized per printer (kitchen font is big, so the Sunmi needs a

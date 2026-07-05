@@ -26,6 +26,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const [mixInput,  setMixInput]            = useState('');
   // SEPOS-VOUCHER-SPLIT-001 — voucher as one tender inside a mixed payment.
   const [mixVoucherCode, setMixVoucherCode] = useState('');
+  const [mixVoucherAmt,  setMixVoucherAmt]  = useState('');
   const [mixVoucherErr,  setMixVoucherErr]  = useState('');
   const [mixVoucherBusy, setMixVoucherBusy] = useState(false);
   const [splitItemCount, setSplitItemCount] = useState(2);
@@ -307,38 +308,49 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const addMixVoucher = async (remaining) => {
     if (mixVoucherBusy) return;
     const code = (mixVoucherCode || '').trim().toUpperCase();
-    if (!code) { setMixVoucherErr('Enter a voucher code'); return; }
+    if (!code) { setMixVoucherErr('Enter a voucher code or reference'); return; }
     if (splitTenders.some(t => t.method === 'Voucher')) { setMixVoucherErr('One voucher per bill'); return; }
     if (remaining <= 0) { setMixVoucherErr('Bill already settled'); return; }
+    const enteredAmt = Math.min(parseFloat(mixVoucherAmt) || 0, remaining);
     setMixVoucherBusy(true); setMixVoucherErr('');
     try {
-      const v = await getVoucher(code);
-      if (v.error)               { setMixVoucherErr(v.error); return; }
-      if (v.status !== 'active')  { setMixVoucherErr(`Voucher is ${v.status}`); return; }
-      const bal = Number(v.balance);
-      if (!(bal > 0))            { setMixVoucherErr('Voucher has no balance left'); return; }
-      const useAmount = Math.min(bal, remaining);
-      const r = await redeemVoucher(code, useAmount, orderId, null);
-      if (r && r.error)          { setMixVoucherErr(r.error); return; }
-      const deducted = Number(r.amount_used ?? useAmount);
-      setSplitTenders(prev => [...prev, { amount: deducted, method: 'Voucher', voucher_code: code }]);
-      setMixVoucherCode('');
-    } catch (e) { setMixVoucherErr(e.message || 'Could not redeem voucher'); }
+      // Best-effort lookup. A match against OUR voucher DB → redeem for real
+      // (balance tracked). No match → BYPASS: the venue sold vouchers on their
+      // previous system that aren't in our DB, so accept it as a tender for the
+      // amount the operator enters, keeping their code as a reference. Nothing
+      // to redeem, so nothing to restore later.
+      let v = null;
+      try { v = await getVoucher(code); } catch { v = null; }
+      const matched = v && !v.error && v.status === 'active' && Number(v.balance) > 0;
+      if (matched) {
+        const cap = enteredAmt > 0 ? enteredAmt : remaining;   // operator may cap how much to use
+        const useAmount = Math.min(Number(v.balance), cap, remaining);
+        const r = await redeemVoucher(code, useAmount, orderId, null);
+        if (r && r.error) { setMixVoucherErr(r.error); return; }
+        const deducted = Number(r.amount_used ?? useAmount);
+        setSplitTenders(prev => [...prev, { amount: deducted, method: 'Voucher', voucher_code: code, external: false }]);
+      } else {
+        if (!(enteredAmt > 0)) { setMixVoucherErr('Enter the voucher amount'); return; }
+        setSplitTenders(prev => [...prev, { amount: enteredAmt, method: 'Voucher', voucher_code: code, external: true }]);
+      }
+      setMixVoucherCode(''); setMixVoucherAmt('');
+    } catch (e) { setMixVoucherErr(e.message || 'Could not add voucher'); }
     finally     { setMixVoucherBusy(false); }
   };
 
-  // Remove a tender from the mix; if it's the voucher, restore its balance.
+  // Remove a tender from the mix; restore balance ONLY for a real redeemed
+  // voucher (external/bypass vouchers had no redemption to undo).
   const removeMixTender = async (i) => {
     const t = splitTenders[i];
-    if (t && t.method === 'Voucher') { try { await removeVoucherFromBill(orderId); } catch {} }
+    if (t && t.method === 'Voucher' && !t.external) { try { await removeVoucherFromBill(orderId); } catch {} }
     setSplitTenders(prev => prev.filter((_, idx) => idx !== i));
   };
 
-  // Leave the mixed flow — restore a redeemed voucher so an abandoned split
-  // never eats voucher balance.
+  // Leave the mixed flow — restore a real redeemed voucher so an abandoned
+  // split never eats voucher balance (external/bypass vouchers need no undo).
   const cancelMix = async () => {
-    if (splitTenders.some(t => t.method === 'Voucher')) { try { await removeVoucherFromBill(orderId); } catch {} }
-    setSplitTenders([]); setMixVoucherCode(''); setMixVoucherErr('');
+    if (splitTenders.some(t => t.method === 'Voucher' && !t.external)) { try { await removeVoucherFromBill(orderId); } catch {} }
+    setSplitTenders([]); setMixVoucherCode(''); setMixVoucherAmt(''); setMixVoucherErr('');
     setStage('bill');
   };
 
@@ -771,11 +783,15 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                     {mixMethod === 'Voucher' ? (
                       <>
                         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                          <input value={mixVoucherCode} onChange={e => { setMixVoucherCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder="Voucher code" style={{ flex: 1, height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase' }} />
+                          <input value={mixVoucherCode} onChange={e => { setMixVoucherCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder="Voucher code / reference" style={{ flex: 2, height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase' }} />
+                          <div style={{ position: 'relative', flex: 1 }}>
+                            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
+                            <input type="number" step="0.01" value={mixVoucherAmt} onChange={e => { setMixVoucherAmt(e.target.value); setMixVoucherErr(''); }} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                          </div>
                         </div>
                         {mixVoucherErr && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{mixVoucherErr}</div>}
-                        <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>Uses the voucher's balance up to the remaining £{mixRemaining.toFixed(2)}.</div>
-                        <button onClick={() => addMixVoucher(mixRemaining)} disabled={mixVoucherBusy || !mixVoucherCode.trim()} style={{ width: '100%', height: 52, borderRadius: 12, border: 'none', cursor: mixVoucherBusy || !mixVoucherCode.trim() ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 16, background: mixVoucherBusy || !mixVoucherCode.trim() ? '#eee' : 'var(--brand-accent,#C9A84C)', color: mixVoucherBusy || !mixVoucherCode.trim() ? '#aaa' : '#fff', marginBottom: 12 }}>{mixVoucherBusy ? 'Redeeming…' : '🎁 Redeem voucher'}</button>
+                        <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>Our vouchers redeem against their balance. A code we don't recognise (e.g. sold on your old system) is accepted for the amount you enter, with the code kept as a reference.</div>
+                        <button onClick={() => addMixVoucher(mixRemaining)} disabled={mixVoucherBusy || !mixVoucherCode.trim()} style={{ width: '100%', height: 52, borderRadius: 12, border: 'none', cursor: mixVoucherBusy || !mixVoucherCode.trim() ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 16, background: mixVoucherBusy || !mixVoucherCode.trim() ? '#eee' : 'var(--brand-accent,#C9A84C)', color: mixVoucherBusy || !mixVoucherCode.trim() ? '#aaa' : '#fff', marginBottom: 12 }}>{mixVoucherBusy ? 'Adding…' : '🎁 Add voucher'}</button>
                       </>
                     ) : (
                       <>

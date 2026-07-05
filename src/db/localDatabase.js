@@ -718,6 +718,10 @@ function seedDefaults() {
   db.prepare(`
     INSERT INTO settings (key, value) VALUES (?, ?)
     ON CONFLICT (key) DO NOTHING
+  `).run('vat_mode', 'inclusive');
+  db.prepare(`
+    INSERT INTO settings (key, value) VALUES (?, ?)
+    ON CONFLICT (key) DO NOTHING
   `).run('restaurant_name', 'SiamEPOS');
 
   db.prepare(`

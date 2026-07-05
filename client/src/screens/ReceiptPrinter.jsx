@@ -188,15 +188,19 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
   const scRow        = serviceCharge  > 0 ? `<tr><td>Service charge (${scRate}%)</td><td style="text-align:right;">${fmt(serviceCharge)}</td></tr>` : '';
   const tipRow       = tip            > 0 ? `<tr><td>Gratuity</td><td style="text-align:right;">${fmt(tip)}</td></tr>` : '';
 
-  // SEPOS-021 — VAT breakdown. Prices VAT-inclusive: net = gross × 100/(100+rate).
+  // SEPOS-021 / SEPOS-VATMODE-001 — VAT breakdown. vat_mode='inclusive' backs
+  // VAT out of the price; 'exclusive' adds rate% on top of the net sale.
+  const vatMode = settings.vat_mode === 'exclusive' ? 'exclusive' : 'inclusive';
   const vatBuckets = {};
   for (const i of activeItems) {
     const rate = Number(i.vat_rate ?? 20);
     let g = (i.quantity || 0) * (i.unit_price || 0);
     if (i.discount_type === 'percent') g *= 1 - ((i.discount_value || 0) / 100);
     if (i.discount_type === 'fixed')   g = Math.max(0, g - (i.discount_value || 0));
-    const net = rate > 0 ? g * (100 / (100 + rate)) : g;
-    const vat = g - net;
+    let net, vat;
+    if (rate <= 0)                    { net = g; vat = 0; }
+    else if (vatMode === 'exclusive') { net = g; vat = g * (rate / 100); }
+    else                              { net = g * (100 / (100 + rate)); vat = g - net; }
     if (!vatBuckets[rate]) vatBuckets[rate] = { rate, net: 0, vat: 0 };
     vatBuckets[rate].net += net;
     vatBuckets[rate].vat += vat;

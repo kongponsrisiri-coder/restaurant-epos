@@ -483,6 +483,9 @@ export const closeOrderZero       = async (orderId) => {
 // SEPOS-PAY-AMEND-001 — change payment method on a closed bill (manager PIN)
 export const amendBillMethod      = (orderId, body) => put(`/api/bills/${orderId}/amend-method`, body);
 export const getBillAmendments    = (orderId) => get(`/api/bills/${orderId}/amendments`);
+// SEPOS-BILLEDIT-001 — correct a wrong/duplicate paid amount on a closed bill.
+// body: { payments: [{ id, amount, method, remove }], reason, pin }
+export const editBillPayment      = (orderId, body) => put(`/api/bills/${orderId}/edit-payment`, body);
 export const getSettings = () => get('/api/settings');
 export const updateSettings = (settings) => put('/api/settings', settings);
 // SEPOS-060 phase 2 — desktop offline license lock state + manual re-check

@@ -2039,7 +2039,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             // real error and KEEP the bill open so staff can retry.
             try {
               if (cart.length > 0) assertOk(await addOrderItems(orderId, cart));
-              assertOk(await payOrder(orderId, total, method, tenders));
+              const payRes = await payOrder(orderId, total, method, tenders);
+              // SEPOS-DBLPAY-001 — the server rejects a second payment on an
+              // already-closed bill (409 alreadyPaid). That means the payment
+              // is ALREADY recorded (a double-tap or another device beat us),
+              // so don't error and don't re-charge — just close the bill.
+              if (payRes && payRes.alreadyPaid) { onClose(); return; }
+              assertOk(payRes);
             } catch (e) {
               alert(`⚠️ Payment NOT completed — the bill is still open.\n\n${e.message || 'Please try again.'}`);
               return;

@@ -12,6 +12,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const [selectedMethod, setSelectedMethod] = useState(null);
   const [stage, setStage]                   = useState('bill');
   const [paymentDetails, setPaymentDetails] = useState(null);
+  // SEPOS-DBLPAY-001 — in-flight guard so the "Done — Close" button can't be
+  // double-tapped into two payments (the Thann Thai T1 double-charge).
+  const [paying, setPaying]                 = useState(false);
 
   const [splitCount, setSplitCount]         = useState(2);
   const [splitPaid, setSplitPaid]           = useState([]);
@@ -21,6 +24,10 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   // Mixed payment (part cash / part card on one bill) — reuses splitTenders.
   const [mixMethod, setMixMethod]           = useState('Cash');
   const [mixInput,  setMixInput]            = useState('');
+  // SEPOS-VOUCHER-SPLIT-001 — voucher as one tender inside a mixed payment.
+  const [mixVoucherCode, setMixVoucherCode] = useState('');
+  const [mixVoucherErr,  setMixVoucherErr]  = useState('');
+  const [mixVoucherBusy, setMixVoucherBusy] = useState(false);
   const [splitItemCount, setSplitItemCount] = useState(2);
   const [itemAssignments, setItemAssignments] = useState({});
   const [splitItemPaid, setSplitItemPaid]   = useState([]);
@@ -127,9 +134,11 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     return sum + p - d;
   }, 0);
 
-  // SEPOS-021 — VAT breakdown by rate. UK convention: menu prices are
-  // VAT-inclusive, so net = gross × 100 / (100 + rate). Service charge
-  // and bill-level discount are out of the VAT scope.
+  // SEPOS-021 / SEPOS-VATMODE-001 — VAT breakdown by rate. vat_mode decides:
+  //   'inclusive' (default) — menu prices contain VAT: net = gross × 100/(100+rate)
+  //   'exclusive' — menu prices are net; VAT is rate% ON TOP: vat = net × rate/100
+  // Service charge and bill-level discount are out of the VAT scope either way.
+  const vatMode = settings.vat_mode === 'exclusive' ? 'exclusive' : 'inclusive';
   const vatBuckets = {};
   for (const i of billItems) {
     const rate = Number(i.vat_rate ?? 20);
@@ -137,12 +146,14 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     if (i.discount_value > 0) {
       g -= i.discount_type === 'percent' ? g * (i.discount_value / 100) : Math.min(i.discount_value, g);
     }
-    const net = rate > 0 ? g * (100 / (100 + rate)) : g;
-    const vat = g - net;
+    let net, vat;
+    if (rate <= 0)                    { net = g; vat = 0; }
+    else if (vatMode === 'exclusive') { net = g; vat = g * (rate / 100); }
+    else                              { net = g * (100 / (100 + rate)); vat = g - net; }
     if (!vatBuckets[rate]) vatBuckets[rate] = { rate, net: 0, vat: 0, gross: 0 };
     vatBuckets[rate].net   += net;
     vatBuckets[rate].vat   += vat;
-    vatBuckets[rate].gross += g;
+    vatBuckets[rate].gross += (net + vat);
   }
   const vatBreakdown = Object.values(vatBuckets).sort((a, b) => a.rate - b.rate);
   const vatTotal = vatBreakdown.reduce((s, b) => s + b.vat, 0);
@@ -289,10 +300,61 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     finally     { setVoucherLoading(false); }
   };
 
-  const handleFinish = () => {
-    // SEPOS-062 — pass the per-tender breakdown for splits so each Cash/Card
-    // amount is recorded as its own payment row (correct Z-report reconciliation).
-    onPay(billTotal, paymentDetails?.method, paymentDetails?.amountPaid, paymentDetails?.tip, paymentDetails?.tenders);
+  // SEPOS-VOUCHER-SPLIT-001 — redeem a voucher as ONE tender in the mixed flow.
+  // Bill stays at full total; the voucher covers part, cash/card settle the
+  // rest. Redeems immediately (server decrements balance under a lock), so
+  // removing the tender or backing out restores it. One voucher per split.
+  const addMixVoucher = async (remaining) => {
+    if (mixVoucherBusy) return;
+    const code = (mixVoucherCode || '').trim().toUpperCase();
+    if (!code) { setMixVoucherErr('Enter a voucher code'); return; }
+    if (splitTenders.some(t => t.method === 'Voucher')) { setMixVoucherErr('One voucher per bill'); return; }
+    if (remaining <= 0) { setMixVoucherErr('Bill already settled'); return; }
+    setMixVoucherBusy(true); setMixVoucherErr('');
+    try {
+      const v = await getVoucher(code);
+      if (v.error)               { setMixVoucherErr(v.error); return; }
+      if (v.status !== 'active')  { setMixVoucherErr(`Voucher is ${v.status}`); return; }
+      const bal = Number(v.balance);
+      if (!(bal > 0))            { setMixVoucherErr('Voucher has no balance left'); return; }
+      const useAmount = Math.min(bal, remaining);
+      const r = await redeemVoucher(code, useAmount, orderId, null);
+      if (r && r.error)          { setMixVoucherErr(r.error); return; }
+      const deducted = Number(r.amount_used ?? useAmount);
+      setSplitTenders(prev => [...prev, { amount: deducted, method: 'Voucher', voucher_code: code }]);
+      setMixVoucherCode('');
+    } catch (e) { setMixVoucherErr(e.message || 'Could not redeem voucher'); }
+    finally     { setMixVoucherBusy(false); }
+  };
+
+  // Remove a tender from the mix; if it's the voucher, restore its balance.
+  const removeMixTender = async (i) => {
+    const t = splitTenders[i];
+    if (t && t.method === 'Voucher') { try { await removeVoucherFromBill(orderId); } catch {} }
+    setSplitTenders(prev => prev.filter((_, idx) => idx !== i));
+  };
+
+  // Leave the mixed flow — restore a redeemed voucher so an abandoned split
+  // never eats voucher balance.
+  const cancelMix = async () => {
+    if (splitTenders.some(t => t.method === 'Voucher')) { try { await removeVoucherFromBill(orderId); } catch {} }
+    setSplitTenders([]); setMixVoucherCode(''); setMixVoucherErr('');
+    setStage('bill');
+  };
+
+  const handleFinish = async () => {
+    // SEPOS-DBLPAY-001 — ignore repeat taps while a payment is being recorded.
+    if (paying) return;
+    setPaying(true);
+    try {
+      // SEPOS-062 — pass the per-tender breakdown for splits so each Cash/Card
+      // amount is recorded as its own payment row (correct Z-report reconciliation).
+      await onPay(billTotal, paymentDetails?.method, paymentDetails?.amountPaid, paymentDetails?.tip, paymentDetails?.tenders);
+    } finally {
+      // onPay closes the bill on success; on failure it keeps the bill open,
+      // so re-enable the button to allow a genuine retry.
+      setPaying(false);
+    }
   };
 
   const handleSplitEqualPayment = (index, method = 'Cash') => {
@@ -429,7 +491,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: MUTED, marginBottom: 6 }}><span>Subtotal</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>£{subtotal.toFixed(2)}</span></div>
               {discountAmount > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#2E9E6E', marginBottom: 6 }}><span>Discount</span><span>-£{discountAmount.toFixed(2)}</span></div>}
               {serviceChargeEnabled && !noServiceCharge && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: MUTED, marginBottom: 6 }}><span>Service charge ({parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5)}%)</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>£{serviceCharge.toFixed(2)}</span></div>}
-              {vatTotal > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: FAINT, marginBottom: 6 }}><span>Includes VAT</span><span>£{vatTotal.toFixed(2)}</span></div>}
+              {vatTotal > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: FAINT, marginBottom: 6 }}><span>{vatMode === 'exclusive' ? 'VAT (20%)' : 'Includes VAT'}</span><span>£{vatTotal.toFixed(2)}</span></div>}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: `2px solid ${INK}`, marginTop: 10, paddingTop: 10 }}>
                 <span style={{ fontSize: 15, fontWeight: 700, color: INK }}>Total due</span>
                 <span style={{ fontSize: 34, fontWeight: 800, color: INK, fontVariantNumeric: 'tabular-nums' }}>£{billTotal.toFixed(2)}</span>
@@ -650,7 +712,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
               )}
               <div style={{ display:'flex', flexDirection:'column', gap:12, maxWidth:340, margin:'0 auto' }}>
                 <button onClick={handlePrintReceipt} style={{ padding:'16px 24px', borderRadius:12, border:'2px solid var(--brand-primary, #1a1a2e)', background:'white', color:'var(--brand-primary, #1a1a2e)', fontSize:16, fontWeight:700, cursor:'pointer' }}>🖨️ Print Receipt</button>
-                <button onClick={handleFinish} style={{ padding:'18px 24px', borderRadius:12, border:'none', background:'var(--brand-primary, #1a1a2e)', color:'white', fontSize:17, fontWeight:800, cursor:'pointer' }}>✓ Done — Close</button>
+                <button onClick={handleFinish} disabled={paying} style={{ padding:'18px 24px', borderRadius:12, border:'none', background: paying ? '#9ca3af' : 'var(--brand-primary, #1a1a2e)', color:'white', fontSize:17, fontWeight:800, cursor: paying ? 'not-allowed' : 'pointer' }}>{paying ? 'Processing…' : '✓ Done — Close'}</button>
               </div>
               <p style={{ fontSize:11, color:'#bbb', marginTop:20 }}>Printer not shown? Set your thermal printer as the default printer in your browser settings.</p>
             </div>
@@ -680,35 +742,60 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   <div style={{ marginBottom: 16 }}>
                     {splitTenders.map((t, i) => (
                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderRadius: 10, background: '#f0fdf4', border: '1px solid #bbf7d0', marginBottom: 6 }}>
-                        <span style={{ fontWeight: 700, color: 'var(--brand-primary,#0D1B3E)' }}>{t.method === 'Cash' ? '💵' : t.method === 'Card' ? '💳' : '🔄'} {t.method}</span>
+                        <span style={{ fontWeight: 700, color: 'var(--brand-primary,#0D1B3E)' }}>{t.method === 'Cash' ? '💵' : t.method === 'Card' ? '💳' : t.method === 'Voucher' ? '🎁' : '🔄'} {t.method}{t.voucher_code ? ` ${t.voucher_code}` : ''}</span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}><b>£{t.amount.toFixed(2)}</b>
-                          <button onClick={() => setSplitTenders(prev => prev.filter((_, idx) => idx !== i))} style={{ border: 'none', background: '#fee2e2', color: '#ef4444', borderRadius: 6, padding: '4px 9px', cursor: 'pointer', fontWeight: 700 }}>✕</button>
+                          <button onClick={() => removeMixTender(i)} style={{ border: 'none', background: '#fee2e2', color: '#ef4444', borderRadius: 6, padding: '4px 9px', cursor: 'pointer', fontWeight: 700 }}>✕</button>
                         </span>
                       </div>
                     ))}
                   </div>
                 )}
-                {!settled && (
+                {!settled && (() => {
+                  const hasVoucher = splitTenders.some(t => t.method === 'Voucher');
+                  const methods = [
+                    { m: 'Cash',    label: '💵 Cash' },
+                    { m: 'Card',    label: '💳 Card' },
+                    { m: 'Voucher', label: '🎁 Voucher' },
+                    { m: 'Other',   label: '🔄 Other' },
+                  ];
+                  return (
                   <>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                      {['Cash', 'Card', 'Other'].map(m => (
-                        <button key={m} onClick={() => setMixMethod(m)} style={{ flex: 1, height: 46, borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 14, border: mixMethod === m ? 'none' : '1.5px solid #ddd', background: mixMethod === m ? 'var(--brand-primary,#0D1B3E)' : '#fff', color: mixMethod === m ? '#fff' : 'var(--brand-primary,#0D1B3E)' }}>{m === 'Cash' ? '💵 Cash' : m === 'Card' ? '💳 Card' : '🔄 Other'}</button>
-                      ))}
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                      {methods.map(({ m, label }) => {
+                        const disabled = m === 'Voucher' && hasVoucher;   // one voucher per split
+                        return (
+                        <button key={m} disabled={disabled} onClick={() => { setMixMethod(m); setMixVoucherErr(''); }} style={{ flex: '1 1 22%', height: 46, borderRadius: 10, cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 14, border: mixMethod === m ? 'none' : '1.5px solid #ddd', background: disabled ? '#f3f4f6' : mixMethod === m ? 'var(--brand-primary,#0D1B3E)' : '#fff', color: disabled ? '#bbb' : mixMethod === m ? '#fff' : 'var(--brand-primary,#0D1B3E)' }}>{label}</button>
+                        );
+                      })}
                     </div>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                      <div style={{ position: 'relative', flex: 1 }}>
-                        <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555' }}>£</span>
-                        <input type="number" step="0.01" value={mixInput} onChange={e => setMixInput(e.target.value)} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 28px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
-                      </div>
-                      <button onClick={() => setMixInput(mixRemaining.toFixed(2))} style={{ height: 48, padding: '0 16px', borderRadius: 10, border: '1.5px solid #ddd', background: '#fff', cursor: 'pointer', fontWeight: 700 }}>Rest</button>
-                    </div>
-                    <button onClick={() => { if (amtNum <= 0) return; setSplitTenders(prev => [...prev, { amount: amtNum, method: mixMethod }]); setMixInput(''); }} disabled={amtNum <= 0} style={{ width: '100%', height: 52, borderRadius: 12, border: 'none', cursor: amtNum > 0 ? 'pointer' : 'not-allowed', fontWeight: 800, fontSize: 16, background: amtNum > 0 ? 'var(--brand-primary,#0D1B3E)' : '#eee', color: amtNum > 0 ? '#fff' : '#aaa', marginBottom: 12 }}>+ Add {mixMethod} £{amtNum.toFixed(2)}</button>
+                    {mixMethod === 'Voucher' ? (
+                      <>
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                          <input value={mixVoucherCode} onChange={e => { setMixVoucherCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder="Voucher code" style={{ flex: 1, height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase' }} />
+                        </div>
+                        {mixVoucherErr && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{mixVoucherErr}</div>}
+                        <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>Uses the voucher's balance up to the remaining £{mixRemaining.toFixed(2)}.</div>
+                        <button onClick={() => addMixVoucher(mixRemaining)} disabled={mixVoucherBusy || !mixVoucherCode.trim()} style={{ width: '100%', height: 52, borderRadius: 12, border: 'none', cursor: mixVoucherBusy || !mixVoucherCode.trim() ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 16, background: mixVoucherBusy || !mixVoucherCode.trim() ? '#eee' : 'var(--brand-accent,#C9A84C)', color: mixVoucherBusy || !mixVoucherCode.trim() ? '#aaa' : '#fff', marginBottom: 12 }}>{mixVoucherBusy ? 'Redeeming…' : '🎁 Redeem voucher'}</button>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                          <div style={{ position: 'relative', flex: 1 }}>
+                            <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555' }}>£</span>
+                            <input type="number" step="0.01" value={mixInput} onChange={e => setMixInput(e.target.value)} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 28px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                          </div>
+                          <button onClick={() => setMixInput(mixRemaining.toFixed(2))} style={{ height: 48, padding: '0 16px', borderRadius: 10, border: '1.5px solid #ddd', background: '#fff', cursor: 'pointer', fontWeight: 700 }}>Rest</button>
+                        </div>
+                        <button onClick={() => { if (amtNum <= 0) return; setSplitTenders(prev => [...prev, { amount: amtNum, method: mixMethod }]); setMixInput(''); }} disabled={amtNum <= 0} style={{ width: '100%', height: 52, borderRadius: 12, border: 'none', cursor: amtNum > 0 ? 'pointer' : 'not-allowed', fontWeight: 800, fontSize: 16, background: amtNum > 0 ? 'var(--brand-primary,#0D1B3E)' : '#eee', color: amtNum > 0 ? '#fff' : '#aaa', marginBottom: 12 }}>+ Add {mixMethod} £{amtNum.toFixed(2)}</button>
+                      </>
+                    )}
                   </>
-                )}
+                  );
+                })()}
                 {settled && (
                   <button onClick={() => { const paid = splitTenders.reduce((s, t) => s + t.amount, 0); setPaymentDetails({ method: 'Split', amountPaid: paid, tip: 0, change: Math.max(0, paid - billTotal), tenders: splitTenders }); setStage('receipt'); }} style={{ width: '100%', height: 56, borderRadius: 12, border: 'none', background: '#22c55e', color: '#fff', fontWeight: 800, fontSize: 17, cursor: 'pointer', marginBottom: 12 }}>✓ Confirm & Close — £{billTotal.toFixed(2)}</button>
                 )}
-                <button onClick={() => { setSplitTenders([]); setStage('bill'); }} style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>← Back to Bill</button>
+                <button onClick={cancelMix} style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>← Back to Bill</button>
               </div>
             </div>
           );

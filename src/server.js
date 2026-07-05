@@ -86,6 +86,38 @@ function billDiscountFactors(rows) {
   return factor;
 }
 
+// SEPOS-SVCFIX-001 — service charge must be computed PER BILL, not derived from
+// (money-taken − subtotal). The old derivation swept tips / overpayments / a
+// double-charge into "service" (Thann Thai showed £124.18 where the real 10%
+// on dine-in was £46.04). Service applies to DINE-IN only (takeaway + counter
+// never carry it) and honours the per-order no_service_charge opt-out.
+function orderIsDineIn(o) {
+  const t = o.order_type || 'dine_in';
+  return t !== 'takeaway' && t !== 'counter';
+}
+function serviceChargeForOrder(o, scEnabled, scRatePct) {
+  if (!scEnabled) return 0;
+  if (o.no_service_charge) return 0;
+  if (!orderIsDineIn(o)) return 0;
+  return Number(o.total ?? 0) * (Number(scRatePct || 0) / 100);
+}
+
+// SEPOS-VATMODE-001 — VAT is computed one of two ways per restaurant, chosen by
+// the `vat_mode` setting (default 'inclusive' so every existing tenant is
+// unchanged). Service charge is always OUTSIDE the VAT base either way.
+//   'inclusive' — UK convention: menu prices already contain VAT.
+//                 net = gross × 100/(100+rate),  vat = gross − net.
+//   'exclusive' — menu prices are net of VAT; VAT is 20% ON TOP of the sale.
+//                 net = gross,  vat = gross × rate/100.
+function vatLine(gross, rate, mode) {
+  const g = Number(gross || 0);
+  const r = Number(rate || 0);
+  if (r <= 0) return { net: g, vat: 0 };
+  if (mode === 'exclusive') return { net: g, vat: g * (r / 100) };
+  const net = g * (100 / (100 + r));
+  return { net, vat: g - net };
+}
+
 // When the desktop shell sets CLIENT_DIST_PATH (Electron does — pointed at
 // client/dist), serve the React bundle from the local server too. Lets
 // kitchen / bar tablets on the same Wi-Fi load SiamEPOS from this host
@@ -1155,36 +1187,21 @@ app.post('/api/orders/:id/close-zero', async (req, res) => {
 });
 
 app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
-  try {
-    const { amount, method } = req.body;
-    const orderId = req.params.id;
-    // BUG-006 — return 404 if the order does not exist, instead of letting
-    // the INSERT blow up with a FK violation and returning a raw 500.
-    const existing = await pool.query('SELECT id FROM orders WHERE id=$1', [orderId]);
-    if (!existing.rows[0]) return res.status(404).json({ error: 'Order not found' });
-    // SEPOS-047c — explicit cancel of an empty/all-voided order. The
-    // OrderScreen Back button sends amount=0, method='cancelled'; the
-    // BUG-002 positive-amount guard below was rejecting it (400), so the
-    // order stayed 'open' and the table stayed occupied forever. Honour
-    // the cancel here (no payment row), then fall through to the shared
-    // table-freeing logic by marking status='cancelled'.
-    if (String(method).toLowerCase() === 'cancelled' && Number(amount) === 0) {
-      await pool.query(`UPDATE orders SET status='cancelled', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
-      const cRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [orderId]);
-      const cTableId = cRes.rows[0]?.table_id;
-      if (cTableId) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [cTableId]);
-      return res.json({ success: true, cancelled: true });
-    }
-    // SEPOS-062 — split payments. When the bill is settled with more than one
-    // tender (e.g. £50 cash + £50 card), the client sends `payments: [{amount,
-    // method}, …]` and we record ONE payments row per tender with its REAL
-    // method. Previously a split wrote a single row with method 'Split', which
-    // the Z-report buckets into "Other" — so cash-drawer reconciliation was
-    // wrong on any day with split bills. Single-tender stays on {amount,method}.
-    // BUG-002 — reject non-positive / non-numeric amounts (a negative used to
-    // record 200 OK, a way to quietly reduce takings).
-    const tenders = Array.isArray(req.body.payments) && req.body.payments.length ? req.body.payments : null;
-    let paymentRows;
+  const { amount, method } = req.body;
+  const orderId = req.params.id;
+  const isCancel = String(method).toLowerCase() === 'cancelled' && Number(amount) === 0;
+  // SEPOS-062 — split payments. When the bill is settled with more than one
+  // tender (e.g. £50 cash + £50 card), the client sends `payments: [{amount,
+  // method}, …]` and we record ONE payments row per tender with its REAL
+  // method. Previously a split wrote a single row with method 'Split', which
+  // the Z-report buckets into "Other" — so cash-drawer reconciliation was
+  // wrong on any day with split bills. Single-tender stays on {amount,method}.
+  // BUG-002 — reject non-positive / non-numeric amounts (a negative used to
+  // record 200 OK, a way to quietly reduce takings). Validated up front (pure,
+  // no DB) so a bad request fails before we open a transaction.
+  const tenders = Array.isArray(req.body.payments) && req.body.payments.length ? req.body.payments : null;
+  let paymentRows = null;
+  if (!isCancel) {
     if (tenders) {
       paymentRows = [];
       for (const t of tenders) {
@@ -1201,12 +1218,51 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
       }
       paymentRows = [{ amount: amt, method }];
     }
-    for (const p of paymentRows) {
-      await pool.query('INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3)', [orderId, p.amount, p.method]);
+  }
+  // SEPOS-DBLPAY-001 — transactional, row-locked payment. The old flow only
+  // checked the order EXISTED, not that it was still open, so a double-tapped
+  // "Done — Close" button (or a retried request) wrote a SECOND payment row
+  // and closed the order twice → the Thann Thai T1 £78.14 double-charge
+  // (05 Jul 2026). Now we lock the row (FOR UPDATE serialises concurrent
+  // requests on PG; SQLite is single-writer) and gate on status='open': the
+  // first request closes the bill, any later request finds it already closed
+  // and is rejected with 409 — no duplicate payment can ever be recorded.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const ord = await client.query('SELECT id, status, table_id FROM orders WHERE id=$1 FOR UPDATE', [orderId]);
+    const order = ord.rows[0];
+    // BUG-006 — 404 if the order does not exist (was a raw 500 on FK violation).
+    if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Order not found' }); }
+
+    // SEPOS-047c — explicit cancel of an empty/all-voided order. The
+    // OrderScreen Back button sends amount=0, method='cancelled'; honour the
+    // cancel here (no payment row) then free the table below.
+    if (isCancel) {
+      if (order.status !== 'open') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: `This bill is already ${order.status}.`, alreadyClosed: true });
+      }
+      await client.query(`UPDATE orders SET status='cancelled', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
+      await client.query('COMMIT');
+      if (order.table_id) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [order.table_id]);
+      return res.json({ success: true, cancelled: true });
     }
-    await pool.query(`UPDATE orders SET status='closed', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
-    const orderRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [orderId]);
-    const tableId = orderRes.rows[0]?.table_id;
+
+    // Double-charge guard — only an OPEN bill can be paid.
+    if (order.status !== 'open') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'This bill has already been paid.', alreadyPaid: true });
+    }
+
+    for (const p of paymentRows) {
+      await client.query('INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3)', [orderId, p.amount, p.method]);
+    }
+    await client.query(`UPDATE orders SET status='closed', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
+    await client.query('COMMIT');
+
+    // ---- post-commit side effects (the order is now closed) ----
+    const tableId = order.table_id;
     if (tableId) {
       await pool.query("UPDATE tables SET status='available' WHERE id=$1", [tableId]);
       // SEPOS-044 — free linked partner tables ONLY if the order actually
@@ -1264,7 +1320,12 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
     io.emit('order_closed', { order_id: orderId });
     await offlineQueue.enqueue('pay_order', { localOrderId: Number(orderId), amount, method, payments: tenders || undefined });
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch {}
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
 });
 
 app.get('/api/orders/:id/bill', async (req, res) => {
@@ -2208,11 +2269,11 @@ app.get('/api/reports/daily', async (req, res) => {
 app.get('/api/reports/summary', async (req, res) => {
   try {
     const { from, to } = req.query;
-    const [result, foodDrinkRes, voucherSoldRes, voucherRedeemedRes] = await Promise.all([
+    const [result, foodDrinkRes, voucherSoldRes, voucherRedeemedRes, settingsRes] = await Promise.all([
       // Korakot 2026-06-02: pull payments.amount as paid_amount so the
       // Reports tab can show what was actually collected (incl. service
       // charge) instead of the bare subtotal.
-      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') ORDER BY orders.closed_at DESC`, [from, to]),
+      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.no_service_charge, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') ORDER BY orders.closed_at DESC`, [from, to]),
       // Korakot 2026-06-02: food vs drink split based on categories.is_bar.
       // Per-item discounts applied. Service charge + bill-level discounts
       // are handled separately above.
@@ -2236,21 +2297,26 @@ app.get('/api/reports/summary', async (req, res) => {
       // SEPOS-VOUCHER-001 — vouchers sold in the date range, split by method
       pool.query(`SELECT payment_method, COUNT(*)::int AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at::date >= $1::date AND created_at::date <= $2::date GROUP BY payment_method`, [from, to]).catch(() => ({ rows: [] })),
       pool.query(`SELECT COUNT(*)::int AS count, COALESCE(SUM(amount_used), 0) AS total FROM voucher_redemptions WHERE used_at::date >= $1::date AND used_at::date <= $2::date`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
+      pool.query(`SELECT key, value FROM settings WHERE key IN ('service_charge_enabled','service_charge_rate','service_charge_percent')`),
     ]);
     const rows = result.rows;
-    // paid_amount = subtotal + service charge (12.5% of subtotal when
-    // enabled). Falls back to orders.total for any historical row whose
-    // payment row was never written.
+    const cfg = {}; for (const r of (settingsRes?.rows || [])) cfg[r.key] = r.value;
+    const scEnabled = String(cfg.service_charge_enabled ?? 'true') !== '0' && String(cfg.service_charge_enabled ?? 'true') !== 'false';
+    const scRate    = Number(cfg.service_charge_rate ?? cfg.service_charge_percent ?? 12.5) || 0;
     // 2026-06-02 follow-up: LEFT JOIN payments multiplies orders on
-    // split-pay days. Sums that read PER PAYMENT (total_sales, by_method)
+    // split-pay days. Sums that read PER PAYMENT (total_paid, by_method)
     // stay on the flat row set; sums that read PER ORDER
-    // (total_subtotal/covers/count) dedupe by orders.id.
-    const total_sales = rows.reduce((sum, r) => sum + Number(r.paid_amount ?? r.total ?? 0), 0);
+    // (total_subtotal/covers/count/service) dedupe by orders.id.
+    const total_paid = rows.reduce((sum, r) => sum + Number(r.paid_amount ?? r.total ?? 0), 0);
     const byOrder = new Map();
     for (const r of rows) if (!byOrder.has(r.id)) byOrder.set(r.id, r);
     const uniqueOrders = [...byOrder.values()];
     const total_subtotal = uniqueOrders.reduce((sum, r) => sum + Number(r.total ?? 0), 0);
-    const total_service  = Math.max(0, total_sales - total_subtotal);
+    const total_discounts = uniqueOrders.reduce((s, r) => { if (!r.discount_value) return s; return s + (r.discount_type === 'percent' ? (r.total || 0) * (r.discount_value / 100) : r.discount_value); }, 0);
+    // SEPOS-SVCFIX-001 — service charge summed PER BILL (dine-in only × rate),
+    // not money-taken − subtotal. total_sales foots to items − discounts + service.
+    const total_service  = uniqueOrders.reduce((sum, r) => sum + serviceChargeForOrder(r, scEnabled, scRate), 0);
+    const total_sales    = Math.max(0, total_subtotal - total_discounts) + total_service;
     const total_covers   = uniqueOrders.reduce((sum, r) => sum + (r.covers || 0), 0);
     const by_method = {};
     rows.forEach(r => { if (r.method) by_method[r.method] = (by_method[r.method] || 0) + Number(r.paid_amount ?? r.total ?? 0); });
@@ -2278,7 +2344,8 @@ app.get('/api/reports/summary', async (req, res) => {
     }
 
     res.json({
-      orders: rows, total_sales, total_subtotal, total_service,
+      orders: rows, total_sales, total_paid, total_subtotal, total_service, total_discounts,
+      service_charge_rate: scRate, service_charge_enabled: scEnabled,
       total_food, total_drink,
       order_count: byOrder.size, total_covers, by_method,
       vouchers_sold: {
@@ -2707,7 +2774,7 @@ app.get('/api/z-report/preview', async (req, res) => {
       from = sessionMeta.opened_at;
       to   = sessionMeta.closed_at || new Date().toISOString(); // open shift → up to now
     }
-    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, foodDrinkRes, vouchersSoldRes, vouchersRedeemedRes] = await Promise.all([
+    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, foodDrinkRes, vouchersSoldRes, vouchersRedeemedRes, settingsRes] = await Promise.all([
       pool.query(`SELECT orders.*, tables.table_number, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp ORDER BY orders.closed_at DESC`, [from, to]),
       pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='open'`),
       pool.query(`SELECT COUNT(*) as void_count, SUM(order_items.unit_price * order_items.quantity) as void_value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp`, [from, to]),
@@ -2737,12 +2804,21 @@ app.get('/api/z-report/preview', async (req, res) => {
       pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at >= $1::timestamp AND created_at <= $2::timestamp AND payment_method != 'mock'`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
       // SEPOS-VOUCHER-001: vouchers redeemed in the range (off till — already paid for at sale time)
       pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(amount_used), 0) AS total FROM voucher_redemptions WHERE used_at >= $1::timestamp AND used_at <= $2::timestamp`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
+      // Service-charge + VAT settings drive the per-bill service line + VAT mode.
+      pool.query(`SELECT key, value FROM settings WHERE key IN ('service_charge_enabled','service_charge_rate','service_charge_percent','vat_mode')`),
     ]);
     const orders = ordersRes.rows;
     const voids = voidsRes.rows[0];
     const voidsByType = voidsByTypeRes.rows;
+    const cfg = {}; for (const r of (settingsRes?.rows || [])) cfg[r.key] = r.value;
+    const scEnabled = String(cfg.service_charge_enabled ?? 'true') !== '0' && String(cfg.service_charge_enabled ?? 'true') !== 'false';
+    const scRate    = Number(cfg.service_charge_rate ?? cfg.service_charge_percent ?? 12.5) || 0;
+    const vatMode   = cfg.vat_mode === 'exclusive' ? 'exclusive' : 'inclusive';
 
-    // VAT breakdown — same maths as /api/reports/vat
+    // VAT breakdown — SEPOS-VATMODE-001: service charge is OUTSIDE the VAT
+    // base (this loop only sees order_items), and the per-rate net/vat split
+    // follows the restaurant's vat_mode ('exclusive' = VAT 20% on top of the
+    // sale, 'inclusive' = VAT backed out of a VAT-inclusive price).
     const vatBuckets = new Map();
     const vatFactors = billDiscountFactors(vatRowsRes.rows); // SEPOS-047j — bill-level discount
     for (const row of vatRowsRes.rows) {
@@ -2751,32 +2827,33 @@ app.get('/api/z-report/preview', async (req, res) => {
       if (row.discount_type === 'percent') gross *= 1 - (Number(row.discount_value || 0) / 100);
       else if (row.discount_type === 'fixed') gross = Math.max(0, gross - Number(row.discount_value || 0));
       gross *= (vatFactors.get(row.order_id) ?? 1); // distribute the order's bill-level discount
-      const net = rate > 0 ? gross * (100 / (100 + rate)) : gross;
-      const vat = gross - net;
+      const { net, vat } = vatLine(gross, rate, vatMode);
       const b = vatBuckets.get(rate) || { rate, net: 0, vat: 0, gross: 0 };
-      b.net += net; b.vat += vat; b.gross += gross;
+      b.net += net; b.vat += vat; b.gross += (net + vat);
       vatBuckets.set(rate, b);
     }
     const vatBreakdown = [...vatBuckets.values()].sort((a, b) => a.rate - b.rate);
     const vatTotal = vatBreakdown.reduce((a, b) => a + b.vat, 0);
-    // Korakot 2026-06-02: report totals = money actually taken (paid_amount,
-    // which includes 12.5% service charge), with subtotal kept separately so
-    // we can derive the service-charge line shown in the Sales Summary.
-    // 2026-06-02 follow-up: LEFT JOIN payments multiplies rows on split-pay
-    // orders. Per-payment sums (totalSales / Cash / Card / Other) stay on
-    // the flat row set; per-order sums (subtotal / covers / discounts /
-    // count) dedupe by orders.id.
-    const totalSales = orders.reduce((s, o) => s + Number(o.paid_amount ?? o.total ?? 0), 0);
+    // Per-order sums dedupe by orders.id; per-payment sums (paid / Cash / Card /
+    // Other) stay on the flat LEFT JOIN payments row set (split-pay = N rows).
     const byOrder = new Map();
     for (const o of orders) if (!byOrder.has(o.id)) byOrder.set(o.id, o);
     const uniqueOrders = [...byOrder.values()];
     const totalSubtotal  = uniqueOrders.reduce((s, o) => s + Number(o.total ?? 0), 0);
-    const totalService   = Math.max(0, totalSales - totalSubtotal);
+    const totalDiscounts = uniqueOrders.reduce((s, o) => { if (!o.discount_value) return s; return s + (o.discount_type === 'percent' ? (o.total || 0) * (o.discount_value / 100) : o.discount_value); }, 0);
+    // SEPOS-SVCFIX-001 — service charge is the SUM of each dine-in bill's own
+    // charge (subtotal × rate), NOT money-taken − subtotal. Immune to tips,
+    // overpayments and double-charges leaking into the service line.
+    const totalService   = uniqueOrders.reduce((s, o) => s + serviceChargeForOrder(o, scEnabled, scRate), 0);
+    // Sales value = item sales − bill-level discounts + service. This FOOTS to
+    // the Food+Drink+Service breakdown. Money actually taken is total_paid;
+    // any gap between the two (e.g. a double-charge) is now visible, not hidden.
+    const totalSales     = Math.max(0, totalSubtotal - totalDiscounts) + totalService;
+    const totalPaid      = orders.reduce((s, o) => s + Number(o.paid_amount ?? o.total ?? 0), 0);
     const totalCovers    = uniqueOrders.reduce((s, o) => s + (o.covers || 0), 0);
     const totalCash      = orders.filter(o => o.method === 'Cash').reduce((s, o) => s + Number(o.paid_amount ?? o.total ?? 0), 0);
     const totalCard      = orders.filter(o => o.method === 'Card').reduce((s, o) => s + Number(o.paid_amount ?? o.total ?? 0), 0);
     const totalOther     = orders.filter(o => o.method !== 'Cash' && o.method !== 'Card').reduce((s, o) => s + Number(o.paid_amount ?? o.total ?? 0), 0);
-    const totalDiscounts = uniqueOrders.reduce((s, o) => { if (!o.discount_value) return s; return s + (o.discount_type === 'percent' ? (o.total || 0) * (o.discount_value / 100) : o.discount_value); }, 0);
     const totalOrders    = byOrder.size;
     const orderTypeSplit = splitByOrderType(orders);
     let totalFood = 0, totalDrink = 0;
@@ -2786,7 +2863,7 @@ app.get('/api/z-report/preview', async (req, res) => {
     }
     const vouchersSold     = vouchersSoldRes.rows[0]     || { count: 0, total: 0 };
     const vouchersRedeemed = vouchersRedeemedRes.rows[0] || { count: 0, total: 0 };
-    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_subtotal: totalSubtotal, total_service: totalService, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: totalOrders, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: totalOrders > 0 ? totalSales / totalOrders : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0) }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, session: sessionMeta, from, to, ...orderTypeSplit });
+    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_paid: totalPaid, total_subtotal: totalSubtotal, total_service: totalService, service_charge_rate: scRate, service_charge_enabled: scEnabled, vat_mode: vatMode, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: totalOrders, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: totalOrders > 0 ? totalSales / totalOrders : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0) }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, session: sessionMeta, from, to, ...orderTypeSplit });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -3012,15 +3089,53 @@ app.get('/api/z-report/history', async (req, res) => {
 app.get('/api/bills', async (req, res) => {
   try {
     const { from, to, method } = req.query;
-    let query = `SELECT orders.id, orders.total, orders.covers, orders.closed_at, orders.discount_type, orders.discount_value, orders.discount_reason, tables.table_number, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.total > 0 AND payments.method IS NOT NULL AND payments.method != 'cancelled'`;
+    // SEPOS-SPLITBILL-001 — one row per PAYMENT still comes back from the JOIN,
+    // but we GROUP by order so a split-tender bill (e.g. £50 cash + £50 card)
+    // shows as a SINGLE "Split" line carrying a `tenders` array, instead of two
+    // separate rows. The method filter is applied at the ORDER level (keep any
+    // bill that has a matching tender) so a split bill still appears under its
+    // Cash or Card filter. Single-payment bills keep their real method.
+    let query = `SELECT orders.id, orders.total, orders.covers, orders.closed_at, orders.discount_type, orders.discount_value, orders.discount_reason, orders.order_type, orders.no_service_charge, tables.table_number, payments.method, payments.amount as paid_amount, payments.id AS payment_id FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.total > 0 AND payments.method IS NOT NULL AND payments.method != 'cancelled'`;
     const params = [];
     let n = 1;
     if (from) { query += ` AND orders.closed_at::date >= $${n}::date`; params.push(from); n++; }
     if (to) { query += ` AND orders.closed_at::date <= $${n}::date`; params.push(to); n++; }
-    if (method && method !== 'all') { query += ` AND payments.method = $${n}`; params.push(method); n++; }
-    query += ' ORDER BY orders.closed_at DESC';
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    query += ' ORDER BY orders.closed_at DESC, payments.id ASC';
+    const [result, scRes] = await Promise.all([
+      pool.query(query, params),
+      pool.query(`SELECT key, value FROM settings WHERE key IN ('service_charge_enabled','service_charge_rate','service_charge_percent')`),
+    ]);
+    const scCfg = {}; for (const r of scRes.rows) scCfg[r.key] = r.value;
+    const scEnabled = String(scCfg.service_charge_enabled ?? 'true') !== '0' && String(scCfg.service_charge_enabled ?? 'true') !== 'false';
+    const scRate    = Number(scCfg.service_charge_rate ?? scCfg.service_charge_percent ?? 12.5) || 0;
+
+    const byOrder = new Map();
+    for (const r of result.rows) {
+      let b = byOrder.get(r.id);
+      if (!b) {
+        b = { id: r.id, total: r.total, covers: r.covers, closed_at: r.closed_at,
+              discount_type: r.discount_type, discount_value: r.discount_value,
+              discount_reason: r.discount_reason, table_number: r.table_number,
+              order_type: r.order_type, no_service_charge: r.no_service_charge,
+              service_charge_rate: scRate,
+              service_charge: serviceChargeForOrder(r, scEnabled, scRate),
+              tenders: [], paid_amount: 0 };
+        byOrder.set(r.id, b);
+      }
+      b.tenders.push({ id: r.payment_id, method: r.method, amount: Number(r.paid_amount || 0) });
+      b.paid_amount += Number(r.paid_amount || 0);
+    }
+    let bills = [...byOrder.values()].map(b => ({
+      ...b,
+      is_split: b.tenders.length > 1,
+      // Single tender → its real method; multiple → "Split" (details in tenders[]).
+      method: b.tenders.length > 1 ? 'Split' : (b.tenders[0]?.method || ''),
+    }));
+    // Order-level method filter: keep bills that have at least one matching tender.
+    if (method && method !== 'all') {
+      bills = bills.filter(b => b.tenders.some(t => t.method === method));
+    }
+    res.json(bills);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -3119,6 +3234,102 @@ app.put('/api/bills/:id/amend-method', async (req, res) => {
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch {}
     console.error('[amend-method]', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// SEPOS-BILLEDIT-001 — closed-bill payment editor. Corrects a wrong/duplicate
+// PAID amount on a closed bill (e.g. the Thann Thai T1 double £78.14). Operates
+// on the EXISTING payment rows: edits amounts in place, and "remove" marks a
+// row cancelled (reports exclude cancelled) rather than DELETE — a delete would
+// cascade-wipe the payment_amendments audit trail. PIN-gated to admin/manager
+// (money edit — stricter than the method amend). NOTE: this fixes the SYSTEM
+// record only; refunding a genuine card double-charge is done on the terminal.
+app.put('/api/bills/:id/edit-payment', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const orderId = parseInt(req.params.id, 10);
+    if (!orderId) return res.status(400).json({ error: 'invalid order id' });
+    const { payments: edits, reason, pin } = req.body || {};
+    if (!Array.isArray(edits) || edits.length === 0) return res.status(400).json({ error: 'payments[] required' });
+    if (!pin) return res.status(400).json({ error: 'Manager PIN required' });
+
+    // PIN gate — admin / manager only (editing money on a closed bill is as
+    // sensitive as deleting one; supervisors are excluded, mirroring delete).
+    const staffRes = await client.query(
+      `SELECT id, name, role FROM staff WHERE pin = $1 AND is_active = 1
+         AND LOWER(role) IN ('manager','admin') LIMIT 1`,
+      [String(pin).trim()]
+    );
+    if (staffRes.rows.length === 0) return res.status(403).json({ error: 'Invalid manager PIN (admin or manager only)' });
+    const staff = staffRes.rows[0];
+
+    const allowed = ['Cash', 'Card', 'Other', 'Stripe'];
+
+    await client.query('BEGIN');
+    const ordRes = await client.query('SELECT id, status FROM orders WHERE id = $1', [orderId]);
+    const order = ordRes.rows[0];
+    if (!order)                   { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Order not found' }); }
+    if (order.status !== 'closed'){ await client.query('ROLLBACK'); return res.status(409).json({ error: 'Bill is not closed' }); }
+
+    // Snapshot current non-cancelled payment rows for this order.
+    const curRes = await client.query(
+      `SELECT id, method, amount FROM payments WHERE order_id = $1 AND COALESCE(method,'') != 'cancelled'`,
+      [orderId]
+    );
+    const current = new Map(curRes.rows.map(p => [Number(p.id), p]));
+
+    let changed = 0;
+    for (const e of edits) {
+      const pid = Number(e.id);
+      const row = current.get(pid);
+      if (!row) { await client.query('ROLLBACK'); return res.status(400).json({ error: `Payment ${e.id} is not on this bill` }); }
+      if (String(row.method).toLowerCase() === 'voucher') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Voucher payments cannot be edited — void the voucher redemption instead' });
+      }
+      const oldAmt = Number(row.amount || 0), oldMethod = row.method;
+      const remove = !!e.remove;
+      let newAmt = remove ? 0 : Number(e.amount);
+      let newMethod = remove ? 'cancelled' : (e.method || oldMethod);
+      if (!remove) {
+        if (!Number.isFinite(newAmt) || newAmt <= 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Each amount must be a positive number' }); }
+        if (!allowed.includes(newMethod)) { await client.query('ROLLBACK'); return res.status(400).json({ error: `method must be one of ${allowed.join(', ')}` }); }
+      }
+      // Skip no-ops.
+      if (!remove && newMethod === oldMethod && Math.abs(newAmt - oldAmt) < 0.005) continue;
+
+      // Audit BEFORE mutating (survives because we never DELETE the row).
+      const note = remove
+        ? `Removed payment: £${oldAmt.toFixed(2)} ${oldMethod}`
+        : `Payment corrected: £${oldAmt.toFixed(2)} ${oldMethod} → £${newAmt.toFixed(2)} ${newMethod}`;
+      await client.query(
+        `INSERT INTO payment_amendments (payment_id, order_id, from_method, to_method, reason, amended_by)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [pid, orderId, oldMethod, newMethod, [reason, note].filter(Boolean).join(' — '), staff.id]
+      );
+      await client.query(
+        `UPDATE payments SET amount = $1, method = $2, amended_at = CURRENT_TIMESTAMP,
+             amended_by = $3, amend_reason = $4, amended_from = COALESCE(amended_from, $5)
+         WHERE id = $6`,
+        [newAmt, newMethod, staff.id, [reason, note].filter(Boolean).join(' — '), oldMethod, pid]
+      );
+      changed++;
+    }
+
+    if (changed === 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'No changes to apply' }); }
+    await client.query('COMMIT');
+    io.emit('payment_amended', { order_id: orderId, by: staff.name });
+    const after = await pool.query(
+      `SELECT id, method, amount FROM payments WHERE order_id = $1 AND COALESCE(method,'') != 'cancelled' ORDER BY id ASC`,
+      [orderId]
+    );
+    res.json({ ok: true, order_id: orderId, changed, tenders: after.rows, amended_by: staff.name });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch {}
+    console.error('[edit-payment]', err);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
@@ -6550,11 +6761,11 @@ app.get('/api/reports/wastage', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// SEPOS-021 — VAT report (date range)
-// Treats prices as VAT-inclusive (UK hospitality convention). For each
-// closed order_item in the window, group by vat_rate and compute net /
-// vat / gross from the item's quantity * unit_price (post any per-item
-// discount). Service charge + bill-level discounts are out of scope.
+// SEPOS-021 / SEPOS-VATMODE-001 — VAT report (date range)
+// vat_mode='inclusive' (default): prices contain VAT, net = gross ÷ (1+rate).
+// vat_mode='exclusive': prices are net, VAT is rate% ON TOP (Thann Thai).
+// For each closed order_item in the window, group by vat_rate. Service charge
+// + bill-level discounts are out of the VAT base either way.
 // ─────────────────────────────────────────────────────────────────────
 app.get('/api/reports/vat', async (req, res) => {
   try {
@@ -6565,7 +6776,8 @@ app.get('/api/reports/vat', async (req, res) => {
     // line so we can render the breakdown split by category type on the
     // VAT report. Per-item AND bill-level discounts are both applied
     // (SEPOS-047j) so the VAT figure matches money actually taken.
-    const r = await pool.query(`
+    const [r, vatModeRes] = await Promise.all([
+      pool.query(`
       SELECT COALESCE(mi.vat_rate, 20) AS vat_rate,
              COALESCE(c.is_bar, 0) AS is_bar,
              oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value,
@@ -6576,19 +6788,22 @@ app.get('/api/reports/vat', async (req, res) => {
       LEFT JOIN orders      o  ON o.id  = oi.order_id
       WHERE o.status='closed' AND oi.voided=0
         AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
-    `, [fromTs, toTs]);
+    `, [fromTs, toTs]),
+      pool.query(`SELECT value FROM settings WHERE key='vat_mode'`),
+    ]);
+    const vatMode = vatModeRes.rows[0]?.value === 'exclusive' ? 'exclusive' : 'inclusive';
 
     const byRate = new Map();
     const byKind = { food: { net: 0, vat: 0, gross: 0, items: 0 }, drink: { net: 0, vat: 0, gross: 0, items: 0 } };
     const vatFactors = billDiscountFactors(r.rows); // SEPOS-047j — bill-level discount
     for (const row of r.rows) {
       const rate = Number(row.vat_rate ?? 20);
-      let gross = Number(row.quantity || 0) * Number(row.unit_price || 0);
-      if (row.discount_type === 'percent') gross *= 1 - (Number(row.discount_value || 0) / 100);
-      else if (row.discount_type === 'fixed') gross = Math.max(0, gross - Number(row.discount_value || 0));
-      gross *= (vatFactors.get(row.order_id) ?? 1); // distribute the order's bill-level discount
-      const net = rate > 0 ? gross * (100 / (100 + rate)) : gross;
-      const vat = gross - net;
+      let base = Number(row.quantity || 0) * Number(row.unit_price || 0);
+      if (row.discount_type === 'percent') base *= 1 - (Number(row.discount_value || 0) / 100);
+      else if (row.discount_type === 'fixed') base = Math.max(0, base - Number(row.discount_value || 0));
+      base *= (vatFactors.get(row.order_id) ?? 1); // distribute the order's bill-level discount
+      const { net, vat } = vatLine(base, rate, vatMode); // SEPOS-VATMODE-001
+      const gross = net + vat;
       const qty = Number(row.quantity || 0);
       const bucket = byRate.get(rate) || { rate, net: 0, vat: 0, gross: 0, items: 0 };
       bucket.net   += net;
@@ -6608,7 +6823,7 @@ app.get('/api/reports/vat', async (req, res) => {
       (a, b) => ({ net: a.net + b.net, vat: a.vat + b.vat, gross: a.gross + b.gross, items: a.items + b.items }),
       { net: 0, vat: 0, gross: 0, items: 0 }
     );
-    res.json({ from: fromTs, to: toTs, breakdown, total, by_kind: byKind });
+    res.json({ from: fromTs, to: toTs, breakdown, total, by_kind: byKind, vat_mode: vatMode });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

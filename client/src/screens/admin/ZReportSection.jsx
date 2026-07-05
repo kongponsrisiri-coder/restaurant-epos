@@ -358,7 +358,7 @@ export default function ZReportSection() {
                 <span style={{ fontWeight: 700 }}>£{Number(reportData.total_drink || 0).toFixed(2)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0f0f0', fontSize: 14, color: 'var(--brand-primary,#0D1B3E)' }}>
-                <span style={{ fontWeight: 600 }}>Service charge (12.5%)</span>
+                <span style={{ fontWeight: 600 }}>Service charge ({Number(reportData.service_charge_rate ?? 12.5)}%)</span>
                 <span style={{ fontWeight: 800 }}>£{Number(reportData.total_service || 0).toFixed(2)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0', fontSize: 20, fontWeight: 800, color: '#e94560' }}><span>TOTAL SALES</span><span>£{Number(reportData.total_sales || 0).toFixed(2)}</span></div>
@@ -382,10 +382,9 @@ export default function ZReportSection() {
                 <div key={s.label} style={{ background: '#f8f8f8', borderRadius: 10, padding: 12, textAlign: 'center' }}><div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div><div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{s.label}</div></div>
               ))}
             </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <div style={{ flex: 1, background: '#f0fdf4', borderRadius: 10, padding: 12, border: '1px solid #bbf7d0' }}><div style={{ fontSize: 11, color: '#888' }}>Discounts Given</div><div style={{ fontSize: 18, fontWeight: 800, color: '#22c55e' }}>£{Number(reportData.total_discounts || 0).toFixed(2)}</div></div>
-              <div style={{ flex: 1, background: '#fff0f3', borderRadius: 10, padding: 12, border: '1px solid #fecdd3' }}><div style={{ fontSize: 11, color: '#888' }}>Void Items</div><div style={{ fontSize: 18, fontWeight: 800, color: '#e94560' }}>{reportData.void_count || 0} items</div></div>
-            </div>
+            {Number(reportData.total_discounts) > 0 && (
+              <div style={{ background: '#f0fdf4', borderRadius: 10, padding: 12, border: '1px solid #bbf7d0' }}><div style={{ fontSize: 11, color: '#888' }}>Discounts Given</div><div style={{ fontSize: 18, fontWeight: 800, color: '#22c55e' }}>£{Number(reportData.total_discounts || 0).toFixed(2)}</div></div>
+            )}
 
             {/* SEPOS-VOUCHER-001 — gift voucher activity (off till — settled to Stripe at sale time) */}
             {(reportData.vouchers_sold?.count > 0 || reportData.vouchers_redeemed?.count > 0) && (
@@ -410,7 +409,7 @@ export default function ZReportSection() {
             {Array.isArray(reportData.vat_breakdown) && reportData.vat_breakdown.length > 0 && (
               <div style={{ marginTop: 12, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#1e40af', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  VAT breakdown
+                  VAT {reportData.vat_mode === 'exclusive' ? '(20% on top)' : '(included in price)'}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {reportData.vat_breakdown.map(b => (
@@ -427,26 +426,6 @@ export default function ZReportSection() {
               </div>
             )}
 
-            {/* SEPOS-023 — voids by type */}
-            {Array.isArray(reportData.voids_by_type) && reportData.voids_by_type.length > 0 && (
-              <div style={{ marginTop: 12, background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 10, padding: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#9a3412', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Void breakdown
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {reportData.voids_by_type.map(v => (
-                    <div key={v.void_type} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
-                      <span style={{ color: '#555' }}>
-                        {v.void_type === 'Comp' ? '🎁 ' : ''}{v.void_type}
-                      </span>
-                      <span style={{ color: '#9a3412', fontWeight: 700 }}>
-                        {v.count} · £{Number(v.value || 0).toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={() => setStep(3)} style={{ flex: 2, padding: '16px', borderRadius: 12, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontSize: 16, fontWeight: 800, cursor: 'pointer' }}>Next — Till Reconciliation →</button>
@@ -547,10 +526,11 @@ function buildZReportBody(r, type, settings, cash, thermal) {
     <table>
       <tr><td>💵 Cash</td><td class="right">${fmt(r.total_cash)}</td></tr>
       <tr><td>💳 Card</td><td class="right">${fmt(r.total_card)}</td></tr>
-      <tr><td>🔄 Other</td><td class="right">${fmt(r.total_other)}</td></tr>
+      ${Number(r.total_other) > 0 ? `<tr><td>🔄 Other</td><td class="right">${fmt(r.total_other)}</td></tr>` : ''}
       <tr><td>🍽️ Food</td><td class="right">${fmt(r.total_food)}</td></tr>
       <tr><td>🍺 Drink</td><td class="right">${fmt(r.total_drink)}</td></tr>
-      <tr><td>Service charge (12.5%)</td><td class="right">${fmt(r.total_service)}</td></tr>
+      <tr><td>Service charge (${Number(r.service_charge_rate ?? 12.5)}%)</td><td class="right">${fmt(r.total_service)}</td></tr>
+      ${Number(r.total_discounts) > 0 ? `<tr><td>Discounts</td><td class="right">-${fmt(r.total_discounts)}</td></tr>` : ''}
       <tr class="total-row"><td>TOTAL SALES</td><td class="right">${fmt(total)}</td></tr>
     </table>`;
 
@@ -566,23 +546,15 @@ function buildZReportBody(r, type, settings, cash, thermal) {
     <table>
       <tr><td>Orders</td><td class="right">${fmtInt(r.total_orders)}</td></tr>
       <tr><td>Covers</td><td class="right">${fmtInt(r.total_covers)}</td></tr>
-      <tr><td>Avg per cover</td><td class="right">${fmt(r.avg_per_cover)}</td></tr>
-      <tr><td>Discounts</td><td class="right">${fmt(r.total_discounts)}</td></tr>
-      <tr><td>Void items</td><td class="right">${fmtInt(r.void_count)} · ${fmt(r.void_value)}</td></tr>
     </table>`;
 
+  const vatOnTop = r.vat_mode === 'exclusive';
   const vat = (Array.isArray(r.vat_breakdown) && r.vat_breakdown.length) ? `
-    ${thermal ? '<hr class="divider"/><div class="section-head">VAT Breakdown</div>' : '<h2>VAT Breakdown</h2>'}
+    ${thermal ? `<hr class="divider"/><div class="section-head">VAT ${vatOnTop ? '(on top)' : '(included)'}</div>` : `<h2>VAT ${vatOnTop ? '(on top)' : '(included)'}</h2>`}
     <table>
       <tr><td>Rate</td><td class="right">Net</td><td class="right">VAT</td></tr>
       ${r.vat_breakdown.map(b => `<tr><td>${b.rate}%</td><td class="right">${fmt(b.net)}</td><td class="right">${fmt(b.vat)}</td></tr>`).join('')}
       <tr class="total-row"><td colspan="2">Total VAT</td><td class="right">${fmt(r.vat_total)}</td></tr>
-    </table>` : '';
-
-  const voids = (Array.isArray(r.voids_by_type) && r.voids_by_type.length) ? `
-    ${thermal ? '<hr class="divider"/><div class="section-head">Voids by Type</div>' : '<h2>Voids by Type</h2>'}
-    <table>
-      ${r.voids_by_type.map(v => `<tr><td>${v.void_type}</td><td class="right">${fmtInt(v.count)}</td><td class="right">${fmt(v.value)}</td></tr>`).join('')}
     </table>` : '';
 
   const recon = `
@@ -603,7 +575,7 @@ function buildZReportBody(r, type, settings, cash, thermal) {
       <tr class="total-row"><td>${cash.cardDifference === 0 ? '✅ Exact match' : cash.cardDifference > 0 ? '📈 Over' : '📉 Short'}</td><td class="right">${fmt(Math.abs(cash.cardDifference || 0))}</td></tr>
     </table>`;
 
-  return head + summary + channels + stats + vat + voids + recon + cardRecon;
+  return head + summary + channels + stats + vat + recon + cardRecon;
 }
 
 // ── ESC/POS line builder ──────────────────────────────────────────
@@ -614,15 +586,20 @@ function buildZReportLines(r, type, settings, cash) {
   if (r.from) lines.push({ kind: 'small', text: `${r.from} -> ${r.to}` });
   lines.push({ kind: 'small', text: nowStamp() });
   lines.push({ kind: 'div' });
+  // SEPOS-ZSIMPLE-001 — trimmed to the essentials (Korakot 2026-07-05):
+  // payments, food/drink + service, dine-in/takeaway, VAT (informational),
+  // orders/covers, then cash + card reconciliation. Voids + avg-per-cover
+  // dropped from the Z (still available in Reports / Bills).
   lines.push({ kind: 'h2', text: 'PAYMENTS' });
   lines.push({ kind: 'row', left: 'Cash',                    right: fmt(r.total_cash) });
   lines.push({ kind: 'row', left: 'Card',                    right: fmt(r.total_card) });
-  lines.push({ kind: 'row', left: 'Other',                   right: fmt(r.total_other) });
+  if (Number(r.total_other) > 0) lines.push({ kind: 'row', left: 'Other', right: fmt(r.total_other) });
   lines.push({ kind: 'div' });
   lines.push({ kind: 'h2', text: 'SALES' });
   lines.push({ kind: 'row', left: 'Food',                    right: fmt(r.total_food) });
   lines.push({ kind: 'row', left: 'Drink',                   right: fmt(r.total_drink) });
-  lines.push({ kind: 'row', left: 'Service charge (12.5%)',  right: fmt(r.total_service) });
+  lines.push({ kind: 'row', left: `Service charge (${Number(r.service_charge_rate ?? 12.5)}%)`,  right: fmt(r.total_service) });
+  if (Number(r.total_discounts) > 0) lines.push({ kind: 'row', left: 'Discounts', right: `-${fmt(r.total_discounts)}` });
   lines.push({ kind: 'total', left: 'TOTAL SALES',           right: fmt(r.total_sales) });
 
   lines.push({ kind: 'div' });
@@ -632,25 +609,15 @@ function buildZReportLines(r, type, settings, cash) {
   lines.push({ kind: 'div' });
   lines.push({ kind: 'row', left: 'Orders',         right: fmtInt(r.total_orders) });
   lines.push({ kind: 'row', left: 'Covers',         right: fmtInt(r.total_covers) });
-  lines.push({ kind: 'row', left: 'Avg per cover',  right: fmt(r.avg_per_cover) });
-  lines.push({ kind: 'row', left: 'Discounts',      right: fmt(r.total_discounts) });
-  lines.push({ kind: 'row', left: 'Void items',     right: `${fmtInt(r.void_count)}  ${fmt(r.void_value)}` });
 
   if (Array.isArray(r.vat_breakdown) && r.vat_breakdown.length) {
     lines.push({ kind: 'div' });
-    lines.push({ kind: 'h2', text: 'VAT BREAKDOWN' });
+    const onTop = r.vat_mode === 'exclusive';
+    lines.push({ kind: 'h2', text: onTop ? 'VAT (ON TOP)' : 'VAT (INCLUDED)' });
     for (const b of r.vat_breakdown) {
       lines.push({ kind: 'row', left: `${b.rate}%  net ${fmt(b.net)}`, right: fmt(b.vat) });
     }
     lines.push({ kind: 'total', left: 'Total VAT', right: fmt(r.vat_total) });
-  }
-
-  if (Array.isArray(r.voids_by_type) && r.voids_by_type.length) {
-    lines.push({ kind: 'div' });
-    lines.push({ kind: 'h2', text: 'VOIDS BY TYPE' });
-    for (const v of r.voids_by_type) {
-      lines.push({ kind: 'row', left: `${v.void_type}  x${fmtInt(v.count)}`, right: fmt(v.value) });
-    }
   }
 
   lines.push({ kind: 'div-solid' });

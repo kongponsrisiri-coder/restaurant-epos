@@ -273,7 +273,8 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
       order.customer_name ? [col2('Customer', order.customer_name), lf()] : [],
       order.pickup_time   ? [col2('Pickup', new Date(order.pickup_time).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/London' })), lf()] : [],
     ] : [
-      col2('Table',  String(order.table_number || '—')), lf(),
+      // Table number BIG + bold + centred so it's obvious at a glance.
+      CMD.ALIGN_CENTER, CMD.BOLD_ON, CMD.SIZE_BIG, txt(`TABLE ${order.table_number || '—'}`), CMD.SIZE_NORMAL, CMD.BOLD_OFF, CMD.ALIGN_LEFT, lf(),
       col2('Covers', String(order.covers       || '—')), lf(),
     ]),
     col2('Date',    date),  lf(),

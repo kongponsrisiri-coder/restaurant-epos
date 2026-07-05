@@ -1264,6 +1264,19 @@ export default function SettingsSection() {
         <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Standard UK rate is 12.5%. This is optional and always shown separately on the bill.</div>
       </div>
 
+      {/* ── VAT treatment (SEPOS-VATMODE-001) ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🧾 VAT</h2>
+        <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+          <label style={{ fontSize:14, fontWeight:600, color:'#555' }}>How your menu prices are set</label>
+          <select value={settings.vat_mode || 'inclusive'} onChange={e => setSettings({...settings, vat_mode:e.target.value})} style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}>
+            <option value="inclusive">Prices include VAT (net = price ÷ 1.2)</option>
+            <option value="exclusive">Prices exclude VAT — add 20% on top (VAT = price × 20%)</option>
+          </select>
+        </div>
+        <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Affects the VAT breakdown on bills, receipts, the VAT report and the Z report. Service charge is never VATed. Per-item VAT rate is set on each menu item.</div>
+      </div>
+
       {/* ── Delivery (SEPOS-DELIVERY-002) ── */}
       <div style={cardStyle}>
         <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🚗 Online Delivery</h2>

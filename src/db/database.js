@@ -316,6 +316,7 @@ async function initDB() {
       INSERT INTO settings (key, value) VALUES
         ('service_charge_enabled', 'true'),
         ('service_charge_rate', '12.5'),
+        ('vat_mode', 'inclusive'),
         ('restaurant_name', 'SiamEPOS')
       ON CONFLICT (key) DO NOTHING
     `);

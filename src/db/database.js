@@ -317,6 +317,7 @@ async function initDB() {
         ('service_charge_enabled', 'true'),
         ('service_charge_rate', '12.5'),
         ('vat_mode', 'inclusive'),
+        ('deposits_enabled', '0'),
         ('restaurant_name', 'SiamEPOS')
       ON CONFLICT (key) DO NOTHING
     `);
@@ -676,11 +677,21 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
         voided_by TEXT,
         voided_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        restaurant_id VARCHAR(100) DEFAULT 'siamepos'
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos',
+        type VARCHAR(20) DEFAULT 'gift',
+        reservation_id INTEGER,
+        take_date DATE
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_vouchers_code        ON vouchers (code)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_vouchers_restaurant  ON vouchers (restaurant_id)`);
+    // SEPOS-DEPOSIT-001 — booking deposits live in the vouchers table as a typed
+    // row (type='deposit', DEP- code, linked to a reservation). Additive columns;
+    // type defaults to 'gift' so every existing voucher + flow is unchanged.
+    await pool.query(`ALTER TABLE vouchers ADD COLUMN IF NOT EXISTS type VARCHAR(20) DEFAULT 'gift'`);
+    await pool.query(`ALTER TABLE vouchers ADD COLUMN IF NOT EXISTS reservation_id INTEGER`);
+    await pool.query(`ALTER TABLE vouchers ADD COLUMN IF NOT EXISTS take_date DATE`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_vouchers_type ON vouchers (type)`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS voucher_redemptions (

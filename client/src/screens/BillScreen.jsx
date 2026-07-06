@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getBill, markBillPrinted, getVoucher, redeemVoucher, applyDiscount, removeVoucherFromBill, assertOk } from '../api';
+import { getBill, markBillPrinted, getVoucher, redeemVoucher, applyDiscount, removeVoucherFromBill, getOrderDeposit, assertOk } from '../api';
 import { printReceipt } from './ReceiptPrinter';
 import { orderShortLabelPlain, orderSubLabel, isTakeaway } from '../utils/orderLabel';
 import { confirm } from '../utils/confirm';
@@ -29,6 +29,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const [mixVoucherAmt,  setMixVoucherAmt]  = useState('');
   const [mixVoucherErr,  setMixVoucherErr]  = useState('');
   const [mixVoucherBusy, setMixVoucherBusy] = useState(false);
+  // SEPOS-DEPOSIT-001 — booking deposit as one tender (method 'Deposit').
+  const [mixDepositCode, setMixDepositCode] = useState('');
+  const [orderDeposit,   setOrderDeposit]   = useState(undefined); // undefined=not fetched, null=none, {..}=found
   const [splitItemCount, setSplitItemCount] = useState(2);
   const [itemAssignments, setItemAssignments] = useState({});
   const [splitItemPaid, setSplitItemPaid]   = useState([]);
@@ -238,6 +241,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     try {
       const v = await getVoucher(code);
       if (v.error) { setVoucherErr(v.error); }
+      else if (v.type === 'deposit')    { setVoucherErr('This is a booking deposit — use the Deposit tender, not the voucher discount.'); }
       else if (v.status !== 'active')   { setVoucherErr(`Voucher is ${v.status}`); }
       else if (Number(v.balance) <= 0)  { setVoucherErr('Voucher has no balance left'); }
       else                              { setVoucherDetails(v); }
@@ -338,20 +342,58 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     finally     { setMixVoucherBusy(false); }
   };
 
-  // Remove a tender from the mix; restore balance ONLY for a real redeemed
-  // voucher (external/bypass vouchers had no redemption to undo).
+  // A tender needs its server-side redemption restored when removed if it's a
+  // real redeemed voucher OR a deposit (both decremented a balance). External
+  // bypass vouchers had no redemption to undo.
+  const tenderNeedsRestore = (t) => t && ((t.method === 'Voucher' && !t.external) || t.method === 'Deposit');
+
+  // Remove a tender from the mix; restore balance for real redemptions.
   const removeMixTender = async (i) => {
     const t = splitTenders[i];
-    if (t && t.method === 'Voucher' && !t.external) { try { await removeVoucherFromBill(orderId); } catch {} }
+    if (tenderNeedsRestore(t)) { try { await removeVoucherFromBill(orderId); } catch {} }
     setSplitTenders(prev => prev.filter((_, idx) => idx !== i));
   };
 
-  // Leave the mixed flow — restore a real redeemed voucher so an abandoned
-  // split never eats voucher balance (external/bypass vouchers need no undo).
+  // Leave the mixed flow — restore any real redemption so an abandoned split
+  // never eats voucher/deposit balance.
   const cancelMix = async () => {
-    if (splitTenders.some(t => t.method === 'Voucher' && !t.external)) { try { await removeVoucherFromBill(orderId); } catch {} }
+    if (splitTenders.some(tenderNeedsRestore)) { try { await removeVoucherFromBill(orderId); } catch {} }
     setSplitTenders([]); setMixVoucherCode(''); setMixVoucherAmt(''); setMixVoucherErr('');
+    setMixDepositCode('');
     setStage('bill');
+  };
+
+  // SEPOS-DEPOSIT-001 — redeem a booking DEPOSIT as one tender (method
+  // 'Deposit'). Same tender mechanism as the voucher split, but the code must
+  // be a type='deposit' voucher (a gift code is rejected — use the Voucher
+  // option). Full sale value stays; the deposit reduces the balance owed.
+  const fetchOrderDeposit = async () => {
+    if (orderDeposit !== undefined) return;             // fetch once
+    try { const r = await getOrderDeposit(orderId); setOrderDeposit(r && r.deposit ? r.deposit : null); }
+    catch { setOrderDeposit(null); }
+  };
+  const addMixDeposit = async (remaining) => {
+    if (mixVoucherBusy) return;
+    const code = (mixDepositCode || orderDeposit?.code || '').trim().toUpperCase();
+    if (!code) { setMixVoucherErr('Enter or scan the deposit code'); return; }
+    if (splitTenders.some(t => t.method === 'Deposit')) { setMixVoucherErr('One deposit per bill'); return; }
+    if (remaining <= 0) { setMixVoucherErr('Bill already settled'); return; }
+    setMixVoucherBusy(true); setMixVoucherErr('');
+    try {
+      const v = await getVoucher(code);
+      if (v.error)                 { setMixVoucherErr(v.error); return; }
+      if (v.type !== 'deposit')    { setMixVoucherErr("That's a gift voucher — use the Voucher option"); return; }
+      if (v.status !== 'active')   { setMixVoucherErr(`Deposit is ${v.status}`); return; }
+      const bal = Number(v.balance);
+      if (!(bal > 0))              { setMixVoucherErr('Deposit has no balance left'); return; }
+      const useAmount = Math.min(bal, remaining);
+      const r = await redeemVoucher(code, useAmount, orderId, null);
+      if (r && r.error)            { setMixVoucherErr(r.error); return; }
+      const deducted = Number(r.amount_used ?? useAmount);
+      setSplitTenders(prev => [...prev, { amount: deducted, method: 'Deposit', voucher_code: code, deposit: true }]);
+      setMixDepositCode('');
+    } catch (e) { setMixVoucherErr(e.message || 'Could not apply deposit'); }
+    finally     { setMixVoucherBusy(false); }
   };
 
   const handleFinish = async () => {
@@ -754,7 +796,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   <div style={{ marginBottom: 16 }}>
                     {splitTenders.map((t, i) => (
                       <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderRadius: 10, background: '#f0fdf4', border: '1px solid #bbf7d0', marginBottom: 6 }}>
-                        <span style={{ fontWeight: 700, color: 'var(--brand-primary,#0D1B3E)' }}>{t.method === 'Cash' ? '💵' : t.method === 'Card' ? '💳' : t.method === 'Voucher' ? '🎁' : '🔄'} {t.method}{t.voucher_code ? ` ${t.voucher_code}` : ''}</span>
+                        <span style={{ fontWeight: 700, color: 'var(--brand-primary,#0D1B3E)' }}>{t.method === 'Cash' ? '💵' : t.method === 'Card' ? '💳' : t.method === 'Voucher' ? '🎁' : t.method === 'Deposit' ? '🧾' : '🔄'} {t.method}{t.voucher_code ? ` ${t.voucher_code}` : ''}</span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}><b>£{t.amount.toFixed(2)}</b>
                           <button onClick={() => removeMixTender(i)} style={{ border: 'none', background: '#fee2e2', color: '#ef4444', borderRadius: 6, padding: '4px 9px', cursor: 'pointer', fontWeight: 700 }}>✕</button>
                         </span>
@@ -764,23 +806,38 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 )}
                 {!settled && (() => {
                   const hasVoucher = splitTenders.some(t => t.method === 'Voucher');
+                  const hasDeposit = splitTenders.some(t => t.method === 'Deposit');
+                  const depositsOn = settings.deposits_enabled === '1';
                   const methods = [
                     { m: 'Cash',    label: '💵 Cash' },
                     { m: 'Card',    label: '💳 Card' },
                     { m: 'Voucher', label: '🎁 Voucher' },
+                    ...(depositsOn ? [{ m: 'Deposit', label: '🧾 Deposit' }] : []),
                     { m: 'Other',   label: '🔄 Other' },
                   ];
                   return (
                   <>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
                       {methods.map(({ m, label }) => {
-                        const disabled = m === 'Voucher' && hasVoucher;   // one voucher per split
+                        const disabled = (m === 'Voucher' && hasVoucher) || (m === 'Deposit' && hasDeposit);
                         return (
-                        <button key={m} disabled={disabled} onClick={() => { setMixMethod(m); setMixVoucherErr(''); }} style={{ flex: '1 1 22%', height: 46, borderRadius: 10, cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 14, border: mixMethod === m ? 'none' : '1.5px solid #ddd', background: disabled ? '#f3f4f6' : mixMethod === m ? 'var(--brand-primary,#0D1B3E)' : '#fff', color: disabled ? '#bbb' : mixMethod === m ? '#fff' : 'var(--brand-primary,#0D1B3E)' }}>{label}</button>
+                        <button key={m} disabled={disabled} onClick={() => { setMixMethod(m); setMixVoucherErr(''); if (m === 'Deposit') fetchOrderDeposit(); }} style={{ flex: '1 1 22%', height: 46, borderRadius: 10, cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 14, border: mixMethod === m ? 'none' : '1.5px solid #ddd', background: disabled ? '#f3f4f6' : mixMethod === m ? 'var(--brand-primary,#0D1B3E)' : '#fff', color: disabled ? '#bbb' : mixMethod === m ? '#fff' : 'var(--brand-primary,#0D1B3E)' }}>{label}</button>
                         );
                       })}
                     </div>
-                    {mixMethod === 'Voucher' ? (
+                    {mixMethod === 'Deposit' ? (
+                      <>
+                        {orderDeposit && (
+                          <div style={{ background: '#eef6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', marginBottom: 8, fontSize: 14, color: '#1e40af' }}>
+                            🧾 Booking deposit found: <b>£{Number(orderDeposit.balance).toFixed(2)}</b> <span style={{ color: '#64748b' }}>({orderDeposit.code})</span>
+                          </div>
+                        )}
+                        <input value={mixDepositCode} onChange={e => { setMixDepositCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder={orderDeposit ? orderDeposit.code : 'Deposit code (DEP-…)'} style={{ width: '100%', height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase', marginBottom: 8 }} />
+                        {mixVoucherErr && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{mixVoucherErr}</div>}
+                        <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>The deposit applies against the balance up to £{mixRemaining.toFixed(2)}. The bill total is unchanged.</div>
+                        <button onClick={() => addMixDeposit(mixRemaining)} disabled={mixVoucherBusy || (!mixDepositCode.trim() && !orderDeposit)} style={{ width: '100%', height: 52, borderRadius: 12, border: 'none', cursor: (mixVoucherBusy || (!mixDepositCode.trim() && !orderDeposit)) ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 16, background: (mixVoucherBusy || (!mixDepositCode.trim() && !orderDeposit)) ? '#eee' : 'var(--brand-primary,#0D1B3E)', color: (mixVoucherBusy || (!mixDepositCode.trim() && !orderDeposit)) ? '#aaa' : '#fff', marginBottom: 12 }}>{mixVoucherBusy ? 'Applying…' : `🧾 Apply deposit${orderDeposit ? ` £${Number(orderDeposit.balance).toFixed(2)}` : ''}`}</button>
+                      </>
+                    ) : mixMethod === 'Voucher' ? (
                       <>
                         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                           <input value={mixVoucherCode} onChange={e => { setMixVoucherCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder="Voucher code / reference" style={{ flex: 2, height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase' }} />

@@ -822,3 +822,7 @@ export const getVoucherDetail   = (id) => get(`/api/vouchers/${id}`);
 export const voidVoucher        = (id, voided_by) => post(`/api/vouchers/${id}/void`, { voided_by });
 export const resendVoucherEmail = (id) => post(`/api/vouchers/${id}/resend-email`, {});
 export const sellVoucher        = (body) => post('/api/vouchers/sell', body);
+
+// ── SEPOS-DEPOSIT-001 — booking deposits (typed vouchers, redeemed as a tender) ──
+export const createDeposit   = (body) => post('/api/deposits', body);
+export const getOrderDeposit = (orderId) => get(`/api/orders/${orderId}/deposit`);

@@ -426,6 +426,40 @@ export default function ZReportSection() {
               </div>
             )}
 
+            {/* SEPOS-DEPOSIT-001 — booking deposits (only when the tenant uses them).
+                Taken today = money in the bank, NOT in today's sales. Redeemed =
+                a non-cash tender applied to bills today (NOT banked cash). Held =
+                outstanding liability. Kept separate from gift vouchers. */}
+            {reportData.deposits_enabled && (
+              (reportData.deposits_taken?.count > 0 || reportData.deposits_redeemed?.count > 0 ||
+               reportData.deposits_forfeited?.count > 0 || reportData.deposits_held?.total > 0) && (
+              <div style={{ marginTop: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#166534', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  🧾 Booking deposits
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#555' }}>Taken today ({reportData.deposits_taken?.count || 0}) <span style={{ color:'#999' }}>· not in today's sales</span></span>
+                    <span style={{ fontWeight: 700 }}>£{Number(reportData.deposits_taken?.total || 0).toFixed(2)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#555' }}>Redeemed today ({reportData.deposits_redeemed?.count || 0}) <span style={{ color:'#999' }}>· non-cash, not banked</span></span>
+                    <span style={{ fontWeight: 700, color: '#166534' }}>£{Number(reportData.deposits_redeemed?.total || 0).toFixed(2)}</span>
+                  </div>
+                  {reportData.deposits_forfeited?.count > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#555' }}>Forfeited / no-show ({reportData.deposits_forfeited?.count || 0}) <span style={{ color:'#999' }}>· income</span></span>
+                      <span style={{ fontWeight: 700, color: '#b45309' }}>£{Number(reportData.deposits_forfeited?.total || 0).toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #bbf7d0', paddingTop: 6, marginTop: 2, fontWeight: 800 }}>
+                    <span>Deposits held (liability)</span>
+                    <span style={{ color: '#166534' }}>£{Number(reportData.deposits_held?.total || 0).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={() => setStep(3)} style={{ flex: 2, padding: '16px', borderRadius: 12, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontSize: 16, fontWeight: 800, cursor: 'pointer' }}>Next — Till Reconciliation →</button>
@@ -557,6 +591,17 @@ function buildZReportBody(r, type, settings, cash, thermal) {
       <tr class="total-row"><td colspan="2">Total VAT</td><td class="right">${fmt(r.vat_total)}</td></tr>
     </table>` : '';
 
+  // SEPOS-DEPOSIT-001 — booking deposits (only when the tenant uses them).
+  const depActive = r.deposits_enabled && (Number(r.deposits_taken?.count) > 0 || Number(r.deposits_redeemed?.count) > 0 || Number(r.deposits_forfeited?.count) > 0 || Number(r.deposits_held?.total) > 0);
+  const deposits = !depActive ? '' : `
+    ${thermal ? '<hr class="divider"/><div class="section-head">Booking Deposits</div>' : '<h2>Booking Deposits</h2>'}
+    <table>
+      <tr><td>Taken today (${r.deposits_taken?.count || 0})</td><td class="right">${fmt(r.deposits_taken?.total)}</td></tr>
+      <tr><td>Redeemed today (${r.deposits_redeemed?.count || 0}) · non-cash</td><td class="right">${fmt(r.deposits_redeemed?.total)}</td></tr>
+      ${Number(r.deposits_forfeited?.count) > 0 ? `<tr><td>Forfeited (${r.deposits_forfeited?.count})</td><td class="right">${fmt(r.deposits_forfeited?.total)}</td></tr>` : ''}
+      <tr class="total-row"><td>Deposits held</td><td class="right">${fmt(r.deposits_held?.total)}</td></tr>
+    </table>`;
+
   const recon = `
     ${thermal ? '<hr class="divider-solid"/><div class="section-head">Cash Reconciliation</div>' : '<h2>Cash Reconciliation</h2>'}
     <table>
@@ -575,7 +620,7 @@ function buildZReportBody(r, type, settings, cash, thermal) {
       <tr class="total-row"><td>${cash.cardDifference === 0 ? '✅ Exact match' : cash.cardDifference > 0 ? '📈 Over' : '📉 Short'}</td><td class="right">${fmt(Math.abs(cash.cardDifference || 0))}</td></tr>
     </table>`;
 
-  return head + summary + channels + stats + vat + recon + cardRecon;
+  return head + summary + channels + stats + vat + deposits + recon + cardRecon;
 }
 
 // ── ESC/POS line builder ──────────────────────────────────────────
@@ -618,6 +663,17 @@ function buildZReportLines(r, type, settings, cash) {
       lines.push({ kind: 'row', left: `${b.rate}%  net ${fmt(b.net)}`, right: fmt(b.vat) });
     }
     lines.push({ kind: 'total', left: 'Total VAT', right: fmt(r.vat_total) });
+  }
+
+  // SEPOS-DEPOSIT-001 — booking deposits (only when used). Redeemed is a non-cash
+  // tender NOT in till cash; taken today is future revenue, not today's sales.
+  if (r.deposits_enabled && (Number(r.deposits_taken?.count) > 0 || Number(r.deposits_redeemed?.count) > 0 || Number(r.deposits_forfeited?.count) > 0 || Number(r.deposits_held?.total) > 0)) {
+    lines.push({ kind: 'div' });
+    lines.push({ kind: 'h2', text: 'BOOKING DEPOSITS' });
+    lines.push({ kind: 'row', left: `Taken today (${r.deposits_taken?.count || 0})`,    right: fmt(r.deposits_taken?.total) });
+    lines.push({ kind: 'row', left: `Redeemed today (${r.deposits_redeemed?.count || 0}) non-cash`, right: fmt(r.deposits_redeemed?.total) });
+    if (Number(r.deposits_forfeited?.count) > 0) lines.push({ kind: 'row', left: `Forfeited (${r.deposits_forfeited?.count})`, right: fmt(r.deposits_forfeited?.total) });
+    lines.push({ kind: 'total', left: 'Deposits held', right: fmt(r.deposits_held?.total) });
   }
 
   lines.push({ kind: 'div-solid' });

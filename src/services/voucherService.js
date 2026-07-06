@@ -31,13 +31,15 @@ const RESTAURANT_SITE    = process.env.RESTAURANT_SITE    || ''; // optional
 const PUBLIC_API_URL_DEFAULT = (process.env.PUBLIC_API_URL || 'https://restaurant-epos-production.up.railway.app').replace(/\/$/, '');
 
 // ── Code generation ───────────────────────────────────────────────
-// 8 chars, no I/O/0/1 ambiguity. Prefix GIFT- so codes are scannable
-// from a printed gift card without typo-prone "is that an O or a 0?".
-function generateCode() {
+// 8 chars, no I/O/0/1 ambiguity. Prefixed so codes are scannable from a
+// printed card without typo-prone "is that an O or a 0?". SEPOS-DEPOSIT-001:
+// gift vouchers stay GIFT-, booking deposits use DEP- so staff + reports can
+// tell them apart at a glance.
+function generateCode(prefix = 'GIFT-') {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let body = '';
   for (let i = 0; i < 8; i++) body += chars[Math.floor(Math.random() * chars.length)];
-  return 'GIFT-' + body;
+  return prefix + body;
 }
 
 // ── Expiry helpers ────────────────────────────────────────────────

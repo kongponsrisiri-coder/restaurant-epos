@@ -1277,6 +1277,16 @@ export default function SettingsSection() {
         <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Affects the VAT breakdown on bills, receipts, the VAT report and the Z report. Service charge is never VATed. Per-item VAT rate is set on each menu item.</div>
       </div>
 
+      {/* ── Booking deposits (SEPOS-DEPOSIT-001) ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🧾 Booking Deposits</h2>
+        <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:14 }}>
+          <input type="checkbox" checked={settings.deposits_enabled==='1'} onChange={e => setSettings({...settings, deposits_enabled:e.target.checked?'1':'0'})} />
+          Enable booking deposits
+        </label>
+        <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Take a deposit against a booking (Admin → Vouchers → Take deposit) and redeem it on the day as a <b>prepaid tender</b> in Mixed Payment — the full bill still records for sales + VAT; the deposit only reduces what's owed. Deposits are reported separately from gift vouchers and never count as till cash. When off, none of the deposit UI shows.</div>
+      </div>
+
       {/* ── Delivery (SEPOS-DELIVERY-002) ── */}
       <div style={cardStyle}>
         <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🚗 Online Delivery</h2>

@@ -2774,7 +2774,7 @@ app.get('/api/z-report/preview', async (req, res) => {
       from = sessionMeta.opened_at;
       to   = sessionMeta.closed_at || new Date().toISOString(); // open shift → up to now
     }
-    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, foodDrinkRes, vouchersSoldRes, vouchersRedeemedRes, settingsRes] = await Promise.all([
+    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, foodDrinkRes, vouchersSoldRes, vouchersRedeemedRes, settingsRes, depTakenRes, depRedeemedRes, depForfeitedRes, depHeldRes] = await Promise.all([
       pool.query(`SELECT orders.*, tables.table_number, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp ORDER BY orders.closed_at DESC`, [from, to]),
       pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='open'`),
       pool.query(`SELECT COUNT(*) as void_count, SUM(order_items.unit_price * order_items.quantity) as void_value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp`, [from, to]),
@@ -2801,11 +2801,20 @@ app.get('/api/z-report/preview', async (req, res) => {
         GROUP BY COALESCE(c.is_bar, 0)
       `, [from, to]),
       // SEPOS-VOUCHER-001: vouchers sold in the range (Stripe — off till)
-      pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at >= $1::timestamp AND created_at <= $2::timestamp AND payment_method != 'mock'`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
-      // SEPOS-VOUCHER-001: vouchers redeemed in the range (off till — already paid for at sale time)
-      pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(amount_used), 0) AS total FROM voucher_redemptions WHERE used_at >= $1::timestamp AND used_at <= $2::timestamp`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
-      // Service-charge + VAT settings drive the per-bill service line + VAT mode.
-      pool.query(`SELECT key, value FROM settings WHERE key IN ('service_charge_enabled','service_charge_rate','service_charge_percent','vat_mode')`),
+      // SEPOS-DEPOSIT-001: GIFT vouchers only (deposits excluded — reported separately below).
+      pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at >= $1::timestamp AND created_at <= $2::timestamp AND payment_method != 'mock' AND COALESCE(type,'gift') != 'deposit'`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
+      // SEPOS-VOUCHER-001: GIFT vouchers redeemed in the range (off till — already paid for at sale time)
+      pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(vr.amount_used), 0) AS total FROM voucher_redemptions vr JOIN vouchers v ON v.id = vr.voucher_id WHERE vr.used_at >= $1::timestamp AND vr.used_at <= $2::timestamp AND COALESCE(v.type,'gift') != 'deposit'`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
+      // Service-charge + VAT + deposits-flag settings.
+      pool.query(`SELECT key, value FROM settings WHERE key IN ('service_charge_enabled','service_charge_rate','service_charge_percent','vat_mode','deposits_enabled')`),
+      // SEPOS-DEPOSIT-001 — deposit flows. Taken today = money in the bank now but
+      // NOT in today's sales (future revenue). Redeemed = the non-cash tender applied
+      // to bills today (excluded from till cash). Forfeited = no-shows kept as income.
+      // Held = current outstanding deposit liability (closing held).
+      pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE type='deposit' AND created_at >= $1::timestamp AND created_at <= $2::timestamp`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
+      pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(vr.amount_used), 0) AS total FROM voucher_redemptions vr JOIN vouchers v ON v.id = vr.voucher_id WHERE v.type='deposit' AND vr.used_at >= $1::timestamp AND vr.used_at <= $2::timestamp`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
+      pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE type='deposit' AND status='forfeited' AND voided_at >= $1::timestamp AND voided_at <= $2::timestamp`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
+      pool.query(`SELECT COALESCE(SUM(balance), 0) AS total, COUNT(*) AS count FROM vouchers WHERE type='deposit' AND status='active' AND balance > 0`).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
     ]);
     const orders = ordersRes.rows;
     const voids = voidsRes.rows[0];
@@ -2814,6 +2823,12 @@ app.get('/api/z-report/preview', async (req, res) => {
     const scEnabled = String(cfg.service_charge_enabled ?? 'true') !== '0' && String(cfg.service_charge_enabled ?? 'true') !== 'false';
     const scRate    = Number(cfg.service_charge_rate ?? cfg.service_charge_percent ?? 12.5) || 0;
     const vatMode   = cfg.vat_mode === 'exclusive' ? 'exclusive' : 'inclusive';
+    // SEPOS-DEPOSIT-001 — deposit flows + liability (0/empty unless the tenant uses them).
+    const depositsEnabled = String(cfg.deposits_enabled ?? '0') === '1';
+    const depTaken     = depTakenRes.rows[0]     || { count: 0, total: 0 };
+    const depRedeemed  = depRedeemedRes.rows[0]  || { count: 0, total: 0 };
+    const depForfeited = depForfeitedRes.rows[0] || { count: 0, total: 0 };
+    const depHeld      = depHeldRes.rows[0]      || { count: 0, total: 0 };
 
     // VAT breakdown — SEPOS-VATMODE-001: service charge is OUTSIDE the VAT
     // base (this loop only sees order_items), and the per-rate net/vat split
@@ -2863,7 +2878,7 @@ app.get('/api/z-report/preview', async (req, res) => {
     }
     const vouchersSold     = vouchersSoldRes.rows[0]     || { count: 0, total: 0 };
     const vouchersRedeemed = vouchersRedeemedRes.rows[0] || { count: 0, total: 0 };
-    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_paid: totalPaid, total_subtotal: totalSubtotal, total_service: totalService, service_charge_rate: scRate, service_charge_enabled: scEnabled, vat_mode: vatMode, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: totalOrders, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: totalOrders > 0 ? totalSales / totalOrders : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0) }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, session: sessionMeta, from, to, ...orderTypeSplit });
+    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_paid: totalPaid, total_subtotal: totalSubtotal, total_service: totalService, service_charge_rate: scRate, service_charge_enabled: scEnabled, vat_mode: vatMode, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: totalOrders, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: totalOrders > 0 ? totalSales / totalOrders : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0) }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, deposits_enabled: depositsEnabled, deposits_taken: { count: Number(depTaken.count || 0), total: Number(depTaken.total || 0) }, deposits_redeemed: { count: Number(depRedeemed.count || 0), total: Number(depRedeemed.total || 0) }, deposits_forfeited: { count: Number(depForfeited.count || 0), total: Number(depForfeited.total || 0) }, deposits_held: { count: Number(depHeld.count || 0), total: Number(depHeld.total || 0) }, session: sessionMeta, from, to, ...orderTypeSplit });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -5631,6 +5646,8 @@ app.get('/api/widget/voucher/:code', widgetCors, async (req, res) => {
       expires_at:      v.expires_at,
       status:          v.status,
       recipient_name:  v.recipient_name,
+      type:            v.type || 'gift',            // SEPOS-DEPOSIT-001 — gift vs deposit
+      reservation_id:  v.reservation_id ?? null,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -5902,6 +5919,96 @@ app.post('/api/vouchers/:id/resend-email', async (req, res) => {
     if (out.ok) await pool.query('UPDATE vouchers SET email_sent_at = NOW() WHERE id = $1', [v.id]);
     res.json(out);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── SEPOS-DEPOSIT-001 — booking deposits (typed vouchers) ──────────
+// A deposit is a PREPAID TENDER: taken now, redeemed on the day against the
+// bill's balance owed (never a discount). Stored as a vouchers row
+// type='deposit' with a DEP- code, linked to a reservation, expiry =
+// reservation date + 7 grace. Redemption reuses /api/vouchers/:code/redeem
+// (the same atomic decrement + voucher_redemptions ledger as gift vouchers);
+// the Bill screen applies it as a 'Deposit' tender. Phase A = manual create
+// (deposit taken by phone / card machine); Stripe capture = Phase B (widget).
+app.post('/api/deposits', async (req, res) => {
+  try {
+    const { amount, payment_method, reservation_id, customer_name, customer_email } = req.body || {};
+    const v = voucherSvc.validateAmount(amount);
+    if (!v.ok) return res.status(400).json({ error: v.error });
+    const method = String(payment_method || 'card').toLowerCase();
+    if (!['cash', 'card', 'mock'].includes(method)) {
+      return res.status(400).json({ error: 'payment_method must be cash, card or mock' });
+    }
+    // Expiry = reservation date + 7 days grace (fallback to default if unlinked).
+    let expires = voucherSvc.defaultExpiryDate();
+    let resId = reservation_id ? Number(reservation_id) : null;
+    if (resId) {
+      const rres = await pool.query('SELECT reservation_date FROM reservations WHERE id = $1', [resId]);
+      const rdate = rres.rows[0]?.reservation_date;
+      if (rdate) {
+        const d = new Date(rdate); d.setDate(d.getDate() + 7);
+        expires = d.toISOString().slice(0, 10);
+      } else {
+        resId = null; // unknown reservation → don't link a phantom id
+      }
+    }
+    let code;
+    for (let i = 0; i < 10; i++) {
+      code = voucherSvc.generateCode('DEP-');
+      const exists = await pool.query('SELECT id FROM vouchers WHERE code = $1', [code]);
+      if (!exists.rows[0]) break;
+    }
+    const rid = resolveRestaurantId(req);
+    const result = await pool.query(
+      `INSERT INTO vouchers
+         (code, original_amount, balance, recipient_name, recipient_email,
+          expires_at, payment_method, restaurant_id, type, reservation_id, take_date)
+       VALUES ($1,$2,$2,$3,$4,$5,$6,$7,'deposit',$8, CURRENT_DATE) RETURNING *`,
+      [code, v.amount, customer_name || null, customer_email || null,
+       expires, method, rid, resId],
+    );
+    const dep = result.rows[0];
+    res.status(201).json({ ...dep, balance: Number(dep.balance), original_amount: Number(dep.original_amount) });
+  } catch (err) {
+    console.error('[deposit] create', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Auto-suggest the active deposit for a bill, matched via the order's booking.
+app.get('/api/orders/:id/deposit', async (req, res) => {
+  try {
+    const ordRes = await pool.query('SELECT reservation_id FROM orders WHERE id = $1', [req.params.id]);
+    const resId = ordRes.rows[0]?.reservation_id;
+    if (!resId) return res.json({ deposit: null });
+    const d = await pool.query(
+      `SELECT code, balance, original_amount, reservation_id FROM vouchers
+        WHERE type='deposit' AND reservation_id=$1 AND status='active' AND balance > 0
+        ORDER BY created_at DESC LIMIT 1`,
+      [resId],
+    );
+    const dep = d.rows[0];
+    res.json({ deposit: dep ? { ...dep, balance: Number(dep.balance), original_amount: Number(dep.original_amount) } : null });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Manual forfeit — a no-show's deposit is kept as income (own report line).
+app.post('/api/deposits/:code/forfeit', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const code = String(req.params.code || '').trim().toUpperCase();
+    await client.query('BEGIN');
+    const r = await client.query("SELECT * FROM vouchers WHERE code=$1 AND type='deposit' FOR UPDATE", [code]);
+    const dep = r.rows[0];
+    if (!dep) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Deposit not found' }); }
+    if (dep.status !== 'active') { await client.query('ROLLBACK'); return res.status(409).json({ error: `Deposit is already ${dep.status}` }); }
+    // Reuse voided_at as the forfeit timestamp so "forfeited today" is date-scoped.
+    await client.query("UPDATE vouchers SET status='forfeited', voided_at=NOW() WHERE id=$1", [dep.id]);
+    await client.query('COMMIT');
+    res.json({ ok: true, code, forfeited: Number(dep.balance) });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch {}
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
 });
 
 // Status transitions — kitchen / admin use.

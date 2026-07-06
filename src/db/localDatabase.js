@@ -435,7 +435,10 @@ function initSchema() {
       voided_by TEXT,
       voided_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      restaurant_id TEXT DEFAULT 'siamepos'
+      restaurant_id TEXT DEFAULT 'siamepos',
+      type TEXT DEFAULT 'gift',
+      reservation_id INTEGER,
+      take_date TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_vouchers_code        ON vouchers (code);
     CREATE INDEX IF NOT EXISTS idx_vouchers_restaurant  ON vouchers (restaurant_id);
@@ -669,6 +672,11 @@ function runMigrations() {
   // SEPOS — per-order service-charge removal (persists the Order screen toggle).
   addColumnIfMissing('orders', 'no_service_charge', 'INTEGER DEFAULT 0');
 
+  // SEPOS-DEPOSIT-001 — booking deposits as typed vouchers (default 'gift' = unchanged).
+  addColumnIfMissing('vouchers', 'type', "TEXT DEFAULT 'gift'");
+  addColumnIfMissing('vouchers', 'reservation_id', 'INTEGER');
+  addColumnIfMissing('vouchers', 'take_date', 'TEXT');
+
   // SEPOS-PRO-002: bidirectional active-order sync.
   // cloud_id maps a local row to its mirror on the cloud Postgres backend.
   //   - Mac creates an order → INSERT local, push to cloud, capture returned id → UPDATE local.cloud_id
@@ -719,6 +727,10 @@ function seedDefaults() {
     INSERT INTO settings (key, value) VALUES (?, ?)
     ON CONFLICT (key) DO NOTHING
   `).run('vat_mode', 'inclusive');
+  db.prepare(`
+    INSERT INTO settings (key, value) VALUES (?, ?)
+    ON CONFLICT (key) DO NOTHING
+  `).run('deposits_enabled', '0');
   db.prepare(`
     INSERT INTO settings (key, value) VALUES (?, ?)
     ON CONFLICT (key) DO NOTHING

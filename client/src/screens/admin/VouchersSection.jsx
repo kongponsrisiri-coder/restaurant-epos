@@ -7,7 +7,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   listVouchers, getVoucherDetail, voidVoucher, resendVoucherEmail, sellVoucher,
-  createDeposit, getSettings,
+  createDeposit, forfeitDeposit, getSettings,
   assertOk,
 } from '../../api';
 import { downloadCsv } from '../../utils/csv';
@@ -18,6 +18,7 @@ const STATUS_PILL = {
   depleted: { bg: '#e0e7ff', fg: '#4338ca', label: '⊘ Depleted' },
   expired:  { bg: '#fef3c7', fg: '#92400e', label: '⏱ Expired' },
   voided:   { bg: '#fee2e2', fg: '#991b1b', label: '✕ Voided' },
+  forfeited:{ bg: '#fef3c7', fg: '#92400e', label: '🧾 Forfeited' },
 };
 
 function fmtMoney(n) { return '£' + Number(n || 0).toFixed(2); }
@@ -108,6 +109,21 @@ export default function VouchersSection() {
       }
     } catch (e) {
       alert('Void failed: ' + e.message);
+      load();
+      if (detailId) openDetail(detailId);
+    }
+  }
+
+  // SEPOS-DEPOSIT-001 — no-show: forfeit a deposit (kept as income). Optimistic
+  // flip, mirrors handleVoid; keyed by DEP- code (the forfeit endpoint's key).
+  async function handleForfeit(code, id) {
+    if (!await confirm('Forfeit this deposit? The customer did not show — the deposit is kept as income and can no longer be redeemed.')) return;
+    setRows(prev => prev.map(v => v.id === id ? { ...v, status: 'forfeited' } : v));
+    setDetail(prev => prev?.voucher?.id === id ? { ...prev, voucher: { ...prev.voucher, status: 'forfeited' } } : prev);
+    try {
+      assertOk(await forfeitDeposit(code));
+    } catch (e) {
+      alert('Forfeit failed: ' + e.message);
       load();
       if (detailId) openDetail(detailId);
     }
@@ -299,6 +315,13 @@ export default function VouchersSection() {
                     <button onClick={() => handleVoid(detail.voucher.id)} disabled={busy}
                       style={{ flex: 1, padding: '12px', borderRadius: 8, border: 'none', background: '#fee2e2', color: '#991b1b', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: busy ? 0.5 : 1 }}>
                       ✕ Void voucher
+                    </button>
+                  )}
+                  {/* SEPOS-DEPOSIT-001 — no-show: forfeit the deposit (kept as income). */}
+                  {detail.voucher.type === 'deposit' && detail.voucher.status === 'active' && (
+                    <button onClick={() => handleForfeit(detail.voucher.code, detail.voucher.id)} disabled={busy}
+                      style={{ flex: 1, padding: '12px', borderRadius: 8, border: 'none', background: '#fef3c7', color: '#92400e', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: busy ? 0.5 : 1 }}>
+                      🧾 Forfeit (no-show)
                     </button>
                   )}
                 </div>

@@ -1079,6 +1079,27 @@ async function printFullKitchenTicket(settings, order, items) {
   }
 }
 
+// SEPOS-STATION-001 — print a full kitchen ticket to an EXPLICIT printer/station
+// (ip/port/mac/copies) rather than the fixed settings.printer_kitchen_ip. Used by
+// the per-station routing so a category's items go to its assigned station.
+async function printKitchenToPrinter(printer, settings, order, items) {
+  const ip = printer.ip;
+  const port = printer.port || 9100;
+  const printerName = printer.name_device || printer.printerName || '';
+  const lprQueue = printer.lpr_queue || 'lp';
+  const copies = Math.max(1, Math.min(5, parseInt(printer.copies || 1, 10) || 1));
+  if (!ip && !printerName) throw new Error('NO_IP');
+  const bilingual = settings.kitchen_language === 'en_th';
+  const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
+  const buf = buildFullKitchenTicket({ order, items, bilingual, thaiCodepage, fontScale: settings.kitchen_font_scale });
+  if (ip) {
+    for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName, lprQueue });
+  } else {
+    const payload = copies > 1 ? Buffer.concat(Array.from({ length: copies }, () => buf)) : buf;
+    await sendRaw(ip, port, payload, { printerName, lprQueue });
+  }
+}
+
 async function printBarTicket(settings, order, items) {
   const ip       = settings.printer_bar_ip;
   const port     = settings.printer_bar_port || 9100;
@@ -1256,6 +1277,7 @@ module.exports = {
   printFireNotice,
   printKitchenTicket,
   printFullKitchenTicket,
+  printKitchenToPrinter, // SEPOS-STATION-001
   printBarTicket,
   printKitchenMessage,    // SEPOS-KITCHEN-MSG-001
   printThaiTest,          // SEPOS-PRINT-THAI-PROBE

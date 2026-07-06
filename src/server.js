@@ -496,6 +496,73 @@ app.put('/api/categories/:id/default-course', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-STATION-001 — assign a category to an extra printer station (or NULL to
+// fall back to the default kitchen/bar routing by is_bar).
+app.put('/api/categories/:id/printer', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  try {
+    const pid = req.body.printer_id ? Number(req.body.printer_id) : null;
+    await pool.query('UPDATE categories SET printer_id = $1 WHERE id = $2', [pid, req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── SEPOS-STATION-001 — extra printer stations (wok/grill/cold…) ──────────
+// The built-in receipt/kitchen/bar printers stay in settings; these are ADDED
+// stations a category can be routed to. Kitchen printing groups items by their
+// resolved printer (see routing rework).
+app.get('/api/printers', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM printers WHERE is_active = 1 ORDER BY sort_order, id');
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post('/api/printers', async (req, res) => {
+  try {
+    const { name, ip, port, mac, kind, copies, sort_order } = req.body || {};
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'Printer name required' });
+    const r = await pool.query(
+      `INSERT INTO printers (name, ip, port, mac, kind, copies, sort_order, restaurant_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [String(name).trim(), ip || null, Number(port) || 9100, mac || null,
+       kind === 'receipt' ? 'receipt' : 'kitchen', Math.max(1, Math.min(5, Number(copies) || 1)),
+       Number(sort_order) || 0, resolveRestaurantId(req)]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.put('/api/printers/:id', async (req, res) => {
+  try {
+    const { name, ip, port, mac, kind, copies, sort_order } = req.body || {};
+    await pool.query(
+      `UPDATE printers SET name=COALESCE($1,name), ip=$2, port=$3, mac=$4,
+         kind=COALESCE($5,kind), copies=$6, sort_order=$7 WHERE id=$8`,
+      [name != null ? String(name).trim() : null, ip || null, Number(port) || 9100, mac || null,
+       kind, Math.max(1, Math.min(5, Number(copies) || 1)), Number(sort_order) || 0, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.delete('/api/printers/:id', async (req, res) => {
+  try {
+    // Detach any categories pointed here (they fall back to default kitchen/bar).
+    await pool.query('UPDATE categories SET printer_id = NULL WHERE printer_id = $1', [req.params.id]);
+    await pool.query('DELETE FROM printers WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+// Test-print to a specific station.
+app.post('/api/printers/:id/test', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM printers WHERE id = $1', [req.params.id]);
+    const p = r.rows[0];
+    if (!p) return res.status(404).json({ error: 'Printer not found' });
+    if (!p.ip) return res.status(400).json({ error: 'This station has no IP set' });
+    await printService.testPrint(p.ip, p.port || 9100, p.mac || '');
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/subcategories', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM subcategories ORDER BY category_id, sort_order');
@@ -5374,19 +5441,22 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
         const printSettings = await loadSettings();
         const mode = printSettings.kitchen_print_mode || 'print';
 
-        // Look up is_bar per menu_item via category
+        // SEPOS-STATION-001 — resolve each item's target: its category's assigned
+        // printer station, else the default (bar printer if is_bar, else kitchen).
+        // Look up is_bar + printer_id per menu_item, and load active stations.
         const menuIds = items.map(it => it.menu_item_id).filter(Boolean);
-        const barIdSet = new Set();
+        const metaById = new Map(); // menu_item_id -> { is_bar, printer_id }
         if (menuIds.length) {
           const rows = await pool.query(
-            `SELECT mi.id, COALESCE(c.is_bar, 0) AS is_bar
-               FROM menu_items mi
-               LEFT JOIN categories c ON mi.category_id = c.id
+            `SELECT mi.id, COALESCE(c.is_bar, 0) AS is_bar, c.printer_id
+               FROM menu_items mi LEFT JOIN categories c ON mi.category_id = c.id
               WHERE mi.id = ANY($1)`,
             [menuIds]
           );
-          rows.rows.forEach(r => { if (Number(r.is_bar) === 1) barIdSet.add(r.id); });
+          rows.rows.forEach(r => metaById.set(r.id, { is_bar: Number(r.is_bar) === 1, printer_id: r.printer_id }));
         }
+        const stationRows = (await pool.query('SELECT * FROM printers WHERE is_active = 1 AND ip IS NOT NULL').catch(() => ({ rows: [] }))).rows;
+        const stationById = new Map(stationRows.map(p => [p.id, p]));
 
         const toPrintItem = (it) => ({
           course: 1,
@@ -5397,8 +5467,15 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
             : '',
         });
 
-        const kitchenItems = items.filter(it => !barIdSet.has(it.menu_item_id)).map(toPrintItem);
-        const barItems     = items.filter(it =>  barIdSet.has(it.menu_item_id)).map(toPrintItem);
+        // Group items by target key: 'kitchen' | 'bar' | station:<id>.
+        const groups = new Map(); // key -> { station|null, items[] }
+        for (const it of items) {
+          const meta = metaById.get(it.menu_item_id) || {};
+          const station = meta.printer_id != null ? stationById.get(meta.printer_id) : null;
+          const key = station ? `station:${station.id}` : (meta.is_bar ? 'bar' : 'kitchen');
+          if (!groups.has(key)) groups.set(key, { station: station || null, items: [] });
+          groups.get(key).items.push(toPrintItem(it));
+        }
 
         const printOrder = {
           id: orderId,
@@ -5411,22 +5488,28 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
           table_number: null,
         };
 
-        // Kitchen ticket — gated by kitchen_print_mode
-        if (mode !== 'kds'
-            && kitchenItems.length
-            && (printSettings.printer_kitchen_ip || printSettings.printer_kitchen_name)) {
-          printService.printFullKitchenTicket(printSettings, printOrder, kitchenItems)
-            .then(() => console.log(`🖨️ Kitchen ticket auto-printed for takeaway #${orderId}`))
-            .catch(err => console.error('[takeaway] kitchen print failed:', err.message));
-        }
-
-        // Bar ticket — no separate mode toggle today, prints whenever
-        // the bar IP is set (printer_bar_name is per-device localStorage,
-        // not available server-side, so we gate on IP only).
-        if (barItems.length && printSettings.printer_bar_ip) {
-          printService.printBarTicket(printSettings, printOrder, barItems)
-            .then(() => console.log(`🍹 Bar ticket auto-printed for takeaway #${orderId}`))
-            .catch(err => console.error('[takeaway] bar print failed:', err.message));
+        for (const [key, grp] of groups) {
+          if (!grp.items.length) continue;
+          if (grp.station) {
+            // Assigned station (extra printer) — SEPOS-STATION-001.
+            printService.printKitchenToPrinter(grp.station, printSettings, printOrder, grp.items)
+              .then(() => console.log(`🖨️ Station "${grp.station.name}" auto-printed for takeaway #${orderId}`))
+              .catch(err => console.error(`[takeaway] station "${grp.station.name}" print failed:`, err.message));
+          } else if (key === 'bar') {
+            // Default bar printer — unchanged path.
+            if (printSettings.printer_bar_ip) {
+              printService.printBarTicket(printSettings, printOrder, grp.items)
+                .then(() => console.log(`🍹 Bar ticket auto-printed for takeaway #${orderId}`))
+                .catch(err => console.error('[takeaway] bar print failed:', err.message));
+            }
+          } else {
+            // Default kitchen printer — unchanged path (gated by kitchen_print_mode).
+            if (mode !== 'kds' && (printSettings.printer_kitchen_ip || printSettings.printer_kitchen_name)) {
+              printService.printFullKitchenTicket(printSettings, printOrder, grp.items)
+                .then(() => console.log(`🖨️ Kitchen ticket auto-printed for takeaway #${orderId}`))
+                .catch(err => console.error('[takeaway] kitchen print failed:', err.message));
+            }
+          }
         }
       } catch (err) {
         console.error('[takeaway] auto print setup failed:', err.message);

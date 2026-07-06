@@ -21,7 +21,7 @@
  *  'both'  — print AND KDS
  */
 
-import { serverPrintKitchen, serverPrintKitchenFull, serverPrintBar, serverPrintFireNotice, getSettings, getKitchenTicketBuffer } from '../api';
+import { serverPrintKitchen, serverPrintKitchenFull, serverPrintBar, serverPrintFireNotice, getSettings, getKitchenTicketBuffer, getPrinters, getMenu } from '../api';
 import { isNativeApp, sendRawToPrinter } from '../native/printer';
 import { sunmiAvailable, sunmiPrintOps, printTarget } from '../native/sunmiPrinter';
 import { buildKitchenOps, opsForSunmi, renderOpsToBytes } from '../native/escpos';
@@ -47,6 +47,51 @@ async function getCachedSettings() {
     setTimeout(() => { _settingsFetched = false; }, 5000); // short TTL so print-routing changes take effect quickly
   }
   return _settingsCache;
+}
+
+// ── SEPOS-STATION-001 — resolve each item to its printer station ──────────────
+// A category can be routed to an extra printer station (categories.printer_id).
+// We map menu_item_id → category.printer_id via the cached menu, and look up the
+// station (ip/port/copies) from getPrinters(). Both cached ~10s. Returns
+// { def: [items with no station], stations: [{ printer, items }] }.
+// If there are NO active stations OR NO item is assigned, everything lands in
+// `def` and the caller behaves exactly as today (migration-safe).
+let _stationCache = null, _stationAt = 0;
+let _menuPrinterMap = null, _menuMapAt = 0;
+async function getStationRouting() {
+  const now = Number(new Date());
+  if (!_stationCache || now - _stationAt > 10000) {
+    try { const p = await getPrinters(); if (Array.isArray(p)) { _stationCache = p; _stationAt = now; } }
+    catch {}
+  }
+  if (!_menuPrinterMap || now - _menuMapAt > 10000) {
+    try {
+      const menu = await getMenu();
+      if (Array.isArray(menu)) {
+        const m = new Map();
+        for (const cat of menu) {
+          const pid = cat && cat.printer_id != null ? Number(cat.printer_id) : null;
+          for (const it of (cat.items || [])) if (it && it.id != null) m.set(it.id, pid);
+        }
+        _menuPrinterMap = m; _menuMapAt = now;
+      }
+    } catch {}
+  }
+  return { stations: _stationCache || [], menuMap: _menuPrinterMap || new Map() };
+}
+async function splitByStation(items) {
+  const { stations, menuMap } = await getStationRouting();
+  const byId = new Map(stations.filter(s => s && s.ip).map(s => [Number(s.id), s]));
+  const def = [], groups = new Map();
+  for (const it of items) {
+    const pid = menuMap.get(it.menu_item_id);
+    const station = pid != null ? byId.get(Number(pid)) : null;
+    if (station) {
+      if (!groups.has(station.id)) groups.set(station.id, { printer: station, items: [] });
+      groups.get(station.id).items.push(it);
+    } else def.push(it);
+  }
+  return { def, stations: [...groups.values()] };
 }
 
 // ── HTML escape ───────────────────────────────────────────────────────────────
@@ -203,14 +248,38 @@ export async function printFullOrderTicket({ order, items, popupWin = null }) {
   const copies   = resolveKitchenCopies(settings);
   const bilingual = isBilingual(settings);
 
-  await dispatchPrint({
-    settings,
-    serverFn: (pn, cp) => serverPrintKitchenFull(order.id, active, pn, cp),
-    html:     buildFullOrderTicketHTML({ order, items: active, copies, bilingual, fontScale: kitchenFs(settings) }),
-    copies,
-    popupWin,
-    native:   { order, items: active, kind: 'full', bilingual },
-  });
+  // SEPOS-STATION-001 — station routing runs ONLY on a native till, which can
+  // TCP straight to each station's IP. Browser/desktop tills reach a network
+  // printer only via the server (no per-station dine-in endpoint yet), so they
+  // keep today's single-kitchen behaviour. No stations assigned ⇒ native also
+  // behaves exactly as today (split.stations is empty → the unchanged path).
+  let split = { def: active, stations: [] };
+  if (isNativeApp()) { try { split = await splitByStation(active); } catch { split = { def: active, stations: [] }; } }
+
+  if (split.stations.length === 0) {
+    await dispatchPrint({
+      settings,
+      serverFn: (pn, cp) => serverPrintKitchenFull(order.id, active, pn, cp),
+      html:     buildFullOrderTicketHTML({ order, items: active, copies, bilingual, fontScale: kitchenFs(settings) }),
+      copies,
+      popupWin,
+      native:   { order, items: active, kind: 'full', bilingual },
+    });
+    return;
+  }
+
+  // Native + stations: one ticket per printer, sent straight to each IP.
+  closeWin(popupWin);
+  if (!shouldPrint(settings)) return;
+  const kIp   = settings.printer_kitchen_ip || settings.printer_receipt_ip;
+  const kPort = settings.printer_kitchen_port || settings.printer_receipt_port || 9100;
+  if (split.def.length) {
+    await nativeKitchenPrint({ native: { order, items: split.def, kind: 'full', bilingual }, ip: kIp, port: kPort, copies, target: printTarget(settings, 'kitchen'), settings });
+  }
+  for (const g of split.stations) {
+    const cp = Math.max(1, Math.min(5, parseInt(g.printer.copies, 10) || copies));
+    await nativeKitchenPrint({ native: { order, items: g.items, kind: 'full', bilingual }, ip: g.printer.ip, port: g.printer.port || 9100, copies: cp, target: 'network', settings });
+  }
 }
 
 // ── Public: print a single course (called when a course is fired) ─────────────

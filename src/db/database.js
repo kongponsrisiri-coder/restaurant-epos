@@ -61,7 +61,27 @@ async function initDB() {
         name VARCHAR(100) NOT NULL,
         sort_order INTEGER DEFAULT 0,
         is_bar INTEGER DEFAULT 0,
-        default_course INTEGER DEFAULT 1
+        default_course INTEGER DEFAULT 1,
+        printer_id INTEGER
+      )
+    `);
+    // SEPOS-STATION-001 — flexible multi-printer routing. Each category can be
+    // pointed at a specific printer (a "station"). NULL = today's rule: bar
+    // printer if is_bar, else the kitchen printer — so nothing changes until an
+    // operator adds printers + assigns categories. is_bar is retained (reports).
+    await pool.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS printer_id INTEGER`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS printers (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        ip VARCHAR(64),
+        port INTEGER DEFAULT 9100,
+        mac VARCHAR(64),
+        kind VARCHAR(20) DEFAULT 'kitchen',
+        copies INTEGER DEFAULT 1,
+        sort_order INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos'
       )
     `);
 

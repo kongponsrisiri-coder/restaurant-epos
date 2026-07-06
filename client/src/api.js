@@ -497,6 +497,17 @@ export const recheckLicense  = () => post('/api/license-recheck', {});
 // SEPOS-LITE-001 — restaurant record incl. subscription plan.
 export const getRestaurant = () => get('/api/restaurant');
 
+// SEPOS-STATION-001 — extra printer stations (wok/grill/cold…) + category routing.
+export const getPrinters        = () => get('/api/printers');
+export const createPrinter      = (body) => post('/api/printers', body);
+export const updatePrinter      = (id, body) => put(`/api/printers/${id}`, body);
+export const deletePrinter      = (id) => del(`/api/printers/${id}`);
+export const testPrinter        = (id) => post(`/api/printers/${id}/test`, {});
+export const setCategoryPrinter = (id, printer_id) => put(`/api/categories/${id}/printer`, { printer_id });
+// Print a dine-in kitchen ticket to a specific station (server routes by printer_id).
+export const serverPrintKitchenToStation = (order_id, items, printer_id, printer_name) =>
+  post('/api/print/kitchen-station', { order_id, items, printer_id, printer_name });
+
 // SEPOS-025/026 — Network printing (server-side ESC/POS to TCP port 9100)
 export const testNetworkPrinter   = (ip, port, printer_name) => post('/api/print/test',    { ip, port, printer_name });
 // SEPOS-ANDROID-001 — ESC/POS buffers (base64) for the native app to send itself.

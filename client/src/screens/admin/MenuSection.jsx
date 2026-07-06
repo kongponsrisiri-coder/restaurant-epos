@@ -9,6 +9,7 @@ import {
   updateCategoryBar, updateCategorySortOrder, updateSubcategorySortOrder, updateMenuItemsSortOrder,
   addCategory, updateCategoryDefaultCourse,
   createDietaryPreset,
+  getPrinters, setCategoryPrinter,
   assertOk,
 } from '../../api';
 import { confirm } from '../../utils/confirm';
@@ -172,6 +173,7 @@ export default function MenuSection() {
   const [modifierItem, setModifierItem]     = useState(null);
   const [modifiers, setModifiers]           = useState([]);
   const [library, setLibrary]               = useState([]);  // SEPOS-059 reusable groups
+  const [printers, setPrinters]             = useState([]);  // SEPOS-STATION-001 extra printer stations
   const [newGroup, setNewGroup]             = useState({ name: '', required: true, multi_select: false });
   const [activeGroup, setActiveGroup]       = useState(null);
   const [pickGroup, setPickGroup]           = useState(''); // shared-group dropdown selection
@@ -197,6 +199,7 @@ export default function MenuSection() {
     if (data.length > 0 && !activeCategory) setActiveCategory(data[0].id);
   };
   useEffect(() => { fetchMenu(); }, []);
+  useEffect(() => { getPrinters().then(p => setPrinters(Array.isArray(p) ? p : [])).catch(() => {}); }, []);
   useEffect(() => { const items = menu.find(c => c.id === activeCategory)?.items || []; setLocalItems([...items]); }, [activeCategory, menu]);
 
   const handleAddCategory = async () => {
@@ -441,6 +444,19 @@ export default function MenuSection() {
               <option value={3}>🔴 Dessert</option>
               <option value={4}>🔵 Extra</option>
             </select>
+            {/* SEPOS-STATION-001 — route this category to a printer station (only
+                shown once stations exist; blank = default kitchen/bar routing). */}
+            {printers.length > 0 && (
+              <select
+                value={cat.printer_id || ''}
+                onChange={async e => { await setCategoryPrinter(cat.id, e.target.value ? Number(e.target.value) : null); fetchMenu(); }}
+                title="Which printer station does this category print to?"
+                style={{ fontSize: 10, padding: '1px 4px', borderRadius: 6, border: '1px solid #ddd', background: cat.printer_id ? '#e0e7ff' : '#eee', cursor: 'pointer', fontWeight: 600, color: '#333' }}
+              >
+                <option value="">🖨 Default</option>
+                {printers.map(p => <option key={p.id} value={p.id}>🏭 {p.name}</option>)}
+              </select>
+            )}
           </div>
           );
         })}

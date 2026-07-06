@@ -48,7 +48,21 @@ function initSchema() {
       name TEXT NOT NULL,
       sort_order INTEGER DEFAULT 0,
       is_bar INTEGER DEFAULT 0,
-      default_course INTEGER DEFAULT 1
+      default_course INTEGER DEFAULT 1,
+      printer_id INTEGER
+    );
+    -- SEPOS-STATION-001 — flexible multi-printer routing (category -> printer).
+    CREATE TABLE IF NOT EXISTS printers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      ip TEXT,
+      port INTEGER DEFAULT 9100,
+      mac TEXT,
+      kind TEXT DEFAULT 'kitchen',
+      copies INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      restaurant_id TEXT DEFAULT 'siamepos'
     );
 
     CREATE TABLE IF NOT EXISTS subcategories (
@@ -682,6 +696,9 @@ function runMigrations() {
   // SEPOS-ALLERGEN-OPT-001 — global (applies to every item) + allergen (⚠️ + free) modifier groups.
   addColumnIfMissing('modifier_groups', 'is_global', 'INTEGER DEFAULT 0');
   addColumnIfMissing('modifier_groups', 'is_allergen', 'INTEGER DEFAULT 0');
+
+  // SEPOS-STATION-001 — category -> printer routing (NULL = today's is_bar rule).
+  addColumnIfMissing('categories', 'printer_id', 'INTEGER');
 
   // SEPOS-PRO-002: bidirectional active-order sync.
   // cloud_id maps a local row to its mirror on the cloud Postgres backend.

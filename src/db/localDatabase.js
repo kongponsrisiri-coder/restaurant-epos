@@ -79,7 +79,9 @@ function initSchema() {
       menu_item_id INTEGER REFERENCES menu_items(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       required INTEGER DEFAULT 0,
-      multi_select INTEGER DEFAULT 0
+      multi_select INTEGER DEFAULT 0,
+      is_global INTEGER DEFAULT 0,
+      is_allergen INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS modifiers (
@@ -676,6 +678,10 @@ function runMigrations() {
   addColumnIfMissing('vouchers', 'type', "TEXT DEFAULT 'gift'");
   addColumnIfMissing('vouchers', 'reservation_id', 'INTEGER');
   addColumnIfMissing('vouchers', 'take_date', 'TEXT');
+
+  // SEPOS-ALLERGEN-OPT-001 — global (applies to every item) + allergen (⚠️ + free) modifier groups.
+  addColumnIfMissing('modifier_groups', 'is_global', 'INTEGER DEFAULT 0');
+  addColumnIfMissing('modifier_groups', 'is_allergen', 'INTEGER DEFAULT 0');
 
   // SEPOS-PRO-002: bidirectional active-order sync.
   // cloud_id maps a local row to its mirror on the cloud Postgres backend.

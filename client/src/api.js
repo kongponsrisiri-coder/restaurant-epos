@@ -420,6 +420,8 @@ export const getItemModifiers = async (itemId) => {
   catch { return []; }   // offline + uncached: no modifiers, but the item still adds
 };
 export const addModifierGroup = (itemId, group) => post(`/api/menu/items/${itemId}/modifiers`, group);
+// SEPOS-ALLERGEN-OPT-001 — one-tap create of the global dietary/allergen group (idempotent server-side).
+export const createDietaryPreset = () => post('/api/menu/dietary-preset', {});
 export const addModifierOption = (groupId, option) => post(`/api/modifier-groups/${groupId}/options`, option);
 export const deleteModifierGroup = (groupId) => del(`/api/modifier-groups/${groupId}`);
 export const deleteModifier = (modifierId) => del(`/api/modifiers/${modifierId}`);

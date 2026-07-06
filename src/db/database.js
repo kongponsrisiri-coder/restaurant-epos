@@ -105,9 +105,15 @@ async function initDB() {
         menu_item_id INTEGER REFERENCES menu_items(id) ON DELETE CASCADE,
         name VARCHAR(100) NOT NULL,
         required INTEGER DEFAULT 0,
-        multi_select INTEGER DEFAULT 0
+        multi_select INTEGER DEFAULT 0,
+        is_global INTEGER DEFAULT 0,
+        is_allergen INTEGER DEFAULT 0
       )
     `);
+    // SEPOS-ALLERGEN-OPT-001 — a global group applies to EVERY item (no per-item
+    // link row); an allergen group's selections print with ⚠️ emphasis + are free.
+    await pool.query(`ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_global INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_allergen INTEGER DEFAULT 0`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS modifiers (

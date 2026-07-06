@@ -626,11 +626,15 @@ app.get('/api/menu/items/:id/modifiers', async (req, res) => {
     // SEPOS-059 — resolve BOTH per-dish (legacy) groups AND attached library
     // groups (shared, linked via menu_item_modifier_groups). A library group
     // is reusable, so the same group id can appear on many dishes.
+    // SEPOS-ALLERGEN-OPT-001 — also union GLOBAL groups (is_global=1), which apply
+    // to every item with no per-item link (e.g. the dietary/allergen group). Item-
+    // specific groups sort first, global ones (dietary) after.
     const groupRes = await pool.query(
       `SELECT * FROM modifier_groups
         WHERE menu_item_id = $1
            OR id IN (SELECT group_id FROM menu_item_modifier_groups WHERE menu_item_id = $1)
-        ORDER BY id`, [req.params.id]);
+           OR COALESCE(is_global, 0) = 1
+        ORDER BY COALESCE(is_global, 0), id`, [req.params.id]);
     if (groupRes.rows.length === 0) return res.json([]);
     const groupsWithMods = await Promise.all(groupRes.rows.map(async group => {
       const modRes = await pool.query('SELECT * FROM modifiers WHERE group_id = $1 AND is_available = 1', [group.id]);
@@ -658,6 +662,30 @@ app.post('/api/modifier-groups/:id/options', async (req, res) => {
     const { name, extra_price } = req.body;
     const result = await pool.query('INSERT INTO modifiers (group_id, name, extra_price) VALUES ($1,$2,$3) RETURNING id', [req.params.id, name, extra_price || 0]);
     res.json({ id: result.rows[0].id, success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-ALLERGEN-OPT-001 — one-tap standard GLOBAL dietary/allergen group.
+// Idempotent: creates it once (menu_item_id NULL so it's a library group,
+// is_global=1 so getItemModifiers unions it onto EVERY item, is_allergen=1 so
+// it prints with emphasis + its options are free, multi_select=1). Operators
+// edit its options afterwards via the normal options endpoints.
+app.post('/api/menu/dietary-preset', async (req, res) => {
+  if (await maybeForwardModifierWriteToCloud(req, res)) return;
+  try {
+    const existing = await pool.query('SELECT id FROM modifier_groups WHERE is_allergen = 1 AND is_global = 1 LIMIT 1');
+    if (existing.rows[0]) return res.json({ id: existing.rows[0].id, created: false });
+    const g = await pool.query(
+      `INSERT INTO modifier_groups (menu_item_id, name, required, multi_select, is_global, is_allergen)
+       VALUES (NULL, $1, 0, 1, 1, 1) RETURNING id`,
+      ['Dietary / Allergen requests']
+    );
+    const gid = g.rows[0].id;
+    const opts = ['No nuts', 'No peanuts', 'No gluten / wheat', 'No shellfish', 'No dairy', 'No egg', 'No fish sauce', 'Vegan', 'Vegetarian'];
+    for (const name of opts) {
+      await pool.query('INSERT INTO modifiers (group_id, name, extra_price) VALUES ($1,$2,0)', [gid, name]);
+    }
+    res.status(201).json({ id: gid, created: true, options: opts.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

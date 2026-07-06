@@ -128,11 +128,26 @@ async function verifyPaymentIntent(piId, expectedAmountGbp) {
 // delivery_date if it's in the future (scheduling is handled by the
 // caller; this function just composes + dispatches). Returns the
 // Brevo result; caller is responsible for stamping email_sent_at.
+// SEPOS-WALLET-002 — the Add-to-Wallet link is emailed to the customer and
+// opened on THEIR phone, so it must be a public URL. A voucher sold on the
+// DESKTOP app hits the local server, so the caller-derived host is
+// `localhost:3001` (or a LAN IP) — unreachable off the till. Reject any
+// local/private host and fall back to the tenant cloud this install syncs to
+// (CLOUD_API_URL), then the PUBLIC_API_URL env, then the main Railway.
+function isLocalHost(u) {
+  return /(localhost|127\.0\.0\.1|0\.0\.0\.0|::1|\/\/(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.))/i.test(u || '');
+}
+function resolveWalletBase(baseUrl) {
+  if (baseUrl && !isLocalHost(baseUrl)) return baseUrl.replace(/\/$/, '');
+  const cloud = process.env.CLOUD_API_URL;
+  if (cloud && !isLocalHost(cloud)) return cloud.replace(/\/$/, '');
+  return PUBLIC_API_URL_DEFAULT;
+}
+
 async function sendVoucherGiftEmail(voucher, options = {}) {
   if (!voucher.recipient_email) return { skipped: true, reason: 'no recipient' };
-  // SEPOS-WALLET-001 — prefer the caller-derived host so the Add-to-Wallet
-  // link always points back to the same backend that processed the sale.
-  const PUBLIC_API_URL = (options.baseUrl || PUBLIC_API_URL_DEFAULT).replace(/\/$/, '');
+  // SEPOS-WALLET-001/002 — public base for the Add-to-Wallet link (never local).
+  const PUBLIC_API_URL = resolveWalletBase(options.baseUrl);
   const code      = voucher.code;
   const amount    = Number(voucher.original_amount || 0).toFixed(2);
   const fromName  = voucher.sender_name    || 'A friend';

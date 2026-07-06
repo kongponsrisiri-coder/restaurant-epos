@@ -324,6 +324,9 @@ async function initDB() {
         ('service_charge_rate', '12.5'),
         ('vat_mode', 'inclusive'),
         ('deposits_enabled', '0'),
+        ('kitchen_font_scale', 'large'),
+        ('receipt_font_scale', 'normal'),
+        ('bar_font_scale', 'large'),
         ('restaurant_name', 'SiamEPOS')
       ON CONFLICT (key) DO NOTHING
     `);

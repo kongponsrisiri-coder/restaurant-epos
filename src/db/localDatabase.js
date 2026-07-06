@@ -737,6 +737,9 @@ function seedDefaults() {
     INSERT INTO settings (key, value) VALUES (?, ?)
     ON CONFLICT (key) DO NOTHING
   `).run('deposits_enabled', '0');
+  for (const [k, v] of [['kitchen_font_scale', 'large'], ['receipt_font_scale', 'normal'], ['bar_font_scale', 'large']]) {
+    db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING`).run(k, v);
+  }
   db.prepare(`
     INSERT INTO settings (key, value) VALUES (?, ?)
     ON CONFLICT (key) DO NOTHING

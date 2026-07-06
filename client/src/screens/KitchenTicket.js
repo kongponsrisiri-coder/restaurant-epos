@@ -104,8 +104,13 @@ async function nativeKitchenPrint({ native, copies = 1, ip, port, target = 'auto
   else if ((target === 'network' || target === 'auto') && ip) dest = 'network';
   if (!dest) { console.warn('[kitchen-ticket] native: no printer for target', target); return; }
 
+  // SEPOS-PRINT-FONT-001 — per-role font scale: bar tickets use bar_font_scale,
+  // everything else (kitchen + fire notice) uses kitchen_font_scale (default 'large' = today).
+  const fontScale = (native && native.kind === 'bar')
+    ? (settings.bar_font_scale || 'large')
+    : (settings.kitchen_font_scale || 'large');
   let ops = null;
-  try { ops = buildKitchenOps(native); } catch (e) { console.warn('[kitchen-ticket] build error:', e?.message); }
+  try { ops = buildKitchenOps({ ...native, fontScale }); } catch (e) { console.warn('[kitchen-ticket] build error:', e?.message); }
   if (!ops) return;
 
   const copyN = Math.max(1, copies);
@@ -201,7 +206,7 @@ export async function printFullOrderTicket({ order, items, popupWin = null }) {
   await dispatchPrint({
     settings,
     serverFn: (pn, cp) => serverPrintKitchenFull(order.id, active, pn, cp),
-    html:     buildFullOrderTicketHTML({ order, items: active, copies, bilingual }),
+    html:     buildFullOrderTicketHTML({ order, items: active, copies, bilingual, fontScale: kitchenFs(settings) }),
     copies,
     popupWin,
     native:   { order, items: active, kind: 'full', bilingual },
@@ -221,7 +226,7 @@ export async function printKitchenTicket({ order, items, course, popupWin = null
   await dispatchPrint({
     settings,
     serverFn: (pn, cp) => serverPrintKitchen(order.id, active, course, pn, cp),
-    html:     buildKitchenTicketHTML({ order, items: active, course, copies, bilingual }),
+    html:     buildKitchenTicketHTML({ order, items: active, course, copies, bilingual, fontScale: kitchenFs(settings) }),
     copies,
     popupWin,
     native:   { order, items: active, course, kind: 'course', bilingual },
@@ -315,7 +320,7 @@ export async function printBarOrderTicket({ order, items, popupWin = null }) {
 
   // 2. Electron silent print to bar printer device (fallback)
   const autoOn     = typeof localStorage === 'undefined' || localStorage.getItem('kitchen_auto_print') !== '0';
-  const html       = buildKitchenTicketHTML({ order, items: barItems, course: 4, copies: 1, bilingual });
+  const html       = buildKitchenTicketHTML({ order, items: barItems, course: 4, copies: 1, bilingual, fontScale: kitchenFs(settings, 'bar') });
 
   if (deviceName && autoOn && window.siamepos?.isElectron && window.siamepos.printHtml) {
     closeWin(popupWin);
@@ -332,26 +337,30 @@ export async function printBarOrderTicket({ order, items, popupWin = null }) {
 
 // ── HTML builders ─────────────────────────────────────────────────────────────
 
-function ticketCSS() {
+// SEPOS-PRINT-FONT-001 — fs is the kitchen font multiplier (1 = today, no
+// regression). Applied to the ticket content sizes so the HTML/Electron kitchen
+// print matches the picker. Default caller passes 1 for 'large' (= today's px).
+function ticketCSS(fs = 1) {
+  const px = (n) => `${Math.round(n * fs)}px`;
   return `
     *    { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:Arial,Helvetica,sans-serif; color:#000; background:#fff; width:80mm; padding:4mm 3mm; }
     @media print { @page { margin:0; size:80mm auto; } body { padding:3mm 2mm; } }
     .page       { }
     .break      { page-break-after:always; }
-    .head   { text-align:center; font-size:24px; font-weight:900; letter-spacing:1px; }
+    .head   { text-align:center; font-size:${px(24)}; font-weight:900; letter-spacing:1px; }
     .sub    { text-align:center; font-size:13px; margin-top:2px; }
-    .course-en  { text-align:center; font-size:16px; font-weight:700; margin-top:6px; }
-    .course-th  { text-align:center; font-size:14px; font-weight:600; margin-top:1px; color:#333; }
+    .course-en  { text-align:center; font-size:${px(16)}; font-weight:700; margin-top:6px; }
+    .course-th  { text-align:center; font-size:${px(14)}; font-weight:600; margin-top:1px; color:#333; }
     .rule   { border-top:2px dashed #000; margin:8px 0; }
     .rule-solid { border-top:2px solid #000; margin:8px 0; }
     .item   { display:flex; gap:8px; align-items:baseline; margin:7px 0; }
-    .qty    { font-size:22px; font-weight:900; min-width:42px; }
-    .name   { font-size:20px; font-weight:900; line-height:1.2; -webkit-text-stroke:0.35px currentColor; }
+    .qty    { font-size:${px(22)}; font-weight:900; min-width:42px; }
+    .name   { font-size:${px(20)}; font-weight:900; line-height:1.2; -webkit-text-stroke:0.35px currentColor; }
     /* Modifier line + second-language line print at the same size as
        the primary item name (Korakot 2026-06-07). */
-    .note     { font-size:20px; font-weight:800; margin:-2px 0 6px 50px; line-height:1.2; }
-    .note-alt { font-size:20px; font-weight:800; margin:-4px 0 4px 50px; line-height:1.2; color:#333; }
+    .note     { font-size:${px(20)}; font-weight:800; margin:-2px 0 6px 50px; line-height:1.2; }
+    .note-alt { font-size:${px(20)}; font-weight:800; margin:-4px 0 4px 50px; line-height:1.2; color:#333; }
     .delivery { margin:6px 0; padding:6px 4px; border-top:1px dashed #000; border-bottom:1px dashed #000; }
     .delivery-label { font-size:14px; font-weight:800; text-align:center; margin-bottom:4px; letter-spacing:1px; }
     .delivery div   { font-size:16px; font-weight:800; line-height:1.3; }
@@ -446,16 +455,16 @@ function buildFullOrderBody({ order, items, bilingual = true }) {
   `;
 }
 
-function buildKitchenTicketHTML({ order, items, course, copies = 1, bilingual = true }) {
+function buildKitchenTicketHTML({ order, items, course, copies = 1, bilingual = true, fontScale = 1 }) {
   const body  = buildSingleCourseBody({ order, items, course, bilingual });
   const pages = multiPage(body, copies);
-  return wrapHTML(pages);
+  return wrapHTML(pages, fontScale);
 }
 
-function buildFullOrderTicketHTML({ order, items, copies = 1, bilingual = true }) {
+function buildFullOrderTicketHTML({ order, items, copies = 1, bilingual = true, fontScale = 1 }) {
   const body  = buildFullOrderBody({ order, items, bilingual });
   const pages = multiPage(body, copies);
-  return wrapHTML(pages);
+  return wrapHTML(pages, fontScale);
 }
 
 function buildFireNoticeHTML({ order, course, bilingual = true }) {
@@ -514,12 +523,18 @@ function multiPage(body, copies) {
   `).join('');
 }
 
-function wrapHTML(pages) {
+// SEPOS-PRINT-FONT-001 — HTML/Electron kitchen multiplier. Centred so the role's
+// DEFAULT = today's px (kitchen default 'large' = ×1.0), no regression.
+const HTML_FS_KITCHEN = { normal: 0.85, large: 1.0, xlarge: 1.2 };
+const kitchenFs = (settings, role = 'kitchen') =>
+  HTML_FS_KITCHEN[(settings && settings[`${role}_font_scale`]) || 'large'] ?? 1;
+
+function wrapHTML(pages, fs = 1) {
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <style>${ticketCSS()}</style>
+  <style>${ticketCSS(fs)}</style>
 </head>
 <body>${pages}</body>
 </html>`;

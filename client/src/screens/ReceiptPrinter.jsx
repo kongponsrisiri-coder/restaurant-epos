@@ -124,6 +124,9 @@ function openPrintPopup(html) {
 function fmt(n) { return '£' + parseFloat(n || 0).toFixed(2); }
 
 function buildReceiptHTML({ order, items, settings, paymentDetails }) {
+  // SEPOS-PRINT-FONT-001 — receipt font multiplier (normal = today, no regression).
+  const rfs = ({ normal: 1.0, large: 1.2, xlarge: 1.4 })[settings?.receipt_font_scale || 'normal'] ?? 1;
+  const rpx = (n) => `${+(n * rfs).toFixed(1)}px`;
   const restaurantName  = settings?.company_name        || settings?.restaurant_name || 'SiamEPOS';
   const restaurantAddr  = settings?.company_address     || settings?.address         || '';
   const restaurantPhone = settings?.company_phone       || settings?.phone           || '';
@@ -243,7 +246,7 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
   <title>Receipt - ${order.order_type === 'takeaway' ? (order.table_number != null ? `Takeaway ${order.table_number}` : `Online Order #${order.id}`) : `Table ${order.table_number}`}</title>
   <style>
     *    { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family:'Courier New',Courier,monospace; font-size:12px; color:#000; background:white; width:80mm; margin:0 auto; padding:4mm 2mm; }
+    body { font-family:'Courier New',Courier,monospace; font-size:${rpx(12)}; color:#000; background:white; width:80mm; margin:0 auto; padding:4mm 2mm; }
     @media print {
       body { width:80mm; margin:0; padding:2mm 1mm; }
       @page { margin:0; size:80mm auto; }
@@ -251,7 +254,7 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
     table { width:100%; border-collapse:collapse; }
     .divider       { border:none; border-top:1px dashed #999; margin:6px 0; }
     .divider-solid { border:none; border-top:1px solid #000;  margin:6px 0; }
-    .total-row td  { padding:4px 0; border-top:2px solid #000; font-size:15px; font-weight:900; }
+    .total-row td  { padding:4px 0; border-top:2px solid #000; font-size:${rpx(15)}; font-weight:900; }
     .center        { text-align:center; }
     .small         { font-size:10px; color:#555; }
   </style>

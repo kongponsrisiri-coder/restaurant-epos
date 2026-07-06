@@ -1287,6 +1287,26 @@ export default function SettingsSection() {
         <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Take a deposit against a booking (Admin → Vouchers → Take deposit) and redeem it on the day as a <b>prepaid tender</b> in Mixed Payment — the full bill still records for sales + VAT; the deposit only reduces what's owed. Deposits are reported separately from gift vouchers and never count as till cash. When off, none of the deposit UI shows.</div>
       </div>
 
+      {/* ── Print text size (SEPOS-PRINT-FONT-001) ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🔠 Print text size</h2>
+        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+          {[['Kitchen ticket text','kitchen_font_scale','large'],
+            ['Receipt text','receipt_font_scale','normal'],
+            ['Bar ticket text','bar_font_scale','large']].map(([label,key,def]) => (
+            <div key={key} style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+              <label style={{ fontSize:14, fontWeight:600, color:'#555', minWidth:150 }}>{label}</label>
+              <select value={settings[key] || def} onChange={e => setSettings({...settings, [key]:e.target.value})} style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}>
+                <option value="normal">Normal</option>
+                <option value="large">Large</option>
+                <option value="xlarge">Extra-large</option>
+              </select>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Bigger = easier to read on a busy line, but fewer characters fit per row. Applies to kitchen / bar tickets and the customer receipt on every printer (thermal + built-in).</div>
+      </div>
+
       {/* ── Delivery (SEPOS-DELIVERY-002) ── */}
       <div style={cardStyle}>
         <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🚗 Online Delivery</h2>

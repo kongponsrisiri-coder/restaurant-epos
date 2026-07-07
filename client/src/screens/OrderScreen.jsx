@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL } from '../api';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder } from '../api';
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
 import { isNativeApp } from '../native/printer';
@@ -36,6 +36,12 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const [activeCategory, setActiveCategory] = useState(null);
   const [activeSubcat, setActiveSubcat] = useState(null);
   const [search, setSearch] = useState('');   // menu search box (whole-menu filter)
+  // SEPOS-ORDER-ARRANGE — on-screen menu reorder (manager-gated, drag & drop)
+  const [arrangeMode, setArrangeMode]   = useState(false);
+  const [arrangeItems, setArrangeItems] = useState([]);
+  const [arrangeDrag, setArrangeDrag]   = useState(null);
+  const [arrangePin, setArrangePin]     = useState(null); // null=closed, {pin,err,busy}=open
+  const [arrangeSaving, setArrangeSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [modifierPopup, setModifierPopup] = useState(null);
   const [showKitchenMsg, setShowKitchenMsg] = useState(false); // SEPOS-KITCHEN-MSG-001
@@ -700,6 +706,37 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     setActiveSubcat(hasNone ? NONE_SUBCAT : subs[0].id);
   };
 
+  // SEPOS-ORDER-ARRANGE — reorder the current category's items right on the
+  // order screen (manager-gated). Reorders the WHOLE active category (flat),
+  // saves 1-based sort_order (matches the reorder-reset fix), refetches menu.
+  const MANAGER_ARR = ['admin', 'manager', 'supervisor'];
+  const enterArrange = () => { setArrangeItems([...activeItems]); setArrangeMode(true); setSearch(''); };
+  const openArrange = () => { if (MANAGER_ARR.includes(staff?.role)) enterArrange(); else setArrangePin({ pin: '', err: '', busy: false }); };
+  const verifyArrangePin = async () => {
+    if (arrangePin?.busy) return;
+    setArrangePin(p => ({ ...p, busy: true, err: '' }));
+    try {
+      const mgr = await loginStaff(arrangePin.pin);
+      if (mgr?.id && MANAGER_ARR.includes(mgr.role)) { setArrangePin(null); enterArrange(); }
+      else setArrangePin(p => ({ ...p, busy: false, err: 'Not a manager PIN.' }));
+    } catch { setArrangePin(p => ({ ...p, busy: false, err: 'PIN check failed.' })); }
+  };
+  const onArrangeDrop = (dropIdx) => {
+    if (arrangeDrag == null || arrangeDrag === dropIdx) { setArrangeDrag(null); return; }
+    setArrangeItems(prev => { const a = [...prev]; const [m] = a.splice(arrangeDrag, 1); a.splice(dropIdx, 0, m); return a; });
+    setArrangeDrag(null);
+  };
+  const saveArrange = async () => {
+    if (arrangeSaving) return;
+    setArrangeSaving(true);
+    try {
+      await updateMenuItemsSortOrder(arrangeItems.map((it, i) => ({ id: it.id, sort_order: i + 1 })));
+      const fresh = await getMenu(); if (Array.isArray(fresh)) setMenu(fresh);
+    } catch (e) { alert('Could not save the new order: ' + (e?.message || 'unknown')); }
+    finally { setArrangeSaving(false); setArrangeMode(false); setArrangeDrag(null); }
+  };
+  const cancelArrange = () => { setArrangeMode(false); setArrangeDrag(null); };
+
   const existingByCourse = {};
   existingItems.filter(item => !item.is_bar).forEach(item => {
     const course = item.course || 1;
@@ -1039,18 +1076,39 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   </div>
                 )}
                 {searchQ && <div style={{ fontSize: 13, color: '#9A9488', marginBottom: 14 }}>{dishesToShow.length} result{dishesToShow.length === 1 ? '' : 's'} for “{search.trim()}”</div>}
+                {/* SEPOS-ORDER-ARRANGE — reorder the menu right here (manager-gated). */}
+                {!searchQ && (arrangeMode ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '10px 14px', background: '#FBF7EC', border: '1.5px solid #C9A84C', borderRadius: 12 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#9A7B1F' }}>⇅ Drag dishes to reorder {menu.find(c => c.id === activeCategory)?.name}</span>
+                    <div style={{ flex: 1 }} />
+                    <button onClick={cancelArrange} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #ddd', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>Cancel</button>
+                    <button onClick={saveArrange} disabled={arrangeSaving} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--brand-primary,#0D1B3E)', color: '#fff', cursor: arrangeSaving ? 'wait' : 'pointer', fontWeight: 800, fontSize: 13 }}>{arrangeSaving ? 'Saving…' : '✓ Done'}</button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                    <button onClick={openArrange} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #E7E2D6', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13, color: '#7C766A' }}>⇅ Arrange menu</button>
+                  </div>
+                ))}
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: 14 }}>
-                  {dishesToShow.map(item => {
+                  {(arrangeMode ? arrangeItems : dishesToShow).map((item, gridIdx) => {
                     const inCart = cart.filter(c => c.menu_item_id === item.id);
                     const totalQty = inCart.reduce((s, c) => s + c.quantity, 0);
                     return (
-                      <div key={item.id} onClick={() => handleItemClick(item)} style={{ background: '#fff', borderRadius: 14, border: `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : '#E7E2D6'}`, padding: 14, cursor: 'pointer', minHeight: 104, display: 'flex', flexDirection: 'column', boxShadow: '0 1px 2px rgba(13,27,62,.05)' }}>
+                      <div key={item.id}
+                        draggable={arrangeMode}
+                        onClick={arrangeMode ? undefined : () => handleItemClick(item)}
+                        onDragStart={arrangeMode ? () => setArrangeDrag(gridIdx) : undefined}
+                        onDragOver={arrangeMode ? (e) => e.preventDefault() : undefined}
+                        onDrop={arrangeMode ? (e) => { e.preventDefault(); onArrangeDrop(gridIdx); } : undefined}
+                        style={{ background: '#fff', borderRadius: 14, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : '#E7E2D6'}`, padding: 14, cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 104, display: 'flex', flexDirection: 'column', boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
                         <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
                         <AllergenChips list={allergensByItemId[item.id]} />
                         <div style={{ flex: 1 }} />
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                           <span style={{ fontSize: 17, fontWeight: 800, color: '#9A7B1F', fontVariantNumeric: 'tabular-nums' }}>£{Number(item.price || 0).toFixed(2)}</span>
-                          {totalQty > 0 ? (
+                          {arrangeMode ? (
+                            <span style={{ color: '#C9A84C', fontSize: 20, fontWeight: 800, cursor: 'grab' }} title="Drag to reorder">⣿</span>
+                          ) : totalQty > 0 ? (
                             <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', background: 'var(--brand-primary,#0D1B3E)', color: 'var(--brand-accent,#C9A84C)', borderRadius: 10, height: 32 }}>
                               <button onClick={e => { e.stopPropagation(); decrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: 'var(--brand-accent,#C9A84C)', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>−</button>
                               <span style={{ fontWeight: 800, fontSize: 14, minWidth: 18, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{totalQty}</span>
@@ -1676,6 +1734,24 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         )}
 
         {/* SEPOS-MISC-001 — MISC ITEM POPUP (off-menu / special open item) */}
+        {/* SEPOS-ORDER-ARRANGE — manager PIN to unlock reorder */}
+        {arrangePin && (
+          <div onClick={() => setArrangePin(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 28, width: 340, maxWidth: '92vw' }}>
+              <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)', marginBottom: 6 }}>⇅ Arrange menu</h2>
+              <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>Rearranging changes the menu order on <b>every till</b>. Enter a manager PIN to continue.</p>
+              <input type="password" inputMode="numeric" autoFocus value={arrangePin.pin}
+                onChange={e => setArrangePin(p => ({ ...p, pin: e.target.value, err: '' }))}
+                onKeyDown={e => { if (e.key === 'Enter') verifyArrangePin(); }}
+                placeholder="Manager PIN" style={{ width: '100%', height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 18, boxSizing: 'border-box', letterSpacing: '4px', textAlign: 'center' }} />
+              {arrangePin.err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 8 }}>{arrangePin.err}</div>}
+              <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+                <button onClick={() => setArrangePin(null)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700 }}>Cancel</button>
+                <button onClick={verifyArrangePin} disabled={arrangePin.busy || !arrangePin.pin} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: (arrangePin.busy || !arrangePin.pin) ? '#ccc' : 'var(--brand-primary,#0D1B3E)', color: '#fff', cursor: 'pointer', fontWeight: 800 }}>{arrangePin.busy ? 'Checking…' : 'Unlock'}</button>
+              </div>
+            </div>
+          </div>
+        )}
         {miscPopup && (
           <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,

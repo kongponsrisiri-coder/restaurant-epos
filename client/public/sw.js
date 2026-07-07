@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v81'; // v81: order screen title shows the logged-in waiter (staff.name)
+const CACHE_NAME = 'siamepos-shell-v82'; // v82: on-screen menu Arrange (manager-PIN, drag-and-drop reorder of the current category, saves to sort_order)
 const APP_SHELL = [
   '/',
   '/index.html',

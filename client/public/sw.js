@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v68'; // bump to invalidate stale caches (v68: 07-07 ONE payment flow — Card/Cash/Deposit/Voucher accumulate partial tenders, any method may over-tender (change), close only when covered; removed separate Split-payment + Mixed buttons; kept Split-equally/Split-by-item on the left)
+const CACHE_NAME = 'siamepos-shell-v69'; // bump to invalidate stale caches (v69: over-tender on the one payment flow = CHANGE to hand back, not a tip)
 const APP_SHELL = [
   '/',
   '/index.html',

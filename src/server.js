@@ -521,35 +521,99 @@ app.put('/api/categories/:id/printer', async (req, res) => {
 // The built-in receipt/kitchen/bar printers stay in settings; these are ADDED
 // stations a category can be routed to. Kitchen printing groups items by their
 // resolved printer (see routing rework).
+// SEPOS-PRINT-UNIFY-001 — overlay the unified printers table onto the legacy
+// settings.printer_<role>_* keys the print paths read. Default per role =
+// settings.default_<role>_printer_id, else the first active printer flagged with
+// that role. No unified printer for a role → legacy settings untouched
+// (migration-safe: today's output is unchanged until the operator sets it up).
+async function applyPrinterRouting(settings) {
+  let printers;
+  try { printers = (await pool.query('SELECT * FROM printers WHERE is_active = 1 ORDER BY sort_order, id')).rows; }
+  catch { return settings; }
+  if (!printers || !printers.length) return settings;
+  const byId = new Map(printers.map(p => [String(p.id), p]));
+  for (const role of ['receipt', 'kitchen', 'bar']) {
+    const defId = settings[`default_${role}_printer_id`];
+    const p = (defId && byId.get(String(defId))) || printers.find(x => Number(x[`role_${role}`]) === 1);
+    if (!p || !(p.ip || p.name)) continue;
+    settings[`printer_${role}_ip`]        = p.ip || '';
+    settings[`printer_${role}_port`]      = p.port || 9100;
+    settings[`printer_${role}_name`]      = p.name || '';
+    settings[`printer_${role}_lpr_queue`] = p.lpr_queue || settings[`printer_${role}_lpr_queue`] || 'lp';
+    if (role === 'kitchen' && p.copies) settings.printer_kitchen_copies = String(p.copies);
+  }
+  return settings;
+}
+
+// One-time: surface the operator's existing fixed Receipt/Kitchen/Bar config as
+// rows in the unified list so it isn't empty on first open. Runs only until any
+// printer carries a role flag; after that the operator's list is authoritative.
+async function ensurePrintersSeeded() {
+  try {
+    const existing = (await pool.query('SELECT * FROM printers')).rows;
+    if (existing.some(p => Number(p.role_receipt) || Number(p.role_kitchen) || Number(p.role_bar))) return;
+    const s = {};
+    (await pool.query(`SELECT key, value FROM settings WHERE key LIKE 'printer_%'`)).rows.forEach(r => { s[r.key] = r.value; });
+    for (const role of ['receipt', 'kitchen', 'bar']) {
+      const ip = s[`printer_${role}_ip`], name = s[`printer_${role}_name`];
+      if (!ip && !name) continue;
+      const roleCol = `role_${role}`;
+      const match = existing.find(p => (ip && p.ip === ip) || (name && p.name === name));
+      if (match) { await pool.query(`UPDATE printers SET ${roleCol} = 1 WHERE id = $1`, [match.id]); }
+      else {
+        const label = role[0].toUpperCase() + role.slice(1) + ' printer';
+        await pool.query(
+          `INSERT INTO printers (name, ip, port, lpr_queue, copies, ${roleCol}) VALUES ($1,$2,$3,$4,$5,1)`,
+          [name || label, ip || null, Number(s[`printer_${role}_port`]) || 9100, s[`printer_${role}_lpr_queue`] || null, Number(s[`printer_${role}_copies`]) || 1]
+        );
+      }
+    }
+  } catch (e) { console.warn('[printers] seed skipped:', e.message); }
+}
+
 app.get('/api/printers', async (req, res) => {
   try {
+    await ensurePrintersSeeded();
     const r = await pool.query('SELECT * FROM printers WHERE is_active = 1 ORDER BY sort_order, id');
     res.json(r.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.post('/api/printers', async (req, res) => {
   try {
-    const { name, ip, port, mac, kind, copies, sort_order } = req.body || {};
+    const { name, ip, port, mac, kind, copies, sort_order, role_receipt, role_kitchen, role_bar, lpr_queue } = req.body || {};
     if (!name || !String(name).trim()) return res.status(400).json({ error: 'Printer name required' });
     const r = await pool.query(
-      `INSERT INTO printers (name, ip, port, mac, kind, copies, sort_order, restaurant_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      `INSERT INTO printers (name, ip, port, mac, kind, copies, sort_order, restaurant_id, role_receipt, role_kitchen, role_bar, lpr_queue)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [String(name).trim(), ip || null, Number(port) || 9100, mac || null,
        kind === 'receipt' ? 'receipt' : 'kitchen', Math.max(1, Math.min(5, Number(copies) || 1)),
-       Number(sort_order) || 0, resolveRestaurantId(req)]
+       Number(sort_order) || 0, resolveRestaurantId(req),
+       role_receipt ? 1 : 0, role_kitchen ? 1 : 0, role_bar ? 1 : 0, lpr_queue || null]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.put('/api/printers/:id', async (req, res) => {
   try {
-    const { name, ip, port, mac, kind, copies, sort_order } = req.body || {};
+    const { name, ip, port, mac, kind, copies, sort_order, role_receipt, role_kitchen, role_bar, lpr_queue } = req.body || {};
     await pool.query(
       `UPDATE printers SET name=COALESCE($1,name), ip=$2, port=$3, mac=$4,
-         kind=COALESCE($5,kind), copies=$6, sort_order=$7 WHERE id=$8`,
+         kind=COALESCE($5,kind), copies=$6, sort_order=$7,
+         role_receipt=$8, role_kitchen=$9, role_bar=$10, lpr_queue=$11 WHERE id=$12`,
       [name != null ? String(name).trim() : null, ip || null, Number(port) || 9100, mac || null,
-       kind, Math.max(1, Math.min(5, Number(copies) || 1)), Number(sort_order) || 0, req.params.id]
+       kind, Math.max(1, Math.min(5, Number(copies) || 1)), Number(sort_order) || 0,
+       role_receipt ? 1 : 0, role_kitchen ? 1 : 0, role_bar ? 1 : 0, lpr_queue || null, req.params.id]
     );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+// Set the default printer for a role (receipt|kitchen|bar). Body: { role, printer_id }.
+app.post('/api/printers/set-default', async (req, res) => {
+  try {
+    const role = String(req.body?.role || '');
+    if (!['receipt', 'kitchen', 'bar'].includes(role)) return res.status(400).json({ error: 'role must be receipt|kitchen|bar' });
+    const pid = req.body?.printer_id != null ? String(Number(req.body.printer_id)) : '';
+    await pool.query('INSERT INTO settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', [`default_${role}_printer_id`, pid]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -7755,6 +7819,7 @@ app.post('/api/print/receipt', async (req, res) => {
     // passes printer_name (the desktop's selected device), print by name via
     // the platform raw path (Windows spooler RAW / CUPS) instead of requiring
     // an IP. This gives crisp ESC/POS black + silent, vs the faint HTML/GDI path.
+    await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_receipt_name = printer_name; settings.printer_receipt_ip = ''; }
     if (!settings.printer_receipt_ip && !settings.printer_receipt_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
@@ -7782,6 +7847,7 @@ app.post('/api/print/kitchen', async (req, res) => {
   const { order_id, items, course, printer_name, copies } = req.body;
   try {
     const settings = await loadSettings();
+    await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
     if (copies) settings.printer_kitchen_copies = String(copies); // client-resolved copies (per-device or system)
     if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
@@ -7803,6 +7869,7 @@ app.post('/api/print/bar', async (req, res) => {
   const { order_id, items, printer_name } = req.body;
   try {
     const settings = await loadSettings();
+    await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_bar_name = printer_name; settings.printer_bar_ip = ''; }
     if (!settings.printer_bar_ip && !settings.printer_bar_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
@@ -7823,6 +7890,7 @@ app.post('/api/print/kitchen-fire', async (req, res) => {
   const { order_id, course, printer_name } = req.body;
   try {
     const settings = await loadSettings();
+    await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
     if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
@@ -7843,6 +7911,7 @@ app.post('/api/print/kitchen-full', async (req, res) => {
   const { order_id, items, printer_name, copies } = req.body;
   try {
     const settings = await loadSettings();
+    await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
     if (copies) settings.printer_kitchen_copies = String(copies); // client-resolved copies (per-device or system)
     if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });

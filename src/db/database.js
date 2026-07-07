@@ -81,9 +81,23 @@ async function initDB() {
         copies INTEGER DEFAULT 1,
         sort_order INTEGER DEFAULT 0,
         is_active INTEGER DEFAULT 1,
-        restaurant_id VARCHAR(100) DEFAULT 'siamepos'
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos',
+        role_receipt INTEGER DEFAULT 0,
+        role_kitchen INTEGER DEFAULT 0,
+        role_bar INTEGER DEFAULT 0,
+        lpr_queue VARCHAR(64)
       )
     `);
+    // SEPOS-PRINT-UNIFY-001 — one flexible printer list. Each printer declares
+    // which of Receipt/Kitchen/Bar it prints (role_* flags); the default per
+    // role is a settings key (default_<role>_printer_id). The print endpoints
+    // overlay the chosen printer onto settings.printer_<role>_* at send time,
+    // falling back to the legacy fixed settings when no row is configured
+    // (migration-safe — today's output is unchanged until set up).
+    await pool.query(`ALTER TABLE printers ADD COLUMN IF NOT EXISTS role_receipt INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE printers ADD COLUMN IF NOT EXISTS role_kitchen INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE printers ADD COLUMN IF NOT EXISTS role_bar INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE printers ADD COLUMN IF NOT EXISTS lpr_queue VARCHAR(64)`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS subcategories (

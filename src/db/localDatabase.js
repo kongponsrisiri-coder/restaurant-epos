@@ -62,7 +62,11 @@ function initSchema() {
       copies INTEGER DEFAULT 1,
       sort_order INTEGER DEFAULT 0,
       is_active INTEGER DEFAULT 1,
-      restaurant_id TEXT DEFAULT 'siamepos'
+      restaurant_id TEXT DEFAULT 'siamepos',
+      role_receipt INTEGER DEFAULT 0,
+      role_kitchen INTEGER DEFAULT 0,
+      role_bar INTEGER DEFAULT 0,
+      lpr_queue TEXT
     );
 
     CREATE TABLE IF NOT EXISTS subcategories (
@@ -708,6 +712,10 @@ function runMigrations() {
   // Lookups go cloud_id ↔ local id so the in-memory map can finally be retired.
   addColumnIfMissing('orders',      'cloud_id', 'INTEGER');
   addColumnIfMissing('order_items', 'dest_category_id', 'INTEGER');  // SEPOS-MISC-001 — Misc line destination category
+  addColumnIfMissing('printers', 'role_receipt', 'INTEGER DEFAULT 0'); // SEPOS-PRINT-UNIFY-001
+  addColumnIfMissing('printers', 'role_kitchen', 'INTEGER DEFAULT 0');
+  addColumnIfMissing('printers', 'role_bar', 'INTEGER DEFAULT 0');
+  addColumnIfMissing('printers', 'lpr_queue', 'TEXT');
   addColumnIfMissing('order_items', 'cloud_id', 'INTEGER');
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_cloud_id      ON orders(cloud_id)      WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] orders.cloud_id index:', err.message); }
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_order_items_cloud_id ON order_items(cloud_id) WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] order_items.cloud_id index:', err.message); }

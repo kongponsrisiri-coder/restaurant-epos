@@ -505,6 +505,8 @@ export const updatePrinter      = (id, body) => put(`/api/printers/${id}`, body)
 export const deletePrinter      = (id) => del(`/api/printers/${id}`);
 export const testPrinter        = (id) => post(`/api/printers/${id}/test`, {});
 export const setCategoryPrinter = (id, printer_id) => put(`/api/categories/${id}/printer`, { printer_id });
+// SEPOS-PRINT-UNIFY-001 — set the default printer for a role (receipt|kitchen|bar)
+export const setPrinterDefault  = (role, printer_id) => post('/api/printers/set-default', { role, printer_id });
 // Print a dine-in kitchen ticket to a specific station (server routes by printer_id).
 export const serverPrintKitchenToStation = (order_id, items, printer_id, printer_name) =>
   post('/api/print/kitchen-station', { order_id, items, printer_id, printer_name });

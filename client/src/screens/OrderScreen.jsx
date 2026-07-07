@@ -35,6 +35,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   });
   const [activeCategory, setActiveCategory] = useState(null);
   const [activeSubcat, setActiveSubcat] = useState(null);
+  const [search, setSearch] = useState('');   // menu search box (whole-menu filter)
   const [loading, setLoading] = useState(true);
   const [modifierPopup, setModifierPopup] = useState(null);
   const [showKitchenMsg, setShowKitchenMsg] = useState(false); // SEPOS-KITCHEN-MSG-001
@@ -678,11 +679,17 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const subTabs = activeSubs.length
     ? [...(activeHasUnfiled ? [{ id: NONE_SUBCAT, name: 'General' }] : []), ...activeSubs]
     : [];
-  const dishesToShow = activeItems.filter(item =>
-    activeSubcat == null ? true
-      : activeSubcat === NONE_SUBCAT ? item.subcategory_id == null
-      : item.subcategory_id === activeSubcat
-  );
+  // Search the whole menu — when the box has text, ignore category/sub-cat and
+  // show every matching dish across all categories (name or 2nd-language name).
+  const searchQ = (search || '').trim().toLowerCase();
+  const dishesToShow = searchQ
+    ? menu.flatMap(c => c.items || []).filter(it =>
+        (it.name || '').toLowerCase().includes(searchQ) || (it.name_alt || '').toLowerCase().includes(searchQ))
+    : activeItems.filter(item =>
+        activeSubcat == null ? true
+          : activeSubcat === NONE_SUBCAT ? item.subcategory_id == null
+          : item.subcategory_id === activeSubcat
+      );
   const selectCategory = (cat) => {
     setActiveCategory(cat.id);
     setActiveCourse(cat.default_course || 1);
@@ -978,13 +985,20 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   if (allVoided || isEmpty) await payOrder(orderId, 0, 'cancelled');
                 }
                 onClose();
-              }} style={{ background: '#F4F1EA', border: '1px solid #E7E2D6', borderRadius: 10, padding: '10px 16px', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: 'var(--brand-primary, #1a1a2e)' }}>← Back</button>
-              <div style={{ flex: 1, fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
+              }} style={{ background: '#F4F1EA', border: '1px solid #E7E2D6', borderRadius: 10, padding: '10px 16px', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: 'var(--brand-primary, #1a1a2e)' }}>‹ Tables</button>
+              <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', whiteSpace: 'nowrap' }}>
                 Table {order?.table_number}
-                {order?.covers ? <span style={{ fontFamily: "'Archivo', sans-serif", fontSize: 13, color: '#9A9488', marginLeft: 10, fontWeight: 600 }}>{order.covers} covers</span> : null}
+                {(order?.covers || order?.staff_name) ? <span style={{ fontFamily: "'Archivo', sans-serif", fontSize: 13, color: '#9A9488', marginLeft: 10, fontWeight: 600 }}>{order?.covers ? `${order.covers} covers` : ''}{order?.covers && order?.staff_name ? ' · ' : ''}{order?.staff_name || ''}</span> : null}
               </div>
-              <button onClick={() => setShowKitchenMsg(true)} style={{ background: '#fff', color: 'var(--brand-primary,#0D1B3E)', border: '1px solid var(--brand-primary,#0D1B3E)', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>📢 Message</button>
-              {/* Send Order moved to a full-width button above View Bill & Pay. */}
+              {/* SEPOS-ORDER-REDESIGN — whole-menu search box */}
+              <div style={{ flex: 1, position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9A9488', fontSize: 15 }}>🔍</span>
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search the whole menu…"
+                  style={{ width: '100%', height: 42, padding: '0 12px 0 34px', borderRadius: 10, border: '1px solid #E7E2D6', background: '#fff', fontSize: 15, boxSizing: 'border-box', fontFamily: "'Archivo', sans-serif" }} />
+                {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#9A9488', fontSize: 16, fontWeight: 700 }}>✕</button>}
+              </div>
+              <button onClick={() => setShowKitchenMsg(true)} style={{ background: '#fff', color: 'var(--brand-primary,#0D1B3E)', border: '1px solid var(--brand-primary,#0D1B3E)', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap' }}>Message kitchen</button>
+              <button onClick={() => openMiscPopup()} style={{ background: '#FBF7EC', color: '#9A7B1F', border: '1.5px dashed #C9A84C', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap' }}>＋ Misc item</button>
             </div>
             {/* menu — full width; category buttons on top, sub-cat tabs below */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -995,7 +1009,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                     const active = activeCategory === cat.id;
                     return (
                       <button key={cat.id} onClick={() => selectCategory(cat)} style={{
-                        padding: '18px 30px', borderRadius: 16, cursor: 'pointer', fontWeight: 800, fontSize: 20, whiteSpace: 'nowrap',
+                        padding: '12px 26px', borderRadius: 14, cursor: 'pointer', fontWeight: 800, fontSize: 17, whiteSpace: 'nowrap',
                         border: active ? 'none' : '1.5px solid #E7E2D6',
                         background: active ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary,#0D1B3E)') : '#fff',
                         color: active ? '#fff' : 'var(--brand-primary, #1a1a2e)' }}>
@@ -1003,44 +1017,28 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       </button>
                     );
                   })}
-                  {/* SEPOS-MISC-001 — off-menu / special open item, at the right end */}
-                  <button onClick={() => openMiscPopup()} style={{
-                    marginLeft: 'auto', padding: '18px 24px', borderRadius: 16, cursor: 'pointer', fontWeight: 800, fontSize: 18, whiteSpace: 'nowrap',
-                    border: '1.5px dashed #C9A84C', background: '#FBF7EC', color: '#9A7B1F' }}>🍽 Misc item</button>
                 </div>
                 {/* Sub-category tabs — shown only when the category has sub-cats
                     (no big "All" list). "General" holds any un-filed items so
                     nothing is ever hidden. The first tab auto-selects on tap. */}
-                {subTabs.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 18, padding: '12px 14px', background: '#F3EEE3', borderRadius: 12, border: '1.5px solid #E2D8C4' }}>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: '#9A7B1F', textTransform: 'uppercase', letterSpacing: '.6px', marginRight: 2 }}>
-                      {menu.find(c => c.id === activeCategory)?.name} ▸
-                    </span>
+                {/* Sub-category — plain pills (course selector moved to the order panel). */}
+                {!searchQ && subTabs.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
                     {subTabs.map(sub => {
                       const active = activeSubcat === sub.id;
                       return (
                         <button key={sub.id} onClick={() => setActiveSubcat(sub.id)} style={{
-                          padding: '12px 22px', borderRadius: 24, cursor: 'pointer', fontWeight: 800, fontSize: 16,
-                          border: active ? '2px solid var(--brand-accent,#C9A84C)' : '2px solid #D9CDB2',
+                          padding: '9px 18px', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: 14,
+                          border: active ? 'none' : '1px solid #E7E2D6',
                           background: active ? 'var(--brand-accent,#C9A84C)' : '#fff',
-                          color: 'var(--brand-primary, #0D1B3E)' }}>
+                          color: active ? '#fff' : '#7C766A' }}>
                           {sub.name}
                         </button>
                       );
                     })}
                   </div>
                 )}
-                {/* Course bar — staff pick the target course (override the dish's
-                    admin default, e.g. serve a starter as a main). */}
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 18 }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#9A9488' }}>Course:</span>
-                  {[1, 2, 3, 4].map(c => (
-                    <button key={c} onClick={() => setActiveCourse(c)} style={{ padding: '11px 20px', borderRadius: 22, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 15,
-                      background: activeCourse === c ? COURSE_COLORS[c] : '#ECE7DA', color: activeCourse === c ? '#fff' : '#7C766A' }}>
-                      {COURSE_LABELS[c]}
-                    </button>
-                  ))}
-                </div>
+                {searchQ && <div style={{ fontSize: 13, color: '#9A9488', marginBottom: 14 }}>{dishesToShow.length} result{dishesToShow.length === 1 ? '' : 's'} for “{search.trim()}”</div>}
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: 14 }}>
                   {dishesToShow.map(item => {
                     const inCart = cart.filter(c => c.menu_item_id === item.id);
@@ -1114,7 +1112,20 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 )}
               </div>
             ) : (
-              <h3 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Order Summary</h3>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Order · Table {order?.table_number}</span>
+                  <span style={{ fontSize: 13, color: '#9A9488', fontWeight: 600 }}>{existingItems.filter(i => !i.voided).reduce((s, i) => s + (i.quantity || 0), 0) + cart.reduce((s, c) => s + (c.quantity || 0), 0)} items</span>
+                </div>
+                {/* Course selector — moved here from the left menu (mockup). */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 12, color: '#9A9488', fontWeight: 600 }}>Send to kitchen as:</span>
+                  {[1, 2, 3, 4].map(c => (
+                    <button key={c} onClick={() => setActiveCourse(c)} style={{ padding: '7px 14px', borderRadius: 16, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                      background: activeCourse === c ? COURSE_COLORS[c] : '#ECE7DA', color: activeCourse === c ? '#fff' : '#7C766A' }}>{COURSE_LABELS[c]}</button>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 
@@ -1516,7 +1527,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 fontSize: 16, fontWeight: 800, cursor: sendBusy ? 'wait' : 'pointer',
                 marginBottom: 10, boxShadow: '0 6px 14px rgba(13,27,62,.24)'
               }}>
-                {sendBusy ? 'Sending…' : `🔔 Send Order — ${cart.reduce((s, c) => s + c.quantity, 0)} item${cart.reduce((s, c) => s + c.quantity, 0) > 1 ? 's' : ''}`}
+                {sendBusy ? 'Sending…' : `Send to kitchen — ${cart.reduce((s, c) => s + c.quantity, 0)} item${cart.reduce((s, c) => s + c.quantity, 0) > 1 ? 's' : ''}`}
               </button>
             )}
 
@@ -1553,7 +1564,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   background: sendBusy ? '#f3a5b3' : '#e94560', color: 'white', fontSize: 16,
                   fontWeight: 800, cursor: sendBusy ? 'wait' : 'pointer'
                 }}>
-                {sendBusy ? 'Sending order…' : `View Bill & Pay — £${orderTotal.toFixed(2)}`}
+                {sendBusy ? 'Sending order…' : `View bill & pay — £${orderTotal.toFixed(2)}`}
               </button>
             )}
           </div>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v79'; // v79: Sales Report shows Food + Drink as % (food-vs-drink split) on screen, print + CSV
+const CACHE_NAME = 'siamepos-shell-v80'; // v80: Order Screen aligned to the new mockup — header search box + Message kitchen + Misc; compact category pills; plain sub-cat pills; course selector moved into the order panel; button relabels (desktop)
 const APP_SHELL = [
   '/',
   '/index.html',

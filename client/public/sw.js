@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v74'; // bump to invalidate stale caches (v74: SEPOS-PRINT-UNIFY-001 — unified printer list inside the Network Printers box: +Add printer, per-printer copies, Bills/Kitchen/Bar role toggles + ⭐ default)
+const CACHE_NAME = 'siamepos-shell-v75'; // bump to invalidate stale caches (v75: VAT breakdown removed from customer receipt + bill (accountant's domain); Print text size moved Settings→Printers; deposit reservation-id labelled optional)
 const APP_SHELL = [
   '/',
   '/index.html',

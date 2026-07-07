@@ -477,7 +477,7 @@ function TakeDepositModal({ onClose, onTaken }) {
             placeholder="Custom amount"
             style={{ width: '100%', padding: '12px', border: '1px solid #ccc', borderRadius: 8, fontSize: 16, fontWeight: 700, marginBottom: 16, boxSizing: 'border-box' }}/>
 
-          <Field label="Reservation ID (links the deposit to the booking)"
+          <Field label="Reservation ID (optional — leave blank if the booking isn't in the system yet)"
             value={reservationId} onChange={setReservationId} />
           <Field label="Customer name (optional)" value={custName} onChange={setCustName} />
           <Field label="Customer email (optional — sends a confirmation)" value={custEmail} onChange={setCustEmail} type="email" />

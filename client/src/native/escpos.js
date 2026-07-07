@@ -59,7 +59,7 @@ function headerOps(ops, order, title, kw = SUNMI_KITCHEN_WIDTH) {
   if (order && order.id != null) ops.push({ op: 'text', v: 'Order #' + order.id });
   // 'krule' = a rule sized per printer (kitchen font is big, so the Sunmi needs a
   // shorter dash run than the network 32 or it wraps). See renderers below.
-  ops.push({ op: 'align', v: 0 }, { op: 'krule', w: kw });
+  ops.push({ op: 'align', v: 0 }, { op: 'krule', w: Math.min(kw, SUNMI_KITCHEN_WIDTH) });
 }
 
 function kitchenItemOps(ops, it, bilingual = true, sz = 'b') {
@@ -100,7 +100,7 @@ export function buildKitchenOps(native) {
   courseKeys.forEach((c, idx) => {
     // Separator between courses so the chef can eye-scan where one course ends
     // and the next begins (matches the HTML/desktop ticket's rule between courses).
-    if (idx > 0) ops.push({ op: 'krule', w: kw });
+    if (idx > 0) ops.push({ op: 'krule', w: Math.min(kw, SUNMI_KITCHEN_WIDTH) });
     ops.push({ op: 'bold', v: true }, { op: 'text', v: COURSE[c] || ('COURSE ' + c) }, { op: 'bold', v: false });
     for (const it of byCourse[c]) kitchenItemOps(ops, it, bilingual, sz);
     ops.push({ op: 'feed', v: 1 });

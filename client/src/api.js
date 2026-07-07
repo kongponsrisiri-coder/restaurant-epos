@@ -467,8 +467,8 @@ export const setOrderServiceCharge = async (orderId, removed) => {
   return put(`/api/orders/${orderId}/service-charge`, { no_service_charge: flag });
 };
 // SEPOS-VOUCHER-REMOVE-001 — undo a partial voucher redemption while bill is open
-export const removeVoucherFromBill = async (orderId) =>
-  (await localTarget(orderId)) ? { success: true } : post(`/api/orders/${orderId}/voucher-remove`, {});
+export const removeVoucherFromBill = async (orderId, code) =>
+  (await localTarget(orderId)) ? { success: true } : post(`/api/orders/${orderId}/voucher-remove`, code ? { code } : {});
 // SEPOS-CLOSE-ZERO — close an order that's at £0 (all voided / fully discounted)
 export const closeOrderZero       = async (orderId) => {
   const lid = await localTarget(orderId);

@@ -328,11 +328,12 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
     ]),
     rule(), lf(),
 
-    // Totals — bolder and more spaced
-    col2('Subtotal', '£' + subtotal.toFixed(2)), lf(),
-    discountAmt   > 0 ? [col2('Discount',              '-£' + discountAmt.toFixed(2)),     lf()] : [],
-    serviceCharge > 0 ? [col2(`Service (${scRate}%)`,   '£' + serviceCharge.toFixed(2)),   lf()] : [],
-    tip           > 0 ? [col2('Gratuity',               '£' + tip.toFixed(2)),              lf()] : [],
+    // Totals — scaled by receipt_font_scale so the whole receipt body matches
+    // the item lines (SEPOS-PRINT-FONT-001 parity; default 'normal' = unchanged).
+    receiptSize, col2('Subtotal', '£' + subtotal.toFixed(2), receiptWidth), CMD.SIZE_NORMAL, lf(),
+    discountAmt   > 0 ? [receiptSize, col2('Discount',            '-£' + discountAmt.toFixed(2),   receiptWidth), CMD.SIZE_NORMAL, lf()] : [],
+    serviceCharge > 0 ? [receiptSize, col2(`Service (${scRate}%)`, '£' + serviceCharge.toFixed(2), receiptWidth), CMD.SIZE_NORMAL, lf()] : [],
+    tip           > 0 ? [receiptSize, col2('Gratuity',             '£' + tip.toFixed(2),            receiptWidth), CMD.SIZE_NORMAL, lf()] : [],
     rule('='), lf(),
     CMD.BOLD_ON, CMD.SIZE_BIG, col2('TOTAL', '£' + billTotal.toFixed(2), LINE_WIDTH / 2),
     CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
@@ -340,10 +341,10 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
 
     // Payment
     method ? [
-      col2('Payment', method), lf(),
+      receiptSize, col2('Payment', method, receiptWidth), CMD.SIZE_NORMAL, lf(),
       method === 'Cash' && amountPaid > 0 ? [
-        col2('Cash tendered', '£' + amountPaid.toFixed(2)), lf(),
-        CMD.BOLD_ON, col2('Change', '£' + change.toFixed(2)), CMD.BOLD_OFF, lf(),
+        receiptSize, col2('Cash tendered', '£' + amountPaid.toFixed(2), receiptWidth), CMD.SIZE_NORMAL, lf(),
+        CMD.BOLD_ON, receiptSize, col2('Change', '£' + change.toFixed(2), receiptWidth), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
       ] : [],
       rule(), lf(),
     ] : [],

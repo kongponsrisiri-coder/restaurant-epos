@@ -347,17 +347,21 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   // bypass vouchers had no redemption to undo.
   const tenderNeedsRestore = (t) => t && ((t.method === 'Voucher' && !t.external) || t.method === 'Deposit');
 
-  // Remove a tender from the mix; restore balance for real redemptions.
+  // Remove a tender from the mix; restore THIS tender's redemption by its code
+  // (a bill may carry both a voucher AND a deposit — restoring "most-recent"
+  // would credit back the wrong one).
   const removeMixTender = async (i) => {
     const t = splitTenders[i];
-    if (tenderNeedsRestore(t)) { try { await removeVoucherFromBill(orderId); } catch {} }
+    if (tenderNeedsRestore(t)) { try { await removeVoucherFromBill(orderId, t.voucher_code); } catch {} }
     setSplitTenders(prev => prev.filter((_, idx) => idx !== i));
   };
 
-  // Leave the mixed flow — restore any real redemption so an abandoned split
-  // never eats voucher/deposit balance.
+  // Leave the mixed flow — restore EVERY real redemption (each by its own code)
+  // so an abandoned split never eats voucher/deposit balance.
   const cancelMix = async () => {
-    if (splitTenders.some(tenderNeedsRestore)) { try { await removeVoucherFromBill(orderId); } catch {} }
+    for (const t of splitTenders) {
+      if (tenderNeedsRestore(t)) { try { await removeVoucherFromBill(orderId, t.voucher_code); } catch {} }
+    }
     setSplitTenders([]); setMixVoucherCode(''); setMixVoucherAmt(''); setMixVoucherErr('');
     setMixDepositCode('');
     setStage('bill');

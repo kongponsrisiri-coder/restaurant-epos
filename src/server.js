@@ -99,7 +99,17 @@ function serviceChargeForOrder(o, scEnabled, scRatePct) {
   if (!scEnabled) return 0;
   if (o.no_service_charge) return 0;
   if (!orderIsDineIn(o)) return 0;
-  return Number(o.total ?? 0) * (Number(scRatePct || 0) / 100);
+  // SEPOS-SVCFIX-001 fix — charge on the base AFTER any bill-level discount,
+  // matching what the till actually took (BillScreen applies service to
+  // subtotal − bill discount). Using o.total (pre-bill-discount) overstated
+  // service on discounted bills. Per-item discounts are already baked into total.
+  let base = Number(o.total ?? 0);
+  if (o.discount_value > 0) {
+    base = o.discount_type === 'percent'
+      ? base * (1 - Number(o.discount_value) / 100)
+      : Math.max(0, base - Number(o.discount_value));
+  }
+  return base * (Number(scRatePct || 0) / 100);
 }
 
 // SEPOS-VATMODE-001 — VAT is computed one of two ways per restaurant, chosen by
@@ -558,7 +568,10 @@ app.post('/api/printers/:id/test', async (req, res) => {
     const p = r.rows[0];
     if (!p) return res.status(404).json({ error: 'Printer not found' });
     if (!p.ip) return res.status(400).json({ error: 'This station has no IP set' });
-    await printService.testPrint(p.ip, p.port || 9100, p.mac || '');
+    // testPrint's 3rd arg is a CUPS/named-printer fallback, NOT a MAC — passing
+    // the MAC made the fallback try to print to a queue named after the MAC.
+    // A station is IP-addressed, so leave the named-printer arg empty.
+    await printService.testPrint(p.ip, p.port || 9100, '');
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -5859,6 +5872,11 @@ app.post('/api/orders/:id/voucher-remove', async (req, res) => {
   try {
     await client.query('BEGIN');
     const orderId = req.params.id;
+    // SEPOS-DEPOSIT-001 fix — a bill can now carry BOTH a voucher AND a deposit
+    // redemption (both write voucher_redemptions rows). Restoring "most-recent"
+    // would credit back the wrong one. When the caller names a specific code,
+    // restore THAT redemption; otherwise keep the legacy most-recent behaviour.
+    const targetCode = (req.body && req.body.code) ? String(req.body.code).trim().toUpperCase() : null;
 
     // Bill must still be open — undoing a closed bill needs a different
     // flow (refund payment + reopen) so we punt that to admin.
@@ -5867,14 +5885,14 @@ app.post('/api/orders/:id/voucher-remove', async (req, res) => {
     if (!order)             { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Order not found' }); }
     if (order.status !== 'open') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Bill is already closed — use refund flow' }); }
 
-    // Find the most recent voucher redemption for this bill.
+    // Find the redemption to undo — the named code's if given, else most-recent.
     const r = await client.query(
       `SELECT vr.id, vr.voucher_id, vr.amount_used, v.code, v.status AS voucher_status
        FROM voucher_redemptions vr
        JOIN vouchers v ON v.id = vr.voucher_id
-       WHERE vr.bill_id = $1
+       WHERE vr.bill_id = $1 ${targetCode ? 'AND UPPER(v.code) = $2' : ''}
        ORDER BY vr.used_at DESC LIMIT 1`,
-      [orderId]
+      targetCode ? [orderId, targetCode] : [orderId]
     );
     const vr = r.rows[0];
     if (!vr) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'No voucher on this bill' }); }

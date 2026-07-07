@@ -815,6 +815,23 @@ export default function PrintersSection() {
         <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Bigger = easier to read on a busy line, but fewer characters fit per row. Applies to kitchen / bar tickets and the customer receipt on every printer (thermal + built-in).</div>
       </div>
 
+      {/* SEPOS-DRAWER-001 — open the cash drawer on payment (default ON). */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:6 }}>💵 Cash drawer</h2>
+        {(() => { const on = settings.open_drawer_on_payment !== '0'; return (
+          <div onClick={() => setSettings(s => ({ ...s, open_drawer_on_payment: (s.open_drawer_on_payment !== '0') ? '0' : '1' }))}
+            style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 0', cursor:'pointer' }}>
+            <div style={{ width:44, height:26, borderRadius:13, background: on ? 'var(--brand-primary,#0D1B3E)' : '#cbd5e1', position:'relative', transition:'background .15s', flexShrink:0 }}>
+              <div style={{ position:'absolute', top:3, left: on ? 21 : 3, width:20, height:20, borderRadius:'50%', background:'#fff', transition:'left .15s' }} />
+            </div>
+            <div>
+              <div style={{ fontSize:14, fontWeight:700, color:'var(--brand-primary,#0D1B3E)' }}>Open the cash drawer on every payment</div>
+              <div style={{ fontSize:12, color:'#888', marginTop:2 }}>Kicks the drawer wired to the receipt printer each time a payment closes. Needs a drawer connected to a network/built-in ESC/POS receipt printer — it won't fire on the browser-print (web) path. Turn off for a till with no drawer.</div>
+            </div>
+          </div>
+        ); })()}
+      </div>
+
       <button onClick={handleSave} disabled={saving}
         style={{ width:'100%', padding:'14px', borderRadius:10, border:'none',
                  background: saved ? '#22c55e' : 'var(--brand-primary, #1a1a2e)', color:'white',

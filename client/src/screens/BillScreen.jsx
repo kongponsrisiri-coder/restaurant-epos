@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getBill, markBillPrinted, getVoucher, redeemVoucher, applyDiscount, removeVoucherFromBill, getOrderDeposit, assertOk } from '../api';
+import { getBill, markBillPrinted, getVoucher, redeemVoucher, applyDiscount, removeVoucherFromBill, getOrderDeposit, assertOk, serverOpenDrawer } from '../api';
 import { printReceipt } from './ReceiptPrinter';
 import { orderShortLabelPlain, orderSubLabel, isTakeaway } from '../utils/orderLabel';
 import { confirm } from '../utils/confirm';
@@ -443,6 +443,10 @@ export default function BillScreen({ orderId, onClose, onPay }) {
       // SEPOS-062 — pass the per-tender breakdown for splits so each Cash/Card
       // amount is recorded as its own payment row (correct Z-report reconciliation).
       await onPay(billTotal, paymentDetails?.method, paymentDetails?.amountPaid, paymentDetails?.tip, paymentDetails?.tenders);
+      // SEPOS-DRAWER-001 — open the cash drawer on payment (fire-and-forget;
+      // never blocks/fails the close). Silent no-op where there's no raw
+      // ESC/POS receipt printer (browser print / no drawer / disabled setting).
+      serverOpenDrawer().catch(() => {});
     } finally {
       // onPay closes the bill on success; on failure it keeps the bill open,
       // so re-enable the button to allow a genuine retry.

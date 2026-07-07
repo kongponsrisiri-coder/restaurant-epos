@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v77'; // v77: 'Scan for printers' on the Printers page — sweeps the LAN on :9100 (local/desktop install only; web says run from the till app or enter IP)
+const CACHE_NAME = 'siamepos-shell-v78'; // v78: cash drawer opens on payment (kick via receipt printer, ESC/POS paths only) + Settings toggle (default on)
 const APP_SHELL = [
   '/',
   '/index.html',

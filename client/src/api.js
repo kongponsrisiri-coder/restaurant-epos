@@ -509,6 +509,8 @@ export const setCategoryPrinter = (id, printer_id) => put(`/api/categories/${id}
 export const setPrinterDefault  = (role, printer_id) => post('/api/printers/set-default', { role, printer_id });
 // SEPOS-PRINT-UNIFY-001 — scan the local network for printers on :9100 (local install only)
 export const scanPrinters       = () => get('/api/printers/scan');
+// SEPOS-DRAWER-001 — open the cash drawer (kick via the receipt printer) on payment
+export const serverOpenDrawer   = (printer_name) => post('/api/print/drawer', printer_name ? { printer_name } : {});
 // Print a dine-in kitchen ticket to a specific station (server routes by printer_id).
 export const serverPrintKitchenToStation = (order_id, items, printer_id, printer_name) =>
   post('/api/print/kitchen-station', { order_id, items, printer_id, printer_name });

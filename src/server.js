@@ -7883,6 +7883,26 @@ app.post('/api/print/receipt', async (req, res) => {
   }
 });
 
+// SEPOS-DRAWER-001 — open the cash drawer on payment. Kicks the RECEIPT
+// printer's drawer port (raw ESC/POS). Gated by open_drawer_on_payment
+// (default ON — only '0' disables). No printer / unreachable → silent skip;
+// never blocks the payment. printer_name overrides the receipt device.
+app.post('/api/print/drawer', async (req, res) => {
+  const { printer_name } = req.body || {};
+  try {
+    const settings = await loadSettings();
+    if (settings.open_drawer_on_payment === '0') return res.json({ success: false, skipped: 'disabled' });
+    await applyPrinterRouting(settings);
+    if (printer_name) { settings.printer_receipt_name = printer_name; settings.printer_receipt_ip = ''; }
+    if (!settings.printer_receipt_ip && !settings.printer_receipt_name) return res.json({ success: false, reason: 'no_printer' });
+    await printService.openCashDrawer(settings);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[print/drawer]', err.message);
+    res.json({ success: false, error: err.message });
+  }
+});
+
 // Print a kitchen ticket for a given order + course
 app.post('/api/print/kitchen', async (req, res) => {
   const { order_id, items, course, printer_name, copies } = req.body;

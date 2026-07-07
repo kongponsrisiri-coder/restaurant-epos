@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v84'; // v84: Table Plan — Size list now only shows the chosen Shape's sizes (no more repeating square+rectangle in one list)
+const CACHE_NAME = 'siamepos-shell-v85'; // v85: Network Setup / Add-a-till QR restored — qrcode lib was fed a CSS var() colour (can't parse → blank QR); now resolves brand colour to a real hex
 const APP_SHELL = [
   '/',
   '/index.html',

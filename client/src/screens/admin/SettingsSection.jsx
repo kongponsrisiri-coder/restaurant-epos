@@ -7,6 +7,18 @@ import { confirm } from '../../utils/confirm';
 import { getTenantUrl } from '../../native/tenant';
 import { isNativeApp } from '../../native/printer';
 
+// QR codes render to a <canvas>, so the qrcode lib needs a REAL hex colour —
+// it can't parse a CSS `var(--brand-primary,…)` string (throws → blank QR).
+// Resolve the live brand colour to hex, falling back to navy so the QR always
+// draws even before the theme vars are set.
+function brandQrDark() {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim();
+    if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) return v;
+  } catch { /* SSR / no DOM */ }
+  return DEFAULT_PRIMARY || '#0D1B3E';
+}
+
 // SEPOS-028 — "any device as a till" (cloud model). Shows this till's cloud
 // address + a QR; a new device opens the SiamEPOS app → Scan QR → joins. Unlike
 // the desktop LAN card, the test hits the live cloud, so it actually responds.
@@ -17,8 +29,8 @@ function AddTillCard({ cardStyle }) {
   useEffect(() => {
     let cancelled = false;
     if (!tenant) return;
-    QRCode.toDataURL(tenant, { width: 220, margin: 1, errorCorrectionLevel: 'M', color: { dark: 'var(--brand-primary,#0D1B3E)', light: '#FFFFFF' } })
-      .then(d => { if (!cancelled) setQr(d); }).catch(() => {});
+    QRCode.toDataURL(tenant, { width: 220, margin: 1, errorCorrectionLevel: 'M', color: { dark: brandQrDark(), light: '#FFFFFF' } })
+      .then(d => { if (!cancelled) setQr(d); }).catch((err) => console.warn('[add-till] QR failed:', err));
     return () => { cancelled = true; };
   }, [tenant]);
   const test = async () => {
@@ -589,7 +601,7 @@ function NetworkSetupCard({ cardStyle }) {
         try {
           const dataUrl = await QRCode.toDataURL(n.url, {
             width: 220, margin: 1, errorCorrectionLevel: 'M',
-            color: { dark: 'var(--brand-primary,#0D1B3E)', light: '#FFFFFF' },
+            color: { dark: brandQrDark(), light: '#FFFFFF' },
           });
           if (!cancelled) setQr(dataUrl);
         } catch (err) { console.warn('[network-setup] QR failed:', err); }

@@ -878,6 +878,10 @@ app.get('/api/orders', async (req, res) => {
 // SiamEPOS Back Office cron. Intentionally unauthenticated so the ops
 // dashboard can ping any client URL without rotating per-client secrets.
 // Returns only aggregate counts — no PII, no menu, no order details.
+// Captured once at boot so /api/health can prove which build + when a tenant
+// last redeployed (ops verification — no build-version marker existed before).
+const SERVER_STARTED_AT = new Date().toISOString();
+const SERVER_COMMIT = process.env.RAILWAY_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT || process.env.GIT_COMMIT || null;
 app.get('/api/health', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -900,6 +904,8 @@ app.get('/api/health', async (req, res) => {
     } catch (_) { /* devices table not present yet */ }
     res.json({
       status: 'ok',
+      commit: SERVER_COMMIT,
+      started_at: SERVER_STARTED_AT,
       orders_today: parseInt(result.rows[0].orders_today, 10) || 0,
       last_order_at: result.rows[0].last_order_at,
       tills,

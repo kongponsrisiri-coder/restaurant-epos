@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v82'; // v82: on-screen menu Arrange (manager-PIN, drag-and-drop reorder of the current category, saves to sort_order)
+const CACHE_NAME = 'siamepos-shell-v83'; // v83: Menu Manager — click a sub-category to filter the item list to that sub-category's dishes (drag-reorder now item-based, works with the filter)
 const APP_SHELL = [
   '/',
   '/index.html',

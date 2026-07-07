@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v85'; // v85: Network Setup / Add-a-till QR restored — qrcode lib was fed a CSS var() colour (can't parse → blank QR); now resolves brand colour to a real hex
+const CACHE_NAME = 'siamepos-shell-v86'; // v86: cloud web app no longer shows the bogus LAN "Network Setup" address (datacenter container 10.x:8080) — server sends local flag, web app swaps to the cloud "add a till" QR; LAN card stays on desktop/host installs
 const APP_SHELL = [
   '/',
   '/index.html',

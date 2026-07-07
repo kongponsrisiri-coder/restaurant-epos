@@ -5115,17 +5115,30 @@ io.on('connection', (socket) => {
 app.get('/api/network-info', (req, res) => {
   const os = require('os');
   const port = process.env.PORT || 3001;
-  const ifaces = os.networkInterfaces();
-  for (const name of Object.keys(ifaces)) {
+  // Only a LOCAL install (desktop / Sunmi host) is a real LAN host worth
+  // pointing tablets at. On the cloud (Railway) this endpoint would otherwise
+  // report the datacenter container's private IP (e.g. 10.x:8080) — a real
+  // address, but meaningless outside the container. `local` lets the client
+  // hide the LAN "Network Setup" card in the cloud web app.
+  const local = String(process.env.DB_MODE || '').toLowerCase() === 'local';
+  // Prefer the Wi-Fi/Ethernet LAN interface: 192.168.x first, then other
+  // private ranges — so a machine with both Wi-Fi and a cellular/hotspot
+  // interface reports the address tablets can actually reach.
+  const os_ = os.networkInterfaces();
+  const candidates = [];
+  for (const name of Object.keys(os_)) {
     if (/^(tun|utun|tap|ipsec|vpn|wg|zt)/i.test(name)) continue;
-    for (const iface of (ifaces[name] || [])) {
+    for (const iface of (os_[name] || [])) {
       if (iface.family !== 'IPv4' || iface.internal) continue;
       if (/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(iface.address)) {
-        return res.json({ ip: iface.address, port, url: `http://${iface.address}:${port}` });
+        candidates.push(iface.address);
       }
     }
   }
-  res.json({ ip: '127.0.0.1', port, url: `http://127.0.0.1:${port}` });
+  // 192.168.x are ordinary home/shop routers — the address tablets share.
+  candidates.sort((a, b) => (b.startsWith('192.168.') ? 1 : 0) - (a.startsWith('192.168.') ? 1 : 0));
+  const ip = candidates[0] || '127.0.0.1';
+  res.json({ ip, port, url: `http://${ip}:${port}`, local });
 });
 
 // ─────────────────────────────────────────────────────────────────────

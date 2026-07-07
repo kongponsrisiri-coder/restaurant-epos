@@ -611,6 +611,14 @@ function NetworkSetupCard({ cardStyle }) {
   }, []);
 
   if (!info) return null;
+  // The cloud (Railway) server reports its datacenter container IP (e.g.
+  // 10.x:8080) — a real address, but useless as a LAN host. In the cloud web
+  // app there's nothing to point tablets at over the LAN (they just open the
+  // same cloud URL), so show the cloud "any device" QR instead of a bogus LAN
+  // address. Desktop / Sunmi-host installs report local:true and keep the LAN
+  // card. (Old desktop servers send no `local` field → undefined → LAN card,
+  // which is correct for them.)
+  if (info.local === false) return <AddTillCard cardStyle={cardStyle} />;
 
   const copy = async () => {
     try {

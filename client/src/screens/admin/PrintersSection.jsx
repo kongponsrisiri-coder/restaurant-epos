@@ -233,12 +233,12 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
     <div style={cardStyle}>
       <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:4 }}>🌐 Network Printers</h2>
       <p style={{ fontSize:13, color:'#888', marginBottom:20, lineHeight:1.6 }}>
-        Enter the IP address of each printer (via a USB print server or built-in LAN port).
-        Once set, <strong>all devices on the same Wi-Fi</strong> — including iPads — print
-        silently with no dialog. Default RAW port 9100; older WAVLINK-style servers will
-        auto-fall-back to LPR port 515. <strong>Save</strong> after entering IPs.
-        Once a printer responds, its MAC is captured silently — if it later gets a
-        new IP from DHCP, the EPOS auto-finds it without operator help.
+        Add every printer here — your main till printers <em>and</em> any extra stations (wok,
+        grill, pass). Enter its IP (via a USB print server or built-in LAN port; default RAW
+        port 9100, older WAVLINK-style servers auto-fall-back to LPR 515), tick what it prints,
+        and <strong>Save</strong>. Once set, <strong>all devices on the same Wi-Fi</strong> —
+        including iPads — print silently with no dialog. Leave IP blank and use the name for a
+        USB/CUPS printer.
       </p>
 
       {discoverToast && (
@@ -247,9 +247,9 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
         </div>
       )}
 
-      {printerRow('🧾 Receipt Printer', 'printer_receipt_ip', 'printer_receipt_port', 'receipt', 'printer_receipt_name', 'printer_receipt_mac')}
-      {printerRow('🍳 Kitchen Printer', 'printer_kitchen_ip', 'printer_kitchen_port', 'kitchen', 'printer_kitchen_name', 'printer_kitchen_mac')}
-      {printerRow('🍹 Bar Printer',     'printer_bar_ip',     'printer_bar_port',     'bar',     'printer_bar_name',     'printer_bar_mac')}
+      {/* SEPOS-PRINT-UNIFY-001 — one flexible list (main printers + extra stations),
+          role toggles + per-printer copies + default. Replaces the 3 fixed rows. */}
+      <StationsCard bare />
 
       {/* SEPOS-ANDROID-001 — auto-print online orders (Android app only). Turn ON for the ONE device at the kitchen/counter so each online order prints once. */}
       {isNativeApp() && (
@@ -265,25 +265,6 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
         </div>
       )}
 
-      {settings.printer_kitchen_ip && (
-        <div style={{ marginTop:-8, marginBottom:16 }}>
-          <label style={{ fontSize:13, fontWeight:600, color:'#555', display:'block', marginBottom:8 }}>Kitchen copies per ticket</label>
-          <div style={{ display:'flex', gap:8 }}>
-            {[1, 2, 3].map(n => (
-              <button key={n} onClick={() => setSettings(s => ({ ...s, printer_kitchen_copies: String(n) }))}
-                style={{ width:56, height:44, borderRadius:8, border:'none', fontWeight:700, fontSize:15, cursor:'pointer',
-                  background: (settings.printer_kitchen_copies || '1') === String(n) ? 'var(--brand-primary, #1a1a2e)' : '#f0f0f0',
-                  color:      (settings.printer_kitchen_copies || '1') === String(n) ? 'white'   : '#555',
-                }}>
-                {n}×
-              </button>
-            ))}
-          </div>
-          <div style={{ fontSize:11, color:'#aaa', marginTop:6 }}>
-            Prints this many tickets per course fire. Use 2× if you have a chef and a sous chef.
-          </div>
-        </div>
-      )}
 
       {/* Kitchen Output Mode — Print / KDS only / Both */}
       <div style={{ marginBottom:16 }}>
@@ -617,7 +598,7 @@ function PrintRoutingCard({ cardStyle, settings, setSettings }) {
 // Beyond the built-in Receipt/Kitchen/Bar above, add as many station printers
 // as the kitchen has. Categories are pointed at a station in Admin → Menu; a
 // category with no station falls back to the default kitchen/bar routing.
-function StationsCard({ cardStyle }) {
+function StationsCard({ cardStyle, bare }) {
   const [list, setList]   = useState([]);
   const [defs, setDefs]   = useState({});     // { receipt, kitchen, bar } → printer id
   const [draft, setDraft] = useState({ name: '', ip: '', port: '9100', copies: '1', role_receipt: false, role_kitchen: true, role_bar: false });
@@ -657,10 +638,9 @@ function StationsCard({ cardStyle }) {
   const patch = (id, k, v) => setList(l => l.map(p => p.id === id ? { ...p, [k]: v } : p));
   const inp = { padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' };
 
-  return (
-    <div style={cardStyle}>
-      <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary,#1a1a2e)', marginBottom: 6 }}>🖨️ Printers</h2>
-      <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>One list for every printer. Tick which tickets each one prints — <b>Bills</b>, <b>Kitchen</b>, <b>Bar</b> — and ⭐ marks the default for that role. Point a menu category at a specific printer in Admin → Menu; anything unrouted goes to the ⭐ default.</div>
+  const body = (
+    <>
+      <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>Add every printer here — main tills and extra stations (wok, grill, pass). Tick which tickets each one prints — <b>Bills</b>, <b>Kitchen</b>, <b>Bar</b> — set its <b>copies</b>, and ⭐ marks the default for that role. Point a menu category at a specific printer in Admin → Menu; anything unrouted goes to the ⭐ default.</div>
 
       {list.map(p => (
         <div key={p.id} style={{ padding: '12px 0', borderTop: '1px solid #f0f0f0' }}>
@@ -712,6 +692,12 @@ function StationsCard({ cardStyle }) {
           })}
         </div>
       </div>
+    </>
+  );
+  return bare ? body : (
+    <div style={cardStyle}>
+      <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary,#1a1a2e)', marginBottom: 6 }}>🖨️ Printers</h2>
+      {body}
     </div>
   );
 }
@@ -749,7 +735,6 @@ export default function PrintersSection() {
 
       <PrintRoutingCard cardStyle={cardStyle} settings={settings} setSettings={setSettings} />
       <NetworkPrinterCard cardStyle={cardStyle} settings={settings} setSettings={setSettings} />
-      <StationsCard cardStyle={cardStyle} />
       <PrinterCard cardStyle={cardStyle} />
 
       <button onClick={handleSave} disabled={saving}

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v73'; // bump to invalidate stale caches (v73: Misc Food + Misc Drink merged into one "🍽 Misc item" button — destination category decides food/bar routing)
+const CACHE_NAME = 'siamepos-shell-v74'; // bump to invalidate stale caches (v74: SEPOS-PRINT-UNIFY-001 — unified printer list inside the Network Printers box: +Add printer, per-printer copies, Bills/Kitchen/Bar role toggles + ⭐ default)
 const APP_SHELL = [
   '/',
   '/index.html',

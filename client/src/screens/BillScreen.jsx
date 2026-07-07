@@ -774,9 +774,14 @@ export default function BillScreen({ orderId, onClose, onPay }) {
         {stage === 'mixed' && (() => {
           const mixPaid = splitTenders.reduce((s, t) => s + t.amount, 0);
           const mixRemaining = Math.max(0, billTotal - mixPaid);
-          // Anything tendered over the bill is CHANGE to hand back to the
-          // customer (e.g. cash £20 for an £18.84 bill → £1.16 change).
-          const mixChange = Math.max(0, mixPaid - billTotal);
+          const mixOver = Math.max(0, mixPaid - billTotal);
+          // What happens to an over-tender depends on whether cash is involved:
+          //  • cash in the mix → CHANGE handed back (£20 cash for £18.84 → £1.16).
+          //  • all card (no cash) → you can't give cash back off a card, so the
+          //    extra is a TIP (gratuity added on the terminal), never change.
+          const hasCashTender = splitTenders.some(t => t.method === 'Cash');
+          const mixChange = hasCashTender ? mixOver : 0;
+          const mixTip    = hasCashTender ? 0       : mixOver;
           const settled = mixPaid + 0.005 >= billTotal;
           // Cash/Card may be tendered OVER what's left (change given); vouchers &
           // deposits cap themselves at the remaining inside their own handlers.
@@ -792,7 +797,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 <div style={{ background: '#f8f8f8', borderRadius: 14, padding: 18, marginBottom: 18 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, marginBottom: 6, color: '#555' }}><span>Bill total</span><span style={{ fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)' }}>£{billTotal.toFixed(2)}</span></div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, marginBottom: 6, color: '#22c55e' }}><span>Paid so far</span><span style={{ fontWeight: 800 }}>£{mixPaid.toFixed(2)}</span></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 18, fontWeight: 800, color: settled ? (mixChange > 0 ? '#22c55e' : '#22c55e') : '#e94560', paddingTop: 8, borderTop: '1px solid #eee' }}><span>{settled ? (mixChange > 0 ? '💚 Change due' : '✅ Settled') : 'Remaining'}</span><span>£{(settled ? mixChange : mixRemaining).toFixed(2)}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 18, fontWeight: 800, color: settled ? (mixTip > 0 ? '#8b5cf6' : '#22c55e') : '#e94560', paddingTop: 8, borderTop: '1px solid #eee' }}><span>{settled ? (mixChange > 0 ? '💚 Change due' : mixTip > 0 ? '💜 Card tip' : '✅ Settled') : 'Remaining'}</span><span>£{(settled ? (mixChange || mixTip) : mixRemaining).toFixed(2)}</span></div>
                 </div>
                 {splitTenders.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
@@ -872,7 +877,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   );
                 })()}
                 {settled && (
-                  <button onClick={() => { const paid = splitTenders.reduce((s, t) => s + t.amount, 0); const method = splitTenders.length === 1 ? splitTenders[0].method : 'Split'; setPaymentDetails({ method, amountPaid: paid, tip: 0, change: Math.max(0, paid - billTotal), tenders: splitTenders }); setStage('receipt'); }} style={{ width: '100%', height: 56, borderRadius: 12, border: 'none', background: '#22c55e', color: '#fff', fontWeight: 800, fontSize: 17, cursor: 'pointer', marginBottom: 12 }}>✓ Confirm &amp; Close — £{billTotal.toFixed(2)}{mixChange > 0 ? ` (£${mixChange.toFixed(2)} change)` : ''}</button>
+                  <button onClick={() => { const paid = splitTenders.reduce((s, t) => s + t.amount, 0); const method = splitTenders.length === 1 ? splitTenders[0].method : 'Split'; setPaymentDetails({ method, amountPaid: paid, tip: mixTip, change: mixChange, tenders: splitTenders }); setStage('receipt'); }} style={{ width: '100%', height: 56, borderRadius: 12, border: 'none', background: '#22c55e', color: '#fff', fontWeight: 800, fontSize: 17, cursor: 'pointer', marginBottom: 12 }}>✓ Confirm &amp; Close — £{billTotal.toFixed(2)}{mixChange > 0 ? ` (£${mixChange.toFixed(2)} change)` : mixTip > 0 ? ` (£${mixTip.toFixed(2)} tip)` : ''}</button>
                 )}
                 <button onClick={cancelMix} style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>← Back to Bill</button>
               </div>

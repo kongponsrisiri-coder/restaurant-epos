@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v69'; // bump to invalidate stale caches (v69: over-tender on the one payment flow = CHANGE to hand back, not a tip)
+const CACHE_NAME = 'siamepos-shell-v70'; // bump to invalidate stale caches (v70: over-tender = CHANGE only when cash is a tender; all-card over-tender = card tip, no change)
 const APP_SHELL = [
   '/',
   '/index.html',

@@ -988,7 +988,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               }} style={{ background: '#F4F1EA', border: '1px solid #E7E2D6', borderRadius: 10, padding: '10px 16px', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: 'var(--brand-primary, #1a1a2e)' }}>‹ Tables</button>
               <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', whiteSpace: 'nowrap' }}>
                 Table {order?.table_number}
-                {(order?.covers || order?.staff_name) ? <span style={{ fontFamily: "'Archivo', sans-serif", fontSize: 13, color: '#9A9488', marginLeft: 10, fontWeight: 600 }}>{order?.covers ? `${order.covers} covers` : ''}{order?.covers && order?.staff_name ? ' · ' : ''}{order?.staff_name || ''}</span> : null}
+                {(order?.covers || staff?.name) ? <span style={{ fontFamily: "'Archivo', sans-serif", fontSize: 13, color: '#9A9488', marginLeft: 10, fontWeight: 600 }}>{order?.covers ? `${order.covers} covers` : ''}{order?.covers && staff?.name ? ' · ' : ''}{staff?.name || ''}</span> : null}
               </div>
               {/* SEPOS-ORDER-REDESIGN — whole-menu search box */}
               <div style={{ flex: 1, position: 'relative' }}>

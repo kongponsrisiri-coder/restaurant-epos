@@ -31,6 +31,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const [mixVoucherBusy, setMixVoucherBusy] = useState(false);
   // SEPOS-DEPOSIT-001 — booking deposit as one tender (method 'Deposit').
   const [mixDepositCode, setMixDepositCode] = useState('');
+  const [mixDepositAmt,  setMixDepositAmt]  = useState('');
   const [orderDeposit,   setOrderDeposit]   = useState(undefined); // undefined=not fetched, null=none, {..}=found
   const [splitItemCount, setSplitItemCount] = useState(2);
   const [itemAssignments, setItemAssignments] = useState({});
@@ -343,9 +344,10 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   };
 
   // A tender needs its server-side redemption restored when removed if it's a
-  // real redeemed voucher OR a deposit (both decremented a balance). External
-  // bypass vouchers had no redemption to undo.
-  const tenderNeedsRestore = (t) => t && ((t.method === 'Voucher' && !t.external) || t.method === 'Deposit');
+  // real redeemed voucher OR a matched deposit (both decremented a balance).
+  // External/bypass tenders (voucher OR deposit taken on another system) had
+  // no redemption in our DB, so there's nothing to undo.
+  const tenderNeedsRestore = (t) => t && !t.external && (t.method === 'Voucher' || t.method === 'Deposit');
 
   // Remove a tender from the mix; restore THIS tender's redemption by its code
   // (a bill may carry both a voucher AND a deposit — restoring "most-recent"
@@ -363,7 +365,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
       if (tenderNeedsRestore(t)) { try { await removeVoucherFromBill(orderId, t.voucher_code); } catch {} }
     }
     setSplitTenders([]); setMixVoucherCode(''); setMixVoucherAmt(''); setMixVoucherErr('');
-    setMixDepositCode('');
+    setMixDepositCode(''); setMixDepositAmt('');
     setStage('bill');
   };
 
@@ -382,20 +384,33 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     if (!code) { setMixVoucherErr('Enter or scan the deposit code'); return; }
     if (splitTenders.some(t => t.method === 'Deposit')) { setMixVoucherErr('One deposit per bill'); return; }
     if (remaining <= 0) { setMixVoucherErr('Bill already settled'); return; }
+    const enteredAmt = Math.min(parseFloat(mixDepositAmt) || 0, remaining);
     setMixVoucherBusy(true); setMixVoucherErr('');
     try {
-      const v = await getVoucher(code);
-      if (v.error)                 { setMixVoucherErr(v.error); return; }
-      if (v.type !== 'deposit')    { setMixVoucherErr("That's a gift voucher — use the Voucher option"); return; }
-      if (v.status !== 'active')   { setMixVoucherErr(`Deposit is ${v.status}`); return; }
-      const bal = Number(v.balance);
-      if (!(bal > 0))              { setMixVoucherErr('Deposit has no balance left'); return; }
-      const useAmount = Math.min(bal, remaining);
-      const r = await redeemVoucher(code, useAmount, orderId, null);
-      if (r && r.error)            { setMixVoucherErr(r.error); return; }
-      const deducted = Number(r.amount_used ?? useAmount);
-      setSplitTenders(prev => [...prev, { amount: deducted, method: 'Deposit', voucher_code: code, deposit: true }]);
-      setMixDepositCode('');
+      // Best-effort lookup. A match against a type='deposit' voucher in OUR DB
+      // → redeem for real (balance tracked, so it can be restored on removal).
+      // No match → BYPASS: the deposit was taken on another system / as cash and
+      // isn't in our DB, so accept it as a tender for the amount the operator
+      // enters, keeping the code as a reference. The rest of the bill is settled
+      // by another method. A code that matches a real GIFT voucher is bounced to
+      // the Voucher option (a gift card isn't a booking deposit).
+      let v = null;
+      try { v = await getVoucher(code); } catch { v = null; }
+      const known = v && !v.error && v.status === 'active' && Number(v.balance) > 0;
+      if (known && v.type !== 'deposit') { setMixVoucherErr("That's a gift voucher — use the Voucher option"); return; }
+      if (known && v.type === 'deposit') {
+        const bal = Number(v.balance);
+        const cap = enteredAmt > 0 ? enteredAmt : remaining;   // operator may cap how much to use
+        const useAmount = Math.min(bal, cap, remaining);
+        const r = await redeemVoucher(code, useAmount, orderId, null);
+        if (r && r.error)            { setMixVoucherErr(r.error); return; }
+        const deducted = Number(r.amount_used ?? useAmount);
+        setSplitTenders(prev => [...prev, { amount: deducted, method: 'Deposit', voucher_code: code, deposit: true, external: false }]);
+      } else {
+        if (!(enteredAmt > 0)) { setMixVoucherErr('Enter the deposit amount'); return; }
+        setSplitTenders(prev => [...prev, { amount: enteredAmt, method: 'Deposit', voucher_code: code, deposit: true, external: true }]);
+      }
+      setMixDepositCode(''); setMixDepositAmt('');
     } catch (e) { setMixVoucherErr(e.message || 'Could not apply deposit'); }
     finally     { setMixVoucherBusy(false); }
   };
@@ -587,7 +602,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
               <div style={{ display: 'flex', gap: 10, marginBottom: 6 }}>
                 <button onClick={() => { setSelectedMethod('Other'); setPaymentInput(billTotal.toFixed(2)); }} style={{ flex: 1, height: 44, borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 14, background: selectedMethod === 'Other' ? GOLD : 'transparent', color: selectedMethod === 'Other' ? NAVY : '#fff', border: selectedMethod === 'Other' ? 'none' : '1.5px solid rgba(255,255,255,.4)' }}>Other</button>
                 <button onClick={() => { setSplitTenders([]); setMixInput(''); setMixMethod('Cash'); setStage('mixed'); }} style={{ flex: 1, height: 44, borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 14, background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,.4)' }}>💵+💳 Mixed</button>
-                <button onClick={() => { setVoucherCode(''); setVoucherDetails(null); setVoucherErr(''); setStage('voucher'); }} style={{ flex: 1, height: 44, borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 14, background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,.4)' }}>🎁 Voucher</button>
+                <button onClick={() => { setSplitTenders([]); setMixInput(''); setMixVoucherCode(''); setMixVoucherAmt(''); setMixDepositCode(''); setMixDepositAmt(''); setMixVoucherErr(''); setMixMethod('Voucher'); setStage('mixed'); }} style={{ flex: 1, height: 44, borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 14, background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,.4)' }}>🎁 Voucher</button>
               </div>
 
               {selectedMethod === 'Cash' ? (
@@ -836,9 +851,15 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                             🧾 Booking deposit found: <b>£{Number(orderDeposit.balance).toFixed(2)}</b> <span style={{ color: '#64748b' }}>({orderDeposit.code})</span>
                           </div>
                         )}
-                        <input value={mixDepositCode} onChange={e => { setMixDepositCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder={orderDeposit ? orderDeposit.code : 'Deposit code (DEP-…)'} style={{ width: '100%', height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase', marginBottom: 8 }} />
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                          <input value={mixDepositCode} onChange={e => { setMixDepositCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder={orderDeposit ? orderDeposit.code : 'Deposit code / reference'} style={{ flex: 2, height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase' }} />
+                          <div style={{ position: 'relative', flex: 1 }}>
+                            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
+                            <input type="number" step="0.01" value={mixDepositAmt} onChange={e => { setMixDepositAmt(e.target.value); setMixVoucherErr(''); }} placeholder={(orderDeposit ? Math.min(Number(orderDeposit.balance), mixRemaining) : mixRemaining).toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                          </div>
+                        </div>
                         {mixVoucherErr && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{mixVoucherErr}</div>}
-                        <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>The deposit applies against the balance up to £{mixRemaining.toFixed(2)}. The bill total is unchanged.</div>
+                        <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>A booking deposit in our system applies against its balance. A deposit taken elsewhere (or as cash) is accepted for the amount you enter, up to £{mixRemaining.toFixed(2)}, with the rest paid by another method. The bill total is unchanged.</div>
                         <button onClick={() => addMixDeposit(mixRemaining)} disabled={mixVoucherBusy || (!mixDepositCode.trim() && !orderDeposit)} style={{ width: '100%', height: 52, borderRadius: 12, border: 'none', cursor: (mixVoucherBusy || (!mixDepositCode.trim() && !orderDeposit)) ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 16, background: (mixVoucherBusy || (!mixDepositCode.trim() && !orderDeposit)) ? '#eee' : 'var(--brand-primary,#0D1B3E)', color: (mixVoucherBusy || (!mixDepositCode.trim() && !orderDeposit)) ? '#aaa' : '#fff', marginBottom: 12 }}>{mixVoucherBusy ? 'Applying…' : `🧾 Apply deposit${orderDeposit ? ` £${Number(orderDeposit.balance).toFixed(2)}` : ''}`}</button>
                       </>
                     ) : mixMethod === 'Voucher' ? (
@@ -1034,7 +1055,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 {[{method:'Cash',icon:'💵'},{method:'Card',icon:'💳'},{method:'Other',icon:'🔄'}].map(({method,icon}) => (
                   <button key={method} onClick={() => { setSelectedMethod(method); setPaymentInput(''); setStage('amount'); }} style={{ padding:isMobile?'22px':'20px', borderRadius:12, border:'2px solid var(--brand-primary, #1a1a2e)', background:'white', color:'var(--brand-primary, #1a1a2e)', fontSize:isMobile?22:20, fontWeight:700, cursor:'pointer' }}>{icon} {method}</button>
                 ))}
-                <button onClick={() => { setVoucherCode(''); setVoucherDetails(null); setVoucherErr(''); setStage('voucher'); }} style={{ padding:isMobile?'22px':'20px', borderRadius:12, border:'2px solid var(--brand-accent,#C9A84C)', background:'#fdf6ec', color:'#5b4a2a', fontSize:isMobile?22:20, fontWeight:700, cursor:'pointer' }}>🎁 Voucher</button>
+                <button onClick={() => { setSplitTenders([]); setMixInput(''); setMixVoucherCode(''); setMixVoucherAmt(''); setMixDepositCode(''); setMixDepositAmt(''); setMixVoucherErr(''); setMixMethod('Voucher'); setStage('mixed'); }} style={{ padding:isMobile?'22px':'20px', borderRadius:12, border:'2px solid var(--brand-accent,#C9A84C)', background:'#fdf6ec', color:'#5b4a2a', fontSize:isMobile?22:20, fontWeight:700, cursor:'pointer' }}>🎁 Voucher</button>
               </div>
               {!isMobile && <button onClick={() => setStage('bill')} style={{ width:'100%', padding:'14px', borderRadius:10, border:'none', background:'#f0f0f0', cursor:'pointer', fontWeight:700, fontSize:15 }}>← Back to Bill</button>}
             </div>

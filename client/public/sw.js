@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v66'; // bump to invalidate stale caches (v66: 07-07 payments/deposits/allergen/font/stations + bug-hunt fixes)
+const CACHE_NAME = 'siamepos-shell-v67'; // bump to invalidate stale caches (v67: 07-07 voucher+deposit bypass on EVERY code entry — Voucher button routes to the tender flow; deposit accepts any amount, rest by another method)
 const APP_SHELL = [
   '/',
   '/index.html',

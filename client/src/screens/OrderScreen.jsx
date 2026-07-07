@@ -291,10 +291,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   // price + qty and pick a destination CATEGORY, which drives kitchen-vs-bar and
   // which printer/station the ticket routes to (same as a normal item's
   // category). The line has no menu_item_id — a first-class custom row.
-  const openMiscPopup = (kind) => {
-    const wantBar = kind === 'drink';
-    const preset = menu.find(c => !!c.is_bar === wantBar) || menu[0];
-    setMiscPopup({ kind, name: '', price: '', quantity: 1, category_id: preset ? preset.id : null });
+  const openMiscPopup = () => {
+    // One Misc button — the destination category (chosen in the popup) decides
+    // food/drink → kitchen/bar routing. Default to the category being viewed.
+    const preset = menu.find(c => c.id === activeCategory) || menu[0];
+    setMiscPopup({ name: '', price: '', quantity: 1, category_id: preset ? preset.id : null });
   };
 
   const addMiscToCart = () => {
@@ -305,7 +306,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     const qty = Math.max(1, Math.floor(Number(p.quantity) || 1));
     if (!name || price <= 0) return;
     const cat = menu.find(c => c.id === p.category_id);
-    const isBar = cat ? !!cat.is_bar : (p.kind === 'drink');
+    const isBar = cat ? !!cat.is_bar : false;
     const course = isBar ? 0 : (cat && cat.default_course != null ? Number(cat.default_course) : 1);
     setCart(prev => [...prev, {
       cartKey: 'MISC_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '_' + name,   // unique so misc lines never merge with each other
@@ -850,13 +851,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 {cat.name} {cat.is_bar ? '🍹' : ''}
               </button>
             ))}
-            {/* SEPOS-MISC-001 — off-menu / special open items, at the right end */}
-            <button onClick={() => openMiscPopup('food')} style={{
+            {/* SEPOS-MISC-001 — off-menu / special open item, at the right end */}
+            <button onClick={() => openMiscPopup()} style={{
               padding: '10px 16px', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap',
-              border: '1.5px dashed #C9A84C', background: '#FBF7EC', color: '#9A7B1F' }}>🍽 Misc Food</button>
-            <button onClick={() => openMiscPopup('drink')} style={{
-              padding: '10px 16px', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap',
-              border: '1.5px dashed #C9A84C', background: '#FBF7EC', color: '#9A7B1F' }}>🥤 Misc Drink</button>
+              border: '1.5px dashed #C9A84C', background: '#FBF7EC', color: '#9A7B1F' }}>🍽 Misc item</button>
           </div>
 
           {/* Sub-category tabs */}
@@ -1005,13 +1003,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       </button>
                     );
                   })}
-                  {/* SEPOS-MISC-001 — off-menu / special open items, at the right end */}
-                  <button onClick={() => openMiscPopup('food')} style={{
+                  {/* SEPOS-MISC-001 — off-menu / special open item, at the right end */}
+                  <button onClick={() => openMiscPopup()} style={{
                     marginLeft: 'auto', padding: '18px 24px', borderRadius: 16, cursor: 'pointer', fontWeight: 800, fontSize: 18, whiteSpace: 'nowrap',
-                    border: '1.5px dashed #C9A84C', background: '#FBF7EC', color: '#9A7B1F' }}>🍽 Misc Food</button>
-                  <button onClick={() => openMiscPopup('drink')} style={{
-                    padding: '18px 24px', borderRadius: 16, cursor: 'pointer', fontWeight: 800, fontSize: 18, whiteSpace: 'nowrap',
-                    border: '1.5px dashed #C9A84C', background: '#FBF7EC', color: '#9A7B1F' }}>🥤 Misc Drink</button>
+                    border: '1.5px dashed #C9A84C', background: '#FBF7EC', color: '#9A7B1F' }}>🍽 Misc item</button>
                 </div>
                 {/* Sub-category tabs — shown only when the category has sub-cats
                     (no big "All" list). "General" holds any un-filed items so
@@ -1678,7 +1673,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
           }}>
             <div style={{ background: 'white', borderRadius: 16, padding: 28, width: 420, maxWidth: '92vw', maxHeight: '85vh', overflowY: 'auto' }}>
               <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 4 }}>
-                {miscPopup.kind === 'drink' ? '🥤 Misc Drink' : '🍽 Misc Food'}
+                🍽 Misc item
               </h2>
               <p style={{ color: '#888', fontSize: 13, marginBottom: 18 }}>Off-menu or special request — type the name and price.</p>
 

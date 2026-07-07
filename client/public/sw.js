@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v72'; // bump to invalidate stale caches (v72: menu reorder fix — arranging an item to the top now sticks; boot migration no longer resets sort_order=0 items to their id every restart)
+const CACHE_NAME = 'siamepos-shell-v73'; // bump to invalidate stale caches (v73: Misc Food + Misc Drink merged into one "🍽 Misc item" button — destination category decides food/bar routing)
 const APP_SHELL = [
   '/',
   '/index.html',

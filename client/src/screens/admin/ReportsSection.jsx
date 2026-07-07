@@ -7,6 +7,14 @@ import {
   fmt, fmtInt, periodLabel, restaurantName, nowStamp,
 } from '../../utils/reportPrinter';
 
+// Food-vs-drink split — % of (food + drink) so the two sum to 100% (service
+// charge is separate). Returns '' when there's no food/drink to split.
+const fdPct = (part, food, drink) => {
+  const t = Number(food || 0) + Number(drink || 0);
+  return t > 0 ? `${(Number(part || 0) / t * 100).toFixed(1)}%` : '';
+};
+const fdParen = (part, food, drink) => { const p = fdPct(part, food, drink); return p ? ` (${p})` : ''; };
+
 export default function ReportsSection() {
   const [tab, setTab] = useState('sales');
   const [period, setPeriod] = useState('today');
@@ -45,8 +53,8 @@ export default function ReportsSection() {
         ]);
       });
       rows.push([]);
-      rows.push(['', '', '', '', 'Food',                 Number(data.total_food     || 0).toFixed(2)]);
-      rows.push(['', '', '', '', 'Drink',                Number(data.total_drink    || 0).toFixed(2)]);
+      rows.push(['', '', '', '', `Food${fdParen(data.total_food, data.total_food, data.total_drink)}`,  Number(data.total_food     || 0).toFixed(2)]);
+      rows.push(['', '', '', '', `Drink${fdParen(data.total_drink, data.total_food, data.total_drink)}`, Number(data.total_drink    || 0).toFixed(2)]);
       rows.push(['', '', '', '', 'Service charge',       Number(data.total_service  || 0).toFixed(2)]);
       rows.push(['', '', '', '', `TOTAL (${data.order_count || 0} orders · ${data.total_covers || 0} covers)`, Number(data.total_sales || 0).toFixed(2)]);
       if (data?.vouchers_sold?.count > 0 || data?.vouchers_redeemed?.count > 0) {
@@ -169,8 +177,8 @@ export default function ReportsSection() {
                     </div>
                   )}
                   <div style={{ padding: '10px 20px', background: '#fafafa', display:'flex', flexDirection:'column', gap:4, fontSize:13 }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', color:'#555' }}><span>🍽️ Food</span><span>£{Number(data.total_food || 0).toFixed(2)}</span></div>
-                    <div style={{ display:'flex', justifyContent:'space-between', color:'#555' }}><span>🍺 Drink</span><span>£{Number(data.total_drink || 0).toFixed(2)}</span></div>
+                    <div style={{ display:'flex', justifyContent:'space-between', color:'#555' }}><span>🍽️ Food{fdPct(data.total_food, data.total_food, data.total_drink) && <span style={{ color:'#999', marginLeft:6 }}>({fdPct(data.total_food, data.total_food, data.total_drink)})</span>}</span><span>£{Number(data.total_food || 0).toFixed(2)}</span></div>
+                    <div style={{ display:'flex', justifyContent:'space-between', color:'#555' }}><span>🍺 Drink{fdPct(data.total_drink, data.total_food, data.total_drink) && <span style={{ color:'#999', marginLeft:6 }}>({fdPct(data.total_drink, data.total_food, data.total_drink)})</span>}</span><span>£{Number(data.total_drink || 0).toFixed(2)}</span></div>
                     <div style={{ display:'flex', justifyContent:'space-between', color:'var(--brand-primary,#0D1B3E)', fontWeight:600 }}><span>Service charge (12.5%)</span><span>£{Number(data.total_service || 0).toFixed(2)}</span></div>
                   </div>
                   <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', background: '#f8f8f8', fontWeight: 700 }}>
@@ -271,8 +279,8 @@ function buildSalesBody(data, period, from, to, settings, thermal) {
     <table>
       <tr><td>Dine-in (${data.dine_in_count || 0})</td><td class="right">${fmt(data.total_dine_in)}</td></tr>
       ${data.takeaway_count > 0 ? `<tr><td>🥡 Takeaway (${data.takeaway_count})</td><td class="right">${fmt(data.total_takeaway)}</td></tr>` : ''}
-      <tr><td>Food</td><td class="right">${fmt(data.total_food)}</td></tr>
-      <tr><td>Drink</td><td class="right">${fmt(data.total_drink)}</td></tr>
+      <tr><td>Food${fdParen(data.total_food, data.total_food, data.total_drink)}</td><td class="right">${fmt(data.total_food)}</td></tr>
+      <tr><td>Drink${fdParen(data.total_drink, data.total_food, data.total_drink)}</td><td class="right">${fmt(data.total_drink)}</td></tr>
       <tr><td>Service charge (12.5%)</td><td class="right">${fmt(data.total_service)}</td></tr>
       <tr class="total-row"><td>TOTAL · ${orderCount} orders</td><td class="right">${fmt(totalSales)}</td></tr>
     </table>`;
@@ -281,8 +289,8 @@ function buildSalesBody(data, period, from, to, settings, thermal) {
     <table>
       <tr><td>Dine-in (${data.dine_in_count || 0} orders)</td><td class="right">${fmt(data.total_dine_in)}</td></tr>
       ${data.takeaway_count > 0 ? `<tr><td>🥡 Online Takeaway (${data.takeaway_count} orders)</td><td class="right">${fmt(data.total_takeaway)}</td></tr>` : ''}
-      <tr><td>🍽️ Food</td><td class="right">${fmt(data.total_food)}</td></tr>
-      <tr><td>🍺 Drink</td><td class="right">${fmt(data.total_drink)}</td></tr>
+      <tr><td>🍽️ Food${fdParen(data.total_food, data.total_food, data.total_drink)}</td><td class="right">${fmt(data.total_food)}</td></tr>
+      <tr><td>🍺 Drink${fdParen(data.total_drink, data.total_food, data.total_drink)}</td><td class="right">${fmt(data.total_drink)}</td></tr>
       <tr><td>Service charge (12.5%)</td><td class="right">${fmt(data.total_service)}</td></tr>
       <tr class="total-row"><td>Total sales (${orderCount} orders · ${covers} covers)</td><td class="right">${fmt(totalSales)}</td></tr>
     </table>`;

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v78'; // v78: cash drawer opens on payment (kick via receipt printer, ESC/POS paths only) + Settings toggle (default on)
+const CACHE_NAME = 'siamepos-shell-v79'; // v79: Sales Report shows Food + Drink as % (food-vs-drink split) on screen, print + CSV
 const APP_SHELL = [
   '/',
   '/index.html',

@@ -617,6 +617,43 @@ app.post('/api/printers/set-default', async (req, res) => {
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+// SEPOS-PRINT-UNIFY-001 — "Scan for printers". Probes this server's own /24
+// subnet on the RAW print port (9100) and returns whatever answers, so the
+// operator doesn't have to hunt for IPs. Only meaningful when the server is ON
+// the restaurant's LAN — i.e. the desktop (Electron) / Sunmi local install. On
+// the cloud backend it can't reach a private LAN, so we return local:false and
+// the UI tells the operator to run it from the till app or type the IP.
+app.get('/api/printers/scan', async (req, res) => {
+  if (!archiveService.isLocalInstall()) {
+    return res.json({ local: false, printers: [], message: 'Scanning finds printers on the same network — run it from the till / desktop app, or enter the IP manually.' });
+  }
+  try {
+    const os = require('os'), net = require('net');
+    // Find this machine's LAN IPv4 → derive the /24 to sweep.
+    let base = null;
+    for (const ifaces of Object.values(os.networkInterfaces())) {
+      for (const ni of ifaces || []) {
+        if (ni.family === 'IPv4' && !ni.internal) { base = ni.address.split('.').slice(0, 3).join('.'); break; }
+      }
+      if (base) break;
+    }
+    if (!base) return res.json({ local: true, printers: [], message: 'No LAN connection found on this device.' });
+    const port = 9100;
+    const probe = (host) => new Promise((resolve) => {
+      const s = new net.Socket();
+      let done = false;
+      const finish = (ok) => { if (done) return; done = true; try { s.destroy(); } catch {} resolve(ok ? host : null); };
+      s.setTimeout(500);
+      s.once('connect', () => finish(true));
+      s.once('timeout', () => finish(false));
+      s.once('error', () => finish(false));
+      s.connect(port, host);
+    });
+    const hosts = Array.from({ length: 254 }, (_, i) => `${base}.${i + 1}`);
+    const found = (await Promise.all(hosts.map(probe))).filter(Boolean);
+    res.json({ local: true, subnet: `${base}.0/24`, printers: found.map(ip => ({ ip, port })) });
+  } catch (err) { res.status(500).json({ local: true, printers: [], error: err.message }); }
+});
 app.delete('/api/printers/:id', async (req, res) => {
   try {
     // Detach any categories pointed here (they fall back to default kitchen/bar).

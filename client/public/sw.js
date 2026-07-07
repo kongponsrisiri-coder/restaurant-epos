@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v76'; // v76: assign menu categories to a printer directly on the Printers page (the 'point' — which food prints where)
+const CACHE_NAME = 'siamepos-shell-v77'; // v77: 'Scan for printers' on the Printers page — sweeps the LAN on :9100 (local/desktop install only; web says run from the till app or enter IP)
 const APP_SHELL = [
   '/',
   '/index.html',

@@ -10,7 +10,7 @@
 // to persist changes.
 
 import { useState, useEffect } from 'react';
-import { getSettings, updateSettings, testNetworkPrinter, cupsQueueForIp, printerHealth, printerGetMac, printerDiscover, printerThaiTest, getPrintTestBuffer, getPrinters, createPrinter, updatePrinter, deletePrinter, testPrinter, setPrinterDefault, getCategories, setCategoryPrinter } from '../../api';
+import { getSettings, updateSettings, testNetworkPrinter, cupsQueueForIp, printerHealth, printerGetMac, printerDiscover, printerThaiTest, getPrintTestBuffer, getPrinters, createPrinter, updatePrinter, deletePrinter, testPrinter, setPrinterDefault, getCategories, setCategoryPrinter, scanPrinters } from '../../api';
 import { isNativeApp, sendRawToPrinter } from '../../native/printer'; // SEPOS-ANDROID-001
 
 // ── Network Printers card (IP-based, RAW + LPR + CUPS fallback chain) ──
@@ -605,6 +605,8 @@ function StationsCard({ cardStyle, bare }) {
   const [draft, setDraft] = useState({ name: '', ip: '', port: '9100', copies: '1', role_receipt: false, role_kitchen: true, role_bar: false });
   const [busy, setBusy]   = useState(false);
   const [tState, setTState] = useState({});   // { id: idle|testing|ok|fail }
+  const [scanning, setScanning] = useState(false);
+  const [scanRes, setScanRes]   = useState(null);   // {local, printers[], message?}
 
   const refresh = async () => {
     try {
@@ -617,6 +619,8 @@ function StationsCard({ cardStyle, bare }) {
   // Route a menu category to this printer (or null to unassign) — the "point"
   // that decides which food prints here, editable without leaving this page.
   const assignCat = async (catId, printerId) => { await setCategoryPrinter(catId, printerId); await refresh(); };
+  const scan = async () => { setScanning(true); setScanRes(null); try { setScanRes(await scanPrinters()); } catch (e) { setScanRes({ error: e.message }); } finally { setScanning(false); } };
+  const addFound = async (ip) => { if (list.some(p => p.ip === ip)) return; await createPrinter({ name: ip, ip, port: 9100, copies: 1, role_kitchen: 1 }); setScanRes(null); await refresh(); };
   useEffect(() => { refresh(); }, []);
 
   const ROLES = [['receipt', '🧾 Bills'], ['kitchen', '🍳 Kitchen'], ['bar', '🍹 Bar']];
@@ -692,6 +696,40 @@ function StationsCard({ cardStyle, bare }) {
           </div>
         </div>
       ))}
+
+      {/* Scan the local network for printers (works on the till/desktop app; the
+          cloud/web version can't reach a private LAN — it returns local:false). */}
+      <div style={{ paddingTop: 14, marginTop: 8, borderTop: '1px dashed #e5e5e5' }}>
+        <button onClick={scan} disabled={scanning} style={{ ...inp, border: '1.5px solid var(--brand-primary,#0D1B3E)', background: '#fff', color: 'var(--brand-primary,#0D1B3E)', fontWeight: 700, cursor: scanning ? 'wait' : 'pointer' }}>
+          {scanning ? '🔍 Scanning…' : '🔍 Scan for printers'}
+        </button>
+        {scanRes && (
+          <div style={{ marginTop: 10, fontSize: 13 }}>
+            {scanRes.error ? (
+              <div style={{ color: '#dc2626' }}>Scan failed: {scanRes.error}</div>
+            ) : scanRes.local === false ? (
+              <div style={{ color: '#888' }}>{scanRes.message}</div>
+            ) : (scanRes.printers && scanRes.printers.length) ? (
+              <div>
+                <div style={{ color: '#555', marginBottom: 6 }}>Found on {scanRes.subnet}:</div>
+                {scanRes.printers.map(p => {
+                  const already = list.some(x => x.ip === p.ip);
+                  return (
+                    <div key={p.ip} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
+                      <span style={{ fontFamily: 'monospace' }}>{p.ip}:{p.port}</span>
+                      {already
+                        ? <span style={{ color: '#16a34a', fontSize: 12 }}>✓ already added</span>
+                        : <button onClick={() => addFound(p.ip)} style={{ ...inp, padding: '4px 10px', border: 'none', background: 'var(--brand-accent,#C9A84C)', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>+ Add</button>}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ color: '#888' }}>No printers found on {scanRes.subnet || 'this network'}. Enter the IP manually below.</div>
+            )}
+          </div>
+        )}
+      </div>
 
       <div style={{ paddingTop: 14, marginTop: 8, borderTop: '2px solid #eee' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>

@@ -7889,6 +7889,13 @@ app.post('/api/print/receipt', async (req, res) => {
 // never blocks the payment. printer_name overrides the receipt device.
 app.post('/api/print/drawer', async (req, res) => {
   const { printer_name } = req.body || {};
+  // The drawer kicks a printer on the LAN — only reachable from a local-server
+  // till (desktop/Sunmi, DB_MODE=local). On the cloud backend the printer is
+  // unreachable and the RAW→LPR→CUPS fallback would burn ~15s per payment, so
+  // skip instantly. (Fires per payment, so speed matters.)
+  if (String(process.env.DB_MODE || '').toLowerCase() !== 'local') {
+    return res.json({ success: false, skipped: 'not a local till' });
+  }
   try {
     const settings = await loadSettings();
     if (settings.open_drawer_on_payment === '0') return res.json({ success: false, skipped: 'disabled' });

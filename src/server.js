@@ -1444,7 +1444,7 @@ app.get('/api/orders/:id/bill', async (req, res) => {
   try {
     const [orderRes, itemsRes, settingsRes] = await Promise.all([
       pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id=$1`, [req.params.id]),
-      pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt, COALESCE(menu_items.vat_rate, 20) AS vat_rate FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id=$1 AND order_items.voided=0`, [req.params.id]),
+      pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt, menu_items.vat_rate FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id=$1 AND order_items.voided=0`, [req.params.id]),
       pool.query('SELECT * FROM settings')
     ]);
     // Missing order used to return 200 with `{order:{items:[]}}` — the

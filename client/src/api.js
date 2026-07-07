@@ -194,6 +194,7 @@ async function localAppendItems(lid, items) {
       notes: it.notes || '', item_note: it.item_note || '',
       course: it.course || 1,
       is_bar: it.is_bar ? 1 : 0,
+      category_id: it.category_id ?? null,   // SEPOS-MISC-001 — drives kitchen/bar + printer routing for custom (menu_item_id=null) lines
       status: it.is_bar ? 'cooking' : 'pending',
       is_fired: it.is_bar ? 1 : 0,
       voided: 0,

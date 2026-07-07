@@ -163,6 +163,7 @@ function initSchema() {
       discount_type TEXT,
       discount_value REAL,
       resend_reason TEXT,
+      dest_category_id INTEGER,
       cloud_id INTEGER
     );
 
@@ -706,6 +707,7 @@ function runMigrations() {
   //   - Chrome creates an order → cloud INSERT, sync pull → INSERT local with cloud_id set
   // Lookups go cloud_id ↔ local id so the in-memory map can finally be retired.
   addColumnIfMissing('orders',      'cloud_id', 'INTEGER');
+  addColumnIfMissing('order_items', 'dest_category_id', 'INTEGER');  // SEPOS-MISC-001 — Misc line destination category
   addColumnIfMissing('order_items', 'cloud_id', 'INTEGER');
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_cloud_id      ON orders(cloud_id)      WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] orders.cloud_id index:', err.message); }
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_order_items_cloud_id ON order_items(cloud_id) WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] order_items.cloud_id index:', err.message); }

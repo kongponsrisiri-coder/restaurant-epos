@@ -40,6 +40,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const [showKitchenMsg, setShowKitchenMsg] = useState(false); // SEPOS-KITCHEN-MSG-001
   const [selectedModifiers, setSelectedModifiers] = useState({});
   const [notePopup, setNotePopup] = useState(null);
+  const [miscPopup, setMiscPopup] = useState(null); // SEPOS-MISC-001 — off-menu / special open item
   const [voidPopup, setVoidPopup] = useState(null);
   const [resendPopup, setResendPopup] = useState(null);
   const [showBill, setShowBill] = useState(false);
@@ -286,6 +287,39 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     });
   };
 
+  // SEPOS-MISC-001 — off-menu / special "open item". Staff type a free name +
+  // price + qty and pick a destination CATEGORY, which drives kitchen-vs-bar and
+  // which printer/station the ticket routes to (same as a normal item's
+  // category). The line has no menu_item_id — a first-class custom row.
+  const openMiscPopup = (kind) => {
+    const wantBar = kind === 'drink';
+    const preset = menu.find(c => !!c.is_bar === wantBar) || menu[0];
+    setMiscPopup({ kind, name: '', price: '', quantity: 1, category_id: preset ? preset.id : null });
+  };
+
+  const addMiscToCart = () => {
+    const p = miscPopup;
+    if (!p) return;
+    const name = (p.name || '').trim();
+    const price = Number(p.price) || 0;
+    const qty = Math.max(1, Math.floor(Number(p.quantity) || 1));
+    if (!name || price <= 0) return;
+    const cat = menu.find(c => c.id === p.category_id);
+    const isBar = cat ? !!cat.is_bar : (p.kind === 'drink');
+    const course = isBar ? 0 : (cat && cat.default_course != null ? Number(cat.default_course) : 1);
+    setCart(prev => [...prev, {
+      cartKey: 'MISC_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '_' + name,   // unique so misc lines never merge with each other
+      menu_item_id: null, name, name_alt: '',
+      unit_price: price, quantity: qty,
+      notes: '', item_note: '',
+      course,
+      is_bar: isBar ? 1 : 0,
+      category_id: cat ? cat.id : null,
+      modifiers: [],
+    }]);
+    setMiscPopup(null);
+  };
+
   const removeFromCart = (cartKey, item_note) => {
     setCart(prev => {
       const existing = prev.find(c => c.cartKey === cartKey && c.item_note === item_note);
@@ -478,6 +512,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         unit_price: c.unit_price, quantity: c.quantity,
         notes: c.notes || '', item_note: c.item_note || '',
         course: c.is_bar ? 0 : (c.course || 1), is_bar: c.is_bar ? 1 : 0,
+        category_id: c.category_id ?? null,
         is_fired: c.is_bar ? 1 : 0, status: c.is_bar ? 'cooking' : 'pending', voided: 0,
       };
     });
@@ -815,6 +850,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 {cat.name} {cat.is_bar ? '🍹' : ''}
               </button>
             ))}
+            {/* SEPOS-MISC-001 — off-menu / special open items, at the right end */}
+            <button onClick={() => openMiscPopup('food')} style={{
+              padding: '10px 16px', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap',
+              border: '1.5px dashed #C9A84C', background: '#FBF7EC', color: '#9A7B1F' }}>🍽 Misc Food</button>
+            <button onClick={() => openMiscPopup('drink')} style={{
+              padding: '10px 16px', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap',
+              border: '1.5px dashed #C9A84C', background: '#FBF7EC', color: '#9A7B1F' }}>🥤 Misc Drink</button>
           </div>
 
           {/* Sub-category tabs */}
@@ -963,6 +1005,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       </button>
                     );
                   })}
+                  {/* SEPOS-MISC-001 — off-menu / special open items, at the right end */}
+                  <button onClick={() => openMiscPopup('food')} style={{
+                    marginLeft: 'auto', padding: '18px 24px', borderRadius: 16, cursor: 'pointer', fontWeight: 800, fontSize: 18, whiteSpace: 'nowrap',
+                    border: '1.5px dashed #C9A84C', background: '#FBF7EC', color: '#9A7B1F' }}>🍽 Misc Food</button>
+                  <button onClick={() => openMiscPopup('drink')} style={{
+                    padding: '18px 24px', borderRadius: 16, cursor: 'pointer', fontWeight: 800, fontSize: 18, whiteSpace: 'nowrap',
+                    border: '1.5px dashed #C9A84C', background: '#FBF7EC', color: '#9A7B1F' }}>🥤 Misc Drink</button>
                 </div>
                 {/* Sub-category tabs — shown only when the category has sub-cats
                     (no big "All" list). "General" holds any un-filed items so
@@ -1618,6 +1667,66 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             onClose={() => setShowKitchenMsg(false)}
             onSent={() => {}}
           />
+        )}
+
+        {/* SEPOS-MISC-001 — MISC ITEM POPUP (off-menu / special open item) */}
+        {miscPopup && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          }}>
+            <div style={{ background: 'white', borderRadius: 16, padding: 28, width: 420, maxWidth: '92vw', maxHeight: '85vh', overflowY: 'auto' }}>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 4 }}>
+                {miscPopup.kind === 'drink' ? '🥤 Misc Drink' : '🍽 Misc Food'}
+              </h2>
+              <p style={{ color: '#888', fontSize: 13, marginBottom: 18 }}>Off-menu or special request — type the name and price.</p>
+
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>Name</label>
+              <input autoFocus value={miscPopup.name} onChange={e => setMiscPopup(p => ({ ...p, name: e.target.value }))}
+                placeholder="e.g. Chef's special soup" style={{ width: '100%', height: 48, padding: '0 14px', borderRadius: 10, border: '1.5px solid #ddd', fontSize: 16, boxSizing: 'border-box', marginBottom: 16 }} />
+
+              <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>Price</label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
+                    <input type="number" step="0.01" min="0" value={miscPopup.price} onChange={e => setMiscPopup(p => ({ ...p, price: e.target.value }))}
+                      placeholder="0.00" style={{ width: '100%', height: 48, padding: '0 12px 0 24px', borderRadius: 10, border: '1.5px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                  </div>
+                </div>
+                <div style={{ width: 130 }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>Qty</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button onClick={() => setMiscPopup(p => ({ ...p, quantity: Math.max(1, (Number(p.quantity) || 1) - 1) }))} style={{ width: 40, height: 48, borderRadius: 10, border: '1.5px solid #ddd', background: '#f7f7f7', cursor: 'pointer', fontSize: 20, fontWeight: 700 }}>−</button>
+                    <input type="number" min="1" value={miscPopup.quantity} onChange={e => setMiscPopup(p => ({ ...p, quantity: e.target.value }))}
+                      style={{ width: 44, height: 48, textAlign: 'center', borderRadius: 10, border: '1.5px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                    <button onClick={() => setMiscPopup(p => ({ ...p, quantity: (Number(p.quantity) || 1) + 1 }))} style={{ width: 40, height: 48, borderRadius: 10, border: '1.5px solid #ddd', background: '#f7f7f7', cursor: 'pointer', fontSize: 20, fontWeight: 700 }}>+</button>
+                  </div>
+                </div>
+              </div>
+
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>Send to (prints with this section's kitchen/bar printer)</label>
+              <select value={miscPopup.category_id ?? ''} onChange={e => setMiscPopup(p => ({ ...p, category_id: Number(e.target.value) }))}
+                style={{ width: '100%', height: 48, padding: '0 12px', borderRadius: 10, border: '1.5px solid #ddd', fontSize: 16, boxSizing: 'border-box', marginBottom: 22, background: '#fff' }}>
+                {menu.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}{cat.is_bar ? ' 🍹' : ''}</option>
+                ))}
+              </select>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setMiscPopup(null)} style={{ flex: 1, padding: '14px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>Cancel</button>
+                {(() => {
+                  const ok = (miscPopup.name || '').trim() && (Number(miscPopup.price) || 0) > 0;
+                  return (
+                    <button onClick={addMiscToCart} disabled={!ok} style={{ flex: 2, padding: '14px', borderRadius: 10, border: 'none', background: ok ? '#e94560' : '#f3c3cc', color: 'white', cursor: ok ? 'pointer' : 'not-allowed', fontWeight: 700, fontSize: 15 }}>
+                      Add to order{(Number(miscPopup.price) || 0) > 0 ? ` · £${((Number(miscPopup.price) || 0) * Math.max(1, Math.floor(Number(miscPopup.quantity) || 1))).toFixed(2)}` : ''}
+                    </button>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
         )}
 
         {/* MODIFIER POPUP */}

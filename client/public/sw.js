@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v70'; // bump to invalidate stale caches (v70: over-tender = CHANGE only when cash is a tender; all-card over-tender = card tip, no change)
+const CACHE_NAME = 'siamepos-shell-v71'; // bump to invalidate stale caches (v71: SEPOS-MISC-001 — Misc Food/Misc Drink open-item buttons on the order screen: free name+price+qty, pick a destination category that drives kitchen/bar + printer routing)
 const APP_SHELL = [
   '/',
   '/index.html',

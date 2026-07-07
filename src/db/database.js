@@ -196,13 +196,21 @@ async function initDB() {
         voided INTEGER DEFAULT 0,
         void_reason TEXT,
         discount_type VARCHAR(50),
-        discount_value DECIMAL(10,2)
+        discount_value DECIMAL(10,2),
+        dest_category_id INTEGER
       )
     `);
 
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS item_name VARCHAR(255)`);
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS resend_reason TEXT`);  // SEPOS-024
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS void_type VARCHAR(50)`); // SEPOS-023
+    // SEPOS-MISC-001 — a Misc/open line has no menu_item_id, so it can't inherit
+    // kitchen/bar + printer routing via menu_items.category_id. Persist the
+    // operator-chosen destination category HERE (named dest_category_id to avoid
+    // colliding with menu_items.category_id in the many `order_items.*` SELECTs)
+    // so reads resolve routing + name + VAT via
+    // COALESCE(menu_items.category_id, order_items.dest_category_id).
+    await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS dest_category_id INTEGER`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS vat_rate DECIMAL(5,2) DEFAULT 20.0`); // SEPOS-021
 
     // SEPOS-034: takeaway / delivery online ordering

@@ -938,7 +938,7 @@ app.get('/api/orders/bar', async (req, res) => {
     if (!orders.length) return res.json([]);
     const orderIds = orders.map(o => o.id);
     const itemsRes = await pool.query(
-      `SELECT order_items.*, menu_items.name, menu_items.name_alt, categories.is_bar FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON menu_items.category_id = categories.id WHERE order_items.order_id = ANY($1) AND order_items.voided = 0 AND order_items.status != 'served' AND categories.is_bar = 1`,
+      `SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt, categories.is_bar FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON categories.id = COALESCE(menu_items.category_id, order_items.dest_category_id) WHERE order_items.order_id = ANY($1) AND order_items.voided = 0 AND order_items.status != 'served' AND categories.is_bar = 1`,
       [orderIds]
     );
     res.json(orders.map(order => ({ ...order, items: itemsRes.rows.filter(i => i.order_id === order.id) })).filter(o => o.items.length > 0));
@@ -951,7 +951,7 @@ app.get('/api/orders/:id', async (req, res) => {
     const order = orderRes.rows[0];
     if (!order) return res.status(404).json({ error: 'Order not found' });
     const itemsRes = await pool.query(
-      `SELECT order_items.*, menu_items.name, menu_items.name_alt, menu_items.category_id, categories.is_bar FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON menu_items.category_id = categories.id WHERE order_items.order_id = $1`,
+      `SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt, menu_items.category_id, categories.is_bar FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON categories.id = COALESCE(menu_items.category_id, order_items.dest_category_id) WHERE order_items.order_id = $1`,
       [req.params.id]
     );
     res.json({ ...order, items: itemsRes.rows });
@@ -1035,9 +1035,13 @@ app.post('/api/orders/:id/items', requireValidLicense, async (req, res) => {
         }
         unitPrice = (Number(unitPrice) || 0) + extra;
       }
+      // SEPOS-MISC-001 — Misc/open lines carry a chosen destination category so
+      // routing (kitchen/bar + printer) + name + VAT resolve through it. Normal
+      // lines leave it null and route via menu_items.category_id as before.
+      const destCategoryId = item.category_id != null ? Number(item.category_id) : null;
       const ins = await client.query(
-        `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at, item_name) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
-        [orderId, item.menu_item_id, item.quantity, unitPrice, item.notes || '', item.course || 1, item.item_note || '', isBar, firedAt, firedAt, itemName]
+        `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at, item_name, dest_category_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+        [orderId, item.menu_item_id, item.quantity, unitPrice, item.notes || '', item.course || 1, item.item_note || '', isBar, firedAt, firedAt, itemName, destCategoryId]
       );
       const newRowId = ins.rows[0].id;
       if (isBar) firedBarIds.push(newRowId);
@@ -1048,7 +1052,7 @@ app.post('/api/orders/:id/items', requireValidLicense, async (req, res) => {
     await client.query('UPDATE orders SET total = $1 WHERE id = $2', [total, orderId]);
     await client.query('COMMIT');
     const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
-    const newItemsRes = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id = $1 AND order_items.is_fired = 1 AND order_items.status = 'cooking'`, [orderId]);
+    const newItemsRes = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id = $1 AND order_items.is_fired = 1 AND order_items.status = 'cooking'`, [orderId]);
     io.emit('new_order_items', { order: orderRes.rows[0], items: newItemsRes.rows });
     await offlineQueue.enqueue('add_items', { localOrderId: Number(orderId), items: queuedItems });
     // SEPOS-032: bar items go is_fired=1 immediately → deplete stock now
@@ -1072,17 +1076,17 @@ app.put('/api/orders/:id/fire-course/:course', async (req, res) => {
     // SEPOS-032: capture ids about-to-be-fired before the UPDATE so we
     // can deplete stock for exactly that set.
     const aboutToFireRes = await pool.query(
-      `SELECT id FROM order_items WHERE order_id=$1 AND course=$2 AND is_fired=0 AND voided=0 AND menu_item_id IN (SELECT menu_items.id FROM menu_items LEFT JOIN categories ON menu_items.category_id = categories.id WHERE categories.is_bar = 0 OR categories.is_bar IS NULL)`,
+      `SELECT id FROM order_items WHERE order_id=$1 AND course=$2 AND is_fired=0 AND voided=0 AND (menu_item_id IN (SELECT menu_items.id FROM menu_items LEFT JOIN categories ON menu_items.category_id = categories.id WHERE categories.is_bar = 0 OR categories.is_bar IS NULL) OR (menu_item_id IS NULL AND (dest_category_id IS NULL OR dest_category_id IN (SELECT id FROM categories WHERE is_bar = 0))))`,
       [id, course]
     );
     const firedIds = aboutToFireRes.rows.map(r => r.id);
     const result = await pool.query(
-      `UPDATE order_items SET is_fired=1, fired_at=$1, status='cooking', cooking_started_at=$2 WHERE order_id=$3 AND course=$4 AND is_fired=0 AND voided=0 AND menu_item_id IN (SELECT menu_items.id FROM menu_items LEFT JOIN categories ON menu_items.category_id = categories.id WHERE categories.is_bar = 0 OR categories.is_bar IS NULL)`,
+      `UPDATE order_items SET is_fired=1, fired_at=$1, status='cooking', cooking_started_at=$2 WHERE order_id=$3 AND course=$4 AND is_fired=0 AND voided=0 AND (menu_item_id IN (SELECT menu_items.id FROM menu_items LEFT JOIN categories ON menu_items.category_id = categories.id WHERE categories.is_bar = 0 OR categories.is_bar IS NULL) OR (menu_item_id IS NULL AND (dest_category_id IS NULL OR dest_category_id IN (SELECT id FROM categories WHERE is_bar = 0))))`,
       [now, now, id, course]
     );
     await depleteStockForItems(firedIds, 'sale');
     const orderRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [id]);
-    const itemsRes = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id = $1 AND order_items.course = $2 AND order_items.is_fired = 1`, [id, course]);
+    const itemsRes = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id = $1 AND order_items.course = $2 AND order_items.is_fired = 1`, [id, course]);
     io.emit('course_fired', { order: orderRes.rows[0], course: Number(course), items: itemsRes.rows });
     await offlineQueue.enqueue('fire_course', { localOrderId: Number(id), course: Number(course) });
     res.json({ success: true, changes: result.rowCount });
@@ -1440,7 +1444,7 @@ app.get('/api/orders/:id/bill', async (req, res) => {
   try {
     const [orderRes, itemsRes, settingsRes] = await Promise.all([
       pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id=$1`, [req.params.id]),
-      pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt, menu_items.vat_rate FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id=$1 AND order_items.voided=0`, [req.params.id]),
+      pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt, COALESCE(menu_items.vat_rate, 20) AS vat_rate FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id=$1 AND order_items.voided=0`, [req.params.id]),
       pool.query('SELECT * FROM settings')
     ]);
     // Missing order used to return 200 with `{order:{items:[]}}` — the
@@ -3493,7 +3497,7 @@ app.post('/api/orders/:id/resend', async (req, res) => {
     // SEPOS-032: resend = kitchen makes the dish again → consume ingredients again
     await depleteStockForItems(item_ids, 'sale');
     const orderRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [req.params.id]);
-    const itemsRes = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.id = ANY($1::int[])`, [item_ids]);
+    const itemsRes = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.id = ANY($1::int[])`, [item_ids]);
     io.emit('course_fired', { order: orderRes.rows[0], course: 0, items: itemsRes.rows });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -7624,7 +7628,7 @@ app.post('/api/print/buffers/receipt', async (req, res) => {
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ ok: false, error: 'Order not found' });
     const itemsRes = await pool.query(
-      `SELECT order_items.*, menu_items.name, menu_items.name_alt
+      `SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt
        FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
        WHERE order_items.order_id = $1`, [order_id]);
     const buf = printService.buildReceipt({
@@ -7649,7 +7653,7 @@ app.post('/api/print/buffers/kitchen', async (req, res) => {
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ ok: false, error: 'Order not found' });
     const itemsRes = await pool.query(
-      `SELECT order_items.*, menu_items.name, menu_items.name_alt
+      `SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt
        FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
        WHERE order_items.order_id = $1`, [order_id]);
     const bilingual    = settings.kitchen_language === 'en_th';
@@ -7752,7 +7756,7 @@ app.post('/api/print/receipt', async (req, res) => {
     // JOIN menu_items so item.name is populated (order_items only carries
     // item_name as a denormalised snapshot — old data may have it blank).
     const itemsRes = await pool.query(
-      `SELECT order_items.*, menu_items.name, menu_items.name_alt
+      `SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt
        FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
        WHERE order_items.order_id = $1`, [order_id]);
     await printService.printReceipt(settings, order, itemsRes.rows, payment_details || {});

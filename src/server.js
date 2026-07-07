@@ -624,7 +624,11 @@ app.post('/api/printers/set-default', async (req, res) => {
 // the cloud backend it can't reach a private LAN, so we return local:false and
 // the UI tells the operator to run it from the till app or type the IP.
 app.get('/api/printers/scan', async (req, res) => {
-  if (!archiveService.isLocalInstall()) {
+  // Local install = the server is ON the restaurant LAN (desktop/Sunmi). Inline
+  // the DB_MODE check — archiveService is require()'d locally per-function, not
+  // module-scoped, so referencing it here would throw.
+  const isLocal = String(process.env.DB_MODE || '').toLowerCase() === 'local';
+  if (!isLocal) {
     return res.json({ local: false, printers: [], message: 'Scanning finds printers on the same network — run it from the till / desktop app, or enter the IP manually.' });
   }
   try {

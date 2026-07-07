@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v67'; // bump to invalidate stale caches (v67: 07-07 voucher+deposit bypass on EVERY code entry — Voucher button routes to the tender flow; deposit accepts any amount, rest by another method)
+const CACHE_NAME = 'siamepos-shell-v68'; // bump to invalidate stale caches (v68: 07-07 ONE payment flow — Card/Cash/Deposit/Voucher accumulate partial tenders, any method may over-tender (change), close only when covered; removed separate Split-payment + Mixed buttons; kept Split-equally/Split-by-item on the left)
 const APP_SHELL = [
   '/',
   '/index.html',

@@ -234,6 +234,21 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     setStage('receipt');
   };
 
+  // SEPOS-PAY-ONE-001 — ONE payment flow. Every method (Card / Cash / Deposit /
+  // Voucher) opens the accumulating payment screen, where each payment is added
+  // as a partial tender that reduces what's left. The bill closes only once the
+  // tenders cover the total; an overpayment (cash) shows as change, an
+  // underpayment can't be closed. Replaces the old separate Split-payment +
+  // Mixed-payment buttons.
+  const startPayment = (method) => {
+    setSplitTenders([]);
+    setMixVoucherCode(''); setMixVoucherAmt(''); setMixDepositCode(''); setMixDepositAmt(''); setMixVoucherErr('');
+    setMixMethod(method);
+    setMixInput(method === 'Card' ? billTotal.toFixed(2) : '');   // card usually = the full amount; editable
+    if (method === 'Deposit') fetchOrderDeposit();
+    setStage('mixed');
+  };
+
   // SEPOS-VOUCHER-001 — voucher redemption
   const handleVoucherLookup = async () => {
     const code = (voucherCode || '').trim().toUpperCase();
@@ -316,7 +331,10 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     if (!code) { setMixVoucherErr('Enter a voucher code or reference'); return; }
     if (splitTenders.some(t => t.method === 'Voucher')) { setMixVoucherErr('One voucher per bill'); return; }
     if (remaining <= 0) { setMixVoucherErr('Bill already settled'); return; }
-    const enteredAmt = Math.min(parseFloat(mixVoucherAmt) || 0, remaining);
+    // No cap at the remaining — any method may be tendered over what's left
+    // (change is given). The only hard limit is a MATCHED voucher's real
+    // balance (you can't redeem more than it actually holds).
+    const enteredAmt = parseFloat(mixVoucherAmt) || 0;
     setMixVoucherBusy(true); setMixVoucherErr('');
     try {
       // Best-effort lookup. A match against OUR voucher DB → redeem for real
@@ -328,8 +346,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
       try { v = await getVoucher(code); } catch { v = null; }
       const matched = v && !v.error && v.status === 'active' && Number(v.balance) > 0;
       if (matched) {
-        const cap = enteredAmt > 0 ? enteredAmt : remaining;   // operator may cap how much to use
-        const useAmount = Math.min(Number(v.balance), cap, remaining);
+        // Explicit amount → use it (capped only by the voucher's balance);
+        // blank → cover as much of the bill as the balance allows.
+        const useAmount = enteredAmt > 0 ? Math.min(Number(v.balance), enteredAmt) : Math.min(Number(v.balance), remaining);
         const r = await redeemVoucher(code, useAmount, orderId, null);
         if (r && r.error) { setMixVoucherErr(r.error); return; }
         const deducted = Number(r.amount_used ?? useAmount);
@@ -384,7 +403,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     if (!code) { setMixVoucherErr('Enter or scan the deposit code'); return; }
     if (splitTenders.some(t => t.method === 'Deposit')) { setMixVoucherErr('One deposit per bill'); return; }
     if (remaining <= 0) { setMixVoucherErr('Bill already settled'); return; }
-    const enteredAmt = Math.min(parseFloat(mixDepositAmt) || 0, remaining);
+    // No cap at the remaining (see addMixVoucher) — the only hard limit is a
+    // MATCHED deposit's real balance.
+    const enteredAmt = parseFloat(mixDepositAmt) || 0;
     setMixVoucherBusy(true); setMixVoucherErr('');
     try {
       // Best-effort lookup. A match against a type='deposit' voucher in OUR DB
@@ -400,8 +421,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
       if (known && v.type !== 'deposit') { setMixVoucherErr("That's a gift voucher — use the Voucher option"); return; }
       if (known && v.type === 'deposit') {
         const bal = Number(v.balance);
-        const cap = enteredAmt > 0 ? enteredAmt : remaining;   // operator may cap how much to use
-        const useAmount = Math.min(bal, cap, remaining);
+        const useAmount = enteredAmt > 0 ? Math.min(bal, enteredAmt) : Math.min(bal, remaining);
         const r = await redeemVoucher(code, useAmount, orderId, null);
         if (r && r.error)            { setMixVoucherErr(r.error); return; }
         const deducted = Number(r.amount_used ?? useAmount);
@@ -594,67 +614,26 @@ export default function BillScreen({ orderId, onClose, onPay }) {
             </div>
           ) : (
             <>
-              <div style={{ display: 'flex', gap: 10, margin: '18px 0' }}>
-                {seg('Card', selectedMethod === 'Card', () => { setSelectedMethod('Card'); setPaymentInput(billTotal.toFixed(2)); })}
-                {seg('Cash', selectedMethod === 'Cash', () => { setSelectedMethod('Cash'); setPaymentInput(''); })}
-                {seg('Split', false, () => { setSplitPaid([]); setSplitTenders([]); setStage('split_equal'); })}
+              {/* SEPOS-PAY-ONE-001 — one payment flow. Pick a method → the payment
+                  screen accumulates partial tenders and closes once covered.
+                  Splitting the bill per person lives on the LEFT (Split equally /
+                  Split by item). */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, margin: '20px 0 16px' }}>
+                {[
+                  { m: 'Card',    label: '💳 Card' },
+                  { m: 'Cash',    label: '💵 Cash' },
+                  { m: 'Deposit', label: '🧾 Deposit' },
+                  { m: 'Voucher', label: '🎁 Voucher' },
+                ].map(({ m, label }) => (
+                  <button key={m} onClick={() => startPayment(m)} style={{ height: 84, borderRadius: 14, cursor: 'pointer', fontWeight: 800, fontSize: 18, background: 'rgba(255,255,255,.08)', color: '#fff', border: '1.5px solid rgba(255,255,255,.25)' }}>{label}</button>
+                ))}
               </div>
-              <div style={{ display: 'flex', gap: 10, marginBottom: 6 }}>
-                <button onClick={() => { setSelectedMethod('Other'); setPaymentInput(billTotal.toFixed(2)); }} style={{ flex: 1, height: 44, borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 14, background: selectedMethod === 'Other' ? GOLD : 'transparent', color: selectedMethod === 'Other' ? NAVY : '#fff', border: selectedMethod === 'Other' ? 'none' : '1.5px solid rgba(255,255,255,.4)' }}>Other</button>
-                <button onClick={() => { setSplitTenders([]); setMixInput(''); setMixMethod('Cash'); setStage('mixed'); }} style={{ flex: 1, height: 44, borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 14, background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,.4)' }}>💵+💳 Mixed</button>
-                <button onClick={() => { setSplitTenders([]); setMixInput(''); setMixVoucherCode(''); setMixVoucherAmt(''); setMixDepositCode(''); setMixDepositAmt(''); setMixVoucherErr(''); setMixMethod('Voucher'); setStage('mixed'); }} style={{ flex: 1, height: 44, borderRadius: 12, cursor: 'pointer', fontWeight: 700, fontSize: 14, background: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,.4)' }}>🎁 Voucher</button>
+              <div style={{ color: 'rgba(255,255,255,.6)', fontSize: 14, lineHeight: 1.6 }}>
+                Add one or more payments — cash, card, deposit or voucher. Take part on one method and the rest on another; the bill closes only once it's fully covered. Splitting the bill per guest is on the left.
               </div>
-
-              {selectedMethod === 'Cash' ? (
-                <>
-                  <div style={{ marginTop: 14, fontSize: 13, color: 'rgba(255,255,255,.6)' }}>Cash tendered</div>
-                  <div style={{ fontSize: 38, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>£{paymentInput || '0.00'}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8, margin: '12px 0' }}>
-                    {quickTenders.map(a => (
-                      <button key={a} onClick={() => setPaymentInput(a.toFixed(2))} style={{ height: 46, borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 15, fontVariantNumeric: 'tabular-nums',
-                        background: paymentInput === a.toFixed(2) ? GOLD : 'rgba(255,255,255,.08)', color: paymentInput === a.toFixed(2) ? NAVY : '#fff', border: 'none' }}>£{a.toFixed(2)}</button>
-                    ))}
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
-                    {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(b => (
-                      <button key={b} onClick={() => handleNumpad(b)} style={{ height: 52, borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 20, fontWeight: 700, background: 'rgba(255,255,255,.08)', color: '#fff' }}>{b}</button>
-                    ))}
-                  </div>
-                  {canPay && change > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 16 }}>
-                      <span style={{ fontSize: 14, color: 'rgba(255,255,255,.6)' }}>Change due</span>
-                      <span style={{ fontSize: 40, fontWeight: 800, color: GREENB, fontVariantNumeric: 'tabular-nums' }}>£{change.toFixed(2)}</span>
-                    </div>
-                  )}
-                </>
-              ) : selectedMethod ? (
-                <>
-                  {/* Editable amount — the card reader / customer may take a different
-                      amount than the bill (rounding, a tip added on the terminal). */}
-                  <div style={{ marginTop: 14, fontSize: 13, color: 'rgba(255,255,255,.6)' }}>Amount {selectedMethod === 'Card' ? 'charged on card' : 'received'} — edit if it differs</div>
-                  <div style={{ fontSize: 38, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>£{paymentInput || '0.00'}</div>
-                  <button onClick={() => setPaymentInput(billTotal.toFixed(2))} style={{ width: '100%', height: 44, borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 14, margin: '12px 0', fontVariantNumeric: 'tabular-nums',
-                    background: paymentInput === billTotal.toFixed(2) ? GOLD : 'rgba(255,255,255,.08)', color: paymentInput === billTotal.toFixed(2) ? NAVY : '#fff', border: 'none' }}>Exact · £{billTotal.toFixed(2)}</button>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
-                    {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(b => (
-                      <button key={b} onClick={() => handleNumpad(b)} style={{ height: 52, borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 20, fontWeight: 700, background: 'rgba(255,255,255,.08)', color: '#fff' }}>{b}</button>
-                    ))}
-                  </div>
-                  <div style={{ border: '1.5px dashed rgba(255,255,255,.35)', borderRadius: 14, padding: '12px 16px', marginTop: 14, color: 'rgba(255,255,255,.7)', fontSize: 13, lineHeight: 1.5 }}>
-                    Present {selectedMethod === 'Card' ? 'card' : 'the'} payment on the reader, then confirm.
-                  </div>
-                  {actualTip > 0 && <div style={{ marginTop: 10, fontSize: 14, color: 'var(--brand-accent,#C9A84C)', display: 'flex', justifyContent: 'space-between' }}><span>Incl. tip / extra</span><span>£{actualTip.toFixed(2)}</span></div>}
-                </>
-              ) : (
-                <div style={{ marginTop: 24, color: 'rgba(255,255,255,.6)', fontSize: 15 }}>Choose a payment method to continue.</div>
-              )}
-
-              <button onClick={handleConfirmPayment} disabled={!canPay}
-                style={{ marginTop: 'auto', height: 68, borderRadius: 14, border: 'none', cursor: canPay ? 'pointer' : 'not-allowed',
-                  background: canPay ? RED : 'rgba(255,255,255,.15)', color: canPay ? '#fff' : 'rgba(255,255,255,.4)',
-                  fontWeight: 800, fontSize: 18, boxShadow: canPay ? '0 8px 18px rgba(233,69,96,.28)' : 'none' }}>
-                {canPay ? `Confirm payment · £${(selectedMethod === 'Cash' ? billTotal : amountPaid).toFixed(2)}` : 'Enter payment'}
-              </button>
+              <div style={{ marginTop: 'auto', color: 'rgba(255,255,255,.4)', fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
+                <span>Total due</span><span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: 'rgba(255,255,255,.7)' }}>£{billTotal.toFixed(2)}</span>
+              </div>
             </>
           )}
         </div>
@@ -750,10 +729,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 </button>
               ) : (
                 <>
-                  <button onClick={() => setStage('method')} style={{ padding:'18px', borderRadius:12, border:'none', background:'var(--brand-primary, #1a1a2e)', color:'white', fontSize:18, fontWeight:800, cursor:'pointer' }}>💳 Take Payment — £{billTotal.toFixed(2)}</button>
+                  <button onClick={() => startPayment('Cash')} style={{ padding:'18px', borderRadius:12, border:'none', background:'var(--brand-primary, #1a1a2e)', color:'white', fontSize:18, fontWeight:800, cursor:'pointer' }}>💳 Take Payment — £{billTotal.toFixed(2)}</button>
                   <button onClick={() => { setSplitPaid([]); setSplitTenders([]); setStage('split_equal'); }} style={{ padding:'14px', borderRadius:12, border:'2px solid var(--brand-accent,#C9A84C)', background:'white', color:'var(--brand-accent,#C9A84C)', fontSize:15, fontWeight:700, cursor:'pointer' }}>✂️ Split Equally</button>
                   <button onClick={() => { setItemAssignments({}); setSplitItemPaid([]); setSplitTenders([]); setActivePerson(0); setStage('split_items'); }} style={{ padding:'14px', borderRadius:12, border:'2px solid #3b82f6', background:'white', color:'#3b82f6', fontSize:15, fontWeight:700, cursor:'pointer' }}>🍽️ Split by Item</button>
-                  <button onClick={() => { setSplitTenders([]); setMixInput(''); setMixMethod('Cash'); setStage('mixed'); }} style={{ padding:'14px', borderRadius:12, border:'2px solid #22c55e', background:'white', color:'#22c55e', fontSize:15, fontWeight:700, cursor:'pointer' }}>💵+💳 Mixed Payment</button>
                 </>
               )}
               <button onClick={handlePrintBill} style={{ padding:'12px', borderRadius:10, border:'2px solid var(--brand-primary, #1a1a2e)', background:'white', color:'var(--brand-primary, #1a1a2e)', fontSize:14, fontWeight:600, cursor:'pointer' }}>🖨️ Print Bill</button>
@@ -796,20 +774,27 @@ export default function BillScreen({ orderId, onClose, onPay }) {
         {stage === 'mixed' && (() => {
           const mixPaid = splitTenders.reduce((s, t) => s + t.amount, 0);
           const mixRemaining = Math.max(0, billTotal - mixPaid);
+          // Anything tendered over the bill is a TIP (the operator entered more
+          // than due on purpose — not change to hand back). If cash is one of
+          // the tenders it's a cash tip, otherwise it rode in on the card.
+          const mixTip = Math.max(0, mixPaid - billTotal);
+          const hasCashTender = splitTenders.some(t => t.method === 'Cash');
           const settled = mixPaid + 0.005 >= billTotal;
-          const amtNum = Math.min(parseFloat(mixInput) || 0, mixRemaining);
+          // Cash/Card may be tendered OVER what's left (change given); vouchers &
+          // deposits cap themselves at the remaining inside their own handlers.
+          const amtNum = parseFloat(mixInput) || 0;
           return (
             <div>
-              {mobileTopBar('Mixed Payment', () => { setSplitTenders([]); setStage('bill'); }, '← Bill')}
+              {mobileTopBar('Payment', () => { cancelMix(); }, '← Bill')}
               <div style={{ padding: isMobile ? '20px 16px' : 32 }}>
                 <div style={{ textAlign: 'center', marginBottom: 20 }}>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)' }}>💵+💳 Mixed Payment</div>
-                  <div style={{ fontSize: 13, color: '#888', marginTop: 4 }}>Take part of the bill on one method, the rest on another.</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)' }}>💳 Payment</div>
+                  <div style={{ fontSize: 13, color: '#888', marginTop: 4 }}>Add each payment — cash, card, deposit or voucher. You can take part on one method and the rest on another; the bill closes once it's fully covered.</div>
                 </div>
                 <div style={{ background: '#f8f8f8', borderRadius: 14, padding: 18, marginBottom: 18 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, marginBottom: 6, color: '#555' }}><span>Bill total</span><span style={{ fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)' }}>£{billTotal.toFixed(2)}</span></div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, marginBottom: 6, color: '#22c55e' }}><span>Paid so far</span><span style={{ fontWeight: 800 }}>£{mixPaid.toFixed(2)}</span></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 18, fontWeight: 800, color: settled ? '#22c55e' : '#e94560', paddingTop: 8, borderTop: '1px solid #eee' }}><span>{settled ? '✅ Settled' : 'Remaining'}</span><span>£{mixRemaining.toFixed(2)}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 18, fontWeight: 800, color: settled ? (mixTip > 0 ? '#8b5cf6' : '#22c55e') : '#e94560', paddingTop: 8, borderTop: '1px solid #eee' }}><span>{settled ? (mixTip > 0 ? (hasCashTender ? '💵 Cash tip' : '💜 Tip') : '✅ Settled') : 'Remaining'}</span><span>£{(settled ? mixTip : mixRemaining).toFixed(2)}</span></div>
                 </div>
                 {splitTenders.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
@@ -826,13 +811,11 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 {!settled && (() => {
                   const hasVoucher = splitTenders.some(t => t.method === 'Voucher');
                   const hasDeposit = splitTenders.some(t => t.method === 'Deposit');
-                  const depositsOn = settings.deposits_enabled === '1';
                   const methods = [
                     { m: 'Cash',    label: '💵 Cash' },
                     { m: 'Card',    label: '💳 Card' },
+                    { m: 'Deposit', label: '🧾 Deposit' },
                     { m: 'Voucher', label: '🎁 Voucher' },
-                    ...(depositsOn ? [{ m: 'Deposit', label: '🧾 Deposit' }] : []),
-                    { m: 'Other',   label: '🔄 Other' },
                   ];
                   return (
                   <>
@@ -859,7 +842,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                           </div>
                         </div>
                         {mixVoucherErr && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{mixVoucherErr}</div>}
-                        <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>A booking deposit in our system applies against its balance. A deposit taken elsewhere (or as cash) is accepted for the amount you enter, up to £{mixRemaining.toFixed(2)}, with the rest paid by another method. The bill total is unchanged.</div>
+                        <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>A booking deposit in our system applies against its balance. A deposit taken elsewhere (or as cash) is accepted for the amount you enter, with the rest paid by another method. The bill total is unchanged.</div>
                         <button onClick={() => addMixDeposit(mixRemaining)} disabled={mixVoucherBusy || (!mixDepositCode.trim() && !orderDeposit)} style={{ width: '100%', height: 52, borderRadius: 12, border: 'none', cursor: (mixVoucherBusy || (!mixDepositCode.trim() && !orderDeposit)) ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 16, background: (mixVoucherBusy || (!mixDepositCode.trim() && !orderDeposit)) ? '#eee' : 'var(--brand-primary,#0D1B3E)', color: (mixVoucherBusy || (!mixDepositCode.trim() && !orderDeposit)) ? '#aaa' : '#fff', marginBottom: 12 }}>{mixVoucherBusy ? 'Applying…' : `🧾 Apply deposit${orderDeposit ? ` £${Number(orderDeposit.balance).toFixed(2)}` : ''}`}</button>
                       </>
                     ) : mixMethod === 'Voucher' ? (
@@ -891,7 +874,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   );
                 })()}
                 {settled && (
-                  <button onClick={() => { const paid = splitTenders.reduce((s, t) => s + t.amount, 0); setPaymentDetails({ method: 'Split', amountPaid: paid, tip: 0, change: Math.max(0, paid - billTotal), tenders: splitTenders }); setStage('receipt'); }} style={{ width: '100%', height: 56, borderRadius: 12, border: 'none', background: '#22c55e', color: '#fff', fontWeight: 800, fontSize: 17, cursor: 'pointer', marginBottom: 12 }}>✓ Confirm & Close — £{billTotal.toFixed(2)}</button>
+                  <button onClick={() => { const paid = splitTenders.reduce((s, t) => s + t.amount, 0); const method = splitTenders.length === 1 ? splitTenders[0].method : 'Split'; setPaymentDetails({ method, amountPaid: paid, tip: Math.max(0, paid - billTotal), change: 0, tenders: splitTenders }); setStage('receipt'); }} style={{ width: '100%', height: 56, borderRadius: 12, border: 'none', background: '#22c55e', color: '#fff', fontWeight: 800, fontSize: 17, cursor: 'pointer', marginBottom: 12 }}>✓ Confirm &amp; Close — £{billTotal.toFixed(2)}{mixTip > 0 ? ` (£${mixTip.toFixed(2)} ${hasCashTender ? 'cash ' : ''}tip)` : ''}</button>
                 )}
                 <button onClick={cancelMix} style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>← Back to Bill</button>
               </div>

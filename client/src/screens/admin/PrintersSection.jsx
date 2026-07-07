@@ -10,7 +10,7 @@
 // to persist changes.
 
 import { useState, useEffect } from 'react';
-import { getSettings, updateSettings, testNetworkPrinter, cupsQueueForIp, printerHealth, printerGetMac, printerDiscover, printerThaiTest, getPrintTestBuffer } from '../../api';
+import { getSettings, updateSettings, testNetworkPrinter, cupsQueueForIp, printerHealth, printerGetMac, printerDiscover, printerThaiTest, getPrintTestBuffer, getPrinters, createPrinter, updatePrinter, deletePrinter, testPrinter } from '../../api';
 import { isNativeApp, sendRawToPrinter } from '../../native/printer'; // SEPOS-ANDROID-001
 
 // ── Network Printers card (IP-based, RAW + LPR + CUPS fallback chain) ──
@@ -613,6 +613,65 @@ function PrintRoutingCard({ cardStyle, settings, setSettings }) {
   );
 }
 
+// ── SEPOS-STATION-001 — extra printer stations (Wok / Grill / Cold …) ──
+// Beyond the built-in Receipt/Kitchen/Bar above, add as many station printers
+// as the kitchen has. Categories are pointed at a station in Admin → Menu; a
+// category with no station falls back to the default kitchen/bar routing.
+function StationsCard({ cardStyle }) {
+  const [list, setList]   = useState([]);
+  const [draft, setDraft] = useState({ name: '', ip: '', port: '9100', mac: '', copies: '1' });
+  const [busy, setBusy]   = useState(false);
+  const [tState, setTState] = useState({});   // { id: idle|testing|ok|fail }
+
+  const refresh = () => getPrinters().then(r => setList(Array.isArray(r) ? r : [])).catch(() => {});
+  useEffect(() => { refresh(); }, []);
+
+  const add = async () => {
+    if (!draft.name.trim() || busy) return;
+    setBusy(true);
+    try { await createPrinter({ name: draft.name.trim(), ip: draft.ip.trim() || null, port: Number(draft.port) || 9100, mac: draft.mac.trim() || null, copies: Number(draft.copies) || 1 });
+      setDraft({ name: '', ip: '', port: '9100', mac: '', copies: '1' }); await refresh(); }
+    finally { setBusy(false); }
+  };
+  const saveRow = async (p) => { await updatePrinter(p.id, { name: p.name, ip: p.ip || null, port: Number(p.port) || 9100, mac: p.mac || null, copies: Number(p.copies) || 1 }); await refresh(); };
+  const removeRow = async (p) => { if (!window.confirm(`Remove station "${p.name}"? Any category pointed here reverts to the default kitchen/bar.`)) return; await deletePrinter(p.id); await refresh(); };
+  const test = async (p) => {
+    setTState(s => ({ ...s, [p.id]: 'testing' }));
+    try { const r = await testPrinter(p.id); setTState(s => ({ ...s, [p.id]: (r && r.success) ? 'ok' : 'fail' })); }
+    catch { setTState(s => ({ ...s, [p.id]: 'fail' })); }
+    setTimeout(() => setTState(s => ({ ...s, [p.id]: 'idle' })), 3000);
+  };
+  const patch = (id, k, v) => setList(l => l.map(p => p.id === id ? { ...p, [k]: v } : p));
+  const inp = { padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' };
+
+  return (
+    <div style={cardStyle}>
+      <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary,#1a1a2e)', marginBottom: 6 }}>🏭 Extra printer stations</h2>
+      <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>Wok, grill, cold, pass… Add a station, then point menu categories at it (Admin → Menu). A category with no station uses the default kitchen/bar printer.</div>
+
+      {list.map(p => (
+        <div key={p.id} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', padding: '10px 0', borderTop: '1px solid #f0f0f0' }}>
+          <input value={p.name || ''} onChange={e => patch(p.id, 'name', e.target.value)} placeholder="Name" style={{ ...inp, flex: '1 1 120px' }} />
+          <input value={p.ip || ''} onChange={e => patch(p.id, 'ip', e.target.value)} placeholder="IP" style={{ ...inp, flex: '1 1 110px' }} />
+          <input value={p.port || 9100} onChange={e => patch(p.id, 'port', e.target.value)} placeholder="Port" style={{ ...inp, width: 70 }} />
+          <input value={p.copies || 1} onChange={e => patch(p.id, 'copies', e.target.value)} type="number" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
+          <button onClick={() => saveRow(p)} style={{ ...inp, border: 'none', background: 'var(--brand-primary,#0D1B3E)', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
+          <button onClick={() => test(p)} style={{ ...inp, border: '1px solid #ddd', background: tState[p.id] === 'ok' ? '#dcfce7' : tState[p.id] === 'fail' ? '#fee2e2' : '#fff', cursor: 'pointer', fontWeight: 700 }}>{tState[p.id] === 'testing' ? '…' : tState[p.id] === 'ok' ? '✓' : tState[p.id] === 'fail' ? '✕' : 'Test'}</button>
+          <button onClick={() => removeRow(p)} style={{ ...inp, border: 'none', background: '#fee2e2', color: '#dc2626', cursor: 'pointer', fontWeight: 700 }}>✕</button>
+        </div>
+      ))}
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', paddingTop: 14, marginTop: 8, borderTop: '2px solid #eee' }}>
+        <input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} placeholder="New station name" style={{ ...inp, flex: '1 1 120px' }} />
+        <input value={draft.ip} onChange={e => setDraft({ ...draft, ip: e.target.value })} placeholder="IP" style={{ ...inp, flex: '1 1 110px' }} />
+        <input value={draft.port} onChange={e => setDraft({ ...draft, port: e.target.value })} placeholder="Port" style={{ ...inp, width: 70 }} />
+        <input value={draft.copies} onChange={e => setDraft({ ...draft, copies: e.target.value })} type="number" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
+        <button onClick={add} disabled={busy || !draft.name.trim()} style={{ ...inp, border: 'none', background: draft.name.trim() ? 'var(--brand-accent,#C9A84C)' : '#eee', color: draft.name.trim() ? '#fff' : '#aaa', fontWeight: 800, cursor: draft.name.trim() ? 'pointer' : 'not-allowed' }}>+ Add station</button>
+      </div>
+    </div>
+  );
+}
+
 export default function PrintersSection() {
   const [settings, setSettings] = useState({});
   const [loaded, setLoaded]     = useState(false);
@@ -646,6 +705,7 @@ export default function PrintersSection() {
 
       <PrintRoutingCard cardStyle={cardStyle} settings={settings} setSettings={setSettings} />
       <NetworkPrinterCard cardStyle={cardStyle} settings={settings} setSettings={setSettings} />
+      <StationsCard cardStyle={cardStyle} />
       <PrinterCard cardStyle={cardStyle} />
 
       <button onClick={handleSave} disabled={saving}

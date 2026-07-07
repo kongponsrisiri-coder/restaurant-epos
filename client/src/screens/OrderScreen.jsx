@@ -40,6 +40,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const [showKitchenMsg, setShowKitchenMsg] = useState(false); // SEPOS-KITCHEN-MSG-001
   const [selectedModifiers, setSelectedModifiers] = useState({});
   const [notePopup, setNotePopup] = useState(null);
+  const [miscPopup, setMiscPopup] = useState(null); // SEPOS-MISC-001 — off-menu / special open item
   const [voidPopup, setVoidPopup] = useState(null);
   const [resendPopup, setResendPopup] = useState(null);
   const [showBill, setShowBill] = useState(false);
@@ -186,7 +187,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   };
 
   const handleItemClick = async (item) => {
-    const modifiers = await getItemModifiers(item.id);
+    const allMods = await getItemModifiers(item.id);
     const isBar = getItemIsBar(item);
     // Course priority: a per-item override (menu_items.default_course) wins so a
     // mixed category like "Lunch" files each dish correctly (its mains print as
@@ -196,11 +197,17 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
       : (item.default_course != null && item.default_course !== '')
         ? Number(item.default_course)
         : activeCourse;
-    if (modifiers && modifiers.length > 0) {
+    // SEPOS-ALLERGEN-OPT-001 (UX option A) — GLOBAL groups (the dietary/allergen
+    // group) apply to every item; don't let them force the modifier popup open on
+    // every tap. Only the item's OWN (non-global) groups trigger the picker; the
+    // dietary group is offered as chips in the note popup (which shows anyway).
+    const ownGroups    = (allMods || []).filter(g => !g.is_global);
+    const dietaryGroups = (allMods || []).filter(g => g.is_global);
+    if (ownGroups.length > 0) {
       setSelectedModifiers({});
-      setModifierPopup({ item, modifiers, course, isBar });
+      setModifierPopup({ item, modifiers: ownGroups, course, isBar, dietaryGroups });
     } else {
-      setNotePopup({ item, modifiers: [], course, isBar, note: '' });
+      setNotePopup({ item, modifiers: [], course, isBar, note: '', dietaryGroups, dietary: [] });
     }
   };
 
@@ -217,7 +224,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   };
 
   const confirmModifiers = () => {
-    const { item, modifiers, course, isBar } = modifierPopup;
+    const { item, modifiers, course, isBar, dietaryGroups } = modifierPopup;
     for (const group of modifiers) {
       if (group.required) {
         const selected = selectedModifiers[group.id];
@@ -229,19 +236,40 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     }
     const chosen = Object.values(selectedModifiers).flat();
     setModifierPopup(null);
-    setNotePopup({ item, modifiers: chosen, course, isBar, note: '' });
+    setNotePopup({ item, modifiers: chosen, course, isBar, note: '', dietaryGroups: dietaryGroups || [], dietary: [] });
   };
 
+  // SEPOS-ALLERGEN-OPT-001 — toggle a dietary/allergen chip in the note popup.
+  const toggleDietary = (opt) => setNotePopup(p => {
+    const cur = p.dietary || [];
+    const on = cur.some(d => d.id === opt.id);
+    return { ...p, dietary: on ? cur.filter(d => d.id !== opt.id) : [...cur, opt] };
+  });
+
   const confirmNote = () => {
-    const { item, modifiers, course, isBar, note } = notePopup;
-    addToCart(item, modifiers, course, isBar, note);
+    const { item, modifiers, course, isBar, note, dietary } = notePopup;
+    // Dietary/allergen selections are a STRUCTURED option (stamped is_allergen so
+    // they print with ⚠️ emphasis) and always free.
+    const dietaryMods = (dietary || []).map(m => ({ ...m, is_allergen: true, extra_price: 0 }));
+    addToCart(item, [...modifiers, ...dietaryMods], course, isBar, note);
     setNotePopup(null);
   };
 
   const addToCart = (item, chosenModifiers, course, isBar, note) => {
     // Prices can arrive as strings — coerce so we ADD, not string-concat (£NaN).
     const extraPrice = chosenModifiers.reduce((sum, m) => sum + (Number(m.extra_price) || 0), 0);
-    const modifierNames = chosenModifiers.map(m => m.name).join(', ');
+    // SEPOS-ALLERGEN-OPT-001 — allergen/dietary selections are wrapped
+    // "** ALLERGEN: … **" in the printed notes so they stand out on ALL three
+    // print paths (network / Sunmi / HTML all render this notes string, and the
+    // ** ** convention already prints bold+big). Kept ASCII — ESC/POS thermal
+    // printers can't render an emoji. The structured is_allergen flag also stays
+    // on each modifier for any structured consumer.
+    const plainMods    = chosenModifiers.filter(m => !m.is_allergen).map(m => m.name);
+    const allergenMods = chosenModifiers.filter(m =>  m.is_allergen).map(m => m.name);
+    const modifierNames = [
+      ...plainMods,
+      ...(allergenMods.length ? [`** ALLERGEN: ${allergenMods.join(', ')} **`] : []),
+    ].join(', ');
     const cartKey = item.id + '_' + modifierNames + '_' + course;
     setCart(prev => {
       const existing = prev.find(c => c.cartKey === cartKey && c.item_note === note);
@@ -257,6 +285,40 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         modifiers: chosenModifiers
       }];
     });
+  };
+
+  // SEPOS-MISC-001 — off-menu / special "open item". Staff type a free name +
+  // price + qty and pick a destination CATEGORY, which drives kitchen-vs-bar and
+  // which printer/station the ticket routes to (same as a normal item's
+  // category). The line has no menu_item_id — a first-class custom row.
+  const openMiscPopup = () => {
+    // One Misc button — the destination category (chosen in the popup) decides
+    // food/drink → kitchen/bar routing. Default to the category being viewed.
+    const preset = menu.find(c => c.id === activeCategory) || menu[0];
+    setMiscPopup({ name: '', price: '', quantity: 1, category_id: preset ? preset.id : null });
+  };
+
+  const addMiscToCart = () => {
+    const p = miscPopup;
+    if (!p) return;
+    const name = (p.name || '').trim();
+    const price = Number(p.price) || 0;
+    const qty = Math.max(1, Math.floor(Number(p.quantity) || 1));
+    if (!name || price <= 0) return;
+    const cat = menu.find(c => c.id === p.category_id);
+    const isBar = cat ? !!cat.is_bar : false;
+    const course = isBar ? 0 : (cat && cat.default_course != null ? Number(cat.default_course) : 1);
+    setCart(prev => [...prev, {
+      cartKey: 'MISC_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '_' + name,   // unique so misc lines never merge with each other
+      menu_item_id: null, name, name_alt: '',
+      unit_price: price, quantity: qty,
+      notes: '', item_note: '',
+      course,
+      is_bar: isBar ? 1 : 0,
+      category_id: cat ? cat.id : null,
+      modifiers: [],
+    }]);
+    setMiscPopup(null);
   };
 
   const removeFromCart = (cartKey, item_note) => {
@@ -451,6 +513,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         unit_price: c.unit_price, quantity: c.quantity,
         notes: c.notes || '', item_note: c.item_note || '',
         course: c.is_bar ? 0 : (c.course || 1), is_bar: c.is_bar ? 1 : 0,
+        category_id: c.category_id ?? null,
         is_fired: c.is_bar ? 1 : 0, status: c.is_bar ? 'cooking' : 'pending', voided: 0,
       };
     });
@@ -788,6 +851,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 {cat.name} {cat.is_bar ? '🍹' : ''}
               </button>
             ))}
+            {/* SEPOS-MISC-001 — off-menu / special open item, at the right end */}
+            <button onClick={() => openMiscPopup()} style={{
+              padding: '10px 16px', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap',
+              border: '1.5px dashed #C9A84C', background: '#FBF7EC', color: '#9A7B1F' }}>🍽 Misc item</button>
           </div>
 
           {/* Sub-category tabs */}
@@ -936,6 +1003,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       </button>
                     );
                   })}
+                  {/* SEPOS-MISC-001 — off-menu / special open item, at the right end */}
+                  <button onClick={() => openMiscPopup()} style={{
+                    marginLeft: 'auto', padding: '18px 24px', borderRadius: 16, cursor: 'pointer', fontWeight: 800, fontSize: 18, whiteSpace: 'nowrap',
+                    border: '1.5px dashed #C9A84C', background: '#FBF7EC', color: '#9A7B1F' }}>🍽 Misc item</button>
                 </div>
                 {/* Sub-category tabs — shown only when the category has sub-cats
                     (no big "All" list). "General" holds any un-filed items so
@@ -1593,6 +1664,66 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
           />
         )}
 
+        {/* SEPOS-MISC-001 — MISC ITEM POPUP (off-menu / special open item) */}
+        {miscPopup && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          }}>
+            <div style={{ background: 'white', borderRadius: 16, padding: 28, width: 420, maxWidth: '92vw', maxHeight: '85vh', overflowY: 'auto' }}>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 4 }}>
+                🍽 Misc item
+              </h2>
+              <p style={{ color: '#888', fontSize: 13, marginBottom: 18 }}>Off-menu or special request — type the name and price.</p>
+
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>Name</label>
+              <input autoFocus value={miscPopup.name} onChange={e => setMiscPopup(p => ({ ...p, name: e.target.value }))}
+                placeholder="e.g. Chef's special soup" style={{ width: '100%', height: 48, padding: '0 14px', borderRadius: 10, border: '1.5px solid #ddd', fontSize: 16, boxSizing: 'border-box', marginBottom: 16 }} />
+
+              <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>Price</label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
+                    <input type="number" step="0.01" min="0" value={miscPopup.price} onChange={e => setMiscPopup(p => ({ ...p, price: e.target.value }))}
+                      placeholder="0.00" style={{ width: '100%', height: 48, padding: '0 12px 0 24px', borderRadius: 10, border: '1.5px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                  </div>
+                </div>
+                <div style={{ width: 130 }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>Qty</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button onClick={() => setMiscPopup(p => ({ ...p, quantity: Math.max(1, (Number(p.quantity) || 1) - 1) }))} style={{ width: 40, height: 48, borderRadius: 10, border: '1.5px solid #ddd', background: '#f7f7f7', cursor: 'pointer', fontSize: 20, fontWeight: 700 }}>−</button>
+                    <input type="number" min="1" value={miscPopup.quantity} onChange={e => setMiscPopup(p => ({ ...p, quantity: e.target.value }))}
+                      style={{ width: 44, height: 48, textAlign: 'center', borderRadius: 10, border: '1.5px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                    <button onClick={() => setMiscPopup(p => ({ ...p, quantity: (Number(p.quantity) || 1) + 1 }))} style={{ width: 40, height: 48, borderRadius: 10, border: '1.5px solid #ddd', background: '#f7f7f7', cursor: 'pointer', fontSize: 20, fontWeight: 700 }}>+</button>
+                  </div>
+                </div>
+              </div>
+
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>Send to (prints with this section's kitchen/bar printer)</label>
+              <select value={miscPopup.category_id ?? ''} onChange={e => setMiscPopup(p => ({ ...p, category_id: Number(e.target.value) }))}
+                style={{ width: '100%', height: 48, padding: '0 12px', borderRadius: 10, border: '1.5px solid #ddd', fontSize: 16, boxSizing: 'border-box', marginBottom: 22, background: '#fff' }}>
+                {menu.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}{cat.is_bar ? ' 🍹' : ''}</option>
+                ))}
+              </select>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setMiscPopup(null)} style={{ flex: 1, padding: '14px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>Cancel</button>
+                {(() => {
+                  const ok = (miscPopup.name || '').trim() && (Number(miscPopup.price) || 0) > 0;
+                  return (
+                    <button onClick={addMiscToCart} disabled={!ok} style={{ flex: 2, padding: '14px', borderRadius: 10, border: 'none', background: ok ? '#e94560' : '#f3c3cc', color: 'white', cursor: ok ? 'pointer' : 'not-allowed', fontWeight: 700, fontSize: 15 }}>
+                      Add to order{(Number(miscPopup.price) || 0) > 0 ? ` · £${((Number(miscPopup.price) || 0) * Math.max(1, Math.floor(Number(miscPopup.quantity) || 1))).toFixed(2)}` : ''}
+                    </button>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* MODIFIER POPUP */}
         {modifierPopup && (
           <div style={{
@@ -1643,12 +1774,12 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                         onClick={() => handleModifierSelect(group.id, opt, group.multi_select)}
                         style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          padding: '12px 16px', borderRadius: 10, marginBottom: 6, cursor: 'pointer',
+                          padding: '16px 18px', minHeight: 30, borderRadius: 12, marginBottom: 8, cursor: 'pointer',
                           border: `2px solid ${selected ? '#e94560' : '#eee'}`,
                           background: selected ? '#fff0f3' : 'white',
                         }}>
-                        <span style={{ fontSize: 15, fontWeight: selected ? 700 : 400 }}>{opt.name}</span>
-                        <span style={{ fontSize: 14, color: opt.extra_price > 0 ? '#e94560' : '#aaa' }}>
+                        <span style={{ fontSize: 17, fontWeight: selected ? 700 : 500 }}>{opt.name}</span>
+                        <span style={{ fontSize: 15, color: opt.extra_price > 0 ? '#e94560' : '#aaa' }}>
                           {opt.extra_price > 0 ? `+£${Number(opt.extra_price).toFixed(2)}` : 'included'}
                         </span>
                       </div>
@@ -1733,6 +1864,27 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   </div>
                 </div>
               )}
+              {/* SEPOS-ALLERGEN-OPT-001 — structured dietary/allergen chips (global
+                  group). Tap instead of typing into the note — prints with ⚠️. */}
+              {Array.isArray(notePopup.dietaryGroups) && notePopup.dietaryGroups.some(g => (g.modifiers || []).length) && (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: 13, fontWeight: 700, color: '#92400e', display: 'block', marginBottom: 8 }}>
+                    ⚠️ Dietary / allergen: <span style={{ fontWeight: 400, color: '#aaa' }}>(tap any that apply)</span>
+                  </label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {notePopup.dietaryGroups.flatMap(g => g.modifiers || []).map(opt => {
+                      const on = (notePopup.dietary || []).some(d => d.id === opt.id);
+                      return (
+                        <button key={opt.id} onClick={() => toggleDietary(opt)} style={{
+                          padding: '11px 14px', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700,
+                          border: on ? '2px solid #b45309' : '1.5px solid #fde68a',
+                          background: on ? '#b45309' : '#fffbeb', color: on ? 'white' : '#92400e',
+                        }}>{on ? '⚠️ ' : ''}{opt.name}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <label style={{
                 fontSize: 13, fontWeight: 700, color: '#555',
                 display: 'block', marginBottom: 8
@@ -1742,7 +1894,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               <textarea
                 value={notePopup.note}
                 onChange={e => setNotePopup({ ...notePopup, note: e.target.value })}
-                placeholder="e.g. No onions, extra spicy, allergy — no nuts..."
+                placeholder="e.g. No onions, extra spicy... (use the ⚠️ chips above for allergies)"
                 rows={3}
                 style={{
                   width: '100%', padding: '12px', borderRadius: 8,

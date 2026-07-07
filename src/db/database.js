@@ -61,7 +61,27 @@ async function initDB() {
         name VARCHAR(100) NOT NULL,
         sort_order INTEGER DEFAULT 0,
         is_bar INTEGER DEFAULT 0,
-        default_course INTEGER DEFAULT 1
+        default_course INTEGER DEFAULT 1,
+        printer_id INTEGER
+      )
+    `);
+    // SEPOS-STATION-001 — flexible multi-printer routing. Each category can be
+    // pointed at a specific printer (a "station"). NULL = today's rule: bar
+    // printer if is_bar, else the kitchen printer — so nothing changes until an
+    // operator adds printers + assigns categories. is_bar is retained (reports).
+    await pool.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS printer_id INTEGER`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS printers (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        ip VARCHAR(64),
+        port INTEGER DEFAULT 9100,
+        mac VARCHAR(64),
+        kind VARCHAR(20) DEFAULT 'kitchen',
+        copies INTEGER DEFAULT 1,
+        sort_order INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos'
       )
     `);
 
@@ -105,9 +125,15 @@ async function initDB() {
         menu_item_id INTEGER REFERENCES menu_items(id) ON DELETE CASCADE,
         name VARCHAR(100) NOT NULL,
         required INTEGER DEFAULT 0,
-        multi_select INTEGER DEFAULT 0
+        multi_select INTEGER DEFAULT 0,
+        is_global INTEGER DEFAULT 0,
+        is_allergen INTEGER DEFAULT 0
       )
     `);
+    // SEPOS-ALLERGEN-OPT-001 — a global group applies to EVERY item (no per-item
+    // link row); an allergen group's selections print with ⚠️ emphasis + are free.
+    await pool.query(`ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_global INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_allergen INTEGER DEFAULT 0`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS modifiers (
@@ -170,13 +196,21 @@ async function initDB() {
         voided INTEGER DEFAULT 0,
         void_reason TEXT,
         discount_type VARCHAR(50),
-        discount_value DECIMAL(10,2)
+        discount_value DECIMAL(10,2),
+        dest_category_id INTEGER
       )
     `);
 
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS item_name VARCHAR(255)`);
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS resend_reason TEXT`);  // SEPOS-024
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS void_type VARCHAR(50)`); // SEPOS-023
+    // SEPOS-MISC-001 — a Misc/open line has no menu_item_id, so it can't inherit
+    // kitchen/bar + printer routing via menu_items.category_id. Persist the
+    // operator-chosen destination category HERE (named dest_category_id to avoid
+    // colliding with menu_items.category_id in the many `order_items.*` SELECTs)
+    // so reads resolve routing + name + VAT via
+    // COALESCE(menu_items.category_id, order_items.dest_category_id).
+    await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS dest_category_id INTEGER`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS vat_rate DECIMAL(5,2) DEFAULT 20.0`); // SEPOS-021
 
     // SEPOS-034: takeaway / delivery online ordering
@@ -317,6 +351,10 @@ async function initDB() {
         ('service_charge_enabled', 'true'),
         ('service_charge_rate', '12.5'),
         ('vat_mode', 'inclusive'),
+        ('deposits_enabled', '0'),
+        ('kitchen_font_scale', 'large'),
+        ('receipt_font_scale', 'normal'),
+        ('bar_font_scale', 'large'),
         ('restaurant_name', 'SiamEPOS')
       ON CONFLICT (key) DO NOTHING
     `);
@@ -585,8 +623,16 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
       ON CONFLICT (restaurant_id, covers_min) DO NOTHING
     `);
 
+    // One-time initial spread ONLY. This used to run every boot and reset any
+    // item at sort_order=0 back to its id — which silently undid the item an
+    // operator dragged to the TOP (top = sort_order 0) on the next restart
+    // ("prawn crackers always moves away"). Now it fires only when NO item has
+    // ever been arranged (nothing has sort_order > 0); the moment any menu has
+    // been reordered it becomes a no-op, so arrangements are never clobbered.
     await pool.query(`
-      UPDATE menu_items SET sort_order = id WHERE sort_order = 0 OR sort_order IS NULL
+      UPDATE menu_items SET sort_order = id
+      WHERE (sort_order = 0 OR sort_order IS NULL)
+        AND NOT EXISTS (SELECT 1 FROM menu_items WHERE sort_order > 0)
     `);
 
     // SEPOS-042 repair: an earlier PUT /api/staff/:id bug wrote
@@ -676,11 +722,21 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
         voided_by TEXT,
         voided_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        restaurant_id VARCHAR(100) DEFAULT 'siamepos'
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos',
+        type VARCHAR(20) DEFAULT 'gift',
+        reservation_id INTEGER,
+        take_date DATE
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_vouchers_code        ON vouchers (code)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_vouchers_restaurant  ON vouchers (restaurant_id)`);
+    // SEPOS-DEPOSIT-001 — booking deposits live in the vouchers table as a typed
+    // row (type='deposit', DEP- code, linked to a reservation). Additive columns;
+    // type defaults to 'gift' so every existing voucher + flow is unchanged.
+    await pool.query(`ALTER TABLE vouchers ADD COLUMN IF NOT EXISTS type VARCHAR(20) DEFAULT 'gift'`);
+    await pool.query(`ALTER TABLE vouchers ADD COLUMN IF NOT EXISTS reservation_id INTEGER`);
+    await pool.query(`ALTER TABLE vouchers ADD COLUMN IF NOT EXISTS take_date DATE`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_vouchers_type ON vouchers (type)`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS voucher_redemptions (

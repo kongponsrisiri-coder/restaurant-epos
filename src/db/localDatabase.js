@@ -48,7 +48,21 @@ function initSchema() {
       name TEXT NOT NULL,
       sort_order INTEGER DEFAULT 0,
       is_bar INTEGER DEFAULT 0,
-      default_course INTEGER DEFAULT 1
+      default_course INTEGER DEFAULT 1,
+      printer_id INTEGER
+    );
+    -- SEPOS-STATION-001 — flexible multi-printer routing (category -> printer).
+    CREATE TABLE IF NOT EXISTS printers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      ip TEXT,
+      port INTEGER DEFAULT 9100,
+      mac TEXT,
+      kind TEXT DEFAULT 'kitchen',
+      copies INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      restaurant_id TEXT DEFAULT 'siamepos'
     );
 
     CREATE TABLE IF NOT EXISTS subcategories (
@@ -79,7 +93,9 @@ function initSchema() {
       menu_item_id INTEGER REFERENCES menu_items(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       required INTEGER DEFAULT 0,
-      multi_select INTEGER DEFAULT 0
+      multi_select INTEGER DEFAULT 0,
+      is_global INTEGER DEFAULT 0,
+      is_allergen INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS modifiers (
@@ -147,6 +163,7 @@ function initSchema() {
       discount_type TEXT,
       discount_value REAL,
       resend_reason TEXT,
+      dest_category_id INTEGER,
       cloud_id INTEGER
     );
 
@@ -435,7 +452,10 @@ function initSchema() {
       voided_by TEXT,
       voided_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      restaurant_id TEXT DEFAULT 'siamepos'
+      restaurant_id TEXT DEFAULT 'siamepos',
+      type TEXT DEFAULT 'gift',
+      reservation_id INTEGER,
+      take_date TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_vouchers_code        ON vouchers (code);
     CREATE INDEX IF NOT EXISTS idx_vouchers_restaurant  ON vouchers (restaurant_id);
@@ -669,12 +689,25 @@ function runMigrations() {
   // SEPOS — per-order service-charge removal (persists the Order screen toggle).
   addColumnIfMissing('orders', 'no_service_charge', 'INTEGER DEFAULT 0');
 
+  // SEPOS-DEPOSIT-001 — booking deposits as typed vouchers (default 'gift' = unchanged).
+  addColumnIfMissing('vouchers', 'type', "TEXT DEFAULT 'gift'");
+  addColumnIfMissing('vouchers', 'reservation_id', 'INTEGER');
+  addColumnIfMissing('vouchers', 'take_date', 'TEXT');
+
+  // SEPOS-ALLERGEN-OPT-001 — global (applies to every item) + allergen (⚠️ + free) modifier groups.
+  addColumnIfMissing('modifier_groups', 'is_global', 'INTEGER DEFAULT 0');
+  addColumnIfMissing('modifier_groups', 'is_allergen', 'INTEGER DEFAULT 0');
+
+  // SEPOS-STATION-001 — category -> printer routing (NULL = today's is_bar rule).
+  addColumnIfMissing('categories', 'printer_id', 'INTEGER');
+
   // SEPOS-PRO-002: bidirectional active-order sync.
   // cloud_id maps a local row to its mirror on the cloud Postgres backend.
   //   - Mac creates an order → INSERT local, push to cloud, capture returned id → UPDATE local.cloud_id
   //   - Chrome creates an order → cloud INSERT, sync pull → INSERT local with cloud_id set
   // Lookups go cloud_id ↔ local id so the in-memory map can finally be retired.
   addColumnIfMissing('orders',      'cloud_id', 'INTEGER');
+  addColumnIfMissing('order_items', 'dest_category_id', 'INTEGER');  // SEPOS-MISC-001 — Misc line destination category
   addColumnIfMissing('order_items', 'cloud_id', 'INTEGER');
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_cloud_id      ON orders(cloud_id)      WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] orders.cloud_id index:', err.message); }
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_order_items_cloud_id ON order_items(cloud_id) WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] order_items.cloud_id index:', err.message); }
@@ -719,6 +752,13 @@ function seedDefaults() {
     INSERT INTO settings (key, value) VALUES (?, ?)
     ON CONFLICT (key) DO NOTHING
   `).run('vat_mode', 'inclusive');
+  db.prepare(`
+    INSERT INTO settings (key, value) VALUES (?, ?)
+    ON CONFLICT (key) DO NOTHING
+  `).run('deposits_enabled', '0');
+  for (const [k, v] of [['kitchen_font_scale', 'large'], ['receipt_font_scale', 'normal'], ['bar_font_scale', 'large']]) {
+    db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING`).run(k, v);
+  }
   db.prepare(`
     INSERT INTO settings (key, value) VALUES (?, ?)
     ON CONFLICT (key) DO NOTHING

@@ -194,6 +194,7 @@ async function localAppendItems(lid, items) {
       notes: it.notes || '', item_note: it.item_note || '',
       course: it.course || 1,
       is_bar: it.is_bar ? 1 : 0,
+      category_id: it.category_id ?? null,   // SEPOS-MISC-001 — drives kitchen/bar + printer routing for custom (menu_item_id=null) lines
       status: it.is_bar ? 'cooking' : 'pending',
       is_fired: it.is_bar ? 1 : 0,
       voided: 0,
@@ -420,6 +421,8 @@ export const getItemModifiers = async (itemId) => {
   catch { return []; }   // offline + uncached: no modifiers, but the item still adds
 };
 export const addModifierGroup = (itemId, group) => post(`/api/menu/items/${itemId}/modifiers`, group);
+// SEPOS-ALLERGEN-OPT-001 — one-tap create of the global dietary/allergen group (idempotent server-side).
+export const createDietaryPreset = () => post('/api/menu/dietary-preset', {});
 export const addModifierOption = (groupId, option) => post(`/api/modifier-groups/${groupId}/options`, option);
 export const deleteModifierGroup = (groupId) => del(`/api/modifier-groups/${groupId}`);
 export const deleteModifier = (modifierId) => del(`/api/modifiers/${modifierId}`);
@@ -465,8 +468,8 @@ export const setOrderServiceCharge = async (orderId, removed) => {
   return put(`/api/orders/${orderId}/service-charge`, { no_service_charge: flag });
 };
 // SEPOS-VOUCHER-REMOVE-001 — undo a partial voucher redemption while bill is open
-export const removeVoucherFromBill = async (orderId) =>
-  (await localTarget(orderId)) ? { success: true } : post(`/api/orders/${orderId}/voucher-remove`, {});
+export const removeVoucherFromBill = async (orderId, code) =>
+  (await localTarget(orderId)) ? { success: true } : post(`/api/orders/${orderId}/voucher-remove`, code ? { code } : {});
 // SEPOS-CLOSE-ZERO — close an order that's at £0 (all voided / fully discounted)
 export const closeOrderZero       = async (orderId) => {
   const lid = await localTarget(orderId);
@@ -494,6 +497,17 @@ export const getLicenseState = () => get('/api/license-state');
 export const recheckLicense  = () => post('/api/license-recheck', {});
 // SEPOS-LITE-001 — restaurant record incl. subscription plan.
 export const getRestaurant = () => get('/api/restaurant');
+
+// SEPOS-STATION-001 — extra printer stations (wok/grill/cold…) + category routing.
+export const getPrinters        = () => get('/api/printers');
+export const createPrinter      = (body) => post('/api/printers', body);
+export const updatePrinter      = (id, body) => put(`/api/printers/${id}`, body);
+export const deletePrinter      = (id) => del(`/api/printers/${id}`);
+export const testPrinter        = (id) => post(`/api/printers/${id}/test`, {});
+export const setCategoryPrinter = (id, printer_id) => put(`/api/categories/${id}/printer`, { printer_id });
+// Print a dine-in kitchen ticket to a specific station (server routes by printer_id).
+export const serverPrintKitchenToStation = (order_id, items, printer_id, printer_name) =>
+  post('/api/print/kitchen-station', { order_id, items, printer_id, printer_name });
 
 // SEPOS-025/026 — Network printing (server-side ESC/POS to TCP port 9100)
 export const testNetworkPrinter   = (ip, port, printer_name) => post('/api/print/test',    { ip, port, printer_name });
@@ -822,3 +836,9 @@ export const getVoucherDetail   = (id) => get(`/api/vouchers/${id}`);
 export const voidVoucher        = (id, voided_by) => post(`/api/vouchers/${id}/void`, { voided_by });
 export const resendVoucherEmail = (id) => post(`/api/vouchers/${id}/resend-email`, {});
 export const sellVoucher        = (body) => post('/api/vouchers/sell', body);
+
+// ── SEPOS-DEPOSIT-001 — booking deposits (typed vouchers, redeemed as a tender) ──
+export const createDeposit   = (body) => post('/api/deposits', body);
+export const getOrderDeposit = (orderId) => get(`/api/orders/${orderId}/deposit`);
+// Manual forfeit of a no-show's deposit (kept as income).
+export const forfeitDeposit  = (code) => post(`/api/deposits/${encodeURIComponent(code)}/forfeit`, {});

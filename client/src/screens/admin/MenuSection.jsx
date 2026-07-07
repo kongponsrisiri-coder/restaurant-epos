@@ -8,6 +8,8 @@ import {
   getSubcategories, addSubcategory, deleteSubcategory, updateCategory, deleteCategory,
   updateCategoryBar, updateCategorySortOrder, updateSubcategorySortOrder, updateMenuItemsSortOrder,
   addCategory, updateCategoryDefaultCourse,
+  createDietaryPreset,
+  getPrinters, setCategoryPrinter,
   assertOk,
 } from '../../api';
 import { confirm } from '../../utils/confirm';
@@ -31,10 +33,10 @@ function OptionAdder({ onAdd }) {
   };
   const onKey = (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
   return (
-    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-      <input autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={onKey} placeholder="Option name" style={{ flex: 2, padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }} />
-      <input value={price} onChange={e => setPrice(e.target.value)} onKeyDown={onKey} placeholder="+£ extra" type="number" step="0.01" style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }} />
-      <button onClick={submit} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 600 }}>Add</button>
+    <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+      <input autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={onKey} placeholder="Option name" style={{ flex: '2 1 160px', minWidth: 0, padding: '13px 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16 }} />
+      <input value={price} onChange={e => setPrice(e.target.value)} onKeyDown={onKey} placeholder="+£ extra" type="number" step="0.01" style={{ flex: '1 1 90px', minWidth: 0, padding: '13px 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16 }} />
+      <button onClick={submit} style={{ padding: '13px 20px', borderRadius: 10, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>Add</button>
     </div>
   );
 }
@@ -171,6 +173,7 @@ export default function MenuSection() {
   const [modifierItem, setModifierItem]     = useState(null);
   const [modifiers, setModifiers]           = useState([]);
   const [library, setLibrary]               = useState([]);  // SEPOS-059 reusable groups
+  const [printers, setPrinters]             = useState([]);  // SEPOS-STATION-001 extra printer stations
   const [newGroup, setNewGroup]             = useState({ name: '', required: true, multi_select: false });
   const [activeGroup, setActiveGroup]       = useState(null);
   const [pickGroup, setPickGroup]           = useState(''); // shared-group dropdown selection
@@ -196,6 +199,7 @@ export default function MenuSection() {
     if (data.length > 0 && !activeCategory) setActiveCategory(data[0].id);
   };
   useEffect(() => { fetchMenu(); }, []);
+  useEffect(() => { getPrinters().then(p => setPrinters(Array.isArray(p) ? p : [])).catch(() => {}); }, []);
   useEffect(() => { const items = menu.find(c => c.id === activeCategory)?.items || []; setLocalItems([...items]); }, [activeCategory, menu]);
 
   const handleAddCategory = async () => {
@@ -295,6 +299,14 @@ export default function MenuSection() {
     await refreshModifiers();
   };
   const handleAddOption = async (name, extra_price) => { await addModifierOption(activeGroup, { name, extra_price: extra_price || 0 }); await refreshModifiers(); };
+  // SEPOS-ALLERGEN-OPT-001 — one-tap standard GLOBAL dietary/allergen group.
+  const handleAddDietaryPreset = async () => {
+    try {
+      const r = await createDietaryPreset();
+      await refreshModifiers();
+      if (r && r.created === false) alert('The standard dietary group already exists — it applies to every dish.');
+    } catch (e) { alert('Could not add dietary group: ' + (e.message || e)); }
+  };
   const handleDeleteGroup  = async (groupId) => { if (!await confirm('Delete this group and all its options?', { danger: true, okLabel: 'Delete' })) return; await deleteModifierGroup(groupId); await refreshModifiers(); if (activeGroup === groupId) setActiveGroup(null); };
   // SEPOS-059 — delete a SHARED (reusable) group from the library entirely. It's
   // removed from every dish that uses it, so warn clearly. (Detaching from just
@@ -315,7 +327,10 @@ export default function MenuSection() {
     // Use the api.js helper (native-safe) — a raw fetch from the Sunmi WebView
     // silently fails, so the drag reorder never persisted and reverted on reload.
     try {
-      const res = await updateMenuItemsSortOrder(items.map((item, index) => ({ id: item.id, sort_order: index })));
+      // 1-based: the boot migration (database.js) resets sort_order=0 → id,
+      // treating 0 as "never arranged". Starting at 1 keeps the item you drag
+      // to the top from being clobbered back to its id on the next restart.
+      const res = await updateMenuItemsSortOrder(items.map((item, index) => ({ id: item.id, sort_order: index + 1 })));
       if (res && res.error) console.error('Failed to save sort order:', res.error);
     } catch (err) { console.error('Failed to save sort order:', err); }
   }
@@ -432,6 +447,19 @@ export default function MenuSection() {
               <option value={3}>🔴 Dessert</option>
               <option value={4}>🔵 Extra</option>
             </select>
+            {/* SEPOS-STATION-001 — route this category to a printer station (only
+                shown once stations exist; blank = default kitchen/bar routing). */}
+            {printers.length > 0 && (
+              <select
+                value={cat.printer_id || ''}
+                onChange={async e => { await setCategoryPrinter(cat.id, e.target.value ? Number(e.target.value) : null); fetchMenu(); }}
+                title="Which printer station does this category print to?"
+                style={{ fontSize: 10, padding: '1px 4px', borderRadius: 6, border: '1px solid #ddd', background: cat.printer_id ? '#e0e7ff' : '#eee', cursor: 'pointer', fontWeight: 600, color: '#333' }}
+              >
+                <option value="">🖨 Default</option>
+                {printers.map(p => <option key={p.id} value={p.id}>🏭 {p.name}</option>)}
+              </select>
+            )}
           </div>
           );
         })}
@@ -627,12 +655,12 @@ export default function MenuSection() {
       )}
       {modifierItem && (
         <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'white', borderRadius: 16, padding: 32, width: 520, maxHeight: '80vh', overflowY: 'auto' }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: 32, width: 'min(640px, 94vw)', maxHeight: '86vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}><h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Options — {modifierItem.name}</h2><button onClick={() => setModifierItem(null)} style={{ background: '#f0f0f0', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', fontWeight: 600 }}>Close</button></div>
             {modifiers.map(group => (
               <div key={group.id} style={{ background: '#f8f8f8', borderRadius: 12, padding: 16, marginBottom: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <div><span style={{ fontWeight: 700, fontSize: 15 }}>{group.name}</span>{group.menu_item_id == null && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, background: '#e0e7ff', color: '#3730a3', padding: '2px 6px', borderRadius: 4 }}>♻️ SHARED</span>}<span style={{ marginLeft: 8, fontSize: 12, color: '#888' }}>{group.required ? 'Required' : 'Optional'} · {group.multi_select ? 'Multi' : 'Pick one'}</span></div>
+                  <div><span style={{ fontWeight: 700, fontSize: 15 }}>{group.name}</span>{(group.is_global || group.is_allergen) ? <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, background: '#fef3c7', color: '#92400e', padding: '2px 6px', borderRadius: 4 }}>{group.is_global ? 'GLOBAL' : ''}{group.is_global && group.is_allergen ? ' · ' : ''}{group.is_allergen ? '⚠️ ALLERGEN' : ''}</span> : (group.menu_item_id == null && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, background: '#e0e7ff', color: '#3730a3', padding: '2px 6px', borderRadius: 4 }}>♻️ SHARED</span>)}<span style={{ marginLeft: 8, fontSize: 12, color: '#888' }}>{group.required ? 'Required' : 'Optional'} · {group.multi_select ? 'Multi' : 'Pick one'}</span></div>
                   <div style={{ display: 'flex', gap: 6 }}><button onClick={() => setActiveGroup(activeGroup === group.id ? null : group.id)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontSize: 12, fontWeight: 600 }}>+ Add option</button>{group.menu_item_id == null ? <button onClick={() => toggleLibrary(group.id, true)} title="Remove from this dish (keeps the shared group for other dishes)" style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#fde68a', color: '#713f12', fontSize: 12, fontWeight: 600 }}>Remove</button> : <button onClick={() => handleDeleteGroup(group.id)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: '#fee2e2', color: '#991b1b', fontSize: 12, fontWeight: 600 }}>Delete</button>}</div>
                 </div>
                 {group.modifiers?.map(opt => (<div key={opt.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderTop: '1px solid #eee' }}><span style={{ fontSize: 14 }}>{opt.name} {opt.extra_price > 0 && <span style={{ color: '#e94560' }}>+£{Number(opt.extra_price).toFixed(2)}</span>}</span><button onClick={() => handleDeleteOption(opt.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 18 }}>×</button></div>))}
@@ -660,6 +688,17 @@ export default function MenuSection() {
               <input value={newGroup.name} onChange={e => setNewGroup({ ...newGroup, name: e.target.value })} placeholder="e.g. Choose Meat" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box', marginBottom: 10 }} />
               <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}><label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={newGroup.required} onChange={e => setNewGroup({ ...newGroup, required: e.target.checked })} /> Required</label><label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={newGroup.multi_select} onChange={e => setNewGroup({ ...newGroup, multi_select: e.target.checked })} /> Allow multiple</label><label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: '#3730a3', fontWeight: 600 }} title="Save to the shared library so you can reuse it on other dishes"><input type="checkbox" checked={newGroup.shared || false} onChange={e => setNewGroup({ ...newGroup, shared: e.target.checked })} /> ♻️ Reusable</label></div>
               <button onClick={handleAddGroup} style={{ width: '100%', padding: '10px', borderRadius: 8, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', cursor: 'pointer', fontWeight: 600 }}>Create Group</button>
+            </div>
+            {/* SEPOS-ALLERGEN-OPT-001 — one-tap standard GLOBAL dietary/allergen group.
+                Applies to EVERY dish; prints with ⚠️ emphasis; free (never a surcharge). */}
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: 16, marginTop: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2, color: '#92400e' }}>🧾 Dietary / allergen requests</div>
+              <div style={{ fontSize: 12, color: '#78716c', marginBottom: 10 }}>A single global group (No nuts, Vegan, No shellfish…) that appears on <b>every</b> dish and prints with a ⚠️ on the kitchen ticket. Set it up once — safer than typing allergies into a note.</div>
+              {modifiers.some(g => g.is_allergen) ? (
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#166534' }}>✓ Standard dietary group is set up — it's on every dish. Edit its options above.</div>
+              ) : (
+                <button onClick={handleAddDietaryPreset} style={{ width: '100%', padding: '11px', borderRadius: 8, border: 'none', background: 'var(--brand-accent, #C9A84C)', color: 'white', cursor: 'pointer', fontWeight: 700 }}>🧾 Add standard dietary group</button>
+              )}
             </div>
           </div>
         </div>

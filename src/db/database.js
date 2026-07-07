@@ -623,8 +623,16 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
       ON CONFLICT (restaurant_id, covers_min) DO NOTHING
     `);
 
+    // One-time initial spread ONLY. This used to run every boot and reset any
+    // item at sort_order=0 back to its id — which silently undid the item an
+    // operator dragged to the TOP (top = sort_order 0) on the next restart
+    // ("prawn crackers always moves away"). Now it fires only when NO item has
+    // ever been arranged (nothing has sort_order > 0); the moment any menu has
+    // been reordered it becomes a no-op, so arrangements are never clobbered.
     await pool.query(`
-      UPDATE menu_items SET sort_order = id WHERE sort_order = 0 OR sort_order IS NULL
+      UPDATE menu_items SET sort_order = id
+      WHERE (sort_order = 0 OR sort_order IS NULL)
+        AND NOT EXISTS (SELECT 1 FROM menu_items WHERE sort_order > 0)
     `);
 
     // SEPOS-042 repair: an earlier PUT /api/staff/:id bug wrote

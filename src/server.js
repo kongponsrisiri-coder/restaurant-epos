@@ -641,7 +641,7 @@ app.get('/api/menu', async (req, res) => {
     const [catRes, subRes, itemRes] = await Promise.all([
       pool.query('SELECT * FROM categories ORDER BY sort_order'),
       pool.query('SELECT * FROM subcategories ORDER BY sort_order'),
-      pool.query('SELECT * FROM menu_items WHERE is_available = 1 ORDER BY sort_order ASC')
+      pool.query('SELECT * FROM menu_items WHERE is_available = 1 ORDER BY sort_order ASC, id ASC')
     ]);
     res.json(catRes.rows.map(cat => ({ ...cat, subcategories: subRes.rows.filter(s => s.category_id === cat.id), items: itemRes.rows.filter(i => i.category_id === cat.id) })));
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -652,7 +652,7 @@ app.get('/api/menu/all', async (req, res) => {
     const [catRes, subRes, itemRes] = await Promise.all([
       pool.query('SELECT * FROM categories ORDER BY sort_order'),
       pool.query('SELECT * FROM subcategories ORDER BY sort_order'),
-      pool.query('SELECT * FROM menu_items ORDER BY sort_order ASC')
+      pool.query('SELECT * FROM menu_items ORDER BY sort_order ASC, id ASC')
     ]);
     res.json(catRes.rows.map(cat => ({ ...cat, subcategories: subRes.rows.filter(s => s.category_id === cat.id), items: itemRes.rows.filter(i => i.category_id === cat.id) })));
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -668,9 +668,13 @@ app.post('/api/menu/items', async (req, res) => {
     if (Array.isArray(allergens) && allergens.length > 0) allergensStr = JSON.stringify(allergens);
     else if (typeof allergens === 'string' && allergens.trim()) allergensStr = JSON.stringify([allergens]);
     const dc = (default_course == null || default_course === '') ? null : (Number(default_course) || null);
+    // Append to the end of the category so a new item gets a real position
+    // (not sort_order=0, which sorts to the top and the boot migration rewrites).
+    const soRes = await pool.query('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM menu_items WHERE category_id = $1', [category_id]);
+    const nextSort = Number(soRes.rows[0]?.next) || 1;
     const result = await pool.query(
-      'INSERT INTO menu_items (category_id, subcategory_id, name, name_alt, description, price, vat_rate, allergens, default_course) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
-      [category_id, subcategory_id || null, name, name_alt || null, description, price, vat_rate ?? 20, allergensStr, dc]
+      'INSERT INTO menu_items (category_id, subcategory_id, name, name_alt, description, price, vat_rate, allergens, default_course, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id',
+      [category_id, subcategory_id || null, name, name_alt || null, description, price, vat_rate ?? 20, allergensStr, dc, nextSort]
     );
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }

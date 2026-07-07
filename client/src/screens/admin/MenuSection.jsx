@@ -327,7 +327,10 @@ export default function MenuSection() {
     // Use the api.js helper (native-safe) — a raw fetch from the Sunmi WebView
     // silently fails, so the drag reorder never persisted and reverted on reload.
     try {
-      const res = await updateMenuItemsSortOrder(items.map((item, index) => ({ id: item.id, sort_order: index })));
+      // 1-based: the boot migration (database.js) resets sort_order=0 → id,
+      // treating 0 as "never arranged". Starting at 1 keeps the item you drag
+      // to the top from being clobbered back to its id on the next restart.
+      const res = await updateMenuItemsSortOrder(items.map((item, index) => ({ id: item.id, sort_order: index + 1 })));
       if (res && res.error) console.error('Failed to save sort order:', res.error);
     } catch (err) { console.error('Failed to save sort order:', err); }
   }

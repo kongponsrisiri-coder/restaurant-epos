@@ -2,6 +2,14 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { SERVER_URL, getTables, updateTablePlan, addTable, deleteTable } from '../../api';
 import { confirm } from '../../utils/confirm';
 
+// SEPOS-TABLE-SIZE — sizes are per-shape now (the Shape dropdown picks the
+// shape; the Size dropdown only offers that shape's sizes — no repeating both).
+const SIZE_OPTIONS = {
+  square:    [['70x70', 'Small (2p)'], ['80x80', 'Medium (4p)'], ['100x100', 'Large (6p)'], ['120x120', 'Extra large (8p+)']],
+  round:     [['70x70', 'Small (2p)'], ['80x80', 'Medium (4p)'], ['100x100', 'Large (6p)'], ['120x120', 'Extra large (8p+)']],
+  rectangle: [['120x70', 'Small (4p)'], ['160x70', 'Medium (6p)'], ['200x70', 'Large (8p)'], ['240x70', 'XL (10p)']],
+};
+
 const apiGet  = url       => fetch(SERVER_URL + url).then(r => r.json());
 const apiPost = (url, d)  => fetch(SERVER_URL + url, { method: 'POST',   headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) }).then(r => r.json());
 const apiPut  = (url, d)  => fetch(SERVER_URL + url, { method: 'PUT',    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) }).then(r => r.json());
@@ -518,7 +526,15 @@ export default function TablePlanSection() {
                 </div>
                 <div>
                   <label style={lbl}>Shape</label>
-                  <select value={selectedTable.shape || 'square'} onChange={e => updateSelectedTable({ shape: e.target.value })} style={inp}>
+                  <select value={selectedTable.shape || 'square'} onChange={e => {
+                    const shape = e.target.value;
+                    const opts = SIZE_OPTIONS[shape] || [];
+                    const cur = `${selectedTable.width}x${selectedTable.height}`;
+                    if (opts.some(([v]) => v === cur)) { updateSelectedTable({ shape }); return; }
+                    // Current dims don't fit the new shape → snap to that shape's default (Medium).
+                    const [w, h] = (opts[1] || opts[0] || ['80x80', ''])[0].split('x').map(Number);
+                    updateSelectedTable({ shape, width: w, height: h });
+                  }} style={inp}>
                     <option value="square">Square</option>
                     <option value="round">Round</option>
                     <option value="rectangle">Rectangle</option>
@@ -526,16 +542,8 @@ export default function TablePlanSection() {
                 </div>
                 <div>
                   <label style={lbl}>Size</label>
-                  <select onChange={e => { const [w, h] = e.target.value.split('x').map(Number); updateSelectedTable({ width: w, height: h }); }} style={inp}>
-                    <option value="">— select size —</option>
-                    <option value="70x70">Small square (2p)</option>
-                    <option value="80x80">Medium square (4p)</option>
-                    <option value="100x100">Large square (6p)</option>
-                    <option value="120x120">Extra large (8p+)</option>
-                    <option value="120x70">Rectangle small (4p)</option>
-                    <option value="160x70">Rectangle medium (6p)</option>
-                    <option value="200x70">Rectangle large (8p)</option>
-                    <option value="240x70">Rectangle XL (10p)</option>
+                  <select value={`${selectedTable.width}x${selectedTable.height}`} onChange={e => { const [w, h] = e.target.value.split('x').map(Number); updateSelectedTable({ width: w, height: h }); }} style={inp}>
+                    {(SIZE_OPTIONS[selectedTable.shape || 'square'] || []).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
                   </select>
                 </div>
 

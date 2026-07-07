@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v83'; // v83: Menu Manager — click a sub-category to filter the item list to that sub-category's dishes (drag-reorder now item-based, works with the filter)
+const CACHE_NAME = 'siamepos-shell-v84'; // v84: Table Plan — Size list now only shows the chosen Shape's sizes (no more repeating square+rectangle in one list)
 const APP_SHELL = [
   '/',
   '/index.html',

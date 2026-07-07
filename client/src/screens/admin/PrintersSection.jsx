@@ -10,7 +10,7 @@
 // to persist changes.
 
 import { useState, useEffect } from 'react';
-import { getSettings, updateSettings, testNetworkPrinter, cupsQueueForIp, printerHealth, printerGetMac, printerDiscover, printerThaiTest, getPrintTestBuffer, getPrinters, createPrinter, updatePrinter, deletePrinter, testPrinter, setPrinterDefault } from '../../api';
+import { getSettings, updateSettings, testNetworkPrinter, cupsQueueForIp, printerHealth, printerGetMac, printerDiscover, printerThaiTest, getPrintTestBuffer, getPrinters, createPrinter, updatePrinter, deletePrinter, testPrinter, setPrinterDefault, getCategories, setCategoryPrinter } from '../../api';
 import { isNativeApp, sendRawToPrinter } from '../../native/printer'; // SEPOS-ANDROID-001
 
 // ── Network Printers card (IP-based, RAW + LPR + CUPS fallback chain) ──
@@ -601,6 +601,7 @@ function PrintRoutingCard({ cardStyle, settings, setSettings }) {
 function StationsCard({ cardStyle, bare }) {
   const [list, setList]   = useState([]);
   const [defs, setDefs]   = useState({});     // { receipt, kitchen, bar } → printer id
+  const [cats, setCats]   = useState([]);     // menu categories (carry printer_id routing)
   const [draft, setDraft] = useState({ name: '', ip: '', port: '9100', copies: '1', role_receipt: false, role_kitchen: true, role_bar: false });
   const [busy, setBusy]   = useState(false);
   const [tState, setTState] = useState({});   // { id: idle|testing|ok|fail }
@@ -610,8 +611,12 @@ function StationsCard({ cardStyle, bare }) {
       const r = await getPrinters(); setList(Array.isArray(r) ? r : []);
       const s = await getSettings();
       setDefs({ receipt: s?.default_receipt_printer_id, kitchen: s?.default_kitchen_printer_id, bar: s?.default_bar_printer_id });
+      const c = await getCategories(); setCats(Array.isArray(c) ? c : []);
     } catch {}
   };
+  // Route a menu category to this printer (or null to unassign) — the "point"
+  // that decides which food prints here, editable without leaving this page.
+  const assignCat = async (catId, printerId) => { await setCategoryPrinter(catId, printerId); await refresh(); };
   useEffect(() => { refresh(); }, []);
 
   const ROLES = [['receipt', '🧾 Bills'], ['kitchen', '🍳 Kitchen'], ['bar', '🍹 Bar']];
@@ -669,6 +674,21 @@ function StationsCard({ cardStyle, bare }) {
                 </span>
               );
             })}
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: '#aaa', marginRight: 2 }}>Sends:</span>
+            {cats.filter(c => String(c.printer_id ?? '') === String(p.id)).map(c => (
+              <span key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 12, background: '#eef2ff', color: '#3730a3', fontSize: 12, fontWeight: 600 }}>
+                {c.name}
+                <button onClick={() => assignCat(c.id, null)} title="Stop sending this category here" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#6366f1', fontWeight: 700, padding: 0, fontSize: 13 }}>✕</button>
+              </span>
+            ))}
+            <select value="" onChange={e => { if (e.target.value) assignCat(Number(e.target.value), p.id); }} style={{ padding: '4px 8px', borderRadius: 10, border: '1px solid #ddd', fontSize: 12, color: '#555' }}>
+              <option value="">+ send a category here…</option>
+              {cats.filter(c => String(c.printer_id ?? '') !== String(p.id)).map(c => (
+                <option key={c.id} value={c.id}>{c.name}{c.printer_id ? ' (move from other)' : ''}</option>
+              ))}
+            </select>
           </div>
         </div>
       ))}

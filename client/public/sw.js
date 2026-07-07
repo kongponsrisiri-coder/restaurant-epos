@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v75'; // bump to invalidate stale caches (v75: VAT breakdown removed from customer receipt + bill (accountant's domain); Print text size moved Settings→Printers; deposit reservation-id labelled optional)
+const CACHE_NAME = 'siamepos-shell-v76'; // v76: assign menu categories to a printer directly on the Printers page (the 'point' — which food prints where)
 const APP_SHELL = [
   '/',
   '/index.html',

@@ -4428,6 +4428,23 @@ async function relayAiToCloud(path, body) {
   }
 }
 
+// SEPOS-AI-HELP-001 — forward each answered Q&A to the ops back-office so
+// Korakot can see, across ALL restaurants, what clients ask. Fire-and-forget:
+// never blocks or fails the reply, and ops being down is a no-op. Only the
+// CLOUD forwards (it holds the SYNC_SECRET ops matches to a client row);
+// desktop/Sunmi relay to their cloud, which does the forward. The ops domain
+// ops-api.siamepos.co.uk does NOT resolve — the Railway URL is the real one
+// (override with OPS_API_URL env if it ever changes).
+const OPS_API_URL = process.env.OPS_API_URL || 'https://restaurant-epos-back-office-production.up.railway.app';
+function forwardAiHelpToOps(entry) {
+  if (!process.env.SYNC_SECRET || !OPS_API_URL) return;
+  fetch(OPS_API_URL.replace(/\/+$/, '') + '/api/ai-help', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-sync-secret': process.env.SYNC_SECRET },
+    body: JSON.stringify(entry),
+  }).catch(() => { /* best-effort — ops outages must never touch the client */ });
+}
+
 app.post('/api/ai/scan-menu', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     const { image_base64, media_type } = req.body;
@@ -4578,6 +4595,15 @@ app.post('/api/ai/help', requireStaffAuthOrSyncSecret(), async (req, res) => {
     if (!out.reply) {
       return res.json({ reply: "Sorry, I hit a technical problem just then. Try again in a moment — or if it keeps happening, contact SiamEPOS support (Korakot on LINE / info@siamepos.co.uk)." });
     }
+    // Fire-and-forget: log this Q&A to ops (what clients ask = gold).
+    forwardAiHelpToOps({
+      question: clean[clean.length - 1].content,
+      reply: out.reply,
+      platform: platform || null,
+      staff_role: (req.staffAuth && req.staffAuth.role) || null,
+      escalated: /contact SiamEPOS support|info@siamepos\.co\.uk|Korakot on LINE/i.test(out.reply),
+      restaurant_name: process.env.RESTAURANT_NAME || null,
+    });
     res.json({ reply: out.reply });
   } catch (err) {
     console.error('POST /api/ai/help error:', err);

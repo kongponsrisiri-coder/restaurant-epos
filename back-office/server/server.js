@@ -16,6 +16,7 @@ const websiteRoutes  = require('./routes/website');
 const financeRoutes  = require('./routes/finance');
 const onboardRoutes  = require('./routes/onboard');
 const stripeWebhookRoutes = require('./routes/stripeWebhook');
+const aiHelpRoutes   = require('./routes/aiHelp'); // SEPOS-AI-HELP-001
 const healthCron     = require('./services/healthCheck');
 
 const PORT = parseInt(process.env.PORT || '3002', 10);
@@ -84,6 +85,7 @@ app.use('/api/tickets', ticketsRoutes);
 app.use('/api/website-configs', websiteRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/onboard', onboardRoutes);  // BO-ONBOARD-001 — public kiosk signup
+app.use('/api/ai-help', aiHelpRoutes);   // SEPOS-AI-HELP-001 — in-app assistant logs
 
 app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path }));
 

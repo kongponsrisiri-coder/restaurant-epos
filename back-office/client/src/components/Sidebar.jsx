@@ -107,6 +107,7 @@ export default function Sidebar({ user, clientCount, isMobile, isOpen, onClose }
         <Item to="/"        icon="🏠" label="Clients"  badge={clientCount} active={isActive('/')}        onClick={handleNavClick} />
         <Item to="/website" icon="🌐" label="Website"                      active={isActive('/website')} onClick={handleNavClick} />
         <Item to="/tickets" icon="🎟" label="Tickets"                      active={isActive('/tickets')} onClick={handleNavClick} />
+        <Item to="/ai-help" icon="🤖" label="AI Help"                      active={isActive('/ai-help')} onClick={handleNavClick} />
         {user?.role === 'admin' && (
           <Item to="/team"    icon="👥" label="Team"    active={isActive('/team')}    onClick={handleNavClick} />
         )}

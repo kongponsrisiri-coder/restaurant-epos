@@ -227,3 +227,21 @@ CREATE TABLE IF NOT EXISTS transaction_attachments (
   uploaded_at      TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_tx_attach_txid ON transaction_attachments (transaction_id);
+
+-- SEPOS-AI-HELP-001 — questions clients ask the in-app "Ask AI" assistant,
+-- forwarded from each tenant cloud (authed by matching the tenant's
+-- x-sync-secret to a client's stored sync_secret → client_id). Gold data on
+-- what clients struggle with; feeds the assistant's knowledge base back.
+CREATE TABLE IF NOT EXISTS ai_help_logs (
+  id               SERIAL PRIMARY KEY,
+  client_id        INT REFERENCES clients(id) ON DELETE SET NULL,
+  restaurant_name  TEXT,                    -- denormalised label (survives client delete)
+  question         TEXT NOT NULL,
+  reply            TEXT,
+  platform         TEXT,                    -- Mac / Windows / iPad / Sunmi / web
+  staff_role       TEXT,
+  escalated        BOOLEAN DEFAULT FALSE,   -- reply told them to contact support
+  created_at       TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_ai_help_logs_client ON ai_help_logs (client_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_help_logs_time   ON ai_help_logs (created_at DESC);

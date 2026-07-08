@@ -20,6 +20,7 @@ import SettingsSection  from './admin/SettingsSection';
 import PrintersSection  from './admin/PrintersSection';
 import InventorySection from './admin/inventory/InventorySection';
 import ReservationSettingsSection from './admin/ReservationSettingsSection';
+import AiHelpAssistant from '../components/AiHelpAssistant'; // SEPOS-AI-HELP-001 — Admin only
 
 // Sidebar layout — 4 collapsible groups so all 18 sections fit on
 // smaller laptop screens. Headers toggle their group open/closed; the
@@ -307,6 +308,7 @@ export default function AdminScreen({ plan }) {
           </>
         )}
       </div>
+      <AiHelpAssistant />{/* SEPOS-AI-HELP-001 — Admin-only floating helper */}
     </div>
   );
 }

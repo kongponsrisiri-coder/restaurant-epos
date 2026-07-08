@@ -17,7 +17,6 @@ import BarScreen from './screens/BarScreen';
 import ReservationsScreen from './screens/ReservationsScreen';
 import CounterScreen from './screens/CounterScreen';
 import SyncQueuePill from './components/SyncQueuePill';
-import AiHelpAssistant from './components/AiHelpAssistant'; // SEPOS-AI-HELP-001
 import OfflineBanner from './components/OfflineBanner';
 import Clock from './components/Clock';
 import LockScreen from './screens/LockScreen';
@@ -473,7 +472,6 @@ export default function App() {
       <OfflineBanner />{/* SEPOS-ANDROID-002 — only visible when internet drops */}
       {body}
       <OnlineOrderPrinter />{/* SEPOS-ANDROID-001 — auto-print incoming online orders (native, headless) */}
-      <AiHelpAssistant />{/* SEPOS-AI-HELP-001 — floating "Ask AI" help assistant (logged-in only) */}
       <InstallBanner />
       {updateReady && updateBannerAllowed && (
         <div style={{

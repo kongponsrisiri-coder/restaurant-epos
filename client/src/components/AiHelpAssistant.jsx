@@ -31,7 +31,9 @@ const SUGGESTIONS = [
   'Why is my till not syncing?',
 ];
 
-export default function AiHelpAssistant() {
+// variant: 'fab' (floating button, default) | 'topbar' (inline button that sits
+// in the app's top bar next to the clock — no longer overlaps page content).
+export default function AiHelpAssistant({ variant = 'fab' }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]); // {role:'user'|'assistant', content}
   const [input, setInput] = useState('');
@@ -77,7 +79,7 @@ export default function AiHelpAssistant() {
   return (
     <>
       {!open && (
-        <button onClick={() => setOpen(true)} title="Ask AI for help" aria-label="Ask AI for help" style={fab}>
+        <button onClick={() => setOpen(true)} title="Ask AI for help" aria-label="Ask AI for help" style={variant === 'topbar' ? topbarBtn : fab}>
           🤖 <span style={{ marginLeft: 6 }}>Ask AI</span>
         </button>
       )}
@@ -147,6 +149,14 @@ const fab = {
   border: '1px solid var(--brand-accent,#C9A84C)', borderRadius: 999,
   padding: '11px 16px', fontSize: 14, fontWeight: 800, cursor: 'pointer',
   boxShadow: '0 8px 24px rgba(0,0,0,0.28)', display: 'flex', alignItems: 'center',
+};
+// Inline top-bar variant — matches the other header buttons (gold accent),
+// sits next to the clock, and doesn't float over page content.
+const topbarBtn = {
+  background: 'var(--brand-accent,#C9A84C)', color: 'var(--brand-primary,#0D1B3E)',
+  border: '1px solid rgba(255,255,255,0.25)', borderRadius: 6,
+  padding: '6px 12px', fontSize: 12, fontWeight: 800, cursor: 'pointer',
+  whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center',
 };
 const overlay = {
   position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)',

@@ -242,16 +242,16 @@ export default function BillsSection() {
         // edge-to-edge because the table is wider than 768px below the
         // wrapper minWidth.
         <div style={{ background: 'white', borderRadius: 12, overflowX: 'auto', overflowY: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', WebkitOverflowScrolling: 'touch' }}>
-          <div style={{ minWidth: 720 }}>
+          <div style={{ minWidth: 860 }}>
           {/* Korakot 2026-06-02: dropped the "Bill #" column. Table number + date
               is the reference operators use day-to-day. */}
-          <div style={{ display: 'grid', gridTemplateColumns: '80px 60px 1fr 110px 100px 100px 90px', padding: '12px 20px', background: '#f8f8f8', fontWeight: 700, fontSize: 13, color: '#555' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '80px 60px 1fr 110px 100px 110px 190px', padding: '12px 20px', background: '#f8f8f8', fontWeight: 700, fontSize: 13, color: '#555' }}>
             <span>Table</span><span>Cvr</span><span>Date & Time</span><span>Method</span><span style={{ textAlign: 'right' }}>Discount</span><span style={{ textAlign: 'right' }}>Total</span><span style={{ textAlign: 'center' }}>Actions</span>
           </div>
           {bills.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: '#bbb' }}>No bills found for this period</div>}
           {bills.map(bill => (
             <div key={bill.id}>
-              <div onClick={() => handleSelectBill(bill)} style={{ display: 'grid', gridTemplateColumns: '80px 60px 1fr 110px 100px 100px 90px', padding: '12px 20px', borderBottom: selectedBill?.id === bill.id ? 'none' : '1px solid #f0f0f0', fontSize: 14, cursor: 'pointer', background: selectedBill?.id === bill.id ? '#f0f7ff' : 'white', alignItems: 'center' }}>
+              <div onClick={() => handleSelectBill(bill)} style={{ display: 'grid', gridTemplateColumns: '80px 60px 1fr 110px 100px 110px 190px', padding: '12px 20px', borderBottom: selectedBill?.id === bill.id ? 'none' : '1px solid #f0f0f0', fontSize: 14, cursor: 'pointer', background: selectedBill?.id === bill.id ? '#f0f7ff' : 'white', alignItems: 'center' }}>
                 <span style={{ fontWeight: 700, color:'var(--brand-primary, #1a1a2e)' }}>T{bill.table_number}</span>
                 <span style={{ color: '#555' }}>{bill.covers || '—'}</span>
                 <span style={{ color: '#555' }}>{formatDateTime(bill.closed_at)}</span>
@@ -377,7 +377,7 @@ export default function BillsSection() {
             // Korakot 2026-06-02: grid template matches the new 7-col
             // header (no Bill # column). Footer total uses paid_amount
             // via the headline totalSales (already service-charge aware).
-            <div style={{ display: 'grid', gridTemplateColumns: '80px 60px 1fr 110px 100px 100px 90px', padding: '14px 20px', background: '#f8f8f8', fontWeight: 800, fontSize: 15 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '80px 60px 1fr 110px 100px 110px 190px', padding: '14px 20px', background: '#f8f8f8', fontWeight: 800, fontSize: 15 }}>
               <span style={{ color: '#555', gridColumn: '1 / 6' }}>Total — {bills.length} bills</span>
               <span style={{ textAlign: 'right', color: '#e94560' }}>£{totalSales.toFixed(2)}</span>
               <span></span>

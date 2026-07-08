@@ -19,6 +19,7 @@ import CounterScreen from './screens/CounterScreen';
 import SyncQueuePill from './components/SyncQueuePill';
 import OfflineBanner from './components/OfflineBanner';
 import Clock from './components/Clock';
+import AiHelpAssistant from './components/AiHelpAssistant'; // SEPOS-AI-HELP-001 — Admin-only, now in the top bar
 import LockScreen from './screens/LockScreen';
 import './App.css';
 
@@ -382,6 +383,9 @@ export default function App() {
 
           <div className="navbar-user">
             <Clock />
+            {/* SEPOS-AI-HELP-001 — Ask AI sits in the top bar next to the clock
+                (Admin only), so it no longer floats over page content. */}
+            {screen === 'admin' && <AiHelpAssistant variant="topbar" />}
             <StatusBadge />
             {/* SEPOS-044 — always-visible pill when anything is queued. */}
             <SyncQueuePill compact={isMobile} />

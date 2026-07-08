@@ -2500,7 +2500,13 @@ app.get('/api/reports/summary', async (req, res) => {
       // Korakot 2026-06-02: pull payments.amount as paid_amount so the
       // Reports tab can show what was actually collected (incl. service
       // charge) instead of the bare subtotal.
-      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.no_service_charge, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') ORDER BY orders.closed_at DESC`, [from, to]),
+      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.no_service_charge, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date AND ((payments.method IS NOT NULL AND payments.method != 'cancelled') OR orders.order_type = 'takeaway') ORDER BY orders.closed_at DESC`, [from, to]),
+      // SEPOS-REPREC-001 — a cancelled/void bill closes with a payment row
+      // method='cancelled', £0. It collected nothing, so it must NOT count as a
+      // sale or an order here — otherwise Trading's "Total Sales" (orders.total)
+      // and "Orders" count outrun the Bills page (which already excludes them),
+      // and the £0 'cancelled' line litters the Payment Methods list. Mirrors the
+      // /api/bills filter so Trading, Bills and the Z report reconcile.
       // Korakot 2026-06-02: food vs drink split based on categories.is_bar.
       // Per-item discounts applied. Service charge + bill-level discounts
       // are handled separately above.
@@ -3002,7 +3008,10 @@ app.get('/api/z-report/preview', async (req, res) => {
       to   = sessionMeta.closed_at || new Date().toISOString(); // open shift → up to now
     }
     const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, foodDrinkRes, vouchersSoldRes, vouchersRedeemedRes, settingsRes, depTakenRes, depRedeemedRes, depForfeitedRes, depHeldRes] = await Promise.all([
-      pool.query(`SELECT orders.*, tables.table_number, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp ORDER BY orders.closed_at DESC`, [from, to]),
+      // SEPOS-REPREC-001 — exclude cancelled/void bills (payment method='cancelled', £0)
+      // from the Z so its Total Sales + order count reconcile with Trading and Bills.
+      // A closed order with no payment row (method NULL) is still kept.
+      pool.query(`SELECT orders.*, tables.table_number, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp AND (payments.method IS NULL OR payments.method != 'cancelled') ORDER BY orders.closed_at DESC`, [from, to]),
       pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='open'`),
       pool.query(`SELECT COUNT(*) as void_count, SUM(order_items.unit_price * order_items.quantity) as void_value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp`, [from, to]),
       // SEPOS-023: breakdown by void_type

@@ -15,8 +15,13 @@ export default function TradingSection() {
     getSummaryReport(from, to).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
   }, [period, customFrom, customTo]);
 
-  const avgPerHead  = data?.total_covers > 0 ? data.total_sales / data.total_covers : 0;
-  const avgPerCover = data?.order_count  > 0 ? data.total_sales / data.order_count  : 0;
+  // SEPOS-REPREC-001 — the headline + averages track MONEY TAKEN (total_paid) so
+  // Trading reconciles exactly with the Bills page and its own Payment Methods
+  // breakdown below. total_sales is the order-value figure (kept for the Reports
+  // breakdown); it can differ from money taken by tips / overpayments.
+  const takings     = Number(data?.total_paid ?? data?.total_sales ?? 0);
+  const avgPerHead  = data?.total_covers > 0 ? takings / data.total_covers : 0;
+  const avgPerCover = data?.order_count  > 0 ? takings / data.order_count  : 0;
 
   return (
     <div style={{ padding: 'clamp(14px, 4vw, 24px)' }}>
@@ -28,15 +33,18 @@ export default function TradingSection() {
         {['today', 'weekly', 'monthly', 'custom'].map(p => (
           <button key={p} onClick={() => setPeriod(p)} style={{ padding: '8px 18px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, textTransform: 'capitalize', whiteSpace: 'nowrap', flexShrink: 0, background: period === p ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0', color: period === p ? 'white' : '#555' }}>{p}</button>
         ))}
-        {period === 'custom' && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 6, flexShrink: 0 }}>
-            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
-            <span style={{ color: '#666', fontSize: 13 }}>→</span>
-            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
-          </div>
-        )}
+        {/* Date-range picker — always visible so any specific day is one tap away.
+            Picking a date jumps straight to the custom range (no need to hit
+            "Custom" first). A single day = set both boxes to the same date. */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 6, flexShrink: 0 }}>
+          <input type="date" value={customFrom} max={customTo || today}
+            onChange={e => { setCustomFrom(e.target.value); setPeriod('custom'); }}
+            style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
+          <span style={{ color: '#666', fontSize: 13 }}>→</span>
+          <input type="date" value={customTo} min={customFrom} max={today}
+            onChange={e => { setCustomTo(e.target.value); setPeriod('custom'); }}
+            style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
+        </div>
       </div>
       {loading ? <div style={{ color: '#888' }}>Loading...</div> : (
         <>
@@ -44,7 +52,7 @@ export default function TradingSection() {
               (≥320px viewport) and grows to 3+ on desktop. */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
             {[
-              { label: 'Total Sales',   value: `£${Number(data?.total_sales || 0).toFixed(2)}`, color: '#e94560' },
+              { label: 'Total Sales',   value: `£${takings.toFixed(2)}`, color: '#e94560' },
               { label: 'Orders',        value: data?.order_count || 0,                    color: '#3b82f6' },
               { label: 'Covers',        value: data?.total_covers || 0,                   color: '#22c55e' },
               { label: 'Avg per Cover', value: `£${avgPerHead.toFixed(2)}`,               color: '#eab308' },

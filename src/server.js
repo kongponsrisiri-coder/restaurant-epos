@@ -7323,17 +7323,21 @@ app.get('/api/sync/health', async (req, res) => {
   const dbMode = (process.env.DB_MODE || 'cloud').toLowerCase();
   const syncSecretSet = !!process.env.SYNC_SECRET;
   let pending = 0;
+  let failed = 0;
   try {
     const r = await pool.query("SELECT COUNT(*) AS n FROM sync_queue WHERE synced = 0");
     pending = Number(r.rows[0]?.n || 0);
+    const rf = await pool.query("SELECT COUNT(*) AS n FROM sync_queue WHERE synced = 2");
+    failed = Number(rf.rows[0]?.n || 0);
   } catch {}
   res.json({
     db_mode: dbMode,
     sync_secret_set: syncSecretSet,
     pending_actions: pending,
-    // Healthy when in cloud mode (no sync needed) OR in local mode
-    // with the secret set and no stuck items.
-    healthy: dbMode === 'cloud' || (syncSecretSet && pending < 20),
+    failed_actions: failed,
+    // Healthy when in cloud mode (no sync needed) OR in local mode with the
+    // secret set, no big pending backlog, and nothing quarantined.
+    healthy: dbMode === 'cloud' || (syncSecretSet && pending < 20 && failed === 0),
   });
 });
 
@@ -7346,20 +7350,32 @@ app.get('/api/sync/queue', async (req, res) => {
   const dbMode = (process.env.DB_MODE || 'cloud').toLowerCase();
   if (dbMode !== 'local') return res.json({ db_mode: dbMode, entries: [] });
   try {
+    // synced: 0 = pending, 2 = quarantined (a push that will never succeed —
+    // surfaced so a failed payment/order is visible, not silently dropped).
     const r = await pool.query(
-      `SELECT id, action_type, payload, created_at
-       FROM sync_queue WHERE synced = 0 ORDER BY id ASC`
+      `SELECT id, action_type, payload, created_at, attempts, last_error, failed_at, synced
+       FROM sync_queue WHERE synced IN (0, 2) ORDER BY synced ASC, id ASC`
     );
-    const entries = r.rows.map(row => {
+    const map = row => {
       let parsed = null;
       try { parsed = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload; }
       catch {}
       return {
         id: row.id, action_type: row.action_type,
         created_at: row.created_at, payload: parsed,
+        attempts: Number(row.attempts) || 0,
+        last_error: row.last_error || null,
+        failed_at: row.failed_at || null,
+        failed: row.synced === 2,
       };
+    };
+    const rows = r.rows.map(map);
+    // entries = pending (back-compat with the existing modal); failed = quarantined.
+    res.json({
+      db_mode: dbMode,
+      entries: rows.filter(e => !e.failed),
+      failed: rows.filter(e => e.failed),
     });
-    res.json({ db_mode: dbMode, entries });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -7390,9 +7406,10 @@ app.post('/api/sync/queue/:id/skip', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ error: 'invalid id' });
+    // Clear a pending (0) OR quarantined (2) entry — dismiss it without pushing.
     const r = await pool.query(
       `UPDATE sync_queue SET synced = 1, synced_at = CURRENT_TIMESTAMP
-       WHERE id = $1 AND synced = 0`,
+       WHERE id = $1 AND synced IN (0, 2)`,
       [id]
     );
     res.json({ success: true, affected: r.rowCount });

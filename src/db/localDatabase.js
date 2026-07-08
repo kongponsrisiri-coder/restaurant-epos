@@ -433,8 +433,11 @@ function initSchema() {
       action_type TEXT,
       payload TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      synced INTEGER DEFAULT 0,
-      synced_at TIMESTAMP
+      synced INTEGER DEFAULT 0,          -- 0 = pending, 1 = done, 2 = failed/quarantined
+      synced_at TIMESTAMP,
+      attempts INTEGER DEFAULT 0,        -- push attempts so a poison item can't retry forever
+      last_error TEXT,                   -- last push error (for the sync-queue inspector)
+      failed_at TIMESTAMP                -- when it was quarantined
     );
 
     -- SEPOS-VOUCHER-001 — gift vouchers
@@ -626,6 +629,12 @@ function addColumnIfMissing(table, column, definition) {
 }
 
 function runMigrations() {
+  // SEPOS-SYNC-HEAL-001: self-healing sync queue — a poison action must not
+  // block the whole queue. attempts caps retries; last_error/failed_at back
+  // the quarantine surfaced in the sync-queue inspector.
+  addColumnIfMissing('sync_queue', 'attempts',   'INTEGER DEFAULT 0');
+  addColumnIfMissing('sync_queue', 'last_error', 'TEXT');
+  addColumnIfMissing('sync_queue', 'failed_at',  'TIMESTAMP');
   // SEPOS-024: resend reason on order_items
   addColumnIfMissing('order_items', 'resend_reason', 'TEXT');
   // Card reconciliation on the Z report (actual card-machine takings + variance)

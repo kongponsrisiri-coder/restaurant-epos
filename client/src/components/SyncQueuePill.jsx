@@ -22,19 +22,24 @@ export default function SyncQueuePill({ compact }) {
     return () => { stopped = true; clearInterval(id); };
   }, []);
 
-  // Only meaningful on local-mode (Mac) installs with something pending.
+  // Only meaningful on local-mode (Mac) installs. Show whenever something is
+  // pending OR quarantined (a failed action the operator should see + clear).
   if (!health || health.db_mode !== 'local') return null;
-  if (!health.pending_actions || health.pending_actions <= 0) return null;
+  const pending = health.pending_actions || 0;
+  const failed = health.failed_actions || 0;
+  if (pending <= 0 && failed <= 0) return null;
 
   return (
     <>
       <button
         onClick={() => setShowModal(true)}
-        title={`${health.pending_actions} sync action${health.pending_actions === 1 ? '' : 's'} pending — tap to inspect`}
+        title={failed > 0
+          ? `${failed} sync action${failed === 1 ? '' : 's'} failed — tap to review`
+          : `${pending} sync action${pending === 1 ? '' : 's'} pending — tap to inspect`}
         style={{
-          background: 'rgba(255,255,255,0.12)',
+          background: failed > 0 ? '#b45309' : 'rgba(255,255,255,0.12)',
           color: 'white',
-          border: '1px solid rgba(255,255,255,0.2)',
+          border: failed > 0 ? '1px solid #f59e0b' : '1px solid rgba(255,255,255,0.2)',
           borderRadius: 6,
           padding: compact ? '5px 9px' : '6px 12px',
           fontSize: compact ? 11 : 12,
@@ -43,7 +48,7 @@ export default function SyncQueuePill({ compact }) {
           whiteSpace: 'nowrap',
         }}
       >
-        🔄 {health.pending_actions}
+        {failed > 0 ? `⚠ ${failed}${pending ? ` · 🔄 ${pending}` : ''}` : `🔄 ${pending}`}
       </button>
       {showModal && (
         <SyncQueueModal

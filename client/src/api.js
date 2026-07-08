@@ -17,6 +17,20 @@ const isLocalId = (id) => typeof id === 'string' && String(id).startsWith('L');
 // they start with 'L', so always test isLocalItemId FIRST where it matters).
 const isLocalItemId = (id) => typeof id === 'string' && String(id).startsWith('LI');
 
+// The shared MAIN SiamEPOS cloud, and the ONLY public host allowed to use it
+// without an explicit VITE_API_URL. Every other public host MUST declare its
+// restaurant's backend via the VITE_API_URL build env var — otherwise it is a
+// misconfigured per-tenant deploy and we refuse to silently serve the main
+// cloud's data (the tenant-leak that made siamepos-thannthai show app.siamepos
+// data — SEPOS-TENANT-GUARD-001).
+const MAIN_CLOUD = 'https://restaurant-epos-production.up.railway.app';
+const MAIN_HOSTS = ['app.siamepos.co.uk'];
+// Set true by getServerURL() when a per-tenant site is missing its VITE_API_URL.
+// Snapshotted into the exported TENANT_MISCONFIGURED const below (after
+// getServerURL runs at module init) and read by App.jsx to block with a loud
+// setup-error screen instead of loading another restaurant's data.
+let tenantMisconfigured = false;
+
 const getServerURL = () => {
   // Electron desktop: the bundled local server lives on :3001 regardless of
   // how the renderer was loaded (file:// in prod, http://localhost:5173 in dev).
@@ -44,15 +58,25 @@ const getServerURL = () => {
   ) {
     return `http://${host}:3001`;
   }
-  // Per-client Netlify deploy: set VITE_API_URL env var to override
+  // Per-client Netlify deploy: the site declares its restaurant's backend via
+  // the VITE_API_URL build env var.
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  // Otherwise use cloud
-  return 'https://restaurant-epos-production.up.railway.app';
+  // No VITE_API_URL on a public host. Only the shared MAIN site may use the main
+  // cloud without one; ANY other public host here is a per-tenant site built
+  // without its VITE_API_URL. Do NOT silently serve the main cloud — flag it so
+  // App.jsx blocks with a setup error instead of showing the wrong restaurant.
+  if (!MAIN_HOSTS.includes(host)) {
+    tenantMisconfigured = true;
+    try { console.error(`[SiamEPOS] Misconfigured deploy: ${host} has no VITE_API_URL. Refusing to fall back to the main cloud.`); } catch {}
+  }
+  return MAIN_CLOUD;
 };
 
 export const SERVER_URL = getServerURL();
+// Snapshot AFTER getServerURL() has run (it sets the flag as a side effect).
+export const TENANT_MISCONFIGURED = tenantMisconfigured;
 
 // SEPOS-047a — both login paths store a Bearer token; attach it to every
 // request so staff-gated endpoints (customers, campaigns, AI scan) work.

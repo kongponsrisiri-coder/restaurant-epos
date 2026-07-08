@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { startMonitoring, onStatusChange, getServerStatus } from './utils/serverDetect';
-import { getRestaurant, getLicenseState, syncLocalOrders, getSettings } from './api';
+import { getRestaurant, getLicenseState, syncLocalOrders, getSettings, TENANT_MISCONFIGURED } from './api';
 import { applyBrandTheme } from './theme'; // SEPOS-BRAND-001 — per-client theme
 import { backupSalesToDevice } from './native/salesBackup'; // SEPOS-ANDROID-003
 import { canAccessReservations, canAccessKitchen, canAccessFullEPOS } from './utils/plan';
@@ -262,6 +262,28 @@ export default function App() {
       </div>
     );
   };
+
+  // SEPOS-TENANT-GUARD-001 — refuse to load if this per-tenant site was built
+  // without its VITE_API_URL. Without this, api.js would silently fall back to
+  // the main SiamEPOS cloud and show the WRONG restaurant's data (the
+  // siamepos-thannthai leak). Fail loud instead — the operator sees a clear
+  // setup error, never another restaurant's orders.
+  if (TENANT_MISCONFIGURED) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: '#0D1B3E', color: 'white', fontFamily: 'system-ui, sans-serif', textAlign: 'center' }}>
+        <div style={{ maxWidth: 460 }}>
+          <div style={{ fontSize: 44, marginBottom: 12 }}>⚠️</div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 10px' }}>This till isn’t configured</h1>
+          <p style={{ fontSize: 15, lineHeight: 1.5, color: 'rgba(255,255,255,0.85)', margin: '0 0 8px' }}>
+            This site (<b>{typeof window !== 'undefined' ? window.location.hostname : ''}</b>) is missing its restaurant’s server address, so it can’t safely load your data.
+          </p>
+          <p style={{ fontSize: 13.5, lineHeight: 1.5, color: 'rgba(255,255,255,0.6)', margin: 0 }}>
+            It was published without its <code>VITE_API_URL</code> setting. Contact SiamEPOS support (info@siamepos.co.uk) — the site needs re-deploying with the correct server address.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // SEPOS-060 phase 2 — a lapsed till is fully locked: the lock screen overrides
   // login and every screen until the subscription is reactivated (or the cloud

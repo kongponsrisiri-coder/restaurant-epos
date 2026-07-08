@@ -683,7 +683,7 @@ export default function MenuSection() {
       )}
       {modifierItem && (
         <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'white', borderRadius: 16, padding: 32, width: 'min(640px, 94vw)', maxHeight: '86vh', overflowY: 'auto' }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: 32, width: 'min(760px, 96vw)', maxHeight: '90vh', overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}><h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Options — {modifierItem.name}</h2><button onClick={() => setModifierItem(null)} style={{ background: '#f0f0f0', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', fontWeight: 600 }}>Close</button></div>
             {modifiers.map(group => (
               <div key={group.id} style={{ background: '#f8f8f8', borderRadius: 12, padding: 16, marginBottom: 12 }}>
@@ -700,7 +700,7 @@ export default function MenuSection() {
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>♻️ Add a shared group</div>
                 <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>Reusable groups you defined once. Pick one to add to this dish — edit the group once and every dish updates.</div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <select value={pickGroup} onChange={e => setPickGroup(e.target.value)} style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid #c7d2fe', fontSize: 13, background: 'white', cursor: 'pointer' }}>
+                  <select value={pickGroup} onChange={e => setPickGroup(e.target.value)} style={{ flex: 1, minWidth: 0, padding: '10px 12px', borderRadius: 8, border: '1px solid #c7d2fe', fontSize: 13, background: 'white', cursor: 'pointer' }}>
                     <option value="">— Choose a shared group —</option>
                     {library.filter(g => !modifiers.some(m => m.id === g.id)).map(g => (
                       <option key={g.id} value={g.id}>{g.name} ({g.required ? 'Required' : 'Optional'}, {g.multi_select ? 'multi' : 'pick one'}) — {(g.modifiers || []).map(o => o.name).join(', ') || 'no options yet'}</option>

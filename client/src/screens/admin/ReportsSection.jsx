@@ -45,7 +45,7 @@ export default function ReportsSection() {
       data.orders.forEach(o => {
         rows.push([
           o.order_type || 'dine_in',
-          o.order_type === 'takeaway' ? (o.customer_name || 'Online') : `Table ${o.table_number || '-'}`,
+          o.order_type === 'takeaway' ? (o.customer_name || 'Takeaway') : `Table ${o.table_number || '-'}`,
           o.method || (o.order_type === 'takeaway' ? 'Online' : ''),
           o.covers || '',
           Number(o.total || 0).toFixed(2),
@@ -155,7 +155,7 @@ export default function ReportsSection() {
               {data?.orders?.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: '#bbb' }}>No orders for this period</div>}
               {data?.orders?.map(order => (
                 <div key={order.id} style={{ padding: '10px 20px', display: 'grid', gridTemplateColumns: '1fr 110px 70px 90px 90px', borderBottom: '1px solid #f0f0f0', fontSize: 14 }}>
-                  <span>{order.order_type === 'takeaway' ? `🥡 ${order.customer_name || 'Online'}` : `Table ${order.table_number}`}</span>
+                  <span>{order.order_type === 'takeaway' ? `🥡 ${order.customer_name || 'Takeaway'}` : `Table ${order.table_number}`}</span>
                   <span>{order.method || (order.order_type === 'takeaway' ? 'Online' : '-')}</span>
                   <span>{order.covers || '-'}</span>
                   <span style={{ textAlign: 'right', color: '#888' }}>£{Number(order.total || 0).toFixed(2)}</span>
@@ -171,7 +171,7 @@ export default function ReportsSection() {
                         <div style={{ fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>£{Number(data.total_dine_in || 0).toFixed(2)} <span style={{ color: '#888', fontSize: 12, fontWeight: 400 }}>· {data.dine_in_count || 0} orders</span></div>
                       </div>
                       <div style={{ padding: '10px 20px' }}>
-                        <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>🥡 Online Takeaway</div>
+                        <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>🥡 Takeaway</div>
                         <div style={{ fontWeight: 800, color: 'var(--brand-accent,#C9A84C)' }}>£{Number(data.total_takeaway || 0).toFixed(2)} <span style={{ color: '#888', fontSize: 12, fontWeight: 400 }}>· {data.takeaway_count || 0} orders</span></div>
                       </div>
                     </div>
@@ -288,7 +288,7 @@ function buildSalesBody(data, period, from, to, settings, thermal) {
     <h2>Breakdown</h2>
     <table>
       <tr><td>Dine-in (${data.dine_in_count || 0} orders)</td><td class="right">${fmt(data.total_dine_in)}</td></tr>
-      ${data.takeaway_count > 0 ? `<tr><td>🥡 Online Takeaway (${data.takeaway_count} orders)</td><td class="right">${fmt(data.total_takeaway)}</td></tr>` : ''}
+      ${data.takeaway_count > 0 ? `<tr><td>🥡 Takeaway (${data.takeaway_count} orders)</td><td class="right">${fmt(data.total_takeaway)}</td></tr>` : ''}
       <tr><td>🍽️ Food${fdParen(data.total_food, data.total_food, data.total_drink)}</td><td class="right">${fmt(data.total_food)}</td></tr>
       <tr><td>🍺 Drink${fdParen(data.total_drink, data.total_food, data.total_drink)}</td><td class="right">${fmt(data.total_drink)}</td></tr>
       <tr><td>Service charge (12.5%)</td><td class="right">${fmt(data.total_service)}</td></tr>
@@ -301,7 +301,7 @@ function buildSalesBody(data, period, from, to, settings, thermal) {
     <div class="section-head">Orders</div>
     <table>
       ${orders.map(o => {
-        const label = o.order_type === 'takeaway' ? '🥡 ' + (o.customer_name || 'Online') : `T${o.table_number || '-'}`;
+        const label = o.order_type === 'takeaway' ? '🥡 ' + (o.customer_name || 'Takeaway') : `T${o.table_number || '-'}`;
         const method = o.method || (o.order_type === 'takeaway' ? 'Online' : '-');
         const amt = Number(o.paid_amount ?? o.total ?? 0);
         return `<tr><td>${label} · ${method}${o.covers ? ' · ' + o.covers + 'p' : ''}</td><td class="right">${fmt(amt)}</td></tr>`;
@@ -313,7 +313,7 @@ function buildSalesBody(data, period, from, to, settings, thermal) {
       <thead><tr><th>Table / Customer</th><th>Method</th><th class="right">Covers</th><th class="right">Subtotal</th><th class="right">Total</th></tr></thead>
       <tbody>
       ${orders.map(o => {
-        const label = o.order_type === 'takeaway' ? '🥡 ' + (o.customer_name || 'Online') : `Table ${o.table_number || '-'}`;
+        const label = o.order_type === 'takeaway' ? '🥡 ' + (o.customer_name || 'Takeaway') : `Table ${o.table_number || '-'}`;
         const method = o.method || (o.order_type === 'takeaway' ? 'Online' : '-');
         return `<tr>
           <td>${label}</td>
@@ -425,7 +425,7 @@ function buildSalesLines(data, period, from, to, settings) {
   // Orders list
   for (const o of data.orders) {
     const label = o.order_type === 'takeaway'
-      ? 'TA ' + (o.customer_name || 'Online')
+      ? 'TA ' + (o.customer_name || 'Takeaway')
       : `T${o.table_number || '-'}`;
     const method = o.method || (o.order_type === 'takeaway' ? 'Online' : '-');
     const amt = Number(o.paid_amount ?? o.total ?? 0);

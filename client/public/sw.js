@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v87'; // v87: self-healing sync queue — a poison action (e.g. re-pay of an already-closed bill) can no longer freeze all sync; failed items quarantine + surface in the Sync-queue modal/pill instead of blocking live orders
+const CACHE_NAME = 'siamepos-shell-v88'; // v88: in-store takeaway labelled "Takeaway" (not "Online Takeaway"/"Online") in Reports so it's not confused with real online orders // v87: self-healing sync queue — a poison action (e.g. re-pay of an already-closed bill) can no longer freeze all sync; failed items quarantine + surface in the Sync-queue modal/pill instead of blocking live orders
 const APP_SHELL = [
   '/',
   '/index.html',

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v86'; // v86: cloud web app no longer shows the bogus LAN "Network Setup" address (datacenter container 10.x:8080) — server sends local flag, web app swaps to the cloud "add a till" QR; LAN card stays on desktop/host installs
+const CACHE_NAME = 'siamepos-shell-v87'; // v87: self-healing sync queue — a poison action (e.g. re-pay of an already-closed bill) can no longer freeze all sync; failed items quarantine + surface in the Sync-queue modal/pill instead of blocking live orders
 const APP_SHELL = [
   '/',
   '/index.html',

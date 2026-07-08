@@ -4542,6 +4542,49 @@ app.post('/api/ai/scan-expense', requireStaffAuthOrSyncSecret(['admin', 'manager
   } catch (err) { return res.status(500).json({ success: false, error: err.message }); }
 });
 
+// SEPOS-AI-HELP-001 — in-app "Ask AI" help assistant. Any logged-in staff
+// (roles=null) OR a desktop/Sunmi relay via SYNC_SECRET. Desktop/Sunmi hold
+// no ANTHROPIC_API_KEY, so they relay to the cloud exactly like the scanners.
+app.post('/api/ai/help', requireStaffAuthOrSyncSecret(), async (req, res) => {
+  try {
+    const { messages, platform } = req.body || {};
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: 'messages[] is required' });
+    }
+    // Sanitise: only {role, content} strings, last 12 turns, length-capped.
+    const clean = messages
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+      .slice(-12)
+      .map(m => ({ role: m.role, content: m.content.slice(0, 2000) }));
+    if (clean.length === 0 || clean[clean.length - 1].role !== 'user') {
+      return res.status(400).json({ error: 'the last message must be from the user' });
+    }
+    // No key here (desktop/Sunmi till) → relay to cloud, same as the scanners.
+    if (!process.env.ANTHROPIC_API_KEY) {
+      const relayed = await relayAiToCloud('/api/ai/help', { messages: clean, platform });
+      if (relayed) return res.status(relayed.status).json(relayed.json);
+      return res.json({ reply: "I can't reach the help service right now — check your internet connection, or contact SiamEPOS support (message Korakot on LINE, or email info@siamepos.co.uk)." });
+    }
+    // Ground the answer in this restaurant's live settings (KV settings table).
+    const ctx = { platform: platform || null, settings: {}, restaurant_name: process.env.RESTAURANT_NAME || null };
+    try {
+      const sres = await pool.query(
+        `SELECT key, value FROM settings WHERE key IN
+           ('service_charge_enabled','service_charge_rate','vat_mode','deposits_enabled')`);
+      sres.rows.forEach(r => { ctx.settings[r.key] = r.value; });
+    } catch { /* grounding is best-effort — answer generically if it fails */ }
+    const aiHelp = require('./services/aiHelpService');
+    const out = await aiHelp.askHelp(clean, ctx);
+    if (!out.reply) {
+      return res.json({ reply: "Sorry, I hit a technical problem just then. Try again in a moment — or if it keeps happening, contact SiamEPOS support (Korakot on LINE / info@siamepos.co.uk)." });
+    }
+    res.json({ reply: out.reply });
+  } catch (err) {
+    console.error('POST /api/ai/help error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/expenses', async (req, res) => {
   try { const result = await pool.query(`SELECT * FROM expenses ORDER BY date DESC, created_at DESC`); res.json(result.rows); }
   catch (err) { res.status(500).json({ error: err.message }); }

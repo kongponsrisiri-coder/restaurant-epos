@@ -810,6 +810,9 @@ export const getReservations = () => get('/api/reservations');
 // risk) or when the queue is backing up.
 export const getSyncHealth = () => get('/api/sync/health');
 
+// SEPOS-AI-HELP-001 — in-app "Ask AI" help assistant. messages = [{role,content}].
+export const askAi = (messages, platform) => post('/api/ai/help', { messages, platform });
+
 // SEPOS-044 follow-up — sync queue inspector (local mode only).
 export const getSyncQueue = () => get('/api/sync/queue');
 export const skipSyncQueueEntry = (id) => post(`/api/sync/queue/${id}/skip`, {});

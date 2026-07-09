@@ -33,7 +33,7 @@ function Lotus({ size = 120 }) {
 // default lotus mark. (This is the on-screen logo, separate from the receipt
 // logo — it can be light/colour since it never gets thermal-printed.)
 function BrandMark({ size = 120, logo }) {
-  if (logo) return <img src={logo} alt="" style={{ height: size, maxWidth: size * 2.4, objectFit: 'contain', display: 'block' }} />;
+  if (logo) return <img src={logo} alt="" style={{ height: size, maxWidth: Math.min(size * 2.4, 440), objectFit: 'contain', display: 'block' }} />;
   return <Lotus size={size} />;
 }
 
@@ -188,7 +188,7 @@ export default function LoginScreen({ onLogin }) {
   // Mobile: compact full-width header strip above the login panel.
   const brandPanel = isMobile ? (
     <div style={{ width: '100%', flexShrink: 0, position: 'relative', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14, overflow: 'hidden' }}>
-      <BrandMark size={60} logo={brandLogo} />
+      <BrandMark size={84} logo={brandLogo} />
       <div style={{ minWidth: 0 }}>
         {/* Restaurant name is the headline; SiamEPOS sits under it as the platform credit. */}
         <div style={{ fontFamily: SERIF, fontSize: 24, color: '#fff', fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.05, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{restaurantName || 'SiamEPOS'}</div>
@@ -201,7 +201,7 @@ export default function LoginScreen({ onLogin }) {
   ) : (
     <div style={{ width: 600, flexShrink: 0, position: 'relative', padding: '0 64px', display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', right: -60, bottom: -40, opacity: 0.05, pointerEvents: 'none' }}><Lotus size={420} /></div>
-      <BrandMark size={168} logo={brandLogo} />
+      <BrandMark size={240} logo={brandLogo} />
       {/* Restaurant name is the hero wordmark; wordBreak so a long name wraps rather than overflow. */}
       <div style={{ fontFamily: SERIF, fontSize: 60, color: '#fff', fontWeight: 700, letterSpacing: '-1.5px', lineHeight: 1.05, marginTop: 28, wordBreak: 'break-word' }}>{restaurantName || 'SiamEPOS'}</div>
       <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 10, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Point of sale</div>

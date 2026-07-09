@@ -89,14 +89,15 @@ export default function LoginScreen({ onLogin }) {
     Promise.all([getRestaurant().catch(() => null), getSettings().catch(() => null)])
       .then(([r, settings]) => {
         const generic = (n) => !n || /^siamepos$/i.test(String(n).trim());
-        // Name priority: restaurants.name → settings.restaurant_name →
-        // settings.company_name (the owner-editable "Restaurant Name" field in
-        // Admin → Settings) → restaurant_id slug as a last resort. company_name
-        // is included so a new tenant whose DB name is still null can set its
-        // display name in-app without a DB edit.
-        const name = (r && r.name)
+        // Name priority — the OWNER-EDITABLE name wins over the onboarding
+        // `restaurants.name` "tag", so a client can rename their till from
+        // Admin → Settings → Restaurant Name (which saves company_name) and see
+        // it here. Matches how receipts/reports resolve the name (company_name
+        // first — see reportPrinter.restaurantName). `restaurants.name` stays as
+        // the fallback for tills that never set a custom display name.
+        const name = (settings && !generic(settings.company_name) && settings.company_name)
           || (settings && !generic(settings.restaurant_name) && settings.restaurant_name)
-          || (settings && !generic(settings.company_name) && settings.company_name)
+          || (r && r.name)
           || (r && r.restaurant_id) || '';
         setRestaurantName(String(name || '').trim());
         if (settings && settings.brand_logo) setBrandLogo(settings.brand_logo); // SEPOS-BRAND-001

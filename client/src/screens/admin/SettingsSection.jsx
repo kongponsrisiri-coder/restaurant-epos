@@ -766,6 +766,7 @@ export default function SettingsSection() {
     kitchen_print_mode:      'print',   // 'print' | 'kds' | 'both'
     kitchen_language:        'en_th',  // 'en_th' | 'en'
     brand_logo:              '',   // SEPOS-BRAND-001 — on-screen logo (separate from receipt logo)
+    brand_logo_size:         'large', // SEPOS-BRAND-001 — login/header logo size: 'small'|'medium'|'large'|'xl'
     brand_primary:           '',   // theme primary colour (blank = default navy)
     brand_accent:            '',   // theme accent colour (blank = default gold)
   });
@@ -1089,6 +1090,21 @@ export default function SettingsSection() {
               <button onClick={() => setSettings(prev => ({ ...prev, brand_logo:'' }))} style={{ padding:'6px 14px', borderRadius:8, border:'none', background:'#fee2e2', color:'#ef4444', fontSize:12, fontWeight:700, cursor:'pointer' }}>🗑 Remove</button>
             )}
           </div>
+        </div>
+
+        {/* SEPOS-BRAND-001 — on-screen logo size (login + headers). Per-client,
+            like the receipt logo size below. */}
+        <label style={labelStyle}>App logo size</label>
+        <div style={{ display:'flex', gap:8, marginBottom:20, flexWrap:'wrap' }}>
+          {[['small','Small'],['medium','Medium'],['large','Large'],['xl','Extra Large']].map(([val, lbl]) => (
+            <button key={val} onClick={() => setSettings(s => ({ ...s, brand_logo_size: val }))}
+              style={{ padding:'7px 15px', borderRadius:8, border:'2px solid', fontSize:13, fontWeight:700, cursor:'pointer',
+                borderColor: (settings.brand_logo_size || 'large') === val ? 'var(--brand-primary, #1a1a2e)' : '#ddd',
+                background:  (settings.brand_logo_size || 'large') === val ? 'var(--brand-primary, #1a1a2e)' : 'white',
+                color:       (settings.brand_logo_size || 'large') === val ? 'white' : '#555' }}>
+              {lbl}
+            </button>
+          ))}
         </div>
 
         {/* Colour presets */}

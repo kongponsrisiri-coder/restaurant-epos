@@ -131,6 +131,15 @@ SiamEPOS as a **native Android app** (Capacitor wrap of `client/`) for the Sunmi
 
 > **🔑 Korakot put Krit FULLY in charge of the spa (25 Jun) — no Sam sign-off needed for spa changes.**
 
+### 📌 SPA-SETTINGS-SYNC — till settings now push to the cloud + stick — ✅ SHIPPED + LIVE-VERIFIED (Krit, 2026-07-09, spa v0.2.39 + cloud)
+**Symptom:** Spa name saved on the till reverted to "Highbury" after logout/login; then (v0.2.38) Save kicked the operator to the login screen. **Two root causes, both fixed:**
+1. **Cloud mount guard** — `app.use('/api/settings', requireAuth, …)` demanded a staff JWT BEFORE the router's own auth, so the till's `x-sync-secret` push was rejected at the mount; the cloud never got the save and the cloud-wins pull reverted it. Now auth is per-route (EPOS pattern): GET=`requireAuth`, PUT=`settingsAuth` (admin/manager JWT **or** sync-secret).
+2. **`requireRole` needs `requireAuth` first** — `requireRole` reads `req.staff`, populated ONLY by `requireAuth`. Calling it alone 401s every VALID token → client treats it as a dead session → login-kick. Fixed by chaining `requireAuth → requireRole` in `settingsAuth`. **Team rule (spa repo): never use `requireRole` without `requireAuth` in front** — audited all other routers, they're safe (mount-level `requireAuth` intact).
+- Ported the restaurant's settings-sync to the spa till: `settings.js` enqueues `update_setting` → `syncService.drainSettings()` pushes to cloud each tick BEFORE the pull (independent of the stuck B3 drain, retries offline) → `pullConfig` pending-guard skips keys with un-pushed local changes (no revert window).
+- **Live-verified on the cloud (8/8 sweep):** health `build`=deployed sha; sync-secret PUT→200 + persisted + read back via /api/sync/config; forged JWT→"invalid token"; no auth→401; GET gated 401; widget/branding public 200; sync feed gated 401; releases/latest→v0.2.39. `/api/health` now reports the deployed git `build` sha (deploys were never the problem — the mount guard was).
+- **v0.2.38 GitHub release marked prerelease + DO-NOT-INSTALL note** (has the login-kick bug); auto-update goes straight to **v0.2.39** (8/8 assets incl. Mac-OTA `.zip`). Highbury's till (v0.2.37) auto-updates on next restart; its old fire-and-forget settings push also works now the cloud accepts it.
+- **Still open (unchanged):** general offline push (appointments/bills created offline) = real Phase B3 work.
+
 ### 📌 SPA-TREATWELL-001 — Treatwell email ingestion — ✅ BUILT + DEPLOYED + LIVE-TESTED (Krit, 25 Jun)
 **Goal:** read the Treatwell booking emails a venue forwards us → auto-create CRM client + place appointment in SiamSpa. One-way, email-only (no Treatwell portal/timetable access). Repo `~/Desktop/siamepos-spa`.
 - **DONE + LIVE on spa-api.siamepos.co.uk.** Built + merged to spa `main` + deployed; parser verified 35/35 against the 3 real Highbury emails (pulled from Korakot's Gmail). New files only (parser, `treatwellIngest` engine, `treatwellAi` = **Sonnet** `claude-sonnet-4-6`, `routes/treatwellEmail`, `ingestion_log`+`clients.source`, admin **Treatwell** review tab); Sam's `treatwell.js` untouched.

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v73'; // bump to invalidate stale caches (v73: Misc Food + Misc Drink merged into one "🍽 Misc item" button — destination category decides food/bar routing)
+const CACHE_NAME = 'siamepos-shell-v92'; // v92: client-adjustable login logo size (Admin → Settings → App logo size) // v91: reports reconcile (exclude cancelled, money-taken headline), Bills total no longer hidden, Ask AI moved to top bar, Options modal bigger/no-clip, tenant-leak guard, bigger login logo + owner-editable name wins // v90: "Ask AI" helper now ONLY in Admin (was floating on every screen, clashed with View bill & pay) // v89: in-app "Ask AI" help assistant (SEPOS-AI-HELP-001) — floating helper grounded in the app map + this restaurant's live settings // v88: in-store takeaway labelled "Takeaway" (not "Online Takeaway"/"Online") in Reports so it's not confused with real online orders // v87: self-healing sync queue — a poison action (e.g. re-pay of an already-closed bill) can no longer freeze all sync; failed items quarantine + surface in the Sync-queue modal/pill instead of blocking live orders
 const APP_SHELL = [
   '/',
   '/index.html',

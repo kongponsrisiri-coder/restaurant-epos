@@ -189,8 +189,9 @@ export default function MenuSection() {
   // SEPOS-046n — inline rename state for the active category chip
   const [editingCatId, setEditingCatId]     = useState(null);
   const [editingCatName, setEditingCatName] = useState('');
-  const [dragIndex, setDragIndex]           = useState(null);
-  const [dragOverIndex, setDragOverIndex]   = useState(null);
+  const [dragIndex, setDragIndex]           = useState(null);  // holds the dragged item's ID
+  const [dragOverIndex, setDragOverIndex]   = useState(null);  // holds the hovered item's ID
+  const [subFilter, setSubFilter]           = useState(null);  // null=all, id=that sub-cat, '__none__'=un-filed
   const [localItems, setLocalItems]         = useState([]);
 
   const fetchMenu = async () => {
@@ -201,6 +202,7 @@ export default function MenuSection() {
   useEffect(() => { fetchMenu(); }, []);
   useEffect(() => { getPrinters().then(p => setPrinters(Array.isArray(p) ? p : [])).catch(() => {}); }, []);
   useEffect(() => { const items = menu.find(c => c.id === activeCategory)?.items || []; setLocalItems([...items]); }, [activeCategory, menu]);
+  useEffect(() => { setSubFilter(null); }, [activeCategory]);  // sub-cat filter is per-category
 
   const handleAddCategory = async () => {
     if (!newCatName.trim()) return;
@@ -314,12 +316,19 @@ export default function MenuSection() {
   const handleDeleteLibraryGroup = async (g) => { if (!await confirm(`Delete the shared group "${g.name}"?\n\nThis removes it from EVERY dish that uses it — not just this one.`, { danger: true, okLabel: 'Delete everywhere' })) return; await deleteModifierGroup(g.id); await refreshModifiers(); };
   const handleDeleteOption = async (optionId) => { await deleteModifier(optionId); setModifiers(await getItemModifiers(modifierItem.id)); };
 
-  function handleDragStart(e, index) { setDragIndex(index); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', index); }
-  function handleDragOver(e, index)  { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverIndex(index); }
-  function handleDrop(e, dropIndex) {
+  // Item-based drag (dragIndex/dragOverIndex hold item IDs) so a sub-category
+  // filter can show a subset yet still reorder within the FULL category list,
+  // preserving every other item's relative position.
+  function handleDragStart(e, item) { setDragIndex(item.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(item.id)); }
+  function handleDragOver(e, item)  { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverIndex(item.id); }
+  function handleDrop(e, dropItem) {
     e.preventDefault();
-    if (dragIndex === null || dragIndex === dropIndex) { setDragIndex(null); setDragOverIndex(null); return; }
-    const newItems = [...localItems]; const draggedItem = newItems[dragIndex]; newItems.splice(dragIndex, 1); newItems.splice(dropIndex, 0, draggedItem);
+    const dragId = dragIndex;
+    if (dragId == null || dragId === dropItem.id) { setDragIndex(null); setDragOverIndex(null); return; }
+    const from = localItems.findIndex(i => i.id === dragId);
+    const to   = localItems.findIndex(i => i.id === dropItem.id);
+    if (from < 0 || to < 0) { setDragIndex(null); setDragOverIndex(null); return; }
+    const newItems = [...localItems]; const [moved] = newItems.splice(from, 1); newItems.splice(to, 0, moved);
     setLocalItems(newItems); setDragIndex(null); setDragOverIndex(null); saveSortOrder(newItems);
   }
   function handleDragEnd() { setDragIndex(null); setDragOverIndex(null); }
@@ -336,6 +345,12 @@ export default function MenuSection() {
   }
 
   const activeCatSubs = subcategories.filter(s => s.category_id === activeCategory);
+  // Sub-category filter for the item list. Drag-reorder still works on the full
+  // localItems (item-based), so filtering here only changes what's shown.
+  const hasUnfiled = localItems.some(i => !i.subcategory_id);
+  const displayItems = subFilter == null ? localItems
+    : subFilter === '__none__' ? localItems.filter(i => !i.subcategory_id)
+    : localItems.filter(i => i.subcategory_id === subFilter);
 
   return (
     <div style={{ padding: 24 }}>
@@ -588,13 +603,26 @@ export default function MenuSection() {
           <button onClick={openAddForm} style={{ background: '#e94560', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }}>+ Add Item</button>
         </div>
       </div>
-      {localItems.length === 0 ? <div style={{ textAlign: 'center', color: '#bbb', marginTop: 60 }}>No items yet — click "+ Add Item" or use 🤖 AI Scanner</div> : (
+      {/* SEPOS-MENU-SUBFILTER — click a sub-category to show only its dishes. */}
+      {activeCatSubs.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+          {[{ k: null, label: `All (${localItems.length})` },
+            ...activeCatSubs.map(s => ({ k: s.id, label: `${s.name} (${localItems.filter(i => i.subcategory_id === s.id).length})` })),
+            ...(hasUnfiled ? [{ k: '__none__', label: `No sub-category (${localItems.filter(i => !i.subcategory_id).length})` }] : [])
+          ].map(({ k, label }) => {
+            const on = subFilter === k;
+            return <button key={String(k)} onClick={() => setSubFilter(k)} style={{ padding: '7px 14px', borderRadius: 16, cursor: 'pointer', fontWeight: 700, fontSize: 13,
+              border: on ? 'none' : '1px solid #ddd', background: on ? '#3b82f6' : '#fff', color: on ? '#fff' : '#555' }}>{label}</button>;
+          })}
+        </div>
+      )}
+      {displayItems.length === 0 ? <div style={{ textAlign: 'center', color: '#bbb', marginTop: 60 }}>{subFilter == null ? 'No items yet — click "+ Add Item" or use 🤖 AI Scanner' : 'No dishes in this sub-category.'}</div> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {localItems.map((item, index) => {
+          {displayItems.map((item) => {
             const subcat = subcategories.find(s => s.id === item.subcategory_id);
-            const isDragging = dragIndex === index; const isOver = dragOverIndex === index;
+            const isDragging = dragIndex === item.id; const isOver = dragOverIndex === item.id;
             return (
-              <div key={item.id} draggable onDragStart={e => handleDragStart(e, index)} onDragOver={e => handleDragOver(e, index)} onDrop={e => handleDrop(e, index)} onDragEnd={handleDragEnd}
+              <div key={item.id} draggable onDragStart={e => handleDragStart(e, item)} onDragOver={e => handleDragOver(e, item)} onDrop={e => handleDrop(e, item)} onDragEnd={handleDragEnd}
                 style={{ background: 'white', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.15)' : '0 1px 4px rgba(0,0,0,0.08)', opacity: isDragging ? 0.5 : 1, border: isOver ? '2px solid #3b82f6' : '2px solid transparent', cursor: 'grab' }}>
                 <div style={{ color: '#ccc', fontSize: 18, cursor: 'grab', userSelect: 'none', flexShrink: 0 }}><div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{[0,1,2].map(r => <div key={r} style={{ display: 'flex', gap: 3 }}><div style={{ width: 4, height: 4, borderRadius: '50%', background: '#ccc' }} /><div style={{ width: 4, height: 4, borderRadius: '50%', background: '#ccc' }} /></div>)}</div></div>
                 <div style={{ flex: 1, opacity: item.is_available ? 1 : 0.5 }}>
@@ -655,7 +683,7 @@ export default function MenuSection() {
       )}
       {modifierItem && (
         <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'white', borderRadius: 16, padding: 32, width: 'min(640px, 94vw)', maxHeight: '86vh', overflowY: 'auto' }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: 32, width: 'min(760px, 96vw)', maxHeight: '90vh', overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}><h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Options — {modifierItem.name}</h2><button onClick={() => setModifierItem(null)} style={{ background: '#f0f0f0', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer', fontWeight: 600 }}>Close</button></div>
             {modifiers.map(group => (
               <div key={group.id} style={{ background: '#f8f8f8', borderRadius: 12, padding: 16, marginBottom: 12 }}>
@@ -672,7 +700,7 @@ export default function MenuSection() {
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>♻️ Add a shared group</div>
                 <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>Reusable groups you defined once. Pick one to add to this dish — edit the group once and every dish updates.</div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <select value={pickGroup} onChange={e => setPickGroup(e.target.value)} style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid #c7d2fe', fontSize: 13, background: 'white', cursor: 'pointer' }}>
+                  <select value={pickGroup} onChange={e => setPickGroup(e.target.value)} style={{ flex: 1, minWidth: 0, padding: '10px 12px', borderRadius: 8, border: '1px solid #c7d2fe', fontSize: 13, background: 'white', cursor: 'pointer' }}>
                     <option value="">— Choose a shared group —</option>
                     {library.filter(g => !modifiers.some(m => m.id === g.id)).map(g => (
                       <option key={g.id} value={g.id}>{g.name} ({g.required ? 'Required' : 'Optional'}, {g.multi_select ? 'multi' : 'pick one'}) — {(g.modifiers || []).map(o => o.name).join(', ') || 'no options yet'}</option>

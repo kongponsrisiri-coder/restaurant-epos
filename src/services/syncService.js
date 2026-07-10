@@ -949,6 +949,19 @@ async function isMenuEmpty() {
 
 let _lastWarnedSecret = 0;
 
+// Max pushes for an item that keeps hitting server errors (5xx) before we
+// give up and quarantine it, so a server-side bug on one action can't retry
+// forever. Pure network/timeout failures (an outage) do NOT count toward this
+// — we keep retrying those until connectivity returns.
+const MAX_SYNC_ATTEMPTS = 6;
+
+// Pull the HTTP status out of an applyToCloud error ("pay_order 409" → 409).
+// Null = no server response (network / timeout / DNS) = a transient outage.
+function errHttpStatus(err) {
+  const m = /\b([1-5]\d{2})\b/.exec(String(err && err.message || ''));
+  return m ? Number(m[1]) : null;
+}
+
 async function syncOnce() {
   const queue = await offlineQueue.pending();
   if (queue.length === 0) return;
@@ -958,8 +971,31 @@ async function syncOnce() {
       await applyToCloud(entry.action_type, entry.payload);
       await offlineQueue.markSynced(entry.id);
     } catch (err) {
-      console.error(`[sync] ${entry.action_type}#${entry.id} failed:`, err.message);
-      // Stop on first failure; will retry on next tick
+      const httpStatus = errHttpStatus(err);
+      // Auth failure (bad/missing SYNC_SECRET) affects EVERY gated push — not
+      // this one item. Stop and surface it; don't quarantine (it's a config
+      // fix, and the actions are still valid once the secret is right).
+      if (httpStatus === 401 || httpStatus === 403) {
+        console.error(`[sync] ${entry.action_type}#${entry.id} auth failed (${httpStatus}) — check SYNC_SECRET`);
+        setStatus('auth_error');
+        return;
+      }
+      // Permanent data error (4xx: order already closed / not found / conflict /
+      // unprocessable). This item will NEVER succeed — quarantine it and KEEP
+      // DRAINING so it can't head-of-line-block the live orders behind it.
+      const permanent = httpStatus !== null && httpStatus >= 400 && httpStatus < 500;
+      const attempts = (entry.attempts || 0) + 1;
+      if (permanent || (httpStatus !== null && attempts >= MAX_SYNC_ATTEMPTS)) {
+        console.error(`[sync] ${entry.action_type}#${entry.id} quarantined after ${attempts} attempt(s): ${err.message}`);
+        await offlineQueue.markFailed(entry.id, err.message);
+        continue; // ← the fix: move on instead of freezing the whole queue
+      }
+      // Transient: a 5xx (server restarting) or a network/timeout (outage).
+      // Bump the counter only when the server actually answered (5xx) so an
+      // outage doesn't burn the attempt budget; then stop this tick and retry
+      // the whole queue next tick once things recover.
+      if (httpStatus !== null) await offlineQueue.bumpAttempt(entry.id, err.message);
+      else console.warn(`[sync] ${entry.action_type}#${entry.id} deferred (no response — offline?): ${err.message}`);
       return;
     }
   }

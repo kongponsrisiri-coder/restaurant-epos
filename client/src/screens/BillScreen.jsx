@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getBill, markBillPrinted, getVoucher, redeemVoucher, applyDiscount, removeVoucherFromBill, getOrderDeposit, assertOk } from '../api';
+import { getBill, markBillPrinted, getVoucher, redeemVoucher, applyDiscount, removeVoucherFromBill, getOrderDeposit, assertOk, serverOpenDrawer } from '../api';
 import { printReceipt } from './ReceiptPrinter';
 import { orderShortLabelPlain, orderSubLabel, isTakeaway } from '../utils/orderLabel';
 import { confirm } from '../utils/confirm';
@@ -443,6 +443,10 @@ export default function BillScreen({ orderId, onClose, onPay }) {
       // SEPOS-062 — pass the per-tender breakdown for splits so each Cash/Card
       // amount is recorded as its own payment row (correct Z-report reconciliation).
       await onPay(billTotal, paymentDetails?.method, paymentDetails?.amountPaid, paymentDetails?.tip, paymentDetails?.tenders);
+      // SEPOS-DRAWER-001 — open the cash drawer on payment (fire-and-forget;
+      // never blocks/fails the close). Silent no-op where there's no raw
+      // ESC/POS receipt printer (browser print / no drawer / disabled setting).
+      serverOpenDrawer().catch(() => {});
     } finally {
       // onPay closes the bill on success; on failure it keeps the bill open,
       // so re-enable the button to allow a genuine retry.
@@ -584,7 +588,6 @@ export default function BillScreen({ orderId, onClose, onPay }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: MUTED, marginBottom: 6 }}><span>Subtotal</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>£{subtotal.toFixed(2)}</span></div>
               {discountAmount > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#2E9E6E', marginBottom: 6 }}><span>Discount</span><span>-£{discountAmount.toFixed(2)}</span></div>}
               {serviceChargeEnabled && !noServiceCharge && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: MUTED, marginBottom: 6 }}><span>Service charge ({parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5)}%)</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>£{serviceCharge.toFixed(2)}</span></div>}
-              {vatTotal > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: FAINT, marginBottom: 6 }}><span>{vatMode === 'exclusive' ? 'VAT (20%)' : 'Includes VAT'}</span><span>£{vatTotal.toFixed(2)}</span></div>}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: `2px solid ${INK}`, marginTop: 10, paddingTop: 10 }}>
                 <span style={{ fontSize: 15, fontWeight: 700, color: INK }}>Total due</span>
                 <span style={{ fontSize: 34, fontWeight: 800, color: INK, fontVariantNumeric: 'tabular-nums' }}>£{billTotal.toFixed(2)}</span>
@@ -693,21 +696,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:14, marginBottom:6, color:'#555' }}><span>Subtotal</span><span>£{subtotal.toFixed(2)}</span></div>
                 {discountAmount>0 && <div style={{ display:'flex', justifyContent:'space-between', fontSize:14, marginBottom:6, color:'#22c55e' }}><span>Discount ({order.discount_reason})</span><span>-£{discountAmount.toFixed(2)}</span></div>}
                 {serviceChargeEnabled && !noServiceCharge && <div style={{ display:'flex', justifyContent:'space-between', fontSize:14, marginBottom:6, color:'#555' }}><span>Service charge ({parseFloat(settings.service_charge_rate||settings.service_charge_percent||12.5)}%)</span><span>£{serviceCharge.toFixed(2)}</span></div>}
-                {/* SEPOS-021 VAT breakdown — informational; prices are VAT-inclusive */}
-                {vatTotal > 0 && (
-                  <div style={{ marginTop:8, padding:'8px 10px', background:'#f8f8f8', borderRadius:8, fontSize:12, color:'#555' }}>
-                    <div style={{ fontWeight:700, marginBottom:4, color:'var(--brand-primary, #1a1a2e)' }}>VAT included</div>
-                    {vatBreakdown.map(b => (
-                      <div key={b.rate} style={{ display:'flex', justifyContent:'space-between' }}>
-                        <span>@ {b.rate}% on £{b.net.toFixed(2)} net</span>
-                        <span>£{b.vat.toFixed(2)}</span>
-                      </div>
-                    ))}
-                    <div style={{ display:'flex', justifyContent:'space-between', borderTop:'1px solid #e0e0e0', marginTop:4, paddingTop:4, fontWeight:700 }}>
-                      <span>Total VAT</span><span>£{vatTotal.toFixed(2)}</span>
-                    </div>
-                  </div>
-                )}
+                {/* VAT breakdown removed — VAT is the owner/accountant's domain (VAT Report kept for them). */}
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:24, fontWeight:800, marginTop:10, color:'var(--brand-primary, #1a1a2e)' }}><span>TOTAL</span><span>£{billTotal.toFixed(2)}</span></div>
               </div>
               <div style={{ textAlign:'center', fontSize:12, color:'#888', borderTop:'1px dashed #ccc', paddingTop:12 }}>{settings.receipt_footer||'Thank you for dining with us!'}</div>

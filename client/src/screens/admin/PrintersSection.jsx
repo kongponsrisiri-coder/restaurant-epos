@@ -10,7 +10,7 @@
 // to persist changes.
 
 import { useState, useEffect } from 'react';
-import { getSettings, updateSettings, testNetworkPrinter, cupsQueueForIp, printerHealth, printerGetMac, printerDiscover, printerThaiTest, getPrintTestBuffer, getPrinters, createPrinter, updatePrinter, deletePrinter, testPrinter } from '../../api';
+import { getSettings, updateSettings, testNetworkPrinter, cupsQueueForIp, printerHealth, printerGetMac, printerDiscover, printerThaiTest, getPrintTestBuffer, getPrinters, createPrinter, updatePrinter, deletePrinter, testPrinter, setPrinterDefault, getCategories, setCategoryPrinter, scanPrinters } from '../../api';
 import { isNativeApp, sendRawToPrinter } from '../../native/printer'; // SEPOS-ANDROID-001
 
 // ── Network Printers card (IP-based, RAW + LPR + CUPS fallback chain) ──
@@ -233,12 +233,12 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
     <div style={cardStyle}>
       <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:4 }}>🌐 Network Printers</h2>
       <p style={{ fontSize:13, color:'#888', marginBottom:20, lineHeight:1.6 }}>
-        Enter the IP address of each printer (via a USB print server or built-in LAN port).
-        Once set, <strong>all devices on the same Wi-Fi</strong> — including iPads — print
-        silently with no dialog. Default RAW port 9100; older WAVLINK-style servers will
-        auto-fall-back to LPR port 515. <strong>Save</strong> after entering IPs.
-        Once a printer responds, its MAC is captured silently — if it later gets a
-        new IP from DHCP, the EPOS auto-finds it without operator help.
+        Add every printer here — your main till printers <em>and</em> any extra stations (wok,
+        grill, pass). Enter its IP (via a USB print server or built-in LAN port; default RAW
+        port 9100, older WAVLINK-style servers auto-fall-back to LPR 515), tick what it prints,
+        and <strong>Save</strong>. Once set, <strong>all devices on the same Wi-Fi</strong> —
+        including iPads — print silently with no dialog. Leave IP blank and use the name for a
+        USB/CUPS printer.
       </p>
 
       {discoverToast && (
@@ -247,9 +247,9 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
         </div>
       )}
 
-      {printerRow('🧾 Receipt Printer', 'printer_receipt_ip', 'printer_receipt_port', 'receipt', 'printer_receipt_name', 'printer_receipt_mac')}
-      {printerRow('🍳 Kitchen Printer', 'printer_kitchen_ip', 'printer_kitchen_port', 'kitchen', 'printer_kitchen_name', 'printer_kitchen_mac')}
-      {printerRow('🍹 Bar Printer',     'printer_bar_ip',     'printer_bar_port',     'bar',     'printer_bar_name',     'printer_bar_mac')}
+      {/* SEPOS-PRINT-UNIFY-001 — one flexible list (main printers + extra stations),
+          role toggles + per-printer copies + default. Replaces the 3 fixed rows. */}
+      <StationsCard bare />
 
       {/* SEPOS-ANDROID-001 — auto-print online orders (Android app only). Turn ON for the ONE device at the kitchen/counter so each online order prints once. */}
       {isNativeApp() && (
@@ -265,25 +265,6 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
         </div>
       )}
 
-      {settings.printer_kitchen_ip && (
-        <div style={{ marginTop:-8, marginBottom:16 }}>
-          <label style={{ fontSize:13, fontWeight:600, color:'#555', display:'block', marginBottom:8 }}>Kitchen copies per ticket</label>
-          <div style={{ display:'flex', gap:8 }}>
-            {[1, 2, 3].map(n => (
-              <button key={n} onClick={() => setSettings(s => ({ ...s, printer_kitchen_copies: String(n) }))}
-                style={{ width:56, height:44, borderRadius:8, border:'none', fontWeight:700, fontSize:15, cursor:'pointer',
-                  background: (settings.printer_kitchen_copies || '1') === String(n) ? 'var(--brand-primary, #1a1a2e)' : '#f0f0f0',
-                  color:      (settings.printer_kitchen_copies || '1') === String(n) ? 'white'   : '#555',
-                }}>
-                {n}×
-              </button>
-            ))}
-          </div>
-          <div style={{ fontSize:11, color:'#aaa', marginTop:6 }}>
-            Prints this many tickets per course fire. Use 2× if you have a chef and a sous chef.
-          </div>
-        </div>
-      )}
 
       {/* Kitchen Output Mode — Print / KDS only / Both */}
       <div style={{ marginBottom:16 }}>
@@ -617,24 +598,46 @@ function PrintRoutingCard({ cardStyle, settings, setSettings }) {
 // Beyond the built-in Receipt/Kitchen/Bar above, add as many station printers
 // as the kitchen has. Categories are pointed at a station in Admin → Menu; a
 // category with no station falls back to the default kitchen/bar routing.
-function StationsCard({ cardStyle }) {
+function StationsCard({ cardStyle, bare }) {
   const [list, setList]   = useState([]);
-  const [draft, setDraft] = useState({ name: '', ip: '', port: '9100', mac: '', copies: '1' });
+  const [defs, setDefs]   = useState({});     // { receipt, kitchen, bar } → printer id
+  const [cats, setCats]   = useState([]);     // menu categories (carry printer_id routing)
+  const [draft, setDraft] = useState({ name: '', ip: '', port: '9100', copies: '1', role_receipt: false, role_kitchen: true, role_bar: false });
   const [busy, setBusy]   = useState(false);
   const [tState, setTState] = useState({});   // { id: idle|testing|ok|fail }
+  const [scanning, setScanning] = useState(false);
+  const [scanRes, setScanRes]   = useState(null);   // {local, printers[], message?}
 
-  const refresh = () => getPrinters().then(r => setList(Array.isArray(r) ? r : [])).catch(() => {});
+  const refresh = async () => {
+    try {
+      const r = await getPrinters(); setList(Array.isArray(r) ? r : []);
+      const s = await getSettings();
+      setDefs({ receipt: s?.default_receipt_printer_id, kitchen: s?.default_kitchen_printer_id, bar: s?.default_bar_printer_id });
+      const c = await getCategories(); setCats(Array.isArray(c) ? c : []);
+    } catch {}
+  };
+  // Route a menu category to this printer (or null to unassign) — the "point"
+  // that decides which food prints here, editable without leaving this page.
+  const assignCat = async (catId, printerId) => { await setCategoryPrinter(catId, printerId); await refresh(); };
+  const scan = async () => { setScanning(true); setScanRes(null); try { setScanRes(await scanPrinters()); } catch (e) { setScanRes({ error: e.message }); } finally { setScanning(false); } };
+  const addFound = async (ip) => { if (list.some(p => p.ip === ip)) return; await createPrinter({ name: ip, ip, port: 9100, copies: 1, role_kitchen: 1 }); setScanRes(null); await refresh(); };
   useEffect(() => { refresh(); }, []);
+
+  const ROLES = [['receipt', '🧾 Bills'], ['kitchen', '🍳 Kitchen'], ['bar', '🍹 Bar']];
+  const roleBody = (p) => ({ role_receipt: p.role_receipt ? 1 : 0, role_kitchen: p.role_kitchen ? 1 : 0, role_bar: p.role_bar ? 1 : 0 });
+  const savePrinter = (p) => updatePrinter(p.id, { name: p.name, ip: p.ip || null, port: Number(p.port) || 9100, mac: p.mac || null, copies: Number(p.copies) || 1, ...roleBody(p) });
 
   const add = async () => {
     if (!draft.name.trim() || busy) return;
     setBusy(true);
-    try { await createPrinter({ name: draft.name.trim(), ip: draft.ip.trim() || null, port: Number(draft.port) || 9100, mac: draft.mac.trim() || null, copies: Number(draft.copies) || 1 });
-      setDraft({ name: '', ip: '', port: '9100', mac: '', copies: '1' }); await refresh(); }
+    try { await createPrinter({ name: draft.name.trim(), ip: draft.ip.trim() || null, port: Number(draft.port) || 9100, copies: Number(draft.copies) || 1, role_receipt: draft.role_receipt ? 1 : 0, role_kitchen: draft.role_kitchen ? 1 : 0, role_bar: draft.role_bar ? 1 : 0 });
+      setDraft({ name: '', ip: '', port: '9100', copies: '1', role_receipt: false, role_kitchen: true, role_bar: false }); await refresh(); }
     finally { setBusy(false); }
   };
-  const saveRow = async (p) => { await updatePrinter(p.id, { name: p.name, ip: p.ip || null, port: Number(p.port) || 9100, mac: p.mac || null, copies: Number(p.copies) || 1 }); await refresh(); };
-  const removeRow = async (p) => { if (!window.confirm(`Remove station "${p.name}"? Any category pointed here reverts to the default kitchen/bar.`)) return; await deletePrinter(p.id); await refresh(); };
+  const saveRow = async (p) => { await savePrinter(p); await refresh(); };
+  const toggleRole = async (p, role) => { const np = { ...p, [`role_${role}`]: p[`role_${role}`] ? 0 : 1 }; setList(l => l.map(x => x.id === p.id ? np : x)); await savePrinter(np); await refresh(); };
+  const makeDefault = async (role, id) => { await setPrinterDefault(role, id); await refresh(); };
+  const removeRow = async (p) => { if (!window.confirm(`Remove printer "${p.name}"? Any category pointed here reverts to the default.`)) return; await deletePrinter(p.id); await refresh(); };
   const test = async (p) => {
     setTState(s => ({ ...s, [p.id]: 'testing' }));
     try { const r = await testPrinter(p.id); setTState(s => ({ ...s, [p.id]: (r && r.success) ? 'ok' : 'fail' })); }
@@ -644,30 +647,115 @@ function StationsCard({ cardStyle }) {
   const patch = (id, k, v) => setList(l => l.map(p => p.id === id ? { ...p, [k]: v } : p));
   const inp = { padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' };
 
-  return (
-    <div style={cardStyle}>
-      <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary,#1a1a2e)', marginBottom: 6 }}>🏭 Extra printer stations</h2>
-      <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>Wok, grill, cold, pass… Add a station, then point menu categories at it (Admin → Menu). A category with no station uses the default kitchen/bar printer.</div>
+  const body = (
+    <>
+      <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>Add every printer here — main tills and extra stations (wok, grill, pass). Tick which tickets each one prints — <b>Bills</b>, <b>Kitchen</b>, <b>Bar</b> — set its <b>copies</b>, and ⭐ marks the default for that role. Point a menu category at a specific printer in Admin → Menu; anything unrouted goes to the ⭐ default.</div>
 
       {list.map(p => (
-        <div key={p.id} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', padding: '10px 0', borderTop: '1px solid #f0f0f0' }}>
-          <input value={p.name || ''} onChange={e => patch(p.id, 'name', e.target.value)} placeholder="Name" style={{ ...inp, flex: '1 1 120px' }} />
-          <input value={p.ip || ''} onChange={e => patch(p.id, 'ip', e.target.value)} placeholder="IP" style={{ ...inp, flex: '1 1 110px' }} />
-          <input value={p.port || 9100} onChange={e => patch(p.id, 'port', e.target.value)} placeholder="Port" style={{ ...inp, width: 70 }} />
-          <input value={p.copies || 1} onChange={e => patch(p.id, 'copies', e.target.value)} type="number" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
-          <button onClick={() => saveRow(p)} style={{ ...inp, border: 'none', background: 'var(--brand-primary,#0D1B3E)', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
-          <button onClick={() => test(p)} style={{ ...inp, border: '1px solid #ddd', background: tState[p.id] === 'ok' ? '#dcfce7' : tState[p.id] === 'fail' ? '#fee2e2' : '#fff', cursor: 'pointer', fontWeight: 700 }}>{tState[p.id] === 'testing' ? '…' : tState[p.id] === 'ok' ? '✓' : tState[p.id] === 'fail' ? '✕' : 'Test'}</button>
-          <button onClick={() => removeRow(p)} style={{ ...inp, border: 'none', background: '#fee2e2', color: '#dc2626', cursor: 'pointer', fontWeight: 700 }}>✕</button>
+        <div key={p.id} style={{ padding: '12px 0', borderTop: '1px solid #f0f0f0' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input value={p.name || ''} onChange={e => patch(p.id, 'name', e.target.value)} placeholder="Name" style={{ ...inp, flex: '1 1 120px' }} />
+            <input value={p.ip || ''} onChange={e => patch(p.id, 'ip', e.target.value)} placeholder="IP (blank = by name)" style={{ ...inp, flex: '1 1 110px' }} />
+            <input value={p.port || 9100} onChange={e => patch(p.id, 'port', e.target.value)} placeholder="Port" style={{ ...inp, width: 70 }} />
+            <input value={p.copies || 1} onChange={e => patch(p.id, 'copies', e.target.value)} type="number" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
+            <button onClick={() => saveRow(p)} style={{ ...inp, border: 'none', background: 'var(--brand-primary,#0D1B3E)', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
+            <button onClick={() => test(p)} style={{ ...inp, border: '1px solid #ddd', background: tState[p.id] === 'ok' ? '#dcfce7' : tState[p.id] === 'fail' ? '#fee2e2' : '#fff', cursor: 'pointer', fontWeight: 700 }}>{tState[p.id] === 'testing' ? '…' : tState[p.id] === 'ok' ? '✓' : tState[p.id] === 'fail' ? '✕' : 'Test'}</button>
+            <button onClick={() => removeRow(p)} style={{ ...inp, border: 'none', background: '#fee2e2', color: '#dc2626', cursor: 'pointer', fontWeight: 700 }}>✕</button>
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: '#aaa', marginRight: 2 }}>Prints:</span>
+            {ROLES.map(([role, label]) => {
+              const on = !!Number(p[`role_${role}`]);
+              const isDefault = String(defs[role] ?? '') === String(p.id);
+              return (
+                <span key={role} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                  <button onClick={() => toggleRole(p, role)} style={{ padding: '5px 10px', borderRadius: 14, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                    border: on ? 'none' : '1px solid #ddd', background: on ? 'var(--brand-primary,#0D1B3E)' : '#fff', color: on ? '#fff' : '#888' }}>{label}</button>
+                  {on && (
+                    <button onClick={() => makeDefault(role, p.id)} title={isDefault ? 'Default for this role' : 'Make default for this role'}
+                      style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 15, padding: '0 2px', color: isDefault ? '#C9A84C' : '#ccc' }}>{isDefault ? '⭐' : '☆'}</button>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: '#aaa', marginRight: 2 }}>Sends:</span>
+            {cats.filter(c => String(c.printer_id ?? '') === String(p.id)).map(c => (
+              <span key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 12, background: '#eef2ff', color: '#3730a3', fontSize: 12, fontWeight: 600 }}>
+                {c.name}
+                <button onClick={() => assignCat(c.id, null)} title="Stop sending this category here" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#6366f1', fontWeight: 700, padding: 0, fontSize: 13 }}>✕</button>
+              </span>
+            ))}
+            <select value="" onChange={e => { if (e.target.value) assignCat(Number(e.target.value), p.id); }} style={{ padding: '4px 8px', borderRadius: 10, border: '1px solid #ddd', fontSize: 12, color: '#555' }}>
+              <option value="">+ send a category here…</option>
+              {cats.filter(c => String(c.printer_id ?? '') !== String(p.id)).map(c => (
+                <option key={c.id} value={c.id}>{c.name}{c.printer_id ? ' (move from other)' : ''}</option>
+              ))}
+            </select>
+          </div>
         </div>
       ))}
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', paddingTop: 14, marginTop: 8, borderTop: '2px solid #eee' }}>
-        <input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} placeholder="New station name" style={{ ...inp, flex: '1 1 120px' }} />
-        <input value={draft.ip} onChange={e => setDraft({ ...draft, ip: e.target.value })} placeholder="IP" style={{ ...inp, flex: '1 1 110px' }} />
-        <input value={draft.port} onChange={e => setDraft({ ...draft, port: e.target.value })} placeholder="Port" style={{ ...inp, width: 70 }} />
-        <input value={draft.copies} onChange={e => setDraft({ ...draft, copies: e.target.value })} type="number" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
-        <button onClick={add} disabled={busy || !draft.name.trim()} style={{ ...inp, border: 'none', background: draft.name.trim() ? 'var(--brand-accent,#C9A84C)' : '#eee', color: draft.name.trim() ? '#fff' : '#aaa', fontWeight: 800, cursor: draft.name.trim() ? 'pointer' : 'not-allowed' }}>+ Add station</button>
+      {/* Scan the local network for printers (works on the till/desktop app; the
+          cloud/web version can't reach a private LAN — it returns local:false). */}
+      <div style={{ paddingTop: 14, marginTop: 8, borderTop: '1px dashed #e5e5e5' }}>
+        <button onClick={scan} disabled={scanning} style={{ ...inp, border: '1.5px solid var(--brand-primary,#0D1B3E)', background: '#fff', color: 'var(--brand-primary,#0D1B3E)', fontWeight: 700, cursor: scanning ? 'wait' : 'pointer' }}>
+          {scanning ? '🔍 Scanning…' : '🔍 Scan for printers'}
+        </button>
+        {scanRes && (
+          <div style={{ marginTop: 10, fontSize: 13 }}>
+            {scanRes.error ? (
+              <div style={{ color: '#dc2626' }}>Scan failed: {scanRes.error}</div>
+            ) : scanRes.local === false ? (
+              <div style={{ color: '#888' }}>{scanRes.message}</div>
+            ) : (scanRes.printers && scanRes.printers.length) ? (
+              <div>
+                <div style={{ color: '#555', marginBottom: 6 }}>Found on {scanRes.subnet}:</div>
+                {scanRes.printers.map(p => {
+                  const already = list.some(x => x.ip === p.ip);
+                  return (
+                    <div key={p.ip} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
+                      <span style={{ fontFamily: 'monospace' }}>{p.ip}:{p.port}</span>
+                      {already
+                        ? <span style={{ color: '#16a34a', fontSize: 12 }}>✓ already added</span>
+                        : <button onClick={() => addFound(p.ip)} style={{ ...inp, padding: '4px 10px', border: 'none', background: 'var(--brand-accent,#C9A84C)', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>+ Add</button>}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ color: '#888' }}>No printers found on {scanRes.subnet || 'this network'}. Enter the IP manually below.</div>
+            )}
+          </div>
+        )}
       </div>
+
+      <div style={{ paddingTop: 14, marginTop: 8, borderTop: '2px solid #eee' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} placeholder="New printer name" style={{ ...inp, flex: '1 1 120px' }} />
+          <input value={draft.ip} onChange={e => setDraft({ ...draft, ip: e.target.value })} placeholder="IP" style={{ ...inp, flex: '1 1 110px' }} />
+          <input value={draft.port} onChange={e => setDraft({ ...draft, port: e.target.value })} placeholder="Port" style={{ ...inp, width: 70 }} />
+          <input value={draft.copies} onChange={e => setDraft({ ...draft, copies: e.target.value })} type="number" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
+          <button onClick={add} disabled={busy || !draft.name.trim()} style={{ ...inp, border: 'none', background: draft.name.trim() ? 'var(--brand-accent,#C9A84C)' : '#eee', color: draft.name.trim() ? '#fff' : '#aaa', fontWeight: 800, cursor: draft.name.trim() ? 'pointer' : 'not-allowed' }}>+ Add printer</button>
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: 11, color: '#aaa', marginRight: 2 }}>Prints:</span>
+          {ROLES.map(([role, label]) => {
+            const on = !!draft[`role_${role}`];
+            return (
+              <button key={role} onClick={() => setDraft(d => ({ ...d, [`role_${role}`]: !d[`role_${role}`] }))} style={{ padding: '5px 10px', borderRadius: 14, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                border: on ? 'none' : '1px solid #ddd', background: on ? 'var(--brand-primary,#0D1B3E)' : '#fff', color: on ? '#fff' : '#888' }}>{label}</button>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+  return bare ? body : (
+    <div style={cardStyle}>
+      <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary,#1a1a2e)', marginBottom: 6 }}>🖨️ Printers</h2>
+      {body}
     </div>
   );
 }
@@ -705,8 +793,44 @@ export default function PrintersSection() {
 
       <PrintRoutingCard cardStyle={cardStyle} settings={settings} setSettings={setSettings} />
       <NetworkPrinterCard cardStyle={cardStyle} settings={settings} setSettings={setSettings} />
-      <StationsCard cardStyle={cardStyle} />
       <PrinterCard cardStyle={cardStyle} />
+
+      {/* Print text size (SEPOS-PRINT-FONT-001) — a printer setting, so it lives here. */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🔠 Print text size</h2>
+        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+          {[['Kitchen ticket text','kitchen_font_scale','large'],
+            ['Receipt text','receipt_font_scale','normal'],
+            ['Bar ticket text','bar_font_scale','large']].map(([label,key,def]) => (
+            <div key={key} style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+              <label style={{ fontSize:14, fontWeight:600, color:'#555', minWidth:150 }}>{label}</label>
+              <select value={settings[key] || def} onChange={e => setSettings({...settings, [key]:e.target.value})} style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}>
+                <option value="normal">Normal</option>
+                <option value="large">Large</option>
+                <option value="xlarge">Extra-large</option>
+              </select>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Bigger = easier to read on a busy line, but fewer characters fit per row. Applies to kitchen / bar tickets and the customer receipt on every printer (thermal + built-in).</div>
+      </div>
+
+      {/* SEPOS-DRAWER-001 — open the cash drawer on payment (default ON). */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:6 }}>💵 Cash drawer</h2>
+        {(() => { const on = settings.open_drawer_on_payment !== '0'; return (
+          <div onClick={() => setSettings(s => ({ ...s, open_drawer_on_payment: (s.open_drawer_on_payment !== '0') ? '0' : '1' }))}
+            style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 0', cursor:'pointer' }}>
+            <div style={{ width:44, height:26, borderRadius:13, background: on ? 'var(--brand-primary,#0D1B3E)' : '#cbd5e1', position:'relative', transition:'background .15s', flexShrink:0 }}>
+              <div style={{ position:'absolute', top:3, left: on ? 21 : 3, width:20, height:20, borderRadius:'50%', background:'#fff', transition:'left .15s' }} />
+            </div>
+            <div>
+              <div style={{ fontSize:14, fontWeight:700, color:'var(--brand-primary,#0D1B3E)' }}>Open the cash drawer on every payment</div>
+              <div style={{ fontSize:12, color:'#888', marginTop:2 }}>Kicks the drawer wired to the receipt printer each time a payment closes. Needs a drawer connected to a network/built-in ESC/POS receipt printer — it won't fire on the browser-print (web) path. Turn off for a till with no drawer.</div>
+            </div>
+          </div>
+        ); })()}
+      </div>
 
       <button onClick={handleSave} disabled={saving}
         style={{ width:'100%', padding:'14px', borderRadius:10, border:'none',

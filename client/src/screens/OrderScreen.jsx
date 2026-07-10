@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL } from '../api';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder } from '../api';
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
 import { isNativeApp } from '../native/printer';
@@ -35,6 +35,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   });
   const [activeCategory, setActiveCategory] = useState(null);
   const [activeSubcat, setActiveSubcat] = useState(null);
+  const [search, setSearch] = useState('');   // menu search box (whole-menu filter)
+  // SEPOS-ORDER-ARRANGE — on-screen menu reorder (manager-gated, drag & drop)
+  const [arrangeMode, setArrangeMode]   = useState(false);
+  const [arrangeItems, setArrangeItems] = useState([]);
+  const [arrangeDrag, setArrangeDrag]   = useState(null);
+  const [arrangePin, setArrangePin]     = useState(null); // null=closed, {pin,err,busy}=open
+  const [arrangeSaving, setArrangeSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [modifierPopup, setModifierPopup] = useState(null);
   const [showKitchenMsg, setShowKitchenMsg] = useState(false); // SEPOS-KITCHEN-MSG-001
@@ -678,11 +685,17 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   const subTabs = activeSubs.length
     ? [...(activeHasUnfiled ? [{ id: NONE_SUBCAT, name: 'General' }] : []), ...activeSubs]
     : [];
-  const dishesToShow = activeItems.filter(item =>
-    activeSubcat == null ? true
-      : activeSubcat === NONE_SUBCAT ? item.subcategory_id == null
-      : item.subcategory_id === activeSubcat
-  );
+  // Search the whole menu — when the box has text, ignore category/sub-cat and
+  // show every matching dish across all categories (name or 2nd-language name).
+  const searchQ = (search || '').trim().toLowerCase();
+  const dishesToShow = searchQ
+    ? menu.flatMap(c => c.items || []).filter(it =>
+        (it.name || '').toLowerCase().includes(searchQ) || (it.name_alt || '').toLowerCase().includes(searchQ))
+    : activeItems.filter(item =>
+        activeSubcat == null ? true
+          : activeSubcat === NONE_SUBCAT ? item.subcategory_id == null
+          : item.subcategory_id === activeSubcat
+      );
   const selectCategory = (cat) => {
     setActiveCategory(cat.id);
     setActiveCourse(cat.default_course || 1);
@@ -692,6 +705,37 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     const hasNone = (cat.items || []).some(i => i.subcategory_id == null);
     setActiveSubcat(hasNone ? NONE_SUBCAT : subs[0].id);
   };
+
+  // SEPOS-ORDER-ARRANGE — reorder the current category's items right on the
+  // order screen (manager-gated). Reorders the WHOLE active category (flat),
+  // saves 1-based sort_order (matches the reorder-reset fix), refetches menu.
+  const MANAGER_ARR = ['admin', 'manager', 'supervisor'];
+  const enterArrange = () => { setArrangeItems([...activeItems]); setArrangeMode(true); setSearch(''); };
+  const openArrange = () => { if (MANAGER_ARR.includes(staff?.role)) enterArrange(); else setArrangePin({ pin: '', err: '', busy: false }); };
+  const verifyArrangePin = async () => {
+    if (arrangePin?.busy) return;
+    setArrangePin(p => ({ ...p, busy: true, err: '' }));
+    try {
+      const mgr = await loginStaff(arrangePin.pin);
+      if (mgr?.id && MANAGER_ARR.includes(mgr.role)) { setArrangePin(null); enterArrange(); }
+      else setArrangePin(p => ({ ...p, busy: false, err: 'Not a manager PIN.' }));
+    } catch { setArrangePin(p => ({ ...p, busy: false, err: 'PIN check failed.' })); }
+  };
+  const onArrangeDrop = (dropIdx) => {
+    if (arrangeDrag == null || arrangeDrag === dropIdx) { setArrangeDrag(null); return; }
+    setArrangeItems(prev => { const a = [...prev]; const [m] = a.splice(arrangeDrag, 1); a.splice(dropIdx, 0, m); return a; });
+    setArrangeDrag(null);
+  };
+  const saveArrange = async () => {
+    if (arrangeSaving) return;
+    setArrangeSaving(true);
+    try {
+      await updateMenuItemsSortOrder(arrangeItems.map((it, i) => ({ id: it.id, sort_order: i + 1 })));
+      const fresh = await getMenu(); if (Array.isArray(fresh)) setMenu(fresh);
+    } catch (e) { alert('Could not save the new order: ' + (e?.message || 'unknown')); }
+    finally { setArrangeSaving(false); setArrangeMode(false); setArrangeDrag(null); }
+  };
+  const cancelArrange = () => { setArrangeMode(false); setArrangeDrag(null); };
 
   const existingByCourse = {};
   existingItems.filter(item => !item.is_bar).forEach(item => {
@@ -978,13 +1022,20 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   if (allVoided || isEmpty) await payOrder(orderId, 0, 'cancelled');
                 }
                 onClose();
-              }} style={{ background: '#F4F1EA', border: '1px solid #E7E2D6', borderRadius: 10, padding: '10px 16px', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: 'var(--brand-primary, #1a1a2e)' }}>← Back</button>
-              <div style={{ flex: 1, fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
+              }} style={{ background: '#F4F1EA', border: '1px solid #E7E2D6', borderRadius: 10, padding: '10px 16px', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: 'var(--brand-primary, #1a1a2e)' }}>‹ Tables</button>
+              <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', whiteSpace: 'nowrap' }}>
                 Table {order?.table_number}
-                {order?.covers ? <span style={{ fontFamily: "'Archivo', sans-serif", fontSize: 13, color: '#9A9488', marginLeft: 10, fontWeight: 600 }}>{order.covers} covers</span> : null}
+                {(order?.covers || staff?.name) ? <span style={{ fontFamily: "'Archivo', sans-serif", fontSize: 13, color: '#9A9488', marginLeft: 10, fontWeight: 600 }}>{order?.covers ? `${order.covers} covers` : ''}{order?.covers && staff?.name ? ' · ' : ''}{staff?.name || ''}</span> : null}
               </div>
-              <button onClick={() => setShowKitchenMsg(true)} style={{ background: '#fff', color: 'var(--brand-primary,#0D1B3E)', border: '1px solid var(--brand-primary,#0D1B3E)', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>📢 Message</button>
-              {/* Send Order moved to a full-width button above View Bill & Pay. */}
+              {/* SEPOS-ORDER-REDESIGN — whole-menu search box */}
+              <div style={{ flex: 1, position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9A9488', fontSize: 15 }}>🔍</span>
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search the whole menu…"
+                  style={{ width: '100%', height: 42, padding: '0 12px 0 34px', borderRadius: 10, border: '1px solid #E7E2D6', background: '#fff', fontSize: 15, boxSizing: 'border-box', fontFamily: "'Archivo', sans-serif" }} />
+                {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#9A9488', fontSize: 16, fontWeight: 700 }}>✕</button>}
+              </div>
+              <button onClick={() => setShowKitchenMsg(true)} style={{ background: '#fff', color: 'var(--brand-primary,#0D1B3E)', border: '1px solid var(--brand-primary,#0D1B3E)', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap' }}>Message kitchen</button>
+              <button onClick={() => openMiscPopup()} style={{ background: '#FBF7EC', color: '#9A7B1F', border: '1.5px dashed #C9A84C', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap' }}>＋ Misc item</button>
             </div>
             {/* menu — full width; category buttons on top, sub-cat tabs below */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -995,7 +1046,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                     const active = activeCategory === cat.id;
                     return (
                       <button key={cat.id} onClick={() => selectCategory(cat)} style={{
-                        padding: '18px 30px', borderRadius: 16, cursor: 'pointer', fontWeight: 800, fontSize: 20, whiteSpace: 'nowrap',
+                        padding: '12px 26px', borderRadius: 14, cursor: 'pointer', fontWeight: 800, fontSize: 17, whiteSpace: 'nowrap',
                         border: active ? 'none' : '1.5px solid #E7E2D6',
                         background: active ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary,#0D1B3E)') : '#fff',
                         color: active ? '#fff' : 'var(--brand-primary, #1a1a2e)' }}>
@@ -1003,56 +1054,61 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       </button>
                     );
                   })}
-                  {/* SEPOS-MISC-001 — off-menu / special open item, at the right end */}
-                  <button onClick={() => openMiscPopup()} style={{
-                    marginLeft: 'auto', padding: '18px 24px', borderRadius: 16, cursor: 'pointer', fontWeight: 800, fontSize: 18, whiteSpace: 'nowrap',
-                    border: '1.5px dashed #C9A84C', background: '#FBF7EC', color: '#9A7B1F' }}>🍽 Misc item</button>
                 </div>
                 {/* Sub-category tabs — shown only when the category has sub-cats
                     (no big "All" list). "General" holds any un-filed items so
                     nothing is ever hidden. The first tab auto-selects on tap. */}
-                {subTabs.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 18, padding: '12px 14px', background: '#F3EEE3', borderRadius: 12, border: '1.5px solid #E2D8C4' }}>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: '#9A7B1F', textTransform: 'uppercase', letterSpacing: '.6px', marginRight: 2 }}>
-                      {menu.find(c => c.id === activeCategory)?.name} ▸
-                    </span>
+                {/* Sub-category — plain pills (course selector moved to the order panel). */}
+                {!searchQ && subTabs.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
                     {subTabs.map(sub => {
                       const active = activeSubcat === sub.id;
                       return (
                         <button key={sub.id} onClick={() => setActiveSubcat(sub.id)} style={{
-                          padding: '12px 22px', borderRadius: 24, cursor: 'pointer', fontWeight: 800, fontSize: 16,
-                          border: active ? '2px solid var(--brand-accent,#C9A84C)' : '2px solid #D9CDB2',
+                          padding: '9px 18px', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: 14,
+                          border: active ? 'none' : '1px solid #E7E2D6',
                           background: active ? 'var(--brand-accent,#C9A84C)' : '#fff',
-                          color: 'var(--brand-primary, #0D1B3E)' }}>
+                          color: active ? '#fff' : '#7C766A' }}>
                           {sub.name}
                         </button>
                       );
                     })}
                   </div>
                 )}
-                {/* Course bar — staff pick the target course (override the dish's
-                    admin default, e.g. serve a starter as a main). */}
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 18 }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#9A9488' }}>Course:</span>
-                  {[1, 2, 3, 4].map(c => (
-                    <button key={c} onClick={() => setActiveCourse(c)} style={{ padding: '11px 20px', borderRadius: 22, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 15,
-                      background: activeCourse === c ? COURSE_COLORS[c] : '#ECE7DA', color: activeCourse === c ? '#fff' : '#7C766A' }}>
-                      {COURSE_LABELS[c]}
-                    </button>
-                  ))}
-                </div>
+                {searchQ && <div style={{ fontSize: 13, color: '#9A9488', marginBottom: 14 }}>{dishesToShow.length} result{dishesToShow.length === 1 ? '' : 's'} for “{search.trim()}”</div>}
+                {/* SEPOS-ORDER-ARRANGE — reorder the menu right here (manager-gated). */}
+                {!searchQ && (arrangeMode ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '10px 14px', background: '#FBF7EC', border: '1.5px solid #C9A84C', borderRadius: 12 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#9A7B1F' }}>⇅ Drag dishes to reorder {menu.find(c => c.id === activeCategory)?.name}</span>
+                    <div style={{ flex: 1 }} />
+                    <button onClick={cancelArrange} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #ddd', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>Cancel</button>
+                    <button onClick={saveArrange} disabled={arrangeSaving} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--brand-primary,#0D1B3E)', color: '#fff', cursor: arrangeSaving ? 'wait' : 'pointer', fontWeight: 800, fontSize: 13 }}>{arrangeSaving ? 'Saving…' : '✓ Done'}</button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                    <button onClick={openArrange} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #E7E2D6', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13, color: '#7C766A' }}>⇅ Arrange menu</button>
+                  </div>
+                ))}
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: 14 }}>
-                  {dishesToShow.map(item => {
+                  {(arrangeMode ? arrangeItems : dishesToShow).map((item, gridIdx) => {
                     const inCart = cart.filter(c => c.menu_item_id === item.id);
                     const totalQty = inCart.reduce((s, c) => s + c.quantity, 0);
                     return (
-                      <div key={item.id} onClick={() => handleItemClick(item)} style={{ background: '#fff', borderRadius: 14, border: `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : '#E7E2D6'}`, padding: 14, cursor: 'pointer', minHeight: 104, display: 'flex', flexDirection: 'column', boxShadow: '0 1px 2px rgba(13,27,62,.05)' }}>
+                      <div key={item.id}
+                        draggable={arrangeMode}
+                        onClick={arrangeMode ? undefined : () => handleItemClick(item)}
+                        onDragStart={arrangeMode ? () => setArrangeDrag(gridIdx) : undefined}
+                        onDragOver={arrangeMode ? (e) => e.preventDefault() : undefined}
+                        onDrop={arrangeMode ? (e) => { e.preventDefault(); onArrangeDrop(gridIdx); } : undefined}
+                        style={{ background: '#fff', borderRadius: 14, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : '#E7E2D6'}`, padding: 14, cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 104, display: 'flex', flexDirection: 'column', boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
                         <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
                         <AllergenChips list={allergensByItemId[item.id]} />
                         <div style={{ flex: 1 }} />
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                           <span style={{ fontSize: 17, fontWeight: 800, color: '#9A7B1F', fontVariantNumeric: 'tabular-nums' }}>£{Number(item.price || 0).toFixed(2)}</span>
-                          {totalQty > 0 ? (
+                          {arrangeMode ? (
+                            <span style={{ color: '#C9A84C', fontSize: 20, fontWeight: 800, cursor: 'grab' }} title="Drag to reorder">⣿</span>
+                          ) : totalQty > 0 ? (
                             <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', background: 'var(--brand-primary,#0D1B3E)', color: 'var(--brand-accent,#C9A84C)', borderRadius: 10, height: 32 }}>
                               <button onClick={e => { e.stopPropagation(); decrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: 'var(--brand-accent,#C9A84C)', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>−</button>
                               <span style={{ fontWeight: 800, fontSize: 14, minWidth: 18, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{totalQty}</span>
@@ -1114,7 +1170,20 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 )}
               </div>
             ) : (
-              <h3 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Order Summary</h3>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Order · Table {order?.table_number}</span>
+                  <span style={{ fontSize: 13, color: '#9A9488', fontWeight: 600 }}>{existingItems.filter(i => !i.voided).reduce((s, i) => s + (i.quantity || 0), 0) + cart.reduce((s, c) => s + (c.quantity || 0), 0)} items</span>
+                </div>
+                {/* Course selector — moved here from the left menu (mockup). */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 12, color: '#9A9488', fontWeight: 600 }}>Send to kitchen as:</span>
+                  {[1, 2, 3, 4].map(c => (
+                    <button key={c} onClick={() => setActiveCourse(c)} style={{ padding: '7px 14px', borderRadius: 16, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                      background: activeCourse === c ? COURSE_COLORS[c] : '#ECE7DA', color: activeCourse === c ? '#fff' : '#7C766A' }}>{COURSE_LABELS[c]}</button>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 
@@ -1516,7 +1585,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 fontSize: 16, fontWeight: 800, cursor: sendBusy ? 'wait' : 'pointer',
                 marginBottom: 10, boxShadow: '0 6px 14px rgba(13,27,62,.24)'
               }}>
-                {sendBusy ? 'Sending…' : `🔔 Send Order — ${cart.reduce((s, c) => s + c.quantity, 0)} item${cart.reduce((s, c) => s + c.quantity, 0) > 1 ? 's' : ''}`}
+                {sendBusy ? 'Sending…' : `Send to kitchen — ${cart.reduce((s, c) => s + c.quantity, 0)} item${cart.reduce((s, c) => s + c.quantity, 0) > 1 ? 's' : ''}`}
               </button>
             )}
 
@@ -1553,7 +1622,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   background: sendBusy ? '#f3a5b3' : '#e94560', color: 'white', fontSize: 16,
                   fontWeight: 800, cursor: sendBusy ? 'wait' : 'pointer'
                 }}>
-                {sendBusy ? 'Sending order…' : `View Bill & Pay — £${orderTotal.toFixed(2)}`}
+                {sendBusy ? 'Sending order…' : `View bill & pay — £${orderTotal.toFixed(2)}`}
               </button>
             )}
           </div>
@@ -1665,6 +1734,24 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         )}
 
         {/* SEPOS-MISC-001 — MISC ITEM POPUP (off-menu / special open item) */}
+        {/* SEPOS-ORDER-ARRANGE — manager PIN to unlock reorder */}
+        {arrangePin && (
+          <div onClick={() => setArrangePin(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 28, width: 340, maxWidth: '92vw' }}>
+              <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)', marginBottom: 6 }}>⇅ Arrange menu</h2>
+              <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>Rearranging changes the menu order on <b>every till</b>. Enter a manager PIN to continue.</p>
+              <input type="password" inputMode="numeric" autoFocus value={arrangePin.pin}
+                onChange={e => setArrangePin(p => ({ ...p, pin: e.target.value, err: '' }))}
+                onKeyDown={e => { if (e.key === 'Enter') verifyArrangePin(); }}
+                placeholder="Manager PIN" style={{ width: '100%', height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 18, boxSizing: 'border-box', letterSpacing: '4px', textAlign: 'center' }} />
+              {arrangePin.err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 8 }}>{arrangePin.err}</div>}
+              <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+                <button onClick={() => setArrangePin(null)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700 }}>Cancel</button>
+                <button onClick={verifyArrangePin} disabled={arrangePin.busy || !arrangePin.pin} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: (arrangePin.busy || !arrangePin.pin) ? '#ccc' : 'var(--brand-primary,#0D1B3E)', color: '#fff', cursor: 'pointer', fontWeight: 800 }}>{arrangePin.busy ? 'Checking…' : 'Unlock'}</button>
+              </div>
+            </div>
+          </div>
+        )}
         {miscPopup && (
           <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,

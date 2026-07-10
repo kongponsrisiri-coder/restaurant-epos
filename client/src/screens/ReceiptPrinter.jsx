@@ -210,15 +210,9 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
   }
   const vatRows = Object.values(vatBuckets).sort((a, b) => a.rate - b.rate);
   const vatTotal = vatRows.reduce((s, b) => s + b.vat, 0);
-  const vatBlock = vatTotal > 0 ? `
-    <hr class="divider"/>
-    <table>
-      <tr><td colspan="2" style="font-size:10px;color:#666;padding-top:2px;text-transform:uppercase;letter-spacing:1px;">VAT Breakdown</td></tr>
-      ${vatRows.map(b => `
-        <tr><td style="font-size:10px;color:#444;">VAT ${b.rate}% on ${fmt(b.net)} net</td><td style="text-align:right;font-size:10px;">${fmt(b.vat)}</td></tr>
-      `).join('')}
-      <tr><td style="font-size:11px;font-weight:700;">Total VAT</td><td style="text-align:right;font-size:11px;font-weight:700;">${fmt(vatTotal)}</td></tr>
-    </table>` : '';
+  // VAT is the owner/accountant's domain — no VAT breakdown on the customer
+  // receipt (the admin VAT Report is kept separately for the accountant).
+  const vatBlock = '';
   const paymentRows  = method ? `
     <tr><td>Payment</td><td style="text-align:right;">${method}</td></tr>
     ${method==='Cash'&&amountPaid>0?`

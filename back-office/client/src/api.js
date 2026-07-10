@@ -189,6 +189,10 @@ export const api = {
       body: JSON.stringify(body),
     }).then(handle),
 
+  // SEPOS-AI-HELP-001 — in-app assistant question logs
+  listAiHelpLogs: (clientId) => fetch(`${API}/api/ai-help${clientId ? `?client=${clientId}` : ''}`, { headers: tokenHeader() }).then(handle),
+  aiHelpStats: () => fetch(`${API}/api/ai-help/stats`, { headers: tokenHeader() }).then(handle),
+
   listTickets: () => fetch(`${API}/api/tickets`, { headers: tokenHeader() }).then(handle),
 
   getTicket: (id) => fetch(`${API}/api/tickets/${id}`, { headers: tokenHeader() }).then(handle),

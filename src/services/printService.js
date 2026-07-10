@@ -60,6 +60,7 @@ const CMD = {
   SIZE_BIG:     Buffer.from([GS,  0x21, 0x11]),   // 2× width, 2× height
   SIZE_XL:      Buffer.from([GS,  0x21, 0x22]),   // 3× width, 3× height (SEPOS-PRINT-FONT-001)
   CUT:          Buffer.from([GS,  0x56, 0x41, 0x05]), // Partial cut + 5mm feed
+  DRAWER_KICK:  Buffer.from([ESC, 0x70, 0x00, 0x19, 0xFA]), // ESC p 0 25 250 — open cash drawer (pin 2)
   LF:           Buffer.from([0x0a]),
 };
 
@@ -1000,6 +1001,18 @@ async function printReceipt(settings, order, items, paymentDetails) {
   await sendRaw(ip, port, buildReceipt({ order, items, settings, paymentDetails }), { printerName, lprQueue });
 }
 
+// SEPOS-DRAWER-001 — open the cash drawer via the RECEIPT printer's RJ11 kick
+// port. Fires on payment (gated by open_drawer_on_payment at the endpoint).
+// Raw ESC/POS only — network / built-in receipt printer, not the browser path.
+async function openCashDrawer(settings) {
+  const ip   = settings.printer_receipt_ip;
+  const port = settings.printer_receipt_port || 9100;
+  const printerName = settings.printer_receipt_name || '';
+  const lprQueue    = settings.printer_receipt_lpr_queue || 'lp';
+  if (!ip && !printerName) throw new Error('NO_IP');
+  await sendRaw(ip, port, CMD.DRAWER_KICK, { printerName, lprQueue });
+}
+
 async function printFireNotice(settings, order, course) {
   const ip       = settings.printer_kitchen_ip;
   const port     = settings.printer_kitchen_port || 9100;
@@ -1275,6 +1288,7 @@ async function printReportText(settings, lines) {
 
 module.exports = {
   printReceipt,
+  openCashDrawer,         // SEPOS-DRAWER-001
   printFireNotice,
   printKitchenTicket,
   printFullKitchenTicket,

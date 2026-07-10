@@ -7,6 +7,18 @@ import { confirm } from '../../utils/confirm';
 import { getTenantUrl } from '../../native/tenant';
 import { isNativeApp } from '../../native/printer';
 
+// QR codes render to a <canvas>, so the qrcode lib needs a REAL hex colour —
+// it can't parse a CSS `var(--brand-primary,…)` string (throws → blank QR).
+// Resolve the live brand colour to hex, falling back to navy so the QR always
+// draws even before the theme vars are set.
+function brandQrDark() {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim();
+    if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) return v;
+  } catch { /* SSR / no DOM */ }
+  return DEFAULT_PRIMARY || '#0D1B3E';
+}
+
 // SEPOS-028 — "any device as a till" (cloud model). Shows this till's cloud
 // address + a QR; a new device opens the SiamEPOS app → Scan QR → joins. Unlike
 // the desktop LAN card, the test hits the live cloud, so it actually responds.
@@ -17,8 +29,8 @@ function AddTillCard({ cardStyle }) {
   useEffect(() => {
     let cancelled = false;
     if (!tenant) return;
-    QRCode.toDataURL(tenant, { width: 220, margin: 1, errorCorrectionLevel: 'M', color: { dark: 'var(--brand-primary,#0D1B3E)', light: '#FFFFFF' } })
-      .then(d => { if (!cancelled) setQr(d); }).catch(() => {});
+    QRCode.toDataURL(tenant, { width: 220, margin: 1, errorCorrectionLevel: 'M', color: { dark: brandQrDark(), light: '#FFFFFF' } })
+      .then(d => { if (!cancelled) setQr(d); }).catch((err) => console.warn('[add-till] QR failed:', err));
     return () => { cancelled = true; };
   }, [tenant]);
   const test = async () => {
@@ -589,7 +601,7 @@ function NetworkSetupCard({ cardStyle }) {
         try {
           const dataUrl = await QRCode.toDataURL(n.url, {
             width: 220, margin: 1, errorCorrectionLevel: 'M',
-            color: { dark: 'var(--brand-primary,#0D1B3E)', light: '#FFFFFF' },
+            color: { dark: brandQrDark(), light: '#FFFFFF' },
           });
           if (!cancelled) setQr(dataUrl);
         } catch (err) { console.warn('[network-setup] QR failed:', err); }
@@ -599,6 +611,14 @@ function NetworkSetupCard({ cardStyle }) {
   }, []);
 
   if (!info) return null;
+  // The cloud (Railway) server reports its datacenter container IP (e.g.
+  // 10.x:8080) — a real address, but useless as a LAN host. In the cloud web
+  // app there's nothing to point tablets at over the LAN (they just open the
+  // same cloud URL), so show the cloud "any device" QR instead of a bogus LAN
+  // address. Desktop / Sunmi-host installs report local:true and keep the LAN
+  // card. (Old desktop servers send no `local` field → undefined → LAN card,
+  // which is correct for them.)
+  if (info.local === false) return <AddTillCard cardStyle={cardStyle} />;
 
   const copy = async () => {
     try {
@@ -746,6 +766,7 @@ export default function SettingsSection() {
     kitchen_print_mode:      'print',   // 'print' | 'kds' | 'both'
     kitchen_language:        'en_th',  // 'en_th' | 'en'
     brand_logo:              '',   // SEPOS-BRAND-001 — on-screen logo (separate from receipt logo)
+    brand_logo_size:         'large', // SEPOS-BRAND-001 — login/header logo size: 'small'|'medium'|'large'|'xl'
     brand_primary:           '',   // theme primary colour (blank = default navy)
     brand_accent:            '',   // theme accent colour (blank = default gold)
   });
@@ -1071,6 +1092,21 @@ export default function SettingsSection() {
           </div>
         </div>
 
+        {/* SEPOS-BRAND-001 — on-screen logo size (login + headers). Per-client,
+            like the receipt logo size below. */}
+        <label style={labelStyle}>App logo size</label>
+        <div style={{ display:'flex', gap:8, marginBottom:20, flexWrap:'wrap' }}>
+          {[['small','Small'],['medium','Medium'],['large','Large'],['xl','Extra Large']].map(([val, lbl]) => (
+            <button key={val} onClick={() => setSettings(s => ({ ...s, brand_logo_size: val }))}
+              style={{ padding:'7px 15px', borderRadius:8, border:'2px solid', fontSize:13, fontWeight:700, cursor:'pointer',
+                borderColor: (settings.brand_logo_size || 'large') === val ? 'var(--brand-primary, #1a1a2e)' : '#ddd',
+                background:  (settings.brand_logo_size || 'large') === val ? 'var(--brand-primary, #1a1a2e)' : 'white',
+                color:       (settings.brand_logo_size || 'large') === val ? 'white' : '#555' }}>
+              {lbl}
+            </button>
+          ))}
+        </div>
+
         {/* Colour presets */}
         <label style={labelStyle}>Colour theme</label>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:14 }}>
@@ -1287,25 +1323,7 @@ export default function SettingsSection() {
         <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Take a deposit against a booking (Admin → Vouchers → Take deposit) and redeem it on the day as a <b>prepaid tender</b> in Mixed Payment — the full bill still records for sales + VAT; the deposit only reduces what's owed. Deposits are reported separately from gift vouchers and never count as till cash. When off, none of the deposit UI shows.</div>
       </div>
 
-      {/* ── Print text size (SEPOS-PRINT-FONT-001) ── */}
-      <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🔠 Print text size</h2>
-        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-          {[['Kitchen ticket text','kitchen_font_scale','large'],
-            ['Receipt text','receipt_font_scale','normal'],
-            ['Bar ticket text','bar_font_scale','large']].map(([label,key,def]) => (
-            <div key={key} style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
-              <label style={{ fontSize:14, fontWeight:600, color:'#555', minWidth:150 }}>{label}</label>
-              <select value={settings[key] || def} onChange={e => setSettings({...settings, [key]:e.target.value})} style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}>
-                <option value="normal">Normal</option>
-                <option value="large">Large</option>
-                <option value="xlarge">Extra-large</option>
-              </select>
-            </div>
-          ))}
-        </div>
-        <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Bigger = easier to read on a busy line, but fewer characters fit per row. Applies to kitchen / bar tickets and the customer receipt on every printer (thermal + built-in).</div>
-      </div>
+      {/* Print text size moved to Admin → Printers (SEPOS-PRINT-FONT-001) — it's a printer setting. */}
 
       {/* ── Delivery (SEPOS-DELIVERY-002) ── */}
       <div style={cardStyle}>

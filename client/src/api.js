@@ -17,6 +17,20 @@ const isLocalId = (id) => typeof id === 'string' && String(id).startsWith('L');
 // they start with 'L', so always test isLocalItemId FIRST where it matters).
 const isLocalItemId = (id) => typeof id === 'string' && String(id).startsWith('LI');
 
+// The shared MAIN SiamEPOS cloud, and the ONLY public host allowed to use it
+// without an explicit VITE_API_URL. Every other public host MUST declare its
+// restaurant's backend via the VITE_API_URL build env var — otherwise it is a
+// misconfigured per-tenant deploy and we refuse to silently serve the main
+// cloud's data (the tenant-leak that made siamepos-thannthai show app.siamepos
+// data — SEPOS-TENANT-GUARD-001).
+const MAIN_CLOUD = 'https://restaurant-epos-production.up.railway.app';
+const MAIN_HOSTS = ['app.siamepos.co.uk'];
+// Set true by getServerURL() when a per-tenant site is missing its VITE_API_URL.
+// Snapshotted into the exported TENANT_MISCONFIGURED const below (after
+// getServerURL runs at module init) and read by App.jsx to block with a loud
+// setup-error screen instead of loading another restaurant's data.
+let tenantMisconfigured = false;
+
 const getServerURL = () => {
   // Electron desktop: the bundled local server lives on :3001 regardless of
   // how the renderer was loaded (file:// in prod, http://localhost:5173 in dev).
@@ -44,15 +58,25 @@ const getServerURL = () => {
   ) {
     return `http://${host}:3001`;
   }
-  // Per-client Netlify deploy: set VITE_API_URL env var to override
+  // Per-client Netlify deploy: the site declares its restaurant's backend via
+  // the VITE_API_URL build env var.
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  // Otherwise use cloud
-  return 'https://restaurant-epos-production.up.railway.app';
+  // No VITE_API_URL on a public host. Only the shared MAIN site may use the main
+  // cloud without one; ANY other public host here is a per-tenant site built
+  // without its VITE_API_URL. Do NOT silently serve the main cloud — flag it so
+  // App.jsx blocks with a setup error instead of showing the wrong restaurant.
+  if (!MAIN_HOSTS.includes(host)) {
+    tenantMisconfigured = true;
+    try { console.error(`[SiamEPOS] Misconfigured deploy: ${host} has no VITE_API_URL. Refusing to fall back to the main cloud.`); } catch {}
+  }
+  return MAIN_CLOUD;
 };
 
 export const SERVER_URL = getServerURL();
+// Snapshot AFTER getServerURL() has run (it sets the flag as a side effect).
+export const TENANT_MISCONFIGURED = tenantMisconfigured;
 
 // SEPOS-047a — both login paths store a Bearer token; attach it to every
 // request so staff-gated endpoints (customers, campaigns, AI scan) work.
@@ -505,6 +529,12 @@ export const updatePrinter      = (id, body) => put(`/api/printers/${id}`, body)
 export const deletePrinter      = (id) => del(`/api/printers/${id}`);
 export const testPrinter        = (id) => post(`/api/printers/${id}/test`, {});
 export const setCategoryPrinter = (id, printer_id) => put(`/api/categories/${id}/printer`, { printer_id });
+// SEPOS-PRINT-UNIFY-001 — set the default printer for a role (receipt|kitchen|bar)
+export const setPrinterDefault  = (role, printer_id) => post('/api/printers/set-default', { role, printer_id });
+// SEPOS-PRINT-UNIFY-001 — scan the local network for printers on :9100 (local install only)
+export const scanPrinters       = () => get('/api/printers/scan');
+// SEPOS-DRAWER-001 — open the cash drawer (kick via the receipt printer) on payment
+export const serverOpenDrawer   = (printer_name) => post('/api/print/drawer', printer_name ? { printer_name } : {});
 // Print a dine-in kitchen ticket to a specific station (server routes by printer_id).
 export const serverPrintKitchenToStation = (order_id, items, printer_id, printer_name) =>
   post('/api/print/kitchen-station', { order_id, items, printer_id, printer_name });
@@ -803,6 +833,9 @@ export const getReservations = () => get('/api/reservations');
 // when the Mac is in local mode without SYNC_SECRET (silent delete-drop
 // risk) or when the queue is backing up.
 export const getSyncHealth = () => get('/api/sync/health');
+
+// SEPOS-AI-HELP-001 — in-app "Ask AI" help assistant. messages = [{role,content}].
+export const askAi = (messages, platform) => post('/api/ai/help', { messages, platform });
 
 // SEPOS-044 follow-up — sync queue inspector (local mode only).
 export const getSyncQueue = () => get('/api/sync/queue');

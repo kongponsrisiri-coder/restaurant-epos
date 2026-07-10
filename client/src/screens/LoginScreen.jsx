@@ -29,11 +29,20 @@ function Lotus({ size = 120 }) {
   );
 }
 
+// SEPOS-BRAND-001 — per-client login/header logo size (Admin → Settings →
+// "App logo size"). Maps each preset to desktop/mobile pixel heights.
+const LOGO_PX = {
+  small:  { desktop: 150, mobile: 56 },
+  medium: { desktop: 200, mobile: 74 },
+  large:  { desktop: 250, mobile: 90 },
+  xl:     { desktop: 330, mobile: 116 },
+};
+
 // SEPOS-BRAND-001 — show the client's uploaded brand logo if set, else the
 // default lotus mark. (This is the on-screen logo, separate from the receipt
 // logo — it can be light/colour since it never gets thermal-printed.)
 function BrandMark({ size = 120, logo }) {
-  if (logo) return <img src={logo} alt="" style={{ height: size, maxWidth: size * 2.4, objectFit: 'contain', display: 'block' }} />;
+  if (logo) return <img src={logo} alt="" style={{ height: size, maxWidth: Math.min(size * 2.4, 440), objectFit: 'contain', display: 'block' }} />;
   return <Lotus size={size} />;
 }
 
@@ -52,6 +61,7 @@ export default function LoginScreen({ onLogin }) {
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [restaurantName, setRestaurantName] = useState('');
   const [brandLogo, setBrandLogo] = useState(''); // SEPOS-BRAND-001
+  const [logoSize, setLogoSize] = useState('large'); // SEPOS-BRAND-001 — app logo size preset
   const [now, setNow] = useState(() => new Date());
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
   // SEPOS-RESET-001 — hidden trigger on the top-left corner opens the
@@ -89,17 +99,19 @@ export default function LoginScreen({ onLogin }) {
     Promise.all([getRestaurant().catch(() => null), getSettings().catch(() => null)])
       .then(([r, settings]) => {
         const generic = (n) => !n || /^siamepos$/i.test(String(n).trim());
-        // Name priority: restaurants.name → settings.restaurant_name →
-        // settings.company_name (the owner-editable "Restaurant Name" field in
-        // Admin → Settings) → restaurant_id slug as a last resort. company_name
-        // is included so a new tenant whose DB name is still null can set its
-        // display name in-app without a DB edit.
-        const name = (r && r.name)
+        // Name priority — the OWNER-EDITABLE name wins over the onboarding
+        // `restaurants.name` "tag", so a client can rename their till from
+        // Admin → Settings → Restaurant Name (which saves company_name) and see
+        // it here. Matches how receipts/reports resolve the name (company_name
+        // first — see reportPrinter.restaurantName). `restaurants.name` stays as
+        // the fallback for tills that never set a custom display name.
+        const name = (settings && !generic(settings.company_name) && settings.company_name)
           || (settings && !generic(settings.restaurant_name) && settings.restaurant_name)
-          || (settings && !generic(settings.company_name) && settings.company_name)
+          || (r && r.name)
           || (r && r.restaurant_id) || '';
         setRestaurantName(String(name || '').trim());
         if (settings && settings.brand_logo) setBrandLogo(settings.brand_logo); // SEPOS-BRAND-001
+        if (settings && settings.brand_logo_size) setLogoSize(settings.brand_logo_size); // SEPOS-BRAND-001
       })
       .catch(() => {});
   }, []);
@@ -188,7 +200,7 @@ export default function LoginScreen({ onLogin }) {
   // Mobile: compact full-width header strip above the login panel.
   const brandPanel = isMobile ? (
     <div style={{ width: '100%', flexShrink: 0, position: 'relative', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14, overflow: 'hidden' }}>
-      <BrandMark size={60} logo={brandLogo} />
+      <BrandMark size={(LOGO_PX[logoSize] || LOGO_PX.large).mobile} logo={brandLogo} />
       <div style={{ minWidth: 0 }}>
         {/* Restaurant name is the headline; SiamEPOS sits under it as the platform credit. */}
         <div style={{ fontFamily: SERIF, fontSize: 24, color: '#fff', fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1.05, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{restaurantName || 'SiamEPOS'}</div>
@@ -201,7 +213,7 @@ export default function LoginScreen({ onLogin }) {
   ) : (
     <div style={{ width: 600, flexShrink: 0, position: 'relative', padding: '0 64px', display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', right: -60, bottom: -40, opacity: 0.05, pointerEvents: 'none' }}><Lotus size={420} /></div>
-      <BrandMark size={168} logo={brandLogo} />
+      <BrandMark size={(LOGO_PX[logoSize] || LOGO_PX.large).desktop} logo={brandLogo} />
       {/* Restaurant name is the hero wordmark; wordBreak so a long name wraps rather than overflow. */}
       <div style={{ fontFamily: SERIF, fontSize: 60, color: '#fff', fontWeight: 700, letterSpacing: '-1.5px', lineHeight: 1.05, marginTop: 28, wordBreak: 'break-word' }}>{restaurantName || 'SiamEPOS'}</div>
       <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 10, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Point of sale</div>

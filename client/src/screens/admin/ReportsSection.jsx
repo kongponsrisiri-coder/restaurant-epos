@@ -7,6 +7,14 @@ import {
   fmt, fmtInt, periodLabel, restaurantName, nowStamp,
 } from '../../utils/reportPrinter';
 
+// Food-vs-drink split — % of (food + drink) so the two sum to 100% (service
+// charge is separate). Returns '' when there's no food/drink to split.
+const fdPct = (part, food, drink) => {
+  const t = Number(food || 0) + Number(drink || 0);
+  return t > 0 ? `${(Number(part || 0) / t * 100).toFixed(1)}%` : '';
+};
+const fdParen = (part, food, drink) => { const p = fdPct(part, food, drink); return p ? ` (${p})` : ''; };
+
 export default function ReportsSection() {
   const [tab, setTab] = useState('sales');
   const [period, setPeriod] = useState('today');
@@ -37,7 +45,7 @@ export default function ReportsSection() {
       data.orders.forEach(o => {
         rows.push([
           o.order_type || 'dine_in',
-          o.order_type === 'takeaway' ? (o.customer_name || 'Online') : `Table ${o.table_number || '-'}`,
+          o.order_type === 'takeaway' ? (o.customer_name || 'Takeaway') : `Table ${o.table_number || '-'}`,
           o.method || (o.order_type === 'takeaway' ? 'Online' : ''),
           o.covers || '',
           Number(o.total || 0).toFixed(2),
@@ -45,10 +53,15 @@ export default function ReportsSection() {
         ]);
       });
       rows.push([]);
-      rows.push(['', '', '', '', 'Food',                 Number(data.total_food     || 0).toFixed(2)]);
-      rows.push(['', '', '', '', 'Drink',                Number(data.total_drink    || 0).toFixed(2)]);
+      rows.push(['', '', '', '', `Food${fdParen(data.total_food, data.total_food, data.total_drink)}`,  Number(data.total_food     || 0).toFixed(2)]);
+      rows.push(['', '', '', '', `Drink${fdParen(data.total_drink, data.total_food, data.total_drink)}`, Number(data.total_drink    || 0).toFixed(2)]);
       rows.push(['', '', '', '', 'Service charge',       Number(data.total_service  || 0).toFixed(2)]);
-      rows.push(['', '', '', '', `TOTAL (${data.order_count || 0} orders · ${data.total_covers || 0} covers)`, Number(data.total_sales || 0).toFixed(2)]);
+      const csvTips = Number(data.total_paid ?? data.total_sales ?? 0) - Number(data.total_sales || 0);
+      if (Math.abs(csvTips) >= 0.01) {
+        rows.push(['', '', '', '', 'Sale value',        Number(data.total_sales || 0).toFixed(2)]);
+        rows.push(['', '', '', '', 'Tips / overpayment', csvTips.toFixed(2)]);
+      }
+      rows.push(['', '', '', '', `TOTAL TAKEN (${data.order_count || 0} orders · ${data.total_covers || 0} covers)`, Number(data.total_paid ?? data.total_sales ?? 0).toFixed(2)]);
       if (data?.vouchers_sold?.count > 0 || data?.vouchers_redeemed?.count > 0) {
         rows.push([]);
         rows.push(['🎁 GIFT VOUCHERS', '', '', '', '', '']);
@@ -111,15 +124,17 @@ export default function ReportsSection() {
             {p}
           </button>
         ))}
-        {period === 'custom' && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 6 }}>
-            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
-            <span style={{ color: '#666', fontSize: 13 }}>→</span>
-            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
-          </div>
-        )}
+        {/* Date-range picker — always visible so any specific day is one tap
+            away; picking a date jumps straight to the custom range. */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 6 }}>
+          <input type="date" value={customFrom} max={customTo || today}
+            onChange={e => { setCustomFrom(e.target.value); setPeriod('custom'); }}
+            style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
+          <span style={{ color: '#666', fontSize: 13 }}>→</span>
+          <input type="date" value={customTo} min={customFrom} max={today}
+            onChange={e => { setCustomTo(e.target.value); setPeriod('custom'); }}
+            style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
+        </div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap' }}>
         {['sales', 'items'].map(t => (
@@ -147,7 +162,7 @@ export default function ReportsSection() {
               {data?.orders?.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: '#bbb' }}>No orders for this period</div>}
               {data?.orders?.map(order => (
                 <div key={order.id} style={{ padding: '10px 20px', display: 'grid', gridTemplateColumns: '1fr 110px 70px 90px 90px', borderBottom: '1px solid #f0f0f0', fontSize: 14 }}>
-                  <span>{order.order_type === 'takeaway' ? `🥡 ${order.customer_name || 'Online'}` : `Table ${order.table_number}`}</span>
+                  <span>{order.order_type === 'takeaway' ? `🥡 ${order.customer_name || 'Takeaway'}` : `Table ${order.table_number}`}</span>
                   <span>{order.method || (order.order_type === 'takeaway' ? 'Online' : '-')}</span>
                   <span>{order.covers || '-'}</span>
                   <span style={{ textAlign: 'right', color: '#888' }}>£{Number(order.total || 0).toFixed(2)}</span>
@@ -163,19 +178,28 @@ export default function ReportsSection() {
                         <div style={{ fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>£{Number(data.total_dine_in || 0).toFixed(2)} <span style={{ color: '#888', fontSize: 12, fontWeight: 400 }}>· {data.dine_in_count || 0} orders</span></div>
                       </div>
                       <div style={{ padding: '10px 20px' }}>
-                        <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>🥡 Online Takeaway</div>
+                        <div style={{ color: '#888', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 }}>🥡 Takeaway</div>
                         <div style={{ fontWeight: 800, color: 'var(--brand-accent,#C9A84C)' }}>£{Number(data.total_takeaway || 0).toFixed(2)} <span style={{ color: '#888', fontSize: 12, fontWeight: 400 }}>· {data.takeaway_count || 0} orders</span></div>
                       </div>
                     </div>
                   )}
                   <div style={{ padding: '10px 20px', background: '#fafafa', display:'flex', flexDirection:'column', gap:4, fontSize:13 }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', color:'#555' }}><span>🍽️ Food</span><span>£{Number(data.total_food || 0).toFixed(2)}</span></div>
-                    <div style={{ display:'flex', justifyContent:'space-between', color:'#555' }}><span>🍺 Drink</span><span>£{Number(data.total_drink || 0).toFixed(2)}</span></div>
+                    <div style={{ display:'flex', justifyContent:'space-between', color:'#555' }}><span>🍽️ Food{fdPct(data.total_food, data.total_food, data.total_drink) && <span style={{ color:'#999', marginLeft:6 }}>({fdPct(data.total_food, data.total_food, data.total_drink)})</span>}</span><span>£{Number(data.total_food || 0).toFixed(2)}</span></div>
+                    <div style={{ display:'flex', justifyContent:'space-between', color:'#555' }}><span>🍺 Drink{fdPct(data.total_drink, data.total_food, data.total_drink) && <span style={{ color:'#999', marginLeft:6 }}>({fdPct(data.total_drink, data.total_food, data.total_drink)})</span>}</span><span>£{Number(data.total_drink || 0).toFixed(2)}</span></div>
                     <div style={{ display:'flex', justifyContent:'space-between', color:'var(--brand-primary,#0D1B3E)', fontWeight:600 }}><span>Service charge (12.5%)</span><span>£{Number(data.total_service || 0).toFixed(2)}</span></div>
                   </div>
+                  {/* SEPOS-REPREC-001 — foot to MONEY TAKEN so Reports reconciles
+                      with Bills + Trading. When money taken ≠ sale value (a tip or
+                      overpayment on card), show both so nothing looks "wrong". */}
+                  {Math.abs(Number(data.total_paid ?? data.total_sales ?? 0) - Number(data.total_sales || 0)) >= 0.01 && (
+                    <div style={{ padding: '6px 20px 0', display: 'flex', flexDirection: 'column', gap: 3, background: '#f8f8f8', fontSize: 12, color: '#999' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between' }}><span>Sale value (food + drink + service)</span><span>£{Number(data.total_sales || 0).toFixed(2)}</span></div>
+                      <div style={{ display:'flex', justifyContent:'space-between' }}><span>Tips / overpayment</span><span>£{(Number(data.total_paid ?? 0) - Number(data.total_sales || 0)).toFixed(2)}</span></div>
+                    </div>
+                  )}
                   <div style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', background: '#f8f8f8', fontWeight: 700 }}>
-                    <span>Total ({data.order_count} orders · {data.total_covers} covers)</span>
-                    <span style={{ color: '#e94560' }}>£{Number(data.total_sales || 0).toFixed(2)}</span>
+                    <span>Total taken ({data.order_count} orders · {data.total_covers} covers)</span>
+                    <span style={{ color: '#e94560' }}>£{Number(data.total_paid ?? data.total_sales ?? 0).toFixed(2)}</span>
                   </div>
                 </>
               )}
@@ -240,6 +264,11 @@ export default function ReportsSection() {
 function buildSalesBody(data, period, from, to, settings, thermal) {
   const orders = data?.orders || [];
   const totalSales = Number(data?.total_sales || 0);
+  // SEPOS-REPREC-001 — foot the printed report to MONEY TAKEN so it matches the
+  // Bills + Trading screens; surface any tip/overpayment as its own line.
+  const totalTaken = Number(data?.total_paid ?? data?.total_sales ?? 0);
+  const tips       = totalTaken - totalSales;
+  const tipsRow    = Math.abs(tips) >= 0.01;
   const orderCount = data?.order_count || 0;
   const covers     = data?.total_covers || 0;
   const headerHtml = thermal
@@ -260,7 +289,7 @@ function buildSalesBody(data, period, from, to, settings, thermal) {
   // Headline cards (full page only)
   const cardsHtml = thermal ? '' : `
     <div class="grid-3" style="margin-top:8px;">
-      <div class="card"><div class="lbl">Total sales</div><div class="val">${fmt(totalSales)}</div></div>
+      <div class="card"><div class="lbl">Total taken</div><div class="val">${fmt(totalTaken)}</div></div>
       <div class="card"><div class="lbl">Orders</div><div class="val">${fmtInt(orderCount)}</div></div>
       <div class="card"><div class="lbl">Covers</div><div class="val">${fmtInt(covers)}</div></div>
     </div>`;
@@ -271,20 +300,22 @@ function buildSalesBody(data, period, from, to, settings, thermal) {
     <table>
       <tr><td>Dine-in (${data.dine_in_count || 0})</td><td class="right">${fmt(data.total_dine_in)}</td></tr>
       ${data.takeaway_count > 0 ? `<tr><td>🥡 Takeaway (${data.takeaway_count})</td><td class="right">${fmt(data.total_takeaway)}</td></tr>` : ''}
-      <tr><td>Food</td><td class="right">${fmt(data.total_food)}</td></tr>
-      <tr><td>Drink</td><td class="right">${fmt(data.total_drink)}</td></tr>
+      <tr><td>Food${fdParen(data.total_food, data.total_food, data.total_drink)}</td><td class="right">${fmt(data.total_food)}</td></tr>
+      <tr><td>Drink${fdParen(data.total_drink, data.total_food, data.total_drink)}</td><td class="right">${fmt(data.total_drink)}</td></tr>
       <tr><td>Service charge (12.5%)</td><td class="right">${fmt(data.total_service)}</td></tr>
-      <tr class="total-row"><td>TOTAL · ${orderCount} orders</td><td class="right">${fmt(totalSales)}</td></tr>
+      ${tipsRow ? `<tr><td>Tips / overpayment</td><td class="right">${fmt(tips)}</td></tr>` : ''}
+      <tr class="total-row"><td>TOTAL TAKEN · ${orderCount} orders</td><td class="right">${fmt(totalTaken)}</td></tr>
     </table>`;
   const breakdownFull = `
     <h2>Breakdown</h2>
     <table>
       <tr><td>Dine-in (${data.dine_in_count || 0} orders)</td><td class="right">${fmt(data.total_dine_in)}</td></tr>
-      ${data.takeaway_count > 0 ? `<tr><td>🥡 Online Takeaway (${data.takeaway_count} orders)</td><td class="right">${fmt(data.total_takeaway)}</td></tr>` : ''}
-      <tr><td>🍽️ Food</td><td class="right">${fmt(data.total_food)}</td></tr>
-      <tr><td>🍺 Drink</td><td class="right">${fmt(data.total_drink)}</td></tr>
+      ${data.takeaway_count > 0 ? `<tr><td>🥡 Takeaway (${data.takeaway_count} orders)</td><td class="right">${fmt(data.total_takeaway)}</td></tr>` : ''}
+      <tr><td>🍽️ Food${fdParen(data.total_food, data.total_food, data.total_drink)}</td><td class="right">${fmt(data.total_food)}</td></tr>
+      <tr><td>🍺 Drink${fdParen(data.total_drink, data.total_food, data.total_drink)}</td><td class="right">${fmt(data.total_drink)}</td></tr>
       <tr><td>Service charge (12.5%)</td><td class="right">${fmt(data.total_service)}</td></tr>
-      <tr class="total-row"><td>Total sales (${orderCount} orders · ${covers} covers)</td><td class="right">${fmt(totalSales)}</td></tr>
+      ${tipsRow ? `<tr><td>Tips / overpayment</td><td class="right">${fmt(tips)}</td></tr>` : ''}
+      <tr class="total-row"><td>Total taken (${orderCount} orders · ${covers} covers)</td><td class="right">${fmt(totalTaken)}</td></tr>
     </table>`;
 
   // Orders list — thermal stacks each on its own row pair; full page is a real table
@@ -293,7 +324,7 @@ function buildSalesBody(data, period, from, to, settings, thermal) {
     <div class="section-head">Orders</div>
     <table>
       ${orders.map(o => {
-        const label = o.order_type === 'takeaway' ? '🥡 ' + (o.customer_name || 'Online') : `T${o.table_number || '-'}`;
+        const label = o.order_type === 'takeaway' ? '🥡 ' + (o.customer_name || 'Takeaway') : `T${o.table_number || '-'}`;
         const method = o.method || (o.order_type === 'takeaway' ? 'Online' : '-');
         const amt = Number(o.paid_amount ?? o.total ?? 0);
         return `<tr><td>${label} · ${method}${o.covers ? ' · ' + o.covers + 'p' : ''}</td><td class="right">${fmt(amt)}</td></tr>`;
@@ -305,7 +336,7 @@ function buildSalesBody(data, period, from, to, settings, thermal) {
       <thead><tr><th>Table / Customer</th><th>Method</th><th class="right">Covers</th><th class="right">Subtotal</th><th class="right">Total</th></tr></thead>
       <tbody>
       ${orders.map(o => {
-        const label = o.order_type === 'takeaway' ? '🥡 ' + (o.customer_name || 'Online') : `Table ${o.table_number || '-'}`;
+        const label = o.order_type === 'takeaway' ? '🥡 ' + (o.customer_name || 'Takeaway') : `Table ${o.table_number || '-'}`;
         const method = o.method || (o.order_type === 'takeaway' ? 'Online' : '-');
         return `<tr>
           <td>${label}</td>
@@ -417,7 +448,7 @@ function buildSalesLines(data, period, from, to, settings) {
   // Orders list
   for (const o of data.orders) {
     const label = o.order_type === 'takeaway'
-      ? 'TA ' + (o.customer_name || 'Online')
+      ? 'TA ' + (o.customer_name || 'Takeaway')
       : `T${o.table_number || '-'}`;
     const method = o.method || (o.order_type === 'takeaway' ? 'Online' : '-');
     const amt = Number(o.paid_amount ?? o.total ?? 0);
@@ -431,7 +462,10 @@ function buildSalesLines(data, period, from, to, settings) {
   lines.push({ kind: 'row', left: 'Food',  right: fmt(data.total_food) });
   lines.push({ kind: 'row', left: 'Drink', right: fmt(data.total_drink) });
   lines.push({ kind: 'row', left: 'Service charge (12.5%)', right: fmt(data.total_service) });
-  lines.push({ kind: 'total', left: `TOTAL (${data.order_count || 0} ord)`, right: fmt(data.total_sales) });
+  const takenLine = Number(data.total_paid ?? data.total_sales ?? 0);
+  const tipsLine  = takenLine - Number(data.total_sales || 0);
+  if (Math.abs(tipsLine) >= 0.01) lines.push({ kind: 'row', left: 'Tips / overpayment', right: fmt(tipsLine) });
+  lines.push({ kind: 'total', left: `TOTAL TAKEN (${data.order_count || 0} ord)`, right: fmt(takenLine) });
   if (data?.vouchers_sold?.count > 0 || data?.vouchers_redeemed?.count > 0) {
     lines.push({ kind: 'div' });
     lines.push({ kind: 'h2', text: 'GIFT VOUCHERS' });

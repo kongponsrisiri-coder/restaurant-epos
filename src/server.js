@@ -521,37 +521,142 @@ app.put('/api/categories/:id/printer', async (req, res) => {
 // The built-in receipt/kitchen/bar printers stay in settings; these are ADDED
 // stations a category can be routed to. Kitchen printing groups items by their
 // resolved printer (see routing rework).
+// SEPOS-PRINT-UNIFY-001 — overlay the unified printers table onto the legacy
+// settings.printer_<role>_* keys the print paths read. Default per role =
+// settings.default_<role>_printer_id, else the first active printer flagged with
+// that role. No unified printer for a role → legacy settings untouched
+// (migration-safe: today's output is unchanged until the operator sets it up).
+async function applyPrinterRouting(settings) {
+  let printers;
+  try { printers = (await pool.query('SELECT * FROM printers WHERE is_active = 1 ORDER BY sort_order, id')).rows; }
+  catch { return settings; }
+  if (!printers || !printers.length) return settings;
+  const byId = new Map(printers.map(p => [String(p.id), p]));
+  for (const role of ['receipt', 'kitchen', 'bar']) {
+    const defId = settings[`default_${role}_printer_id`];
+    const p = (defId && byId.get(String(defId))) || printers.find(x => Number(x[`role_${role}`]) === 1);
+    if (!p || !(p.ip || p.name)) continue;
+    settings[`printer_${role}_ip`]        = p.ip || '';
+    settings[`printer_${role}_port`]      = p.port || 9100;
+    settings[`printer_${role}_name`]      = p.name || '';
+    settings[`printer_${role}_lpr_queue`] = p.lpr_queue || settings[`printer_${role}_lpr_queue`] || 'lp';
+    if (role === 'kitchen' && p.copies) settings.printer_kitchen_copies = String(p.copies);
+  }
+  return settings;
+}
+
+// One-time: surface the operator's existing fixed Receipt/Kitchen/Bar config as
+// rows in the unified list so it isn't empty on first open. Runs only until any
+// printer carries a role flag; after that the operator's list is authoritative.
+async function ensurePrintersSeeded() {
+  try {
+    const existing = (await pool.query('SELECT * FROM printers')).rows;
+    if (existing.some(p => Number(p.role_receipt) || Number(p.role_kitchen) || Number(p.role_bar))) return;
+    const s = {};
+    (await pool.query(`SELECT key, value FROM settings WHERE key LIKE 'printer_%'`)).rows.forEach(r => { s[r.key] = r.value; });
+    for (const role of ['receipt', 'kitchen', 'bar']) {
+      const ip = s[`printer_${role}_ip`], name = s[`printer_${role}_name`];
+      if (!ip && !name) continue;
+      const roleCol = `role_${role}`;
+      const match = existing.find(p => (ip && p.ip === ip) || (name && p.name === name));
+      if (match) { await pool.query(`UPDATE printers SET ${roleCol} = 1 WHERE id = $1`, [match.id]); }
+      else {
+        const label = role[0].toUpperCase() + role.slice(1) + ' printer';
+        await pool.query(
+          `INSERT INTO printers (name, ip, port, lpr_queue, copies, ${roleCol}) VALUES ($1,$2,$3,$4,$5,1)`,
+          [name || label, ip || null, Number(s[`printer_${role}_port`]) || 9100, s[`printer_${role}_lpr_queue`] || null, Number(s[`printer_${role}_copies`]) || 1]
+        );
+      }
+    }
+  } catch (e) { console.warn('[printers] seed skipped:', e.message); }
+}
+
 app.get('/api/printers', async (req, res) => {
   try {
+    await ensurePrintersSeeded();
     const r = await pool.query('SELECT * FROM printers WHERE is_active = 1 ORDER BY sort_order, id');
     res.json(r.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.post('/api/printers', async (req, res) => {
   try {
-    const { name, ip, port, mac, kind, copies, sort_order } = req.body || {};
+    const { name, ip, port, mac, kind, copies, sort_order, role_receipt, role_kitchen, role_bar, lpr_queue } = req.body || {};
     if (!name || !String(name).trim()) return res.status(400).json({ error: 'Printer name required' });
     const r = await pool.query(
-      `INSERT INTO printers (name, ip, port, mac, kind, copies, sort_order, restaurant_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      `INSERT INTO printers (name, ip, port, mac, kind, copies, sort_order, restaurant_id, role_receipt, role_kitchen, role_bar, lpr_queue)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [String(name).trim(), ip || null, Number(port) || 9100, mac || null,
        kind === 'receipt' ? 'receipt' : 'kitchen', Math.max(1, Math.min(5, Number(copies) || 1)),
-       Number(sort_order) || 0, resolveRestaurantId(req)]
+       Number(sort_order) || 0, resolveRestaurantId(req),
+       role_receipt ? 1 : 0, role_kitchen ? 1 : 0, role_bar ? 1 : 0, lpr_queue || null]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.put('/api/printers/:id', async (req, res) => {
   try {
-    const { name, ip, port, mac, kind, copies, sort_order } = req.body || {};
+    const { name, ip, port, mac, kind, copies, sort_order, role_receipt, role_kitchen, role_bar, lpr_queue } = req.body || {};
     await pool.query(
       `UPDATE printers SET name=COALESCE($1,name), ip=$2, port=$3, mac=$4,
-         kind=COALESCE($5,kind), copies=$6, sort_order=$7 WHERE id=$8`,
+         kind=COALESCE($5,kind), copies=$6, sort_order=$7,
+         role_receipt=$8, role_kitchen=$9, role_bar=$10, lpr_queue=$11 WHERE id=$12`,
       [name != null ? String(name).trim() : null, ip || null, Number(port) || 9100, mac || null,
-       kind, Math.max(1, Math.min(5, Number(copies) || 1)), Number(sort_order) || 0, req.params.id]
+       kind, Math.max(1, Math.min(5, Number(copies) || 1)), Number(sort_order) || 0,
+       role_receipt ? 1 : 0, role_kitchen ? 1 : 0, role_bar ? 1 : 0, lpr_queue || null, req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+// Set the default printer for a role (receipt|kitchen|bar). Body: { role, printer_id }.
+app.post('/api/printers/set-default', async (req, res) => {
+  try {
+    const role = String(req.body?.role || '');
+    if (!['receipt', 'kitchen', 'bar'].includes(role)) return res.status(400).json({ error: 'role must be receipt|kitchen|bar' });
+    const pid = req.body?.printer_id != null ? String(Number(req.body.printer_id)) : '';
+    await pool.query('INSERT INTO settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', [`default_${role}_printer_id`, pid]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+// SEPOS-PRINT-UNIFY-001 — "Scan for printers". Probes this server's own /24
+// subnet on the RAW print port (9100) and returns whatever answers, so the
+// operator doesn't have to hunt for IPs. Only meaningful when the server is ON
+// the restaurant's LAN — i.e. the desktop (Electron) / Sunmi local install. On
+// the cloud backend it can't reach a private LAN, so we return local:false and
+// the UI tells the operator to run it from the till app or type the IP.
+app.get('/api/printers/scan', async (req, res) => {
+  // Local install = the server is ON the restaurant LAN (desktop/Sunmi). Inline
+  // the DB_MODE check — archiveService is require()'d locally per-function, not
+  // module-scoped, so referencing it here would throw.
+  const isLocal = String(process.env.DB_MODE || '').toLowerCase() === 'local';
+  if (!isLocal) {
+    return res.json({ local: false, printers: [], message: 'Scanning finds printers on the same network — run it from the till / desktop app, or enter the IP manually.' });
+  }
+  try {
+    const os = require('os'), net = require('net');
+    // Find this machine's LAN IPv4 → derive the /24 to sweep.
+    let base = null;
+    for (const ifaces of Object.values(os.networkInterfaces())) {
+      for (const ni of ifaces || []) {
+        if (ni.family === 'IPv4' && !ni.internal) { base = ni.address.split('.').slice(0, 3).join('.'); break; }
+      }
+      if (base) break;
+    }
+    if (!base) return res.json({ local: true, printers: [], message: 'No LAN connection found on this device.' });
+    const port = 9100;
+    const probe = (host) => new Promise((resolve) => {
+      const s = new net.Socket();
+      let done = false;
+      const finish = (ok) => { if (done) return; done = true; try { s.destroy(); } catch {} resolve(ok ? host : null); };
+      s.setTimeout(500);
+      s.once('connect', () => finish(true));
+      s.once('timeout', () => finish(false));
+      s.once('error', () => finish(false));
+      s.connect(port, host);
+    });
+    const hosts = Array.from({ length: 254 }, (_, i) => `${base}.${i + 1}`);
+    const found = (await Promise.all(hosts.map(probe))).filter(Boolean);
+    res.json({ local: true, subnet: `${base}.0/24`, printers: found.map(ip => ({ ip, port })) });
+  } catch (err) { res.status(500).json({ local: true, printers: [], error: err.message }); }
 });
 app.delete('/api/printers/:id', async (req, res) => {
   try {
@@ -2395,7 +2500,13 @@ app.get('/api/reports/summary', async (req, res) => {
       // Korakot 2026-06-02: pull payments.amount as paid_amount so the
       // Reports tab can show what was actually collected (incl. service
       // charge) instead of the bare subtotal.
-      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.no_service_charge, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') ORDER BY orders.closed_at DESC`, [from, to]),
+      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.no_service_charge, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled') ORDER BY orders.closed_at DESC`, [from, to]),
+      // SEPOS-REPREC-001 — a cancelled/void bill closes with a payment row
+      // method='cancelled', £0. It collected nothing, so it must NOT count as a
+      // sale or an order here — otherwise Trading's "Total Sales" (orders.total)
+      // and "Orders" count outrun the Bills page (which already excludes them),
+      // and the £0 'cancelled' line litters the Payment Methods list. Mirrors the
+      // /api/bills filter so Trading, Bills and the Z report reconcile.
       // Korakot 2026-06-02: food vs drink split based on categories.is_bar.
       // Per-item discounts applied. Service charge + bill-level discounts
       // are handled separately above.
@@ -2897,7 +3008,10 @@ app.get('/api/z-report/preview', async (req, res) => {
       to   = sessionMeta.closed_at || new Date().toISOString(); // open shift → up to now
     }
     const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, foodDrinkRes, vouchersSoldRes, vouchersRedeemedRes, settingsRes, depTakenRes, depRedeemedRes, depForfeitedRes, depHeldRes] = await Promise.all([
-      pool.query(`SELECT orders.*, tables.table_number, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp ORDER BY orders.closed_at DESC`, [from, to]),
+      // SEPOS-REPREC-001 — exclude cancelled/void bills (payment method='cancelled', £0)
+      // from the Z so its Total Sales + order count reconcile with Trading and Bills.
+      // A closed order with no payment row (method NULL) is still kept.
+      pool.query(`SELECT orders.*, tables.table_number, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp AND (payments.method IS NULL OR payments.method != 'cancelled') ORDER BY orders.closed_at DESC`, [from, to]),
       pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='open'`),
       pool.query(`SELECT COUNT(*) as void_count, SUM(order_items.unit_price * order_items.quantity) as void_value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp`, [from, to]),
       // SEPOS-023: breakdown by void_type
@@ -4323,6 +4437,23 @@ async function relayAiToCloud(path, body) {
   }
 }
 
+// SEPOS-AI-HELP-001 — forward each answered Q&A to the ops back-office so
+// Korakot can see, across ALL restaurants, what clients ask. Fire-and-forget:
+// never blocks or fails the reply, and ops being down is a no-op. Only the
+// CLOUD forwards (it holds the SYNC_SECRET ops matches to a client row);
+// desktop/Sunmi relay to their cloud, which does the forward. The ops domain
+// ops-api.siamepos.co.uk does NOT resolve — the Railway URL is the real one
+// (override with OPS_API_URL env if it ever changes).
+const OPS_API_URL = process.env.OPS_API_URL || 'https://restaurant-epos-back-office-production.up.railway.app';
+function forwardAiHelpToOps(entry) {
+  if (!process.env.SYNC_SECRET || !OPS_API_URL) return;
+  fetch(OPS_API_URL.replace(/\/+$/, '') + '/api/ai-help', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-sync-secret': process.env.SYNC_SECRET },
+    body: JSON.stringify(entry),
+  }).catch(() => { /* best-effort — ops outages must never touch the client */ });
+}
+
 app.post('/api/ai/scan-menu', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     const { image_base64, media_type } = req.body;
@@ -4435,6 +4566,58 @@ app.post('/api/ai/scan-expense', requireStaffAuthOrSyncSecret(['admin', 'manager
     const expense = JSON.parse(aiData.content?.[0]?.text?.replace(/```json|```/g, '').trim() || '{}');
     return res.json({ success: true, expense });
   } catch (err) { return res.status(500).json({ success: false, error: err.message }); }
+});
+
+// SEPOS-AI-HELP-001 — in-app "Ask AI" help assistant. Any logged-in staff
+// (roles=null) OR a desktop/Sunmi relay via SYNC_SECRET. Desktop/Sunmi hold
+// no ANTHROPIC_API_KEY, so they relay to the cloud exactly like the scanners.
+app.post('/api/ai/help', requireStaffAuthOrSyncSecret(), async (req, res) => {
+  try {
+    const { messages, platform } = req.body || {};
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: 'messages[] is required' });
+    }
+    // Sanitise: only {role, content} strings, last 12 turns, length-capped.
+    const clean = messages
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+      .slice(-12)
+      .map(m => ({ role: m.role, content: m.content.slice(0, 2000) }));
+    if (clean.length === 0 || clean[clean.length - 1].role !== 'user') {
+      return res.status(400).json({ error: 'the last message must be from the user' });
+    }
+    // No key here (desktop/Sunmi till) → relay to cloud, same as the scanners.
+    if (!process.env.ANTHROPIC_API_KEY) {
+      const relayed = await relayAiToCloud('/api/ai/help', { messages: clean, platform });
+      if (relayed) return res.status(relayed.status).json(relayed.json);
+      return res.json({ reply: "I can't reach the help service right now — check your internet connection, or contact SiamEPOS support (message Korakot on LINE, or email info@siamepos.co.uk)." });
+    }
+    // Ground the answer in this restaurant's live settings (KV settings table).
+    const ctx = { platform: platform || null, settings: {}, restaurant_name: process.env.RESTAURANT_NAME || null };
+    try {
+      const sres = await pool.query(
+        `SELECT key, value FROM settings WHERE key IN
+           ('service_charge_enabled','service_charge_rate','vat_mode','deposits_enabled')`);
+      sres.rows.forEach(r => { ctx.settings[r.key] = r.value; });
+    } catch { /* grounding is best-effort — answer generically if it fails */ }
+    const aiHelp = require('./services/aiHelpService');
+    const out = await aiHelp.askHelp(clean, ctx);
+    if (!out.reply) {
+      return res.json({ reply: "Sorry, I hit a technical problem just then. Try again in a moment — or if it keeps happening, contact SiamEPOS support (Korakot on LINE / info@siamepos.co.uk)." });
+    }
+    // Fire-and-forget: log this Q&A to ops (what clients ask = gold).
+    forwardAiHelpToOps({
+      question: clean[clean.length - 1].content,
+      reply: out.reply,
+      platform: platform || null,
+      staff_role: (req.staffAuth && req.staffAuth.role) || null,
+      escalated: /contact SiamEPOS support|info@siamepos\.co\.uk|Korakot on LINE/i.test(out.reply),
+      restaurant_name: process.env.RESTAURANT_NAME || null,
+    });
+    res.json({ reply: out.reply });
+  } catch (err) {
+    console.error('POST /api/ai/help error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/expenses', async (req, res) => {
@@ -5010,17 +5193,30 @@ io.on('connection', (socket) => {
 app.get('/api/network-info', (req, res) => {
   const os = require('os');
   const port = process.env.PORT || 3001;
-  const ifaces = os.networkInterfaces();
-  for (const name of Object.keys(ifaces)) {
+  // Only a LOCAL install (desktop / Sunmi host) is a real LAN host worth
+  // pointing tablets at. On the cloud (Railway) this endpoint would otherwise
+  // report the datacenter container's private IP (e.g. 10.x:8080) — a real
+  // address, but meaningless outside the container. `local` lets the client
+  // hide the LAN "Network Setup" card in the cloud web app.
+  const local = String(process.env.DB_MODE || '').toLowerCase() === 'local';
+  // Prefer the Wi-Fi/Ethernet LAN interface: 192.168.x first, then other
+  // private ranges — so a machine with both Wi-Fi and a cellular/hotspot
+  // interface reports the address tablets can actually reach.
+  const os_ = os.networkInterfaces();
+  const candidates = [];
+  for (const name of Object.keys(os_)) {
     if (/^(tun|utun|tap|ipsec|vpn|wg|zt)/i.test(name)) continue;
-    for (const iface of (ifaces[name] || [])) {
+    for (const iface of (os_[name] || [])) {
       if (iface.family !== 'IPv4' || iface.internal) continue;
       if (/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(iface.address)) {
-        return res.json({ ip: iface.address, port, url: `http://${iface.address}:${port}` });
+        candidates.push(iface.address);
       }
     }
   }
-  res.json({ ip: '127.0.0.1', port, url: `http://127.0.0.1:${port}` });
+  // 192.168.x are ordinary home/shop routers — the address tablets share.
+  candidates.sort((a, b) => (b.startsWith('192.168.') ? 1 : 0) - (a.startsWith('192.168.') ? 1 : 0));
+  const ip = candidates[0] || '127.0.0.1';
+  res.json({ ip, port, url: `http://${ip}:${port}`, local });
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -7205,17 +7401,21 @@ app.get('/api/sync/health', async (req, res) => {
   const dbMode = (process.env.DB_MODE || 'cloud').toLowerCase();
   const syncSecretSet = !!process.env.SYNC_SECRET;
   let pending = 0;
+  let failed = 0;
   try {
     const r = await pool.query("SELECT COUNT(*) AS n FROM sync_queue WHERE synced = 0");
     pending = Number(r.rows[0]?.n || 0);
+    const rf = await pool.query("SELECT COUNT(*) AS n FROM sync_queue WHERE synced = 2");
+    failed = Number(rf.rows[0]?.n || 0);
   } catch {}
   res.json({
     db_mode: dbMode,
     sync_secret_set: syncSecretSet,
     pending_actions: pending,
-    // Healthy when in cloud mode (no sync needed) OR in local mode
-    // with the secret set and no stuck items.
-    healthy: dbMode === 'cloud' || (syncSecretSet && pending < 20),
+    failed_actions: failed,
+    // Healthy when in cloud mode (no sync needed) OR in local mode with the
+    // secret set, no big pending backlog, and nothing quarantined.
+    healthy: dbMode === 'cloud' || (syncSecretSet && pending < 20 && failed === 0),
   });
 });
 
@@ -7228,20 +7428,32 @@ app.get('/api/sync/queue', async (req, res) => {
   const dbMode = (process.env.DB_MODE || 'cloud').toLowerCase();
   if (dbMode !== 'local') return res.json({ db_mode: dbMode, entries: [] });
   try {
+    // synced: 0 = pending, 2 = quarantined (a push that will never succeed —
+    // surfaced so a failed payment/order is visible, not silently dropped).
     const r = await pool.query(
-      `SELECT id, action_type, payload, created_at
-       FROM sync_queue WHERE synced = 0 ORDER BY id ASC`
+      `SELECT id, action_type, payload, created_at, attempts, last_error, failed_at, synced
+       FROM sync_queue WHERE synced IN (0, 2) ORDER BY synced ASC, id ASC`
     );
-    const entries = r.rows.map(row => {
+    const map = row => {
       let parsed = null;
       try { parsed = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload; }
       catch {}
       return {
         id: row.id, action_type: row.action_type,
         created_at: row.created_at, payload: parsed,
+        attempts: Number(row.attempts) || 0,
+        last_error: row.last_error || null,
+        failed_at: row.failed_at || null,
+        failed: row.synced === 2,
       };
+    };
+    const rows = r.rows.map(map);
+    // entries = pending (back-compat with the existing modal); failed = quarantined.
+    res.json({
+      db_mode: dbMode,
+      entries: rows.filter(e => !e.failed),
+      failed: rows.filter(e => e.failed),
     });
-    res.json({ db_mode: dbMode, entries });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -7272,9 +7484,10 @@ app.post('/api/sync/queue/:id/skip', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ error: 'invalid id' });
+    // Clear a pending (0) OR quarantined (2) entry — dismiss it without pushing.
     const r = await pool.query(
       `UPDATE sync_queue SET synced = 1, synced_at = CURRENT_TIMESTAMP
-       WHERE id = $1 AND synced = 0`,
+       WHERE id = $1 AND synced IN (0, 2)`,
       [id]
     );
     res.json({ success: true, affected: r.rowCount });
@@ -7755,6 +7968,7 @@ app.post('/api/print/receipt', async (req, res) => {
     // passes printer_name (the desktop's selected device), print by name via
     // the platform raw path (Windows spooler RAW / CUPS) instead of requiring
     // an IP. This gives crisp ESC/POS black + silent, vs the faint HTML/GDI path.
+    await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_receipt_name = printer_name; settings.printer_receipt_ip = ''; }
     if (!settings.printer_receipt_ip && !settings.printer_receipt_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
@@ -7777,11 +7991,39 @@ app.post('/api/print/receipt', async (req, res) => {
   }
 });
 
+// SEPOS-DRAWER-001 — open the cash drawer on payment. Kicks the RECEIPT
+// printer's drawer port (raw ESC/POS). Gated by open_drawer_on_payment
+// (default ON — only '0' disables). No printer / unreachable → silent skip;
+// never blocks the payment. printer_name overrides the receipt device.
+app.post('/api/print/drawer', async (req, res) => {
+  const { printer_name } = req.body || {};
+  // The drawer kicks a printer on the LAN — only reachable from a local-server
+  // till (desktop/Sunmi, DB_MODE=local). On the cloud backend the printer is
+  // unreachable and the RAW→LPR→CUPS fallback would burn ~15s per payment, so
+  // skip instantly. (Fires per payment, so speed matters.)
+  if (String(process.env.DB_MODE || '').toLowerCase() !== 'local') {
+    return res.json({ success: false, skipped: 'not a local till' });
+  }
+  try {
+    const settings = await loadSettings();
+    if (settings.open_drawer_on_payment === '0') return res.json({ success: false, skipped: 'disabled' });
+    await applyPrinterRouting(settings);
+    if (printer_name) { settings.printer_receipt_name = printer_name; settings.printer_receipt_ip = ''; }
+    if (!settings.printer_receipt_ip && !settings.printer_receipt_name) return res.json({ success: false, reason: 'no_printer' });
+    await printService.openCashDrawer(settings);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[print/drawer]', err.message);
+    res.json({ success: false, error: err.message });
+  }
+});
+
 // Print a kitchen ticket for a given order + course
 app.post('/api/print/kitchen', async (req, res) => {
   const { order_id, items, course, printer_name, copies } = req.body;
   try {
     const settings = await loadSettings();
+    await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
     if (copies) settings.printer_kitchen_copies = String(copies); // client-resolved copies (per-device or system)
     if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
@@ -7803,6 +8045,7 @@ app.post('/api/print/bar', async (req, res) => {
   const { order_id, items, printer_name } = req.body;
   try {
     const settings = await loadSettings();
+    await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_bar_name = printer_name; settings.printer_bar_ip = ''; }
     if (!settings.printer_bar_ip && !settings.printer_bar_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
@@ -7823,6 +8066,7 @@ app.post('/api/print/kitchen-fire', async (req, res) => {
   const { order_id, course, printer_name } = req.body;
   try {
     const settings = await loadSettings();
+    await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
     if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
@@ -7843,6 +8087,7 @@ app.post('/api/print/kitchen-full', async (req, res) => {
   const { order_id, items, printer_name, copies } = req.body;
   try {
     const settings = await loadSettings();
+    await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
     if (copies) settings.printer_kitchen_copies = String(copies); // client-resolved copies (per-device or system)
     if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });

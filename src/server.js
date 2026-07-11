@@ -2191,6 +2191,14 @@ app.get('/api/settings', async (req, res) => {
     const result = await pool.query('SELECT * FROM settings');
     const settings = {};
     result.rows.forEach(r => settings[r.key] = r.value);
+    // SEPOS-PRINT-UNIFY-001 fix — overlay the Network Printers list onto the
+    // legacy printer_<role>_ip keys the clients read. Without this, a printer
+    // configured ONLY via the unified list (roles + ⭐ default) never reaches
+    // the client, so orders/bills silently don't print even though a manual
+    // Test (which hits the IP directly) works. The print endpoints already do
+    // this server-side, but the client gates the print call on these keys, so
+    // GET must expose them too.
+    await applyPrinterRouting(settings);
     res.json(settings);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

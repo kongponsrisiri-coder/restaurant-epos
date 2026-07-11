@@ -445,12 +445,12 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
         // = SIZE_BIG, i.e. today's output). Korakot 2026-06-02: "letters need
         // to be a little bit wider" — now operator-configurable per SEPOS-PRINT-FONT-001.
         CMD.BOLD_ON, itemSize,
-        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}`),
+        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}${item.notes ? ' / ' + item.notes : ''}`),
         CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
         // Thai item name — same scale as the English line above.
         nameAlt    ? [CMD.BOLD_ON, itemSize, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
-        // Modifier / option choice line — same scale as the item line.
-        item.notes ? [CMD.BOLD_ON, itemSize, txt('  > ' + item.notes), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
+        // Modifier / option choice now prints INLINE on the item-name line above
+        // ("…name / option") per operator request — no separate line.
         // SEPOS-024b — the free-text special request (item_note, e.g. "Mild",
         // "no peanuts") prints boldly so it stands out from the modifier line.
         item.item_note ? [CMD.BOLD_ON, itemSize, txt('  ** ' + item.item_note + ' **'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
@@ -494,12 +494,12 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
         // Item line — sized by the tenant's kitchen/bar font scale (default
         // 'large' = SIZE_BIG = today's output). SEPOS-PRINT-FONT-001.
         CMD.BOLD_ON, itemSize,
-        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}`),
+        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}${item.notes ? ' / ' + item.notes : ''}`),
         CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
         // Thai item name — same scale as the English line above.
         nameAlt    ? [CMD.BOLD_ON, itemSize, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
-        // Modifier / option choice line — same scale as the item line.
-        item.notes ? [CMD.BOLD_ON, itemSize, txt('  > ' + item.notes), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
+        // Modifier / option choice now prints INLINE on the item-name line above
+        // ("…name / option") per operator request — no separate line.
         // SEPOS-024b — the free-text special request prints boldly so it stands
         // out from the modifier line above.
         item.item_note ? [CMD.BOLD_ON, itemSize, txt('  ** ' + item.item_note + ' **'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],

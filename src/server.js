@@ -974,8 +974,24 @@ app.delete('/api/menu/items/:id', async (req, res) => {
 
 app.get('/api/orders', async (req, res) => {
   try {
-    const result = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status = 'open' ORDER BY orders.created_at DESC`);
-    res.json(result.rows);
+    const result = await pool.query(`SELECT orders.*, tables.table_number,
+        (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = orders.id AND oi.voided = 0) AS item_count
+      FROM orders LEFT JOIN tables ON orders.table_id = tables.id
+      WHERE orders.status = 'open' ORDER BY orders.created_at DESC`);
+    // SEPOS-GHOST-001 — hide phantom/ghost orders. An OPEN order with 0 items
+    // that's older than a short grace window was abandoned (a double-tap on
+    // "new order", or a backed-out create) and must NOT keep its table (esp. a
+    // takeaway slot) occupied on the floor — that's the recurring "ghost table".
+    // The grace window keeps a just-created order visible until its first item
+    // is rung in, so live seating/creation still works.
+    const GRACE_MS = 3 * 60 * 1000;
+    const now = Date.now();
+    const rows = result.rows.filter((o) => {
+      if (Number(o.item_count) > 0) return true;               // real order — keep
+      const t = o.created_at ? new Date(o.created_at).getTime() : now;
+      return Number.isFinite(t) ? (now - t) < GRACE_MS : true; // empty: keep only if just created
+    });
+    res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

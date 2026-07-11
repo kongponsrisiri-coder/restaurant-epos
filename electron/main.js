@@ -8,8 +8,12 @@ const { spawn } = require('child_process');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const DEV_URL = 'http://localhost:5173';
 
-// Single source of truth for the app icon — same lotus the PWA uses.
-const APP_ICON_PATH = path.join(PROJECT_ROOT, 'client', 'public', 'icon-512.png');
+// Single source of truth for the app icon — the SiamEPOS lotus. Use the
+// bundled electron/build/icon.png (shipped via package.json "files": build/**),
+// so it resolves in BOTH dev and the packaged app. The old client/public path
+// is NOT bundled (only client-dist is), so at runtime the file was missing and
+// Windows fell back to the generic Electron icon in the taskbar + window.
+const APP_ICON_PATH = path.join(__dirname, 'build', 'icon.png');
 
 // Per-install config — restaurant name, cloud URL, restaurant id. Lives at
 // electron/config.json in dev (matches your repo layout) and in userData
@@ -774,6 +778,15 @@ ipcMain.handle('siamepos:check-for-updates', async () => {
 });
 
 app.whenReady().then(async () => {
+  // Windows: bind the app + its taskbar icon to a stable AppUserModelID (the
+  // installer appId). Without this, Windows shows the generic Electron icon in
+  // the taskbar and won't group the app's windows under one icon.
+  if (process.platform === 'win32') {
+    try { app.setAppUserModelId('uk.co.siamepos.pro'); } catch (err) {
+      console.warn('[win] setAppUserModelId failed:', err.message);
+    }
+  }
+
   // Dock icon (macOS only — Linux/Windows ignore this).
   if (process.platform === 'darwin' && app.dock && fs.existsSync(APP_ICON_PATH)) {
     try { app.dock.setIcon(APP_ICON_PATH); } catch (err) {

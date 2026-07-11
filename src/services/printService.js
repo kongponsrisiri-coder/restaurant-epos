@@ -54,6 +54,11 @@ const CMD = {
   ALIGN_RIGHT:  Buffer.from([ESC, 0x61, 0x02]),
   BOLD_ON:      Buffer.from([ESC, 0x45, 0x01]),
   BOLD_OFF:     Buffer.from([ESC, 0x45, 0x00]),
+  // Double-strike — prints each dot row twice for heavier/thicker strokes
+  // (stacks with bold). Kitchen/bar tickets turn it on so orders read thicker
+  // across the pass. INIT cancels it (ESC G 0) so receipts stay normal weight.
+  DSTRIKE_ON:   Buffer.from([ESC, 0x47, 0x01]),
+  DSTRIKE_OFF:  Buffer.from([ESC, 0x47, 0x00]),
   SIZE_NORMAL:  Buffer.from([GS,  0x21, 0x00]),   // 1× width, 1× height
   SIZE_TALL:    Buffer.from([GS,  0x21, 0x01]),   // 1× width, 2× height
   SIZE_WIDE:    Buffer.from([GS,  0x21, 0x10]),   // 2× width, 1× height
@@ -422,7 +427,7 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
   const parts = [
     // Head room to match the Sunmi (4 lines) so the TABLE header clears a
     // ticket-rail clip when the ticket is hung (ports escpos.js headerOps feed:4).
-    CAN, CMD.INIT, lf(4),
+    CAN, CMD.INIT, CMD.DSTRIKE_ON, lf(4),
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(courseEN), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
@@ -504,7 +509,7 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
   ]);
 
   const parts = [
-    CAN, CMD.INIT, lf(4),    // CAN discards leftover bytes; 4-line head room (matches Sunmi) + clean start
+    CAN, CMD.INIT, CMD.DSTRIKE_ON, lf(4),    // CAN discards leftover bytes; 4-line head room (matches Sunmi) + clean start
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     order.customer_name ? [txt(order.customer_name), lf()] : [],

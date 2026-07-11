@@ -74,10 +74,12 @@ const LINE_WIDTH = 42;  // characters at normal size on 80mm paper
 function scaleCmd(scale) {
   return scale === 'xlarge' ? CMD.SIZE_XL
        : scale === 'normal' ? CMD.SIZE_NORMAL
+       : scale === 'medium' ? CMD.SIZE_TALL   // double-HEIGHT only — taller + fills the paper, but same char width so names don't truncate
        : CMD.SIZE_BIG; // 'large' / default
 }
 function scaleWidthDivisor(scale) {
-  return scale === 'xlarge' ? 3 : scale === 'normal' ? 1 : 2; // 'large'/default = 2
+  // 'medium' is single-width → keep the FULL line width (no truncation), just taller.
+  return scale === 'xlarge' ? 3 : scale === 'normal' ? 1 : scale === 'medium' ? 1 : 2; // 'large'/default = 2
 }
 
 // ── Bilingual course labels ───────────────────────────────────────────────────

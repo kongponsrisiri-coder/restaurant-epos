@@ -1469,8 +1469,15 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             )}
           </div>
 
-          {/* Bottom totals */}
-          <div style={{ padding: '14px 16px', borderTop: '1px solid #eee', flexShrink: 0 }}>
+          {/* Bottom totals. On mobile this footer is pinned to the panel bottom,
+              which sits UNDER the fixed 58px tab bar — so add the same tab-bar
+              clearance the scroll area uses, or the "View bill & pay" button
+              (the last row) hides behind the Menu/Order tabs. */}
+          <div style={{
+            padding: '14px 16px',
+            paddingBottom: isMobile ? 'calc(58px + env(safe-area-inset-bottom, 0px) + 14px)' : '14px',
+            borderTop: '1px solid #eee', flexShrink: 0
+          }}>
             <div style={{ marginBottom: 10 }}>
               {order?.discount_value > 0 ? (
                 <div style={{ display: 'flex', gap: 8 }}>

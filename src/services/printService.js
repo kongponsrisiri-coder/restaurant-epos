@@ -406,7 +406,9 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
   const headSize = heading.length <= 10 ? CMD.SIZE_BIG : CMD.SIZE_TALL;
 
   const parts = [
-    CAN, CMD.INIT, lf(),
+    // Head room to match the Sunmi (4 lines) so the TABLE header clears a
+    // ticket-rail clip when the ticket is hung (ports escpos.js headerOps feed:4).
+    CAN, CMD.INIT, lf(4),
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(courseEN), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
@@ -488,7 +490,7 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
   ]);
 
   const parts = [
-    CAN, CMD.INIT, lf(),     // CAN discards leftover bytes; LF after INIT ensures clean start
+    CAN, CMD.INIT, lf(4),    // CAN discards leftover bytes; 4-line head room (matches Sunmi) + clean start
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     order.customer_name ? [txt(order.customer_name), lf()] : [],

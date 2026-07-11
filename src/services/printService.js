@@ -322,17 +322,22 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
               ? (item.discount_type === 'percent' ? p * item.discount_value / 100 : Math.min(item.discount_value, p))
               : 0);
         const net = p - d;
+        // Chosen OPTIONS (modifier picks like "Prawn", "Large"). Put them INLINE
+        // after the name — "1x Massaman Curry (Chicken)" — when the whole line
+        // (name + option + price) fits; otherwise drop the option to its own
+        // indented sub-line so a long name+option never truncates. Free-text
+        // kitchen notes (item_note) stay off the customer's bill.
+        const priceStr   = '£' + net.toFixed(2);
+        const baseLabel  = `${item.quantity}x ${item.name || item.item_name || ('Item #' + item.menu_item_id)}`;
+        const opt        = item.notes ? String(item.notes).trim() : '';
+        const inlineLabel = opt ? `${baseLabel} (${opt})` : baseLabel;
+        const labelBudget = receiptWidth - priceStr.length - 1; // col2's room for the label before it truncates
+        const fitsInline  = !opt || inlineLabel.length <= labelBudget;
         return [
-          CMD.BOLD_ON, receiptSize, col2(`${item.quantity}x ${item.name || item.item_name || ('Item #' + item.menu_item_id)}`, '£' + net.toFixed(2), receiptWidth), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-          // Show the customer's chosen OPTIONS (modifier-group picks like
-          // "Prawn", "Large") so the bill reflects what was actually ordered.
-          // Pad to the item's block width (col2 with an empty right column) so
-          // the option left-aligns UNDER the item name instead of floating in
-          // the centre of the (centre-aligned) receipt.
-          item.notes ? [receiptSize, col2('   ' + item.notes, '', receiptWidth), CMD.SIZE_NORMAL, lf()] : [],
-          // The free-text kitchen note (item_note, e.g. "no peanuts", "extra
-          // spicy") stays OFF the customer's bill — it belongs on the kitchen
-          // ticket where the chef needs it.
+          CMD.BOLD_ON, receiptSize, col2(fitsInline ? inlineLabel : baseLabel, priceStr, receiptWidth), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+          // Didn't fit inline → own indented sub-line, padded to the block width
+          // so it left-aligns under the item name (not floating in the centre).
+          (opt && !fitsInline) ? [receiptSize, col2('   ' + opt, '', receiptWidth), CMD.SIZE_NORMAL, lf()] : [],
         ];
       }),
     ]),

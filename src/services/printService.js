@@ -186,13 +186,15 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
   // notes / modifiers / mid-shift price changes keep them separate so
   // the receipt remains accurate). Kitchen tickets still print line by
   // line because the chef needs to see each customisation.
-  // Notes are intentionally excluded from the grouping key so the
-  // receipt collapses "1x Pad Thai (extra spicy)" + "1x Pad Thai" into
-  // a single "2x Pad Thai" line — the customer doesn't need to see
-  // kitchen instructions on their bill. Notes still appear on the
-  // kitchen ticket where the chef needs them.
+  // The chosen OPTIONS (item.notes — modifier picks like "Prawn", "Large") ARE
+  // in the key, so different picks stay on their own line and print on the bill.
+  // The free-text kitchen note (item_note, e.g. "extra spicy") is NOT keyed and
+  // is omitted from the receipt — it stays on the kitchen ticket for the chef.
   const groupKey = (i) => [
     i.menu_item_id ?? i.id,
+    i.notes || '',   // chosen OPTIONS (modifier picks) — keep different picks on
+                     // separate lines so each shows on the bill. Free-text
+                     // item_note is NOT keyed, so it still merges + stays off the bill.
     i.discount_type || '',
     Number(i.discount_value || 0),
     Number(i.unit_price || 0),
@@ -322,10 +324,12 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
         const net = p - d;
         return [
           CMD.BOLD_ON, receiptSize, col2(`${item.quantity}x ${item.name || item.item_name || ('Item #' + item.menu_item_id)}`, '£' + net.toFixed(2), receiptWidth), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-          // Per-item notes are intentionally omitted from the receipt —
-          // kitchen instructions ("no peanuts", "extra spicy") don't
-          // belong on the customer's bill. Notes still print on the
-          // kitchen ticket where the chef needs them.
+          // Show the customer's chosen OPTIONS (modifier-group picks like
+          // "Prawn", "Large") so the bill reflects what was actually ordered.
+          item.notes ? [receiptSize, txt('   ' + item.notes), CMD.SIZE_NORMAL, lf()] : [],
+          // The free-text kitchen note (item_note, e.g. "no peanuts", "extra
+          // spicy") stays OFF the customer's bill — it belongs on the kitchen
+          // ticket where the chef needs it.
         ];
       }),
     ]),

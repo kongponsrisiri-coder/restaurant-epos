@@ -2649,8 +2649,17 @@ app.get('/api/tables/status', async (req, res) => {
     const itemsRes = await pool.query(`SELECT order_items.*, categories.is_bar FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON menu_items.category_id = categories.id WHERE order_items.order_id = ANY($1) AND order_items.voided=0`, [orderIds]);
     const itemsByOrder = {};
     itemsRes.rows.forEach(item => { if (!itemsByOrder[item.order_id]) itemsByOrder[item.order_id] = []; itemsByOrder[item.order_id].push(item); });
+    const GHOST_GRACE_MS = 3 * 60 * 1000;
+    const nowMs = Date.now();
     const result = orders.map(order => {
       const items = itemsByOrder[order.id] || [];
+      // SEPOS-GHOST-001 — a phantom order (0 items) past the grace window was
+      // abandoned or double-tapped open; drop it so it doesn't ghost-occupy its
+      // table. Without this a 0-item open order defaults to 'occupied' below.
+      if (items.length === 0) {
+        const t = order.created_at ? new Date(order.created_at).getTime() : nowMs;
+        if (Number.isFinite(t) && (nowMs - t) >= GHOST_GRACE_MS) return null;
+      }
       const kitchenItems = items.filter(i => !i.is_bar);
       const starters = kitchenItems.filter(i => Number(i.course) === 1);
       const mains = kitchenItems.filter(i => Number(i.course) === 2);
@@ -2665,7 +2674,7 @@ app.get('/api/tables/status', async (req, res) => {
       else if (starters.some(i => i.is_fired)) colourStatus = 'starters_fired';
       if (order.bill_printed && !hasFiredItems) colourStatus = 'bill_printed';
       return { ...order, colour_status: colourStatus };
-    });
+    }).filter(Boolean);
 
     // SEPOS-044 (reverted 2026-07-04 per Korakot): NO auto-occupy of linked
     // tables. Only the table the staff actually seats is marked occupied — the

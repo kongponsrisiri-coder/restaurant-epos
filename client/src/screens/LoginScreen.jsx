@@ -46,6 +46,17 @@ function BrandMark({ size = 120, logo }) {
   return <Lotus size={size} />;
 }
 
+// Gold ring spinner for the cold-start loading state. Self-contained (keyframes
+// travel with it) so it can be dropped anywhere without a global stylesheet.
+function Spinner({ size = 30 }) {
+  return (
+    <>
+      <style>{`@keyframes sepos-spin{to{transform:rotate(360deg)}}`}</style>
+      <span style={{ display: 'inline-block', width: size, height: size, border: `3px solid ${GOLD_TINT}`, borderTopColor: GOLD, borderRadius: '50%', animation: 'sepos-spin 0.8s linear infinite' }} />
+    </>
+  );
+}
+
 const initials = (name) => String(name || '?').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
 const isManagerRole = (role) => role === 'admin' || role === 'manager';
 
@@ -54,6 +65,11 @@ export default function LoginScreen({ onLogin }) {
   const [error, setError]     = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  // True from mount until the first data-load either succeeds or exhausts its
+  // retries — so a cold-starting desktop till shows "Loading…" instead of the
+  // alarming "Staff list unavailable / no restaurant" flash. Web resolves on
+  // the first try, so this is visible only for the ~1s the local server boots.
+  const [booting, setBooting] = useState(true);
   const [mode, setMode]         = useState('pin');   // 'pin' | 'email'
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
@@ -93,27 +109,37 @@ export default function LoginScreen({ onLogin }) {
   }, []);
 
   useEffect(() => {
-    getStaff()
-      .then(list => setStaffList(Array.isArray(list) ? list.filter(s => s.is_active !== 0) : []))
-      .catch(() => setStaffList([]));
-    Promise.all([getRestaurant().catch(() => null), getSettings().catch(() => null)])
-      .then(([r, settings]) => {
-        const generic = (n) => !n || /^siamepos$/i.test(String(n).trim());
-        // Name priority — the OWNER-EDITABLE name wins over the onboarding
-        // `restaurants.name` "tag", so a client can rename their till from
-        // Admin → Settings → Restaurant Name (which saves company_name) and see
-        // it here. Matches how receipts/reports resolve the name (company_name
-        // first — see reportPrinter.restaurantName). `restaurants.name` stays as
-        // the fallback for tills that never set a custom display name.
-        const name = (settings && !generic(settings.company_name) && settings.company_name)
-          || (settings && !generic(settings.restaurant_name) && settings.restaurant_name)
-          || (r && r.name)
-          || (r && r.restaurant_id) || '';
-        setRestaurantName(String(name || '').trim());
-        if (settings && settings.brand_logo) setBrandLogo(settings.brand_logo); // SEPOS-BRAND-001
-        if (settings && settings.brand_logo_size) setLogoSize(settings.brand_logo_size); // SEPOS-BRAND-001
-      })
-      .catch(() => {});
+    let cancelled = false;
+    let attempts = 0;
+    const load = async () => {
+      const [list, r, settings] = await Promise.all([
+        getStaff().catch(() => null),
+        getRestaurant().catch(() => null),
+        getSettings().catch(() => null),
+      ]);
+      if (cancelled) return;
+      // Cold-start race — on the desktop the LOCAL server can still be booting
+      // when the login first renders, so all three calls fail and the page
+      // sticks on an empty restaurant name + no staff ("no restaurant id").
+      // Retry (0.8s apart, up to ~10s) until the server answers, then populate.
+      // Web: the server is always up so this succeeds on the first try.
+      if (!list && !r && !settings && attempts < 12) { attempts++; setTimeout(load, 800); return; }
+      setBooting(false); // server answered (or we've exhausted retries) — stop showing the loader
+      if (Array.isArray(list)) setStaffList(list.filter(s => s.is_active !== 0));
+      const generic = (n) => !n || /^siamepos$/i.test(String(n).trim());
+      // Name priority — the OWNER-EDITABLE name wins over the onboarding
+      // `restaurants.name` "tag" (company_name first, matching receipts/reports);
+      // `restaurant_id` is the last-resort label.
+      const name = (settings && !generic(settings.company_name) && settings.company_name)
+        || (settings && !generic(settings.restaurant_name) && settings.restaurant_name)
+        || (r && r.name)
+        || (r && r.restaurant_id) || '';
+      setRestaurantName(String(name || '').trim());
+      if (settings && settings.brand_logo) setBrandLogo(settings.brand_logo); // SEPOS-BRAND-001
+      if (settings && settings.brand_logo_size) setLogoSize(settings.brand_logo_size); // SEPOS-BRAND-001
+    };
+    load();
+    return () => { cancelled = true; };
   }, []);
 
   async function handleLogin(pinToUse) {
@@ -283,9 +309,16 @@ export default function LoginScreen({ onLogin }) {
         <div style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: INK, textAlign: 'center' }}>Welcome back</div>
         <div style={{ color: MUTED, fontSize: 14, marginTop: 6, marginBottom: 24, textAlign: 'center' }}>Tap your name to sign in</div>
         {sorted.length === 0 ? (
-          <div style={{ textAlign: 'center', color: MUTED, fontSize: 14 }}>
-            Staff list unavailable — <button onClick={() => setSelectedStaff({ name: 'Staff', role: '' })} style={{ ...linkBtn, display: 'inline' }}>enter PIN directly ›</button>
-          </div>
+          booting ? (
+            <div style={{ textAlign: 'center', color: MUTED, fontSize: 15, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '28px 0' }}>
+              <Spinner />
+              <div>Loading your restaurant…</div>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', color: MUTED, fontSize: 14 }}>
+              Staff list unavailable — <button onClick={() => setSelectedStaff({ name: 'Staff', role: '' })} style={{ ...linkBtn, display: 'inline' }}>enter PIN directly ›</button>
+            </div>
+          )
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 14, maxHeight: 420, overflowY: 'auto', padding: 2 }}>
             {sorted.map(s => {
@@ -346,6 +379,25 @@ export default function LoginScreen({ onLogin }) {
           </div>
         </div>
       </div>
+
+      {/* SEPOS-EXIT-001 — clean Exit, desktop only. Staff sometimes force-quit +
+          re-open when something looks stuck, which used to spawn a second
+          instance fighting over the same local DB. A visible, confirmed Exit on
+          the login screen gives them the safe way out. Web / tablet PWA never
+          exposes window.siamepos, so this button simply isn't rendered there. */}
+      {typeof window !== 'undefined' && window.siamepos?.isElectron && window.siamepos?.quitApp && (
+        <button
+          onClick={() => {
+            if (window.confirm('Close SiamEPOS?\n\nThe till will shut down. You can re-open it any time from the desktop icon.')) {
+              try { window.siamepos.quitApp(); } catch { /* no-op */ }
+            }
+          }}
+          style={{ position: 'fixed', left: 16, bottom: 16, zIndex: 2500,
+            background: 'rgba(255,255,255,0.10)', color: '#fff', border: '1px solid rgba(255,255,255,0.28)',
+            borderRadius: 10, padding: '10px 16px', fontSize: 14, fontWeight: 700, fontFamily: UI_FONT,
+            cursor: 'pointer', backdropFilter: 'blur(2px)' }}
+        >⏻ Exit</button>
+      )}
 
       {/* SEPOS-RESET-001 — reset-for-new-client confirm dialog */}
       {showReset && (

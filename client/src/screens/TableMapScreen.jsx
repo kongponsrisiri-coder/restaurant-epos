@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getTables, createOrder, getOrders, getTableStatus, moveTable, mergeTables, getReservations, assertOk } from '../api';
 import TakeawayStrip    from '../components/TakeawayStrip';
@@ -30,6 +30,11 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
   const [showCoversPopup, setShowCoversPopup] = useState(null);
   const [coversInput, setCoversInput] = useState('');
   const [tick, setTick] = useState(0);
+  // SEPOS-GHOST-001 — in-flight guard so a fast double-tap on ✓ / a takeaway
+  // table can't fire two createOrder calls (the client half of the ghost-table
+  // fix; the server de-dupes too). Ref = synchronous gate; state = button UI.
+  const creatingRef = useRef(false);
+  const [creating, setCreating] = useState(false);
 
   // Sandy: Mobile state — defaults to grid on mobile (more touch-friendly)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -192,12 +197,16 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
     } else if (table.is_takeaway) {
       // SEPOS-TAKEAWAY-TABLE — no covers prompt; ring straight into a takeaway
       // order (order_type='takeaway' → skips service charge, kitchen labels it).
+      if (creatingRef.current) return;         // SEPOS-GHOST-001 — ignore double-tap
+      creatingRef.current = true; setCreating(true);
       try {
         const data = await createOrder(table.id, 1, staff?.id, 'takeaway');
         if (!data?.id) throw new Error(data?.error || 'No order id returned');
         onOpenOrder(data.id, table.id);
       } catch (err) {
         alert(`Failed to start takeaway: ${err.message || 'please try again'}`);
+      } finally {
+        creatingRef.current = false; setCreating(false);
       }
     } else {
       setShowCoversPopup(table);
@@ -659,6 +668,10 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                   } else if (btn === '✓') {
                     const num = parseInt(coversInput);
                     if (isNaN(num) || num < 1) return alert('Please enter number of covers!');
+                    // SEPOS-GHOST-001 — swallow a double-tap so we never fire two
+                    // createOrder calls for the same table (empty-twin ghost).
+                    if (creatingRef.current) return;
+                    creatingRef.current = true; setCreating(true);
                     try {
                       // SEPOS-047h — createOrder resolves {error} (no throw)
                       // on failure; without this guard data.id was undefined
@@ -671,15 +684,18 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                       onOpenOrder(data.id, showCoversPopup.id);
                     } catch (err) {
                       alert(`Failed to create order: ${err.message || 'please try again'}`);
+                    } finally {
+                      creatingRef.current = false; setCreating(false);
                     }
                   } else {
                     setCoversInput(prev => prev.length < 2 ? prev + btn : prev);
                   }
-                }} style={{
+                }} disabled={creating && btn === '✓'} style={{
                   height: isMobile ? 72 : 64,
                   borderRadius: 12, border: 'none',
                   fontSize: isMobile ? 26 : 22,
-                  fontWeight: 700, cursor: 'pointer',
+                  fontWeight: 700, cursor: (creating && btn === '✓') ? 'wait' : 'pointer',
+                  opacity: (creating && btn === '✓') ? 0.6 : 1,
                   background: btn === '✓' ? '#e94560' : btn === 'C' ? '#f0f0f0' : '#f8f8f8',
                   color: btn === '✓' ? 'white' : 'var(--brand-primary, #1a1a2e)',
                 }}>{btn}</button>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { startMonitoring, onStatusChange, getServerStatus } from './utils/serverDetect';
-import { getRestaurant, getLicenseState, syncLocalOrders, getSettings, TENANT_MISCONFIGURED } from './api';
+import { getRestaurant, getLicenseState, syncLocalOrders, getSettings, TENANT_MISCONFIGURED, getCurrentSession } from './api';
 import { applyBrandTheme } from './theme'; // SEPOS-BRAND-001 — per-client theme
 import { backupSalesToDevice } from './native/salesBackup'; // SEPOS-ANDROID-003
 import { canAccessReservations, canAccessKitchen, canAccessFullEPOS } from './utils/plan';
@@ -21,6 +21,7 @@ import OfflineBanner from './components/OfflineBanner';
 import Clock from './components/Clock';
 import AiHelpAssistant from './components/AiHelpAssistant'; // SEPOS-AI-HELP-001 — Admin-only, now in the top bar
 import LockScreen from './screens/LockScreen';
+import OpenDayModal from './components/OpenDayModal'; // SEPOS-OPENDAY-001
 import './App.css';
 
 // ── Sandy: Lotus badge logo mark — replaces SVG flags ─────────────
@@ -83,6 +84,10 @@ export default function App() {
   // Defaults to 'pro' so a Pro install renders fully even before the
   // fetch resolves (and if the fetch ever fails).
   const [plan, setPlan]                 = useState('pro');
+  // SEPOS-OPENDAY-001 — true once getRestaurant has resolved the REAL plan, so
+  // the open-day check doesn't race the default 'pro' and flash the modal on a
+  // lite tenant before its plan loads.
+  const [planReady, setPlanReady]       = useState(false);
   const [activeOrder, setActiveOrder]   = useState(null);
   const [menuOpen, setMenuOpen]         = useState(false);
   const [serverStatus, setServerStatus] = useState(getServerStatus());
@@ -101,6 +106,12 @@ export default function App() {
       window.siamepos.onUpdateReady(() => setUpdateReady(true));
     }
   }, []);
+
+  // SEPOS-OPENDAY-001 — 'idle' | 'checking' | 'ok' | 'needed'. Drives the
+  // once-per-day "Open the day" prompt so a trading session always exists before
+  // the first sale (otherwise orders close against a NULL session and never land
+  // in a Z report).
+  const [dayCheck, setDayCheck] = useState('idle');
 
   // SEPOS-BRAND-001 — apply the tenant's brand colours app-wide at load. Safe
   // if it fails / is unset (falls back to the default SiamEPOS navy+gold).
@@ -197,9 +208,32 @@ export default function App() {
           }
           return cur;
         });
+        setPlanReady(true);
       })
-      .catch(() => {});
+      .catch(() => { setPlanReady(true); }); // fail-open: proceed with default 'pro'
   }, []);
+
+  // SEPOS-OPENDAY-001 — after login, check whether a trading session is open and
+  // prompt to open one if not. Re-keys on staff (so a logout→login re-checks; a
+  // Skip only lasts the current login) and on plan. Skipped for roles/plans that
+  // never close paid orders (kitchen/bar, non-fullEPOS). FAIL-OPEN on any error —
+  // a broken session check must never lock staff out of a live floor.
+  useEffect(() => {
+    if (!staff) { setDayCheck('idle'); return; }
+    if (!planReady) return; // wait for the real plan so lite tenants never flash the modal
+    if (staff.role === 'kitchen' || staff.role === 'bar') { setDayCheck('ok'); return; }
+    if (!canAccessFullEPOS(plan)) { setDayCheck('ok'); return; }
+    let alive = true;
+    setDayCheck('checking');
+    getCurrentSession()
+      .then((r) => {
+        if (!alive) return;
+        if (r && r.error) { setDayCheck('ok'); return; } // fail-open
+        setDayCheck(r && r.session ? 'ok' : 'needed');
+      })
+      .catch(() => { if (alive) setDayCheck('ok'); });    // fail-open
+    return () => { alive = false; };
+  }, [staff, plan, planReady]);
 
   const handleInstall = async () => {
     if (!installPrompt) return;
@@ -497,6 +531,17 @@ export default function App() {
     <>
       <OfflineBanner />{/* SEPOS-ANDROID-002 — only visible when internet drops */}
       {body}
+      {/* SEPOS-OPENDAY-001 — first-login-of-the-day "Open the day" prompt. Only
+          renders on a positive {session:null}; fail-open + Skip keep it from ever
+          bricking the floor. Sits after {body}; the licenseLock / tenant-setup
+          early-returns render before this fragment, so it never shows there. */}
+      {dayCheck === 'needed' && (
+        <OpenDayModal
+          staff={staff}
+          onOpened={() => setDayCheck('ok')}
+          onSkip={() => setDayCheck('ok')}
+        />
+      )}
       <OnlineOrderPrinter />{/* SEPOS-ANDROID-001 — auto-print incoming online orders (native, headless) */}
       <InstallBanner />
       {updateReady && updateBannerAllowed && (

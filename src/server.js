@@ -1089,6 +1089,22 @@ app.get('/api/orders/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-GHOST-001 — per-key async mutex. Serialises async critical sections
+// that share a key so a double-tapped "open table" can't race two INSERTs into
+// two open orders on the same table (the "ghost table" phantom: one order gets
+// the items, the empty twin lingers on the floor). Chains each call after the
+// previous one for the key; swallows prior rejections so one failure doesn't
+// poison the chain, and GCs the map entry once the tail settles.
+const _orderCreateLocks = new Map();
+function runExclusive(key, fn) {
+  const prev = _orderCreateLocks.get(key) || Promise.resolve();
+  const run = prev.then(fn, fn);
+  const tail = run.catch(() => {});
+  _orderCreateLocks.set(key, tail);
+  tail.then(() => { if (_orderCreateLocks.get(key) === tail) _orderCreateLocks.delete(key); });
+  return run;
+}
+
 app.post('/api/orders', requireActiveSubscription, requireValidLicense, async (req, res) => {
   try {
     const { table_id, covers, staff_id, order_type } = req.body;
@@ -1096,21 +1112,56 @@ app.post('/api/orders', requireActiveSubscription, requireValidLicense, async (r
     // status flip and don't enforce covers.
     const type = order_type === 'counter' || order_type === 'takeaway'
       ? order_type : 'dine_in';
-    const result = await pool.query(
-      `INSERT INTO orders (table_id, staff_id, status, covers, order_type, opened_at)
-       VALUES ($1, $2, 'open', $3, $4, NOW()) RETURNING id`,
-      [table_id || null, staff_id || null, covers || 1, type]
-    );
-    if (table_id) {
-      await pool.query("UPDATE tables SET status = 'occupied' WHERE id = $1", [table_id]);
-    }
-    const localOrderId = result.rows[0].id;
-    await offlineQueue.enqueue('create_order', {
-      localOrderId, table_id: table_id || null,
-      covers: covers || 1, staff_id: staff_id || null,
-      order_type: type,
+
+    // SEPOS-GHOST-001 — de-duplicate a double-tapped table-open. A dine-in table
+    // is single-bill by nature, so a second create on a table that already has an
+    // open dine-in order should return that SAME order, not spawn an empty twin.
+    // Takeaway/counter legitimately run several concurrent orders on one pseudo-
+    // table, so they always create a fresh order (keyed uniquely to avoid a lock).
+    const dedupe = type === 'dine_in' && table_id;
+    const lockKey = dedupe
+      ? `order-create:table:${table_id}`
+      : `order-create:new:${staff_id || ''}:${table_id || 'none'}`;
+
+    const out = await runExclusive(lockKey, async () => {
+      if (dedupe) {
+        // Prefer an existing open order that already has items, then the newest.
+        // NB: order by a CASE/EXISTS expression, NOT a SELECT-list alias —
+        // Postgres rejects an output alias used inside an ORDER BY expression
+        // (SQLite tolerates it), so an aliased `(item_count > 0)` would 500 every
+        // dine-in table-open on the cloud. This form runs on both backends.
+        const existing = await pool.query(
+          `SELECT o.id
+             FROM orders o
+            WHERE o.table_id = $1 AND o.status = 'open'
+              AND (o.order_type IS NULL OR o.order_type = 'dine_in')
+            ORDER BY CASE WHEN EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id) THEN 1 ELSE 0 END DESC,
+                     o.id DESC
+            LIMIT 1`,
+          [table_id]
+        );
+        if (existing.rows.length > 0) {
+          await pool.query("UPDATE tables SET status = 'occupied' WHERE id = $1", [table_id]);
+          return { id: existing.rows[0].id, success: true, reused: true };
+        }
+      }
+      const result = await pool.query(
+        `INSERT INTO orders (table_id, staff_id, status, covers, order_type, opened_at)
+         VALUES ($1, $2, 'open', $3, $4, NOW()) RETURNING id`,
+        [table_id || null, staff_id || null, covers || 1, type]
+      );
+      if (table_id) {
+        await pool.query("UPDATE tables SET status = 'occupied' WHERE id = $1", [table_id]);
+      }
+      const localOrderId = result.rows[0].id;
+      await offlineQueue.enqueue('create_order', {
+        localOrderId, table_id: table_id || null,
+        covers: covers || 1, staff_id: staff_id || null,
+        order_type: type,
+      });
+      return { id: localOrderId, success: true };
     });
-    res.json({ id: localOrderId, success: true });
+    res.json(out);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

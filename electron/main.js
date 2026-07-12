@@ -8,6 +8,26 @@ const { spawn } = require('child_process');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const DEV_URL = 'http://localhost:5173';
 
+// SEPOS-EXIT-001 — single-instance lock. When something looks stuck, staff
+// sometimes force-quit and re-open SiamEPOS, ending up with TWO instances both
+// running a local Express server against the SAME SQLite DB
+// (userData/siamepos-local.db) — lock contention + sync races. Hold the OS
+// single-instance lock; a second launch hands control to the first (focus its
+// window) and exits immediately. Packaged-only, so a dev `npm start` can still
+// run alongside an installed copy on the same machine.
+const gotSingleInstanceLock = app.isPackaged ? app.requestSingleInstanceLock() : true;
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
 // Single source of truth for the app icon — the SiamEPOS lotus. Use the
 // bundled electron/build/icon.png (shipped via package.json "files": build/**),
 // so it resolves in BOTH dev and the packaged app. The old client/public path
@@ -777,7 +797,18 @@ ipcMain.handle('siamepos:check-for-updates', async () => {
   }
 });
 
+// SEPOS-EXIT-001 — quit cleanly from the login screen's Exit button. Goes
+// through before-quit (which stops the local server child) so nothing is left
+// holding the SQLite DB.
+ipcMain.handle('quit-app', () => {
+  app.quit();
+});
+
 app.whenReady().then(async () => {
+  // SEPOS-EXIT-001 — a second instance that failed to get the lock is already
+  // quitting; don't spawn a server or create a window from it.
+  if (!gotSingleInstanceLock) return;
+
   // Windows: bind the app + its taskbar icon to a stable AppUserModelID (the
   // installer appId). Without this, Windows shows the generic Electron icon in
   // the taskbar and won't group the app's windows under one icon.

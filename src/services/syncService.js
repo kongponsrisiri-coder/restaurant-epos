@@ -71,6 +71,23 @@ const PULL_TABLES = [
   { path: '/api/till-sessions',          table: 'till_sessions',          pk: 'id' },
 ];
 
+// SEPOS-DEVICE-PRINTERS-001 — device-owned settings the cloud-wins pull must NOT
+// overwrite. These name THIS till's physical print hardware / LAN, or reference
+// rows in the device-local `printers` table (which is already not synced). The
+// cloud copy belongs to whichever till last pushed (or stale onboarding), so
+// letting it cloud-win silently reverts a working printer setup mid-service —
+// the till is authoritative for its own hardware. (Local edits still PUSH to the
+// cloud as a backup; we just never let the cloud pull clobber them back.)
+const DEVICE_OWNED_SETTING_PREFIXES = ['printer_'];
+const DEVICE_OWNED_SETTING_KEYS = new Set([
+  'default_receipt_printer_id', 'default_kitchen_printer_id', 'default_bar_printer_id',
+  'open_drawer_on_payment', 'kitchen_thai_codepage',
+]);
+function isDeviceOwnedSettingKey(key) {
+  const k = String(key);
+  return DEVICE_OWNED_SETTING_PREFIXES.some((p) => k.startsWith(p)) || DEVICE_OWNED_SETTING_KEYS.has(k);
+}
+
 let initialSyncDone = false;
 
 // SEPOS-PRO-002: cloud_id mapping is now persisted on orders.cloud_id and
@@ -571,7 +588,9 @@ async function pullFromCloud() {
       // every tick and settings (printer IP, Thai codepage, service charge…)
       // never reached a freshly-provisioned till. Map the object to rows.
       const list = Array.isArray(rows) ? rows
-        : ep.table === 'settings' ? Object.entries(rows || {}).map(([key, value]) => ({ key, value }))
+        : ep.table === 'settings' ? Object.entries(rows || {})
+            .filter(([key]) => !isDeviceOwnedSettingKey(key))
+            .map(([key, value]) => ({ key, value }))
         : (rows?.data || []);
       const n = await upsertRows(ep.table, ep.pk, list);
       if (n > 0) console.log(`[sync] pull ${ep.table}: ${n} rows`);

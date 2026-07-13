@@ -866,7 +866,25 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   );
                 })()}
                 {settled && (
-                  <button onClick={() => { const paid = splitTenders.reduce((s, t) => s + t.amount, 0); const method = splitTenders.length === 1 ? splitTenders[0].method : 'Split'; setPaymentDetails({ method, amountPaid: paid, tip: mixTip, change: mixChange, tenders: splitTenders }); setStage('receipt'); }} style={{ width: '100%', height: 56, borderRadius: 12, border: 'none', background: '#22c55e', color: '#fff', fontWeight: 800, fontSize: 17, cursor: 'pointer', marginBottom: 12 }}>✓ Confirm &amp; Close — £{billTotal.toFixed(2)}{mixChange > 0 ? ` (£${mixChange.toFixed(2)} change)` : mixTip > 0 ? ` (£${mixTip.toFixed(2)} tip)` : ''}</button>
+                  <button onClick={() => {
+                    const paid = splitTenders.reduce((s, t) => s + t.amount, 0);
+                    // SEPOS-CASHCHANGE-001 — cash change is handed BACK, so it must not be
+                    // recorded as money taken. Reduce the cash tender(s) by the change so the
+                    // RECORDED tenders foot to the BILL, not the over-tender. (Card over-tender
+                    // is a genuine tip — mixTip — and is left intact.)
+                    let toDrop = mixChange;
+                    const recTenders = splitTenders.map(t => {
+                      if (toDrop > 0.001 && t.method === 'Cash') {
+                        const cut = Math.min(toDrop, t.amount);
+                        toDrop = Number((toDrop - cut).toFixed(2));
+                        return { ...t, amount: Number((t.amount - cut).toFixed(2)) };
+                      }
+                      return t;
+                    }).filter(t => t.amount > 0.001);
+                    const method = recTenders.length === 1 ? recTenders[0].method : 'Split';
+                    setPaymentDetails({ method, amountPaid: paid, tip: mixTip, change: mixChange, tenders: recTenders });
+                    setStage('receipt');
+                  }} style={{ width: '100%', height: 56, borderRadius: 12, border: 'none', background: '#22c55e', color: '#fff', fontWeight: 800, fontSize: 17, cursor: 'pointer', marginBottom: 12 }}>✓ Confirm &amp; Close — £{billTotal.toFixed(2)}{mixChange > 0 ? ` (£${mixChange.toFixed(2)} change)` : mixTip > 0 ? ` (£${mixTip.toFixed(2)} tip)` : ''}</button>
                 )}
                 <button onClick={cancelMix} style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>← Back to Bill</button>
               </div>

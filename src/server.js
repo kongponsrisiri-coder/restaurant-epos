@@ -2675,7 +2675,16 @@ function splitByOrderType(rows) {
 
 app.get('/api/reports/daily', async (req, res) => {
   try {
-    const date = req.query.date || new Date().toISOString().split('T')[0];
+    // SEPOS-048 — "today" is the RESTAURANT's today, and the day runs from
+    // the restaurant's midnight to the next one. The old `::date` bucketing
+    // grouped by UTC day, so in BST an order closed 00:30 local counted on
+    // the previous day's report (and after 11pm the default date was wrong).
+    const tz = await restaurantTz();
+    const date = req.query.date || dateInZone(new Date(), tz);
+    const dayStart = zonedMidnightUtc(date, tz);
+    if (!dayStart) return res.status(400).json({ error: 'Invalid date' });
+    const nextYmd = new Date(Date.parse(`${date}T12:00:00Z`) + 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const dayEnd = zonedMidnightUtc(nextYmd, tz);
     // BUG-EPOS-005 (Nook): /reports/daily was reporting orders.total
     // (the bare subtotal) where /reports/summary was already reporting
     // payments.amount (the money actually taken, including 12.5%
@@ -2683,7 +2692,7 @@ app.get('/api/reports/daily', async (req, res) => {
     // agree to the penny.
     // SEPOS-AUDIT-001 — mirror SEPOS-REPREC-001's cancelled exclusion here too:
     // written-off bills were still counted in daily totals/order_count.
-    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date = $1::date AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled') ORDER BY orders.closed_at DESC`, [date]);
+    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled') ORDER BY orders.closed_at DESC`, [dayStart.toISOString(), dayEnd.toISOString()]);
     const total = result.rows.reduce((sum, r) => sum + Number(r.paid_amount ?? r.total ?? 0), 0);
     // Dedupe order_count by orders.id — LEFT JOIN payments multiplies rows
     // on split-pay orders.
@@ -4206,6 +4215,59 @@ function minutesInZone(date, timeZone) {
   }
 }
 
+// SEPOS-048 (cont.) — restaurant-local calendar date (YYYY-MM-DD) and
+// wall-clock (HH:MM). Same rule as minutesInZone: NEVER derive a
+// customer-facing date/time from the Node process's clock directly —
+// Railway runs UTC, so walk-in reservations were stamped 1h early all
+// summer and "today" flipped at 1am local.
+function dateInZone(date, timeZone) {
+  try {
+    // en-CA gives ISO-style YYYY-MM-DD directly.
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timeZone || 'Europe/London',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(date);
+  } catch { return date.toISOString().slice(0, 10); }
+}
+function hhmmInZone(date, timeZone) {
+  const mins = minutesInZone(date, timeZone) % 1440;
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+}
+
+// Tenant timezone from settings (each Railway is per-tenant). Cached 60s so
+// hot report/walk-in paths don't add a query per hit.
+let _tzCache = { value: null, at: 0 };
+async function restaurantTz() {
+  if (_tzCache.value && Date.now() - _tzCache.at < 60000) return _tzCache.value;
+  try {
+    const r = await pool.query(`SELECT value FROM settings WHERE key = 'timezone'`);
+    _tzCache = { value: r.rows[0]?.value || 'Europe/London', at: Date.now() };
+  } catch { _tzCache = { value: 'Europe/London', at: Date.now() }; }
+  return _tzCache.value;
+}
+
+// UTC instant of local midnight for a YYYY-MM-DD in the given zone.
+// Iterative: start from UTC midnight, measure what local wall-clock that
+// instant shows, and correct by the difference (converges in ≤2 steps,
+// DST transitions included). Lets day-windowed reports bound on the
+// RESTAURANT's midnight instead of bucketing rows by UTC date.
+function zonedMidnightUtc(ymd, timeZone) {
+  const tz = timeZone || 'Europe/London';
+  let t = Date.parse(`${ymd}T00:00:00Z`);
+  if (Number.isNaN(t)) return null;
+  try {
+    for (let i = 0; i < 3; i++) {
+      const localYmd = dateInZone(new Date(t), tz);
+      const localMins = minutesInZone(new Date(t), tz) % 1440;
+      const have = Date.parse(`${localYmd}T00:00:00Z`) + localMins * 60000;
+      const want = Date.parse(`${ymd}T00:00:00Z`);
+      if (have === want) break;
+      t -= (have - want);
+    }
+  } catch { /* fall through with the UTC-midnight guess */ }
+  return new Date(t);
+}
+
 // SEPOS-027 — parse a reservation's assigned tables (table_ids CSV, or table_id).
 function parseTableIds(table_id, table_ids) {
   if (table_ids) return String(table_ids).split(',').map(s => parseInt(s.trim(), 10)).filter(Boolean);
@@ -4466,7 +4528,10 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
     // BUG-004 — reject bookings for a date already in the past.
     // reservation_date arrives as 'YYYY-MM-DD'; lexical compare against
     // today works for that format. Same-day bookings are allowed.
-    if (String(reservation_date).slice(0, 10) < new Date().toISOString().slice(0, 10)) {
+    // SEPOS-048 — "today" in the restaurant's timezone, not UTC: after 11pm
+    // BST the UTC date was still yesterday, so a booking for "today" made
+    // just after midnight was wrongly rejected as in-the-past (and vice versa).
+    if (String(reservation_date).slice(0, 10) < dateInZone(new Date(), await restaurantTz())) {
       return res.status(400).json({ error: 'Reservation date cannot be in the past' });
     }
     const coversNum = parseInt(covers, 10);
@@ -4626,9 +4691,13 @@ app.post('/api/reservations/walk-in', async (req, res) => {
     const coversNum = parseInt(covers, 10);
     if (!coversNum || coversNum < 1) return res.status(400).json({ error: 'covers must be at least 1' });
 
+    // SEPOS-048 — stamp the walk-in with the RESTAURANT's date + wall-clock,
+    // not the container's (Railway = UTC → walk-ins were logged 1h early in
+    // BST, and just before 1am they landed on yesterday's date).
     const now = new Date();
-    const today = now.toISOString().slice(0, 10);
-    const hhmm  = now.toTimeString().slice(0, 5);
+    const walkinTz = await restaurantTz();
+    const today = dateInZone(now, walkinTz);
+    const hhmm  = hhmmInZone(now, walkinTz);
 
     const resvIns = await pool.query(
       `INSERT INTO reservations
@@ -5114,7 +5183,8 @@ app.post('/api/expenses', async (req, res) => {
   try {
     const { category, description, amount, date } = req.body;
     if (!description || !amount) return res.status(400).json({ error: 'description and amount are required' });
-    const result = await pool.query(`INSERT INTO expenses (category, description, amount, date) VALUES ($1,$2,$3,$4) RETURNING id`, [category || 'other', description, parseFloat(amount), date || new Date().toISOString().split('T')[0]]);
+    // SEPOS-048 — default the expense to the restaurant's date, not UTC's.
+    const result = await pool.query(`INSERT INTO expenses (category, description, amount, date) VALUES ($1,$2,$3,$4) RETURNING id`, [category || 'other', description, parseFloat(amount), date || dateInZone(new Date(), await restaurantTz())]);
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

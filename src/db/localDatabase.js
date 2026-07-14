@@ -130,6 +130,7 @@ function initSchema() {
       discount_value REAL,
       discount_reason TEXT,
       no_service_charge INTEGER DEFAULT 0,
+      service_charge REAL,
       bill_printed INTEGER DEFAULT 0,
       opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       closed_at TIMESTAMP,
@@ -162,6 +163,7 @@ function initSchema() {
       cooking_started_at TIMESTAMP,
       served_at TIMESTAMP,
       voided INTEGER DEFAULT 0,
+      voided_at TIMESTAMP,
       void_reason TEXT,
       void_type TEXT,
       discount_type TEXT,
@@ -651,6 +653,10 @@ function runMigrations() {
   addColumnIfMissing('order_items', 'void_type', 'TEXT');
   // SEPOS-030: staff attribution on orders
   addColumnIfMissing('orders', 'staff_id', 'INTEGER');
+  // SEPOS-AUDIT-001 — close-time service-charge snapshot + real void instant
+  // (see database.js for why). Mirrored here so both backends carry them.
+  addColumnIfMissing('orders', 'service_charge', 'REAL');
+  addColumnIfMissing('order_items', 'voided_at', 'TIMESTAMP');
   // SEPOS-PRO-008: link a bill to its booking for accurate per-customer spend
   addColumnIfMissing('orders', 'reservation_id', 'INTEGER');
   // SEPOS-021: VAT rate per menu item
@@ -828,6 +834,21 @@ function preTranslate(sql) {
   out = out.replace(/\s+FOR\s+UPDATE(?=\s*$|\s|;)/gi, '');
   // `expr::date` → `date(expr)` (works for column refs and $N placeholders)
   out = out.replace(/([\w.]+|\$\d+)\s*::\s*date\b/gi, 'date($1)');
+  // SEPOS-AUDIT-001 — canonicalise BOTH sides of a timestamp comparison.
+  // Local rows store naive UTC ('2026-07-08 22:15:00') but rows seeded from
+  // the cloud (upsertClosedOrders / pullActiveOrders) carry pg's ISO form
+  // ('2026-07-08T13:00:00.000Z'). As raw strings 'T' sorts after ' ', so
+  // `closed_at <= datetime(?)` silently dropped every cloud-seeded bill from
+  // the till's Z / VAT / report windows. Wrapping the COLUMN side too makes
+  // both operands canonical ('YYYY-MM-DD HH:MM:SS') regardless of stored
+  // format. Must run BEFORE the generic ::timestamp rule below.
+  // Inequality operators ONLY — a bare `=` could be an UPDATE … SET
+  // assignment, which must not become `datetime(col) = …`. Every real
+  // window comparison in server.js uses >=, <=, or >.
+  out = out.replace(
+    /([\w.]+)\s*(>=|<=|<>|!=|>|<)\s*(\$\d+)\s*::\s*timestamp\b/gi,
+    'datetime($1) $2 datetime($3)'
+  );
   // `expr::timestamp` → `datetime(expr)`
   out = out.replace(/([\w.]+|\$\d+)\s*::\s*timestamp\b/gi, 'datetime($1)');
   // SEPOS-047e — `expr::int` → `CAST(expr AS INTEGER)`. SQLite has no `::`
@@ -944,13 +965,22 @@ async function query(text, params = []) {
   }
   const pre = preTranslate(text);
   const { sql, params: flat } = translateParams(pre, params || []);
+  // SEPOS-AUDIT-001 — coerce JS booleans to 1/0 at the choke point.
+  // Cloud PG BOOLEAN columns (table_combinations.is_active,
+  // restaurant_settings.is_active, …) arrive through res.json as JS
+  // true/false; better-sqlite3 refuses to bind booleans ("can only bind
+  // numbers, strings, bigints, buffers, and null"), so every sync upsert
+  // carrying one silently failed each 5s tick — linked-table groups and
+  // reservation settings never reached the till. One map fixes every
+  // current and future feed.
+  const bound = flat.map((v) => (v === true ? 1 : v === false ? 0 : v));
 
   try {
     if (shouldReturnRows(sql)) {
-      const rows = normaliseTimestamps(db.prepare(sql).all(...flat));
+      const rows = normaliseTimestamps(db.prepare(sql).all(...bound));
       return { rows, rowCount: rows.length };
     }
-    const info = db.prepare(sql).run(...flat);
+    const info = db.prepare(sql).run(...bound);
     return { rows: [], rowCount: info.changes, lastInsertRowid: info.lastInsertRowid };
   } catch (err) {
     err.message = `[db:local] ${err.message}\n  sql: ${sql}\n  params: ${JSON.stringify(flat)}`;

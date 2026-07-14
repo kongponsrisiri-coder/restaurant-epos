@@ -104,12 +104,18 @@ export default function ZReportSection() {
     }
     const pettyNum = parseFloat(pettyCash) || 0;
     const actualNum = parseFloat(actualCash) || 0;
-    const expectedCash = (reportData.total_cash || 0) - pettyNum;
+    // SEPOS-AUDIT-001 — gift vouchers sold at the till for CASH put money in
+    // the drawer without a payments row, so the drawer counted "Over" by every
+    // cash voucher sale. Include them in Expected Cash (and card sales in the
+    // card figure below).
+    const voucherTillCash = Number(reportData.vouchers_sold?.till_cash || 0);
+    const voucherTillCard = Number(reportData.vouchers_sold?.till_card || 0);
+    const expectedCash = (reportData.total_cash || 0) + voucherTillCash - pettyNum;
     const difference = actualNum - expectedCash;
     // Card reconciliation: only compute a variance if the operator entered the
     // card-machine takings (blank = not reconciled → null, not 0).
     const actualCardNum = actualCard !== '' ? (parseFloat(actualCard) || 0) : null;
-    const cardDifference = actualCardNum != null ? actualCardNum - (reportData.total_card || 0) : null;
+    const cardDifference = actualCardNum != null ? actualCardNum - ((reportData.total_card || 0) + voucherTillCard) : null;
     try {
       const saved = await saveZReport(reportType, reportData.from, reportData.to, reportData, 0, pettyNum, pettyCashReason, actualNum, difference, actualCardNum, cardDifference);
       // SEPOS-053 — if this Z closed an open shift, mark the session closed and
@@ -213,10 +219,13 @@ export default function ZReportSection() {
 
   const pettyNum     = parseFloat(pettyCash) || 0;
   const actualNum    = parseFloat(actualCash) || 0;
-  const expectedCash = reportData ? (reportData.total_cash || 0) - pettyNum : 0;
+  // SEPOS-AUDIT-001 — till voucher sales are drawer money too (see handleConfirmSave).
+  const vTillCashR   = Number(reportData?.vouchers_sold?.till_cash || 0);
+  const vTillCardR   = Number(reportData?.vouchers_sold?.till_card || 0);
+  const expectedCash = reportData ? (reportData.total_cash || 0) + vTillCashR - pettyNum : 0;
   const difference   = actualNum - expectedCash;
   const actualCardR  = actualCard !== '' ? (parseFloat(actualCard) || 0) : null;
-  const cardDiffR    = (reportData && actualCardR != null) ? actualCardR - (reportData.total_card || 0) : null;
+  const cardDiffR    = (reportData && actualCardR != null) ? actualCardR - ((reportData.total_card || 0) + vTillCardR) : null;
   const inputStyle   = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, boxSizing: 'border-box' };
 
   return (
@@ -386,11 +395,16 @@ export default function ZReportSection() {
               <div style={{ background: '#f0fdf4', borderRadius: 10, padding: 12, border: '1px solid #bbf7d0' }}><div style={{ fontSize: 11, color: '#888' }}>Discounts Given</div><div style={{ fontSize: 18, fontWeight: 800, color: '#22c55e' }}>£{Number(reportData.total_discounts || 0).toFixed(2)}</div></div>
             )}
 
-            {/* SEPOS-VOUCHER-001 — gift voucher activity (off till — settled to Stripe at sale time) */}
+            {/* SEPOS-VOUCHER-001 — gift voucher activity. SEPOS-AUDIT-001: the
+                caption now reflects HOW they were sold — cash/card sales went
+                through this till's drawer (and are included in Expected Cash);
+                only online sales settled to Stripe. */}
             {(reportData.vouchers_sold?.count > 0 || reportData.vouchers_redeemed?.count > 0) && (
               <div style={{ marginTop: 12, background: '#fdf6ec', border: '1px solid #f3e1bb', borderRadius: 10, padding: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#5b4a2a', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  🎁 Gift vouchers — settled to Stripe, not the till
+                  🎁 Gift vouchers{(vTillCashR + vTillCardR) > 0
+                    ? ` — £${(vTillCashR + vTillCardR).toFixed(2)} sold at the till (in Expected Cash/Card)`
+                    : ' — sold online, settled to Stripe (not the till)'}
                 </div>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <div style={{ flex: 1, fontSize: 13 }}>

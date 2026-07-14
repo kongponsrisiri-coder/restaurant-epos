@@ -10,7 +10,10 @@ types.setTypeParser(1114, (v) => (v == null ? null : new Date(String(v).replace(
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  // SEPOS-AUDIT-001 — local Postgres (dev/test) doesn't speak SSL; Railway
+  // always does. Gate on the host so `DATABASE_URL=postgresql://localhost/...`
+  // works for local testing without touching production behaviour.
+  ssl: /localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL || '') ? false : { rejectUnauthorized: false },
   min: 2,
   max: 10,
   idleTimeoutMillis: 60000,
@@ -240,6 +243,15 @@ async function initDB() {
     // overnight shifts). NULL when no shift was open at close time; the
     // date-range Z-report still catches those.
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS session_id INTEGER`);
+    // SEPOS-AUDIT-001 — service charge SNAPSHOT stamped at close time. Reports
+    // used to derive every historical bill's service from TODAY'S rate setting,
+    // so a rate change silently rewrote past Z/report totals. NULL = legacy row
+    // (falls back to the derivation).
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS service_charge NUMERIC(10,2)`);
+    // SEPOS-AUDIT-001 — when the void actually happened. Z void figures used to
+    // window on orders.created_at, so a void during the shift on a table seated
+    // before it vanished from that shift's Z.
+    await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS voided_at TIMESTAMP`);
     // SEPOS-DELIVERY-002 — collection vs delivery for takeaway orders.
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_subtype VARCHAR(20) DEFAULT 'collection'`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT`);

@@ -48,18 +48,41 @@ function headerOps(ops, order, title, kw = SUNMI_KITCHEN_WIDTH) {
   let label;
   const t = order && order.order_type;
   if (t && t !== 'dine_in') {
-    // A walk-in takeaway rung up at the till sits on a takeaway table → show
-    // "TAKEAWAY N" so the kitchen knows which collection number it is.
-    // "ONLINE ORDER" is only for website orders that have no table.
+    // SEPOS-ANDROID-004 — an online DELIVERY order prints "DELIVERY"; a walk-in
+    // takeaway rung up at the till sits on a takeaway table → "TAKEAWAY N";
+    // a website collection with no table → "ONLINE ORDER".
     label = t === 'counter' ? 'COUNTER'
+      : (order.order_subtype === 'delivery') ? 'DELIVERY'
       : (t === 'takeaway' && order.table_number != null && order.table_number !== '') ? `TAKEAWAY ${order.table_number}`
       : 'ONLINE ORDER';
   } else label = 'TABLE ' + ((order && (order.table_number ?? order.table_id)) ?? '');
   ops.push({ op: 'size', v: 'h' }, { op: 'text', v: label }, { op: 'size', v: 'n' }, { op: 'bold', v: false }); // big table no.
   if (order && order.id != null) ops.push({ op: 'text', v: 'Order #' + order.id });
+  // SEPOS-ANDROID-004 — online / takeaway / delivery header: the kitchen needs
+  // WHO it's for, WHEN to have it ready, and (delivery) WHERE it's going. Mirrors
+  // the desktop takeaway kitchen ticket (printService.printFullKitchenTicket).
+  if (order && t && t !== 'dine_in') {
+    if (order.customer_name)  ops.push({ op: 'text', v: String(order.customer_name) });
+    if (order.customer_phone) ops.push({ op: 'text', v: String(order.customer_phone) });
+    if (order.pickup_time)    ops.push({ op: 'bold', v: true }, { op: 'text', v: 'Pickup ' + fmtTime(order.pickup_time) }, { op: 'bold', v: false });
+    if (order.order_subtype === 'delivery' && order.delivery_address) {
+      ops.push({ op: 'krule', w: Math.min(kw, SUNMI_KITCHEN_WIDTH) });
+      ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'text', v: '-- DELIVERY --' }, { op: 'bold', v: false }, { op: 'align', v: 0 });
+      for (const line of String(order.delivery_address).split(/\r?\n|,\s*/).map(s => s.trim()).filter(Boolean)) {
+        ops.push({ op: 'text', v: line });
+      }
+    }
+  }
   // 'krule' = a rule sized per printer (kitchen font is big, so the Sunmi needs a
   // shorter dash run than the network 32 or it wraps). See renderers below.
   ops.push({ op: 'align', v: 0 }, { op: 'krule', w: Math.min(kw, SUNMI_KITCHEN_WIDTH) });
+}
+
+// HH:MM in the DEVICE's local time — the Sunmi sits at the restaurant, so its
+// clock is the restaurant's timezone (correct even for a non-UK client).
+function fmtTime(t) {
+  try { return new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
+  catch { return String(t); }
 }
 
 function kitchenItemOps(ops, it, bilingual = true, sz = 'b') {

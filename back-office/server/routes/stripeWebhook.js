@@ -16,6 +16,26 @@ const router  = express.Router();
 const { pool } = require('../db/pool');
 const { stripe } = require('../services/stripeClient');
 
+// BO-BILLING-002 (Krit for Korakot, 2026-07-14) — push a LINE message to
+// Korakot when a client pays / a payment fails, so billing isn't silent.
+// Reuses the SiamEPOS LINE channel (same token as the restaurant cloud).
+// Dormant unless LINE_CHANNEL_ACCESS_TOKEN + LINE_KORAKOT_USER_ID are set on
+// this service. Fire-and-forget: a LINE failure never breaks the webhook 200.
+async function notifyLine(text) {
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const to    = process.env.LINE_KORAKOT_USER_ID;
+  if (!token || !to) return;
+  try {
+    const r = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ to, messages: [{ type: 'text', text: String(text).slice(0, 4900) }] }),
+    });
+    if (!r.ok) console.warn('[stripe-webhook] LINE push', r.status, (await r.text()).slice(0, 200));
+  } catch (e) { console.warn('[stripe-webhook] LINE push failed:', e.message); }
+}
+const money = (pence) => (pence == null ? '' : `£${(pence / 100).toFixed(2)}`);
+
 // Map a client row from either the subscription id (preferred) or the
 // customer id, then set its status. Returns the affected row count.
 async function setClientStatus({ subscriptionId, customerId }, status) {
@@ -74,9 +94,13 @@ router.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
             [parseInt(clientId, 10), customerId, subscriptionId]
           );
           console.log(`[stripe-webhook] checkout.session.completed → active (client ${clientId}, ${r.rows.length} matched)`);
+          const nm = r.rows[0] && r.rows[0].restaurant_name;
+          notifyLine(`💰 New payment!\n\n${nm || 'A client'} just paid ${money(obj.amount_total)} — now ACTIVE.\n\nView: https://ops.siamepos.co.uk`);
         } else {
           const r = await setClientStatus({ subscriptionId, customerId }, 'active');
           console.log(`[stripe-webhook] checkout.session.completed (no client_id) → active (${r.rows.length} matched)`);
+          const nm = r.rows[0] && r.rows[0].restaurant_name;
+          notifyLine(`💰 New payment!\n\n${nm || 'A client'} just paid ${money(obj.amount_total)} — now ACTIVE.\n\nView: https://ops.siamepos.co.uk`);
         }
         break;
       }
@@ -88,6 +112,8 @@ router.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
           'past_due'
         );
         console.log(`[stripe-webhook] invoice.payment_failed → past_due (${r.rows.length} client matched)`);
+        const failNm = r.rows[0] && r.rows[0].restaurant_name;
+        notifyLine(`⚠️ Payment FAILED\n\n${failNm || 'A client'}'s recurring payment (${money(obj.amount_due)}) failed — marked past-due. Chase it.\n\nhttps://ops.siamepos.co.uk`);
         break;
       }
 

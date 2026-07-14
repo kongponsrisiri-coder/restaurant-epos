@@ -72,7 +72,7 @@ jobs:
         working-directory: client
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-        run: npx --yes netlify-cli@17 deploy --prod --no-build --dir=dist --site ${{ matrix.site_id }}
+        run: npx --yes netlify-cli@26 deploy --prod --no-build --dir=dist --site ${{ matrix.site_id }}
 
   ops-site:
     name: Ops back-office
@@ -93,4 +93,4 @@ jobs:
         working-directory: back-office/client
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-        run: npx --yes netlify-cli@17 deploy --prod --no-build --dir=dist --site 89bb8ca5-2adf-4557-825c-b739b5764f49
+        run: npx --yes netlify-cli@26 deploy --prod --no-build --dir=dist --site 89bb8ca5-2adf-4557-825c-b739b5764f49

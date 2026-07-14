@@ -428,7 +428,11 @@ async function forwardToCloudWith(req, res, label, { path, body, afterOk } = {})
   try {
     const url = `${process.env.CLOUD_API_URL}${path || req.originalUrl}`;
     // Verify pass — bounded (see forwardWriteToCloud): 8s then local fallback.
-    const init = { method: req.method, headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8000) };
+    // REG-1 (Nook) — carry the install's SYNC_SECRET so forwards to now-gated
+    // cloud endpoints (voucher list etc.) authenticate server-to-server.
+    const fwdHeaders = { 'Content-Type': 'application/json' };
+    if (process.env.SYNC_SECRET) fwdHeaders['x-sync-secret'] = process.env.SYNC_SECRET;
+    const init = { method: req.method, headers: fwdHeaders, signal: AbortSignal.timeout(8000) };
     const payload = body !== undefined ? body : req.body;
     if (req.method !== 'GET' && req.method !== 'HEAD' && payload && Object.keys(payload).length) {
       init.body = JSON.stringify(payload);
@@ -3192,7 +3196,9 @@ app.post('/api/sync/amend-method', async (req, res) => {
 // voucher figures (incl. the drawer reconciliation) regressed to zero. This
 // (with vouchers, which /api/vouchers already serves) mirrors both tables
 // cloud→local read-only so reports see them again. Recent window only.
-app.get('/api/voucher-redemptions', async (req, res) => {
+// REG-1 (Nook 2026-07-14) — gated: this was live-leaking redemption rows to
+// the anonymous internet. The desktop pull authenticates with x-sync-secret.
+app.get('/api/voucher-redemptions', requireStaffAuthOrSyncSecret(), async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT id, voucher_id, bill_id, amount_used, redeemed_by, used_at, restaurant_id
@@ -5352,6 +5358,13 @@ app.get('/api/supplier-invoices', async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// (auth note) GET /api/vouchers and GET /api/voucher-redemptions are gated
+// with requireStaffAuthOrSyncSecret — Nook's REG-1 (2026-07-14): both leaked
+// voucher codes/balances/redemptions to the anonymous internet. Staff UIs
+// send the Bearer token (api.js attaches it globally); the desktop pull
+// sends x-sync-secret. The public widget balance check stays on
+// GET /api/widget/voucher/:code (exact-code lookup only).
+
 // SEPOS-046 — itemised detail for the invoice history expander. The confirm
 // endpoint already writes one stock_movements row per line with
 // reference='invoice:<id>', so the lines live there (including for every
@@ -6825,7 +6838,7 @@ app.post('/api/orders/:id/voucher-remove', async (req, res) => {
 });
 
 // Admin — list (auto-expires any active+past while reading)
-app.get('/api/vouchers', async (req, res) => {
+app.get('/api/vouchers', requireStaffAuthOrSyncSecret(), async (req, res) => {
   // SEPOS-AUDIT-001 — cloud-authoritative on local installs (see voucher-lookup).
   if (await forwardToCloudWith(req, res, 'voucher-list')) return;
   try {

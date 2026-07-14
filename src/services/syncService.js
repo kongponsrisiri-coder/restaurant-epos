@@ -825,7 +825,11 @@ async function pullFromCloud() {
   // Flat-shape endpoints.
   for (const ep of PULL_TABLES) {
     try {
+      // REG-1 (Nook) — send the install's SYNC_SECRET on every pull: the
+      // voucher endpoints are now auth-gated on the cloud (they were leaking
+      // codes/balances publicly), and the header is harmless on open ones.
       const r = await fetch(CLOUD_API_URL + ep.path, {
+        headers: process.env.SYNC_SECRET ? { 'x-sync-secret': process.env.SYNC_SECRET } : {},
         signal: AbortSignal.timeout(PING_TIMEOUT_MS),
       });
       if (!r.ok) {

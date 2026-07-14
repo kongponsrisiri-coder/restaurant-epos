@@ -156,8 +156,9 @@ export default function ZReportSection() {
     if (!reportData) return;
     const rows = [];
     rows.push(['Z Report', reportType === 'day' ? 'End of Day' : reportType === 'custom' ? 'Custom Range Report' : 'Shift Close']);
-    rows.push(['From', reportData.from || '']);
-    rows.push(['To', reportData.to || '']);
+    // SEPOS-048 (Nook QA follow-up) — local wall-clock, not raw ISO UTC.
+    rows.push(['From', stampLocal(reportData.from)]);
+    rows.push(['To', stampLocal(reportData.to)]);
     rows.push([]);
     rows.push(['Sales summary', 'Amount £']);
     rows.push(['Cash', Number(reportData.total_cash || 0).toFixed(2)]);

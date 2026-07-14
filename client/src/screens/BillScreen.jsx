@@ -209,6 +209,17 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const allAssigned     = unassignedItems.length === 0 && billItems.length > 0;
   const personColors    = ['#e94560','#3b82f6','#22c55e','#8b5cf6','#f97316','#06b6d4','#ec4899','#eab308'];
 
+  // SEPOS-PENNY-001 (part 2) — the same push-from-the-right entry for the
+  // TYPED amount boxes on the one-flow Payment screen (cash/card amount,
+  // voucher amount, deposit amount). Whatever lands in the box is reduced to
+  // its digits and read as pence: typing 3201 shows £32.01 (was £3201.00 —
+  // Korakot's screenshot, 2026-07-14). Editing/backspace anywhere behaves:
+  // the surviving digits re-read as pence. 6-digit cap = £9,999.99.
+  const pennyType = (raw) => {
+    const digits = String(raw).replace(/\D/g, '').replace(/^0+/, '').slice(0, 6);
+    return digits ? (parseInt(digits, 10) / 100).toFixed(2) : '';
+  };
+
   // SEPOS-PENNY-001 — ATM/card-machine style amount entry (staff feedback via
   // Korakot 2026-07-14: "they don't want to type the decimal point"). Digits
   // push in from the right: 2 → £0.02, 29 → £0.29, 2919 → £29.19 — exactly how
@@ -886,7 +897,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                           <input value={mixDepositCode} onChange={e => { setMixDepositCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder={orderDeposit ? orderDeposit.code : 'Deposit code / reference'} style={{ flex: 2, height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase' }} />
                           <div style={{ position: 'relative', flex: 1 }}>
                             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
-                            <input type="number" step="0.01" value={mixDepositAmt} onChange={e => { setMixDepositAmt(e.target.value); setMixVoucherErr(''); }} placeholder={(orderDeposit ? Math.min(Number(orderDeposit.balance), mixRemaining) : mixRemaining).toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                            <input type="text" inputMode="numeric" value={mixDepositAmt} onChange={e => { setMixDepositAmt(pennyType(e.target.value)); setMixVoucherErr(''); }} placeholder={(orderDeposit ? Math.min(Number(orderDeposit.balance), mixRemaining) : mixRemaining).toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
                           </div>
                         </div>
                         {mixVoucherErr && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{mixVoucherErr}</div>}
@@ -899,7 +910,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                           <input value={mixVoucherCode} onChange={e => { setMixVoucherCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder="Voucher code / reference" style={{ flex: 2, height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase' }} />
                           <div style={{ position: 'relative', flex: 1 }}>
                             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
-                            <input type="number" step="0.01" value={mixVoucherAmt} onChange={e => { setMixVoucherAmt(e.target.value); setMixVoucherErr(''); }} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                            <input type="text" inputMode="numeric" value={mixVoucherAmt} onChange={e => { setMixVoucherAmt(pennyType(e.target.value)); setMixVoucherErr(''); }} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
                           </div>
                         </div>
                         {mixVoucherErr && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{mixVoucherErr}</div>}
@@ -911,7 +922,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
                           <div style={{ position: 'relative', flex: 1 }}>
                             <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555' }}>£</span>
-                            <input type="number" step="0.01" value={mixInput} onChange={e => setMixInput(e.target.value)} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 28px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                            <input type="text" inputMode="numeric" value={mixInput} onChange={e => setMixInput(pennyType(e.target.value))} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 28px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
                           </div>
                           <button onClick={() => setMixInput(mixRemaining.toFixed(2))} style={{ height: 48, padding: '0 16px', borderRadius: 10, border: '1.5px solid #ddd', background: '#fff', cursor: 'pointer', fontWeight: 700 }}>Rest</button>
                         </div>

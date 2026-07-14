@@ -209,12 +209,29 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const allAssigned     = unassignedItems.length === 0 && billItems.length > 0;
   const personColors    = ['#e94560','#3b82f6','#22c55e','#8b5cf6','#f97316','#06b6d4','#ec4899','#eab308'];
 
+  // SEPOS-PENNY-001 — ATM/card-machine style amount entry (staff feedback via
+  // Korakot 2026-07-14: "they don't want to type the decimal point"). Digits
+  // push in from the right: 2 → £0.02, 29 → £0.29, 2919 → £29.19 — exactly how
+  // the card terminal they already use works. The "." key is gone; "00" (a
+  // standard till key) makes round amounts fast: 2,00,0 → £20.00. The stored
+  // string stays a normal "29.19" decimal so every consumer (parseFloat at
+  // amountPaid, quick-amount highlight compares) is untouched.
   const handleNumpad = (btn) => {
     if (btn === 'C')  { setPaymentInput(''); return; }
-    if (btn === '⌫') { setPaymentInput(p => p.slice(0,-1)); return; }
-    if (btn === '.') { if (paymentInput.includes('.')) return; setPaymentInput(p => (p||'0')+'.'); return; }
-    if (paymentInput.includes('.') && paymentInput.split('.')[1]?.length >= 2) return;
-    setPaymentInput(p => p + btn);
+    const pence = Math.round((parseFloat(paymentInput) || 0) * 100);
+    if (btn === '⌫') {
+      const next = Math.floor(pence / 10);
+      setPaymentInput(next > 0 ? (next / 100).toFixed(2) : '');
+      return;
+    }
+    if (btn === '00') {
+      if (pence === 0 || pence > 9999) return; // no-op on empty; cap £9,999.99
+      setPaymentInput(((pence * 100) / 100).toFixed(2));
+      return;
+    }
+    if (!/^\d$/.test(btn)) return;
+    if (pence > 99999) return; // cap £9,999.99 — fat-finger guard
+    setPaymentInput(((pence * 10 + Number(btn)) / 100).toFixed(2));
   };
 
   // ── The shared receipt payload — pre-calculated totals from BillScreen ──
@@ -1194,7 +1211,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 </div>
                 <div style={{ padding:'12px 16px 8px' }}>
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
-                    {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(btn => (
+                    {['7','8','9','4','5','6','1','2','3','00','0','⌫'].map(btn => (
                       <button key={btn} onClick={() => handleNumpad(btn)} style={{ height:72, borderRadius:12, border:'none', fontSize:26, fontWeight:700, cursor:'pointer', background:btn==='⌫'?'#fee2e2':'#f8f8f8', color:btn==='⌫'?'#ef4444':'var(--brand-primary,#0D1B3E)' }}>{btn}</button>
                     ))}
                   </div>
@@ -1248,7 +1265,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                     <div style={{ fontSize:36, fontWeight:800, color:'white', fontFamily:'monospace' }}>£{paymentInput||'0.00'}</div>
                   </div>
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8 }}>
-                    {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(btn => (
+                    {['7','8','9','4','5','6','1','2','3','00','0','⌫'].map(btn => (
                       <button key={btn} onClick={() => handleNumpad(btn)} style={{ height:68, borderRadius:12, border:'none', fontSize:22, fontWeight:700, cursor:'pointer', background:btn==='⌫'?'#fee2e2':'#f8f8f8', color:btn==='⌫'?'#ef4444':'var(--brand-primary, #1a1a2e)' }}>{btn}</button>
                     ))}
                   </div>

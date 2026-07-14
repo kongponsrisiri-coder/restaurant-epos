@@ -1469,8 +1469,15 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             )}
           </div>
 
-          {/* Bottom totals */}
-          <div style={{ padding: '14px 16px', borderTop: '1px solid #eee', flexShrink: 0 }}>
+          {/* Bottom totals. On mobile this footer is pinned to the panel bottom,
+              which sits UNDER the fixed 58px tab bar — so add the same tab-bar
+              clearance the scroll area uses, or the "View bill & pay" button
+              (the last row) hides behind the Menu/Order tabs. */}
+          <div style={{
+            padding: '14px 16px',
+            paddingBottom: isMobile ? 'calc(58px + env(safe-area-inset-bottom, 0px) + 14px)' : '14px',
+            borderTop: '1px solid #eee', flexShrink: 0
+          }}>
             <div style={{ marginBottom: 10 }}>
               {order?.discount_value > 0 ? (
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -1615,6 +1622,15 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   // SEPOS-046z — the bill must not open while a send is in
                   // flight, or it could be paid before those items land.
                   if (sendBusy) return;
+                  // SEPOS-AUDIT-001 — unsent cart items are NOT on the server
+                  // bill: this button's total includes them but BillScreen's
+                  // doesn't, so paying now undercharged by the whole cart (and
+                  // the items were appended after payment, never fired to the
+                  // kitchen). Make staff send first.
+                  if (cart.length > 0) {
+                    alert(`⚠️ ${cart.reduce((s, c) => s + c.quantity, 0)} item(s) in the cart haven't been sent to the kitchen.\n\nTap "Send to kitchen" first, then take payment — otherwise they'd be missing from the bill.`);
+                    return;
+                  }
                   setShowBill(true);
                 }}
                 style={{
@@ -2277,7 +2293,15 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             // bill while nothing was recorded. On failure: surface the
             // real error and KEEP the bill open so staff can retry.
             try {
-              if (cart.length > 0) assertOk(await addOrderItems(orderId, cart));
+              // SEPOS-AUDIT-001 — never silently append unsent cart items at
+              // pay time: the payment amount was fixed from the server bill
+              // WITHOUT them, so appending here undercharged by the cart value
+              // and the items never fired to the kitchen. The View-bill button
+              // now blocks on a non-empty cart; this is the belt-and-braces.
+              if (cart.length > 0) {
+                alert('⚠️ Payment NOT taken — items in the cart were never sent to the kitchen.\n\nClose the bill, tap "Send to kitchen", then pay.');
+                return;
+              }
               const payRes = await payOrder(orderId, total, method, tenders);
               // SEPOS-DBLPAY-001 — the server rejects a second payment on an
               // already-closed bill (409 alreadyPaid). That means the payment

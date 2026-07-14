@@ -22,4 +22,8 @@ contextBridge.exposeInMainWorld('siamepos', {
   // Printing (SEPOS-025 receipts / SEPOS-026 kitchen tickets).
   listPrinters: () => ipcRenderer.invoke('list-printers'),
   printHtml: (payload) => ipcRenderer.invoke('print-html', payload),
+  // SEPOS-EXIT-001 — quit the desktop app cleanly from the login screen, so
+  // staff stop force-closing / re-opening (which spawned duplicate instances
+  // fighting over the same local DB).
+  quitApp: () => ipcRenderer.invoke('quit-app'),
 });

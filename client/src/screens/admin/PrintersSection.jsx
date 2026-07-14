@@ -806,6 +806,7 @@ export default function PrintersSection() {
               <label style={{ fontSize:14, fontWeight:600, color:'#555', minWidth:150 }}>{label}</label>
               <select value={settings[key] || def} onChange={e => setSettings({...settings, [key]:e.target.value})} style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}>
                 <option value="normal">Normal</option>
+                <option value="medium">Medium (taller — fills the paper, no cut-off)</option>
                 <option value="large">Large</option>
                 <option value="xlarge">Extra-large</option>
               </select>

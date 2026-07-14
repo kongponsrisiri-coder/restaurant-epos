@@ -104,12 +104,18 @@ export default function ZReportSection() {
     }
     const pettyNum = parseFloat(pettyCash) || 0;
     const actualNum = parseFloat(actualCash) || 0;
-    const expectedCash = (reportData.total_cash || 0) - pettyNum;
+    // SEPOS-AUDIT-001 — gift vouchers sold at the till for CASH put money in
+    // the drawer without a payments row, so the drawer counted "Over" by every
+    // cash voucher sale. Include them in Expected Cash (and card sales in the
+    // card figure below).
+    const voucherTillCash = Number(reportData.vouchers_sold?.till_cash || 0);
+    const voucherTillCard = Number(reportData.vouchers_sold?.till_card || 0);
+    const expectedCash = (reportData.total_cash || 0) + voucherTillCash - pettyNum;
     const difference = actualNum - expectedCash;
     // Card reconciliation: only compute a variance if the operator entered the
     // card-machine takings (blank = not reconciled → null, not 0).
     const actualCardNum = actualCard !== '' ? (parseFloat(actualCard) || 0) : null;
-    const cardDifference = actualCardNum != null ? actualCardNum - (reportData.total_card || 0) : null;
+    const cardDifference = actualCardNum != null ? actualCardNum - ((reportData.total_card || 0) + voucherTillCard) : null;
     try {
       const saved = await saveZReport(reportType, reportData.from, reportData.to, reportData, 0, pettyNum, pettyCashReason, actualNum, difference, actualCardNum, cardDifference);
       // SEPOS-053 — if this Z closed an open shift, mark the session closed and
@@ -150,8 +156,9 @@ export default function ZReportSection() {
     if (!reportData) return;
     const rows = [];
     rows.push(['Z Report', reportType === 'day' ? 'End of Day' : reportType === 'custom' ? 'Custom Range Report' : 'Shift Close']);
-    rows.push(['From', reportData.from || '']);
-    rows.push(['To', reportData.to || '']);
+    // SEPOS-048 (Nook QA follow-up) — local wall-clock, not raw ISO UTC.
+    rows.push(['From', stampLocal(reportData.from)]);
+    rows.push(['To', stampLocal(reportData.to)]);
     rows.push([]);
     rows.push(['Sales summary', 'Amount £']);
     rows.push(['Cash', Number(reportData.total_cash || 0).toFixed(2)]);
@@ -213,53 +220,64 @@ export default function ZReportSection() {
 
   const pettyNum     = parseFloat(pettyCash) || 0;
   const actualNum    = parseFloat(actualCash) || 0;
-  const expectedCash = reportData ? (reportData.total_cash || 0) - pettyNum : 0;
+  // SEPOS-AUDIT-001 — till voucher sales are drawer money too (see handleConfirmSave).
+  const vTillCashR   = Number(reportData?.vouchers_sold?.till_cash || 0);
+  const vTillCardR   = Number(reportData?.vouchers_sold?.till_card || 0);
+  const expectedCash = reportData ? (reportData.total_cash || 0) + vTillCashR - pettyNum : 0;
   const difference   = actualNum - expectedCash;
   const actualCardR  = actualCard !== '' ? (parseFloat(actualCard) || 0) : null;
-  const cardDiffR    = (reportData && actualCardR != null) ? actualCardR - (reportData.total_card || 0) : null;
+  const cardDiffR    = (reportData && actualCardR != null) ? actualCardR - ((reportData.total_card || 0) + vTillCardR) : null;
   const inputStyle   = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 15, boxSizing: 'border-box' };
 
   return (
     <div style={{ padding: 24, maxWidth: 700 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>🔐 Z Report / Close Shift</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>🔐 Close Shift / Z Report</h1>
         <button onClick={() => setShowHistory(!showHistory)} style={{ background: '#f0f0f0', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>{showHistory ? 'Hide History' : '📋 View History'}</button>
       </div>
 
       {/* SEPOS-053 — open/close trading shift (EposNow-style). The shift's
           own open→close window is the Z boundary, so it can span midnight or
-          two nights with no calendar/timezone edge. */}
+          two nights with no calendar/timezone edge.
+          SEPOS-ZHERO-001 (Korakot 2026-07-14) — clients were reaching for the
+          standalone Z report over Close Shift because the Z button looked more
+          important. Flipped the hierarchy: the shift is now the prominent hero
+          (this is the real end-of-day action + till reconciliation), and the
+          read-only Z below is deliberately quiet/secondary. */}
       {step === 1 && (
         session ? (
-          <div style={{ background: '#f0fdf4', border: '2px solid #86efac', borderRadius: 12, padding: 18, marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ background: '#f0fdf4', border: '2px solid #22c55e', borderRadius: 16, padding: 24, marginBottom: 20, boxShadow: '0 4px 14px rgba(34,197,94,0.18)' }}>
+            <div style={{ display: 'inline-block', fontSize: 10, fontWeight: 800, letterSpacing: 0.6, color: '#166534', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 999, padding: '3px 10px', marginBottom: 12, textTransform: 'uppercase' }}>End of day</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
               <div>
-                <div style={{ fontWeight: 800, fontSize: 15, color: '#166534' }}>🟢 Shift open</div>
-                <div style={{ fontSize: 13, color: '#15803d', marginTop: 2 }}>
-                  Since {formatDateTime(session.session.opened_at)} · {session.orders || 0} order{(session.orders||0)===1?'':'s'} · £{Number(session.takings || 0).toFixed(2)}
+                <div style={{ fontWeight: 800, fontSize: 20, color: '#166534' }}>🟢 Shift is open</div>
+                <div style={{ fontSize: 14, color: '#15803d', marginTop: 4 }}>
+                  Since {formatDateTime(session.session.opened_at)} · {session.orders || 0} order{(session.orders||0)===1?'':'s'} · <strong>£{Number(session.takings || 0).toFixed(2)}</strong> so far
                 </div>
+                <div style={{ fontSize: 13, color: '#15803d', marginTop: 8, maxWidth: 380 }}>Closing the shift runs the Z, counts the till and banks the takings — this is the report to use at the end of trading.</div>
               </div>
               <button onClick={() => loadReport('session')} disabled={loading}
-                style={{ padding: '12px 20px', borderRadius: 10, border: 'none', background: '#16a34a', color: 'white', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
-                {loading ? 'Loading…' : '✅ Close this shift (Z)'}
+                style={{ padding: '18px 28px', borderRadius: 12, border: 'none', background: '#16a34a', color: 'white', fontWeight: 800, fontSize: 17, cursor: 'pointer', boxShadow: '0 3px 8px rgba(22,163,74,0.35)', flexShrink: 0 }}>
+                {loading ? 'Loading…' : '✅ Close Shift & Count Till'}
               </button>
             </div>
           </div>
         ) : (
-          <div style={{ background: '#f8fafc', border: '2px dashed #cbd5e1', borderRadius: 12, padding: 18, marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ background: 'var(--brand-primary, #1a1a2e)', borderRadius: 16, padding: 24, marginBottom: 20, boxShadow: '0 4px 14px rgba(0,0,0,0.18)' }}>
+            <div style={{ display: 'inline-block', fontSize: 10, fontWeight: 800, letterSpacing: 0.6, color: 'var(--brand-accent, #C9A84C)', background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 999, padding: '3px 10px', marginBottom: 12, textTransform: 'uppercase' }}>Start of day</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
               <div>
-                <div style={{ fontWeight: 800, fontSize: 15, color: '#334155' }}>No shift open</div>
-                <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>Open a shift to total takings by session — it can run overnight, even across two nights.</div>
+                <div style={{ fontWeight: 800, fontSize: 20, color: 'white' }}>☀️ Open a Shift</div>
+                <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.82)', marginTop: 4, maxWidth: 380 }}>Open a shift at the start of trading so the day's takings total by session — it can run overnight, even across two nights, with no midnight cut-off.</div>
               </div>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
                 <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: 14 }}>£</span>
+                  <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: 15 }}>£</span>
                   <input type="number" step="0.01" value={openFloat} onChange={e => setOpenFloat(e.target.value)} placeholder="Float"
-                    style={{ width: 100, padding: '11px 10px 11px 22px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 14, boxSizing: 'border-box' }} />
+                    style={{ width: 110, padding: '15px 12px 15px 24px', borderRadius: 10, border: 'none', fontSize: 15, boxSizing: 'border-box' }} />
                 </div>
                 <button onClick={handleOpenShift} disabled={shiftBusy}
-                  style={{ padding: '12px 20px', borderRadius: 10, border: 'none', background: '#0ea5e9', color: 'white', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+                  style={{ padding: '15px 28px', borderRadius: 12, border: 'none', background: 'var(--brand-accent, #C9A84C)', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 800, fontSize: 17, cursor: 'pointer', boxShadow: '0 3px 8px rgba(0,0,0,0.25)' }}>
                   {shiftBusy ? 'Opening…' : '▶ Open Shift'}
                 </button>
               </div>
@@ -291,22 +309,24 @@ export default function ZReportSection() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* SEPOS-Z-TIDY — one report section. "End of Day" and "Custom Range"
               were the same operation (a Z over a from→to window); merged so it's
-              clear this is report-only and doesn't touch the shift. */}
-          <div style={{ background: '#eff6ff', borderRadius: 12, padding: 24, border: '1px solid #bfdbfe' }}>
-            <div style={{ fontWeight: 700, fontSize: 16, color: '#1e40af', marginBottom: 4 }}>📊 Sales Report (Z)</div>
-            <div style={{ fontSize: 13, color: '#888', marginBottom: 18 }}>A read-only sales report for a chosen period. This does <strong>not</strong> close a shift — to end a shift, use “Close this shift” above.</div>
+              clear this is report-only and doesn't touch the shift.
+              SEPOS-ZHERO-001 — deliberately quiet/secondary vs the shift hero
+              above: muted card, small heading, a plain "view only" button (not
+              the old big red one) so staff don't mistake it for closing up. */}
+          <div style={{ background: '#f8fafc', borderRadius: 12, padding: 18, border: '1px solid #e2e8f0' }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#475569', marginBottom: 2 }}>📊 Just need a sales figure?</div>
+            <div style={{ fontSize: 12.5, color: '#94a3b8', marginBottom: 14 }}>Run a read-only Z for any period. This does <strong>not</strong> close a shift or count the till — use “Close Shift” above to end trading.</div>
 
-            <button onClick={() => loadReport('day')} disabled={loading} style={{ width: '100%', padding: '16px', borderRadius: 10, border: 'none', background: '#e94560', color: 'white', fontWeight: 800, cursor: 'pointer', fontSize: 16 }}>{loading ? 'Loading…' : "🌙 Today's Z — End of Day"}</button>
-            <div style={{ fontSize: 12, color: '#aaa', marginTop: 6 }}>Covers all of today's trading, midnight → now.</div>
+            <button onClick={() => loadReport('day')} disabled={loading} style={{ padding: '11px 18px', borderRadius: 9, border: '1px solid #cbd5e1', background: 'white', color: '#475569', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>{loading ? 'Loading…' : "🌙 View today's Z (midnight → now)"}</button>
 
-            <div style={{ borderTop: '1px solid #dbeafe', marginTop: 20, paddingTop: 18 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: '#1e40af', marginBottom: 4 }}>📅 Any other period</div>
-              <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>e.g. last Tuesday's lunch, or last week's totals.</div>
-              <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: 180 }}><label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>From</label><input type="datetime-local" value={fromTime} onChange={e => setFromTime(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
-                <div style={{ flex: 1, minWidth: 180 }}><label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>To</label><input type="datetime-local" value={toTime} onChange={e => setToTime(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
+            <div style={{ borderTop: '1px solid #e2e8f0', marginTop: 16, paddingTop: 14 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: '#64748b', marginBottom: 2 }}>📅 Any other period</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>e.g. last Tuesday's lunch, or last week's totals.</div>
+              <div style={{ display: 'flex', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 170 }}><label style={{ fontSize: 12, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 4 }}>From</label><input type="datetime-local" value={fromTime} onChange={e => setFromTime(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
+                <div style={{ flex: 1, minWidth: 170 }}><label style={{ fontSize: 12, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 4 }}>To</label><input type="datetime-local" value={toTime} onChange={e => setToTime(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
               </div>
-              <button onClick={() => loadReport('custom')} disabled={loading} style={{ padding: '14px 28px', borderRadius: 10, border: 'none', background: '#2563eb', color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 15 }}>{loading ? 'Loading…' : '📅 Run Report'}</button>
+              <button onClick={() => loadReport('custom')} disabled={loading} style={{ padding: '10px 20px', borderRadius: 9, border: '1px solid #cbd5e1', background: 'white', color: '#475569', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>{loading ? 'Loading…' : '📅 Run Report'}</button>
             </div>
           </div>
         </div>
@@ -386,11 +406,16 @@ export default function ZReportSection() {
               <div style={{ background: '#f0fdf4', borderRadius: 10, padding: 12, border: '1px solid #bbf7d0' }}><div style={{ fontSize: 11, color: '#888' }}>Discounts Given</div><div style={{ fontSize: 18, fontWeight: 800, color: '#22c55e' }}>£{Number(reportData.total_discounts || 0).toFixed(2)}</div></div>
             )}
 
-            {/* SEPOS-VOUCHER-001 — gift voucher activity (off till — settled to Stripe at sale time) */}
+            {/* SEPOS-VOUCHER-001 — gift voucher activity. SEPOS-AUDIT-001: the
+                caption now reflects HOW they were sold — cash/card sales went
+                through this till's drawer (and are included in Expected Cash);
+                only online sales settled to Stripe. */}
             {(reportData.vouchers_sold?.count > 0 || reportData.vouchers_redeemed?.count > 0) && (
               <div style={{ marginTop: 12, background: '#fdf6ec', border: '1px solid #f3e1bb', borderRadius: 10, padding: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#5b4a2a', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  🎁 Gift vouchers — settled to Stripe, not the till
+                  🎁 Gift vouchers{(vTillCashR + vTillCardR) > 0
+                    ? ` — £${(vTillCashR + vTillCardR).toFixed(2)} sold at the till (in Expected Cash/Card)`
+                    : ' — sold online, settled to Stripe (not the till)'}
                 </div>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <div style={{ flex: 1, fontSize: 13 }}>
@@ -545,15 +570,23 @@ export default function ZReportSection() {
 }
 
 // ── Print body builder ────────────────────────────────────────────
+// SEPOS-048 — the printed Z header used to show the raw ISO strings
+// ("2026-07-13T23:00:00.000Z → …"): in BST that reads as starting at 11pm
+// the previous day, which is what made clients think the timezone was wrong.
+// Format in the till's local time like the on-screen report does.
+const stampLocal = (dt) => dt
+  ? new Date(dt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+  : '';
+
 function buildZReportBody(r, type, settings, cash, thermal) {
   const head = thermal
     ? `<div class="center" style="font-size:13px;font-weight:900;letter-spacing:1px;">${restaurantName(settings)}</div>
        <div class="center small">${type === 'day' ? 'END OF DAY' : type === 'custom' ? 'CUSTOM RANGE' : 'SHIFT CLOSE'}</div>
-       <div class="center small muted">${r.from || ''} → ${r.to || ''}</div>
+       <div class="center small muted">${stampLocal(r.from)} → ${stampLocal(r.to)}</div>
        <div class="center small muted">${nowStamp()}</div>
        <hr class="divider"/>`
     : `<h1>${restaurantName(settings)} — ${type === 'day' ? 'End of Day Z Report' : 'Shift Close Z Report'}</h1>
-       <div class="sub"><span class="pill">PERIOD</span> &nbsp; ${r.from || ''} → ${r.to || ''}</div>`;
+       <div class="sub"><span class="pill">PERIOD</span> &nbsp; ${stampLocal(r.from)} → ${stampLocal(r.to)}</div>`;
 
   const total = Number(r.total_sales || 0);
   const summary = `
@@ -628,7 +661,7 @@ function buildZReportLines(r, type, settings, cash) {
   const lines = [];
   lines.push({ kind: 'h1', text: restaurantName(settings) });
   lines.push({ kind: 'h2', text: type === 'day' ? 'END OF DAY' : type === 'custom' ? 'CUSTOM RANGE' : 'SHIFT CLOSE' });
-  if (r.from) lines.push({ kind: 'small', text: `${r.from} -> ${r.to}` });
+  if (r.from) lines.push({ kind: 'small', text: `${stampLocal(r.from)} -> ${stampLocal(r.to)}` });
   lines.push({ kind: 'small', text: nowStamp() });
   lines.push({ kind: 'div' });
   // SEPOS-ZSIMPLE-001 — trimmed to the essentials (Korakot 2026-07-05):

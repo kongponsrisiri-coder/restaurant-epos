@@ -124,6 +124,14 @@ const RELAY_EVENTS = [
   'reservation_cancelled',
   'new_takeaway_order',
   'takeaway_status',
+  // SEPOS-AUDIT-001 — these four were emitted by the cloud but never
+  // relayed, so the desktop till missed them entirely: a cloud-side order
+  // delete left a permanent ghost on the floor, a payment amendment never
+  // refreshed Bills, kitchen messages and delivery updates went dark.
+  'order_deleted',
+  'payment_amended',
+  'kitchen_message',
+  'delivery_status',
 ];
 
 let cloudSocket = null;

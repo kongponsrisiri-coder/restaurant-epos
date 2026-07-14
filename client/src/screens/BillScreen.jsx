@@ -209,12 +209,40 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const allAssigned     = unassignedItems.length === 0 && billItems.length > 0;
   const personColors    = ['#e94560','#3b82f6','#22c55e','#8b5cf6','#f97316','#06b6d4','#ec4899','#eab308'];
 
+  // SEPOS-PENNY-001 (part 2) — the same push-from-the-right entry for the
+  // TYPED amount boxes on the one-flow Payment screen (cash/card amount,
+  // voucher amount, deposit amount). Whatever lands in the box is reduced to
+  // its digits and read as pence: typing 3201 shows £32.01 (was £3201.00 —
+  // Korakot's screenshot, 2026-07-14). Editing/backspace anywhere behaves:
+  // the surviving digits re-read as pence. 6-digit cap = £9,999.99.
+  const pennyType = (raw) => {
+    const digits = String(raw).replace(/\D/g, '').replace(/^0+/, '').slice(0, 6);
+    return digits ? (parseInt(digits, 10) / 100).toFixed(2) : '';
+  };
+
+  // SEPOS-PENNY-001 — ATM/card-machine style amount entry (staff feedback via
+  // Korakot 2026-07-14: "they don't want to type the decimal point"). Digits
+  // push in from the right: 2 → £0.02, 29 → £0.29, 2919 → £29.19 — exactly how
+  // the card terminal they already use works. The "." key is gone; "00" (a
+  // standard till key) makes round amounts fast: 2,00,0 → £20.00. The stored
+  // string stays a normal "29.19" decimal so every consumer (parseFloat at
+  // amountPaid, quick-amount highlight compares) is untouched.
   const handleNumpad = (btn) => {
     if (btn === 'C')  { setPaymentInput(''); return; }
-    if (btn === '⌫') { setPaymentInput(p => p.slice(0,-1)); return; }
-    if (btn === '.') { if (paymentInput.includes('.')) return; setPaymentInput(p => (p||'0')+'.'); return; }
-    if (paymentInput.includes('.') && paymentInput.split('.')[1]?.length >= 2) return;
-    setPaymentInput(p => p + btn);
+    const pence = Math.round((parseFloat(paymentInput) || 0) * 100);
+    if (btn === '⌫') {
+      const next = Math.floor(pence / 10);
+      setPaymentInput(next > 0 ? (next / 100).toFixed(2) : '');
+      return;
+    }
+    if (btn === '00') {
+      if (pence === 0 || pence > 9999) return; // no-op on empty; cap £9,999.99
+      setPaymentInput(((pence * 100) / 100).toFixed(2));
+      return;
+    }
+    if (!/^\d$/.test(btn)) return;
+    if (pence > 99999) return; // cap £9,999.99 — fat-finger guard
+    setPaymentInput(((pence * 10 + Number(btn)) / 100).toFixed(2));
   };
 
   // ── The shared receipt payload — pre-calculated totals from BillScreen ──
@@ -304,6 +332,16 @@ export default function BillScreen({ orderId, onClose, onPay }) {
         // here plus onPay('Voucher') on Done wrote TWO payment rows, double-
         // counting voucher takings in Z / Reports. Just show the receipt;
         // onPay closes the order as method='Voucher'.
+        // SEPOS-AUDIT-001 — persist a marker NOW: the balance is already
+        // redeemed server-side, so if the till reloads/crashes before "Done"
+        // the reopened bill used to show a plain full-price bill with the
+        // customer's balance silently gone (they'd be charged twice). A
+        // £0-value discount_reason makes the applied voucher visible on any
+        // reopened bill (hasVoucherDiscount keys on the 'Voucher ' prefix)
+        // without touching the maths; voucher-remove clears it by prefix.
+        try {
+          await applyDiscount(orderId, null, 0, `Voucher ${code} — covers full bill £${billTotal.toFixed(2)}`);
+        } catch { /* marker is best-effort — never block the payment */ }
         setPaymentDetails({ method: 'Voucher', amountPaid: billTotal, tip: 0, change: 0, voucher_code: code });
         setStage('receipt');
       } else {
@@ -346,16 +384,22 @@ export default function BillScreen({ orderId, onClose, onPay }) {
       try { v = await getVoucher(code); } catch { v = null; }
       const matched = v && !v.error && v.status === 'active' && Number(v.balance) > 0;
       if (matched) {
-        // Explicit amount → use it (capped only by the voucher's balance);
-        // blank → cover as much of the bill as the balance allows.
-        const useAmount = enteredAmt > 0 ? Math.min(Number(v.balance), enteredAmt) : Math.min(Number(v.balance), remaining);
+        // SEPOS-AUDIT-001 — cap at the REMAINING too, not just the balance.
+        // Typing the face value (say £50) on a £30 bill used to redeem the
+        // full £50 off the customer's balance and misclassify the £20 excess
+        // as a 'card tip' — a voucher can't give change, so never redeem more
+        // than what's left on the bill.
+        const useAmount = enteredAmt > 0
+          ? Math.min(Number(v.balance), enteredAmt, remaining)
+          : Math.min(Number(v.balance), remaining);
         const r = await redeemVoucher(code, useAmount, orderId, null);
         if (r && r.error) { setMixVoucherErr(r.error); return; }
         const deducted = Number(r.amount_used ?? useAmount);
         setSplitTenders(prev => [...prev, { amount: deducted, method: 'Voucher', voucher_code: code, external: false }]);
       } else {
         if (!(enteredAmt > 0)) { setMixVoucherErr('Enter the voucher amount'); return; }
-        setSplitTenders(prev => [...prev, { amount: enteredAmt, method: 'Voucher', voucher_code: code, external: true }]);
+        // External bypass tender — no change can be given off it either.
+        setSplitTenders(prev => [...prev, { amount: Math.min(enteredAmt, remaining), method: 'Voucher', voucher_code: code, external: true }]);
       }
       setMixVoucherCode(''); setMixVoucherAmt('');
     } catch (e) { setMixVoucherErr(e.message || 'Could not add voucher'); }
@@ -373,7 +417,13 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   // would credit back the wrong one).
   const removeMixTender = async (i) => {
     const t = splitTenders[i];
-    if (tenderNeedsRestore(t)) { try { await removeVoucherFromBill(orderId, t.voucher_code); } catch {} }
+    if (tenderNeedsRestore(t)) {
+      // SEPOS-AUDIT-001 — a failed restore means the customer's balance is
+      // still redeemed while the tender disappears from the split. Surface it
+      // so staff can retry / call support instead of silently eating balance.
+      try { await removeVoucherFromBill(orderId, t.voucher_code); }
+      catch (e) { alert(`⚠️ Could not restore ${t.voucher_code}'s balance (${e.message || 'network error'}). The tender was removed from this bill but the balance may still be deducted — check Admin → Vouchers.`); }
+    }
     setSplitTenders(prev => prev.filter((_, idx) => idx !== i));
   };
 
@@ -381,7 +431,10 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   // so an abandoned split never eats voucher/deposit balance.
   const cancelMix = async () => {
     for (const t of splitTenders) {
-      if (tenderNeedsRestore(t)) { try { await removeVoucherFromBill(orderId, t.voucher_code); } catch {} }
+      if (tenderNeedsRestore(t)) {
+        try { await removeVoucherFromBill(orderId, t.voucher_code); }
+        catch (e) { alert(`⚠️ Could not restore ${t.voucher_code}'s balance (${e.message || 'network error'}) — check Admin → Vouchers before re-charging the customer.`); } // SEPOS-AUDIT-001
+      }
     }
     setSplitTenders([]); setMixVoucherCode(''); setMixVoucherAmt(''); setMixVoucherErr('');
     setMixDepositCode(''); setMixDepositAmt('');
@@ -421,14 +474,16 @@ export default function BillScreen({ orderId, onClose, onPay }) {
       if (known && v.type !== 'deposit') { setMixVoucherErr("That's a gift voucher — use the Voucher option"); return; }
       if (known && v.type === 'deposit') {
         const bal = Number(v.balance);
-        const useAmount = enteredAmt > 0 ? Math.min(bal, enteredAmt) : Math.min(bal, remaining);
+        // SEPOS-AUDIT-001 — like vouchers, a deposit can't give change: cap the
+        // redemption at the bill remaining too, never just the balance.
+        const useAmount = enteredAmt > 0 ? Math.min(bal, enteredAmt, remaining) : Math.min(bal, remaining);
         const r = await redeemVoucher(code, useAmount, orderId, null);
         if (r && r.error)            { setMixVoucherErr(r.error); return; }
         const deducted = Number(r.amount_used ?? useAmount);
         setSplitTenders(prev => [...prev, { amount: deducted, method: 'Deposit', voucher_code: code, deposit: true, external: false }]);
       } else {
         if (!(enteredAmt > 0)) { setMixVoucherErr('Enter the deposit amount'); return; }
-        setSplitTenders(prev => [...prev, { amount: enteredAmt, method: 'Deposit', voucher_code: code, deposit: true, external: true }]);
+        setSplitTenders(prev => [...prev, { amount: Math.min(enteredAmt, remaining), method: 'Deposit', voucher_code: code, deposit: true, external: true }]);
       }
       setMixDepositCode(''); setMixDepositAmt('');
     } catch (e) { setMixVoucherErr(e.message || 'Could not apply deposit'); }
@@ -469,7 +524,14 @@ export default function BillScreen({ orderId, onClose, onPay }) {
 
   const handleSplitItemPayment = (personIdx, method = 'Cash') => {
     const newPaid = [...splitItemPaid, personIdx];
-    const isLast = newPaid.length >= splitItemCount;
+    // SEPOS-AUDIT-001 — a person with NO items assigned never shows a pay
+    // button, so `newPaid.length >= splitItemCount` could never fire and the
+    // receipt stage was unreachable (bill stuck mid-split). isLast keys on the
+    // people who actually HOLD items.
+    const personsWithItems = new Set(billItems.map(i => itemAssignments[i.id]).filter(p => p !== undefined));
+    const isLast = personsWithItems.size > 0
+      ? [...personsWithItems].every(p => newPaid.includes(p))
+      : newPaid.length >= splitItemCount;
     const prevSum = splitTenders.reduce((s, t) => s + t.amount, 0);
     const amount = isLast ? Number((billTotal - prevSum).toFixed(2)) : Number(getPersonTotal(personIdx).total.toFixed(2));
     setSplitItemPaid(newPaid);
@@ -764,13 +826,18 @@ export default function BillScreen({ orderId, onClose, onPay }) {
           const mixPaid = splitTenders.reduce((s, t) => s + t.amount, 0);
           const mixRemaining = Math.max(0, billTotal - mixPaid);
           const mixOver = Math.max(0, mixPaid - billTotal);
-          // What happens to an over-tender depends on whether cash is involved:
-          //  • cash in the mix → CHANGE handed back (£20 cash for £18.84 → £1.16).
-          //  • all card (no cash) → you can't give cash back off a card, so the
-          //    extra is a TIP (gratuity added on the terminal), never change.
-          const hasCashTender = splitTenders.some(t => t.method === 'Cash');
-          const mixChange = hasCashTender ? mixOver : 0;
-          const mixTip    = hasCashTender ? 0       : mixOver;
+          // What happens to an over-tender depends on which tender caused it:
+          //  • cash → CHANGE handed back (£20 cash for £18.84 → £1.16), but
+          //    change can never exceed the cash physically tendered;
+          //  • card → you can't give cash back off a card, so the extra is a
+          //    TIP (gratuity added on the terminal), never change.
+          // SEPOS-AUDIT-001 — split the overage: up to the cash amount is
+          // change, anything beyond that (a deliberate card over-tender in the
+          // same mix) is tip. Vouchers/deposits are capped at the remaining in
+          // their handlers, so they can never create overage.
+          const cashPaid  = splitTenders.filter(t => t.method === 'Cash').reduce((s, t) => s + t.amount, 0);
+          const mixChange = Math.min(mixOver, cashPaid);
+          const mixTip    = Math.max(0, mixOver - mixChange);
           const settled = mixPaid + 0.005 >= billTotal;
           // Cash/Card may be tendered OVER what's left (change given); vouchers &
           // deposits cap themselves at the remaining inside their own handlers.
@@ -830,7 +897,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                           <input value={mixDepositCode} onChange={e => { setMixDepositCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder={orderDeposit ? orderDeposit.code : 'Deposit code / reference'} style={{ flex: 2, height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase' }} />
                           <div style={{ position: 'relative', flex: 1 }}>
                             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
-                            <input type="number" step="0.01" value={mixDepositAmt} onChange={e => { setMixDepositAmt(e.target.value); setMixVoucherErr(''); }} placeholder={(orderDeposit ? Math.min(Number(orderDeposit.balance), mixRemaining) : mixRemaining).toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                            <input type="text" inputMode="numeric" value={mixDepositAmt} onChange={e => { setMixDepositAmt(pennyType(e.target.value)); setMixVoucherErr(''); }} placeholder={(orderDeposit ? Math.min(Number(orderDeposit.balance), mixRemaining) : mixRemaining).toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
                           </div>
                         </div>
                         {mixVoucherErr && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{mixVoucherErr}</div>}
@@ -843,7 +910,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                           <input value={mixVoucherCode} onChange={e => { setMixVoucherCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder="Voucher code / reference" style={{ flex: 2, height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase' }} />
                           <div style={{ position: 'relative', flex: 1 }}>
                             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
-                            <input type="number" step="0.01" value={mixVoucherAmt} onChange={e => { setMixVoucherAmt(e.target.value); setMixVoucherErr(''); }} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                            <input type="text" inputMode="numeric" value={mixVoucherAmt} onChange={e => { setMixVoucherAmt(pennyType(e.target.value)); setMixVoucherErr(''); }} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
                           </div>
                         </div>
                         {mixVoucherErr && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{mixVoucherErr}</div>}
@@ -855,7 +922,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
                           <div style={{ position: 'relative', flex: 1 }}>
                             <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555' }}>£</span>
-                            <input type="number" step="0.01" value={mixInput} onChange={e => setMixInput(e.target.value)} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 28px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                            <input type="text" inputMode="numeric" value={mixInput} onChange={e => setMixInput(pennyType(e.target.value))} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 28px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
                           </div>
                           <button onClick={() => setMixInput(mixRemaining.toFixed(2))} style={{ height: 48, padding: '0 16px', borderRadius: 10, border: '1.5px solid #ddd', background: '#fff', cursor: 'pointer', fontWeight: 700 }}>Rest</button>
                         </div>
@@ -866,7 +933,25 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   );
                 })()}
                 {settled && (
-                  <button onClick={() => { const paid = splitTenders.reduce((s, t) => s + t.amount, 0); const method = splitTenders.length === 1 ? splitTenders[0].method : 'Split'; setPaymentDetails({ method, amountPaid: paid, tip: mixTip, change: mixChange, tenders: splitTenders }); setStage('receipt'); }} style={{ width: '100%', height: 56, borderRadius: 12, border: 'none', background: '#22c55e', color: '#fff', fontWeight: 800, fontSize: 17, cursor: 'pointer', marginBottom: 12 }}>✓ Confirm &amp; Close — £{billTotal.toFixed(2)}{mixChange > 0 ? ` (£${mixChange.toFixed(2)} change)` : mixTip > 0 ? ` (£${mixTip.toFixed(2)} tip)` : ''}</button>
+                  <button onClick={() => {
+                    const paid = splitTenders.reduce((s, t) => s + t.amount, 0);
+                    // SEPOS-CASHCHANGE-001 — cash change is handed BACK, so it must not be
+                    // recorded as money taken. Reduce the cash tender(s) by the change so the
+                    // RECORDED tenders foot to the BILL, not the over-tender. (Card over-tender
+                    // is a genuine tip — mixTip — and is left intact.)
+                    let toDrop = mixChange;
+                    const recTenders = splitTenders.map(t => {
+                      if (toDrop > 0.001 && t.method === 'Cash') {
+                        const cut = Math.min(toDrop, t.amount);
+                        toDrop = Number((toDrop - cut).toFixed(2));
+                        return { ...t, amount: Number((t.amount - cut).toFixed(2)) };
+                      }
+                      return t;
+                    }).filter(t => t.amount > 0.001);
+                    const method = recTenders.length === 1 ? recTenders[0].method : 'Split';
+                    setPaymentDetails({ method, amountPaid: paid, tip: mixTip, change: mixChange, tenders: recTenders });
+                    setStage('receipt');
+                  }} style={{ width: '100%', height: 56, borderRadius: 12, border: 'none', background: '#22c55e', color: '#fff', fontWeight: 800, fontSize: 17, cursor: 'pointer', marginBottom: 12 }}>✓ Confirm &amp; Close — £{billTotal.toFixed(2)}{mixChange > 0 ? ` (£${mixChange.toFixed(2)} change)` : mixTip > 0 ? ` (£${mixTip.toFixed(2)} tip)` : ''}</button>
                 )}
                 <button onClick={cancelMix} style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>← Back to Bill</button>
               </div>
@@ -884,7 +969,15 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 <div style={{ fontSize:14, fontWeight:700, color:'#555', marginBottom:12, textAlign:'center' }}>Split between how many people?</div>
                 <div style={{ display:'grid', gridTemplateColumns:isMobile?'repeat(3,1fr)':'repeat(5,1fr)', gap:8 }}>
                   {[2,3,4,5,6,7,8,9,10].map(n => (
-                    <button key={n} onClick={() => { setSplitCount(n); setSplitPaid([]); }} style={{ padding:isMobile?'16px 8px':'14px 8px', borderRadius:10, border:'none', cursor:'pointer', fontWeight:700, fontSize:18, background:splitCount===n?'var(--brand-primary, #1a1a2e)':'#f0f0f0', color:splitCount===n?'white':'var(--brand-primary, #1a1a2e)' }}>{n}</button>
+                    <button key={n} onClick={() => {
+                      // SEPOS-AUDIT-001 — changing the head-count restarts the
+                      // split: clearing paid WITHOUT clearing the tenders left
+                      // already-taken money in the sum, so the last person's
+                      // remainder went negative (server 400, bill stuck) or
+                      // recorded the wrong amount. Warn if money was taken.
+                      if (splitTenders.length > 0) alert('Split restarted — payments already taken were cleared. Re-take each person\'s payment.');
+                      setSplitCount(n); setSplitPaid([]); setSplitTenders([]);
+                    }} style={{ padding:isMobile?'16px 8px':'14px 8px', borderRadius:10, border:'none', cursor:'pointer', fontWeight:700, fontSize:18, background:splitCount===n?'var(--brand-primary, #1a1a2e)':'#f0f0f0', color:splitCount===n?'white':'var(--brand-primary, #1a1a2e)' }}>{n}</button>
                   ))}
                 </div>
               </div>
@@ -928,7 +1021,11 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 <div style={{ fontSize:13, fontWeight:700, color:'#555', marginBottom:10 }}>How many people?</div>
                 <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                   {[2,3,4,5,6,7,8].map(n => (
-                    <button key={n} onClick={() => { setSplitItemCount(n); setItemAssignments({}); setSplitItemPaid([]); setActivePerson(0); }} style={{ padding:isMobile?'12px 18px':'10px 16px', borderRadius:8, border:'none', cursor:'pointer', fontWeight:700, fontSize:16, background:splitItemCount===n?'var(--brand-primary, #1a1a2e)':'#f0f0f0', color:splitItemCount===n?'white':'var(--brand-primary, #1a1a2e)' }}>{n}</button>
+                    <button key={n} onClick={() => {
+                      // SEPOS-AUDIT-001 — same tender-leak fix as split-equal.
+                      if (splitTenders.length > 0) alert('Split restarted — payments already taken were cleared. Re-take each person\'s payment.');
+                      setSplitItemCount(n); setItemAssignments({}); setSplitItemPaid([]); setSplitTenders([]); setActivePerson(0);
+                    }} style={{ padding:isMobile?'12px 18px':'10px 16px', borderRadius:8, border:'none', cursor:'pointer', fontWeight:700, fontSize:16, background:splitItemCount===n?'var(--brand-primary, #1a1a2e)':'#f0f0f0', color:splitItemCount===n?'white':'var(--brand-primary, #1a1a2e)' }}>{n}</button>
                   ))}
                 </div>
               </div>
@@ -1125,7 +1222,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 </div>
                 <div style={{ padding:'12px 16px 8px' }}>
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
-                    {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(btn => (
+                    {['7','8','9','4','5','6','1','2','3','00','0','⌫'].map(btn => (
                       <button key={btn} onClick={() => handleNumpad(btn)} style={{ height:72, borderRadius:12, border:'none', fontSize:26, fontWeight:700, cursor:'pointer', background:btn==='⌫'?'#fee2e2':'#f8f8f8', color:btn==='⌫'?'#ef4444':'var(--brand-primary,#0D1B3E)' }}>{btn}</button>
                     ))}
                   </div>
@@ -1179,7 +1276,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                     <div style={{ fontSize:36, fontWeight:800, color:'white', fontFamily:'monospace' }}>£{paymentInput||'0.00'}</div>
                   </div>
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8 }}>
-                    {['7','8','9','4','5','6','1','2','3','.','0','⌫'].map(btn => (
+                    {['7','8','9','4','5','6','1','2','3','00','0','⌫'].map(btn => (
                       <button key={btn} onClick={() => handleNumpad(btn)} style={{ height:68, borderRadius:12, border:'none', fontSize:22, fontWeight:700, cursor:'pointer', background:btn==='⌫'?'#fee2e2':'#f8f8f8', color:btn==='⌫'?'#ef4444':'var(--brand-primary, #1a1a2e)' }}>{btn}</button>
                     ))}
                   </div>

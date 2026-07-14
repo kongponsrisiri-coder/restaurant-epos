@@ -8,8 +8,32 @@ const { spawn } = require('child_process');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const DEV_URL = 'http://localhost:5173';
 
-// Single source of truth for the app icon — same lotus the PWA uses.
-const APP_ICON_PATH = path.join(PROJECT_ROOT, 'client', 'public', 'icon-512.png');
+// SEPOS-EXIT-001 — single-instance lock. When something looks stuck, staff
+// sometimes force-quit and re-open SiamEPOS, ending up with TWO instances both
+// running a local Express server against the SAME SQLite DB
+// (userData/siamepos-local.db) — lock contention + sync races. Hold the OS
+// single-instance lock; a second launch hands control to the first (focus its
+// window) and exits immediately. Packaged-only, so a dev `npm start` can still
+// run alongside an installed copy on the same machine.
+const gotSingleInstanceLock = app.isPackaged ? app.requestSingleInstanceLock() : true;
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
+// Single source of truth for the app icon — the SiamEPOS lotus. Use the
+// bundled electron/build/icon.png (shipped via package.json "files": build/**),
+// so it resolves in BOTH dev and the packaged app. The old client/public path
+// is NOT bundled (only client-dist is), so at runtime the file was missing and
+// Windows fell back to the generic Electron icon in the taskbar + window.
+const APP_ICON_PATH = path.join(__dirname, 'build', 'icon.png');
 
 // Per-install config — restaurant name, cloud URL, restaurant id. Lives at
 // electron/config.json in dev (matches your repo layout) and in userData
@@ -773,7 +797,27 @@ ipcMain.handle('siamepos:check-for-updates', async () => {
   }
 });
 
+// SEPOS-EXIT-001 — quit cleanly from the login screen's Exit button. Goes
+// through before-quit (which stops the local server child) so nothing is left
+// holding the SQLite DB.
+ipcMain.handle('quit-app', () => {
+  app.quit();
+});
+
 app.whenReady().then(async () => {
+  // SEPOS-EXIT-001 — a second instance that failed to get the lock is already
+  // quitting; don't spawn a server or create a window from it.
+  if (!gotSingleInstanceLock) return;
+
+  // Windows: bind the app + its taskbar icon to a stable AppUserModelID (the
+  // installer appId). Without this, Windows shows the generic Electron icon in
+  // the taskbar and won't group the app's windows under one icon.
+  if (process.platform === 'win32') {
+    try { app.setAppUserModelId('uk.co.siamepos.pro'); } catch (err) {
+      console.warn('[win] setAppUserModelId failed:', err.message);
+    }
+  }
+
   // Dock icon (macOS only — Linux/Windows ignore this).
   if (process.platform === 'darwin' && app.dock && fs.existsSync(APP_ICON_PATH)) {
     try { app.dock.setIcon(APP_ICON_PATH); } catch (err) {

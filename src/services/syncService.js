@@ -69,7 +69,35 @@ const PULL_TABLES = [
   // another terminal shows on this till's banner; desktop-initiated open/close
   // forwards to cloud first (forwardWriteToCloud) so ids stay in one space.
   { path: '/api/till-sessions',          table: 'till_sessions',          pk: 'id' },
+  // SEPOS-AUDIT-001 (verify pass) — vouchers became cloud-authoritative
+  // (redeem/sell forward to the cloud), which emptied the till's LOCAL voucher
+  // tables and blanked the Z's voucher figures — including the drawer
+  // reconciliation for cash voucher sales. Mirror both tables cloud→local so
+  // the reports see them again. UPSERT-ONLY (no orphan-delete): the cloud
+  // feeds are windowed/LIMIT'd and a voucher sold OFFLINE lives only locally
+  // until its sell_voucher push lands — orphan-delete would wipe both.
+  // Voids arrive as status='void' updates on the matched id, so hard-delete
+  // reconciliation isn't needed.
+  { path: '/api/vouchers',               table: 'vouchers',               pk: 'id' },
+  { path: '/api/voucher-redemptions',    table: 'voucher_redemptions',    pk: 'id' },
 ];
+
+// SEPOS-DEVICE-PRINTERS-001 — device-owned settings the cloud-wins pull must NOT
+// overwrite. These name THIS till's physical print hardware / LAN, or reference
+// rows in the device-local `printers` table (which is already not synced). The
+// cloud copy belongs to whichever till last pushed (or stale onboarding), so
+// letting it cloud-win silently reverts a working printer setup mid-service —
+// the till is authoritative for its own hardware. (Local edits still PUSH to the
+// cloud as a backup; we just never let the cloud pull clobber them back.)
+const DEVICE_OWNED_SETTING_PREFIXES = ['printer_'];
+const DEVICE_OWNED_SETTING_KEYS = new Set([
+  'default_receipt_printer_id', 'default_kitchen_printer_id', 'default_bar_printer_id',
+  'open_drawer_on_payment', 'kitchen_thai_codepage',
+]);
+function isDeviceOwnedSettingKey(key) {
+  const k = String(key);
+  return DEVICE_OWNED_SETTING_PREFIXES.some((p) => k.startsWith(p)) || DEVICE_OWNED_SETTING_KEYS.has(k);
+}
 
 let initialSyncDone = false;
 
@@ -125,15 +153,23 @@ async function findLocalItemByCloudId(cloudId) {
 // the push completes and clears the queue entry.
 async function ordersWithPendingPush() {
   try {
+    // SEPOS-AUDIT-001 — every order-scoped action type must be listed here,
+    // or the cloud-wins pull reverts the local change while its push is still
+    // in the queue (the revert class the stability audit confirmed).
     const r = await pool.query(
       `SELECT payload FROM sync_queue WHERE synced = 0
-       AND action_type IN ('create_order','add_items','fire_course','pay_order','delete_order')`
+       AND action_type IN ('create_order','add_items','fire_course','pay_order','delete_order',
+                           'apply_discount','update_order_flags','move_order','merge_orders',
+                           'resend_items','close_zero','cancel_order','takeaway_status',
+                           'amend_method','edit_payment')`
     );
     const orderIds = new Set();
     for (const row of r.rows) {
       try {
         const p = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
         if (p && p.localOrderId) orderIds.add(Number(p.localOrderId));
+        // merge_orders touches TWO orders — protect the source too.
+        if (p && p.mergeLocalOrderId) orderIds.add(Number(p.mergeLocalOrderId));
       } catch {}
     }
     return orderIds;
@@ -161,7 +197,8 @@ async function itemsWithPendingPush() {
   try {
     const r = await pool.query(
       `SELECT payload FROM sync_queue WHERE synced = 0
-       AND action_type IN ('add_items','void_item','update_item_status')`
+       AND action_type IN ('add_items','void_item','update_item_status',
+                           'apply_item_discount','resend_items','merge_orders')`
     );
     const itemIds = new Set();
     for (const row of r.rows) {
@@ -173,10 +210,79 @@ async function itemsWithPendingPush() {
             if (it && it.localItemId) itemIds.add(Number(it.localItemId));
           }
         }
+        // resend_items carries a plain array of local item ids.
+        if (p && Array.isArray(p.localItemIds)) {
+          for (const id of p.localItemIds) itemIds.add(Number(id));
+        }
       } catch {}
     }
     return itemIds;
   } catch { return new Set(); }
+}
+
+// SEPOS-AUDIT-001 — is there still an unsynced queue entry of one of these
+// action types for this local order/item? Used by the strict cloud-id
+// resolvers below to tell "parent push hasn't run yet" (transient — wait)
+// apart from "parent push failed/was quarantined" (permanent — never target
+// the cloud with a raw local id).
+async function hasPendingQueueAction(actionTypes, matcher) {
+  try {
+    const placeholders = actionTypes.map((_, i) => `$${i + 1}`).join(',');
+    const r = await pool.query(
+      `SELECT payload FROM sync_queue WHERE synced = 0 AND action_type IN (${placeholders})`,
+      actionTypes
+    );
+    for (const row of r.rows) {
+      try {
+        const p = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+        if (p && matcher(p)) return true;
+      } catch {}
+    }
+    return false;
+  } catch { return false; }
+}
+
+// SEPOS-AUDIT-001 — CRITICAL fix. The push cases below used to fall back to
+// the RAW LOCAL id when cloud_id wasn't bound (`|| payload.localOrderId`).
+// Local ids and cloud ids are independent sequences, so when a create_order
+// push failed permanently (quarantined) that fallback made add_items / pay /
+// fire / void target whatever UNRELATED cloud order happened to share the
+// number — items landed on and payments CLOSED someone else's live bill.
+// SEPOS-047c removed exactly this fallback for delete_order; these resolvers
+// extend the same refusal to every other cloud mutation:
+//   • cloud_id bound → use it.
+//   • unbound but the parent create/add push is still pending → throw a
+//     plain error (no HTTP status → classified transient → retried next
+//     tick, by which time the ordered drain has bound the id).
+//   • unbound with no pending parent → the parent push is gone (quarantined/
+//     lost). Throw err.permanent so the entry is quarantined too and
+//     surfaced in the Sync-queue modal, instead of hitting a wrong bill.
+async function requireOrderCloudId(actionType, localOrderId) {
+  const cloudId = await getOrderCloudId(localOrderId);
+  if (cloudId) return cloudId;
+  const parentPending = await hasPendingQueueAction(['create_order'],
+    (p) => Number(p.localOrderId) === Number(localOrderId));
+  if (parentPending) {
+    throw new Error(`${actionType}: waiting for create_order push of local order ${localOrderId}`);
+  }
+  const err = new Error(
+    `${actionType}: local order ${localOrderId} has no cloud_id and no pending create_order — refusing to target a raw local id on the cloud`);
+  err.permanent = true;
+  throw err;
+}
+async function requireItemCloudId(actionType, localItemId) {
+  const cloudId = await getItemCloudId(localItemId);
+  if (cloudId) return cloudId;
+  const parentPending = await hasPendingQueueAction(['add_items', 'create_order'],
+    (p) => (Array.isArray(p.items) && p.items.some(it => Number(it?.localItemId) === Number(localItemId)))
+        || Number(p.localItemId) === Number(localItemId));
+  if (parentPending) {
+    throw new Error(`${actionType}: waiting for add_items push of local item ${localItemId}`);
+  }
+  const err = new Error(
+    `${actionType}: local item ${localItemId} has no cloud_id and no pending add_items — refusing to target a raw local id on the cloud`);
+  err.permanent = true;
+  throw err;
 }
 
 function setStatus(next) {
@@ -240,7 +346,7 @@ async function applyToCloud(actionType, payload) {
       return j;
     }
     case 'add_items': {
-      const cloudId = (await getOrderCloudId(payload.localOrderId)) || payload.localOrderId;
+      const cloudId = await requireOrderCloudId('add_items', payload.localOrderId);
       const r = await fetch(url(`/api/orders/${cloudId}/items`), {
         method: 'POST', ...json({ items: payload.items }),
       });
@@ -259,7 +365,7 @@ async function applyToCloud(actionType, payload) {
       return j;
     }
     case 'pay_order': {
-      const cloudId = (await getOrderCloudId(payload.localOrderId)) || payload.localOrderId;
+      const cloudId = await requireOrderCloudId('pay_order', payload.localOrderId);
       const r = await fetch(url(`/api/orders/${cloudId}/pay`), {
         // SEPOS-062 — forward the per-tender split breakdown when present so the
         // cloud records the same Cash/Card rows the till did.
@@ -271,7 +377,7 @@ async function applyToCloud(actionType, payload) {
       return r.json();
     }
     case 'fire_course': {
-      const cloudId = (await getOrderCloudId(payload.localOrderId)) || payload.localOrderId;
+      const cloudId = await requireOrderCloudId('fire_course', payload.localOrderId);
       const r = await fetch(url(`/api/orders/${cloudId}/fire-course/${payload.course}`), {
         method: 'PUT', ...json({}),
       });
@@ -279,7 +385,7 @@ async function applyToCloud(actionType, payload) {
       return r.json();
     }
     case 'void_item': {
-      const cloudItemId = (await getItemCloudId(payload.localItemId)) || payload.localItemId;
+      const cloudItemId = await requireItemCloudId('void_item', payload.localItemId);
       // SEPOS-047c — forward quantity + void_type so the cloud voids the
       // SAME amount (was {reason} only → cloud voided the WHOLE line).
       const r = await fetch(url(`/api/order-items/${cloudItemId}/void`), {
@@ -302,9 +408,10 @@ async function applyToCloud(actionType, payload) {
     case 'update_item_status': {
       // Pass tap "Done" / chef tap "Cooked" on a local-mode install.
       // Mirror the change to cloud so the next pullActiveOrders doesn't
-      // revert it. Falls back to local id if cloud_id isn't bound yet
-      // (item created here this tick, push not yet completed).
-      const cloudItemId = (await getItemCloudId(payload.localItemId)) || payload.localItemId;
+      // revert it. If cloud_id isn't bound yet (item created here this tick,
+      // push not yet completed) the resolver throws a transient error so the
+      // ordered drain binds it first — never a raw-local-id fallback.
+      const cloudItemId = await requireItemCloudId('update_item_status', payload.localItemId);
       const r = await fetch(url(`/api/order-items/${cloudItemId}/status`), {
         method: 'PUT', ...json({ status: payload.status }),
       });
@@ -386,6 +493,166 @@ async function applyToCloud(actionType, payload) {
         }),
       });
       if (!r.ok) throw new Error(`delete_order ${r.status}`);
+      return r.json();
+    }
+    // ── SEPOS-AUDIT-001 — push cases for the writes that used to be one-way ──
+    // (local till applied them, nothing pushed, and the 5s cloud-wins pull
+    // reverted them). Each replays the SAME public endpoint on the cloud with
+    // the local ids translated to cloud ids.
+    case 'apply_discount': {
+      const cloudId = await requireOrderCloudId('apply_discount', payload.localOrderId);
+      const r = await fetch(url(`/api/orders/${cloudId}/discount`), {
+        method: 'PUT', ...json({
+          discount_type: payload.discount_type,
+          discount_value: payload.discount_value,
+          discount_reason: payload.discount_reason,
+        }),
+      });
+      if (!r.ok) throw new Error(`apply_discount ${r.status}`);
+      return r.json();
+    }
+    case 'apply_item_discount': {
+      const cloudItemId = await requireItemCloudId('apply_item_discount', payload.localItemId);
+      const r = await fetch(url(`/api/order-items/${cloudItemId}/discount`), {
+        method: 'PUT', ...json({
+          discount_type: payload.discount_type,
+          discount_value: payload.discount_value,
+        }),
+      });
+      if (!r.ok) throw new Error(`apply_item_discount ${r.status}`);
+      return r.json();
+    }
+    case 'update_order_flags': {
+      const cloudId = await requireOrderCloudId('update_order_flags', payload.localOrderId);
+      if (payload.no_service_charge !== undefined && payload.no_service_charge !== null) {
+        const r = await fetch(url(`/api/orders/${cloudId}/service-charge`), {
+          method: 'PUT', ...json({ no_service_charge: payload.no_service_charge }),
+        });
+        if (!r.ok) throw new Error(`update_order_flags(service-charge) ${r.status}`);
+      }
+      if (payload.bill_printed) {
+        const r = await fetch(url(`/api/orders/${cloudId}/bill-printed`), {
+          method: 'PUT', ...json({}),
+        });
+        if (!r.ok) throw new Error(`update_order_flags(bill-printed) ${r.status}`);
+      }
+      return { ok: true };
+    }
+    case 'move_order': {
+      const cloudId = await requireOrderCloudId('move_order', payload.localOrderId);
+      // Table ids are shared cloud/local (the tables pull keeps cloud pks).
+      const r = await fetch(url(`/api/orders/${cloudId}/move`), {
+        method: 'PUT', ...json({ new_table_id: payload.new_table_id }),
+      });
+      if (!r.ok) throw new Error(`move_order ${r.status}`);
+      return r.json();
+    }
+    case 'merge_orders': {
+      const cloudTarget = await requireOrderCloudId('merge_orders', payload.localOrderId);
+      const cloudSource = await requireOrderCloudId('merge_orders', payload.mergeLocalOrderId);
+      const r = await fetch(url(`/api/orders/${cloudTarget}/merge`), {
+        method: 'PUT', ...json({ merge_order_id: cloudSource }),
+      });
+      if (!r.ok) throw new Error(`merge_orders ${r.status}`);
+      return r.json();
+    }
+    case 'resend_items': {
+      const cloudId = await requireOrderCloudId('resend_items', payload.localOrderId);
+      const cloudItemIds = [];
+      for (const localItemId of payload.localItemIds || []) {
+        cloudItemIds.push(await requireItemCloudId('resend_items', localItemId));
+      }
+      if (cloudItemIds.length === 0) return { skipped: true };
+      const r = await fetch(url(`/api/orders/${cloudId}/resend`), {
+        method: 'POST', ...json({ item_ids: cloudItemIds, reason: payload.reason }),
+      });
+      if (!r.ok) throw new Error(`resend_items ${r.status}`);
+      return r.json();
+    }
+    case 'close_zero': {
+      const cloudId = await requireOrderCloudId('close_zero', payload.localOrderId);
+      const r = await fetch(url(`/api/orders/${cloudId}/close-zero`), { method: 'POST', ...json({}) });
+      // 409 = already closed on cloud (someone else closed it) — done.
+      if (r.status === 409) return { alreadyClosed: true };
+      if (!r.ok) throw new Error(`close_zero ${r.status}`);
+      return r.json();
+    }
+    case 'cancel_order': {
+      const cloudId = await requireOrderCloudId('cancel_order', payload.localOrderId);
+      const r = await fetch(url(`/api/orders/${cloudId}/pay`), {
+        method: 'POST', ...json({ amount: 0, method: 'cancelled' }),
+      });
+      if (r.status === 409) return { alreadyClosed: true };
+      if (!r.ok) throw new Error(`cancel_order ${r.status}`);
+      return r.json();
+    }
+    case 'takeaway_status': {
+      const cloudId = await requireOrderCloudId('takeaway_status', payload.localOrderId);
+      const r = await fetch(url(`/api/orders/${cloudId}/takeaway-status`), {
+        method: 'PUT', ...json({ status: payload.status }),
+      });
+      if (!r.ok) throw new Error(`takeaway_status ${r.status}`);
+      return r.json();
+    }
+    case 'amend_method': {
+      // Verify pass — replays through the SYNC_SECRET-gated sync endpoint so
+      // no PIN is ever persisted in sync_queue (the PIN was already validated
+      // on the till at request time).
+      const cloudId = await requireOrderCloudId('amend_method', payload.localOrderId);
+      if (!process.env.SYNC_SECRET) throw new Error('SYNC_SECRET missing');
+      const r = await fetch(url('/api/sync/amend-method'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-sync-secret': process.env.SYNC_SECRET },
+        body: JSON.stringify({
+          order_id: cloudId, new_method: payload.new_method,
+          reason: payload.reason, amended_by_name: payload.amended_by_name,
+          // legacy entries queued before this change carried a pin — ignored.
+        }),
+      });
+      if (!r.ok) throw new Error(`amend_method ${r.status}`);
+      return r.json();
+    }
+    case 'edit_payment': {
+      const cloudId = await requireOrderCloudId('edit_payment', payload.localOrderId);
+      if (!process.env.SYNC_SECRET) throw new Error('SYNC_SECRET missing');
+      const r = await fetch(url('/api/sync/edit-payment'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-sync-secret': process.env.SYNC_SECRET },
+        body: JSON.stringify({
+          order_id: cloudId, edits: payload.edits,
+          reason: payload.reason, amended_by_name: payload.amended_by_name,
+          sync_key: payload.sync_key || null, // verify pass — replay idempotency
+        }),
+      });
+      if (!r.ok) throw new Error(`edit_payment ${r.status}`);
+      return r.json();
+    }
+    case 'sell_voucher': {
+      // Verify pass — replay an offline voucher sale with the SAME code the
+      // customer holds. Idempotent (ON CONFLICT(code) DO NOTHING on the cloud).
+      if (!process.env.SYNC_SECRET) throw new Error('SYNC_SECRET missing');
+      const r = await fetch(url('/api/sync/sell-voucher'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-sync-secret': process.env.SYNC_SECRET },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) throw new Error(`sell_voucher ${r.status}`);
+      return r.json();
+    }
+    case 'session_open': {
+      const r = await fetch(url('/api/till-sessions/open'), {
+        method: 'POST', ...json({ staff_id: payload.staff_id, float_amount: payload.float_amount }),
+      });
+      if (r.status === 409) return { alreadyOpen: true };   // cloud already has an open shift
+      if (!r.ok) throw new Error(`session_open ${r.status}`);
+      return r.json();
+    }
+    case 'session_close': {
+      const r = await fetch(url('/api/till-sessions/close'), {
+        method: 'POST', ...json({ closed_by: payload.closed_by, z_report_id: payload.z_report_id }),
+      });
+      if (r.status === 409) return { alreadyClosed: true }; // no open shift on cloud — done
+      if (!r.ok) throw new Error(`session_close ${r.status}`);
       return r.json();
     }
     default:
@@ -558,7 +825,11 @@ async function pullFromCloud() {
   // Flat-shape endpoints.
   for (const ep of PULL_TABLES) {
     try {
+      // REG-1 (Nook) — send the install's SYNC_SECRET on every pull: the
+      // voucher endpoints are now auth-gated on the cloud (they were leaking
+      // codes/balances publicly), and the header is harmless on open ones.
       const r = await fetch(CLOUD_API_URL + ep.path, {
+        headers: process.env.SYNC_SECRET ? { 'x-sync-secret': process.env.SYNC_SECRET } : {},
         signal: AbortSignal.timeout(PING_TIMEOUT_MS),
       });
       if (!r.ok) {
@@ -570,9 +841,33 @@ async function pullFromCloud() {
       // array, so the old `Array.isArray ? rows : rows?.data || []` discarded it
       // every tick and settings (printer IP, Thai codepage, service charge…)
       // never reached a freshly-provisioned till. Map the object to rows.
-      const list = Array.isArray(rows) ? rows
-        : ep.table === 'settings' ? Object.entries(rows || {}).map(([key, value]) => ({ key, value }))
+      let list = Array.isArray(rows) ? rows
+        : ep.table === 'settings' ? Object.entries(rows || {})
+            .filter(([key]) => !isDeviceOwnedSettingKey(key))
+            .map(([key, value]) => ({ key, value }))
         : (rows?.data || []);
+      // SEPOS-AUDIT-001 — till_sessions guard. (a) While a session open/close
+      // replay is still queued, the cloud's view is stale — skip the pull
+      // entirely this tick (mirrors ordersWithPendingPush). (b) Never let a
+      // cloud row flip a locally-CLOSED session back to 'open': cloud and
+      // local session ids are independent sequences, so after an offline
+      // close the cloud's still-open row (same numeric id) used to reopen
+      // yesterday's shift on the till.
+      if (ep.table === 'till_sessions') {
+        const pendingSessions = await hasPendingQueueAction(
+          ['session_open', 'session_close'], () => true);
+        if (pendingSessions) continue;
+        const filtered = [];
+        for (const row of list) {
+          if (row && row.id != null && row.status === 'open') {
+            const loc = await pool.query(
+              `SELECT status FROM till_sessions WHERE id = $1`, [row.id]);
+            if (loc.rows[0]?.status === 'closed') continue;   // local close wins
+          }
+          filtered.push(row);
+        }
+        list = filtered;
+      }
       const n = await upsertRows(ep.table, ep.pk, list);
       if (n > 0) console.log(`[sync] pull ${ep.table}: ${n} rows`);
       // SEPOS-059 fix — cloud-wins DELETE for flagged flat tables (the modifier
@@ -628,7 +923,6 @@ async function pullActiveOrders() {
   }
 
   const { orders = [], order_items = [], payments = [] } = payload;
-  if (orders.length === 0) return;
 
   // Snapshot which local rows have Mac-side pending mutations — those
   // are skipped below to avoid the "tap → appears → snaps back → reappears"
@@ -638,6 +932,15 @@ async function pullActiveOrders() {
   // Cloud ids the Mac is currently deleting (their local rows are already
   // gone — pull must NOT re-INSERT them while the push is in flight).
   const pendingDeleteCloudIds = await cloudIdsWithPendingDelete();
+
+  // SEPOS-AUDIT-001 (verify pass) — the deletion reconciliation MUST run even
+  // when the snapshot is EMPTY: deleting the ONLY open order on the cloud (the
+  // most common ops-support delete, typically end of night) produces exactly
+  // that empty snapshot, and the old placement (after the early return below)
+  // made the probe dead code for it — the ghost stayed on the floor.
+  await reconcileCloudDeletions(orders, pendingOrderIds, pendingDeleteCloudIds);
+
+  if (orders.length === 0) return;
 
   let inserted = 0, updated = 0, skippedPending = 0, skippedDelete = 0;
 
@@ -695,14 +998,27 @@ async function pullActiveOrders() {
       if (pendingOrderIds.has(localId)) {
         skippedPending++;
       } else {
-        const setCols = Object.keys(fields).filter(k => k !== 'cloud_id');
-        if (setCols.length > 0) {
-          const sets = setCols.map((c, i) => `${c} = $${i + 1}`).join(',');
-          await pool.query(
-            `UPDATE orders SET ${sets} WHERE id = $${setCols.length + 1}`,
-            [...setCols.map(c => fields[c]), localId]
-          );
-          updated++;
+        // SEPOS-AUDIT-001 — CRITICAL: never downgrade a locally CLOSED /
+        // CANCELLED bill back to 'open'. If the pay/cancel push hasn't
+        // landed yet (e.g. cloud was 502ing and the entry is retrying, or
+        // it was quarantined), the cloud copy still says 'open' — cloud-wins
+        // here used to flip the till's PAID bill back onto the floor,
+        // inviting a second payment. The till is authoritative for a close
+        // it performed; skip until the push closes the cloud copy too.
+        const st = await pool.query('SELECT status FROM orders WHERE id = $1', [localId]);
+        const localStatus = st.rows[0]?.status;
+        if ((localStatus === 'closed' || localStatus === 'cancelled') && fields.status === 'open') {
+          skippedPending++;
+        } else {
+          const setCols = Object.keys(fields).filter(k => k !== 'cloud_id');
+          if (setCols.length > 0) {
+            const sets = setCols.map((c, i) => `${c} = $${i + 1}`).join(',');
+            await pool.query(
+              `UPDATE orders SET ${sets} WHERE id = $${setCols.length + 1}`,
+              [...setCols.map(c => fields[c]), localId]
+            );
+            updated++;
+          }
         }
       }
     } else {
@@ -765,6 +1081,56 @@ async function pullActiveOrders() {
 
   if (inserted || updated || itemsInserted || itemsUpdated || skippedPending || skippedDelete) {
     console.log(`[sync] active-orders: ${inserted}+${updated} orders, ${itemsInserted}+${itemsUpdated} items${itemsSkipped ? ` (${itemsSkipped} item-skips, parent not yet pulled)` : ''}${skippedPending ? ` (${skippedPending} skipped — local pending)` : ''}${skippedDelete ? ` (${skippedDelete} skipped — pending delete push)` : ''}`);
+  }
+
+}
+
+// ─── SEPOS-AUDIT-001: reconcile cloud-side deletions ────────────────
+// pullActiveOrders only inserts/updates and the closed-orders feed only
+// covers status='closed', so an order hard-DELETEd on the cloud (ops
+// support, or a browser terminal's DELETE /api/orders/:id) used to leave a
+// permanent ghost open order on the till — it has real items, so the
+// 0-item display filter never hides it, and the table shows occupied
+// forever. Any local OPEN order that (a) is bound to a cloud_id, (b) is
+// absent from this active snapshot, and (c) has no pending local push is
+// probed individually: cloud 404 → it was deleted → cancel it locally and
+// free the table. A 200 means it merely closed (the closed-orders pull
+// will reconcile) — leave it alone. Capped per tick to bound work.
+// (Verify pass: extracted to run BEFORE the empty-snapshot early return.)
+async function reconcileCloudDeletions(orders, pendingOrderIds, pendingDeleteCloudIds) {
+  try {
+    const snapshotIds = new Set(orders.map(o => Number(o.id)));
+    const localOpen = await pool.query(
+      `SELECT id, cloud_id, table_id FROM orders WHERE status = 'open' AND cloud_id IS NOT NULL`
+    );
+    let probed = 0, ghostsCancelled = 0;
+    for (const row of localOpen.rows) {
+      if (probed >= 5) break;                                   // bound per tick
+      const cid = Number(row.cloud_id);
+      if (snapshotIds.has(cid)) continue;                       // still active on cloud
+      if (pendingOrderIds.has(Number(row.id))) continue;        // our push in flight
+      if (pendingDeleteCloudIds.has(cid)) continue;             // our delete in flight
+      probed++;
+      try {
+        const pr = await fetch(`${CLOUD_API_URL}/api/orders/${cid}`, {
+          signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+        });
+        if (pr.status === 404) {
+          await pool.query(
+            `UPDATE orders SET status = 'cancelled', closed_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = 'open'`,
+            [row.id]
+          );
+          if (row.table_id) {
+            await pool.query(`UPDATE tables SET status = 'available' WHERE id = $1`, [row.table_id]);
+          }
+          ghostsCancelled++;
+          console.log(`[sync] local order ${row.id} (cloud ${cid}) was deleted on the cloud — cancelled locally`);
+        }
+      } catch { /* offline blip — retry next tick */ }
+    }
+    if (ghostsCancelled) console.log(`[sync] reconciled ${ghostsCancelled} cloud-deleted order(s)`);
+  } catch (err) {
+    console.warn('[sync] deletion reconciliation skipped:', err.message);
   }
 }
 
@@ -972,20 +1338,48 @@ async function syncOnce() {
       await offlineQueue.markSynced(entry.id);
     } catch (err) {
       const httpStatus = errHttpStatus(err);
+      // SEPOS-AUDIT-001 — an action that flagged itself permanent must
+      // quarantine even when its status is 401/403 (e.g. amend_method's PIN
+      // rejected by the CLOUD staff table): treating it as a global auth
+      // failure below would halt the whole queue forever on one bad entry.
+      if (err.permanent === true) {
+        console.error(`[sync] ${entry.action_type}#${entry.id} quarantined (permanent): ${err.message}`);
+        await offlineQueue.markFailed(entry.id, err.message);
+        continue;
+      }
       // Auth failure (bad/missing SYNC_SECRET) affects EVERY gated push — not
       // this one item. Stop and surface it; don't quarantine (it's a config
       // fix, and the actions are still valid once the secret is right).
       if (httpStatus === 401 || httpStatus === 403) {
         console.error(`[sync] ${entry.action_type}#${entry.id} auth failed (${httpStatus}) — check SYNC_SECRET`);
         setStatus('auth_error');
-        return;
+        // SEPOS-AUDIT-001 (verify pass) — return the state as a hint so tick()
+        // doesn't immediately overwrite it with a healthy-looking 'syncing'.
+        return 'auth_error';
       }
       // Permanent data error (4xx: order already closed / not found / conflict /
-      // unprocessable). This item will NEVER succeed — quarantine it and KEEP
-      // DRAINING so it can't head-of-line-block the live orders behind it.
-      const permanent = httpStatus !== null && httpStatus >= 400 && httpStatus < 500;
+      // unprocessable), or an action that flagged itself permanent (e.g. a
+      // mutation whose parent create_order failed, so its cloud_id can never
+      // bind — SEPOS-AUDIT-001). It will NEVER succeed — quarantine it and
+      // KEEP DRAINING so it can't head-of-line-block the live orders behind it.
+      const permanent = err.permanent === true
+        || (httpStatus !== null && httpStatus >= 400 && httpStatus < 500);
       const attempts = (entry.attempts || 0) + 1;
-      if (permanent || (httpStatus !== null && attempts >= MAX_SYNC_ATTEMPTS)) {
+      // SEPOS-AUDIT-001 — CRITICAL: state-mutating actions must NEVER be
+      // quarantined on 5xx. A routine Railway redeploy answers 502 for a
+      // couple of minutes; at one attempt per 5s tick the old rule
+      // (attempts >= 6) quarantined a pay_order in ~30s — the cloud copy then
+      // stayed open forever and the pull flipped the till's PAID bill back to
+      // 'open', inviting a second charge. The verify pass extended this to
+      // EVERY order/money-state replay (merge, close, cancel, collected,
+      // discounts, amendments, sessions…) — the same redeploy would have
+      // quarantined those, leaving the un-pushed change to be reverted by the
+      // pull. Only pure-settings pushes may exhaust: their replay is
+      // idempotent and losing one is recoverable from the admin screen.
+      const EXHAUSTIBLE_ACTIONS = new Set(['update_kv_settings', 'update_restaurant_settings']);
+      const exhausted = httpStatus !== null && attempts >= MAX_SYNC_ATTEMPTS
+        && EXHAUSTIBLE_ACTIONS.has(entry.action_type);
+      if (permanent || exhausted) {
         console.error(`[sync] ${entry.action_type}#${entry.id} quarantined after ${attempts} attempt(s): ${err.message}`);
         await offlineQueue.markFailed(entry.id, err.message);
         continue; // ← the fix: move on instead of freezing the whole queue
@@ -994,8 +1388,19 @@ async function syncOnce() {
       // Bump the counter only when the server actually answered (5xx) so an
       // outage doesn't burn the attempt budget; then stop this tick and retry
       // the whole queue next tick once things recover.
-      if (httpStatus !== null) await offlineQueue.bumpAttempt(entry.id, err.message);
-      else console.warn(`[sync] ${entry.action_type}#${entry.id} deferred (no response — offline?): ${err.message}`);
+      if (httpStatus !== null) {
+        await offlineQueue.bumpAttempt(entry.id, err.message);
+        if (attempts >= MAX_SYNC_ATTEMPTS) {
+          // SEPOS-AUDIT-001 (verify pass) — a deterministic 5xx on a retained
+          // action now head-of-line-blocks the queue by design (better than
+          // wrong money), but it must be VISIBLE: surface 'stuck' so the pill
+          // stops showing a healthy-looking eternal 'syncing'.
+          console.error(`[sync] ${entry.action_type}#${entry.id} still failing after ${attempts} attempts (${err.message}) — retrying until the cloud recovers; queue is blocked behind it`);
+          return 'stuck';
+        }
+      } else {
+        console.warn(`[sync] ${entry.action_type}#${entry.id} deferred (no response — offline?): ${err.message}`);
+      }
       return;
     }
   }
@@ -1033,10 +1438,14 @@ async function tick() {
       initialSyncDone = true;
     }
 
-    await syncOnce();
+    // SEPOS-AUDIT-001 (verify pass) — honour syncOnce's status hint
+    // ('auth_error' / 'stuck'): the unconditional healthy setStatus below used
+    // to overwrite those within the same tick, so a wrong SYNC_SECRET or a
+    // head-of-line-blocked queue showed as an eternal healthy 'syncing'.
+    const hint = await syncOnce();
     await pullFromCloud();
     const remaining = await offlineQueue.pendingCount();
-    setStatus(remaining > 0 ? 'syncing' : 'cloud');
+    setStatus(hint || (remaining > 0 ? 'syncing' : 'cloud'));
   } finally {
     inProgress = false;
   }

@@ -1203,16 +1203,23 @@ export default function SettingsSection() {
                       {[['small','S'],['medium','M'],['large','L'],['full','Full']].map(([val, label]) => (
                         <button key={val} onClick={async () => {
                           setSettings(s => ({ ...s, receipt_logo_size: val }));
-                          if (!settings.company_logo) return;
+                          // Persist the preset even with no logo image uploaded.
+                          if (!settings.company_logo) { updateSettings({ receipt_logo_size: val }).catch(() => {}); return; }
                           try {
                             const bmp = await imageToThermalBitmap(settings.company_logo, sizeToWidth(val));
-                            setSettings(s => ({
-                              ...s,
+                            const patch = {
                               receipt_logo_size: val,
                               company_logo_bitmap:        bmp.b64,
                               company_logo_bitmap_width:  String(bmp.widthBytes),
                               company_logo_bitmap_height: String(bmp.height),
-                            }));
+                              company_logo_bitmap_rev:    '2',
+                            };
+                            setSettings(s => ({ ...s, ...patch }));
+                            // BUGFIX — persist the regenerated bitmap immediately (like the
+                            // upload + auto-rebuild paths do). Previously this only updated
+                            // React state, so the resized bitmap never reached the DB and the
+                            // printed receipt kept the old logo size regardless of the setting.
+                            await updateSettings(patch);
                             setBitmapPreview(bmp.previewDataUrl);
                             setBitmapInkPct(bmp.inkPct);
                           } catch (err) { console.warn('size change conversion failed:', err); }

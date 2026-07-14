@@ -54,6 +54,11 @@ const CMD = {
   ALIGN_RIGHT:  Buffer.from([ESC, 0x61, 0x02]),
   BOLD_ON:      Buffer.from([ESC, 0x45, 0x01]),
   BOLD_OFF:     Buffer.from([ESC, 0x45, 0x00]),
+  // Double-strike — prints each dot row twice for heavier/thicker strokes
+  // (stacks with bold). Kitchen/bar tickets turn it on so orders read thicker
+  // across the pass. INIT cancels it (ESC G 0) so receipts stay normal weight.
+  DSTRIKE_ON:   Buffer.from([ESC, 0x47, 0x01]),
+  DSTRIKE_OFF:  Buffer.from([ESC, 0x47, 0x00]),
   SIZE_NORMAL:  Buffer.from([GS,  0x21, 0x00]),   // 1× width, 1× height
   SIZE_TALL:    Buffer.from([GS,  0x21, 0x01]),   // 1× width, 2× height
   SIZE_WIDE:    Buffer.from([GS,  0x21, 0x10]),   // 2× width, 1× height
@@ -74,10 +79,12 @@ const LINE_WIDTH = 42;  // characters at normal size on 80mm paper
 function scaleCmd(scale) {
   return scale === 'xlarge' ? CMD.SIZE_XL
        : scale === 'normal' ? CMD.SIZE_NORMAL
+       : scale === 'medium' ? CMD.SIZE_TALL   // double-HEIGHT only — taller + fills the paper, but same char width so names don't truncate
        : CMD.SIZE_BIG; // 'large' / default
 }
 function scaleWidthDivisor(scale) {
-  return scale === 'xlarge' ? 3 : scale === 'normal' ? 1 : 2; // 'large'/default = 2
+  // 'medium' is single-width → keep the FULL line width (no truncation), just taller.
+  return scale === 'xlarge' ? 3 : scale === 'normal' ? 1 : scale === 'medium' ? 1 : 2; // 'large'/default = 2
 }
 
 // ── Bilingual course labels ───────────────────────────────────────────────────
@@ -184,13 +191,15 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
   // notes / modifiers / mid-shift price changes keep them separate so
   // the receipt remains accurate). Kitchen tickets still print line by
   // line because the chef needs to see each customisation.
-  // Notes are intentionally excluded from the grouping key so the
-  // receipt collapses "1x Pad Thai (extra spicy)" + "1x Pad Thai" into
-  // a single "2x Pad Thai" line — the customer doesn't need to see
-  // kitchen instructions on their bill. Notes still appear on the
-  // kitchen ticket where the chef needs them.
+  // The chosen OPTIONS (item.notes — modifier picks like "Prawn", "Large") ARE
+  // in the key, so different picks stay on their own line and print on the bill.
+  // The free-text kitchen note (item_note, e.g. "extra spicy") is NOT keyed and
+  // is omitted from the receipt — it stays on the kitchen ticket for the chef.
   const groupKey = (i) => [
     i.menu_item_id ?? i.id,
+    i.notes || '',   // chosen OPTIONS (modifier picks) — keep different picks on
+                     // separate lines so each shows on the bill. Free-text
+                     // item_note is NOT keyed, so it still merges + stays off the bill.
     i.discount_type || '',
     Number(i.discount_value || 0),
     Number(i.unit_price || 0),
@@ -295,7 +304,7 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
       order.pickup_time   ? [col2('Pickup', new Date(order.pickup_time).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/London' })), lf()] : [],
     ] : [
       // Table number BIG + bold + centred so it's obvious at a glance.
-      CMD.ALIGN_CENTER, CMD.BOLD_ON, CMD.SIZE_BIG, txt(`TABLE ${order.table_number || '—'}`), CMD.SIZE_NORMAL, CMD.BOLD_OFF, CMD.ALIGN_LEFT, lf(),
+      CMD.ALIGN_CENTER, CMD.BOLD_ON, CMD.SIZE_BIG, txt(`TABLE ${order.table_number || '—'}`), CMD.SIZE_NORMAL, CMD.BOLD_OFF, CMD.ALIGN_CENTER, lf(),
       col2('Covers', String(order.covers       || '—')), lf(),
     ]),
     col2('Date',    date),  lf(),
@@ -318,12 +327,22 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
               ? (item.discount_type === 'percent' ? p * item.discount_value / 100 : Math.min(item.discount_value, p))
               : 0);
         const net = p - d;
+        // Chosen OPTIONS (modifier picks like "Prawn", "Large"). Put them INLINE
+        // after the name — "1x Massaman Curry (Chicken)" — when the whole line
+        // (name + option + price) fits; otherwise drop the option to its own
+        // indented sub-line so a long name+option never truncates. Free-text
+        // kitchen notes (item_note) stay off the customer's bill.
+        const priceStr   = '£' + net.toFixed(2);
+        const baseLabel  = `${item.quantity}x ${item.name || item.item_name || ('Item #' + item.menu_item_id)}`;
+        const opt        = item.notes ? String(item.notes).trim() : '';
+        const inlineLabel = opt ? `${baseLabel} (${opt})` : baseLabel;
+        const labelBudget = receiptWidth - priceStr.length - 1; // col2's room for the label before it truncates
+        const fitsInline  = !opt || inlineLabel.length <= labelBudget;
         return [
-          CMD.BOLD_ON, receiptSize, col2(`${item.quantity}x ${item.name || item.item_name || ('Item #' + item.menu_item_id)}`, '£' + net.toFixed(2), receiptWidth), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-          // Per-item notes are intentionally omitted from the receipt —
-          // kitchen instructions ("no peanuts", "extra spicy") don't
-          // belong on the customer's bill. Notes still print on the
-          // kitchen ticket where the chef needs them.
+          CMD.BOLD_ON, receiptSize, col2(fitsInline ? inlineLabel : baseLabel, priceStr, receiptWidth), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+          // Didn't fit inline → own indented sub-line, padded to the block width
+          // so it left-aligns under the item name (not floating in the centre).
+          (opt && !fitsInline) ? [receiptSize, col2('   ' + opt, '', receiptWidth), CMD.SIZE_NORMAL, lf()] : [],
         ];
       }),
     ]),
@@ -406,7 +425,9 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
   const headSize = heading.length <= 10 ? CMD.SIZE_BIG : CMD.SIZE_TALL;
 
   const parts = [
-    CAN, CMD.INIT, lf(),
+    // Head room to match the Sunmi (4 lines) so the TABLE header clears a
+    // ticket-rail clip when the ticket is hung (ports escpos.js headerOps feed:4).
+    CAN, CMD.INIT, CMD.DSTRIKE_ON, lf(4),
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(courseEN), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
@@ -424,12 +445,12 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
         // = SIZE_BIG, i.e. today's output). Korakot 2026-06-02: "letters need
         // to be a little bit wider" — now operator-configurable per SEPOS-PRINT-FONT-001.
         CMD.BOLD_ON, itemSize,
-        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}`),
+        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}${item.notes ? ' / ' + item.notes : ''}`),
         CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
         // Thai item name — same scale as the English line above.
         nameAlt    ? [CMD.BOLD_ON, itemSize, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
-        // Modifier / option choice line — same scale as the item line.
-        item.notes ? [CMD.BOLD_ON, itemSize, txt('  > ' + item.notes), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
+        // Modifier / option choice now prints INLINE on the item-name line above
+        // ("…name / option") per operator request — no separate line.
         // SEPOS-024b — the free-text special request (item_note, e.g. "Mild",
         // "no peanuts") prints boldly so it stands out from the modifier line.
         item.item_note ? [CMD.BOLD_ON, itemSize, txt('  ** ' + item.item_note + ' **'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
@@ -473,12 +494,12 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
         // Item line — sized by the tenant's kitchen/bar font scale (default
         // 'large' = SIZE_BIG = today's output). SEPOS-PRINT-FONT-001.
         CMD.BOLD_ON, itemSize,
-        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}`),
+        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}${item.notes ? ' / ' + item.notes : ''}`),
         CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
         // Thai item name — same scale as the English line above.
         nameAlt    ? [CMD.BOLD_ON, itemSize, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
-        // Modifier / option choice line — same scale as the item line.
-        item.notes ? [CMD.BOLD_ON, itemSize, txt('  > ' + item.notes), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
+        // Modifier / option choice now prints INLINE on the item-name line above
+        // ("…name / option") per operator request — no separate line.
         // SEPOS-024b — the free-text special request prints boldly so it stands
         // out from the modifier line above.
         item.item_note ? [CMD.BOLD_ON, itemSize, txt('  ** ' + item.item_note + ' **'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
@@ -488,7 +509,7 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
   ]);
 
   const parts = [
-    CAN, CMD.INIT, lf(),     // CAN discards leftover bytes; LF after INIT ensures clean start
+    CAN, CMD.INIT, CMD.DSTRIKE_ON, lf(4),    // CAN discards leftover bytes; 4-line head room (matches Sunmi) + clean start
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     order.customer_name ? [txt(order.customer_name), lf()] : [],

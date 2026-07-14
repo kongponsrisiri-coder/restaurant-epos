@@ -132,6 +132,23 @@ export function buildKitchenOps(native) {
   return ops;
 }
 
+// ── 📢 Kitchen message ticket → ops (SEPOS-ANDROID-004) ──────────────────────
+// Built on-device so it prints on the built-in printer (UTF-8 → Thai messages
+// render). Mirrors the server's distinctive message ticket: MESSAGE header,
+// big table number, the text, who sent it.
+export function buildKitchenMessageOps({ table_number, customer_name, message, waiter_name } = {}) {
+  const ops = [];
+  ops.push({ op: 'feed', v: 4 });
+  ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: 'MESSAGE' }, { op: 'size', v: 'n' });
+  if (table_number != null && table_number !== '') ops.push({ op: 'size', v: 'h' }, { op: 'text', v: 'TABLE ' + table_number }, { op: 'size', v: 'n' });
+  else if (customer_name) ops.push({ op: 'size', v: 'b' }, { op: 'text', v: String(customer_name) }, { op: 'size', v: 'n' });
+  ops.push({ op: 'bold', v: false }, { op: 'align', v: 0 }, { op: 'krule', w: SUNMI_KITCHEN_WIDTH });
+  ops.push({ op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: String(message || '') }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
+  if (waiter_name) ops.push({ op: 'feed', v: 1 }, { op: 'text', v: 'from ' + waiter_name });
+  ops.push({ op: 'feed', v: 2 }, { op: 'cut' });
+  return ops;
+}
+
 // ── Customer bill / receipt layout → ops ──────────────────────────────────────
 export function buildReceiptOps({ order, items, settings, paymentDetails = {} }) {
   const s = settings || {};

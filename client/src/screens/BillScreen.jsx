@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { getBill, markBillPrinted, getVoucher, redeemVoucher, applyDiscount, removeVoucherFromBill, getOrderDeposit, assertOk, serverOpenDrawer } from '../api';
+import { isNativeApp } from '../native/printer';
+import { sunmiAvailable, sunmiKickDrawer } from '../native/sunmiPrinter';
 import { printReceipt } from './ReceiptPrinter';
 import { orderShortLabelPlain, orderSubLabel, isTakeaway } from '../utils/orderLabel';
 import { confirm } from '../utils/confirm';
@@ -501,7 +503,18 @@ export default function BillScreen({ orderId, onClose, onPay }) {
       // SEPOS-DRAWER-001 — open the cash drawer on payment (fire-and-forget;
       // never blocks/fails the close). Silent no-op where there's no raw
       // ESC/POS receipt printer (browser print / no drawer / disabled setting).
-      serverOpenDrawer().catch(() => {});
+      // SEPOS-ANDROID-004 — on the native app the cloud can't kick a local
+      // drawer: pulse the Sunmi's own RJ11 drawer port via the built-in
+      // printer instead (needs open_drawer_on_payment='1', same as desktop).
+      (async () => {
+        try {
+          if (isNativeApp() && await sunmiAvailable()) {
+            if (settings?.open_drawer_on_payment === '1') await sunmiKickDrawer();
+          } else {
+            serverOpenDrawer().catch(() => {});
+          }
+        } catch {}
+      })();
     } finally {
       // onPay closes the bill on success; on failure it keeps the bill open,
       // so re-enable the button to allow a genuine retry.

@@ -5194,6 +5194,43 @@ app.delete('/api/expenses/:id', async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-046 (Nook's POTENTIAL BUG #2) — recipe costs were stored at save time
+// and never refreshed, so after a supplier price change every food-cost %
+// badge and the wastage report kept costing dishes at the OLD ingredient
+// price. Called from the invoice confirm below for the ingredients whose
+// cost actually changed: refresh each affected recipe_line from the CURRENT
+// cost/yield (same formula as client calcLineCost), then re-foot the recipe.
+async function recalcRecipesForIngredients(client, ingredientIds) {
+  if (!ingredientIds.length) return 0;
+  const linesRes = await client.query(
+    `SELECT rl.id, rl.recipe_id, rl.quantity_used, i.cost_per_unit, i.yield_percentage
+       FROM recipe_lines rl JOIN ingredients i ON i.id = rl.ingredient_id
+      WHERE rl.ingredient_id = ANY($1::int[])`,
+    [ingredientIds]
+  );
+  if (!linesRes.rows.length) return 0;
+  for (const l of linesRes.rows) {
+    const q = Number(l.quantity_used) || 0;
+    const c = Number(l.cost_per_unit) || 0;
+    const y = Number(l.yield_percentage) || 100;
+    const lineCost = (!q || !c) ? 0 : (q * c) / (y / 100);
+    await client.query(`UPDATE recipe_lines SET line_cost = $1 WHERE id = $2`, [lineCost, l.id]);
+  }
+  const recipeIds = [...new Set(linesRes.rows.map(r => r.recipe_id))];
+  for (const rid of recipeIds) {
+    await client.query(
+      `UPDATE recipes SET
+         total_cost = (SELECT COALESCE(SUM(line_cost), 0) FROM recipe_lines WHERE recipe_id = $1),
+         cost_per_portion = (SELECT COALESCE(SUM(line_cost), 0) FROM recipe_lines WHERE recipe_id = $1)
+                            / CASE WHEN COALESCE(serves, 1) > 0 THEN COALESCE(serves, 1) ELSE 1 END,
+         last_calculated = NOW()
+       WHERE id = $1`,
+      [rid]
+    );
+  }
+  return recipeIds.length;
+}
+
 app.post('/api/supplier-invoices', async (req, res) => {
   const client = await pool.connect();
   try {
@@ -5250,7 +5287,7 @@ app.post('/api/supplier-invoices', async (req, res) => {
         updated.push(ing.name_en);
 
         if (Math.abs(unitPrice - oldCost) > 0.001) {
-          price_changes.push({ name: ing.name_en, old_cost: oldCost, new_cost: unitPrice });
+          price_changes.push({ id: ing.id, name: ing.name_en, old_cost: oldCost, new_cost: unitPrice });
         }
 
       } else {
@@ -5273,9 +5310,15 @@ app.post('/api/supplier-invoices', async (req, res) => {
       }
     }
 
-    // 3. Return everything the frontend needs for the done screen
+    // 3. SEPOS-046 — refresh recipe costs for price-changed ingredients so
+    // food-cost badges and the wastage report track the new supplier price.
+    const recipes_recalculated = await recalcRecipesForIngredients(
+      client, price_changes.map(p => p.id).filter(Boolean)
+    );
+
+    // 4. Return everything the frontend needs for the done screen
     await client.query('COMMIT');
-    res.json({ id: invoiceId, success: true, created, updated, price_changes });
+    res.json({ id: invoiceId, success: true, created, updated, price_changes, recipes_recalculated });
 
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (e) {}
@@ -5307,6 +5350,25 @@ app.get('/api/batch-recipe-lines', async (req, res) => {
 app.get('/api/supplier-invoices', async (req, res) => {
   try { const result = await pool.query(`SELECT * FROM supplier_invoices ORDER BY created_at DESC LIMIT 100`); res.json(result.rows); }
   catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-046 — itemised detail for the invoice history expander. The confirm
+// endpoint already writes one stock_movements row per line with
+// reference='invoice:<id>', so the lines live there (including for every
+// invoice recorded since the transaction fix shipped) — no new table needed.
+app.get('/api/supplier-invoices/:id/lines', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT sm.quantity, sm.cost_at_time, sm.note, sm.created_at,
+              i.name_en, i.unit
+         FROM stock_movements sm
+         LEFT JOIN ingredients i ON i.id = sm.ingredient_id
+        WHERE sm.reference = $1
+        ORDER BY sm.id ASC`,
+      [`invoice:${parseInt(req.params.id, 10) || 0}`]
+    );
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/ingredients', async (req, res) => {

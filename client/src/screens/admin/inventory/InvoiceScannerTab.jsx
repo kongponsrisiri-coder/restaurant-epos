@@ -30,6 +30,9 @@ function InvoiceHistory() {
   const [invoices, setInvoices]             = useState([]);
   const [loading, setLoading]               = useState(true);
   const [expandedId, setExpandedId]         = useState(null);
+  // SEPOS-046 — itemised lines per invoice, fetched lazily on expand
+  // (from stock_movements reference='invoice:<id>' via the new endpoint).
+  const [linesById, setLinesById]           = useState({});
   const [filterMonth, setFilterMonth]       = useState(currentMonthStr());
   const [filterSupplier, setFilterSupplier] = useState('all');
   const [search, setSearch]                 = useState('');
@@ -125,7 +128,16 @@ function InvoiceHistory() {
             const sc     = STATUS_STYLE[inv.status] || STATUS_STYLE.processed;
             return (
               <div key={inv.id} style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: isOpen ? '0 4px 16px rgba(13,27,62,0.1)' : '0 1px 4px rgba(0,0,0,0.06)', border: isOpen ? '2px solid var(--brand-primary,#0D1B3E)' : '2px solid transparent', transition: 'box-shadow 0.15s, border 0.15s' }}>
-                <div onClick={() => setExpandedId(isOpen ? null : inv.id)} style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flexWrap: 'wrap' }}>
+                <div onClick={() => {
+                  const opening = !isOpen;
+                  setExpandedId(opening ? inv.id : null);
+                  if (opening && linesById[inv.id] === undefined) {
+                    fetch(`${SERVER_URL}/api/supplier-invoices/${inv.id}/lines`)
+                      .then(r => r.json())
+                      .then(rows => setLinesById(prev => ({ ...prev, [inv.id]: Array.isArray(rows) ? rows : [] })))
+                      .catch(() => setLinesById(prev => ({ ...prev, [inv.id]: [] })));
+                  }
+                }} style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flexWrap: 'wrap' }}>
                   <span style={{ color: 'var(--brand-primary,#0D1B3E)', fontSize: 13, fontWeight: 700, flexShrink: 0, width: 14 }}>{isOpen ? '▼' : '▶'}</span>
                   <span style={{ fontSize: 13, color: '#888', minWidth: 100 }}>{fmtDate(inv.invoice_date || inv.created_at)}</span>
                   <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--brand-primary,#0D1B3E)', flex: 1, minWidth: 120 }}>{inv.supplier_name || '—'}</span>
@@ -142,10 +154,29 @@ function InvoiceHistory() {
                       <div><div style={hDetLbl}>Total Amount</div><div style={{ ...hDetVal, fontSize: 20, fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)' }}>{fmtCurrency(inv.total_amount)}</div></div>
                       <div><div style={hDetLbl}>Status</div><span style={{ background: sc.bg, color: sc.color, fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>{sc.label}</span></div>
                     </div>
-                    <div style={{ background: 'white', borderRadius: 8, padding: '10px 14px', border: '1px dashed #e0e0e0', display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 18 }}>📋</span>
-                      <div><div style={{ fontSize: 13, color: '#555', fontWeight: 600 }}>Line items not stored</div><div style={{ fontSize: 12, color: '#aaa' }}>Re-scan the original invoice to see the full breakdown</div></div>
-                    </div>
+                    {/* SEPOS-046 — itemised breakdown from the delivery stock movements. */}
+                    {linesById[inv.id] === undefined ? (
+                      <div style={{ fontSize: 13, color: '#aaa', padding: '8px 4px' }}>Loading line items…</div>
+                    ) : linesById[inv.id].length > 0 ? (
+                      <div style={{ background: 'white', borderRadius: 8, border: '1px solid #eee', overflow: 'hidden' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 8, padding: '8px 14px', background: '#f4f6f9', fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          <span>Item</span><span style={{ textAlign: 'right' }}>Qty</span><span style={{ textAlign: 'right' }}>Unit Cost</span><span style={{ textAlign: 'right' }}>Line Total</span>
+                        </div>
+                        {linesById[inv.id].map((l, i) => (
+                          <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 8, padding: '8px 14px', fontSize: 13, borderTop: '1px solid #f5f5f5' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--brand-primary,#0D1B3E)' }}>{l.name_en || '—'}{String(l.note || '').includes('auto-created') && <span style={{ marginLeft: 6, fontSize: 10, background: '#dcfce7', color: '#15803d', padding: '1px 6px', borderRadius: 10, fontWeight: 700 }}>NEW</span>}</span>
+                            <span style={{ textAlign: 'right', color: '#555', fontVariantNumeric: 'tabular-nums' }}>{Number(l.quantity)} {l.unit || ''}</span>
+                            <span style={{ textAlign: 'right', color: '#555', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(l.cost_at_time)}</span>
+                            <span style={{ textAlign: 'right', fontWeight: 700, color: 'var(--brand-primary,#0D1B3E)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency((parseFloat(l.quantity) || 0) * (parseFloat(l.cost_at_time) || 0))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ background: 'white', borderRadius: 8, padding: '10px 14px', border: '1px dashed #e0e0e0', display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 18 }}>📋</span>
+                        <div><div style={{ fontSize: 13, color: '#555', fontWeight: 600 }}>No line items recorded for this invoice</div><div style={{ fontSize: 12, color: '#aaa' }}>Invoices recorded before June 2026 saved the header only</div></div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

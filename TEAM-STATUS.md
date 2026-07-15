@@ -119,6 +119,38 @@ While stress-testing the spa I found `spa-api.siamepos.co.uk` had **no `JWT_SECR
 
 ---
 
+## 📣 NEW SERVICE FOR THE WHOLE TEAM — SiamEPOS now HOSTS client websites (Korakot via Krit, 2026-07-15)
+
+**We can now host client restaurant websites on our own infrastructure at ~£0 cost** (free GitHub Actions → Netlify pipeline, same stack the app/POS sites run on). This is a **new revenue line + a sales door-opener** — the **"Website Service"** is already live (J intapad pays **£5/mo**, Stripe product `prod_UsxCmHbQlA6RrU`).
+
+**Two ways we can look after a client's website:**
+- **Path A — manage it where it is.** Client adds us as a Contributor/Editor (Wix, Squarespace, GoDaddy…) or gives us FTP; we do the updates in place. We can still drop our **booking + takeaway widgets** into their existing site (they're just `<script>` embeds).
+- **Path B — bring it onto our hosting.** Download their site (or build a new one) → deploy to our Netlify → **repoint their domain** (client always keeps ownership of their own domain — never locked in) → free SSL. This is where we can wire the **live EPOS loop** (menu auto-pulled from their till + online booking + 0%-commission takeaway), the way the Baan Siam demo site does.
+
+**What this means for each of you:**
+- **Maya** — new thing to sell: *"we'll host and look after your website too — and it plugs straight into your till: live menu, online booking, and takeaway with zero commission."* Strong upsell for any restaurant that already has a website (or needs one).
+- **Nick** — pricing input welcome. Website Service is £5/mo today (host-only). Worth a tier: host-only vs host + EPOS-integrated vs host + ongoing updates.
+- **Sandy** — you build & own the client sites. The EPOS-integrated reference is `client/MockUp Website/` (Baan Siam: live `/api/menu` fetch + widget embeds). First one is Chart Thai — see your ticket below.
+- **Pose** — billing already covers it (Stripe "Website Service" product; ops reads the catalogue). Website-only clients bill the same way as EPOS clients.
+- **Krit owns the hosting mechanics** (deploy pipeline, DNS cutover). Infra tokens (Netlify/Cloudflare/etc.) stay **local** in Control Room — never in the cloud ops app.
+
+**First migration in flight:** Chart Thai — their current site (a generic bought template on the client's FTP host) is now mirrored onto our hosting as a preview, and Sandy's proper Chart Thai build is deployed alongside it for comparison. Live `chartthai.co.uk` is **untouched** until Korakot approves the cutover.
+
+---
+
+## 🆕 NEW TICKET FOR MAYA — CHART-THAI-WEB-002 (Krit for Korakot, 2026-07-15 · reassigned from Sandy)
+
+**Productionise the Chart Thai website build + wire the live EPOS, ready to go live on our hosting.** Chart Thai's current live site (`chartthai.co.uk`) is a generic bought jQuery/Bootstrap template on the client's old FTP host. Korakot wants to move Chart Thai's website onto our hosting and replace the template with the **proper 7-page Chart Thai site Sandy built in June** (forest-green/gold, real logo) — which was never deployed until now. (Maya owns this now; the build is Sandy's — loop her in for design tweaks.)
+
+- **Full spec:** `~/Documents/Claude/Projects/SiamEpos/CHART-THAI-WEB-002.md`
+- **Previews (both on our hosting now):** your build → **https://chartthai-sandy.netlify.app** · current template (reference) → https://chartthai-preview.netlify.app · real live site (**DO NOT TOUCH**) → chartthai.co.uk
+- **Source of your build:** `~/Downloads/website/` (7 pages incl. About + 7 real food photos — the complete copy; ignore the older 6-page one in `Projects/SiamEpos/chart-thai-site/`).
+- **Core tasks:** refresh + QA all 7 pages (incl. a **390px mobile pass**), then **wire the live EPOS** — menu from `https://chart-thai.siamepos.co.uk/api/menu` (110 items, allergen chips), booking widget `chart-thai.siamepos.co.uk/widget.js`, takeaway widget `chart-thai.siamepos.co.uk/takeaway-widget.js` (all verified live). SEO verify + Taste-Skill polish with **Chart Thai brand overriding** the skill defaults.
+- **Do NOT touch the live site** — work on the build + preview only; Krit/Korakot handle the DNS cutover once Korakot says go.
+- **Maya: pick this up when ready — reassigned from Sandy 2026-07-15; the build is Sandy's, loop her in for design tweaks. Korakot will confirm priority.**
+
+---
+
 ## 📨 HANDOFF FOR SAM — Spa PR #29 reviewed by Krit, ready to merge (Krit, 2026-07-14)
 
 > **▶️ OVER TO SAM (spa is your lane; Korakot's asked me to hand this to you rather than merge it into your live medical client myself).**
@@ -287,6 +319,7 @@ json_schema) + `messengerService.js` (Graph API send). Env on Railway: `MESSENGE
 
 | Date | Agent | Completed | Ticket |
 |------|-------|-----------|--------|
+| 2026-07-15 | Krit | **🌐 Website HOSTING SERVICE launched + FOUR client sites live on our host (SEPOS-HOSTING-002).** We now host client websites on the free GitHub Actions→Netlify stack (new "Website Service" line; J intapad £5/mo, Stripe `prod_UsxCmHbQlA6RrU`). **(1) Chart Thai** — live `chartthai.co.uk` (bought jQuery/Bootstrap template on the client's FTP/nginx host) mirrored EXACTLY → **chartthai-preview.netlify.app** (147 files); Sandy's proper 7-page build → **chartthai-sandy.netlify.app**. **Live site UNTOUCHED — no DNS change until Korakot approves cutover.** FTP creds gitignored `scripts/.secrets-chart-thai-ftp.txt` (local). Ticket **CHART-THAI-WEB-002 → Maya** (see callout above). **(2) Jinta Thai Massage** demo **jinta-massage.netlify.app** — self-contained (27 imgs localized; 10 already-broken WP 404s → real Jinta photos). **(3) Thann Thai** — took Sandy's real 6-page build (per Korakot), **wired SiamEPOS booking + online-order widgets into it** (Book buttons → `openBooking()`→booking overlay; new "Order Takeaway" nav+hero → `data-siamepos-takeaway`; both `data-restaurant="siamepos"`, verified id on Thann Thai's cloud; logo localized), live **thann-thai.netlify.app**. **Maya to improve** — canonical `~/Documents/SiamEPOS-Docs/client-sites/thann-thai/` (Projects dup deleted, single source). **(4) Highbury Thai Massage** (spa, Maya's) — deployed existing 4-page build **highbury-thai-massage.netlify.app**, fixed 3 broken hotlinks → local photos; spa booking widget (`highbury-api-production.up.railway.app/widget.js`) verified. ⚠️ spa engineering stays **Sam's** lane. **(5) Control Room** — Stripe shows real product NAMES not `prod_…` codes (4-level expand-limit bug → resolve via ops plan list) + editable per-customer reference notes; **Websites tab GROUPS sites** 🌐 Client websites (7) / 🖥️ Client POS-app / 🛠️ Our infra via `CLIENT_SITES` in `control-room.py` (add each new client site's Netlify name there). Sources in `~/Documents/SiamEPOS-Docs/client-sites/{chart-thai,jinta-massage,thann-thai,highbury-thai-massage}`. Team-wide hosting-service announcement + Maya ticket callout + Announcements row on this board. | SEPOS-HOSTING-002 · CHART-THAI-WEB-002 |
 | 2026-07-14 | Maya | **🍽️ AKIN THAI WEBSITE — booking widget + story + phone + real photos, all LIVE on akinthai.co.uk.** (1) **ResDiary booking widget** embedded on a new `book.html` (matches site design, email fallback for large groups); all 18 "Book a Table" mailto links across the 6 pages now point there — customers book with instant confirmation instead of emailing. (2) **Owner's story copy** woven into About (Who We Are + "A table for every moment" private-events section, up-to-80-guests line) and the homepage Welcome. (3) **Phone 01270 421261** added everywhere (Contact "Call Us" card, Find Us rows, all footers, booking-page note — all `tel:` links). (4) **10 pro photos placed**: homepage Welcome (team + khantoke platter), Signature Dishes swapped to the 3 photographed dishes w/ real menu names+prices (Chicken Satay £7.95 / Prawn Tempura £8.95 / Pork Ribs £8.45), 5-photo homepage strip, 2 on About, full 10-photo gallery mosaic (no gaps, alt text, lazy-load, UUID files renamed to `chicken-satay.jpg` etc.). (5) **Fixed an internal note leaking on the public site** — Opening Hours said "ask your client to send them"; now "Opening hours coming soon — call 01270 421261". **⚠️ Krit:** during your hosting overhaul the domain flip-flopped mid-session (Netlify→CF Pages→Netlify) and the two copies drifted; I've **synced BOTH hosts (Netlify sweet-boba + akinthai.pages.dev) and BOTH folders to identical content** — canonical source per your recipe = `~/Documents/SiamEPOS-Docs/client-sites/akinthai/` (the old `~/Documents/Claude/Projects/SiamEpos/akin-thai/` is now a mirror; consider retiring it). **Nook:** please QA the live booking flow end-to-end on akinthai.co.uk/book (date → time slots → ResDiary details form, mobile + desktop). **Korakot:** still waiting on real opening hours from the client. (6) **Privacy & Cookies pages rolled out (UK GDPR/PECR)** — matching plain-English pages live on **akinthai.co.uk/privacy** (ResDiary + Google Maps/Fonts third-party cookies, ICO rights) and **siamepos.net/privacy** (SiamEPOS platform, Stripe, Brevo consent + unsubscribe), footer-linked on every page; company site already had cookie-policy/privacy-policy live (verified 200). No banners needed — none of our sites set tracking cookies (that's a selling point: "no tracking cookies" is on the page). Baan Siam changes committed to repo (`8f866ad`); Akin Thai lives outside the repo, both hosts redeployed in sync. **Rule of thumb for new client sites: no analytics = no banner, but ALWAYS ship the privacy page + footer link.** | AKINTHAI-SITE |
 | 2026-07-14 | Krit | **🌐 HOSTING + WEBSITES OVERHAUL — ⚠️ MAYA READ THIS (how web deploys work now).** **(1) Web sites now build on FREE GitHub Actions, not Netlify's paid cloud (SEPOS-HOSTING-001).** Netlify was rebuilding 6 sites per push on the paid plan; a productive day = £££ for a 1-second build. New workflow `.github/workflows/deploy-sites.yml` builds + `netlify deploy --no-build`s on every push to `main` touching `client/**` or `back-office/client/**`: **app.siamepos, both Baan Siam POS sites, Thann Thai POS, and ops** — each with its own `VITE_API_URL` baked + a **tenant-leak guard step** (deploy FAILS if the wrong cloud is baked). Netlify auto-builds are now STOPPED on those sites (they only serve files). **➡️ MAYA: the two Baan Siam POS sites + Thann Thai POS used to be MANUAL `netlify deploy` after every client change — they're AUTOMATIC now on push. You no longer hand-deploy them.** Marketing sites (siamepos.co.uk company, siamepos.net Baan Siam demo, akinthai) are still NOT in the repo build → **still manual** (CLI/drag-drop) — unchanged. Spa sites build from the spa repo (Sam's) — untouched. **(2) Client websites → Cloudflare Pages, £0/site forever (Phase 2 started).** Recipe for a NEW client site: put the built files in `~/Documents/SiamEPOS-Docs/client-sites/<name>/`, `npx wrangler pages deploy . --project-name=<name>`, attach the domain in Cloudflare, one CNAME in Namecheap. Free tier = unlimited sites + bandwidth + auto-HTTPS. Pairs with the new **Stripe "Website Service" £5/mo product** → hosting bundled into client subs at pure margin. **⚠️ MAYA — THE APEX-DOMAIN GOTCHA (cost akinthai a brief outage today, my mistake):** Cloudflare Pages does **NOT** issue an SSL cert for a BARE/root domain (akinthai.co.uk) unless the domain's DNS is fully hosted on Cloudflare's nameservers. `www` (a CNAME) works fine; the apex does NOT with just a Namecheap ALIAS → visitors get `ERR_SSL_VERSION_OR_CIPHER_MISMATCH`. **So: for a client's ROOT domain, either (a) move their nameservers to Cloudflare (the proper way — do it off-hours, not mid-service), or (b) keep the root on the current host.** akinthai is REVERTED to Netlify for now (stable, valid cert); its Cloudflare Pages project (`akinthai.pages.dev`) stays live+inert for the proper migration later. Site source is archived at `~/Documents/SiamEPOS-Docs/client-sites/akinthai/` (there was NO local copy before — pulled from live). **(3) Tokens:** GitHub + Cloudflare API tokens now in `~/Library/Application Support/SiamEPOS Control Room/.infra-keys`; `NETLIFY_AUTH_TOKEN` is a repo Actions secret. **Korakot follow-ups:** check next Netlify invoice (should be ~£0 → downgrade Pro), GitHub token expires ~2026-10-12. | SEPOS-HOSTING-001 |
 | 2026-07-14 | Krit | **📦 SUNMI APK v1.4.35 + Chart Thai switches to Sunmi THIS SUNDAY (19 Jul).** Chart Thai is leaving the desktop PC till for a Sunmi — **reason: their network printer is unusable**, so I made EVERY print/kick path work on the Sunmi's BUILT-IN printer (SEPOS-ANDROID-004): online + delivery orders (with customer/pickup/**delivery-address** header), 📢 kitchen messages, AND the cash-drawer kick (RJ11 pulse — ⚠️ hardware-untested, first test is Sunday). Built on `android-app` (merged all of main = full 1.7.x batch), signed, at `~/Documents/SiamEPOS-Android/SiamEPOS-v1.4.35.apk` (versionCode 40). Generic build — new client points it at their cloud via the first-launch setup screen. **Runbook:** `~/Documents/Claude/Projects/SiamEpos/CHART-THAI-SUNMI-SWITCH-2026-07-19.md` (drain the desktop sync queue FIRST, then Printers→Built-in + "auto-print online orders" ON). ⚠️ Trade-off: Sunmi = cloud client, NO offline trading (desktop had local SQLite); PC stays as fallback first weeks. **After Sunday, Chart Thai fixes ship via APK sideload, not the desktop release tag.** Also a NEW Sunmi client is on v1.4.35 (their reason for the earlier v1.4.34 build). | SEPOS-ANDROID-004 · v1.4.35 |
@@ -535,6 +568,7 @@ json_schema) + `messengerService.js` (Graph API send). Env on Railway: `MESSENGE
 
 | Date | From | Message |
 |------|------|---------|
+| 2026-07-15 | Korakot (via Krit) | **🌐 NEW SERVICE — SiamEPOS now HOSTS client websites (free GitHub Actions → Netlify, ~£0 cost).** New revenue line + sales door-opener; "Website Service" is live (J intapad £5/mo, Stripe `prod_UsxCmHbQlA6RrU`). **Two paths:** (A) manage a client's existing site in place (Contributor/FTP access, we can still embed our booking + takeaway widgets), or (B) migrate it onto our hosting + repoint their domain (client keeps domain ownership — never locked in) and wire the **live EPOS loop** (menu from their till + online booking + 0%-commission takeaway), like the Baan Siam demo (`client/MockUp Website/`). **Maya:** sell it as an upsell — "we host + look after your website, and it plugs into your till." **Nick:** pricing/tiers input welcome (host-only vs host+EPOS vs host+updates). **Sandy:** you build/own the sites. **Pose:** billing already covers it (Stripe catalogue). **Krit** owns hosting mechanics + DNS cutover; infra tokens stay LOCAL in Control Room. First migration in flight: **Chart Thai** (CHART-THAI-WEB-002 — see top callout). |
 | 2026-06-04 | Korakot | **🖥️🪟 OS-AGNOSTIC BY DEFAULT — Every customer-facing string must work on Mac AND Windows.** SiamEPOS Pro ships as both Mac DMG and Windows EXE, but historical UI copy + system prompts hardcoded "Mac" / "your Mac" / "This Mac" everywhere (Admin → Data Storage, LINE bot recipes, etc). Already swept Admin SettingsSection (commit `71b2ae5`) + the LINE bot knowledge base. **From now on every agent must:** (1) write UI strings, error messages, manuals, system prompts, and email templates as OS-neutral by default — "your device" / "your till" / "the desktop app" — never "your Mac"; (2) when a fix LEGITIMATELY differs by OS (config paths, keyboard shortcuts, system menus), label BOTH — e.g. `Mac: Cmd+Shift+R · Windows: Ctrl+Shift+R`; (3) same applies to iPad / Android tablet — say "tablet" when both work. Full rule in `CLAUDE.md` → Critical Coding Rules. Code comments mentioning Mac are fine (developer-facing). |
 | 2026-06-04 | Korakot | **📁 NEW DOC LOCATION — All manuals + QA reports now in `~/Documents/SiamEPOS-Docs/`.** Consolidated 26 files (10 manuals, 16 QA reports + stress tests) into a single folder outside the repo: `manuals/` + `qa-reports/` + index `README.md`. **From now on every agent must:** (1) save NEW manuals or QA reports into the right subfolder of `~/Documents/SiamEPOS-Docs/`; (2) edit existing ones in place — don't duplicate; (3) reference them by absolute path in handoffs (`~/Documents/SiamEPOS-Docs/manuals/<file>`). Ticket specs (SEPOS-*/SPA-*/BO-*) stay in `~/Documents/Claude/Projects/SiamEpos/` as before; release notes + agent context (KRIT/KAI/MAYA/NICK/SANDY.md) stay in the repo root. Full rules in `CLAUDE.md` section "📁 Manuals & QA reports". Read `~/Documents/SiamEPOS-Docs/README.md` for the index before adding anything. |
 | 2026-05-20 | Sam | **SiamSpa Railway env vars — action needed after Railway recovers.** (1) Set `UNSUB_SECRET` on spa-api service — run `openssl rand -hex 32`. If unset, insecure default works but tokens never expire. (2) Set `SPA_ADDRESS` for GDPR email footer (e.g. "47 Charlotte Street, London W1T 4ED"). (3) Confirm `BREVO_API_KEY` is set — required for booking confirmation emails + campaigns. Note: `clients.unsubscribed_at` + `campaigns` table migrate automatically on Railway boot. |
@@ -643,3 +677,62 @@ json_schema) + `messengerService.js` (Graph API send). Env on Railway: `MESSENGE
 ```
 | 2026-05-14 | Krit | Short description of what was done | SEPOS-XXX |
 ```
+
+---
+
+## 🧖 SAM → SANDY (+ team) — Highbury Thai Massage: live client + site changes (2026-07-15)
+
+**Highbury Thai Massage is LIVE (till-only spa client).** Own Railway ("Highbury Spa") + Postgres + Netlify. Cloud API `https://highbury-api-production.up.railway.app`; browser till `https://siamspa-highbury.netlify.app`. Their tester data was migrated off the demo Siam-Spa till (141 clients / 245 appts / 31 treatments / 8 staff / 145 bills / 22 vouchers). **Pose: still needs an ops-registry row, product=spa.**
+
+**⚠️ SANDY — I edited your live `highbury-sandy.netlify.app` site directly** (it's manual-deploy with no recoverable source, so I pulled Netlify's file manifest, patched, and redeployed). **If you redeploy from your own source, carry these 4 changes forward or they'll revert:**
+1. **Voucher amounts unified → £50 / £65 / £85 / £100 / £150** everywhere (the homepage `price-pill` tiles, the services.html `#vouchers` pills, AND the widget's `AMOUNTS` array). Dropped the "30 mins/45 mins…" duration labels from the voucher pills (they were £35/52/65/88/115 and contradicted the real treatment menu). **Treatment-menu prices untouched.**
+2. **Voucher widget was broken on your site** — it called `window.spaFetch` (only exists if you ship our `config.js`), so the "For a treatment" tab + session-bundle picker never loaded. Fixed two ways: the served `/widget.js` now defines `window.spaFetch` itself (repo commit `c524abb`, so any embed gets it free), and `voucher-widget.js` now falls back to `window.SPA_API` directly. Your page already sets `window.SPA_API` correctly — no page change needed.
+3. **Mobile burger wasn't showing.** Two fixes in `style.css`: (a) widened the burger breakpoint from `max-width:768px` → `900px` so tablets/narrow windows get it; (b) the fixed `.announce` offers bar was wrapping to ~3 lines (~180px) on mobile and covering the nav (logo+burger pinned at `top:41px` underneath) — forced it to a single scrollable row on mobile. Burger now shows correctly.
+4. Site redeployed **without `netlify.toml`** (it wasn't publicly fetchable — only held asset-cache headers; functionally identical for a static site).
+
+**Note:** Highbury has **no Stripe keys** yet → the online voucher widget is in **demo mode** (creates real voucher records, takes NO payment). Must add Stripe before it goes public for real money.
+
+Repo changes that also landed on main (help all clients): `c524abb` (self-contained voucher widget + `/widget.js` spaFetch), plus the earlier `SPA-WALLET-001` Apple Wallet + online session bundles + admin permanent-delete work.
+
+**Update (2026-07-15, later) — Highbury mobile offers-bar, FINAL state for Sandy:**
+The mobile burger fix in point 3 above went through a couple of iterations; the
+live `style.css` now ends with a `@media(max-width:900px)` block that: shows the
+burger ≤900px, and lays the fixed `.announce` offers bar out as **2 rows** on
+mobile (each weekly offer on its own full-width line — Tue&Wed and Mon–Fri),
+hides the `.a-dot` separators, and **drops the "This Week" label on mobile**
+(Korakot's call — 2 lines only). `--announce-h:72px` on mobile sizes the bar so
+the nav (logo+burger) sits flush below it, no overlap. Sandy: if you rebuild from
+your own source, reproduce this final layout (2 offer lines, no "This Week"
+header on mobile), not the intermediate single-line version.
+
+**🎫 SAM → KRIT — new ticket SPA-VOUCHER-TILL-SYNC-001 (2026-07-15).** Voucher
+cancel/delete doesn't stick on the SPA **desktop till** (comes back after sync):
+the till is pull-only for vouchers, so local cancel/delete never reaches the
+cloud and the pull re-activates it. Cloud/browser side is already done (commit
+`b852bb7` — `DELETE /api/vouchers/:id?permanent=1` + "Delete permanently" UI,
+live on spa.siamepos.co.uk). Needs: (A) a small sync fix — sync-secret-gated
+cloud voucher-op endpoint + the till proxying cancel/delete to cloud when online
+(offline→503, like redeem) + pull feed reflecting cancels/deletes; (B) a new
+signed/notarized SPA desktop build (v0.2.40) via your pipeline. Full spec +
+file:line pointers + acceptance criteria in the ticket. Interim: Korakot manages
+vouchers from the browser cloud admin (works today).
+
+**Update (2026-07-15) — SPA-VOUCHER-TILL-SYNC-001 code is DONE (Sam), Krit build-only.**
+Fix pushed to `main` @ `6c43d09` + verified (throwaway PG + local SQLite): till
+voucher cancel/delete now pushes to the cloud (new sync-secret `POST /api/sync/
+voucher-op`), offline→503, cloud-down→502 (no local divergence), pull feed sends
+cancelled vouchers so tills reflect it. **Krit: no code — just cut+sign+notarize a
+new SPA desktop build `v0.2.40` and roll it to Korakot's till.** Cloud must lead
+the till: git-linked spa-api/Baan Siam auto-deployed; Highbury (manual `railway
+up`) needs `6c43d09` redeployed before its till updates (Sam will). Ticket rewritten
+to build-only.
+
+**🎫 SAM → KRIT — SPA-INGEST-EMAIL-ROUTING-001 (2026-07-15).** Marketplace booking
+ingest now handles **Treatwell AND Fresha** (code done + tested + live, commit
+`6b77693`): emails → `POST /api/treatwell-email/inbound` → appointment on the till
+tagged source, with a review queue. **Krit: plumbing only — wire Brevo Inbound
+Parsing → Highbury's endpoint** (webhook `https://highbury-api-production.up.railway.app/
+api/treatwell-email/inbound?secret=<INBOUND_EMAIL_SECRET from Highbury Railway>`),
+add the Namecheap MX Brevo shows, and have the venue forward Treatwell+Fresha emails
+to `tw-highbury@in.siamepos.co.uk`. Full turnkey steps + acceptance + a multi-client
+routing note (per-client subdomain vs central dispatcher, your call later) in the ticket.

@@ -8103,6 +8103,27 @@ async function recordClockEvent(req, res, eventType) {
 app.post('/api/clock/in',  (req, res) => recordClockEvent(req, res, 'in'));
 app.post('/api/clock/out', (req, res) => recordClockEvent(req, res, 'out'));
 
+// SEPOS-CLOCK-002 — one-button clock toggle for the login screen's clock mode.
+// The till can't know whether the staff member is currently in or out, so the
+// server looks at their LAST event and records the opposite. Returns which
+// action was taken so the screen can confirm "Clocked IN/OUT at HH:MM".
+app.post('/api/clock/toggle', async (req, res) => {
+  try {
+    const { pin } = req.body;
+    if (!pin) return res.status(400).json({ error: 'PIN required' });
+    const staffRes = await pool.query('SELECT id, name FROM staff WHERE pin=$1 AND is_active=1', [pin]);
+    const staff = staffRes.rows[0];
+    if (!staff) return res.status(401).json({ error: 'Invalid PIN' });
+    const last = await pool.query(
+      'SELECT event_type FROM clock_events WHERE staff_id=$1 ORDER BY event_at DESC, id DESC LIMIT 1',
+      [staff.id]
+    );
+    const next = last.rows[0] && last.rows[0].event_type === 'in' ? 'out' : 'in';
+    await pool.query('INSERT INTO clock_events (staff_id, event_type) VALUES ($1, $2)', [staff.id, next]);
+    res.json({ success: true, staff_id: staff.id, name: staff.name, event_type: next, event_at: new Date().toISOString() });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Returns staff who are currently clocked in (their latest event is 'in').
 app.get('/api/clock/status', async (req, res) => {
   try {

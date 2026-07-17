@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { loginStaff, clockIn, clockOut, emailLogin, storePinSession, getStaff, getRestaurant, getSettings } from '../api';
+import { loginStaff, clockToggle, emailLogin, storePinSession, getStaff, getRestaurant, getSettings } from '../api';
 import { resetDevice, currentTillTarget, canSwitchClient } from '../utils/deviceReset';
 import { NAVY, GOLD, RED, GREEN } from '../theme'; // SEPOS-BRAND-001 — per-client brand colours
 
@@ -71,6 +71,13 @@ export default function LoginScreen({ onLogin }) {
   // the first try, so this is visible only for the ~1s the local server boots.
   const [booting, setBooting] = useState(true);
   const [mode, setMode]         = useState('pin');   // 'pin' | 'email'
+  // SEPOS-CLOCK-002 — "clock mode": tap Clock in/out FIRST, then enter your
+  // code. (The old flow — type PIN then tap Clock — was unreachable because a
+  // 4-digit PIN auto-logs-in.) In clock mode the same numpad clocks you in or
+  // out (server toggles based on your last event) and returns to the login
+  // screen without entering the till.
+  const [clockMode, setClockMode] = useState(false);
+  const [clockDone, setClockDone] = useState(null);  // { name, kind: 'in'|'out', time }
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [staffList, setStaffList]         = useState([]);
@@ -161,17 +168,22 @@ export default function LoginScreen({ onLogin }) {
     } finally { setLoading(false); }
   }
 
-  async function handleClock(kind) {
-    if (!pin) { setError('Enter your PIN first.'); return; }
+  // SEPOS-CLOCK-002 — one code entry clocks you IN or OUT automatically
+  // (the server records the opposite of your last event).
+  async function handleClockToggle(pinToUse) {
+    const p = pinToUse ?? pin;
+    if (!p) return;
     setLoading(true); setError(''); setSuccess('');
     try {
-      const r = await (kind === 'in' ? clockIn(pin) : clockOut(pin));
+      const r = await clockToggle(p);
       if (r?.error || !r?.name) {
         setError(r?.error || 'Clock action failed.'); setPin('');
       } else {
         const t = new Date(r.event_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-        setSuccess(`✓ ${r.name} clocked ${kind.toUpperCase()} at ${t}`); setPin('');
-        setTimeout(() => setSuccess(''), 4000);
+        setPin('');
+        setClockDone({ name: r.name, kind: r.event_type, time: t });
+        // auto-return to the login screen after the confirmation
+        setTimeout(() => { setClockDone(null); setClockMode(false); }, 3500);
       }
     } catch {
       setError('Connection error. Check your network.'); setPin('');
@@ -199,7 +211,9 @@ export default function LoginScreen({ onLogin }) {
     setError(''); setSuccess('');
     const next = pin + d;
     setPin(next);
-    if (next.length === 4) handleLogin(next);   // 4-digit PINs auto-submit (✓ key for longer)
+    // 4-digit PINs auto-submit (✓ key for longer). In clock mode the same
+    // entry clocks in/out instead of signing in (SEPOS-CLOCK-002).
+    if (next.length === 4) (clockMode ? handleClockToggle(next) : handleLogin(next));
   }
   function pressDelete() { setPin(p => p.slice(0, -1)); setError(''); }
 
@@ -267,6 +281,38 @@ export default function LoginScreen({ onLogin }) {
           style={{ ...primaryBtn, marginTop: 18 }}>{loading ? 'Signing in…' : 'Sign in'}</button>
         {msg}
         <button onClick={() => { setMode('pin'); setError(''); }} style={linkBtn}>‹ Back to staff PIN</button>
+      </div>
+    );
+  } else if (clockMode) {
+    // SEPOS-CLOCK-002 — clock in/out mode: same numpad, different job.
+    panelContent = (
+      <div style={{ display: 'flex', gap: isMobile ? 20 : 48, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+        {/* identity panel — clock themed */}
+        <div style={{ width: isMobile ? '100%' : 240, maxWidth: 280 }}>
+          <button onClick={() => { setClockMode(false); setPin(''); setError(''); }} style={linkBtn}>‹ Back to sign in</button>
+          <div style={{ width: 84, height: 84, borderRadius: '50%', marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: NAVY, fontSize: 38 }}>🕐</div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: INK, marginTop: 14 }}>Clock in / out</div>
+          <div style={{ color: MUTED, fontSize: 13, marginTop: 6, lineHeight: 1.5 }}>
+            Enter your code — you'll be clocked in or out automatically. You won't be signed in to the till.
+          </div>
+          <div style={{ display: 'flex', gap: 14, marginTop: 18 }}>
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} style={{ width: 16, height: 16, borderRadius: '50%',
+                background: i < pin.length ? GOLD : 'transparent', border: i < pin.length ? `2px solid ${GOLD}` : '2px solid #C9C2B2' }} />
+            ))}
+          </div>
+        </div>
+        {/* numpad */}
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 96px)', gap: 12, width: isMobile ? '100%' : undefined, maxWidth: isMobile ? 320 : undefined }}>
+          {['1','2','3','4','5','6','7','8','9'].map(d => (
+            <button key={d} onClick={() => pressDigit(d)} style={isMobile ? mobileNumKey : numKey}>{d}</button>
+          ))}
+          <button onClick={pressDelete} style={{ ...(isMobile ? mobileNumKey : numKey), background: '#EFEAE0', fontSize: 22 }}>⌫</button>
+          <button onClick={() => pressDigit('0')} style={isMobile ? mobileNumKey : numKey}>0</button>
+          <button onClick={() => handleClockToggle()} disabled={loading || !pin}
+            style={{ ...(isMobile ? mobileNumKey : numKey), background: GREEN, color: '#fff', opacity: (loading || !pin) ? 0.5 : 1 }}>✓</button>
+        </div>
       </div>
     );
   } else if (selectedStaff) {
@@ -344,16 +390,13 @@ export default function LoginScreen({ onLogin }) {
     );
   }
 
-  // PIN-view footer (clock in/out) vs staff-view footer (email link)
-  const footer = mode === 'email' ? null : selectedStaff ? (
-    <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 26, alignItems: 'center', flexWrap: 'wrap' }}>
-      <button onClick={() => handleClock('in')} disabled={loading} style={{ ...outlineBtn, color: GREEN, borderColor: '#BFE6D2' }}>🕐 Clock In</button>
-      <button onClick={() => handleClock('out')} disabled={loading} style={{ ...outlineBtn, color: MUTED, borderColor: CARD_BORDER }}>Clock Out</button>
+  // SEPOS-CLOCK-002 — one "Clock in / out" entry point on every PIN-side view
+  // (tap it FIRST, then enter your code). Hidden while already in clock mode.
+  const enterClockMode = () => { setClockMode(true); setSelectedStaff(null); setPin(''); setError(''); setSuccess(''); };
+  const footer = mode === 'email' ? null : clockMode ? null : (
+    <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: selectedStaff ? 26 : 22, alignItems: 'center', flexWrap: 'wrap' }}>
+      <button onClick={enterClockMode} disabled={loading} style={{ ...outlineBtn, color: GREEN, borderColor: '#BFE6D2' }}>🕐 Clock in / out</button>
       <button onClick={() => { setMode('email'); setError(''); }} style={linkBtn}>Sign in with email →</button>
-    </div>
-  ) : (
-    <div style={{ textAlign: 'center', marginTop: 22 }}>
-      <button onClick={() => { setMode('email'); setError(''); }} style={linkBtn}>Sign in with email instead →</button>
     </div>
   );
 
@@ -397,6 +440,23 @@ export default function LoginScreen({ onLogin }) {
             borderRadius: 10, padding: '10px 16px', fontSize: 14, fontWeight: 700, fontFamily: UI_FONT,
             cursor: 'pointer', backdropFilter: 'blur(2px)' }}
         >⏻ Exit</button>
+      )}
+
+      {/* SEPOS-CLOCK-002 — big clock confirmation; auto-dismisses, tap to skip */}
+      {clockDone && (
+        <div onClick={() => { setClockDone(null); setClockMode(false); }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(13,27,62,.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3200, padding: 16, cursor: 'pointer' }}>
+          <div style={{ background: '#fff', borderRadius: 22, padding: '38px 44px', textAlign: 'center', maxWidth: '92vw', fontFamily: UI_FONT }}>
+            <div style={{ fontSize: 56, lineHeight: 1 }}>{clockDone.kind === 'in' ? '✅' : '👋'}</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)', marginTop: 14 }}>{clockDone.name}</div>
+            <div style={{ fontSize: 19, fontWeight: 700, marginTop: 8, color: clockDone.kind === 'in' ? GREEN : MUTED }}>
+              {clockDone.kind === 'in' ? `Clocked IN at ${clockDone.time}` : `Clocked OUT at ${clockDone.time}`}
+            </div>
+            <div style={{ fontSize: 13.5, color: MUTED, marginTop: 10 }}>
+              {clockDone.kind === 'in' ? 'Have a great shift!' : 'See you next time!'}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* SEPOS-RESET-001 — reset-for-new-client confirm dialog */}

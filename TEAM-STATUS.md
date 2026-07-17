@@ -111,6 +111,14 @@ While stress-testing the spa I found `spa-api.siamepos.co.uk` had **no `JWT_SECR
 
 ---
 
+## 🌐 DOMAIN BUNDLING — decided (Korakot + Nick, 2026-07-17)
+
+Going with **domain bundling, NOT a Namecheap affiliate program.** SiamEPOS registers + manages each client's domain and **includes it in the £5/mo Website Service** — pitch: *"website + hosting + domain, all managed, £5/month."* Adds recurring margin + real lock-in (domain → Cloudflare DNS → Pages → site → EPOS) and fixes the apex-SSL gotcha because we own the nameservers.
+- **Guardrail:** register in the **CLIENT's name — they OWN the domain**, SiamEPOS is admin/manager only. Never hold a client's domain hostage; it must be portable if they leave (trust, not force).
+- **✅ Krit (ops) DONE 2026-07-17:** (a) Reseller-account reality check: Namecheap discontinued the classic reseller program — our EXISTING API account is the vehicle (retail ~£7-9/yr fits fine inside £60/yr service revenue; ResellerClub only worth it at 50+ domains). (b) **Expiry + auto-renew tracking LIVE:** Control Room → Domains tab now pulls the FULL Namecheap account via the API (new client domains appear automatically) with per-domain auto-renew chips — red "auto-renew OFF ⚠️" warning surfaces lapse risk; whois fallback if the API/IP-whitelist is down. First pull found **all 7 domains auto-renew ON** (and discovered siammart.co.uk the old hardcoded list missed). ⚠️ Recurring gotcha: Korakot's home IP rotates — each rotation needs the new IP added to Namecheap's API whitelist (Profile → Tools → API Access); Domains tab falls back to whois gracefully meanwhile. (c) Registering client domains in the CLIENT's name = standing practice from the next website client.
+
+---
+
 ## 🆕 NEW TICKET FOR SAM — SPA-WHATSAPP-AI-001 (Nick, 2026-07-12)
 
 **WhatsApp AI booking concierge for the spa client — a LIVE client request.** Customer taps "Chat on WhatsApp" on the spa website → AI answers treatment/price/duration/address/hours questions, checks **real availability**, **holds** a slot and sends a **Stripe payment link**. Booking confirms **only on payment** (held ≠ confirmed; no card details in chat; AI never invents slots). Design = Claude tool-use over Twilio WhatsApp calling SiamSpa. Mostly **exposing existing widget/Stripe/Treatwell plumbing** as 4 tools (`get_treatments`, `get_spa_info`, `check_availability`, `hold_slot`) + a held-booking **TTL/auto-release** lifecycle + a small orchestrator service. Bilingual EN/TH, human handoff, GDPR consent.

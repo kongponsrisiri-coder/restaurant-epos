@@ -636,6 +636,10 @@ json_schema) + `messengerService.js` (Graph API send). Env on Railway: `MESSENGE
 
 ---
 
+## 📨 FOR NICK — fold "domain included" into the Website Service pricing (Korakot via Krit, 2026-07-17)
+
+Korakot explored Namecheap's affiliate program; verdict = not worth it at our scale (one-time ~20–35% commission on a £7–10 domain, NOTHING on renewals → £1–3 per client, once). **The better play: bundle domain registration + management INTO the Website Service.** We already hold the Namecheap API and manage client DNS anyway (Chart Thai, akinthai, the MX plumbing) — so registering the client's domain ourselves and pricing it into the service turns a £7/yr cost into recurring margin AND removes the "how do I buy a domain?" sales obstacle. Client keeps domain ownership (same never-locked-in promise as hosting). **Your call:** price shape — e.g. Website Service £5/mo → £8/mo with domain included, or domain folded into a £59 setup; and whether it's default-on for new clients. Update the pricing page copy once decided. Related context: memory `project_website_hosting_service`.
+
 ## 📋 Handoffs & Notes
 
 *Use this section to leave messages for other agents. Delete entries once actioned.*

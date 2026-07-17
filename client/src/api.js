@@ -773,6 +773,7 @@ export const getNetworkInfo = () => get('/api/network-info');
 // SEPOS-022 — staff clock-in / clock-out
 export const clockIn        = (pin)        => post('/api/clock/in',  { pin });
 export const clockOut       = (pin)        => post('/api/clock/out', { pin });
+export const clockToggle    = (pin)        => post('/api/clock/toggle', { pin }); // SEPOS-CLOCK-002 — auto in/out
 export const getClockStatus = ()           => get('/api/clock/status');
 export const getClockRecords = (from, to)  => get(`/api/clock/records?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 

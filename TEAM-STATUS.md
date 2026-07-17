@@ -636,6 +636,10 @@ json_schema) + `messengerService.js` (Graph API send). Env on Railway: `MESSENGE
 
 ---
 
+## 📨 FOR NICK #2 — strategy read on productizing the one-click social machine (SEPOS-SOCIAL-APP-001)
+
+Korakot wants to explore turning this week's internal social machine (AI drafts from till data → approval board → one click → deny auto-amends) into a PRODUCT — "Make wasn't good; nobody ships you-only-click-approve." Full concept + competitor map: `~/Documents/Claude/Projects/SiamEpos/SEPOS-SOCIAL-APP-001-Concept.md`. Krit's staged recommendation: Stage 1 = self-serve "Social" tab inside SiamEPOS Admin (reuses ~80% of the build, creates a DIY tier under the £39 managed service, strengthens the ERP story); Stage 2 = standalone app ONLY after ~5 paying social clients (needs Meta App Review — 2-6 weeks — and real marketing spend). **Your questions in the ticket:** DIY pricing without cannibalising £39; Stage-2 go/no-go gate; naming; ERP positioning fit. Phase-2 bet — nothing builds before Phase-1 revenue, this is strategy-shelf work.
+
 ## 📨 FOR NICK — fold "domain included" into the Website Service pricing (Korakot via Krit, 2026-07-17)
 
 Korakot explored Namecheap's affiliate program; verdict = not worth it at our scale (one-time ~20–35% commission on a £7–10 domain, NOTHING on renewals → £1–3 per client, once). **The better play: bundle domain registration + management INTO the Website Service.** We already hold the Namecheap API and manage client DNS anyway (Chart Thai, akinthai, the MX plumbing) — so registering the client's domain ourselves and pricing it into the service turns a £7/yr cost into recurring margin AND removes the "how do I buy a domain?" sales obstacle. Client keeps domain ownership (same never-locked-in promise as hosting). **Your call:** price shape — e.g. Website Service £5/mo → £8/mo with domain included, or domain folded into a £59 setup; and whether it's default-on for new clients. Update the pricing page copy once decided. Related context: memory `project_website_hosting_service`.

@@ -118,6 +118,12 @@ Korakot approves posts visually in **Control Room → Social tab → 📋 Approv
 1. **Draft a batch** (e.g. 2–3 posts for the week) using the client's real data: dish/treatment of the week with real price, offers, voucher pushes, seasonal (Songkran, Mother's Day, Loy Krathong…), behind-the-scenes with their real photos.
 2. **Enqueue to the approval board (above)** — NEVER post unapproved content.
 3. **Posting is automatic** — approved items fire from the Control Room Timetable at their `schedule_at`. Your job ends at enqueue (with a good proposed time) + reacting to denies.
+
+## 📅 Weekly rhythm (Korakot, 2026-07-19)
+- **Plan ONE WEEK at a time — never long batches** ("you never know what will happen"). Sunday ~20:00 = your weekly planning run (Control Room fires it): draft next week's posts, enqueue as pending with proposed times; Korakot approves during the week.
+- **SiamEPOS page = 3 posts/week TOTAL** — count what's already lined up for the week (queue + native Meta Planner scheduled_posts) and only top up the difference.
+- **Content mix — "only about SiamEPOS is too much":** at most 1 product/promo-led post per week. The rest = real KNOWLEDGE for Thai business owners in the UK, rotating our three audiences — 🍽 restaurant (allergen law, hygiene ratings, marketplace commission maths, tips law, no-shows, seasonal Thai moments) · 💆 spa (Treatwell/Fresha economics, deposits, vouchers, loyalty) · 🛍 retail (stock control, card fees, Google Business Profile) · plus general UK small-biz (MTD, hiring, reviews). Teach first; at most ONE quiet SiamEPOS line at the end. Verify every law/number before you state it.
+- Daily 09:12 run = maintenance only (denies, schedule_at gaps, photo inbox, quiet-page check) — no weekly drafting there.
 4. **Check engagement weekly** — reply-worthy comments get flagged (Plus tier: draft the replies).
 5. **Log in TEAM-STATUS** what went out + anything the client said.
 

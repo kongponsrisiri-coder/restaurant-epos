@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
-import { C, card, btn, input, label, fmtRelTime, fmtMoney, STATUS_STYLE, PLAN_LABEL, PRODUCT_BADGE } from '../theme.js';
+import { C, card, btn, input, label, fmtRelTime, fmtMoney, STATUS_STYLE, PLAN_LABEL, productBadge } from '../theme.js';
 import StatusPill from '../components/StatusPill.jsx';
 import HealthDot from '../components/HealthDot.jsx';
 import Avatar from '../components/Avatar.jsx';
@@ -53,7 +53,7 @@ export default function ClientDetailPage() {
   const { client, health, notes, tills = [] } = data;
   const latest = health[0];
   const isSpa = (client.product || 'restaurant') === 'spa';
-  const prod = PRODUCT_BADGE[client.product || 'restaurant'];
+  const prod = productBadge(client.product);
 
   const saveField = async (field, value) => {
     setSaving(true);

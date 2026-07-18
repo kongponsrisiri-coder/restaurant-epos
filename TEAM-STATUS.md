@@ -119,6 +119,10 @@ Going with **domain bundling, NOT a Namecheap affiliate program.** SiamEPOS regi
 
 ---
 
+## 🆕 NEW TICKET FOR SAM — SPA-LOYALTY-001 spa loyalty card (client request, 2026-07-18)
+
+A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Documents/Claude/Projects/SiamEpos/SPA-LOYALTY-001-Sam-Ticket.md` — the SiamEPOS take: **no physical cards; a visit = completed paid appointment, auto-counted per client**, configurable "every Nth visit → reward" in Settings, progress + one-tap reward at checkout (reuse SPA-CHECKOUT-V3 discount mechanics), `loyalty_events` audit, BOTH DBs + sync. Phase 2 = Apple Wallet loyalty pass on the existing voucher-pass infra. **⚠️ Blocked on Korakot answering the ticket's 5 open questions first** (which client — Highbury? · scheme numbers · does history count · expiry · do Treatwell/Fresha visits count — pitch "direct bookings only" as channel-shift). Marketing tie-in ready: Mint makes the "every 10th massage free" launch content the day it ships.
+
 ## 🆕 NEW TICKET FOR SAM — SPA-WHATSAPP-AI-001 (Nick, 2026-07-12)
 
 **WhatsApp AI booking concierge for the spa client — a LIVE client request.** Customer taps "Chat on WhatsApp" on the spa website → AI answers treatment/price/duration/address/hours questions, checks **real availability**, **holds** a slot and sends a **Stripe payment link**. Booking confirms **only on payment** (held ≠ confirmed; no card details in chat; AI never invents slots). Design = Claude tool-use over Twilio WhatsApp calling SiamSpa. Mostly **exposing existing widget/Stripe/Treatwell plumbing** as 4 tools (`get_treatments`, `get_spa_info`, `check_availability`, `hold_slot`) + a held-booking **TTL/auto-release** lifecycle + a small orchestrator service. Bilingual EN/TH, human handoff, GDPR consent.

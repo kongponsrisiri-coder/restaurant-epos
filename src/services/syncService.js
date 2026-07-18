@@ -758,6 +758,10 @@ async function pullMenuTree() {
         // stale rate forever. is_online (takeaway-widget visibility) had the
         // same drop — the toggle reverted on the next local refetch.
         vat_rate: i.vat_rate, is_online: i.is_online,
+        // Same bug class as vat_rate above: the per-item kitchen course
+        // override (7437041, v1.6.115) never reached local-mode tills, so
+        // offline ordering dropped every item into the course-bar selection.
+        default_course: i.default_course,
       }))
     );
 

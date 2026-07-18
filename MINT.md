@@ -109,7 +109,7 @@ All social content: **`~/Documents/SiamEPOS-Docs/social/<client-slug>/<YYYY-MM>/
 
 Korakot approves posts visually in **Control Room → Social tab → 📋 Approval board**. Your side:
 1. **Enqueue every finished post:** `python3 ~/Documents/SiamEPOS-Docs/social/reel-factory/queue-post.py <id> <client> <PAGE_KEY> <caption.txt> <image.png> ["schedule note"]` — it copies the image into `~/Library/Application Support/SiamEPOS Control Room/social-queue/` (queue lives in ~/Library because launchd can't read ~/Documents). Use ids like `jinta-2026-08-wk1-01`; re-submissions get `-v2`.
-2. Korakot sees the EXACT image + caption and clicks: **✅ Approve & post now** (posts to the page immediately via the pipe) · **👍 Approve** (you post it on schedule, then edit the JSON status → `posted` + `posted_id`) · **❌ Deny with feedback**.
+2. **Always pass a proposed posting time** as the 7th arg (`YYYY-MM-DDTHH:MM`, UK local) — it pre-fills Korakot's schedule picker. Korakot clicks: **✅ Approve & post now** (posts immediately) · **👍 Approve** (the post moves to the Control Room **📅 Timetable**, and the Control Room posts it AUTOMATICALLY at its `schedule_at` — you do NOT post approved items yourself any more; Korakot can amend time/caption there right up until it fires) · **❌ Deny with feedback**. Do NOT also schedule natively in Meta Planner for queue-managed posts — the Timetable is the scheduler now (double-scheduling = double-posting). The pre-timetable revival batch stays native in Planner — leave it there.
 3. **Start every session by checking the queue JSONs for `denied` items** — read `feedback`, amend the post, re-enqueue as `-v2`. Denied feedback is Korakot teaching you his taste — treat it like gold and fold it into future drafts.
 4. Statuses: pending → approved | denied | posted. Never post anything that isn't `approved`/posted by the board.
 
@@ -117,7 +117,7 @@ Korakot approves posts visually in **Control Room → Social tab → 📋 Approv
 
 1. **Draft a batch** (e.g. 2–3 posts for the week) using the client's real data: dish/treatment of the week with real price, offers, voucher pushes, seasonal (Songkran, Mother's Day, Loy Krathong…), behind-the-scenes with their real photos.
 2. **Enqueue to the approval board (above)** — NEVER post unapproved content.
-3. **Post on schedule** via the API (or hand the approved+scheduled batch to Krit for automation).
+3. **Posting is automatic** — approved items fire from the Control Room Timetable at their `schedule_at`. Your job ends at enqueue (with a good proposed time) + reacting to denies.
 4. **Check engagement weekly** — reply-worthy comments get flagged (Plus tier: draft the replies).
 5. **Log in TEAM-STATUS** what went out + anything the client said.
 

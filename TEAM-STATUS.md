@@ -111,6 +111,15 @@ While stress-testing the spa I found `spa-api.siamepos.co.uk` had **no `JWT_SECR
 
 ---
 
+## 📝 SESSION HANDOFF — Nick, 2026-07-17 (two things need Korakot's action)
+
+1. **Website changes STAGED but NOT pushed** (`client/Website/`): homepage `index.html` reframed to the all-in-one **ERP** positioning (hero + title/meta + a new "one system runs everything" modules section, EN/TH), and a **NEW `social.html`** page for the Social Media Service (**single £39/mo tier**, cloned from the website-design shell, bilingual) linked from the homepage services row. **→ Korakot: review + `git push`.** (Sandy: on-brand + structurally verified; couldn't browser-render in this env, so eyeball before pushing.)
+2. **Registered office change** — Korakot moving house; SiamEPOS Ltd office → **57 Queens Road, Weybridge, Surrey, KT13 9UQ** (sister's restaurant / Thann Thai, permission given). **→ Korakot: file AD01 at Companies House**, then notify HMRC/ICO/bank/Stripe/IPO/Start-Up-Loan/insurer/Namecheap. Agent files (NICK/KAI/Hero) + memory already updated; the Thann Thai invoice left on the OLD address on purpose.
+
+Also this session: business plan **v10 brought fully current** (v1.7.3, £59 pricing, services + domain bundling); **investor pack** created (teaser, SEIS advance-assurance steps, community-crowdfunding sketch, Google Business Profile setup) in `~/Documents/Claude/Projects/SiamEpos/`; social pricing confirmed single **£39** (below); **SPA-WHATSAPP-AI-001** ticket for Sam (below); **domain bundling** decided (below).
+
+---
+
 ## 🌐 DOMAIN BUNDLING — decided (Korakot + Nick, 2026-07-17)
 
 Going with **domain bundling, NOT a Namecheap affiliate program.** SiamEPOS registers + manages each client's domain and **includes it in the £5/mo Website Service** — pitch: *"website + hosting + domain, all managed, £5/month."* Adds recurring margin + real lock-in (domain → Cloudflare DNS → Pages → site → EPOS) and fixes the apex-SSL gotcha because we own the nameservers.
@@ -118,6 +127,17 @@ Going with **domain bundling, NOT a Namecheap affiliate program.** SiamEPOS regi
 - **✅ Krit (ops) DONE 2026-07-17:** (a) Reseller-account reality check: Namecheap discontinued the classic reseller program — our EXISTING API account is the vehicle (retail ~£7-9/yr fits fine inside £60/yr service revenue; ResellerClub only worth it at 50+ domains). (b) **Expiry + auto-renew tracking LIVE:** Control Room → Domains tab now pulls the FULL Namecheap account via the API (new client domains appear automatically) with per-domain auto-renew chips — red "auto-renew OFF ⚠️" warning surfaces lapse risk; whois fallback if the API/IP-whitelist is down. First pull found **all 7 domains auto-renew ON** (and discovered siammart.co.uk the old hardcoded list missed). ⚠️ Recurring gotcha: Korakot's home IP rotates — each rotation needs the new IP added to Namecheap's API whitelist (Profile → Tools → API Access); Domains tab falls back to whois gracefully meanwhile. (c) Registering client domains in the CLIENT's name = standing practice from the next website client.
 
 ---
+
+## 📨 FOR KRIT — small queue for the NEXT spa desktop build (v0.2.43, no rush) (Sam, 2026-07-18 eve)
+
+Nothing urgent — bundle these when you next cut: `2813550` fixes Treatwell
+settle on an offline till (removed from the offline gate — £0 taken, nothing
+needs internet) AND makes treatwell/'external' closes push their paid state up
+from local tills (previously only cash did — those bills stayed unpaid on the
+cloud). Plus `23622c6`/`a082c29` loyalty T&Cs + email wording ride along.
+Browser tills + both clouds already have all of it. Highbury's client tests
+Treatwell settle at checkout tomorrow (Sun 07-19) on the WEB till, so the fix
+is live for them regardless.
 
 ## 🔄 SPA-LOYALTY-001 addendum — T&Cs added, v0.2.42 CONFIRMED LIVE, deploy gotcha for everyone (Sam, 2026-07-18 late)
 

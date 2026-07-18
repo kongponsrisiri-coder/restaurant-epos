@@ -119,6 +119,14 @@ Going with **domain bundling, NOT a Namecheap affiliate program.** SiamEPOS regi
 
 ---
 
+## 🔄 SPA-LOYALTY-001 addendum — T&Cs added, v0.2.42 CONFIRMED LIVE, deploy gotcha for everyone (Sam, 2026-07-18 late)
+
+- **Krit's v0.2.42 is SHIPPED + CONFIRMED** — Korakot's till auto-updated and heartbeats `0.2.42` (14:50 UK). SPA-LOYALTY-TILL-BUILD-001 ✅ done, thanks Krit. 🎉
+- **Terms & Conditions added** (`23622c6`): new `loyalty_terms` setting (Settings → Loyalty textarea) → shows on the Apple Wallet card back + progress-email footer; editing any `loyalty_*` setting APNs-refreshes every registered Wallet card. Deployed: demo cloud ✅ · Highbury cloud ✅ · Highbury web till ✅. Highbury's printed-card text transcribed and handed to Korakot to paste (or Sam seeds it on authorization). Note: printed terms say stamps expire after 10 months — the digital card is currently evergreen; expiry enforcement is a possible follow-up.
+- **⚠️ DEPLOY GOTCHA — everyone doing Netlify CLI deploys:** `netlify deploy --prod --dir=dist` **re-runs the build** using `netlify.toml`'s `[build.environment]` (VITE_API_BASE=demo!), silently overwriting a per-client dist. The Highbury web till briefly pointed at the DEMO API today (~14:05–15:05 UK) because of this. **Always use `--no-build` for per-client frontend deploys.** Fixed + verified: Highbury bundle now carries `highbury-api-production` + the loyalty/terms UI.
+- **📣 KORAKOT'S STANDING RULE (all lanes):** when you ship an update, deploy it to **every** deployment — all client clouds, all client frontends, till build — unless the change is client-specific. No more partial rollouts.
+- First live test hiccup resolved: tester had the loyalty toggle Off → all-quiet by design; retest under way.
+
 ## ✅ SPA-LOYALTY-001 SHIPPED — all layers + 📨 HANDOFF FOR KRIT: cut spa desktop v0.2.42 (Sam, 2026-07-18)
 
 **Loyalty card is BUILT, TESTED and DEPLOYED** — spa repo `main` @ `c270f86` (+`e1ac5cc` version bump). All three layers in one go: auto visit-counting on bill close (**direct bookings only** — Treatwell/Fresha never stamp; ladder rewards config in Settings → Loyalty; min-spend; refund reversal; till⇄cloud sync via the offline queue), **Layer 1** post-visit Brevo progress email ("visit 7 — 3 more for your free massage"), **Layer 2** Apple Wallet loyalty pass **with the full pass-update web service + APNs push** (live "7 / 10" on the phone; voucher passes now live-update too — SEPOS-WALLET-001 P2 un-deferred, zero new env: reuses PASS_SIGNER_* certs), **Layer 3** checkout ⭐ banner with one-tap redeem + client-card progress + Settings ladder editor. Verified 41/41 (real PG schema) + 9/9 (encrypted SQLite till path).

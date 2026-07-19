@@ -48,6 +48,9 @@ jobs:
           - label: Thann Thai POS
             site_id: 40bc73f9-8fbf-4b5d-8d8b-47f276d2ecfa
             api_url: https://thannthai.siamepos.co.uk
+          - label: Chart Thai POS
+            site_id: 36096015-d948-45d5-a350-0722591591ef
+            api_url: https://chart-thai.siamepos.co.uk
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -141,3 +141,5 @@ Korakot approves posts visually in **Control Room → Social tab → 📋 Approv
 1. **Jinta pilot batch #1**: 6–8 draft posts from their treatments/prices/photos (60/90-min prices, vouchers, the Kensington local angle). Ready to show Korakot → then Jinta.
 2. **SiamEPOS page revival**: 2 posts/week plan (the page sat silent since May — bad look for a company selling social media management 😄). Use Maya's proven angles (zero-commission takeaway, Natasha's Law, AI menu scanner) in MAYA.md.
 3. Ask Korakot for the second pipeline client's name when he's ready.
+
+**📌 STANDING RULE (Korakot, 2026-07-20): update `TEAM-STATUS.md` IN REAL TIME** — the moment you ship, decide, or hit a blocker, put the row on the board THEN AND THERE, not in a batch at session end. Concurrent sessions read the board live; a stale board causes double work and missed handoffs. (End-of-session tidy-up still applies on top.)

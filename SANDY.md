@@ -394,3 +394,5 @@ Always specify exact hex values from the palette.
 Always specify exact font weights and sizes.
 Minimum font size 13px for restaurant screens.
 ```
+
+**📌 STANDING RULE (Korakot, 2026-07-20): update `TEAM-STATUS.md` IN REAL TIME** — the moment you ship, decide, or hit a blocker, put the row on the board THEN AND THERE, not in a batch at session end. Concurrent sessions read the board live; a stale board causes double work and missed handoffs. (End-of-session tidy-up still applies on top.)

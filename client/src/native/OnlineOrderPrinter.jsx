@@ -3,23 +3,27 @@
 // On the native Android app, the designated device listens for new online orders
 // and prints the kitchen ticket itself (the cloud can't reach a LAN printer).
 // Headless (renders nothing). No-op unless: running natively AND this device is
-// flagged as the online-order printer AND a printer is configured. Deduped so an
-// order prints once (even across reconnects / multiple devices).
+// flagged as the online-order printer. Deduped so an order prints once (even
+// across reconnects / multiple devices).
+//
+// SEPOS-ANDROID-005 (2026-07-19) — print through printFullOrderTicket, the same
+// path as manual kitchen printing, so the Admin → Printers destination is
+// honoured: built-in Sunmi, network, or station routing. The old code demanded
+// printer_kitchen_ip and sent a server-rendered buffer over the LAN — on a
+// built-in-only Sunmi (Chart Thai) it silently never printed.
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { io } from 'socket.io-client';
-import { SERVER_URL, getSettings, getKitchenBuffer } from '../api';
-import { isNativeApp, sendRawToPrinter } from './printer';
+import { SERVER_URL, getOrder } from '../api';
+import { isNativeApp } from './printer';
+import { printFullOrderTicket } from '../screens/KitchenTicket';
 
 const FLAG    = 'print_online_orders';     // '1' on the one device that should print
 const PRINTED = 'printed_online_orders';   // recent ids, for dedup
 
 export default function OnlineOrderPrinter() {
-  const settingsRef = useRef(null);
-
   useEffect(() => {
     if (!isNativeApp()) return;            // web/desktop print online orders the existing way
-    getSettings().then((s) => { settingsRef.current = s; }).catch(() => {});
 
     const socket = io(SERVER_URL, { transports: ['websocket', 'polling'] });
     socket.on('new_takeaway_order', async (payload) => {
@@ -30,16 +34,14 @@ export default function OnlineOrderPrinter() {
         let printed = [];
         try { printed = JSON.parse(localStorage.getItem(PRINTED) || '[]'); } catch {}
         if (printed.includes(id)) return;                   // already printed
-
-        const s = settingsRef.current || (settingsRef.current = await getSettings());
-        const target = s.printer_kitchen_ip || s.printer_receipt_ip;  // single-printer Sunmi → built-in
-        if (!target) return;
-        const port = s.printer_kitchen_port || s.printer_receipt_port || 9100;
-
-        const buf = await getKitchenBuffer(id);
-        if (buf && buf.data) await sendRawToPrinter(target, port, buf.data);
-
+        // Claim the id BEFORE printing — a socket reconnect can redeliver the
+        // event mid-print and a double ticket is worse than a rare missed one
+        // (the order is always visible on the Kitchen tab regardless).
         localStorage.setItem(PRINTED, JSON.stringify([...printed, id].slice(-200)));
+
+        const order = await getOrder(id);
+        if (!order || order.error) return;
+        await printFullOrderTicket({ order, items: order.items || [] });
       } catch (e) {
         console.warn('[online-order-print]', e && e.message);
       }

@@ -671,6 +671,7 @@ function runMigrations() {
   addColumnIfMissing('restaurant_settings', 'restaurant_phone', 'TEXT');
   addColumnIfMissing('tables', 'is_takeaway', 'INTEGER DEFAULT 0'); // SEPOS-TAKEAWAY-TABLE
   addColumnIfMissing('restaurant_settings', 'timezone',                     "TEXT DEFAULT 'Europe/London'");
+  addColumnIfMissing('restaurant_settings', 'closed_days', 'TEXT');  // SEPOS-051
   addColumnIfMissing('restaurant_settings', 'takeaway_busy_threshold',      'INTEGER DEFAULT 5');
   addColumnIfMissing('restaurant_settings', 'takeaway_very_busy_threshold', 'INTEGER DEFAULT 10');
   addColumnIfMissing('restaurant_settings', 'takeaway_wait_quiet',          'INTEGER DEFAULT 20');

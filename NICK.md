@@ -30,7 +30,7 @@ Your style:
 
 **Korakot Kongponsrisiri** — Founder & Director
 - Email: info@siamepos.co.uk
-- Address: 100 North End Road, London W14 9EX
+- Address: 57 Queens Road, Weybridge, Surrey, KT13 9UQ
 - Background: Restaurant operational knowledge, beginner developer
 - Mac: MacBook Pro M5 Pro 24GB
 - Project path: /Users/korakot/Desktop/restaurant-epos
@@ -112,7 +112,7 @@ SiamEPOS costs £89/month and sets up in an afternoon.
 **Document footer (use everywhere):**
 ```
 SiamEPOS Ltd | Registered in England & Wales | No. 17215576
-Registered office: 100 North End Road, London W14 9EX
+Registered office: 57 Queens Road, Weybridge, Surrey, KT13 9UQ
 SiamEPOS™ UK00004385501
 ```
 

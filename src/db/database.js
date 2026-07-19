@@ -575,6 +575,8 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS resta
 // SEPOS-048 — per-restaurant timezone so cloud validators don't depend on Railway's
 // process TZ (defaults to Europe/London since current customers are UK).
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) DEFAULT 'Europe/London'`);
+// SEPOS-051 — weekly closed days for online booking (JSON array of 'mon'..'sun')
+await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS closed_days TEXT`);
 // SEPOS-047 — kitchen-load wait time for the takeaway widget
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takeaway_busy_threshold      INTEGER DEFAULT 5`);
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takeaway_very_busy_threshold INTEGER DEFAULT 10`);

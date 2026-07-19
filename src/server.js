@@ -4352,6 +4352,17 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
     if (requestedDate < today) return res.json({ slots: [], message: 'Date is in the past' });
     if (requestedDate > maxDate) return res.json({ slots: [], message: 'Date too far in advance' });
 
+    // SEPOS-051 — weekly closed days
+    let closedDays = [];
+    try { closedDays = JSON.parse(s.closed_days || '[]'); } catch {}
+    const DAY_KEYS  = ['sun','mon','tue','wed','thu','fri','sat'];
+    const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const dow = requestedDate.getDay();
+    if (closedDays.includes(DAY_KEYS[dow])) {
+      return res.json({ date, covers: coversNum, restaurant_id, slots: [], closed: true,
+        message: `We are closed on ${DAY_NAMES[dow]}s — please choose another day.` });
+    }
+
     const interval = s.slot_interval_mins || 15;
 
     // Build all possible slots based on service type
@@ -4470,7 +4481,7 @@ app.get('/api/reservations/settings', async (req, res) => {
               booking_lead_hours, booking_advance_days, is_active,
               takeaway_busy_threshold, takeaway_very_busy_threshold,
               takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
-              timezone
+              timezone, closed_days
        FROM restaurant_settings WHERE restaurant_id = $1`, [rid]
     );
     const s = result.rows[0] || { restaurant_id: rid, is_active: true };
@@ -4495,13 +4506,14 @@ app.get('/api/reservations/settings/:restaurantId', widgetCors, async (req, res)
               booking_lead_hours, booking_advance_days, is_active,
               takeaway_busy_threshold, takeaway_very_busy_threshold,
               takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
-              timezone
+              timezone, closed_days
        FROM restaurant_settings WHERE restaurant_id = $1`,
       [req.params.restaurantId]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Restaurant not found' });
     const s = result.rows[0];
     if (!s.is_active) return res.status(403).json({ error: 'Online booking is currently disabled' });
+    try { s.closed_days = JSON.parse(s.closed_days || '[]'); } catch { s.closed_days = []; }
     res.json(s);
   } catch (err) {
     console.error('GET /api/reservations/settings error:', err);
@@ -4543,7 +4555,15 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
     const coversNum = parseInt(covers, 10);
     if (!coversNum || coversNum < 1) return res.status(400).json({ error: 'Covers must be at least 1' });
     const slotCheck = await pool.query(`SELECT COALESCE(SUM(covers), 0) AS booked FROM reservations WHERE reservation_date = $1 AND TO_CHAR(reservation_time, 'HH24:MI') = $2 AND restaurant_id = $3 AND status NOT IN ('cancelled','no-show')`, [reservation_date, reservation_time.slice(0, 5), restaurant_id]);
-    const settingsRes = await pool.query('SELECT max_covers_per_slot, max_party_size, restaurant_phone FROM restaurant_settings WHERE restaurant_id = $1', [restaurant_id]);
+    const settingsRes = await pool.query('SELECT max_covers_per_slot, max_party_size, restaurant_phone, closed_days FROM restaurant_settings WHERE restaurant_id = $1', [restaurant_id]);
+    // SEPOS-051 — refuse bookings on weekly closed days (authoritative; widgets also hide them)
+    try {
+      const cd = JSON.parse(settingsRes.rows[0]?.closed_days || '[]');
+      const dowB = new Date(String(reservation_date) + 'T12:00:00').getDay();
+      if (cd.includes(['sun','mon','tue','wed','thu','fri','sat'][dowB])) {
+        return res.status(400).json({ error: 'The restaurant is closed on that day — please choose another date.' });
+      }
+    } catch {}
     // SEPOS-050 — online (widget) bookings are capped to the restaurant's
     // max party size. Staff-created bookings are NOT capped — staff can
     // link tables and judge their own floor.
@@ -4782,7 +4802,13 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
       takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
       // SEPOS-048 — IANA timezone (e.g. 'Europe/London', 'Asia/Bangkok')
       timezone,
+      // SEPOS-051 — weekly closed days, array of 'mon'..'sun'
+      closed_days,
     } = req.body;
+    const VALID_DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
+    const closedDaysJson = Array.isArray(closed_days)
+      ? JSON.stringify(closed_days.filter(d => VALID_DAYS.includes(String(d).toLowerCase())))
+      : null;
     await pool.query(
       `INSERT INTO restaurant_settings
          (restaurant_id, restaurant_name, brand_colour, opening_time, last_booking_time,
@@ -4791,8 +4817,8 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
           slot_interval_mins, max_covers_per_slot, max_party_size, restaurant_phone,
           booking_lead_hours, booking_advance_days, is_active,
           takeaway_busy_threshold, takeaway_very_busy_threshold,
-          takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy, timezone)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+          takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy, timezone, closed_days)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
        ON CONFLICT (restaurant_id) DO UPDATE SET
          restaurant_name      = EXCLUDED.restaurant_name,
          brand_colour         = EXCLUDED.brand_colour,
@@ -4815,7 +4841,8 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
          takeaway_wait_quiet          = EXCLUDED.takeaway_wait_quiet,
          takeaway_wait_busy           = EXCLUDED.takeaway_wait_busy,
          takeaway_wait_very_busy      = EXCLUDED.takeaway_wait_very_busy,
-         timezone                     = EXCLUDED.timezone`,
+         timezone                     = EXCLUDED.timezone,
+         closed_days                  = EXCLUDED.closed_days`,
       [req.params.restaurantId, restaurant_name, brand_colour, opening_time, last_booking_time,
        service_type || 'all_day', lunch_service_start || '11:00', lunch_service_end || '14:30',
        dinner_service_start || '17:30', dinner_service_end || '21:30',
@@ -4830,7 +4857,7 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
        takeaway_wait_quiet          ?? 20,
        takeaway_wait_busy           ?? 35,
        takeaway_wait_very_busy      ?? 50,
-       timezone || 'Europe/London']
+       timezone || 'Europe/London', closedDaysJson]
     );
 
     // SEPOS-049 + SEPOS-050 — durable write-through to cloud. On a desktop

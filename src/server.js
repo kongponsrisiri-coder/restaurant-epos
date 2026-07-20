@@ -5346,7 +5346,7 @@ app.post('/api/concierge/:profile/book', async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'paid_demo')`,
       [req.params.profile, (typeof session_id === 'string' && session_id.slice(0, 64)) || null,
        String(name).trim().slice(0, 120), String(phone).trim().slice(0, 40),
-       treatment.label, minutes, when.replace('T', ' ') + ':00', profile.deposit_gbp || 0]);
+       treatment.label, minutes, start.toISOString(), profile.deposit_gbp || 0]);
     res.json({ ok: true, label: treatment.label, price: treatment.prices[minutes], deposit: profile.deposit_gbp || 0 });
   } catch (err) {
     console.error('POST /api/concierge/book error:', err);

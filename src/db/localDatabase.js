@@ -579,6 +579,21 @@ function initSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_concierge_session ON concierge_messages (profile, session_id, id);
 
+    CREATE TABLE IF NOT EXISTS concierge_bookings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      profile TEXT NOT NULL,
+      session_id TEXT,
+      customer_name TEXT NOT NULL,
+      customer_phone TEXT,
+      treatment TEXT NOT NULL,
+      minutes INTEGER NOT NULL,
+      start_at TEXT NOT NULL,
+      deposit_gbp REAL DEFAULT 0,
+      status TEXT DEFAULT 'paid_demo',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_concierge_bookings ON concierge_bookings (profile, start_at);
+
     CREATE TABLE IF NOT EXISTS batch_recipes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,

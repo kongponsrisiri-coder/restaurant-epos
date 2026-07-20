@@ -5249,7 +5249,8 @@ app.post('/api/concierge/:profile', async (req, res) => {
     if (clean.length === 0 || clean[clean.length - 1].role !== 'user') {
       return res.status(400).json({ error: 'the last message must be from the user' });
     }
-    const out = await concierge.askConcierge(req.params.profile, clean);
+    const diary = profile.treatments ? await _conciergeDiary(req.params.profile, profile) : '';
+    const out = await concierge.askConcierge(req.params.profile, clean, diary);
     const reply = out.reply || profile.fallback || 'Sorry — please try again in a moment.';
     // Owner-inbox transcript (fire-and-forget; never blocks the reply).
     const sid = typeof req.body.session_id === 'string' && /^[a-z0-9-]{8,64}$/i.test(req.body.session_id)
@@ -5269,6 +5270,149 @@ app.post('/api/concierge/:profile', async (req, res) => {
     console.error('POST /api/concierge error:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// Live diary grounding: booked ranges for the next 7 days, computed server-side
+// so the AI reads availability instead of inventing it. One-therapist demo model.
+const LONDON = 'Europe/London';
+function _lonDate(d) { return d.toLocaleDateString('en-GB', { timeZone: LONDON, weekday: 'short', day: 'numeric', month: 'short' }); }
+function _lonHM(d) { return d.toLocaleTimeString('en-GB', { timeZone: LONDON, hour: '2-digit', minute: '2-digit', hour12: false }); }
+function _lonYMD(d) { return d.toLocaleDateString('en-CA', { timeZone: LONDON }); }
+async function _conciergeDiary(profileId, profile) {
+  try {
+    const now = new Date();
+    const r = await pool.query(
+      `SELECT customer_name, treatment, minutes, start_at FROM concierge_bookings
+       WHERE profile = $1 AND status <> 'cancelled' ORDER BY start_at ASC LIMIT 200`, [profileId]);
+    const byDay = new Map();
+    r.rows.forEach(b => {
+      const start = new Date(b.start_at);
+      const end = new Date(start.getTime() + b.minutes * 60000);
+      if (end < now || start.getTime() > now.getTime() + 7 * 86400000) return;
+      const key = _lonYMD(start);
+      if (!byDay.has(key)) byDay.set(key, []);
+      byDay.get(key).push(_lonHM(start) + '–' + _lonHM(end));
+    });
+    const lines = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now.getTime() + i * 86400000);
+      const booked = byDay.get(_lonYMD(d));
+      lines.push(_lonDate(d) + ' (' + _lonYMD(d) + '): ' + (booked && booked.length ? 'booked ' + booked.join(', ') : 'free all day'));
+    }
+    return 'DIARY — right now it is ' + _lonDate(now) + ' ' + _lonHM(now)
+      + ' (UK time). Open ' + String(profile.open_hour).padStart(2, '0') + ':00–' + profile.close_hour + ':00 daily. Booked ranges for the next 7 days:\n'
+      + lines.join('\n')
+      + '\nEverything not listed as booked (and inside opening hours, finishing by close, and not in the past) is available.';
+  } catch (e) {
+    console.error('[concierge] diary build failed:', e.message);
+    return '';
+  }
+}
+
+// Booking creation — validates the slot server-side (hours + overlap) so a
+// stale/hand-edited link can never double-book. Demo payment (SEPOS-034
+// mock-pay pattern); real Stripe lands when the client signs.
+app.post('/api/concierge/:profile/book', async (req, res) => {
+  try {
+    const concierge = require('./services/conciergeService');
+    const profile = _conciergeCors(req, res) || concierge.getProfile(req.params.profile);
+    if (!profile || !profile.treatments) return res.status(404).json({ error: 'unknown profile' });
+    const { t, d, when, name, phone, session_id } = req.body || {};
+    const treatment = profile.treatments[t];
+    const minutes = parseInt(d, 10);
+    if (!treatment) return res.status(400).json({ error: 'Unknown treatment.' });
+    if (!treatment.prices[minutes]) return res.status(400).json({ error: 'That duration is not offered for this treatment.' });
+    if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'Please give a name for the booking.' });
+    if (!phone || String(phone).replace(/\D/g, '').length < 10) return res.status(400).json({ error: 'Please give a contact number so May can reach you.' });
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(when))) return res.status(400).json({ error: 'Invalid time.' });
+    const start = new Date(when + ':00+01:00'); // demo: UK summer offset
+    const end = new Date(start.getTime() + minutes * 60000);
+    if (isNaN(start) || start < new Date()) return res.status(400).json({ error: 'That time is in the past — please pick a new one in the chat.' });
+    const sh = parseInt(when.slice(11, 13), 10), sm = parseInt(when.slice(14, 16), 10);
+    const endMins = sh * 60 + sm + minutes;
+    if (sh < profile.open_hour || endMins > profile.close_hour * 60) {
+      return res.status(400).json({ error: 'That time falls outside opening hours (10am–8pm).' });
+    }
+    // Overlap check in JS (dialect-safe).
+    const dayRows = await pool.query(
+      `SELECT minutes, start_at FROM concierge_bookings WHERE profile = $1 AND status <> 'cancelled'`, [req.params.profile]);
+    const clash = dayRows.rows.some(b => {
+      const bs = new Date(b.start_at); const be = new Date(bs.getTime() + b.minutes * 60000);
+      return bs < end && be > start;
+    });
+    if (clash) return res.status(409).json({ error: 'Sorry — that slot has just been taken. Pop back to the chat and pick another time.' });
+    await pool.query(
+      `INSERT INTO concierge_bookings (profile, session_id, customer_name, customer_phone, treatment, minutes, start_at, deposit_gbp, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'paid_demo')`,
+      [req.params.profile, (typeof session_id === 'string' && session_id.slice(0, 64)) || null,
+       String(name).trim().slice(0, 120), String(phone).trim().slice(0, 40),
+       treatment.label, minutes, when.replace('T', ' ') + ':00', profile.deposit_gbp || 0]);
+    res.json({ ok: true, label: treatment.label, price: treatment.prices[minutes], deposit: profile.deposit_gbp || 0 });
+  } catch (err) {
+    console.error('POST /api/concierge/book error:', err);
+    res.status(500).json({ error: 'Something went wrong — please try again.' });
+  }
+});
+
+// The booking + demo-payment page the bot links to. Mobile-first, self-contained.
+app.get('/concierge-book/:profile', (req, res) => {
+  const concierge = require('./services/conciergeService');
+  const profile = concierge.getProfile(req.params.profile);
+  if (!profile || !profile.treatments) return res.status(404).send('Not found');
+  const t = String(req.query.t || ''); const d = parseInt(req.query.d, 10);
+  const when = String(req.query.when || ''); const name = String(req.query.name || '').slice(0, 60);
+  const tr = profile.treatments[t];
+  const ok = tr && tr.prices[d] && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(when);
+  const price = ok ? tr.prices[d] : 0; const dep = profile.deposit_gbp || 0;
+  const whenNice = ok ? new Date(when + ':00+01:00').toLocaleString('en-GB', { timeZone: LONDON, weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '';
+  const e = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  res.type('html').send(`<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex">
+<title>Book — ${e(profile.display_name)}</title><style>
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F8F1E8;min-height:100dvh;display:flex;flex-direction:column;align-items:center;padding:0 16px 40px}
+header{background:#2E362E;color:#fff;width:100vw;padding:calc(env(safe-area-inset-top) + 16px) 20px 16px;text-align:center}
+h1{font-size:18px;font-weight:600}.sub{font-size:12.5px;opacity:.8;margin-top:2px}
+.card{background:#fff;border-radius:14px;box-shadow:0 4px 18px rgba(0,0,0,.08);max-width:430px;width:100%;margin-top:20px;padding:22px}
+.rowl{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #f0ece4;font-size:15px}
+.rowl b{text-align:right}.tot{font-size:16px;border-bottom:none;padding-top:12px}
+label{display:block;font-size:13px;color:#556;margin:14px 0 5px}
+input{width:100%;padding:12px;border:1px solid #ddd;border-radius:9px;font-size:16px}
+button{width:100%;margin-top:18px;padding:15px;border:none;border-radius:10px;background:#2E362E;color:#fff;font-size:16px;font-weight:600;cursor:pointer}
+button:disabled{opacity:.6}.demo{margin-top:10px;text-align:center;font-size:11.5px;color:#998}
+.err{background:#fdecea;color:#b3261e;border-radius:9px;padding:12px;font-size:14px;margin-top:14px;display:none}
+.done{display:none;text-align:center;padding:14px 0}.done .tick{font-size:52px}.done h2{font-size:19px;margin:10px 0 6px}.done p{color:#556;font-size:14.5px;line-height:1.5}
+</style></head><body>
+<header><h1>${e(profile.display_name)}</h1><div class="sub">Secure booking · Kensington Church Street, W8</div></header>
+<div class="card" id="card">${ok ? `
+  <div class="rowl"><span>Treatment</span><b>${e(tr.label)}</b></div>
+  <div class="rowl"><span>Duration</span><b>${d} minutes</b></div>
+  <div class="rowl"><span>When</span><b>${e(whenNice)}</b></div>
+  <div class="rowl"><span>Price on the day</span><b>£${price - dep} (after deposit)</b></div>
+  <div class="rowl tot"><span>Deposit to pay now</span><b>£${dep}</b></div>
+  <label>Your name</label><input id="nm" value="${e(name)}" autocomplete="name">
+  <label>Mobile number (May will confirm on this)</label><input id="ph" type="tel" inputmode="tel" autocomplete="tel" placeholder="07…">
+  <button id="pay">Pay £${dep} deposit &amp; confirm</button>
+  <div class="demo">Demo checkout — no real card is charged. Live payments use Stripe.</div>
+  <div class="err" id="err"></div>
+  <div class="done" id="done"><div class="tick">✅</div><h2>Booking confirmed!</h2><p id="dmsg"></p></div>
+` : `<div class="done" style="display:block"><div class="tick">🤔</div><h2>This link looks incomplete</h2><p>Please go back to the chat and ask for a fresh booking link.</p></div>`}</div>
+${ok ? `<script>
+var q=new URLSearchParams(location.search);
+document.getElementById('pay').addEventListener('click',function(){
+  var b=this;b.disabled=true;b.textContent='Processing…';
+  var err=document.getElementById('err');err.style.display='none';
+  fetch('/api/concierge/${e(req.params.profile)}/book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    t:q.get('t'),d:q.get('d'),when:q.get('when'),name:document.getElementById('nm').value,phone:document.getElementById('ph').value,session_id:(function(){try{return sessionStorage.getItem('jw-sid')||null}catch(e){return null}})()
+  })}).then(function(r){return r.json().then(function(j){return{s:r.status,j:j}})}).then(function(x){
+    if(x.j&&x.j.ok){
+      ['nm','ph','pay'].forEach(function(i){document.getElementById(i).style.display='none'});
+      document.querySelector('.demo').style.display='none';
+      var dn=document.getElementById('done');dn.style.display='block';
+      document.getElementById('dmsg').textContent='£'+x.j.deposit+' deposit received (demo). '+x.j.label+' — see you then! May has your booking and will message if anything changes.';
+    } else { err.textContent=(x.j&&x.j.error)||'Something went wrong — try again.';err.style.display='block';b.disabled=false;b.textContent='Pay £${dep} deposit & confirm'; }
+  }).catch(function(){err.textContent='Connection problem — try again.';err.style.display='block';b.disabled=false;b.textContent='Pay £${dep} deposit & confirm';});
+});
+</script>` : ''}</body></html>`);
 });
 
 // Owner inbox (demo): private-key URL, mobile-first. Real product = SiamSpa admin tab.
@@ -5300,7 +5444,16 @@ app.get('/api/concierge/:profile/inbox', async (req, res) => {
       if (!s.preview && m.role === 'user') s.preview = String(m.content).slice(0, 120);
       if (m.role === 'user' && CONCIERGE_BOOKING_RE.test(m.content)) s.booking = true;
     });
-    res.json({ sessions: Array.from(sessions.values()).slice(0, 60) });
+    let bookings = [];
+    try {
+      const br = await pool.query(
+        `SELECT customer_name, customer_phone, treatment, minutes, start_at, deposit_gbp, status
+         FROM concierge_bookings WHERE profile = $1 AND status <> 'cancelled'
+         ORDER BY start_at ASC LIMIT 100`, [req.params.profile]);
+      const cutoff = Date.now() - 12 * 3600000;
+      bookings = br.rows.filter(b => new Date(b.start_at).getTime() > cutoff);
+    } catch (e) { /* table may not exist on old tills — inbox still works */ }
+    res.json({ sessions: Array.from(sessions.values()).slice(0, 60), bookings });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.get('/api/concierge/:profile/thread/:session', async (req, res) => {
@@ -5354,10 +5507,21 @@ var P=${JSON.stringify(req.params.profile)};
 var listEl=document.getElementById('list'),thEl=document.getElementById('thread'),backEl=document.getElementById('back'),subEl=document.getElementById('sub');
 function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
 function ago(t){var s=(Date.now()-new Date(t).getTime())/1000;if(s<60)return 'now';if(s<3600)return Math.floor(s/60)+'m';if(s<86400)return Math.floor(s/3600)+'h';return Math.floor(s/86400)+'d'}
+function bookingsHtml(bs){
+  if(!bs||!bs.length)return '';
+  return '<div style="background:#E7F6EC;padding:10px 16px;font-size:13px;font-weight:600;color:#1a6b3c">Confirmed bookings · '+bs.length+'</div>'
+    +bs.map(function(b){
+      var w=new Date(b.start_at).toLocaleString('en-GB',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+      return '<div class="row" style="cursor:default"><div class="ava" style="background:#1a6b3c">✓</div>'
+        +'<div class="mid"><div class="who">'+esc(b.customer_name)+' · '+esc(w)+'</div>'
+        +'<div class="pv">'+esc(b.treatment)+' · '+b.minutes+'min · £'+b.deposit_gbp+' deposit paid'+(b.customer_phone?' · '+esc(b.customer_phone):'')+'</div></div></div>';
+    }).join('');
+}
 function load(){fetch('/api/concierge/'+P+'/inbox?key='+encodeURIComponent(KEY)).then(r=>r.json()).then(function(d){
   var ss=(d&&d.sessions)||[];
-  if(!ss.length){listEl.innerHTML='<div class="empty">No chats yet.<br>They\\'ll appear here the moment a customer messages the assistant.</div>';return}
-  listEl.innerHTML=ss.map(function(s){
+  var bh=bookingsHtml((d&&d.bookings)||[]);
+  if(!ss.length&&!bh){listEl.innerHTML='<div class="empty">No chats yet.<br>They\\'ll appear here the moment a customer messages the assistant.</div>';return}
+  listEl.innerHTML=bh+ss.map(function(s){
     return '<div class="row" data-s="'+esc(s.session_id)+'"><div class="ava">'+esc(s.session_id.slice(-2).toUpperCase())+'</div>'
       +'<div class="mid"><div class="who">Guest '+esc(s.session_id.slice(-4))+(s.booking?' <span class="pin">📌</span>':'')+'</div>'
       +'<div class="pv">'+esc(s.preview||'…')+'</div></div>'

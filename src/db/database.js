@@ -897,6 +897,22 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_concierge_session ON concierge_messages(profile, session_id, id)`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS concierge_bookings (
+        id SERIAL PRIMARY KEY,
+        profile VARCHAR(50) NOT NULL,
+        session_id VARCHAR(64),
+        customer_name VARCHAR(120) NOT NULL,
+        customer_phone VARCHAR(40),
+        treatment VARCHAR(60) NOT NULL,
+        minutes INTEGER NOT NULL,
+        start_at TIMESTAMP NOT NULL,
+        deposit_gbp NUMERIC(10,2) DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'paid_demo',
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_concierge_bookings ON concierge_bookings(profile, start_at)`);
 
     // ── SEPOS-BATCH-001 — kitchen batch prep ───────────────────────────
     // batch_recipes is the make-template (e.g. "Red Curry Paste: 5kg from

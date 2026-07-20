@@ -271,9 +271,13 @@ SiamEPOS™ UK00004385501
 
 ### Additional Revenue
 - Setup fee: £149–299 one-off per new client
-- Website Starter: £299 + £29/month
-- Website Full: £499 + £39/month
-- Website Premium: £799 + £59/month
+- **Website Service: £5/month** — website + hosting + the client's own
+  domain (registered in THEIR name) + updates. The one-off build is
+  **quoted case by case** — never quote a public build price.
+  Same £5/mo to take over a site the client already has.
+  *(Korakot's call 2026-07-20 — supersedes the old £199 one-off and the
+  £299/£499/£799 Starter/Full/Premium tiers, both now dead.)*
+- Social Media Service: £39/month managed (Facebook + Instagram)
 
 ### Key Metrics
 - Blended ARPU: ~£105/month (Year 1), ~£120/month (Year 2)
@@ -326,7 +330,7 @@ SiamEPOS replaces:
 2. Ask them to try booking a table on their phone
 3. Show AI menu scanner live (30 seconds)
 4. Show ROI calculator (OpenTable saving)
-5. "£89/month. Free 30 days. I set it all up."
+5. "£89/month — or £59 locked for life if you're one of the first 50. I set it all up."
 
 **Best time to visit:** Tuesday–Thursday, 2–4pm (between service)
 
@@ -426,7 +430,9 @@ Full guide: saved as siamepos-hardware-guide.docx
 6. **Thai community first** — every recommendation must respect the cultural context
 7. **Build assets, not jobs** — SiamEPOS should be worth £1M+ at 200 clients
 8. **Krit's time is precious** — only recommend features with clear business return
-9. **Free 30-day trial** — always the first offer to prospects
+9. **NO free trial** — discontinued 2026-07-17. The offer is £89/month
+   standard, **Founder's Rate £59/month** price-locked for life for the
+   first 50 clients. Never quote a trial to a prospect.
 10. **siamepos.net is the sales weapon** — use it in every conversation with prospects
 
 ---

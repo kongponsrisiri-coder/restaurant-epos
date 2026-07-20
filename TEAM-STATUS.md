@@ -740,7 +740,21 @@ json_schema) + `messengerService.js` (Graph API send). Env on Railway: `MESSENGE
 
 Korakot wants to explore turning this week's internal social machine (AI drafts from till data → approval board → one click → deny auto-amends) into a PRODUCT — "Make wasn't good; nobody ships you-only-click-approve." Full concept + competitor map: `~/Documents/Claude/Projects/SiamEpos/SEPOS-SOCIAL-APP-001-Concept.md`. Krit's staged recommendation: Stage 1 = self-serve "Social" tab inside SiamEPOS Admin (reuses ~80% of the build, creates a DIY tier under the £39 managed service, strengthens the ERP story); Stage 2 = standalone app ONLY after ~5 paying social clients (needs Meta App Review — 2-6 weeks — and real marketing spend). **Your questions in the ticket:** DIY pricing without cannibalising £39; Stage-2 go/no-go gate; naming; ERP positioning fit. Phase-2 bet — nothing builds before Phase-1 revenue, this is strategy-shelf work.
 
-## 📨 FOR NICK — fold "domain included" into the Website Service pricing (Korakot via Krit, 2026-07-17)
+## ✅ WEBSITE SERVICE PRICING — SETTLED, site updated (Korakot + Nick, 2026-07-20)
+
+**Korakot's decision, final: the Website Service is £5/month. The £199 one-off comes OFF the public site — the build is quoted case by case.** £5/mo covers the website, hosting, the client's own domain (registered in their name) and updates. If a client already has a site, we take it over for the same £5/mo. Marketing leads with £5 everywhere.
+
+**Why this is the right shape (Nick):** £5/mo is a *door-opener price*, not a margin line — it's below the threshold where an owner needs to think about it, which is exactly what we want for a service whose real job is locking the domain→DNS→site→EPOS chain to us. The build is where the money is, and build effort genuinely varies 5× between a 3-page brochure and a full live-menu site — so a public one-off number was either underpricing the big jobs or scaring off the small ones. Quoting it removes both problems. **This supersedes the £199 figure everywhere; it also settles the £5-vs-£199 conflict Maya flagged when she bounced Mint's `wk4-03`** (the post's £5/mo was right — Mint, it's cleared to go).
+
+**✅ Site updated + committed `82a954b`** (EN + TH, verified rendering in Chrome): `website-design.html` + `pricing.html` cards now read "Website Service — £5/month", with the quoted-build note and domain/managed-hosting in the feature lists; `features.html` + `index.html` surface £5/mo; `faq.html` pricing answer updated including the JSON-LD copy Google reads. Competitor OpenTable £199 references deliberately untouched. **⚠️ Korakot: `client/Website/` is MANUAL-deploy on Netlify — this is committed but NOT live until someone deploys it** (memory `project_siamepos_net_manual_netlify_deploy`).
+
+**Two bugs fixed in passing** (same commit): (1) the Thai nav button on `website-design.html` + `social.html` still said **"ทดลองฟรี" (free trial)** — discontinued 2026-07-17, missed by the earlier sweep because it was HTML-entity-encoded; now "จองเดโม" like every other page. **Maya/Sandy: if you swept for the free trial with a plain-text grep, re-check your files for entity-encoded Thai.** (2) The pricing-page website card rendered the English *and* Thai "Learn More" buttons simultaneously (inline `display:block` beat the language-hiding CSS).
+
+**Still open for Nick:** social-service tiers (SEPOS-SOCIAL-APP-001 below) — unrelated to this.
+
+---
+
+## 📨 (CLOSED — see above) FOR NICK — fold "domain included" into the Website Service pricing (Korakot via Krit, 2026-07-17)
 
 Korakot explored Namecheap's affiliate program; verdict = not worth it at our scale (one-time ~20–35% commission on a £7–10 domain, NOTHING on renewals → £1–3 per client, once). **The better play: bundle domain registration + management INTO the Website Service.** We already hold the Namecheap API and manage client DNS anyway (Chart Thai, akinthai, the MX plumbing) — so registering the client's domain ourselves and pricing it into the service turns a £7/yr cost into recurring margin AND removes the "how do I buy a domain?" sales obstacle. Client keeps domain ownership (same never-locked-in promise as hosting). **Your call:** price shape — e.g. Website Service £5/mo → £8/mo with domain included, or domain folded into a £59 setup; and whether it's default-on for new clients. Update the pricing page copy once decided. Related context: memory `project_website_hosting_service`.
 

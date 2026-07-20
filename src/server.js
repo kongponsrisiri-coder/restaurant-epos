@@ -5250,11 +5250,134 @@ app.post('/api/concierge/:profile', async (req, res) => {
       return res.status(400).json({ error: 'the last message must be from the user' });
     }
     const out = await concierge.askConcierge(req.params.profile, clean);
-    res.json({ reply: out.reply || profile.fallback || 'Sorry — please try again in a moment.' });
+    const reply = out.reply || profile.fallback || 'Sorry — please try again in a moment.';
+    // Owner-inbox transcript (fire-and-forget; never blocks the reply).
+    const sid = typeof req.body.session_id === 'string' && /^[a-z0-9-]{8,64}$/i.test(req.body.session_id)
+      ? req.body.session_id : null;
+    if (sid) {
+      const userMsg = clean[clean.length - 1].content;
+      pool.query(
+        `INSERT INTO concierge_messages (profile, session_id, role, content) VALUES ($1,$2,$3,$4)`,
+        [req.params.profile, sid, 'user', userMsg]
+      ).then(() => pool.query(
+        `INSERT INTO concierge_messages (profile, session_id, role, content) VALUES ($1,$2,$3,$4)`,
+        [req.params.profile, sid, 'assistant', reply]
+      )).catch(e => console.error('[concierge] transcript insert failed:', e.message));
+    }
+    res.json({ reply });
   } catch (err) {
     console.error('POST /api/concierge error:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// Owner inbox (demo): private-key URL, mobile-first. Real product = SiamSpa admin tab.
+function _conciergeInboxAuth(req, res) {
+  const concierge = require('./services/conciergeService');
+  const profile = concierge.getProfile(req.params.profile);
+  if (!profile || !profile.inbox_key || req.query.key !== profile.inbox_key) {
+    res.status(404).json({ error: 'not found' });
+    return null;
+  }
+  return profile;
+}
+const CONCIERGE_BOOKING_RE = /book|จอง|appointment|reserve|tomorrow|tonight|พรุ่งนี้|คืนนี้/i;
+app.get('/api/concierge/:profile/inbox', async (req, res) => {
+  try {
+    if (!_conciergeInboxAuth(req, res)) return;
+    const r = await pool.query(
+      `SELECT session_id, role, content, created_at FROM concierge_messages
+       WHERE profile = $1 ORDER BY id DESC LIMIT 600`, [req.params.profile]);
+    const sessions = new Map();
+    // rows are newest-first; first row seen per session = its latest message
+    r.rows.forEach(m => {
+      let s = sessions.get(m.session_id);
+      if (!s) {
+        s = { session_id: m.session_id, last_at: m.created_at, preview: '', count: 0, booking: false };
+        sessions.set(m.session_id, s);
+      }
+      s.count++;
+      if (!s.preview && m.role === 'user') s.preview = String(m.content).slice(0, 120);
+      if (m.role === 'user' && CONCIERGE_BOOKING_RE.test(m.content)) s.booking = true;
+    });
+    res.json({ sessions: Array.from(sessions.values()).slice(0, 60) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.get('/api/concierge/:profile/thread/:session', async (req, res) => {
+  try {
+    if (!_conciergeInboxAuth(req, res)) return;
+    const r = await pool.query(
+      `SELECT role, content, created_at FROM concierge_messages
+       WHERE profile = $1 AND session_id = $2 ORDER BY id ASC LIMIT 200`,
+      [req.params.profile, req.params.session]);
+    res.json({ messages: r.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.get('/concierge-inbox/:profile', (req, res) => {
+  const profile = _conciergeInboxAuth(req, res);
+  if (!profile) return;
+  const name = profile.display_name || req.params.profile;
+  res.type('html').send(`<!doctype html><html><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex"><title>${name} — Chat inbox</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#ECE5DD;min-height:100dvh}
+  header{background:#075E54;color:#fff;padding:calc(env(safe-area-inset-top) + 14px) 16px 14px;position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px}
+  header h1{font-size:17px;font-weight:600;flex:1}
+  header .sub{font-size:12px;opacity:.85}
+  #back{display:none;background:none;border:none;color:#fff;font-size:24px;padding:2px 8px 2px 0;cursor:pointer}
+  .row{background:#fff;padding:14px 16px;border-bottom:1px solid #eee;display:flex;gap:12px;align-items:center;cursor:pointer}
+  .row:active{background:#f2f2f2}
+  .ava{width:46px;height:46px;border-radius:50%;background:#2E362E;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;flex:none;font-size:15px}
+  .mid{flex:1;min-width:0}
+  .who{font-weight:600;font-size:15px;display:flex;gap:6px;align-items:center}
+  .pv{color:#667;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
+  .meta{text-align:right;flex:none}
+  .t{color:#889;font-size:12px}
+  .n{display:inline-block;background:#25D366;color:#fff;border-radius:10px;font-size:11px;padding:1px 7px;margin-top:5px}
+  .pin{font-size:13px}
+  .empty{padding:48px 24px;text-align:center;color:#778}
+  #thread{display:none;padding:12px;flex-direction:column;gap:8px}
+  .b{max-width:84%;padding:8px 12px;border-radius:10px;font-size:14.5px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word;box-shadow:0 1px 1px rgba(0,0,0,.08)}
+  .u{background:#fff;align-self:flex-start;border-top-left-radius:2px}
+  .a{background:#DCF8C6;align-self:flex-end;border-top-right-radius:2px}
+  .b .ts{display:block;font-size:10.5px;color:#99a;margin-top:4px;text-align:right}
+  .note{font-size:11.5px;color:#889;text-align:center;padding:10px}
+</style></head><body>
+<header><button id="back" aria-label="Back">&#8249;</button><div style="flex:1"><h1>${name}</h1><div class="sub" id="sub">Customer chats · AI assistant</div></div></header>
+<div id="list"></div><div id="thread"></div>
+<div class="note">Guests are anonymous until they share contact details in chat. 📌 = possible booking request.</div>
+<script>
+var KEY=new URLSearchParams(location.search).get('key');
+var P=${JSON.stringify(req.params.profile)};
+var listEl=document.getElementById('list'),thEl=document.getElementById('thread'),backEl=document.getElementById('back'),subEl=document.getElementById('sub');
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function ago(t){var s=(Date.now()-new Date(t).getTime())/1000;if(s<60)return 'now';if(s<3600)return Math.floor(s/60)+'m';if(s<86400)return Math.floor(s/3600)+'h';return Math.floor(s/86400)+'d'}
+function load(){fetch('/api/concierge/'+P+'/inbox?key='+encodeURIComponent(KEY)).then(r=>r.json()).then(function(d){
+  var ss=(d&&d.sessions)||[];
+  if(!ss.length){listEl.innerHTML='<div class="empty">No chats yet.<br>They\\'ll appear here the moment a customer messages the assistant.</div>';return}
+  listEl.innerHTML=ss.map(function(s){
+    return '<div class="row" data-s="'+esc(s.session_id)+'"><div class="ava">'+esc(s.session_id.slice(-2).toUpperCase())+'</div>'
+      +'<div class="mid"><div class="who">Guest '+esc(s.session_id.slice(-4))+(s.booking?' <span class="pin">📌</span>':'')+'</div>'
+      +'<div class="pv">'+esc(s.preview||'…')+'</div></div>'
+      +'<div class="meta"><div class="t">'+ago(s.last_at)+'</div><div class="n">'+s.count+'</div></div></div>';
+  }).join('');
+  Array.prototype.forEach.call(listEl.querySelectorAll('.row'),function(r){r.addEventListener('click',function(){openThread(r.getAttribute('data-s'))})});
+})}
+function openThread(sid){
+  fetch('/api/concierge/'+P+'/thread/'+encodeURIComponent(sid)+'?key='+encodeURIComponent(KEY)).then(r=>r.json()).then(function(d){
+    listEl.style.display='none';thEl.style.display='flex';backEl.style.display='block';
+    subEl.textContent='Guest '+sid.slice(-4);
+    thEl.innerHTML=((d&&d.messages)||[]).map(function(m){
+      return '<div class="b '+(m.role==='user'?'u':'a')+'">'+esc(m.content)+'<span class="ts">'+new Date(m.created_at).toLocaleString('en-GB',{hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'})+'</span></div>';
+    }).join('');
+    window.scrollTo(0,document.body.scrollHeight);
+  });
+}
+backEl.addEventListener('click',function(){thEl.style.display='none';backEl.style.display='none';listEl.style.display='block';subEl.textContent='Customer chats · AI assistant';load()});
+load();setInterval(function(){if(listEl.style.display!=='none')load()},25000);
+</script></body></html>`);
 });
 
 app.get('/api/expenses', async (req, res) => {

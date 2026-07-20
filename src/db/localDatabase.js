@@ -569,6 +569,16 @@ function initSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses (date DESC);
 
+    CREATE TABLE IF NOT EXISTS concierge_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      profile TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_concierge_session ON concierge_messages (profile, session_id, id);
+
     CREATE TABLE IF NOT EXISTS batch_recipes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,

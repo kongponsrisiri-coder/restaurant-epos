@@ -5207,6 +5207,56 @@ app.post('/api/ai/help', requireStaffAuthOrSyncSecret(), async (req, res) => {
   }
 });
 
+// SEPOS-CONCIERGE-DEMO — public customer-chat concierge (WhatsApp-bot brain).
+// Grounded per-profile in conciergeService; CORS locked to the profile's own
+// site origins; small per-IP rate limit since this is unauthenticated.
+const _conciergeHits = new Map(); // ip -> [timestamps]
+function _conciergeAllow(ip) {
+  const now = Date.now();
+  const arr = (_conciergeHits.get(ip) || []).filter(t => now - t < 5 * 60 * 1000);
+  if (arr.length >= 25) { _conciergeHits.set(ip, arr); return false; }
+  arr.push(now); _conciergeHits.set(ip, arr);
+  if (_conciergeHits.size > 5000) _conciergeHits.clear(); // memory guard
+  return true;
+}
+function _conciergeCors(req, res) {
+  const concierge = require('./services/conciergeService');
+  const profile = concierge.getProfile(req.params.profile);
+  const origin = req.headers.origin;
+  if (profile && origin && profile.origin_whitelist.includes(origin)) {
+    res.set('Access-Control-Allow-Origin', origin);
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.set('Vary', 'Origin');
+  }
+  return profile;
+}
+app.options('/api/concierge/:profile', (req, res) => { _conciergeCors(req, res); res.sendStatus(204); });
+app.post('/api/concierge/:profile', async (req, res) => {
+  try {
+    const concierge = require('./services/conciergeService');
+    const profile = _conciergeCors(req, res);
+    if (!profile) return res.status(404).json({ error: 'unknown profile' });
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
+    if (!_conciergeAllow(ip)) return res.status(429).json({ error: 'slow down a little — try again in a few minutes' });
+    const { messages } = req.body || {};
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.json({ reply: profile.greeting });
+    }
+    const clean = messages
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+      .slice(-12)
+      .map(m => ({ role: m.role, content: m.content.slice(0, 1000) }));
+    if (clean.length === 0 || clean[clean.length - 1].role !== 'user') {
+      return res.status(400).json({ error: 'the last message must be from the user' });
+    }
+    const out = await concierge.askConcierge(req.params.profile, clean);
+    res.json({ reply: out.reply || profile.fallback || 'Sorry — please try again in a moment.' });
+  } catch (err) {
+    console.error('POST /api/concierge error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/expenses', async (req, res) => {
   try { const result = await pool.query(`SELECT * FROM expenses ORDER BY date DESC, created_at DESC`); res.json(result.rows); }
   catch (err) { res.status(500).json({ error: err.message }); }

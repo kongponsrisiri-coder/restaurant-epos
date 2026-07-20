@@ -6,6 +6,51 @@
 
 ---
 
+## 📱 SOCIAL CONTENT — KORAKOT'S STANDING RULES (given to Mint, 2026-07-20 · keep visible for everyone)
+
+> These are the taste + accuracy rules Korakot taught during the Website/Social card work. They apply to **every social post & card** we make. New rules get appended here AND to `MINT.md` so they carry into every session. (Full blow-by-blow lives in the **Mint** row under Active Work.)
+
+**Design of the image**
+1. **Every card carries an IMAGE — never a text-only slide.** The image can be a real photograph, a live screenshot, **OR AI-generated art** (see 2).
+2. **AI-generated images ARE allowed** for our own / generic mood shots (that's what this card used). Use **candid-style prompts** (muted colours, mild grain, imperfect framing) so it reads real, not glossy-AI. But AI is **decorative / generic ONLY**: a specific **client's actual dishes, premises or staff must be REAL (enhanced) photos — never AI-faked.** Prefer a fresh live screenshot over a reused archive.
+3. Show the customer seeing the restaurant **OUTSIDE the venue** (at home / on the go). Reaching people **before** they're in the room is the whole point of website + social.
+
+**Message & accuracy**
+4. **Social media = being SEEN / staying visible** ("customers see you exist and you're active"). It is **NOT a booking channel.** Booking + online ordering belong to the **WEBSITE**. Never put a "Book now" button on a social post/mockup, and never claim posts take bookings.
+5. Keep the two services distinct — **Website £5/mo** (own site, booking + ordering, 0% commission) · **Social £39/mo** (Facebook + Instagram, presence, you approve every post). Bundle = website **free** when taken with social; the one-off build is **never implied free**. Verify every price against the canonical rate card before quoting.
+
+**Contact / CTA**
+6. **Lead the CTA with the ONE-TAP channel** — Messenger (when the post is on Facebook) or **WhatsApp 07896 036386** — NOT "go to our website." "chat → website → find a form" is too many steps. Website is **"more details"** only.
+
+**This session's deliverable:** the **Social Media Service** card (`siamepos-2026-08-websocial-01`) is built, design signed off by Korakot, and **PENDING on the Control Room approval board** (proposed Mon 4 Aug 11:00) — awaiting his board approval to schedule/post. Source: `~/Documents/SiamEPOS-Docs/marketing/cards/website-social-card.html` (+ `hero-social.html` for the FB-post mockup).
+
+---
+
+## 📜 KORAKOT'S RULES — PRODUCT & ENGINEERING (rolling · every agent reads this · append when Korakot gives you a rule in-session)
+
+> Same idea as Mint's social rules above: when Korakot teaches a rule during a session, it gets appended HERE (and to your agent .md) so it survives into everyone's next session. Latest batch given to Krit overnight 20–21 Jul during the Twilio + AI-concierge work.
+
+1. **Right lane, right stack.** A client's features are built on THEIR product's stack. Jinta is a spa client → the AI concierge lives in `siamepos-spa` (spa-api + spa Admin), grounded in the spa's real tables — not bolted onto the restaurant cloud because it's convenient. (Krit built the first demo on the restaurant cloud; Korakot corrected it; rebuilt properly the same night.)
+2. **AI reads real data — it never invents.** Availability, prices, rota, menus come from live tables injected/tooled server-side. If the bot can't look something up, give it a tool (e.g. customers asked "who's working tomorrow?" → `list_therapists` reading the real rota) — don't let it guess.
+3. **Owner-facing surfaces live in Admin, mobile-first.** No "secret link" pages — owners check things on their phones between clients, so it must be in the app they already use, easy in and out. (The chat inbox started as a keyed URL — "not practical at all" — and became Admin → AI Chats.)
+4. **Escalation keeps the customer in the conversation.** When something is beyond the AI: collect the details and say a person will reply RIGHT HERE shortly. Never bounce a customer to a different phone number — only give the phone number if they explicitly ask for it.
+5. **Payment is always a LINK, never in-chat.** The bot sends a booking/payment link (Stripe); card details never pass through a conversation. Deposit safety stands (Sam's W3): deposit due + no Stripe configured = refuse to silently confirm a free booking — roll back + human handoff. (Demo spa tenant currently runs **No deposit** by Korakot's explicit choice, 20 Jul.)
+6. **Tokens: never accept short default expiries.** The Netlify PAT 7-day default nearly killed every site deploy. CI/service tokens get long or no expiry and live in encrypted stores (GitHub secrets / `.infra-keys`). And secrets stay Korakot-side: agents generate + verify, Korakot pastes — agents never type keys into fields.
+
+---
+
+## 📣 SESSION DIGEST — overnight Sun 20 → Mon 21 Jul (Krit + Korakot): Twilio launch-ready + spa AI concierge LIVE end-to-end
+
+One night, two big fronts — full detail in the dated rows under Recently Completed; this is the read-in-60-seconds version:
+
+**🔑 Infra saved from silent breakage:** both Netlify Personal Access Tokens were expiring NEXT DAY (7-day default trap). Rotated to no-expiry tokens, GitHub Actions deploys verified green (6 jobs), Control Room verified reading 21 sites / 7 domains. Also: Control Room custom-domain links made clickable; a mid-rollout "backends on different commits" alert diagnosed (it was our own doc pushes) and cleared.
+
+**📱 Twilio = WhatsApp/SMS foundation DONE:** Business Profile was rejected (gmail ≠ business domain) → profile fixed to info@siamepos.co.uk → discovered info@ couldn't SEND (dead smtp password for years) → rewired through Brevo relay → domain-proof reply delivered → **profile APPROVED in 21 min**. UK number chosen (+44 7861 932999), UK Mobile Business regulatory bundle SUBMITTED (verdict → info@). Booking-SMS code shipped dormant in the restaurant backend (SEPOS-027). This is exactly steps 2–3 of Sam's WHATSAPP-SETUP.md runbook — when the bundle clears, the number registers and Sam's bot goes live on WhatsApp.
+
+**🧖 Spa AI concierge — customer-to-calendar PROVEN:** discovery that Sam had already built SPA-WHATSAPP-AI-001 end-to-end (orchestrator + real-availability tools + Stripe holds + Twilio inbound). Added the missing surfaces: public **website chat** (same orchestrator, `web:` sessions) live on jinta-massage.netlify.app in a WhatsApp-style widget; **Admin → AI Chats** inbox (list/thread/✋ Take over); **`list_therapists`** tool. Live-proven chain: chat → real rota + availability → booking **confirmed ref #295 → visible on the Appointments timeline (Nuan, 21 Jul 15:00)**. Jinta pitch is demo-ready; remaining: seed Jinta's treatments/name onto the demo tenant, Sam's review, Stripe keys when the deposit flow should show.
+
+---
+
 ## 📣 MESSAGE FOR MAYA & SANDY — Key positioning insight (Nick, 2026-06-18)
 
 **The ERP framing — use this in all marketing and design narrative.**

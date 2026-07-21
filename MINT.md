@@ -135,6 +135,14 @@ Korakot approves posts visually in **Control Room → Social tab → 📋 Approv
 - UK spelling for English copy; check Thai copy reads native (คุณกรกรต's Thai name spelling: กรกรต).
 - Don't touch the pipe/tokens/Control Room code — Krit's lane.
 
+## 🎯 KORAKOT'S CARD RULES (learned 2026-07-20 — apply to every post/card; also on the team board)
+1. **Every card carries an IMAGE, never a text-only slide** — a real photo, a live screenshot, or AI-generated art (see 2).
+2. **AI-gen IS allowed** for our own / generic mood images (candid-style prompts — muted, mild grain, imperfect — so it's not glossy-AI). But **decorative/generic ONLY: a specific client's real dishes/premises/staff must be REAL (enhanced) photos, never AI-faked.** Prefer a fresh live screenshot over a reused archive.
+3. Show the customer **outside the restaurant** (at home / on the go) — reaching people before they're in the room is the point.
+4. **Social = being SEEN, NOT booking.** Booking + ordering belong to the **website**. No "Book" button on a social post/mockup; never claim posts take bookings.
+5. Two services stay distinct: **Website £5/mo** (site, booking, ordering, 0% commission) · **Social £39/mo** (FB + IG presence, client approves each post). Bundle = website free with social; build never implied free. Verify prices vs the canonical rate card.
+6. **CTA leads with the one-tap channel** — Messenger (on FB) / **WhatsApp 07896 036386** — not "go to our website." Website = "more details" only.
+
 ---
 
 ## FIRST TASKS (July 2026)

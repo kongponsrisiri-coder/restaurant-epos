@@ -33,7 +33,9 @@
       "Bash(git push *)",
       "Bash(curl -s https://baan-siam.siamepos.co.uk/ --max-time 10)",
       "Bash(pbcopy)",
-      "Skill(code-review)"
+      "Skill(code-review)",
+      "mcp__claude_ai_Gmail__get_thread",
+      "mcp__claude_ai_Gmail__search_threads"
     ]
   }
 }

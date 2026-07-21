@@ -326,7 +326,7 @@ export default function ClientDetailPage() {
             </div>
           </SectionCard>
 
-          {!isSpa && <SiamPayCard client={client} />}
+          <SiamPayCard client={client} />
 
           {isAdmin && (
             <SectionCard title="Danger zone">
@@ -662,7 +662,7 @@ function SiamPayCard({ client }) {
       {!status?.enabled ? (
         <div>
           <div style={{ fontSize: 13, color: C.textFaint, marginBottom: 10 }}>
-            For clients <strong>without their own Stripe</strong>: creates their SiamPay account (Stripe Express — Stripe does the KYC), then online takeaway payments settle straight to <strong>their</strong> bank. We take a flat 10p per order from their settlement; the customer always pays the menu price.
+            For clients <strong>without their own Stripe</strong>: creates their SiamPay account (Stripe Express — Stripe does the KYC), then online payments (takeaway orders, booking deposits, vouchers, payment links) settle straight to <strong>their</strong> bank. We take a flat 10p per transaction from their settlement; the customer always pays the quoted price.
           </div>
           <button onClick={enable} disabled={busy === 'enable'}
             style={{ ...btn.gold, fontSize: 13, opacity: busy === 'enable' ? 0.6 : 1, cursor: busy === 'enable' ? 'wait' : 'pointer' }}>

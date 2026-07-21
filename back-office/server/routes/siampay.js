@@ -70,7 +70,8 @@ router.post('/clients/:id/enable', async (req, res) => {
       },
       business_profile: {
         name: client.restaurant_name,
-        mcc: '5812', // eating places / restaurants
+        // MCC by product: restaurants 5812, spas/massage 7297.
+        mcc: (client.product || 'restaurant') === 'spa' ? '7297' : '5812',
       },
       metadata: { bo_client_id: String(client.id), slug: client.slug || '' },
     });

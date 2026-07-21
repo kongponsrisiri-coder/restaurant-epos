@@ -76,11 +76,16 @@ function validateAmount(amount) {
 }
 
 // ── Stripe payment intent (with mock fallback) ────────────────────
-// If STRIPE_SECRET_KEY isn't set, we hand back a fake PI shape so the
-// widget can still demo end-to-end on Baan Siam. The created voucher
-// is tagged payment_method='mock' so reports + admin can distinguish.
+// Three tenant modes (SIAMPAY-002): own STRIPE_SECRET_KEY → today's flow;
+// SiamPay platform mode → direct charge on the connected account + flat
+// app fee from the client's settlement (customer pays the voucher value
+// only); neither → mock PI so the demo widget still works end-to-end.
+// The created voucher is tagged payment_method='mock' in mock mode.
+const { siampayCfg } = require('./siampay');
+
 async function createPaymentIntent(amountGbp) {
-  if (!process.env.STRIPE_SECRET_KEY) {
+  const sp = siampayCfg();
+  if (!process.env.STRIPE_SECRET_KEY && !sp) {
     return {
       mode: 'mock',
       payment_intent_id: 'mock_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
@@ -88,13 +93,25 @@ async function createPaymentIntent(amountGbp) {
       publishable_key: null,
     };
   }
-  const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-  const intent = await stripe.paymentIntents.create({
+  const params = {
     amount: Math.round(Number(amountGbp) * 100),
     currency: 'gbp',
     automatic_payment_methods: { enabled: true },
     metadata: { product: 'siamepos_gift_voucher' },
-  });
+  };
+  if (sp) {
+    params.application_fee_amount = sp.feePence;
+    const intent = await require('stripe')(sp.key).paymentIntents.create(params, { stripeAccount: sp.account });
+    return {
+      mode: 'stripe',
+      payment_intent_id: intent.id,
+      client_secret: intent.client_secret,
+      publishable_key: sp.pk,
+      stripe_account: sp.account, // widget must init Stripe.js with this
+    };
+  }
+  const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+  const intent = await stripe.paymentIntents.create(params);
   return {
     mode: 'stripe',
     payment_intent_id: intent.id,
@@ -107,17 +124,29 @@ async function createPaymentIntent(amountGbp) {
 // For mock PIs we accept by prefix; for real PIs we re-fetch from Stripe
 // and check status. Returns the actual amount paid (defends against
 // client tampering with the amount field).
-async function verifyPaymentIntent(piId, expectedAmountGbp) {
+async function verifyPaymentIntent(piId, expectedAmountGbp, opts = {}) {
   if (!piId) return { ok: false, error: 'No payment_intent_id' };
   if (String(piId).startsWith('mock_')) {
-    return { ok: true, mode: 'mock', amount_paid: Number(expectedAmountGbp) };
+    // Mock PIs are only legitimate when the tenant genuinely has no payment
+    // rail (demo / pre-go-live) OR the demo flag forced mock at purchase
+    // time (opts.allowMock). On a paying tenant, a hand-crafted "mock_" id
+    // must NOT mint a free voucher.
+    if (opts.allowMock || (!process.env.STRIPE_SECRET_KEY && !siampayCfg())) {
+      return { ok: true, mode: 'mock', amount_paid: Number(expectedAmountGbp) };
+    }
+    return { ok: false, error: 'mock payment not accepted on this restaurant' };
   }
-  if (!process.env.STRIPE_SECRET_KEY) {
+  const sp = siampayCfg();
+  if (!process.env.STRIPE_SECRET_KEY && !sp) {
     return { ok: false, error: 'Stripe not configured but real PI submitted' };
   }
   try {
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-    const pi = await stripe.paymentIntents.retrieve(piId);
+    // SIAMPAY-002 — a SiamPay PI lives on the connected account, so the
+    // retrieve must carry stripeAccount as request OPTIONS (3rd arg — the
+    // 2-arg form sends it as an API param and Stripe rejects it).
+    const pi = sp
+      ? await require('stripe')(sp.key).paymentIntents.retrieve(piId, {}, { stripeAccount: sp.account })
+      : await require('stripe')(process.env.STRIPE_SECRET_KEY).paymentIntents.retrieve(piId);
     if (pi.status !== 'succeeded') return { ok: false, error: `Payment not completed (${pi.status})` };
     return { ok: true, mode: 'stripe', amount_paid: (pi.amount_received || 0) / 100 };
   } catch (err) {

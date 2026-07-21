@@ -6810,15 +6810,7 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
 // transfer_data, never a SiamEPOS balance in the flow (FCA/SEIS posture).
 // A tenant's own STRIPE_SECRET_KEY always wins — existing clients unchanged.
 // TEST MODE ONLY until solicitor + SEIS sign-offs (see SIAMPAY-002 ticket).
-function siampayCfg() {
-  if (process.env.STRIPE_SECRET_KEY) return null; // own-keys tenants keep today's flow
-  const key = process.env.PLATFORM_STRIPE_SECRET_KEY;
-  const pk = process.env.PLATFORM_STRIPE_PUBLISHABLE_KEY;
-  const account = process.env.SIAMPAY_ACCOUNT;
-  if (!key || !pk || !account) return null;
-  const feePence = Math.max(0, Math.min(100, Number(process.env.SIAMPAY_FEE_PENCE ?? 10) || 0));
-  return { key, pk, account, feePence };
-}
+const { siampayCfg } = require('./services/siampay'); // shared with voucherService
 
 app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
   // A restaurant can force mock/demo pay (no card field) even with Stripe keys
@@ -6949,7 +6941,17 @@ app.post('/api/widget/voucher/purchase', widgetCors, async (req, res) => {
   try {
     const v = voucherSvc.validateAmount(req.body?.amount);
     if (!v.ok) return res.status(400).json({ error: v.error });
-    const pi = await voucherSvc.createPaymentIntent(v.amount);
+    // Demo tenants force mock pay via the same flag the takeaway widget
+    // honours — otherwise a SiamPay/own-keys tenant in TEST mode would show
+    // prospects a real card form their own cards can't complete.
+    let mock = false;
+    try { const s = await loadSettings(); mock = String(s.takeaway_mock_pay || '') === '1'; } catch {}
+    const pi = mock
+      ? { mode: 'mock',
+          payment_intent_id: 'mock_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+          client_secret: 'mock_secret_no_real_payment',
+          publishable_key: null }
+      : await voucherSvc.createPaymentIntent(v.amount);
     res.json({ ...pi, amount: v.amount });
   } catch (err) {
     console.error('[voucher] purchase', err);
@@ -6966,7 +6968,12 @@ app.post('/api/widget/voucher/confirm', widgetCors, async (req, res) => {
     } = req.body || {};
     const v = voucherSvc.validateAmount(amount);
     if (!v.ok) return res.status(400).json({ error: v.error });
-    const verify = await voucherSvc.verifyPaymentIntent(payment_intent_id, v.amount);
+    // allowMock mirrors the purchase endpoint's demo-flag decision, so a
+    // demo tenant's mock voucher confirms but a paying tenant can't be
+    // tricked with a hand-crafted "mock_" id.
+    let mockOk = false;
+    try { const s = await loadSettings(); mockOk = String(s.takeaway_mock_pay || '') === '1'; } catch {}
+    const verify = await voucherSvc.verifyPaymentIntent(payment_intent_id, v.amount, { allowMock: mockOk });
     if (!verify.ok) return res.status(402).json({ error: verify.error });
     // Re-trust server's amount_paid over client's amount — defends
     // against the client submitting a £500 PI then asking for a £1000

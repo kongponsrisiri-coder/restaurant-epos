@@ -6579,10 +6579,10 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
     // SEPOS-047b — the paid amount must match the server-priced total.
     // A mismatch means menu prices changed mid-checkout or the widget
     // was tampered with; either way the order must not land as 'paid'.
-    // SIAMPAY-002 — in SiamPay mode the customer also pays the flat
-    // handling fee on top, so the expected charge = total + fee.
-    const spFee = siampayCfg();
-    const expectedPence = Math.round(total * 100) + (spFee ? spFee.feePence : 0);
+    // SIAMPAY-002 (Korakot 21 Jul): the customer pays the menu price ONLY.
+    // The flat SiamPay fee is application_fee_amount — deducted from the
+    // client's settlement by Stripe, never added on top for the customer.
+    const expectedPence = Math.round(total * 100);
     if (verifiedPaymentIntentId !== null && verifiedPaymentPence !== expectedPence) {
       console.warn(`[takeaway] PI ${verifiedPaymentIntentId} amount ${verifiedPaymentPence}p != expected ${expectedPence}p — rejected`);
       return res.status(402).json({ error: 'Payment amount does not match the order total — please refresh and try again' });
@@ -6837,7 +6837,8 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
       configured: true,
       publishable_key: sp.pk,
       stripe_account: sp.account,
-      fee_pence: sp.feePence, // customer-facing "Card handling" line
+      // No fee_pence: the SiamPay fee comes out of the client's settlement
+      // (application_fee_amount), the customer just pays the menu price.
     });
   }
   const configured = !mock && !!process.env.STRIPE_PUBLISHABLE_KEY && !!process.env.STRIPE_SECRET_KEY;

@@ -401,8 +401,9 @@
     return pct > 0 ? Math.round(gross * (1 - pct / 100) * 100) / 100 : gross;
   }
   // SIAMPAY-002 — flat customer-facing handling fee (SiamPay tenants only).
-  function handlingFee() { return state.stripeConfigured ? (Number(state.stripeFeePence) || 0) / 100 : 0; }
-  function payTotal() { return Math.round((cartTotal() + handlingFee()) * 100) / 100; }
+  // SIAMPAY-002 (Korakot 21 Jul): the customer pays the menu price only —
+  // the SiamPay fee is deducted from the restaurant's settlement server-side.
+  function payTotal() { return cartTotal(); }
   // SEPOS-TAKEAWAY-OPTIONS — cart lines are keyed by item + chosen options so
   // "Pad Thai (Chicken)" and "Pad Thai (Prawn +£2)" are separate lines.
   function lineKey(itemId, mods) {
@@ -858,8 +859,6 @@
         ${discountPct() > 0 ? `
           <div class="tw-review-row"><span>Subtotal</span><span>${fmt(cartSubtotal())}</span></div>
           <div class="tw-review-row" style="color:#166534;font-weight:700;"><span>🎉 Online discount (${discountPct()}%)</span><span>−${fmt(cartSubtotal() - cartTotal())}</span></div>` : ''}
-        ${handlingFee() > 0 ? `
-          <div class="tw-review-row" style="color:#888;"><span>Card handling</span><span>${fmt(handlingFee())}</span></div>` : ''}
         <div class="tw-review-total">
           <span>Total</span>
           <span style="color:#C9A84C;">${fmt(payTotal())}</span>
@@ -1259,7 +1258,6 @@
         // SIAMPAY-002 — SiamPay tenants: confirm on the connected account +
         // show the flat customer-facing handling fee.
         state.stripeAccount  = data.stripe_account || null;
-        state.stripeFeePence = Number(data.fee_pence) || 0;
       }
     } catch (e) {
       // Fail open — stays in mock mode

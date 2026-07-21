@@ -6432,7 +6432,7 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
         // SIAMPAY-002 — a SiamPay PI lives on the CONNECTED account, so the
         // retrieve must carry the stripeAccount header to find it.
         const pi = spVerify
-          ? await require('stripe')(spVerify.key).paymentIntents.retrieve(payment_intent_id, { stripeAccount: spVerify.account })
+          ? await require('stripe')(spVerify.key).paymentIntents.retrieve(payment_intent_id, {}, { stripeAccount: spVerify.account })
           : await require('stripe')(process.env.STRIPE_SECRET_KEY).paymentIntents.retrieve(payment_intent_id);
         if (pi.status !== 'succeeded') {
           return res.status(402).json({ error: `Payment not completed (${pi.status})` });

@@ -100,11 +100,42 @@ SiamEPOS Professional = £89 ต่อเดือน
 ❌ OpenTable (ค่าคอมมิชชั่น £500-2,000/เดือน)
 ❌ แอปสั่งอาหารออนไลน์ (หักค่าคอมมิชชั่นต่อออเดอร์)
 ❌ ระบบ EPOS ทั่วไป (£69-189/เดือน)
+❌ เครื่องรูดบัตร + ค่าเช่ารายเดือน + สัญญาผูกมัด
 ❌ สต็อกใน Excel
 ❌ จัดการสารก่อภูมิแพ้ด้วยมือ
 
 ✅ SiamEPOS อย่างเดียว £89/เดือน"
 ```
+
+### 💳 SiamPay — "No card machine needed" (angle from Nick, 21 Jul · pitch as COMING, no date)
+SiamPay lets a client with **no Stripe account** take payments **online** (takeaway,
+vouchers, deposits) with money settling **into their own bank**. It closes our loop:
+*website → order → payment → their bank.* ⚠️ **Status unresolved:** runbook says LIVE
+21 Jul 13:15; Nick briefed it as in-build. Zero live clients either way → **pitch it
+as coming / rolling out, never hard-promise a date** (safe in both cases). Confirm true
+status with Korakot before escalating to "available now."
+
+**Nick's positioning — "No card machine needed":**
+- **Nothing to buy** — take payments on your website with **zero hardware**.
+- **Cheaper start than buying/renting a card terminal** — perfect for the cheap-start pitch (pairs with the "bring your own PC" hardware card).
+- Sell it as **optional, not "card machines are obsolete"** — it's for *online* payments, doesn't replace their in-person terminal.
+
+**The pitch (client-facing, qualitative — safe to use):**
+- 🇹🇭 "รับเงินออนไลน์เข้าบัญชีร้านโดยตรง — ไม่ต้องมีเครื่องรูดบัตร"
+- "ไม่มีค่าเช่าเครื่อง · ไม่มีสัญญา · ไม่มีค่ารายเดือน"
+- "ตั้งค่าให้ใน 10 นาที บนมือถือ — เงินเข้าบัญชีคุณภายใน ~2 วันทำการ"
+- EN: *"No card machine, no contract, no monthly fee — your website takes payments straight into your bank."*
+- **Trust story (Nick):** *"we set your payments up for you, fairly — no hardware, no lock-in."*
+- Pairs with the anti-delivery-app line: **keep the order (0% commission to us) AND get your money in ~2 days**, not held by an app.
+
+**⛔ HARD RULES for SiamPay marketing:**
+1. **Never publish the internal economics** — our 10p earn, the £2/mo cost, the ~£1,300–1,500 break-even are "not for clients." Out of everything.
+2. **Frame the 10p as card PROCESSING, not commission** (Nick) — it must never read as us taking a cut of their sale, or it dents the 0%-commission brand. *0% on the order + standard card processing.*
+3. **Don't bake the exact per-transaction rate into an asset yet** — under review (Nick: flat 10p vs 10p+0.4%). Varies → don't quote it (rule #6). Qualitative until Nick locks it.
+4. **No competitor named with a claim** (ASA rule #8) — Nick's "cheaper than a SumUp" is an *internal* angle only; published copy says "a card machine / PDQ terminal", never "SumUp".
+5. **No "trusted by" claims** — zero live clients. Verify a real client payout before any public announcement (runbook standing rule).
+
+**Go-live gate for a SiamPay card/campaign:** (a) true status confirmed, (b) Nick locks the rate, (c) first live client's payout verified, (d) Korakot's approval. Then build the bilingual card (navy/gold, real logo). Source runbook: `~/Documents/SiamEPOS-Docs/manuals/SiamPay-Client-Onboarding-Runbook.md`.
 
 ---
 

@@ -30,3 +30,6 @@ client/dist/
 client/android/node-host/
 # Local Netlify folder
 .netlify
+
+# Claude Code local permission grants — machine-personal, never commit
+.claude/settings.local.json

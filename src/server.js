@@ -6902,6 +6902,103 @@ app.get('/.well-known/apple-developer-merchantid-domain-association', (req, res)
   res.type('text/plain').send(content);
 });
 
+// ── SIAMPAY-QR-001 — dine-in QR pay-by-link (Nick's addendum, 21 Jul) ─────
+// Waiter rings up the bill → the till requests a Stripe Checkout session →
+// shows the QR → customer scans and pays with Apple Pay / Google Pay / card
+// → the till polls status and closes the bill through the normal pay flow
+// (method 'QR Card' — buckets as 'Other' on Z, correct because the money
+// arrives via Stripe payout, not the card machine).
+//
+// Rails: same decision as everywhere else — tenant's own STRIPE_SECRET_KEY,
+// else SiamPay platform mode (direct charge on the connected account + flat
+// app fee via payment_intent_data). Stripe-HOSTED Checkout is what makes
+// Apple/Google Pay appear with zero domain setup — checkout.stripe.com is
+// pre-registered, so scan-to-pay is one tap on any modern phone.
+function qrPayRail() {
+  const sp = siampayCfg();
+  if (sp) return { key: sp.key, opts: { stripeAccount: sp.account }, feePence: sp.feePence };
+  if (process.env.STRIPE_SECRET_KEY) return { key: process.env.STRIPE_SECRET_KEY, opts: {}, feePence: 0 };
+  return null;
+}
+
+app.post('/api/orders/:id/qr-pay', requireValidLicense, async (req, res) => {
+  const rail = qrPayRail();
+  if (!rail) return res.status(503).json({ error: 'No card rail configured — set up SiamPay (or Stripe keys) to use QR pay' });
+  const amountPence = Math.round(Number(req.body?.amount) * 100);
+  if (!Number.isInteger(amountPence) || amountPence < 30) {
+    return res.status(400).json({ error: 'Invalid amount (minimum 30p)' });
+  }
+  if (amountPence > 500000) {
+    return res.status(400).json({ error: 'Amount too large for QR pay' });
+  }
+  try {
+    const ord = await pool.query(
+      `SELECT o.id, o.status, t.name AS table_name, t.table_number
+         FROM orders o LEFT JOIN tables t ON t.id = o.table_id
+        WHERE o.id = $1`, [req.params.id]);
+    const order = ord.rows[0];
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.status !== 'open') return res.status(409).json({ error: `This bill is already ${order.status}` });
+    const tableLabel = order.table_name || (order.table_number != null ? `Table ${order.table_number}` : `Order #${order.id}`);
+    const rn = process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant';
+    const params = {
+      mode: 'payment',
+      line_items: [{
+        quantity: 1,
+        price_data: {
+          currency: 'gbp',
+          unit_amount: amountPence,
+          product_data: { name: `${rn} — ${tableLabel}` },
+        },
+      }],
+      // Checkout minimum is 30 min; the till's QR modal is the real timeout.
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+      metadata: { purpose: 'qr_bill', order_id: String(order.id), product: 'siamepos_qr_pay' },
+      success_url: `${req.protocol}://${req.get('host')}/qr-pay-thanks`,
+      cancel_url:  `${req.protocol}://${req.get('host')}/qr-pay-thanks?status=cancelled`,
+    };
+    if (rail.feePence > 0) params.payment_intent_data = { application_fee_amount: rail.feePence };
+    const session = await require('stripe')(rail.key).checkout.sessions.create(params, rail.opts);
+    res.json({ session_id: session.id, url: session.url, amount_pence: amountPence });
+  } catch (err) {
+    console.error('[qr-pay] create', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/orders/:id/qr-pay/status', requireValidLicense, async (req, res) => {
+  const rail = qrPayRail();
+  if (!rail) return res.status(503).json({ error: 'No card rail configured' });
+  const sessionId = String(req.query.session_id || '');
+  if (!sessionId.startsWith('cs_')) return res.status(400).json({ error: 'session_id required' });
+  try {
+    const sess = await require('stripe')(rail.key).checkout.sessions.retrieve(sessionId, {}, rail.opts);
+    // The session must belong to THIS order — stops a paid session for a £5
+    // bill being replayed to close someone else's £80 bill.
+    if (String(sess.metadata?.order_id) !== String(req.params.id)) {
+      return res.status(400).json({ error: 'session does not match this order' });
+    }
+    res.json({
+      paid: sess.payment_status === 'paid',
+      status: sess.status,
+      amount_total: sess.amount_total,
+    });
+  } catch (err) {
+    console.error('[qr-pay] status', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Tiny customer-facing landing after Checkout — they just show the till.
+app.get('/qr-pay-thanks', (req, res) => {
+  const cancelled = req.query.status === 'cancelled';
+  res.type('html').send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
+<body style="margin:0;font-family:system-ui,-apple-system,sans-serif;background:#0D1B3E;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center">
+<div style="padding:32px"><div style="font-size:64px">${cancelled ? '↩️' : '✅'}</div>
+<h1 style="margin:12px 0 8px;font-size:24px">${cancelled ? 'Payment cancelled' : 'Payment received!'}</h1>
+<p style="opacity:.8;font-size:16px">${cancelled ? 'No charge was made — please see a member of staff.' : 'Thank you — your server will confirm it on the till. You can close this page.'}</p></div></body>`);
+});
+
 // Active takeaway orders — for kitchen view + Mac sync pull.
 app.get('/api/takeaway/orders/active', async (req, res) => {
   try {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { getBill, markBillPrinted, getVoucher, redeemVoucher, applyDiscount, removeVoucherFromBill, getOrderDeposit, assertOk, serverOpenDrawer } from '../api';
 import { printReceipt } from './ReceiptPrinter';
+import QRPayModal from '../components/QRPayModal';
 import { orderShortLabelPlain, orderSubLabel, isTakeaway } from '../utils/orderLabel';
 import { confirm } from '../utils/confirm';
 
@@ -23,6 +24,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const [splitTenders, setSplitTenders]     = useState([]);
   // Mixed payment (part cash / part card on one bill) — reuses splitTenders.
   const [mixMethod, setMixMethod]           = useState('Cash');
+  const [showQrPay, setShowQrPay]           = useState(false); // SIAMPAY-QR-001
   const [mixInput,  setMixInput]            = useState('');
   // SEPOS-VOUCHER-SPLIT-001 — voucher as one tender inside a mixed payment.
   const [mixVoucherCode, setMixVoucherCode] = useState('');
@@ -781,6 +783,8 @@ export default function BillScreen({ orderId, onClose, onPay }) {
               ) : (
                 <>
                   <button onClick={() => startPayment('Cash')} style={{ padding:'18px', borderRadius:12, border:'none', background:'var(--brand-primary, #1a1a2e)', color:'white', fontSize:18, fontWeight:800, cursor:'pointer' }}>💳 Take Payment — £{billTotal.toFixed(2)}</button>
+                  {/* SIAMPAY-QR-001 — customer scans + pays on their phone (Apple/Google Pay). */}
+                  <button onClick={() => setShowQrPay(true)} style={{ padding:'14px', borderRadius:12, border:'2px solid #16a34a', background:'white', color:'#16a34a', fontSize:15, fontWeight:700, cursor:'pointer' }}>📱 QR Pay — customer scans (£{billTotal.toFixed(2)})</button>
                   <button onClick={() => { setSplitPaid([]); setSplitTenders([]); setStage('split_equal'); }} style={{ padding:'14px', borderRadius:12, border:'2px solid var(--brand-accent,#C9A84C)', background:'white', color:'var(--brand-accent,#C9A84C)', fontSize:15, fontWeight:700, cursor:'pointer' }}>✂️ Split Equally</button>
                   <button onClick={() => { setItemAssignments({}); setSplitItemPaid([]); setSplitTenders([]); setActivePerson(0); setStage('split_items'); }} style={{ padding:'14px', borderRadius:12, border:'2px solid #3b82f6', background:'white', color:'#3b82f6', fontSize:15, fontWeight:700, cursor:'pointer' }}>🍽️ Split by Item</button>
                 </>
@@ -1288,6 +1292,21 @@ export default function BillScreen({ orderId, onClose, onPay }) {
         )}
 
       </div>
+
+      {/* SIAMPAY-QR-001 — customer scans + pays; on success the payment is
+          recorded as 'QR Card' and the normal receipt/close flow takes over. */}
+      {showQrPay && (
+        <QRPayModal
+          orderId={orderId}
+          amount={billTotal}
+          onClose={() => setShowQrPay(false)}
+          onPaid={() => {
+            setShowQrPay(false);
+            setPaymentDetails({ method: 'QR Card', amountPaid: billTotal, tip: 0, change: 0 });
+            setStage('receipt');
+          }}
+        />
+      )}
     </div>
   );
 }

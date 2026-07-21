@@ -326,6 +326,8 @@ export default function ClientDetailPage() {
             </div>
           </SectionCard>
 
+          {!isSpa && <SiamPayCard client={client} />}
+
           {isAdmin && (
             <SectionCard title="Danger zone">
               <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 10 }}>
@@ -598,6 +600,133 @@ function HeroStat({ label, value, sub }) {
       <div style={{ fontSize: 20, fontWeight: 800, color: 'white', marginTop: 4 }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>{sub}</div>}
     </div>
+  );
+}
+
+// SIAMPAY-002 Phase B — Connect Express onboarding card.
+// Enable → creates the client's Express account; link → hosted Stripe KYC;
+// chips show live charges/payouts state. Once charges are enabled, the env
+// block below is what goes on the client's tenant Railway (secret key is
+// pasted from .infra-keys — the server never sends it to the browser).
+function SiamPayCard({ client }) {
+  const [cfg, setCfg] = useState(null);        // { configured, mode }
+  const [status, setStatus] = useState(null);  // status payload or { enabled:false }
+  const [busy, setBusy] = useState('');
+  const [link, setLink] = useState('');
+  const [copied, setCopied] = useState('');
+  const [error, setError] = useState('');
+
+  const refresh = () => {
+    api.siampayConfig().then(setCfg).catch(() => setCfg({ configured: false }));
+    api.siampayStatus(client.id).then(setStatus).catch(e => setError(e.message || 'status failed'));
+  };
+  useEffect(refresh, [client.id]);
+
+  const enable = async () => {
+    setBusy('enable'); setError('');
+    try { await api.siampayEnable(client.id); refresh(); }
+    catch (e) { setError(e.message || 'enable failed'); }
+    setBusy('');
+  };
+  const makeLink = async () => {
+    setBusy('link'); setError('');
+    try { const r = await api.siampayOnboardingLink(client.id); setLink(r.url); }
+    catch (e) { setError(e.message || 'link failed'); }
+    setBusy('');
+  };
+  const copy = (text, tag) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(tag); setTimeout(() => setCopied(''), 1500);
+    });
+  };
+
+  const chip = (on, labelOn, labelOff) => (
+    <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20,
+      background: on ? '#dcfce7' : '#fef3c7', color: on ? '#166534' : '#92400e' }}>
+      {on ? labelOn : labelOff}
+    </span>
+  );
+
+  if (cfg && !cfg.configured) {
+    return (
+      <SectionCard title="💳 SiamPay">
+        <div style={{ fontSize: 13, color: C.textFaint }}>
+          Not configured on ops yet — set <code>SIAMPAY_PLATFORM_SECRET_KEY</code> (+ publishable key) on the Back Office Railway to activate this card. Keys live in Control Room .infra-keys.
+        </div>
+      </SectionCard>
+    );
+  }
+
+  return (
+    <SectionCard title={`💳 SiamPay${cfg?.mode === 'test' ? ' (TEST mode)' : ''}`}>
+      {!status?.enabled ? (
+        <div>
+          <div style={{ fontSize: 13, color: C.textFaint, marginBottom: 10 }}>
+            For clients <strong>without their own Stripe</strong>: creates their SiamPay account (Stripe Express — Stripe does the KYC), then online takeaway payments settle straight to <strong>their</strong> bank. We take a flat 10p per order from their settlement; the customer always pays the menu price.
+          </div>
+          <button onClick={enable} disabled={busy === 'enable'}
+            style={{ ...btn.gold, fontSize: 13, opacity: busy === 'enable' ? 0.6 : 1, cursor: busy === 'enable' ? 'wait' : 'pointer' }}>
+            {busy === 'enable' ? 'Creating…' : '💳 Enable SiamPay'}
+          </button>
+        </div>
+      ) : (
+        <div>
+          <div style={{ fontSize: 12, color: C.textMuted, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all', marginBottom: 10 }}>
+            {status.account}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+            {chip(status.details_submitted, 'KYC submitted', 'KYC pending')}
+            {chip(status.charges_enabled, 'Charges enabled', 'Charges off')}
+            {chip(status.payouts_enabled, 'Payouts enabled', 'Payouts off')}
+          </div>
+          {!status.charges_enabled && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 13, color: C.textFaint, marginBottom: 8 }}>
+                {status.requirements_due?.length
+                  ? `Stripe still needs: ${status.requirements_due.slice(0, 4).join(', ')}${status.requirements_due.length > 4 ? '…' : ''}`
+                  : 'Send the client their onboarding link — Stripe collects ID + bank details.'}
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={makeLink} disabled={busy === 'link'}
+                  style={{ ...btn.gold, fontSize: 13, opacity: busy === 'link' ? 0.6 : 1, cursor: busy === 'link' ? 'wait' : 'pointer' }}>
+                  {busy === 'link' ? 'Creating…' : '🔗 Create onboarding link'}
+                </button>
+                <button onClick={refresh} style={{ ...btn.ghost, fontSize: 13 }}>↻ Refresh status</button>
+              </div>
+              {link && (
+                <div style={{ marginTop: 10, padding: 12, background: C.surfaceAlt || '#f6f7fb', borderRadius: 10, border: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all', marginBottom: 8 }}>{link}</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => copy(link, 'link')} style={{ ...btn.ghost, fontSize: 12 }}>{copied === 'link' ? '✓ Copied!' : '📋 Copy link'}</button>
+                    <a href={link} target="_blank" rel="noopener noreferrer" style={{ ...btn.gold, fontSize: 12, textDecoration: 'none' }}>Open ↗</a>
+                  </div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>Links expire quickly — mint a fresh one if the client stalls. Send it, or open it with the client on-site.</div>
+                </div>
+              )}
+            </div>
+          )}
+          {status.charges_enabled && (
+            <div style={{ padding: 12, background: C.surfaceAlt || '#f6f7fb', borderRadius: 10, border: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Tenant Railway env vars (last step)
+              </div>
+              {Object.entries(status.tenant_env || {}).map(([k, v]) => (
+                <div key={k} style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all', marginBottom: 4 }}>
+                  {k}={v}{' '}
+                  {!v.startsWith('(') && (
+                    <button onClick={() => copy(`${k}=${v}`, k)} style={{ ...btn.ghost, fontSize: 10, padding: '1px 6px' }}>{copied === k ? '✓' : '📋'}</button>
+                  )}
+                </div>
+              ))}
+              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>
+                Paste all three on the client's Railway app service, then redeploy it. A tenant's own STRIPE_SECRET_KEY (if set) overrides SiamPay — remove it first.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {error && <div style={{ fontSize: 12, color: C.danger || '#991b1b', marginTop: 10 }}>{error}</div>}
+    </SectionCard>
   );
 }
 

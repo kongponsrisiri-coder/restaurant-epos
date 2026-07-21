@@ -166,6 +166,25 @@ export const api = {
       body: JSON.stringify(plan ? { plan } : {}),
     }).then(handle),
 
+  // SIAMPAY-002 Phase B — Connect Express onboarding for SiamPay.
+  siampayConfig: () =>
+    fetch(`${API}/api/siampay/config`, { headers: tokenHeader() }).then(handle),
+
+  siampayStatus: (id) =>
+    fetch(`${API}/api/siampay/clients/${id}/status`, { headers: tokenHeader() }).then(handle),
+
+  siampayEnable: (id) =>
+    fetch(`${API}/api/siampay/clients/${id}/enable`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+    }).then(handle),
+
+  siampayOnboardingLink: (id) =>
+    fetch(`${API}/api/siampay/clients/${id}/onboarding-link`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+    }).then(handle),
+
   runHealth: (clientId) =>
     fetch(`${API}/api/health/run`, {
       method: 'POST',

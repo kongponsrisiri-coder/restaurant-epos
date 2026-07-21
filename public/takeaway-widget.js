@@ -395,11 +395,14 @@
   function cartSubtotal() {
     return state.cart.reduce((s, i) => s + Number(i.unit_price) * Number(i.quantity), 0);
   }
-  function cartTotal() { // what the customer actually pays (discount applied)
+  function cartTotal() { // order total after discount (before any handling fee)
     const gross = cartSubtotal();
     const pct = discountPct();
     return pct > 0 ? Math.round(gross * (1 - pct / 100) * 100) / 100 : gross;
   }
+  // SIAMPAY-002 — flat customer-facing handling fee (SiamPay tenants only).
+  function handlingFee() { return state.stripeConfigured ? (Number(state.stripeFeePence) || 0) / 100 : 0; }
+  function payTotal() { return Math.round((cartTotal() + handlingFee()) * 100) / 100; }
   // SEPOS-TAKEAWAY-OPTIONS — cart lines are keyed by item + chosen options so
   // "Pad Thai (Chicken)" and "Pad Thai (Prawn +£2)" are separate lines.
   function lineKey(itemId, mods) {
@@ -855,9 +858,11 @@
         ${discountPct() > 0 ? `
           <div class="tw-review-row"><span>Subtotal</span><span>${fmt(cartSubtotal())}</span></div>
           <div class="tw-review-row" style="color:#166534;font-weight:700;"><span>🎉 Online discount (${discountPct()}%)</span><span>−${fmt(cartSubtotal() - cartTotal())}</span></div>` : ''}
+        ${handlingFee() > 0 ? `
+          <div class="tw-review-row" style="color:#888;"><span>Card handling</span><span>${fmt(handlingFee())}</span></div>` : ''}
         <div class="tw-review-total">
           <span>Total</span>
-          <span style="color:#C9A84C;">${fmt(cartTotal())}</span>
+          <span style="color:#C9A84C;">${fmt(payTotal())}</span>
         </div>
       </div>
       <button id="tw-edit-order" style="background:none;border:none;color:#0D1B3E;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer;margin:-8px 0 16px;padding:0;">✏️ Edit order</button>
@@ -919,7 +924,7 @@
       nextLabel = 'Review order →';
     } else if (state.step === 4) {
       nextLabel = state.stripeConfigured
-        ? `Pay ${fmt(cartTotal())}`
+        ? `Pay ${fmt(payTotal())}`
         : `✓ Place order · ${fmt(cartTotal())}`;
     }
     const cls = state.step === 4 ? 'tw-btn-gold' : 'tw-btn-primary';
@@ -1187,7 +1192,11 @@
       render(); return;
     }
     if (!_stripe) {
-      _stripe = window.Stripe(state.stripePublishableKey);
+      // SIAMPAY-002 — SiamPay tenants confirm on the client's connected
+      // account (direct charge), so Stripe.js needs the account context.
+      _stripe = state.stripeAccount
+        ? window.Stripe(state.stripePublishableKey, { stripeAccount: state.stripeAccount })
+        : window.Stripe(state.stripePublishableKey);
     }
     // Recreate elements + PaymentElement when amount changes (e.g. cart
     // edited between Step 3 and Step 4). PaymentElement caches the
@@ -1247,6 +1256,10 @@
         const data = await r.json();
         state.stripeConfigured    = !!data.configured;
         state.stripePublishableKey = data.publishable_key || null;
+        // SIAMPAY-002 — SiamPay tenants: confirm on the connected account +
+        // show the flat customer-facing handling fee.
+        state.stripeAccount  = data.stripe_account || null;
+        state.stripeFeePence = Number(data.fee_pence) || 0;
       }
     } catch (e) {
       // Fail open — stays in mock mode
@@ -1311,7 +1324,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            amount_pence:      Math.round(cartTotal() * 100),
+            amount_pence:      Math.round(payTotal() * 100),
             order_description: 'Takeaway order',
           }),
         });

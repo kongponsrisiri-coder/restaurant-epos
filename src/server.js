@@ -6424,12 +6424,16 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
     let verifiedPaymentIntentId = null;
     let verifiedPaymentPence = null;
     if (payment_intent_id) {
-      if (!process.env.STRIPE_SECRET_KEY) {
+      const spVerify = siampayCfg();
+      if (!process.env.STRIPE_SECRET_KEY && !spVerify) {
         return res.status(400).json({ error: 'Stripe not configured — cannot verify payment' });
       }
       try {
-        const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-        const pi = await stripe.paymentIntents.retrieve(payment_intent_id);
+        // SIAMPAY-002 — a SiamPay PI lives on the CONNECTED account, so the
+        // retrieve must carry the stripeAccount header to find it.
+        const pi = spVerify
+          ? await require('stripe')(spVerify.key).paymentIntents.retrieve(payment_intent_id, { stripeAccount: spVerify.account })
+          : await require('stripe')(process.env.STRIPE_SECRET_KEY).paymentIntents.retrieve(payment_intent_id);
         if (pi.status !== 'succeeded') {
           return res.status(402).json({ error: `Payment not completed (${pi.status})` });
         }
@@ -6575,8 +6579,12 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
     // SEPOS-047b — the paid amount must match the server-priced total.
     // A mismatch means menu prices changed mid-checkout or the widget
     // was tampered with; either way the order must not land as 'paid'.
-    if (verifiedPaymentIntentId !== null && verifiedPaymentPence !== Math.round(total * 100)) {
-      console.warn(`[takeaway] PI ${verifiedPaymentIntentId} amount ${verifiedPaymentPence}p != order total ${Math.round(total * 100)}p — rejected`);
+    // SIAMPAY-002 — in SiamPay mode the customer also pays the flat
+    // handling fee on top, so the expected charge = total + fee.
+    const spFee = siampayCfg();
+    const expectedPence = Math.round(total * 100) + (spFee ? spFee.feePence : 0);
+    if (verifiedPaymentIntentId !== null && verifiedPaymentPence !== expectedPence) {
+      console.warn(`[takeaway] PI ${verifiedPaymentIntentId} amount ${verifiedPaymentPence}p != expected ${expectedPence}p — rejected`);
       return res.status(402).json({ error: 'Payment amount does not match the order total — please refresh and try again' });
     }
 
@@ -6794,6 +6802,24 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
 // confirm, then confirms client-side, then posts the order with the
 // verified payment_intent_id.
 
+// SIAMPAY-002 v1 — SiamPay mode for tenants WITHOUT their own Stripe keys.
+// Nick's hard rule (board 21 Jul, Korakot-approved): DIRECT charges on the
+// client's connected account — the PaymentIntent lives ON acct_…, money
+// settles to the client (merchant of record), we take a flat
+// application_fee_amount (default 10p). Never destination charges, never
+// transfer_data, never a SiamEPOS balance in the flow (FCA/SEIS posture).
+// A tenant's own STRIPE_SECRET_KEY always wins — existing clients unchanged.
+// TEST MODE ONLY until solicitor + SEIS sign-offs (see SIAMPAY-002 ticket).
+function siampayCfg() {
+  if (process.env.STRIPE_SECRET_KEY) return null; // own-keys tenants keep today's flow
+  const key = process.env.PLATFORM_STRIPE_SECRET_KEY;
+  const pk = process.env.PLATFORM_STRIPE_PUBLISHABLE_KEY;
+  const account = process.env.SIAMPAY_ACCOUNT;
+  if (!key || !pk || !account) return null;
+  const feePence = Math.max(0, Math.min(100, Number(process.env.SIAMPAY_FEE_PENCE ?? 10) || 0));
+  return { key, pk, account, feePence };
+}
+
 app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
   // A restaurant can force mock/demo pay (no card field) even with Stripe keys
   // present, via the `takeaway_mock_pay` setting ('1'). Used for the sales-demo
@@ -6803,6 +6829,17 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
   // deployments (no flag) keep real Stripe untouched.
   let mock = false;
   try { const s = await loadSettings(); mock = String(s.takeaway_mock_pay || '') === '1'; } catch {}
+  const sp = siampayCfg();
+  if (!mock && sp) {
+    // SIAMPAY-002 — widget must init Stripe.js WITH the connected account so
+    // the direct charge confirms in the client's own account context.
+    return res.json({
+      configured: true,
+      publishable_key: sp.pk,
+      stripe_account: sp.account,
+      fee_pence: sp.feePence, // customer-facing "Card handling" line
+    });
+  }
   const configured = !mock && !!process.env.STRIPE_PUBLISHABLE_KEY && !!process.env.STRIPE_SECRET_KEY;
   res.json({
     configured,
@@ -6811,7 +6848,8 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
 });
 
 app.post('/api/takeaway/payment-intent', widgetCors, async (req, res) => {
-  if (!process.env.STRIPE_SECRET_KEY) {
+  const sp = siampayCfg();
+  if (!process.env.STRIPE_SECRET_KEY && !sp) {
     return res.status(503).json({ error: 'Stripe not configured on this restaurant. Please ask the restaurant to switch to demo mode.' });
   }
   const amountPence = Number(req.body?.amount_pence);
@@ -6825,8 +6863,7 @@ app.post('/api/takeaway/payment-intent', widgetCors, async (req, res) => {
     return res.status(400).json({ error: 'Amount too large for online takeaway' });
   }
   try {
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-    const pi = await stripe.paymentIntents.create({
+    const params = {
       amount:   amountPence,
       currency: 'gbp',
       description,
@@ -6838,7 +6875,16 @@ app.post('/api/takeaway/payment-intent', widgetCors, async (req, res) => {
         product:       'siamepos_takeaway',
         restaurant_id: resolveRestaurantId(req),
       },
-    });
+    };
+    let pi;
+    if (sp) {
+      // SIAMPAY-002 — DIRECT charge on the connected account + flat app fee.
+      // The client is merchant of record; the fee is Stripe-ledgered to us.
+      params.application_fee_amount = sp.feePence;
+      pi = await require('stripe')(sp.key).paymentIntents.create(params, { stripeAccount: sp.account });
+    } else {
+      pi = await require('stripe')(process.env.STRIPE_SECRET_KEY).paymentIntents.create(params);
+    }
     res.json({
       client_secret:     pi.client_secret,
       payment_intent_id: pi.id,

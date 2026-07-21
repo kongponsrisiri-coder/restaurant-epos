@@ -1364,6 +1364,27 @@ export default function SettingsSection() {
         </div>
       </div>
 
+      {/* ── Online Order Discount (SEPOS-TAKEAWAY-DISCOUNT) ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🎉 Online Order Discount</h2>
+        <div style={{ fontSize:12, color:'#888', marginBottom:16 }}>
+          Give customers a percentage off when they order through your own online takeaway widget — a direct reward for skipping the commission apps. Shows as a banner on the ordering page and as a discount line at checkout, on the kitchen ticket and in reports. Set 0 to switch it off.
+        </div>
+        <div>
+          <label style={{ fontSize:14, fontWeight:600, color:'#555', display:'block', marginBottom:6 }}>Discount on online orders (%)</label>
+          <input
+            value={settings.takeaway_discount_percent || ''}
+            onChange={e => setSettings({ ...settings, takeaway_discount_percent: e.target.value })}
+            type="number" step="1" min="0" max="50"
+            placeholder="e.g. 10"
+            style={{ width:120, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}
+          />
+        </div>
+        <div style={{ fontSize:12, color:'#aaa', marginTop:10 }}>
+          Applies to online takeaway &amp; delivery orders only — never to dine-in bills. Capped at 50%.
+        </div>
+      </div>
+
       {/* ── Courier Dispatch (SEPOS-DELIVERY-001) ── */}
       <div style={cardStyle}>
         <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🛵 Courier Dispatch</h2>

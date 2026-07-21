@@ -6280,15 +6280,20 @@ app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
     // set both a restaurant postcode and a radius. The widget uses this
     // flag to decide whether to show the Delivery toggle at all.
     const dr = await pool.query(
-      `SELECT key, value FROM settings WHERE key IN ('restaurant_postcode','delivery_radius_miles')`
+      `SELECT key, value FROM settings WHERE key IN ('restaurant_postcode','delivery_radius_miles','takeaway_discount_percent')`
     );
     const cfg = {};
     dr.rows.forEach(row => { cfg[row.key] = row.value; });
     const deliveryEnabled = !!(cfg.restaurant_postcode && Number(cfg.delivery_radius_miles) > 0);
+    // SEPOS-TAKEAWAY-DISCOUNT — optional % off online takeaway orders (Chart
+    // Thai ask, 2026-07-21). 0 = off. Clamped 0–50 as a fat-finger guard; the
+    // order endpoint clamps identically so widget and server always agree.
+    const discountPercent = Math.min(50, Math.max(0, Number(cfg.takeaway_discount_percent) || 0));
     res.json({
       ...(r.rows[0] || {}),
       delivery_enabled: deliveryEnabled,
       delivery_radius_miles: deliveryEnabled ? Number(cfg.delivery_radius_miles) : 0,
+      discount_percent: discountPercent,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6554,6 +6559,19 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
       total += it.server_price * (Number(it.quantity) || 1);
     }
 
+    // SEPOS-TAKEAWAY-DISCOUNT — optional % off online orders (Chart Thai,
+    // 2026-07-21). Applied server-side BEFORE the paid-amount check so a
+    // tampered widget can't claim a bigger discount than the setting allows;
+    // clamped identically to /api/takeaway/settings so both sides agree.
+    let discountPercent = 0;
+    try {
+      const dset = await client.query(`SELECT value FROM settings WHERE key = 'takeaway_discount_percent'`);
+      discountPercent = Math.min(50, Math.max(0, Number(dset.rows[0]?.value) || 0));
+    } catch { /* setting absent → no discount */ }
+    if (discountPercent > 0) {
+      total = Math.round(total * (1 - discountPercent / 100) * 100) / 100;
+    }
+
     // SEPOS-047b — the paid amount must match the server-priced total.
     // A mismatch means menu prices changed mid-checkout or the widget
     // was tampered with; either way the order must not land as 'paid'.
@@ -6587,11 +6605,11 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
           order_type, customer_name, customer_phone, customer_email,
           pickup_time, takeaway_status, payment_status, payment_intent_id, customer_note,
           order_subtype, delivery_address, delivery_notes, marketing_consent,
-          restaurant_id)
+          restaurant_id, discount_type, discount_value, discount_reason)
        VALUES (NULL, 'open', 1, $1, NOW(),
                'takeaway', $2, $3, $4,
                $5, 'pending', $6, $7, $8,
-               $9, $10, $11, $12, $13)
+               $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING id`,
       [total, customer_name.trim(), customer_phone.trim(), (customer_email || '').trim() || null,
        pickup_time, paymentStatus, verifiedPaymentIntentId, notes || null,
@@ -6599,7 +6617,10 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
        subtype === 'delivery' ? delivery_address.trim() : null,
        subtype === 'delivery' ? (delivery_notes || '').trim() || null : null,
        marketing_consent ? 1 : 0,
-       restaurantId]
+       restaurantId,
+       discountPercent > 0 ? 'percent' : null,
+       discountPercent > 0 ? discountPercent : null,
+       discountPercent > 0 ? 'Online order discount' : null]
     );
     const orderId = orderRes.rows[0].id;
 

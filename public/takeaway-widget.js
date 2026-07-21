@@ -320,6 +320,23 @@
       font-size:11px; color:#aaa; text-align:right; margin-top:4px; margin-bottom:10px;
     }
 
+    /* ── SEPOS-TAKEAWAY-OPTIONS + DISCOUNT ── */
+    .tw-cart-mods { display:block; font-size:11px; color:#8a8a97; margin-top:2px; line-height:1.35; font-weight:400; }
+    .tw-discount-chip {
+      background:#f0f7ee; border:1.5px solid #86efac; color:#166534; font-weight:700;
+      border-radius:10px; padding:9px 12px; font-size:13px; margin:0 0 12px;
+    }
+    .tw-opt-group { margin-top:16px; }
+    .tw-opt-title { font-weight:800; font-size:14px; color:#1a1a2e; margin-bottom:8px; }
+    .tw-opt-req { font-size:10px; font-weight:700; color:#b3261e; background:#fdecea; border-radius:8px; padding:2px 8px; margin-left:8px; text-transform:uppercase; letter-spacing:.04em; }
+    .tw-opt-optional { font-size:10px; font-weight:700; color:#888; background:#f0f0f0; border-radius:8px; padding:2px 8px; margin-left:8px; text-transform:uppercase; letter-spacing:.04em; }
+    .tw-opt-list { display:flex; flex-wrap:wrap; gap:8px; }
+    .tw-opt {
+      border:1.5px solid #ddd; background:#fff; color:#1a1a2e; border-radius:999px;
+      padding:9px 14px; font:inherit; font-size:14px; cursor:pointer; min-height:40px;
+    }
+    .tw-opt-on { border-color:#0D1B3E; background:#0D1B3E; color:#fff; font-weight:700; }
+
     /* ── Success ── */
     .tw-success { text-align:center; padding:40px 24px 32px; }
     .tw-success-tick { font-size:72px; margin-bottom:12px; }
@@ -372,20 +389,74 @@
       ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
   function cartCount() { return state.cart.reduce((s, i) => s + i.quantity, 0); }
-  function cartTotal() {
+  // SEPOS-TAKEAWAY-DISCOUNT — optional % off online orders, from
+  // /api/takeaway/settings (server clamps identically and re-verifies).
+  function discountPct() { return Math.min(50, Math.max(0, Number(state.settings?.discount_percent) || 0)); }
+  function cartSubtotal() {
     return state.cart.reduce((s, i) => s + Number(i.unit_price) * Number(i.quantity), 0);
   }
-  function addToCart(item) {
-    const existing = state.cart.find(c => c.menu_item_id === item.id);
+  function cartTotal() { // what the customer actually pays (discount applied)
+    const gross = cartSubtotal();
+    const pct = discountPct();
+    return pct > 0 ? Math.round(gross * (1 - pct / 100) * 100) / 100 : gross;
+  }
+  // SEPOS-TAKEAWAY-OPTIONS — cart lines are keyed by item + chosen options so
+  // "Pad Thai (Chicken)" and "Pad Thai (Prawn +£2)" are separate lines.
+  function lineKey(itemId, mods) {
+    return itemId + '|' + (mods || []).map(m => m.id).sort((a, b) => a - b).join(',');
+  }
+  function addToCart(item, mods) {
+    mods = mods || [];
+    const extra = mods.reduce((s, m) => s + (Number(m.extra_price) || 0), 0);
+    const key = lineKey(item.id, mods);
+    const existing = state.cart.find(c => c.key === key);
     if (existing) existing.quantity += 1;
-    else state.cart.push({ menu_item_id: item.id, name: item.name, unit_price: Number(item.price || 0), quantity: 1 });
+    else state.cart.push({
+      key,
+      menu_item_id: item.id,
+      name: item.name,
+      unit_price: (Number(item.price || 0) + extra),
+      quantity: 1,
+      modifiers: mods,
+    });
     applyCartChange();
   }
-  function changeQty(menu_item_id, delta) {
-    const it = state.cart.find(c => c.menu_item_id === menu_item_id);
+  // Tap on a dish → fetch its option groups (cached); options exist → choose
+  // first, none → straight into the cart. Fetch failure degrades to plain add.
+  async function startAdd(item) {
+    let groups = state.modCache ? state.modCache[item.id] : undefined;
+    if (groups === undefined) {
+      try {
+        const r = await fetch(API + '/api/menu/items/' + item.id + '/modifiers?restaurant_id=' + encodeURIComponent(RESTAURANT_ID));
+        groups = r.ok ? await r.json() : [];
+      } catch { groups = []; }
+      groups = (Array.isArray(groups) ? groups : []).filter(g => Array.isArray(g.modifiers) && g.modifiers.length > 0);
+      (state.modCache = state.modCache || {})[item.id] = groups;
+    }
+    if (!groups.length) return addToCart(item);
+    state.optionsFor = { item, groups, sel: {} };
+    render();
+  }
+  function optionsSelectionValid() {
+    if (!state.optionsFor) return false;
+    return state.optionsFor.groups.every(g =>
+      !Number(g.required) || (state.optionsFor.sel[g.id] || []).length > 0);
+  }
+  function optionsChosenMods() {
+    const out = [];
+    state.optionsFor.groups.forEach(g => {
+      (state.optionsFor.sel[g.id] || []).forEach(id => {
+        const m = g.modifiers.find(x => Number(x.id) === Number(id));
+        if (m) out.push({ id: m.id, name: m.name, extra_price: Number(m.extra_price) || 0 });
+      });
+    });
+    return out;
+  }
+  function changeQty(key, delta) {
+    const it = state.cart.find(c => c.key === key);
     if (!it) return;
     it.quantity += delta;
-    if (it.quantity <= 0) state.cart = state.cart.filter(c => c.menu_item_id !== menu_item_id);
+    if (it.quantity <= 0) state.cart = state.cart.filter(c => c.key !== key);
     applyCartChange();
   }
   // On the menu view, update ONLY the cart UI (bar + sidebar) so the menu list —
@@ -546,18 +617,54 @@
 
   function renderCartRows() {
     if (state.cart.length === 0) return `<div class="tw-cart-empty">Tap any dish to add it ✨</div>`;
+    const pct = discountPct();
+    const totalsBlock = pct > 0
+      ? `<div class="tw-cart-total" style="font-weight:400;font-size:13px;color:#666;"><span>Subtotal</span><span>${fmt(cartSubtotal())}</span></div>
+         <div class="tw-cart-total" style="font-weight:700;font-size:13px;color:#166534;"><span>🎉 Online discount (${pct}%)</span><span>−${fmt(cartSubtotal() - cartTotal())}</span></div>
+         <div class="tw-cart-total"><span>Total</span><span>${fmt(cartTotal())}</span></div>`
+      : `<div class="tw-cart-total"><span>Total</span><span>${fmt(cartTotal())}</span></div>`;
     return state.cart.map(c => `
       <div class="tw-cart-row">
-        <span class="tw-cart-name">${esc(c.name)}</span>
+        <span class="tw-cart-name">${esc(c.name)}${(c.modifiers && c.modifiers.length)
+          ? `<span class="tw-cart-mods">${esc(c.modifiers.map(m => m.name).join(', '))}</span>` : ''}</span>
         <span class="tw-cart-qtypill">
-          <button data-dec="${c.menu_item_id}">−</button>
+          <button data-dec="${esc(c.key)}">−</button>
           <span>${c.quantity}</span>
-          <button data-inc="${c.menu_item_id}">+</button>
+          <button data-inc="${esc(c.key)}">+</button>
         </span>
         <span class="tw-cart-price">${fmt(c.unit_price * c.quantity)}</span>
       </div>
-    `).join('') + `
-      <div class="tw-cart-total"><span>Total</span><span>${fmt(cartTotal())}</span></div>
+    `).join('') + totalsBlock;
+  }
+
+  // SEPOS-TAKEAWAY-OPTIONS — full-view option chooser (mobile-first, same
+  // pattern as the mobile cart review). Radio for single-choice groups,
+  // toggles for multi-select; required groups gate the Add button.
+  function renderOptionsSheet() {
+    const o = state.optionsFor;
+    const extra = optionsChosenMods().reduce((s, m) => s + (Number(m.extra_price) || 0), 0);
+    const price = (Number(o.item.price) || 0) + extra;
+    return `
+      <h2 class="tw-h2">${esc(o.item.name)}</h2>
+      ${o.groups.map(g => `
+        <div class="tw-opt-group">
+          <div class="tw-opt-title">${esc(g.name)}
+            ${Number(g.required) ? '<span class="tw-opt-req">required</span>'
+              : '<span class="tw-opt-optional">optional</span>'}
+          </div>
+          <div class="tw-opt-list">
+            ${g.modifiers.map(m => {
+              const on = (o.sel[g.id] || []).some(id => Number(id) === Number(m.id));
+              const priceTag = Number(m.extra_price) > 0 ? ` +${fmt(m.extra_price)}` : '';
+              return `<button class="tw-opt${on ? ' tw-opt-on' : ''}" data-optg="${g.id}" data-optm="${m.id}">${esc(m.name)}${priceTag}</button>`;
+            }).join('')}
+          </div>
+        </div>
+      `).join('')}
+      <div style="display:flex;gap:10px;margin-top:18px;">
+        <button class="tw-btn" id="tw-opt-cancel" style="flex:1;background:#f0f0f0;color:#1a1a2e;">Cancel</button>
+        <button class="tw-btn tw-btn-primary" id="tw-opt-add" style="flex:2;" ${optionsSelectionValid() ? '' : 'disabled'}>Add to order · ${fmt(price)}</button>
+      </div>
     `;
   }
 
@@ -565,6 +672,8 @@
     if (state.menu.length === 0) {
       return `<div style="text-align:center;padding:60px 0;color:#888;font-size:15px;">Loading menu…</div>`;
     }
+    // Option chooser takes over the whole step (like the mobile cart review).
+    if (state.optionsFor) return renderOptionsSheet();
     // Mobile: "View cart" opens an editable review (add/remove) BEFORE details —
     // details are only asked at checkout, and the cart stays editable here.
     if (state.mobileCartOpen) {
@@ -582,6 +691,7 @@
     const count = cartCount();
     return `
       ${renderBusyChip()}
+      ${discountPct() > 0 ? `<div class="tw-discount-chip">🎉 ${discountPct()}% off — online order discount, applied at checkout</div>` : ''}
       <div class="tw-split">
         <div class="tw-menu-col">
           <div class="tw-cats">
@@ -737,10 +847,14 @@
       <div style="background:#f8f8f8;border-radius:14px;padding:16px;margin-bottom:16px;">
         ${state.cart.map(c => `
           <div class="tw-review-row">
-            <span><span class="tw-review-qty">${c.quantity}×</span>${esc(c.name)}</span>
+            <span><span class="tw-review-qty">${c.quantity}×</span>${esc(c.name)}${(c.modifiers && c.modifiers.length)
+              ? `<span class="tw-cart-mods">${esc(c.modifiers.map(m => m.name).join(', '))}</span>` : ''}</span>
             <span style="font-weight:700;">${fmt(c.unit_price * c.quantity)}</span>
           </div>
         `).join('')}
+        ${discountPct() > 0 ? `
+          <div class="tw-review-row"><span>Subtotal</span><span>${fmt(cartSubtotal())}</span></div>
+          <div class="tw-review-row" style="color:#166534;font-weight:700;"><span>🎉 Online discount (${discountPct()}%)</span><span>−${fmt(cartSubtotal() - cartTotal())}</span></div>` : ''}
         <div class="tw-review-total">
           <span>Total</span>
           <span style="color:#C9A84C;">${fmt(cartTotal())}</span>
@@ -900,7 +1014,7 @@
           const id = Number(el.dataset.add);
           const cat = state.menu.find(c => c.id === state.activeCategory);
           const item = cat?.items.find(i => i.id === id);
-          if (item) addToCart(item);
+          if (item) startAdd(item);
         });
       });
       document.querySelectorAll('.tw-item-add').forEach(btn => {
@@ -909,14 +1023,39 @@
           const id = Number(btn.closest('.tw-item')?.dataset.add);
           const cat = state.menu.find(c => c.id === state.activeCategory);
           const item = cat?.items.find(i => i.id === id);
-          if (item) addToCart(item);
+          if (item) startAdd(item);
         });
       });
       document.querySelectorAll('[data-inc]').forEach(b => {
-        b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(Number(b.dataset.inc), 1); });
+        b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(b.dataset.inc, 1); });
       });
       document.querySelectorAll('[data-dec]').forEach(b => {
-        b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(Number(b.dataset.dec), -1); });
+        b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(b.dataset.dec, -1); });
+      });
+      // SEPOS-TAKEAWAY-OPTIONS — option chooser events.
+      document.querySelectorAll('[data-optg]').forEach(b => {
+        b.addEventListener('click', () => {
+          const o = state.optionsFor; if (!o) return;
+          const gid = Number(b.dataset.optg), mid = Number(b.dataset.optm);
+          const g = o.groups.find(x => Number(x.id) === gid); if (!g) return;
+          const cur = o.sel[gid] || [];
+          if (Number(g.multi_select)) {
+            o.sel[gid] = cur.some(id => Number(id) === mid) ? cur.filter(id => Number(id) !== mid) : [...cur, mid];
+          } else {
+            // single-choice: tap selects; tapping the selected one clears it
+            // (required groups simply re-disable Add until a choice is made)
+            o.sel[gid] = cur.some(id => Number(id) === mid) ? [] : [mid];
+          }
+          render();
+        });
+      });
+      $('tw-opt-cancel')?.addEventListener('click', () => { state.optionsFor = null; render(); });
+      $('tw-opt-add')?.addEventListener('click', () => {
+        if (!optionsSelectionValid()) return;
+        const o = state.optionsFor;
+        addToCart(o.item, optionsChosenMods());
+        state.optionsFor = null;
+        render();
       });
       // Mobile cart bar → open the editable cart review (NOT straight to details).
       $('tw-cart-bar-btn')?.addEventListener('click', () => {
@@ -1245,6 +1384,9 @@
             quantity:     c.quantity,
             unit_price:   c.unit_price,
             name:         c.name,
+            // SEPOS-TAKEAWAY-OPTIONS — chosen options; server re-prices each
+            // by id (anti-tamper) and prints names on the kitchen ticket.
+            modifiers:    (c.modifiers || []).map(m => ({ id: m.id, name: m.name, extra_price: m.extra_price })),
           })),
         }),
       });

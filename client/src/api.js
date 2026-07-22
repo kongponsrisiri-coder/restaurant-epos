@@ -436,6 +436,8 @@ export const loginStaff = async (pin) => {
     return { error: "No internet — and this PIN hasn't signed in on this device yet. Connect once, then it works offline." };
   }
 };
+// SEPOS-SEC-LOGIN — signed-in staff set their own PIN (forced off the default 1234).
+export const changeStaffPin = (new_pin) => post('/api/staff/change-pin', { new_pin });
 // SEPOS-LITE-003 — email + password login (Lite restaurant owners).
 export const emailLogin = (email, password) => post('/api/auth/email-login', { email, password });
 export const getDailyReport = (date) => get(`/api/reports/daily${date ? `?date=${date}` : ''}`);

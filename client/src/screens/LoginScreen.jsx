@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { loginStaff, clockToggle, emailLogin, storePinSession, getStaff, getRestaurant, getSettings } from '../api';
+import { loginStaff, clockToggle, emailLogin, storePinSession, getStaff, getRestaurant, getSettings, changeStaffPin } from '../api';
 import { resetDevice, currentTillTarget, canSwitchClient } from '../utils/deviceReset';
 import { NAVY, GOLD, RED, GREEN } from '../theme'; // SEPOS-BRAND-001 — per-client brand colours
 
@@ -82,6 +82,12 @@ export default function LoginScreen({ onLogin }) {
   const [password, setPassword] = useState('');
   const [staffList, setStaffList]         = useState([]);
   const [selectedStaff, setSelectedStaff] = useState(null);
+  // SEPOS-SEC-LOGIN — forced PIN change off the default 1234.
+  const [mustChange, setMustChange] = useState(false);
+  const [pendingStaff, setPendingStaff] = useState(null);
+  const [np1, setNp1] = useState('');
+  const [np2, setNp2] = useState('');
+  const [changeErr, setChangeErr] = useState('');
   const [restaurantName, setRestaurantName] = useState('');
   const [brandLogo, setBrandLogo] = useState(''); // SEPOS-BRAND-001
   const [logoSize, setLogoSize] = useState('large'); // SEPOS-BRAND-001 — app logo size preset
@@ -161,11 +167,28 @@ export default function LoginScreen({ onLogin }) {
         setError(`That PIN isn't ${selectedStaff.name}'s. Check your name and PIN.`); setPin('');
       } else {
         storePinSession(staff);
+        // SEPOS-SEC-LOGIN — an operator still on a weak/default PIN must set a
+        // real one before the till opens (the public default can't persist).
+        if (staff.must_change_pin) { setPendingStaff(staff); setMustChange(true); setPin(''); setLoading(false); return; }
         onLogin(staff);
       }
     } catch {
       setError('Connection error. Check your network.'); setPin('');
     } finally { setLoading(false); }
+  }
+
+  // SEPOS-SEC-LOGIN — submit the mandatory new PIN, then enter the till.
+  async function submitNewPin() {
+    setChangeErr('');
+    if (!/^\d{4,6}$/.test(np1)) { setChangeErr('PIN must be 4–6 digits'); return; }
+    if (np1 !== np2) { setChangeErr('The two PINs don’t match'); return; }
+    setLoading(true);
+    try {
+      const r = await changeStaffPin(np1);
+      if (r && r.error) { setChangeErr(r.error); return; }
+      onLogin(pendingStaff);
+    } catch { setChangeErr('Could not set PIN — check your connection'); }
+    finally { setLoading(false); }
   }
 
   // SEPOS-CLOCK-002 — one code entry clocks you IN or OUT automatically
@@ -268,7 +291,27 @@ export default function LoginScreen({ onLogin }) {
 
   // ── right content (staff grid / PIN / email) ───────────────────────────────
   let panelContent;
-  if (mode === 'email') {
+  if (mustChange) {
+    // SEPOS-SEC-LOGIN — mandatory PIN change after signing in with the default.
+    panelContent = (
+      <div style={{ maxWidth: 340, margin: '0 auto', width: '100%', textAlign: 'center' }}>
+        <div style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: INK }}>Set your PIN</div>
+        <div style={{ color: MUTED, fontSize: 14, marginTop: 8, marginBottom: 20, lineHeight: 1.5 }}>
+          You’re on the default PIN. Choose a private 4–6 digit PIN before you continue.
+        </div>
+        <input type="password" inputMode="numeric" autoFocus maxLength={6} value={np1}
+          onChange={e => setNp1(e.target.value.replace(/\D/g, ''))} placeholder="New PIN"
+          style={{ ...inputStyle, textAlign: 'center', letterSpacing: 6 }} />
+        <input type="password" inputMode="numeric" maxLength={6} value={np2}
+          onChange={e => setNp2(e.target.value.replace(/\D/g, ''))} onKeyDown={e => e.key === 'Enter' && submitNewPin()}
+          placeholder="Confirm PIN" style={{ ...inputStyle, textAlign: 'center', letterSpacing: 6, marginTop: 12 }} />
+        {changeErr && <div style={{ color: RED || '#b3261e', fontSize: 13, marginTop: 12 }}>{changeErr}</div>}
+        <button onClick={submitNewPin} disabled={loading || !np1 || !np2} style={{ ...primaryBtn, marginTop: 18 }}>
+          {loading ? 'Saving…' : 'Set PIN & continue'}
+        </button>
+      </div>
+    );
+  } else if (mode === 'email') {
     panelContent = (
       <div style={{ maxWidth: 380, margin: '0 auto', width: '100%' }}>
         <div style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: INK }}>Owner sign in</div>
@@ -384,11 +427,6 @@ export default function LoginScreen({ onLogin }) {
                 </button>
               );
             })}
-          </div>
-        )}
-        {staffList.length === 1 && staffList[0].name === 'Admin' && isManagerRole(staffList[0].role) && (
-          <div style={{ marginTop: 16, textAlign: 'center', color: MUTED, fontSize: 13, lineHeight: 1.6 }}>
-            First time? Tap <b>Admin</b> — the default PIN is <b>1234</b>.<br />Change it and add your team in <b>Admin → Staff</b>.
           </div>
         )}
       </div>

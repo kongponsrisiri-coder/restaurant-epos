@@ -1769,18 +1769,62 @@ app.get('/api/orders/:id/bill', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-SEC-LOGIN — brute-force lockout for the PIN login. The till login is a
+// PUBLIC page and the PIN is 4 digits; previously this endpoint had NO throttle
+// at all → unlimited guesses. Failure-based: 8 wrong PINs in 15 min from one IP
+// → that IP is locked 15 min. A good login clears the counter (legit staff who
+// know their PIN are unaffected). Email login stays as the escape hatch.
+const _loginFails = new Map();
+const _FAIL_MAX = 8, _FAIL_WIN = 15 * 60 * 1000;
+function _loginLockedOut(ip) {
+  const now = Date.now();
+  const arr = (_loginFails.get(ip) || []).filter((t) => now - t < _FAIL_WIN);
+  _loginFails.set(ip, arr);
+  if (_loginFails.size > 5000) _loginFails.clear();
+  return arr.length >= _FAIL_MAX;
+}
+function _recordLoginFail(ip) { const a = _loginFails.get(ip) || []; a.push(Date.now()); _loginFails.set(ip, a); }
+const _WEAK_PINS = new Set(['1234', '0000', '1111', '2222', '3333', '4444', '5555', '6666',
+  '7777', '8888', '9999', '4321', '1212', '2580', '0123', '123456', '000000', '111111']);
+function _isWeakPin(p) { return _WEAK_PINS.has(String(p || '')); }
+
 app.post('/api/staff/login', async (req, res) => {
   try {
     const { pin } = req.body;
+    const ip = 'ip:' + (req.ip || req.get('x-forwarded-for') || '');
+    if (_loginLockedOut(ip)) {
+      return res.status(429).json({ error: 'Too many wrong PINs — locked for a few minutes. Try again shortly, or use “Sign in with email”.' });
+    }
     const result = await pool.query('SELECT * FROM staff WHERE pin=$1 AND is_active=1', [pin]);
     const staff = result.rows[0];
-    if (!staff) return res.status(401).json({ error: 'Invalid PIN' });
+    if (!staff) { _recordLoginFail(ip); return res.status(401).json({ error: 'Invalid PIN' }); }
+    _loginFails.delete(ip); // good login — reset brute-force counter for this IP
     // SEPOS-047a — PIN login now issues the same HMAC session token as
     // email login (signToken below), so staff-gated endpoints can verify
     // the caller. Old clients ignore the extra fields harmlessly.
     const exp = Date.now() + 14 * 24 * 60 * 60 * 1000;
     const token = signToken({ sid: staff.id, name: staff.name, role: staff.role, exp });
-    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp });
+    // SEPOS-SEC-LOGIN — an operator still on a weak/default PIN (the seeded 1234)
+    // must set a real one before using the till; the public default can't persist.
+    const must_change_pin = _isWeakPin(pin) && ['admin', 'manager', 'supervisor'].includes(staff.role);
+    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp, must_change_pin });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-SEC-LOGIN — POST /api/staff/change-pin { new_pin } — signed-in staff
+// set their OWN PIN. Used by the forced change off the default. Plaintext PIN
+// (matches the login query) + UNIQUE constraint, so validate + dedupe here.
+app.post('/api/staff/change-pin', requireStaffAuth(), async (req, res) => {
+  try {
+    const newPin = String((req.body || {}).new_pin || '').trim();
+    if (!/^\d{4,6}$/.test(newPin)) return res.status(400).json({ error: 'PIN must be 4–6 digits' });
+    if (_isWeakPin(newPin)) return res.status(400).json({ error: 'That PIN is too easy to guess — pick another' });
+    const myId = req.staffAuth && req.staffAuth.sid;
+    if (!myId) return res.status(401).json({ error: 'not authenticated' });
+    const dup = await pool.query('SELECT id FROM staff WHERE pin=$1 AND id<>$2', [newPin, myId]);
+    if (dup.rows[0]) return res.status(409).json({ error: 'That PIN is already in use — choose another' });
+    await pool.query('UPDATE staff SET pin=$1 WHERE id=$2', [newPin, myId]);
+    res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

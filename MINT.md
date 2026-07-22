@@ -142,6 +142,24 @@ Korakot approves posts visually in **Control Room → Social tab → 📋 Approv
 4. **Social = being SEEN, NOT booking.** Booking + ordering belong to the **website**. No "Book" button on a social post/mockup; never claim posts take bookings.
 5. Two services stay distinct: **Website £5/mo** (site, booking, ordering, 0% commission) · **Social £39/mo** (FB + IG presence, client approves each post). Bundle = website free with social; build never implied free. Verify prices vs the canonical rate card.
 6. **CTA leads with the one-tap channel** — Messenger (on FB) / **WhatsApp 07896 036386** — not "go to our website." Website = "more details" only.
+7. **Reel / video ads are PORTRAIT — 1080×1920 (9:16), vertical only** (Reels / TikTok / Stories / feed). Never landscape or square for a reel. Reel factory (`reel-factory/make-reel.py`) already outputs this — keep it.
+8. **EVERY post caption ends with HASHTAGS** (Korakot 2026-07-23) — relevant to the post's topic AND our product. ~5–8 tags, mix Thai + English + brand + topic (never 20+ spam). On their own line after the — กต / CTA. Always include **#SiamEPOS** + ≥1 audience tag + topic tags. Pull from the bank below; verify each fits the specific post.
+
+### #️⃣ HASHTAG BANK (mix ~5–8 per post)
+- **Always (brand + UK-Thai audience):** #SiamEPOS · #ร้านอาหารไทยในอังกฤษ · #ThaiRestaurantUK · #คนไทยในยูเค · #ThaiFoodUK
+- **POS / hardware / byoh:** #ระบบขายหน้าร้าน · #POS · #restauranttech · #ร้านอาหาร
+- **Takeaway / online ordering / 0% commission:** #สั่งกลับบ้าน · #ThaiTakeaway · #สั่งอาหารออนไลน์ · #TakeawayUK · #0commission
+- **Booking / reservation:** #จองโต๊ะออนไลน์ · #onlinebooking · #reservation
+- **Website service:** #เว็บไซต์ร้านอาหาร · #restaurantwebsite
+- **Social media service:** #โซเชียลร้านอาหาร · #socialmediaforrestaurants · #ร้านอาหารออนไลน์
+- **SiamPay / payments:** #รับเงินออนไลน์ · #onlinepayment · #ร้านอาหาร
+- **General SME knowledge:** #ธุรกิจร้านอาหาร · #restaurantbusiness · #SMEUK
+
+## 🎬 VIDEO ADS — capabilities (2026-07-22)
+- **DEFAULT = image-based video (Korakot 2026-07-22: "Sora price too high, prefer video-from-image").** Make reels the CHEAP way: **gpt-image-2 portrait stills + full-bleed Ken-Burns/crossfade template** (`marketing/reels/byoh/buildreel.py`). A few pennies per shot. Use this unless Korakot says otherwise.
+- **Sora (real AI video) is OPT-IN ONLY — do NOT use without Korakot's explicit request AND cost OK** (it's expensive per second). When approved: OPENAI_API_KEY has **`sora-2`** + **`sora-2-pro`**; API = `POST /v1/videos` (model, prompt, `seconds` "4/8/12", `size` e.g. `1024x1792` portrait) → async, poll `GET /v1/videos/{id}` → download `GET /v1/videos/{id}/content`. Sora clips come WITH ambient audio. Prefer plain `sora-2` over `sora-2-pro` unless a hero ad needs max fidelity.
+- **Director workflow (both routes):** the model renders FOOTAGE only (no on-screen text — it garbles); Mint overlays Thai/EN hooks + brand + endcard and stitches with crossfades. Reels ship PORTRAIT + SILENT → trending audio added in the IG/FB app at publish. No royalty-free music library in-house yet.
+- Shipped: byoh reel (image-based, `marketing/reels/byoh/`) · takeaway-0% (Sora, `marketing/reels/takeaway/`).
 
 ---
 

@@ -7992,6 +7992,7 @@ async function sendTakeawayConfirmation({ order_id, customer_name, customer_emai
   const { sendBrevoEmail } = require('./services/emailService');
   if (!process.env.BREVO_API_KEY) return;
   const restaurantName = process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant';
+  const th = await require('./services/brandTheme').getBrandTheme(); // restaurant's own brand colours
   const orderNumber = 'T' + String(order_id).padStart(4, '0');
   const pickupDate = new Date(pickup_time);
   // Pin to Europe/London — Railway runs in UTC so without timeZone the
@@ -8007,12 +8008,12 @@ async function sendTakeawayConfirmation({ order_id, customer_name, customer_emai
   const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f5f5f5;font-family:system-ui,sans-serif;color:#1a1a2e;">
   <table cellpadding="0" cellspacing="0" width="100%" style="background:#f5f5f5;padding:24px 0;"><tr><td align="center">
     <table cellpadding="0" cellspacing="0" width="600" style="max-width:600px;background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
-      <tr><td style="background:#0D1B3E;padding:24px 30px;color:#C9A84C;font-family:Georgia,serif;font-size:24px;font-weight:700;">${restaurantName}</td></tr>
+      <tr><td style="background:${th.primaryHex};padding:24px 30px;color:${th.accentHex};font-family:Georgia,serif;font-size:24px;font-weight:700;">${restaurantName}</td></tr>
       <tr><td style="padding:30px;font-size:15px;line-height:1.6;color:#1a1a2e;">
         <p>Hi ${String(customer_name).replace(/[<>]/g,'')},</p>
         <p>Thanks for your takeaway order. We'll have it ready for collection at:</p>
         <p style="background:#fef3c7;padding:14px 18px;border-radius:10px;font-weight:700;text-align:center;">🥡 ${pickupStr}</p>
-        <p>Your order number is <strong style="font-size:18px;color:#C9A84C;">${orderNumber}</strong> — please quote this when collecting.</p>
+        <p>Your order number is <strong style="font-size:18px;color:${th.primaryHex};">${orderNumber}</strong> — please quote this when collecting.</p>
         <table style="width:100%;border-collapse:collapse;margin:14px 0;font-size:14px;">
           ${itemRows}
           <tr><td style="padding:10px 0 6px;border-top:2px solid #eee;font-weight:800;">Total</td>
@@ -8080,7 +8081,9 @@ function parseUnsubscribeToken(token) {
   } catch { return null; }
 }
 
-function buildCampaignEmail({ subject, body, customer_name, customer_email, restaurantName, restaurantAddress }) {
+function buildCampaignEmail({ subject, body, customer_name, customer_email, restaurantName, restaurantAddress, th }) {
+  const primaryHex = (th && th.primaryHex) || '#0D1B3E'; // restaurant brand, SiamEPOS navy fallback
+  const accentHex  = (th && th.accentHex)  || '#C9A84C';
   const safeName = (customer_name || 'there').replace(/[<>]/g, '');
   const personalisedBody = String(body || '').replace(/\{\{\s*name\s*\}\}/gi, safeName);
   const unsubUrl = `${process.env.PUBLIC_API_URL || 'https://restaurant-epos-production.up.railway.app'}/api/unsubscribe?token=${encodeURIComponent(unsubscribeToken(customer_email))}`;
@@ -8090,7 +8093,7 @@ function buildCampaignEmail({ subject, body, customer_name, customer_email, rest
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f5f5f5;padding:24px 0;">
     <tr><td align="center">
       <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
-        <tr><td style="background:#0D1B3E;padding:24px 30px;color:#C9A84C;font-family:Georgia,serif;font-size:24px;font-weight:700;">${restaurantName}</td></tr>
+        <tr><td style="background:${primaryHex};padding:24px 30px;color:${accentHex};font-family:Georgia,serif;font-size:24px;font-weight:700;">${restaurantName}</td></tr>
         <tr><td style="padding:30px;line-height:1.6;font-size:15px;color:#1a1a2e;">${personalisedBody}</td></tr>
         <tr><td style="padding:20px 30px;background:#fafafa;border-top:1px solid #eee;font-size:11px;color:#888;line-height:1.5;">
           <div style="margin-bottom:6px;"><strong>${restaurantName}</strong>${restaurantAddress ? ' · ' + restaurantAddress : ''}</div>
@@ -8214,6 +8217,7 @@ app.post('/api/campaigns/send', requireStaffAuth(['admin', 'manager', 'superviso
     const restaurantName    = process.env.RESTAURANT_NAME    || 'SiamEPOS Restaurant';
     const restaurantAddress = process.env.RESTAURANT_ADDRESS || '';
     const { sendBrevoEmail } = require('./services/emailService');
+    const th = await require('./services/brandTheme').getBrandTheme(); // restaurant brand — fetched once for the whole send
 
     let sent = 0, failed = 0;
     for (const c of recipients) {
@@ -8221,7 +8225,7 @@ app.post('/api/campaigns/send', requireStaffAuth(['admin', 'manager', 'superviso
         subject, body,
         customer_name:  c.customer_name,
         customer_email: c.customer_email,
-        restaurantName, restaurantAddress,
+        restaurantName, restaurantAddress, th,
       });
       try {
         await sendBrevoEmail(c.customer_email, subject, html);

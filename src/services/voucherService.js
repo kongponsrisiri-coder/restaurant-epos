@@ -188,25 +188,26 @@ async function sendVoucherGiftEmail(voucher, options = {}) {
     ? new Date(String(voucher.expires_at).slice(0, 10) + 'T12:00:00')
         .toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
     : '';
+  const th        = await require('./brandTheme').getBrandTheme(); // restaurant's own brand colours
 
   const html = `
     <div style="font-family:Georgia,serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e7e3da">
-      <div style="background:#1e3a6e;padding:36px 24px;text-align:center">
-        <div style="color:#C9A84C;font-size:13px;letter-spacing:3px;text-transform:uppercase;margin-bottom:10px">A Gift For You</div>
-        <h1 style="color:white;margin:0;font-size:30px;font-weight:400">${RESTAURANT_NAME}</h1>
+      <div style="background:${th.primaryHex};padding:36px 24px;text-align:center">
+        <div style="color:${th.accentHex};font-size:13px;letter-spacing:3px;text-transform:uppercase;margin-bottom:10px">A Gift For You</div>
+        <h1 style="color:${th.textOnPrimaryHex};margin:0;font-size:30px;font-weight:400">${RESTAURANT_NAME}</h1>
       </div>
 
       <div style="padding:32px 28px;text-align:center">
         <p style="font-size:16px;color:#444;margin:0 0 4px">Dear <strong>${escapeHtml(toName)}</strong>,</p>
         <p style="font-size:15px;color:#666;margin:0 0 22px"><strong>${escapeHtml(fromName)}</strong> has sent you a gift voucher.</p>
 
-        ${message ? `<div style="background:#fdf6ec;border-left:4px solid #C9A84C;padding:14px 18px;margin:0 0 24px;text-align:left;font-style:italic;color:#5b4a2a;font-size:14px">"${escapeHtml(message)}"</div>` : ''}
+        ${message ? `<div style="background:#fdf6ec;border-left:4px solid ${th.accentHex};padding:14px 18px;margin:0 0 24px;text-align:left;font-style:italic;color:#5b4a2a;font-size:14px">"${escapeHtml(message)}"</div>` : ''}
 
-        <div style="background:linear-gradient(135deg,#1e3a6e,#2a4d8a);border-radius:12px;padding:28px 20px;margin:18px 0">
-          <div style="color:#C9A84C;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">Voucher Value</div>
-          <div style="color:white;font-size:48px;font-weight:700;letter-spacing:-1px">£${amount}</div>
-          <div style="margin-top:18px;background:rgba(255,255,255,0.1);border:1px dashed rgba(255,255,255,0.3);border-radius:8px;padding:12px 16px;font-family:Menlo,Consolas,monospace;color:white;font-size:22px;letter-spacing:3px;font-weight:700">${code}</div>
-          <div style="color:rgba(255,255,255,0.7);font-size:11px;margin-top:10px">Quote this code when paying your bill</div>
+        <div style="background:${th.primaryHex};border-radius:12px;padding:28px 20px;margin:18px 0">
+          <div style="color:${th.accentHex};font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">Voucher Value</div>
+          <div style="color:${th.textOnPrimaryHex};font-size:48px;font-weight:700;letter-spacing:-1px">£${amount}</div>
+          <div style="margin-top:18px;background:rgba(255,255,255,0.1);border:1px dashed ${th.accentHex};border-radius:8px;padding:12px 16px;font-family:Menlo,Consolas,monospace;color:${th.textOnPrimaryHex};font-size:22px;letter-spacing:3px;font-weight:700">${code}</div>
+          <div style="color:${th.softOnPrimary};font-size:11px;margin-top:10px">Quote this code when paying your bill</div>
         </div>
 
         <p style="color:#888;font-size:13px;margin:24px 0 4px">Valid until <strong>${expiry}</strong></p>
@@ -219,7 +220,7 @@ async function sendVoucherGiftEmail(voucher, options = {}) {
         </p>
         <p style="color:#aaa;font-size:11px;margin:8px 0 0">Open this email on your iPhone to save the voucher to Wallet</p>
 
-        ${RESTAURANT_SITE ? `<p style="margin:18px 0 0"><a href="${RESTAURANT_SITE}" style="display:inline-block;padding:11px 24px;background:#C9A84C;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;letter-spacing:0.5px">Book a table →</a></p>` : ''}
+        ${RESTAURANT_SITE ? `<p style="margin:18px 0 0"><a href="${RESTAURANT_SITE}" style="display:inline-block;padding:11px 24px;background:${th.accentHex};color:${th.primaryHex};text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;letter-spacing:0.5px">Book a table →</a></p>` : ''}
       </div>
 
       <div style="background:#fafaf7;padding:18px 24px;text-align:center;border-top:1px solid #eee;color:#888;font-size:11px">

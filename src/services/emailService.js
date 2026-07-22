@@ -1,4 +1,5 @@
 const https = require('https');
+const { getBrandTheme } = require('./brandTheme'); // SEPOS-EMAIL-BRAND-001 — per-restaurant email colours
 
 const RESTAURANT_NAME    = process.env.RESTAURANT_NAME  || 'SiamEPOS Restaurant';
 const RESTAURANT_EMAIL   = process.env.RESTAURANT_EMAIL || 'info@siamepos.co.uk';
@@ -141,21 +142,22 @@ async function sendBookingConfirmation(reservation) {
   const covers = reservation.covers;
   const notes  = escapeHtml(reservation.notes || '—');
   const ref    = reservation.id;
+  const th     = await getBrandTheme(); // restaurant's own brand colours
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e0e0e0">
 
-      <div style="background:#1a472a;padding:32px;text-align:center">
-        <h1 style="color:white;margin:0;font-size:26px">✅ Booking Confirmed!</h1>
-        <p style="color:#a8d5b5;margin:8px 0 0;font-size:15px">${RESTAURANT_NAME}</p>
+      <div style="background:${th.primaryHex};padding:32px;text-align:center">
+        <h1 style="color:${th.textOnPrimaryHex};margin:0;font-size:26px">✅ Booking Confirmed!</h1>
+        <p style="color:${th.softOnPrimary};margin:8px 0 0;font-size:15px">${RESTAURANT_NAME}</p>
       </div>
 
       <div style="padding:32px">
         <p style="font-size:16px;color:#333">Dear <strong>${name}</strong>,</p>
         <p style="color:#555;font-size:15px">Thank you for your reservation at <strong>${RESTAURANT_NAME}</strong>. Your booking has been confirmed!</p>
 
-        <div style="background:#f8fdf9;border:2px solid #1a472a;border-radius:10px;padding:24px;margin:24px 0">
-          <h3 style="margin:0 0 16px;color:#1a472a;font-size:16px">📋 BOOKING DETAILS</h3>
+        <div style="background:${th.tintHex};border:2px solid ${th.primaryHex};border-radius:10px;padding:24px;margin:24px 0">
+          <h3 style="margin:0 0 16px;color:${th.primaryHex};font-size:16px">📋 BOOKING DETAILS</h3>
           <p style="margin:8px 0;font-size:15px">📅 <strong>Date:</strong> ${date}</p>
           <p style="margin:8px 0;font-size:15px">⏰ <strong>Time:</strong> ${time}</p>
           <p style="margin:8px 0;font-size:15px">👥 <strong>Guests:</strong> ${covers}</p>
@@ -193,20 +195,21 @@ async function sendReminderEmail(reservation) {
   const time   = formatTime(reservation.reservation_time);
   const name   = escapeHtml(reservation.customer_name);
   const covers = reservation.covers;
+  const th     = await getBrandTheme(); // restaurant's own brand colours
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e0e0e0">
 
-      <div style="background:#1a472a;padding:32px;text-align:center">
-        <h1 style="color:white;margin:0;font-size:24px">⏰ Reminder: Your booking is tomorrow!</h1>
-        <p style="color:#a8d5b5;margin:8px 0 0">${RESTAURANT_NAME}</p>
+      <div style="background:${th.primaryHex};padding:32px;text-align:center">
+        <h1 style="color:${th.textOnPrimaryHex};margin:0;font-size:24px">⏰ Reminder: Your booking is tomorrow!</h1>
+        <p style="color:${th.softOnPrimary};margin:8px 0 0">${RESTAURANT_NAME}</p>
       </div>
 
       <div style="padding:32px">
         <p style="font-size:16px;color:#333">Dear <strong>${name}</strong>,</p>
         <p style="color:#555;font-size:15px">This is a reminder that you have a reservation <strong>tomorrow</strong> at <strong>${RESTAURANT_NAME}</strong>.</p>
 
-        <div style="background:#f8fdf9;border:2px solid #1a472a;border-radius:10px;padding:24px;margin:24px 0">
+        <div style="background:${th.tintHex};border:2px solid ${th.primaryHex};border-radius:10px;padding:24px;margin:24px 0">
           <p style="margin:8px 0;font-size:15px">📅 <strong>Date:</strong> ${date}</p>
           <p style="margin:8px 0;font-size:15px">⏰ <strong>Time:</strong> ${time}</p>
           <p style="margin:8px 0;font-size:15px">👥 <strong>Guests:</strong> ${covers}</p>

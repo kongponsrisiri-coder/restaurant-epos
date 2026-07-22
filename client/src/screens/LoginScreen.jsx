@@ -386,6 +386,11 @@ export default function LoginScreen({ onLogin }) {
             })}
           </div>
         )}
+        {staffList.length === 1 && staffList[0].name === 'Admin' && isManagerRole(staffList[0].role) && (
+          <div style={{ marginTop: 16, textAlign: 'center', color: MUTED, fontSize: 13, lineHeight: 1.6 }}>
+            First time? Tap <b>Admin</b> — the default PIN is <b>1234</b>.<br />Change it and add your team in <b>Admin → Staff</b>.
+          </div>
+        )}
       </div>
     );
   }

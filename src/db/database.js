@@ -983,6 +983,34 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
     await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS is_batch BOOLEAN DEFAULT FALSE`);
     await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS batch_recipe_id INTEGER`);
 
+    // SEPOS-LOGIN-SEED — fresh-till default admin (parity with the spa till).
+    // A brand-new till (or one reset for a new client) has no staff, so nobody
+    // can PIN-log-in — the owner had to know to use the email login first. Now
+    // every till without an active admin/manager gets an "Admin / PIN 1234"
+    // account. Guarded so it's a NO-OP for live clients that already have an
+    // admin (Chart Thai, Thann Thai, etc.), and self-healing: if a till ever
+    // loses every admin, the next boot restores a login instead of locking out.
+    // Dialect-safe (no PG-only casts) so it works on cloud PG AND local SQLite
+    // tills. PINs are plaintext here (login matches pin directly), unlike spa.
+    try {
+      const admins = await pool.query(
+        "SELECT COUNT(*) AS n FROM staff WHERE is_active = 1 AND role IN ('admin','manager')",
+      );
+      if (Number(admins.rows[0].n) === 0) {
+        const takenRows = await pool.query('SELECT pin FROM staff');
+        const taken = new Set(takenRows.rows.map((r) => String(r.pin)));
+        let pin = '1234';
+        if (taken.has(pin)) { for (let p = 1000; p <= 9999; p++) { if (!taken.has(String(p))) { pin = String(p); break; } } }
+        await pool.query(
+          "INSERT INTO staff (name, pin, role, is_active) VALUES ('Admin', $1, 'admin', 1)",
+          [pin],
+        );
+        console.warn(`[seed] No active admin — created default admin 'Admin' (PIN ${pin}). CHANGE IT.`);
+      }
+    } catch (e) {
+      console.error('[seed] default-admin seed skipped:', e.message);
+    }
+
     console.log('✅ Database ready');
   } catch (err) {
     console.error('Database init error:', err);

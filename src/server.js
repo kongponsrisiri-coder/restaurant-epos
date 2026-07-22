@@ -204,6 +204,9 @@ let sendBookingSms = async () => {};
 try {
   const emailSvc = require('./services/emailService');
   sendBookingConfirmation = emailSvc.sendBookingConfirmation;
+  // SEPOS-027 — the SMS sender was never assigned here, so the dormant
+  // stub swallowed every booking SMS even once TWILIO_* env landed.
+  sendBookingSms = emailSvc.sendBookingSms;
   console.log('✅ Email service loaded');
 } catch (e) {
   console.log('ℹ️  Email service not configured yet — skipping');

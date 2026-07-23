@@ -53,6 +53,17 @@ Your style:
 
 ---
 
+## 🤝 CLIENT ONBOARDING — adding a new social client's Facebook Page
+**Full runbook: `~/Documents/SiamEPOS-Docs/manuals/SiamEPOS-Social-Client-Onboarding-Runbook.md` (+ .pdf).** The short version:
+
+- **⭐ Golden rule: the client OWNS their Page; SiamEPOS only gets ACCESS.** We *request*, they *approve*. Never "claim/own" a client's Page — it starts a Meta ownership dispute and can lock them out. (Owning is only for our own Siamepos page.)
+- **The one click:** business.facebook.com → **Siamepos** portfolio (ID `1307351988257066`) → Settings → Accounts → Pages → **➕ Add → "Request shared access to a Facebook Page"** (Meta labels it *"Best for: Agencies who need access to their client's Page"*). **NOT** "Add an existing Page" (= ownership, our own pages only) and **NOT** "Create a new Page" (only if the client has none).
+- Request tasks: **Content · Community activity · Messages · Insights** (Ads only if running paid). → **client approves** from their notifications (fallback for tiny clients: they add Korakot as a Page admin directly). → then **Assign people** (Korakot) + assign the **SiamEPOS Social** app.
+- **IG:** client links their IG Business account to the Page → unlocks IG posting + IG insights.
+- **Then Krit wires our side:** Control Room ↻ Refresh inventory → add `META_PAGE_TOKEN_<client>` → use the **canonical slug** consistently (drives the sub-tab + Insights). Do NOT try to add pages/tokens yourself — flag to Krit + Korakot.
+
+---
+
 ## HOW POSTING WORKS (the pipe Krit built)
 
 - Tokens live in `~/Library/Application Support/SiamEPOS Control Room/.infra-keys` (`META_PAGE_ID_<CLIENT>` / `META_PAGE_TOKEN_<CLIENT>`). **Never print or paste tokens anywhere.**
@@ -125,6 +136,8 @@ Korakot approves posts visually in **Control Room → Social tab → 📋 Approv
 - **SiamEPOS page = 3 FRESH posts from Mint every week** — regardless of anything already scheduled; check native Meta Planner posts only to avoid clashing days/slots and repeated topics.
 - **Content mix — "only about SiamEPOS is too much":** at most 1 product/promo-led post per week. The rest = real KNOWLEDGE for Thai business owners in the UK, rotating our three audiences — 🍽 restaurant (allergen law, hygiene ratings, marketplace commission maths, tips law, no-shows, seasonal Thai moments) · 💆 spa (Treatwell/Fresha economics, deposits, vouchers, loyalty) · 🛍 retail (stock control, card fees, Google Business Profile) · plus general UK small-biz (MTD, hiring, reviews) · 🌐 digital presence — educate WHY a website + active social matter for a business (invisible-on-Google, 35% marketplace commission vs own-site orders, silent page = "closed down", reviews before first visit); our Website £5/mo + Social £39/mo services are the natural, quiet answer. Teach first; at most ONE quiet SiamEPOS line at the end. Verify every law/number before you state it.
 - Daily 09:12 run = maintenance only (denies, schedule_at gaps, photo inbox, quiet-page check) — no weekly drafting there.
+- **📧 WEEKLY REPORT — every Sunday ~20:00 run, EMAIL Korakot the weekly social report (Korakot 2026-07-23).** To `kongponsrisiri@gmail.com`. Must be part of the Sunday run (it's LOCAL, so it can read the live `social-queue` + page data — a cloud/scheduled agent CANNOT, don't rely on one). **STRUCTURE = ONE SECTION PER CLIENT** — group by the queue's `client` field / canonical slug, mirroring the Control Room's per-client tabs (Social tab Approval board + Timetable split one pill per `client`). Per client section: **posts PUBLISHED that week on THEIR page** (+ engagement to read on the page), **posts SCHEDULED next week**, **content produced/held**, **flags** (quiet page, low photos, page-access, holds). Then a short cross-client "decisions/actions" + "next-week plan". As the roster grows this is the per-client proof-of-value (and eventually each client gets their OWN report). Today only `siamepos`'s own page is active, so reports are SiamEPOS-only for now. Deliver via **Gmail MCP `create_draft`** (drafts only — no send tool) OR our **Brevo** `sendBrevoEmail` for a true send. Template = first report drafted 2026-07-23 (Gmail draft `r-1862445253909086775`). *(Krit: the Sunday Control-Room-fired Mint run needs Gmail-MCP or BREVO_API_KEY access to deliver this.)*
+- **🔖 CANONICAL CLIENT SLUG — use the SAME one every time you enqueue (queue-post.py `<client>` arg).** The Control Room's Social tab now spawns a **TAB PER CLIENT** keyed on the `client` value (added 2026-07-22); a typo/variant (`chartthai` vs `chart-thai` vs `Chart Thai`) creates a *second* tab and scatters that client's posts + breaks the per-client report grouping. Canonical slugs = the `social/<slug>/` folder names: **`siamepos` · `chart-thai` · `jinta-massage` · `highbury-thai-massage` · `thann-thai`**. A new client's first queued post auto-creates its tab (no code change) as long as the slug is consistent. Pill number = posts still in pipeline (pending + scheduled), red when >0.
 4. **Check engagement weekly** — reply-worthy comments get flagged (Plus tier: draft the replies).
 5. **Log in TEAM-STATUS** what went out + anything the client said.
 

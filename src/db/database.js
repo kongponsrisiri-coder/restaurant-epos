@@ -521,6 +521,20 @@ async function initDB() {
     await pool.query(`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS unsubscribed_at TIMESTAMP`); // SEPOS-033
     await pool.query(`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS table_ids TEXT`); // multi-table join — CSV of table ids, table_id stays the primary
 
+    // SEPOS-SALESCHAT-001 — AI sales concierge for the marketing site (siamepos.co.uk).
+    // Cloud-only. One row per web visitor session. handoff=true silences the AI so a
+    // human (Korakot, via the Control Room) can take over the thread.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sales_chats (
+        session_id VARCHAR(80) PRIMARY KEY,
+        name       VARCHAR(120),
+        messages   JSONB DEFAULT '[]'::jsonb,
+        handoff    BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     // SEPOS-PRO-008 — link a bill to the booking it belongs to, for accurate
     // per-customer spend. Placed AFTER the reservations table exists so the FK
     // resolves on a fresh database. ON DELETE SET NULL: deleting a reservation

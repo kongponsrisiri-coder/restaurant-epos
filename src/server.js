@@ -4243,6 +4243,123 @@ app.post('/api/website/demo-request', widgetCors, async (req, res) => {
   }
 });
 
+// ─── SEPOS-SALESCHAT-001 — AI sales concierge for the marketing site ───
+// Public: /api/saleschat/message + /poll (CORS-open, rate-limited). Admin
+// (Control Room, x-saleschat-secret gated): list / thread / reply / handoff.
+// handoff=TRUE silences the AI so a human can take over the thread.
+const SALESCHAT_SECRET = process.env.SALESCHAT_SECRET || '';
+const SALESCHAT_SYSTEM = `You are Tara, the friendly assistant for SiamEPOS — a UK restaurant & spa management system built for Thai businesses. You chat with prospective customers on the SiamEPOS marketing website.
+
+WHO YOU ARE
+- Introduce yourself as Tara, the SiamEPOS assistant. Warm, concise, helpful — not salesy.
+- Reply in the visitor's language (English or Thai — natural/polite ค่ะ/ครับ).
+- Be honest: if asked whether you're a person or a bot, say you're SiamEPOS's digital assistant and can connect them with the team. Never pose as a real human staff member.
+
+WHAT SIAMEPOS IS (answer only from this — never invent features or prices)
+- All-in-one till (POS) for Thai restaurants & spas in the UK: table plan + kitchen display (KDS), online reservations, online takeaway ordering (0% commission), spa appointments, customer CRM + email campaigns, reports, staff clock-in, inventory, and you can use any tablet or phone as a terminal.
+- Runs in a browser AND as a desktop app (Mac & Windows), works offline.
+- Add-ons: a client Website (£5/mo), a Social Media service (£39/mo, Facebook + Instagram), SiamPay card payments (1.5% + 30p, no monthly fee), and an AI booking concierge.
+
+PRICING (quote only these; if unsure of a number, say you'll have the team confirm — never guess)
+- SiamEPOS: £89/month. Founder's Rate £59/month for early customers. No long tie-in; free onboarding.
+- Website £5/mo · Social £39/mo · SiamPay 1.5% + 30p.
+
+HOW TO HELP
+- Answer questions about features, pricing, setup and the fit for a Thai UK business.
+- Nudge gently toward a demo: point them to "Book a demo" on this site, or offer to take their name + phone so the team calls them.
+- For a serious buyer, or anything you can't answer, offer to connect them with the team.
+- Keep replies short.`;
+
+function anthropicChat(system, messages) {
+  return new Promise((resolve) => {
+    const body = JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 600, system, messages });
+    const https = require('https');
+    const r = https.request({ hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body),
+                 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' } },
+      (rs) => { let d = ''; rs.on('data', c => d += c); rs.on('end', () => {
+        try { const j = JSON.parse(d); resolve((j.content || []).map(b => b.text || '').join('').trim() || null); }
+        catch { resolve(null); } }); });
+    r.on('error', () => resolve(null)); r.write(body); r.end();
+  });
+}
+const _salesHits = new Map();
+function _salesAllow(ip) { const now = Date.now();
+  const a = (_salesHits.get(ip) || []).filter(t => now - t < 5 * 60 * 1000);
+  if (a.length >= 30) { _salesHits.set(ip, a); return false; }
+  a.push(now); _salesHits.set(ip, a); if (_salesHits.size > 5000) _salesHits.clear(); return true; }
+function salesAdminAuth(req, res, next) {
+  if (!SALESCHAT_SECRET || req.headers['x-saleschat-secret'] !== SALESCHAT_SECRET)
+    return res.status(401).json({ error: 'unauthorized' });
+  next();
+}
+const _salesMsgs = (m) => (typeof m === 'string' ? JSON.parse(m) : m) || [];
+
+app.post('/api/saleschat/message', widgetCors, async (req, res) => {
+  try {
+    const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip;
+    if (!_salesAllow(ip)) return res.status(429).json({ reply: 'One moment — please try again shortly.' });
+    const { session_id, message } = req.body || {};
+    if (typeof session_id !== 'string' || !/^[a-z0-9-]{8,80}$/i.test(session_id)) return res.status(400).json({ error: 'bad session' });
+    const text = String(message || '').trim();
+    if (!text || text.length > 2000) return res.status(400).json({ error: 'bad message' });
+    const cur = (await pool.query('SELECT messages, handoff FROM sales_chats WHERE session_id=$1', [session_id])).rows[0];
+    const msgs = cur ? _salesMsgs(cur.messages) : [];
+    msgs.push({ role: 'user', content: text, ts: new Date().toISOString() });
+    let reply = null;
+    if (cur && cur.handoff) {
+      // a human is handling this thread — AI stays quiet; the widget poll delivers the human's reply
+    } else if (!process.env.ANTHROPIC_API_KEY) {
+      reply = 'Thanks! Our team will reply shortly — you can also book a demo on this site. 🙏';
+      msgs.push({ role: 'assistant', content: reply, ts: new Date().toISOString() });
+    } else {
+      const aiMsgs = msgs.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }));
+      reply = (await anthropicChat(SALESCHAT_SYSTEM, aiMsgs)) || 'Sorry — I had a hiccup. Please try again, or book a demo on this site.';
+      msgs.push({ role: 'assistant', content: reply, ts: new Date().toISOString() });
+    }
+    await pool.query(`INSERT INTO sales_chats (session_id, messages) VALUES ($1,$2)
+      ON CONFLICT (session_id) DO UPDATE SET messages=$2, updated_at=NOW()`, [session_id, JSON.stringify(msgs)]);
+    res.json({ reply, handoff: !!(cur && cur.handoff) });
+  } catch (e) { console.error('[saleschat] message', e.message); res.status(500).json({ reply: 'Sorry — please try again in a moment.' }); }
+});
+
+app.get('/api/saleschat/poll', widgetCors, async (req, res) => {
+  try {
+    const sid = String(req.query.session_id || ''); const after = parseInt(req.query.after || '0', 10) || 0;
+    const cur = (await pool.query('SELECT messages FROM sales_chats WHERE session_id=$1', [sid])).rows[0];
+    if (!cur) return res.json({ total: 0, messages: [] });
+    const ops = _salesMsgs(cur.messages).filter(m => m.role === 'assistant' && m.operator).map(m => m.content);
+    res.json({ total: ops.length, messages: after < ops.length ? ops.slice(after) : [] });
+  } catch (e) { res.json({ total: 0, messages: [] }); }
+});
+
+app.get('/api/saleschat/admin/conversations', salesAdminAuth, async (req, res) => {
+  const rows = (await pool.query(`SELECT session_id, name, messages, handoff, updated_at FROM sales_chats ORDER BY updated_at DESC LIMIT 100`)).rows;
+  res.json(rows.map(r => { const m = _salesMsgs(r.messages); const last = m[m.length - 1] || {};
+    return { session_id: r.session_id, name: r.name, handoff: !!r.handoff, updated_at: r.updated_at,
+             count: m.length, last: String(last.content || '').slice(0, 90), last_role: last.role, last_operator: !!last.operator }; }));
+});
+app.get('/api/saleschat/admin/conversations/:sid', salesAdminAuth, async (req, res) => {
+  const r = (await pool.query('SELECT session_id,name,messages,handoff FROM sales_chats WHERE session_id=$1', [req.params.sid])).rows[0];
+  if (!r) return res.status(404).json({ error: 'not found' });
+  res.json({ session_id: r.session_id, name: r.name, handoff: !!r.handoff, messages: _salesMsgs(r.messages) });
+});
+app.post('/api/saleschat/admin/conversations/:sid/reply', salesAdminAuth, async (req, res) => {
+  const text = String(req.body?.text || '').trim();
+  if (!text || text.length > 2000) return res.status(400).json({ error: 'text required' });
+  const r = (await pool.query('SELECT messages FROM sales_chats WHERE session_id=$1', [req.params.sid])).rows[0];
+  if (!r) return res.status(404).json({ error: 'not found' });
+  const msgs = _salesMsgs(r.messages);
+  msgs.push({ role: 'assistant', content: text, operator: true, ts: new Date().toISOString() });
+  await pool.query('UPDATE sales_chats SET messages=$2, handoff=TRUE, updated_at=NOW() WHERE session_id=$1', [req.params.sid, JSON.stringify(msgs)]);
+  res.json({ ok: true, handoff: true });
+});
+app.post('/api/saleschat/admin/conversations/:sid/handoff', salesAdminAuth, async (req, res) => {
+  const on = !!req.body?.handoff;
+  await pool.query('UPDATE sales_chats SET handoff=$2, updated_at=NOW() WHERE session_id=$1', [req.params.sid, on]);
+  res.json({ ok: true, handoff: on });
+});
+
 // Helper to convert "HH:MM" string to total minutes
 function toMins(t) {
   const [h, m] = String(t).slice(0, 5).split(':').map(Number);

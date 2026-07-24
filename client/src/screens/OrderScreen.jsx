@@ -20,8 +20,11 @@ const COURSE_COLORS = { 1: '#3b82f6', 2: '#e94560', 3: '#8b5cf6', 4: '#22c55e' }
 let tempSeq = 0;
 const nextTempId = () => { tempSeq += 1; return -(Date.now() + tempSeq); };
 
-export default function OrderScreen({ orderId, tableId, staff, onClose }) {
+export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }) {
   const [menu, setMenu] = useState([]);
+  // SEPOS-TILL-LOCK-001 — full-screen "✓ sent" flash before returning to the
+  // PIN screen. Only ever used when App passes onSent (Till Security setting on).
+  const [sentFlash, setSentFlash] = useState(false);
   // SEPOS allergens — dish_allergens overrides keyed by menu_item_id.
   // Loaded once on mount; merged with menu_items.allergens at render time.
   const [allergenOverrides, setAllergenOverrides] = useState({});
@@ -546,6 +549,15 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
 
       // No success popup — the items are already in the Order Summary and the
       // 🔥 Fire buttons are right there; a blocking confirm on every send is noise.
+
+      // SEPOS-TILL-LOCK-001 — when Till Security's send-lock is on, close the
+      // loop visibly: a 1.4s "✓ Order sent" flash, then back to the PIN screen.
+      // The print chain above is fire-and-forget (module-level services), so
+      // unmounting this screen does not interrupt kitchen/bar tickets.
+      if (onSent) {
+        setSentFlash(true);
+        setTimeout(() => onSent(), 1400);
+      }
     } catch (err) {
       // Clean up pre-opened window on error
       try { if (barWin && !barWin.closed) barWin.close(); } catch {}
@@ -778,6 +790,21 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
 
   return (
     <>
+      {/* SEPOS-TILL-LOCK-001 — sent confirmation flash (shown just before the
+          screen returns to sign-in, so staff SEE the loop close) */}
+      {sentFlash && (
+        <div style={{
+          position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, zIndex: 100003,
+          background: 'rgba(22,163,74,0.96)', color: 'white', display: 'flex',
+          flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 84, lineHeight: 1 }}>✓</div>
+          <div style={{ fontSize: 26, fontWeight: 800, marginTop: 12 }}>Order sent to kitchen</div>
+          {order?.table_number != null && (
+            <div style={{ fontSize: 17, marginTop: 6, opacity: 0.9 }}>Table {order.table_number}</div>
+          )}
+        </div>
+      )}
       <style>{`
         @keyframes pendingPulse {
           0%, 100% { border-color: #f59e0b; box-shadow: 0 0 0 0 rgba(245,158,11,0); }

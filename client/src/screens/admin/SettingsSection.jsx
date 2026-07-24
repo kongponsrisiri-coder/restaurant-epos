@@ -763,6 +763,8 @@ export default function SettingsSection() {
     receipt_footer:          'Thank you for dining with us!',
     service_charge_rate:     '12.5',
     service_charge_enabled:  '1',
+    till_send_lock:          '1',   // SEPOS-TILL-LOCK-001 — back to sign-in after sending an order
+    till_idle_minutes:       '2',   // SEPOS-TILL-LOCK-001 — auto sign-out after idle ('0' = off)
     kitchen_print_mode:      'print',   // 'print' | 'kds' | 'both'
     kitchen_language:        'en_th',  // 'en_th' | 'en'
     brand_logo:              '',   // SEPOS-BRAND-001 — on-screen logo (separate from receipt logo)
@@ -1290,6 +1292,32 @@ export default function SettingsSection() {
           </div>
         </div>
       )}
+
+      {/* ── SEPOS-TILL-LOCK-001 — Till security ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🔒 Till Security</h2>
+        <div style={{ display:'flex', alignItems:'center', gap:16, marginBottom:14 }}>
+          <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:14 }}>
+            <input type="checkbox" checked={settings.till_send_lock!=='0'} onChange={e => setSettings({...settings, till_send_lock:e.target.checked?'1':'0'})} />
+            Return to the sign-in screen after sending an order
+          </label>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:8 }}>
+          <label style={{ fontSize:14, fontWeight:600, color:'#555' }}>Auto sign-out when idle</label>
+          <select value={settings.till_idle_minutes||'2'} onChange={e => setSettings({...settings, till_idle_minutes:e.target.value})}
+            style={{ padding:'8px 10px', border:'1px solid #ddd', borderRadius:8, fontSize:14 }}>
+            <option value="0">Off</option>
+            <option value="1">After 1 minute</option>
+            <option value="2">After 2 minutes</option>
+            <option value="5">After 5 minutes</option>
+            <option value="10">After 10 minutes</option>
+          </select>
+        </div>
+        <div style={{ fontSize:12, color:'#888', lineHeight:1.5 }}>
+          Staff sign back in with their PIN in seconds. Unsent basket items are kept on the table.
+          Kitchen and Bar displays are never signed out automatically.
+        </div>
+      </div>
 
       {/* ── Service Charge ── */}
       <div style={cardStyle}>

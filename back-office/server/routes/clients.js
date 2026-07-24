@@ -169,6 +169,25 @@ function renderTemplate(filePath, vars) {
   });
 }
 
+// ── SEC-2026-07 — redact tenant secrets from the metadata bag before it
+// leaves the server. The bag legitimately holds provisioning credentials
+// (sync_secret, tenant DB URL, PINs, API keys, setup/jwt secrets) that the
+// UI displays MASKED on the Setup tab — but they were being shipped in full
+// to every authenticated ops user (incl. read-only support/viewer roles) and
+// for EVERY client in the list. We strip them from the list unconditionally
+// and from the detail view for non-admins. Pattern-based so new secret-ish
+// keys are caught automatically; benign fields (slugs, urls, account_ref,
+// stripe_account_id, pk_live, addresses, onboarding flags) are preserved.
+const SECRET_META_RE = /secret|password|(^|_)pin$|(^|_)sk_|sk_live|sk_test|api[_-]?key|database_url|(^|_)token$|jwt|webhook|admin_login/i;
+function redactMetadata(meta) {
+  if (!meta || typeof meta !== 'object') return meta;
+  const out = {};
+  for (const k of Object.keys(meta)) {
+    out[k] = SECRET_META_RE.test(k) ? '••••••••' : meta[k];
+  }
+  return out;
+}
+
 // List all clients with their LATEST health-check row joined in. One round
 // trip — DISTINCT ON gives us the most recent row per client_id.
 router.get('/', async (req, res) => {
@@ -189,7 +208,8 @@ router.get('/', async (req, res) => {
       ) h ON TRUE
       ORDER BY c.created_at DESC
     `);
-    res.json(r.rows);
+    // SEC-2026-07 — never ship tenant secrets in the all-clients list.
+    res.json(r.rows.map(row => (row && row.metadata) ? { ...row, metadata: redactMetadata(row.metadata) } : row));
   } catch (err) {
     console.error('[ops-clients] list error', err);
     res.status(500).json({ error: err.message });
@@ -232,8 +252,15 @@ router.get('/:id', async (req, res) => {
       pool.query('SELECT device_id, app_version, platform, last_seen FROM client_tills WHERE client_id = $1 ORDER BY last_seen DESC', [id]),
     ]);
     if (clientRes.rows.length === 0) return res.status(404).json({ error: 'Client not found' });
+    // SEC-2026-07 — only admins see the raw provisioning secrets on the Setup
+    // tab; support/viewer roles get them masked. Admins (e.g. Korakot) keep the
+    // full setup/credentials workflow unchanged.
+    const clientRow = clientRes.rows[0];
+    if (!(req.user && req.user.role === 'admin') && clientRow.metadata) {
+      clientRow.metadata = redactMetadata(clientRow.metadata);
+    }
     res.json({
-      client: clientRes.rows[0],
+      client: clientRow,
       health: healthRes.rows,
       notes:  notesRes.rows,
       tills:  tillsRes.rows,

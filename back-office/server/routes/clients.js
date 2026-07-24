@@ -276,12 +276,19 @@ router.put('/:id', async (req, res) => {
     const id = parseInt(req.params.id, 10);
     // Whitelisted updatable fields — keeps the endpoint safe from
     // arbitrary column injection via the request body.
-    const allowed = [
+    // SEC-2026-07 — non-admins (support/viewer) may edit basic contact fields
+    // only; billing, go-live status, and the credentials `metadata` bag are
+    // admin-only (prevents a non-admin overwriting tenant secrets or flipping
+    // a client live/churned). Admins keep the full field set unchanged.
+    const isAdmin = req.user && req.user.role === 'admin';
+    const allowed = isAdmin ? [
       'restaurant_name', 'owner_name', 'email', 'phone', 'railway_url',
       'plan', 'status', 'monthly_fee', 'trial_start', 'sub_start', 'next_billing',
       'metadata',  // SEPOS-WEB-002 — flexible setup / credentials bag.
       'product',   // BO-SPA-001 — 'restaurant' | 'spa'
       'slug',      // BO-SLUG-001 — subdomain slug
+    ] : [
+      'restaurant_name', 'owner_name', 'email', 'phone', 'railway_url', 'product', 'slug',
     ];
     const sets = [];
     const params = [];
@@ -301,7 +308,10 @@ router.put('/:id', async (req, res) => {
       params
     );
     if (r.rows.length === 0) return res.status(404).json({ error: 'Client not found' });
-    res.json(r.rows[0]);
+    // SEC-2026-07 — never echo the secrets bag back to a non-admin.
+    const updated = r.rows[0];
+    if (!isAdmin && updated.metadata) updated.metadata = redactMetadata(updated.metadata);
+    res.json(updated);
   } catch (err) {
     console.error('[ops-clients] update error', err);
     res.status(500).json({ error: err.message });
@@ -421,7 +431,7 @@ router.get('/billing/plans', async (req, res) => {
   }
 });
 
-router.post('/:id/billing/checkout-link', async (req, res) => {
+router.post('/:id/billing/checkout-link', adminOnly, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const { rows } = await pool.query(
@@ -463,7 +473,7 @@ router.post('/:id/billing/checkout-link', async (req, res) => {
 // Fixes clients billed before the payment-link flow — their row had no Stripe
 // ids so ops showed "no subscription". Writes the ids (+ next billing) only;
 // leaves the client's status untouched so the go-live label isn't disturbed.
-router.post('/:id/billing/link-subscription', async (req, res) => {
+router.post('/:id/billing/link-subscription', adminOnly, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const { rows } = await pool.query('SELECT id, email FROM clients WHERE id = $1', [id]);
@@ -514,7 +524,7 @@ router.post('/:id/billing/link-subscription', async (req, res) => {
  * Wizard-only fields land in clients.metadata as a flat bag so we don't
  * have to ALTER TABLE for every new question we ever want to ask.
  */
-router.post('/onboard', async (req, res) => {
+router.post('/onboard', adminOnly, async (req, res) => {
   try {
     const b = req.body || {};
     if (!b.restaurant_name?.trim()) {
@@ -688,7 +698,7 @@ router.put('/:id/checklist', async (req, res) => {
 // the URL stored in clients.metadata.tenant_database_url and runs
 // the same staff + settings SQL the /seed.sql download produces.
 // On success it ticks staff_seeded + settings_seeded automatically.
-router.post('/:id/provision/seed-db', async (req, res) => {
+router.post('/:id/provision/seed-db', adminOnly, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const cur = await pool.query('SELECT * FROM clients WHERE id = $1', [id]);
@@ -805,7 +815,7 @@ router.get('/:id/provision/railway-template', async (req, res) => {
 // attaches the {slug}.siamepos.co.uk subdomain, and ticks
 // netlify_provisioned + dns_pointed on success. SSL is requested
 // best-effort and stamped on the response.
-router.post('/:id/provision/netlify', async (req, res) => {
+router.post('/:id/provision/netlify', adminOnly, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const cur = await pool.query('SELECT * FROM clients WHERE id = $1', [id]);
@@ -860,7 +870,7 @@ router.post('/:id/provision/netlify', async (req, res) => {
 // Pre-req: tenant_railway_url must be set, and the tenant must have a real
 // JWT_SECRET/SETUP_SECRET on Railway — otherwise set-credentials uses a random
 // per-boot secret and (correctly) rejects every call with 403.
-router.post('/:id/provision/owner-login', async (req, res) => {
+router.post('/:id/provision/owner-login', adminOnly, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const cur = await pool.query('SELECT * FROM clients WHERE id = $1', [id]);
@@ -959,7 +969,7 @@ router.get('/:id/security', async (req, res) => {
 
 // Run the live AUTH_SECRET probe against the tenant + persist the result.
 // This is the one check that cannot be hand-ticked — it must be proven.
-router.post('/:id/security/verify', async (req, res) => {
+router.post('/:id/security/verify', adminOnly, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const cur = await pool.query('SELECT * FROM clients WHERE id = $1', [id]);
@@ -1002,7 +1012,7 @@ router.post('/:id/security/verify', async (req, res) => {
 
 // Toggle a MANUAL attestation (admin_pin, tokens_revoked). Auto checks are
 // rejected here — they can only be proven via /security/verify.
-router.put('/:id/security', async (req, res) => {
+router.put('/:id/security', adminOnly, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const { key, value } = req.body || {};

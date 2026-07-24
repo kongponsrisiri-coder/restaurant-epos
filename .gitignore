@@ -33,3 +33,7 @@ client/android/node-host/
 
 # Claude Code local permission grants — machine-personal, never commit
 .claude/settings.local.json
+
+# Never commit local Claude chat exports (SEC-2026-07)
+Claude Chat history/
+*.chat-export.json

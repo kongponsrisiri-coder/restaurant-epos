@@ -158,6 +158,7 @@ Korakot approves posts visually in **Control Room → Social tab → 📋 Approv
 6. **CTA leads with the one-tap channel** — Messenger (on FB) / **WhatsApp 07896 036386** — not "go to our website." Website = "more details" only.
 7. **Reel / video ads are PORTRAIT — 1080×1920 (9:16), vertical only** (Reels / TikTok / Stories / feed). Never landscape or square for a reel. Reel factory (`reel-factory/make-reel.py`) already outputs this — keep it.
 8. **EVERY post caption ends with HASHTAGS** (Korakot 2026-07-23) — relevant to the post's topic AND our product. ~5–8 tags, mix Thai + English + brand + topic (never 20+ spam). On their own line after the — กต / CTA. Always include **#SiamEPOS** + ≥1 audience tag + topic tags. Pull from the bank below; verify each fits the specific post.
+9. **Captions must be SCANNABLE — never a wall of text** (Korakot 2026-07-23). Put a **blank line between distinct blocks/sections** (e.g. each day-born group, each service, intro→body→CTA→hashtags). One idea per line where it aids reading. FB strips leading spaces/indent alignment — use **blank lines**, not spaces, to separate. Skim-test every caption before enqueuing.
 
 ### #️⃣ HASHTAG BANK (mix ~5–8 per post)
 - **Always (brand + UK-Thai audience):** #SiamEPOS · #ร้านอาหารไทยในอังกฤษ · #ThaiRestaurantUK · #คนไทยในยูเค · #ThaiFoodUK

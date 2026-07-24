@@ -399,7 +399,11 @@
     if (!window.Stripe) {
       await loadScript('https://js.stripe.com/v3/');
     }
-    stripe = window.Stripe(state.pi.publishable_key);
+    // SIAMPAY-002 — platform mode: the PI lives on the client's connected
+    // account, so Stripe.js must be scoped to it.
+    stripe = state.pi.stripe_account
+      ? window.Stripe(state.pi.publishable_key, { stripeAccount: state.pi.stripe_account })
+      : window.Stripe(state.pi.publishable_key);
     elements = stripe.elements({
       clientSecret: state.pi.client_secret,
       appearance: { theme: 'stripe', variables: { colorPrimary: '#1e3a6e' } },

@@ -5,6 +5,9 @@
 2. Add yourself to the "Active Work" table if starting a ticket
 3. Then proceed with whatever Korakot asks
 
+
+**📌 STANDING RULE (Korakot, 2026-07-20): update `TEAM-STATUS.md` IN REAL TIME** — the moment you ship, decide, or hit a blocker, put the row on the board THEN AND THERE, not in a batch at session end. Concurrent sessions read the board live; a stale board causes double work and missed handoffs. (End-of-session tidy-up still applies on top.)
+
 ## ⚠️ END OF EVERY SESSION — DO THIS BEFORE FINISHING
 1. Move your row to "Recently Completed" in `../TEAM-STATUS.md`
 2. Add any handoff notes for Krit, Sam, or Nook

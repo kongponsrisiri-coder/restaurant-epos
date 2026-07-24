@@ -204,6 +204,9 @@ let sendBookingSms = async () => {};
 try {
   const emailSvc = require('./services/emailService');
   sendBookingConfirmation = emailSvc.sendBookingConfirmation;
+  // SEPOS-027 — the SMS sender was never assigned here, so the dormant
+  // stub swallowed every booking SMS even once TWILIO_* env landed.
+  sendBookingSms = emailSvc.sendBookingSms;
   console.log('✅ Email service loaded');
 } catch (e) {
   console.log('ℹ️  Email service not configured yet — skipping');
@@ -1766,18 +1769,62 @@ app.get('/api/orders/:id/bill', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-SEC-LOGIN — brute-force lockout for the PIN login. The till login is a
+// PUBLIC page and the PIN is 4 digits; previously this endpoint had NO throttle
+// at all → unlimited guesses. Failure-based: 8 wrong PINs in 15 min from one IP
+// → that IP is locked 15 min. A good login clears the counter (legit staff who
+// know their PIN are unaffected). Email login stays as the escape hatch.
+const _loginFails = new Map();
+const _FAIL_MAX = 8, _FAIL_WIN = 15 * 60 * 1000;
+function _loginLockedOut(ip) {
+  const now = Date.now();
+  const arr = (_loginFails.get(ip) || []).filter((t) => now - t < _FAIL_WIN);
+  _loginFails.set(ip, arr);
+  if (_loginFails.size > 5000) _loginFails.clear();
+  return arr.length >= _FAIL_MAX;
+}
+function _recordLoginFail(ip) { const a = _loginFails.get(ip) || []; a.push(Date.now()); _loginFails.set(ip, a); }
+const _WEAK_PINS = new Set(['1234', '0000', '1111', '2222', '3333', '4444', '5555', '6666',
+  '7777', '8888', '9999', '4321', '1212', '2580', '0123', '123456', '000000', '111111']);
+function _isWeakPin(p) { return _WEAK_PINS.has(String(p || '')); }
+
 app.post('/api/staff/login', async (req, res) => {
   try {
     const { pin } = req.body;
+    const ip = 'ip:' + (req.ip || req.get('x-forwarded-for') || '');
+    if (_loginLockedOut(ip)) {
+      return res.status(429).json({ error: 'Too many wrong PINs — locked for a few minutes. Try again shortly, or use “Sign in with email”.' });
+    }
     const result = await pool.query('SELECT * FROM staff WHERE pin=$1 AND is_active=1', [pin]);
     const staff = result.rows[0];
-    if (!staff) return res.status(401).json({ error: 'Invalid PIN' });
+    if (!staff) { _recordLoginFail(ip); return res.status(401).json({ error: 'Invalid PIN' }); }
+    _loginFails.delete(ip); // good login — reset brute-force counter for this IP
     // SEPOS-047a — PIN login now issues the same HMAC session token as
     // email login (signToken below), so staff-gated endpoints can verify
     // the caller. Old clients ignore the extra fields harmlessly.
     const exp = Date.now() + 14 * 24 * 60 * 60 * 1000;
     const token = signToken({ sid: staff.id, name: staff.name, role: staff.role, exp });
-    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp });
+    // SEPOS-SEC-LOGIN — an operator still on a weak/default PIN (the seeded 1234)
+    // must set a real one before using the till; the public default can't persist.
+    const must_change_pin = _isWeakPin(pin) && ['admin', 'manager', 'supervisor'].includes(staff.role);
+    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp, must_change_pin });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-SEC-LOGIN — POST /api/staff/change-pin { new_pin } — signed-in staff
+// set their OWN PIN. Used by the forced change off the default. Plaintext PIN
+// (matches the login query) + UNIQUE constraint, so validate + dedupe here.
+app.post('/api/staff/change-pin', requireStaffAuth(), async (req, res) => {
+  try {
+    const newPin = String((req.body || {}).new_pin || '').trim();
+    if (!/^\d{4,6}$/.test(newPin)) return res.status(400).json({ error: 'PIN must be 4–6 digits' });
+    if (_isWeakPin(newPin)) return res.status(400).json({ error: 'That PIN is too easy to guess — pick another' });
+    const myId = req.staffAuth && req.staffAuth.sid;
+    if (!myId) return res.status(401).json({ error: 'not authenticated' });
+    const dup = await pool.query('SELECT id FROM staff WHERE pin=$1 AND id<>$2', [newPin, myId]);
+    if (dup.rows[0]) return res.status(409).json({ error: 'That PIN is already in use — choose another' });
+    await pool.query('UPDATE staff SET pin=$1 WHERE id=$2', [newPin, myId]);
+    res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -4196,6 +4243,123 @@ app.post('/api/website/demo-request', widgetCors, async (req, res) => {
   }
 });
 
+// ─── SEPOS-SALESCHAT-001 — AI sales concierge for the marketing site ───
+// Public: /api/saleschat/message + /poll (CORS-open, rate-limited). Admin
+// (Control Room, x-saleschat-secret gated): list / thread / reply / handoff.
+// handoff=TRUE silences the AI so a human can take over the thread.
+const SALESCHAT_SECRET = process.env.SALESCHAT_SECRET || '';
+const SALESCHAT_SYSTEM = `You are Tara, the friendly assistant for SiamEPOS — a UK restaurant & spa management system built for Thai businesses. You chat with prospective customers on the SiamEPOS marketing website.
+
+WHO YOU ARE
+- Introduce yourself as Tara, the SiamEPOS assistant. Warm, concise, helpful — not salesy.
+- Tara is female. Reply in the visitor's language. In Thai, always use feminine politeness — end sentences with ค่ะ/คะ and refer to yourself as หนู or by your name Tara. Do NOT use the stiff/formal ดิฉัน, and never use the male ครับ/ผม.
+- Be honest: if asked whether you're a person or a bot, say you're SiamEPOS's digital assistant and can connect them with the team. Never pose as a real human staff member.
+
+WHAT SIAMEPOS IS (answer only from this — never invent features or prices)
+- All-in-one till (POS) for Thai restaurants & spas in the UK: table plan + kitchen display (KDS), online reservations, online takeaway ordering (0% commission), spa appointments, customer CRM + email campaigns, reports, staff clock-in, inventory, and you can use any tablet or phone as a terminal.
+- Runs in a browser AND as a desktop app (Mac & Windows), works offline.
+- Add-ons: a client Website (£5/mo), a Social Media service (£39/mo, Facebook + Instagram), SiamPay card payments (1.5% + 30p, no monthly fee), and an AI booking concierge.
+
+PRICING (quote only these; if unsure of a number, say you'll have the team confirm — never guess)
+- SiamEPOS: £89/month. Founder's Rate £59/month for early customers. No long tie-in; free onboarding.
+- Website £5/mo · Social £39/mo · SiamPay 1.5% + 30p.
+
+HOW TO HELP
+- Answer questions about features, pricing, setup and the fit for a Thai UK business.
+- Nudge gently toward a demo: point them to "Book a demo" on this site, or offer to take their name + phone so the team calls them.
+- For a serious buyer, or anything you can't answer, offer to connect them with the team.
+- Keep replies short.`;
+
+function anthropicChat(system, messages) {
+  return new Promise((resolve) => {
+    const body = JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 600, system, messages });
+    const https = require('https');
+    const r = https.request({ hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body),
+                 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' } },
+      (rs) => { let d = ''; rs.on('data', c => d += c); rs.on('end', () => {
+        try { const j = JSON.parse(d); resolve((j.content || []).map(b => b.text || '').join('').trim() || null); }
+        catch { resolve(null); } }); });
+    r.on('error', () => resolve(null)); r.write(body); r.end();
+  });
+}
+const _salesHits = new Map();
+function _salesAllow(ip) { const now = Date.now();
+  const a = (_salesHits.get(ip) || []).filter(t => now - t < 5 * 60 * 1000);
+  if (a.length >= 30) { _salesHits.set(ip, a); return false; }
+  a.push(now); _salesHits.set(ip, a); if (_salesHits.size > 5000) _salesHits.clear(); return true; }
+function salesAdminAuth(req, res, next) {
+  if (!SALESCHAT_SECRET || req.headers['x-saleschat-secret'] !== SALESCHAT_SECRET)
+    return res.status(401).json({ error: 'unauthorized' });
+  next();
+}
+const _salesMsgs = (m) => (typeof m === 'string' ? JSON.parse(m) : m) || [];
+
+app.post('/api/saleschat/message', widgetCors, async (req, res) => {
+  try {
+    const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip;
+    if (!_salesAllow(ip)) return res.status(429).json({ reply: 'One moment — please try again shortly.' });
+    const { session_id, message } = req.body || {};
+    if (typeof session_id !== 'string' || !/^[a-z0-9-]{8,80}$/i.test(session_id)) return res.status(400).json({ error: 'bad session' });
+    const text = String(message || '').trim();
+    if (!text || text.length > 2000) return res.status(400).json({ error: 'bad message' });
+    const cur = (await pool.query('SELECT messages, handoff FROM sales_chats WHERE session_id=$1', [session_id])).rows[0];
+    const msgs = cur ? _salesMsgs(cur.messages) : [];
+    msgs.push({ role: 'user', content: text, ts: new Date().toISOString() });
+    let reply = null;
+    if (cur && cur.handoff) {
+      // a human is handling this thread — AI stays quiet; the widget poll delivers the human's reply
+    } else if (!process.env.ANTHROPIC_API_KEY) {
+      reply = 'Thanks! Our team will reply shortly — you can also book a demo on this site. 🙏';
+      msgs.push({ role: 'assistant', content: reply, ts: new Date().toISOString() });
+    } else {
+      const aiMsgs = msgs.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }));
+      reply = (await anthropicChat(SALESCHAT_SYSTEM, aiMsgs)) || 'Sorry — I had a hiccup. Please try again, or book a demo on this site.';
+      msgs.push({ role: 'assistant', content: reply, ts: new Date().toISOString() });
+    }
+    await pool.query(`INSERT INTO sales_chats (session_id, messages) VALUES ($1,$2)
+      ON CONFLICT (session_id) DO UPDATE SET messages=$2, updated_at=NOW()`, [session_id, JSON.stringify(msgs)]);
+    res.json({ reply, handoff: !!(cur && cur.handoff) });
+  } catch (e) { console.error('[saleschat] message', e.message); res.status(500).json({ reply: 'Sorry — please try again in a moment.' }); }
+});
+
+app.get('/api/saleschat/poll', widgetCors, async (req, res) => {
+  try {
+    const sid = String(req.query.session_id || ''); const after = parseInt(req.query.after || '0', 10) || 0;
+    const cur = (await pool.query('SELECT messages FROM sales_chats WHERE session_id=$1', [sid])).rows[0];
+    if (!cur) return res.json({ total: 0, messages: [] });
+    const ops = _salesMsgs(cur.messages).filter(m => m.role === 'assistant' && m.operator).map(m => m.content);
+    res.json({ total: ops.length, messages: after < ops.length ? ops.slice(after) : [] });
+  } catch (e) { res.json({ total: 0, messages: [] }); }
+});
+
+app.get('/api/saleschat/admin/conversations', salesAdminAuth, async (req, res) => {
+  const rows = (await pool.query(`SELECT session_id, name, messages, handoff, updated_at FROM sales_chats ORDER BY updated_at DESC LIMIT 100`)).rows;
+  res.json(rows.map(r => { const m = _salesMsgs(r.messages); const last = m[m.length - 1] || {};
+    return { session_id: r.session_id, name: r.name, handoff: !!r.handoff, updated_at: r.updated_at,
+             count: m.length, last: String(last.content || '').slice(0, 90), last_role: last.role, last_operator: !!last.operator }; }));
+});
+app.get('/api/saleschat/admin/conversations/:sid', salesAdminAuth, async (req, res) => {
+  const r = (await pool.query('SELECT session_id,name,messages,handoff FROM sales_chats WHERE session_id=$1', [req.params.sid])).rows[0];
+  if (!r) return res.status(404).json({ error: 'not found' });
+  res.json({ session_id: r.session_id, name: r.name, handoff: !!r.handoff, messages: _salesMsgs(r.messages) });
+});
+app.post('/api/saleschat/admin/conversations/:sid/reply', salesAdminAuth, async (req, res) => {
+  const text = String(req.body?.text || '').trim();
+  if (!text || text.length > 2000) return res.status(400).json({ error: 'text required' });
+  const r = (await pool.query('SELECT messages FROM sales_chats WHERE session_id=$1', [req.params.sid])).rows[0];
+  if (!r) return res.status(404).json({ error: 'not found' });
+  const msgs = _salesMsgs(r.messages);
+  msgs.push({ role: 'assistant', content: text, operator: true, ts: new Date().toISOString() });
+  await pool.query('UPDATE sales_chats SET messages=$2, handoff=TRUE, updated_at=NOW() WHERE session_id=$1', [req.params.sid, JSON.stringify(msgs)]);
+  res.json({ ok: true, handoff: true });
+});
+app.post('/api/saleschat/admin/conversations/:sid/handoff', salesAdminAuth, async (req, res) => {
+  const on = !!req.body?.handoff;
+  await pool.query('UPDATE sales_chats SET handoff=$2, updated_at=NOW() WHERE session_id=$1', [req.params.sid, on]);
+  res.json({ ok: true, handoff: on });
+});
+
 // Helper to convert "HH:MM" string to total minutes
 function toMins(t) {
   const [h, m] = String(t).slice(0, 5).split(':').map(Number);
@@ -5207,6 +5371,343 @@ app.post('/api/ai/help', requireStaffAuthOrSyncSecret(), async (req, res) => {
   }
 });
 
+// SEPOS-CONCIERGE-DEMO — public customer-chat concierge (WhatsApp-bot brain).
+// Grounded per-profile in conciergeService; CORS locked to the profile's own
+// site origins; small per-IP rate limit since this is unauthenticated.
+const _conciergeHits = new Map(); // ip -> [timestamps]
+function _conciergeAllow(ip) {
+  const now = Date.now();
+  const arr = (_conciergeHits.get(ip) || []).filter(t => now - t < 5 * 60 * 1000);
+  if (arr.length >= 25) { _conciergeHits.set(ip, arr); return false; }
+  arr.push(now); _conciergeHits.set(ip, arr);
+  if (_conciergeHits.size > 5000) _conciergeHits.clear(); // memory guard
+  return true;
+}
+function _conciergeCors(req, res) {
+  const concierge = require('./services/conciergeService');
+  const profile = concierge.getProfile(req.params.profile);
+  const origin = req.headers.origin;
+  if (profile && origin && profile.origin_whitelist.includes(origin)) {
+    res.set('Access-Control-Allow-Origin', origin);
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.set('Vary', 'Origin');
+  }
+  return profile;
+}
+app.options('/api/concierge/:profile', (req, res) => { _conciergeCors(req, res); res.sendStatus(204); });
+app.post('/api/concierge/:profile', async (req, res) => {
+  try {
+    const concierge = require('./services/conciergeService');
+    const profile = _conciergeCors(req, res);
+    if (!profile) return res.status(404).json({ error: 'unknown profile' });
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
+    if (!_conciergeAllow(ip)) return res.status(429).json({ error: 'slow down a little — try again in a few minutes' });
+    const { messages } = req.body || {};
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.json({ reply: profile.greeting });
+    }
+    const clean = messages
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+      .slice(-12)
+      .map(m => ({ role: m.role, content: m.content.slice(0, 1000) }));
+    if (clean.length === 0 || clean[clean.length - 1].role !== 'user') {
+      return res.status(400).json({ error: 'the last message must be from the user' });
+    }
+    const diary = profile.treatments ? await _conciergeDiary(req.params.profile, profile) : '';
+    const out = await concierge.askConcierge(req.params.profile, clean, diary);
+    const reply = out.reply || profile.fallback || 'Sorry — please try again in a moment.';
+    // Owner-inbox transcript (fire-and-forget; never blocks the reply).
+    const sid = typeof req.body.session_id === 'string' && /^[a-z0-9-]{8,64}$/i.test(req.body.session_id)
+      ? req.body.session_id : null;
+    if (sid) {
+      const userMsg = clean[clean.length - 1].content;
+      pool.query(
+        `INSERT INTO concierge_messages (profile, session_id, role, content) VALUES ($1,$2,$3,$4)`,
+        [req.params.profile, sid, 'user', userMsg]
+      ).then(() => pool.query(
+        `INSERT INTO concierge_messages (profile, session_id, role, content) VALUES ($1,$2,$3,$4)`,
+        [req.params.profile, sid, 'assistant', reply]
+      )).catch(e => console.error('[concierge] transcript insert failed:', e.message));
+    }
+    res.json({ reply });
+  } catch (err) {
+    console.error('POST /api/concierge error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Live diary grounding: booked ranges for the next 7 days, computed server-side
+// so the AI reads availability instead of inventing it. One-therapist demo model.
+const LONDON = 'Europe/London';
+function _lonDate(d) { return d.toLocaleDateString('en-GB', { timeZone: LONDON, weekday: 'short', day: 'numeric', month: 'short' }); }
+function _lonHM(d) { return d.toLocaleTimeString('en-GB', { timeZone: LONDON, hour: '2-digit', minute: '2-digit', hour12: false }); }
+function _lonYMD(d) { return d.toLocaleDateString('en-CA', { timeZone: LONDON }); }
+async function _conciergeDiary(profileId, profile) {
+  try {
+    const now = new Date();
+    const r = await pool.query(
+      `SELECT customer_name, treatment, minutes, start_at FROM concierge_bookings
+       WHERE profile = $1 AND status <> 'cancelled' ORDER BY start_at ASC LIMIT 200`, [profileId]);
+    const byDay = new Map();
+    r.rows.forEach(b => {
+      const start = new Date(b.start_at);
+      const end = new Date(start.getTime() + b.minutes * 60000);
+      if (end < now || start.getTime() > now.getTime() + 7 * 86400000) return;
+      const key = _lonYMD(start);
+      if (!byDay.has(key)) byDay.set(key, []);
+      byDay.get(key).push(_lonHM(start) + '–' + _lonHM(end));
+    });
+    const lines = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now.getTime() + i * 86400000);
+      const booked = byDay.get(_lonYMD(d));
+      lines.push(_lonDate(d) + ' (' + _lonYMD(d) + '): ' + (booked && booked.length ? 'booked ' + booked.join(', ') : 'free all day'));
+    }
+    return 'DIARY — right now it is ' + _lonDate(now) + ' ' + _lonHM(now)
+      + ' (UK time). Open ' + String(profile.open_hour).padStart(2, '0') + ':00–' + profile.close_hour + ':00 daily. Booked ranges for the next 7 days:\n'
+      + lines.join('\n')
+      + '\nEverything not listed as booked (and inside opening hours, finishing by close, and not in the past) is available.';
+  } catch (e) {
+    console.error('[concierge] diary build failed:', e.message);
+    return '';
+  }
+}
+
+// Booking creation — validates the slot server-side (hours + overlap) so a
+// stale/hand-edited link can never double-book. Demo payment (SEPOS-034
+// mock-pay pattern); real Stripe lands when the client signs.
+app.post('/api/concierge/:profile/book', async (req, res) => {
+  try {
+    const concierge = require('./services/conciergeService');
+    const profile = _conciergeCors(req, res) || concierge.getProfile(req.params.profile);
+    if (!profile || !profile.treatments) return res.status(404).json({ error: 'unknown profile' });
+    const { t, d, when, name, phone, session_id } = req.body || {};
+    const treatment = profile.treatments[t];
+    const minutes = parseInt(d, 10);
+    if (!treatment) return res.status(400).json({ error: 'Unknown treatment.' });
+    if (!treatment.prices[minutes]) return res.status(400).json({ error: 'That duration is not offered for this treatment.' });
+    if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'Please give a name for the booking.' });
+    if (!phone || String(phone).replace(/\D/g, '').length < 10) return res.status(400).json({ error: 'Please give a contact number so May can reach you.' });
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(when))) return res.status(400).json({ error: 'Invalid time.' });
+    const start = new Date(when + ':00+01:00'); // demo: UK summer offset
+    const end = new Date(start.getTime() + minutes * 60000);
+    if (isNaN(start) || start < new Date()) return res.status(400).json({ error: 'That time is in the past — please pick a new one in the chat.' });
+    const sh = parseInt(when.slice(11, 13), 10), sm = parseInt(when.slice(14, 16), 10);
+    const endMins = sh * 60 + sm + minutes;
+    if (sh < profile.open_hour || endMins > profile.close_hour * 60) {
+      return res.status(400).json({ error: 'That time falls outside opening hours (10am–8pm).' });
+    }
+    // Overlap check in JS (dialect-safe).
+    const dayRows = await pool.query(
+      `SELECT minutes, start_at FROM concierge_bookings WHERE profile = $1 AND status <> 'cancelled'`, [req.params.profile]);
+    const clash = dayRows.rows.some(b => {
+      const bs = new Date(b.start_at); const be = new Date(bs.getTime() + b.minutes * 60000);
+      return bs < end && be > start;
+    });
+    if (clash) return res.status(409).json({ error: 'Sorry — that slot has just been taken. Pop back to the chat and pick another time.' });
+    await pool.query(
+      `INSERT INTO concierge_bookings (profile, session_id, customer_name, customer_phone, treatment, minutes, start_at, deposit_gbp, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'paid_demo')`,
+      [req.params.profile, (typeof session_id === 'string' && session_id.slice(0, 64)) || null,
+       String(name).trim().slice(0, 120), String(phone).trim().slice(0, 40),
+       treatment.label, minutes, start.toISOString(), profile.deposit_gbp || 0]);
+    res.json({ ok: true, label: treatment.label, price: treatment.prices[minutes], deposit: profile.deposit_gbp || 0 });
+  } catch (err) {
+    console.error('POST /api/concierge/book error:', err);
+    res.status(500).json({ error: 'Something went wrong — please try again.' });
+  }
+});
+
+// The booking + demo-payment page the bot links to. Mobile-first, self-contained.
+app.get('/concierge-book/:profile', (req, res) => {
+  const concierge = require('./services/conciergeService');
+  const profile = concierge.getProfile(req.params.profile);
+  if (!profile || !profile.treatments) return res.status(404).send('Not found');
+  const t = String(req.query.t || ''); const d = parseInt(req.query.d, 10);
+  const when = String(req.query.when || ''); const name = String(req.query.name || '').slice(0, 60);
+  const tr = profile.treatments[t];
+  const ok = tr && tr.prices[d] && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(when);
+  const price = ok ? tr.prices[d] : 0; const dep = profile.deposit_gbp || 0;
+  const whenNice = ok ? new Date(when + ':00+01:00').toLocaleString('en-GB', { timeZone: LONDON, weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '';
+  const e = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  res.type('html').send(`<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex">
+<title>Book — ${e(profile.display_name)}</title><style>
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F8F1E8;min-height:100dvh;display:flex;flex-direction:column;align-items:center;padding:0 16px 40px}
+header{background:#2E362E;color:#fff;width:100vw;padding:calc(env(safe-area-inset-top) + 16px) 20px 16px;text-align:center}
+h1{font-size:18px;font-weight:600}.sub{font-size:12.5px;opacity:.8;margin-top:2px}
+.card{background:#fff;border-radius:14px;box-shadow:0 4px 18px rgba(0,0,0,.08);max-width:430px;width:100%;margin-top:20px;padding:22px}
+.rowl{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #f0ece4;font-size:15px}
+.rowl b{text-align:right}.tot{font-size:16px;border-bottom:none;padding-top:12px}
+label{display:block;font-size:13px;color:#556;margin:14px 0 5px}
+input{width:100%;padding:12px;border:1px solid #ddd;border-radius:9px;font-size:16px}
+button{width:100%;margin-top:18px;padding:15px;border:none;border-radius:10px;background:#2E362E;color:#fff;font-size:16px;font-weight:600;cursor:pointer}
+button:disabled{opacity:.6}.demo{margin-top:10px;text-align:center;font-size:11.5px;color:#998}
+.err{background:#fdecea;color:#b3261e;border-radius:9px;padding:12px;font-size:14px;margin-top:14px;display:none}
+.done{display:none;text-align:center;padding:14px 0}.done .tick{font-size:52px}.done h2{font-size:19px;margin:10px 0 6px}.done p{color:#556;font-size:14.5px;line-height:1.5}
+</style></head><body>
+<header><h1>${e(profile.display_name)}</h1><div class="sub">Secure booking · Kensington Church Street, W8</div></header>
+<div class="card" id="card">${ok ? `
+  <div class="rowl"><span>Treatment</span><b>${e(tr.label)}</b></div>
+  <div class="rowl"><span>Duration</span><b>${d} minutes</b></div>
+  <div class="rowl"><span>When</span><b>${e(whenNice)}</b></div>
+  <div class="rowl"><span>Price on the day</span><b>£${price - dep} (after deposit)</b></div>
+  <div class="rowl tot"><span>Deposit to pay now</span><b>£${dep}</b></div>
+  <label>Your name</label><input id="nm" value="${e(name)}" autocomplete="name">
+  <label>Mobile number (May will confirm on this)</label><input id="ph" type="tel" inputmode="tel" autocomplete="tel" placeholder="07…">
+  <button id="pay">Pay £${dep} deposit &amp; confirm</button>
+  <div class="demo">Demo checkout — no real card is charged. Live payments use Stripe.</div>
+  <div class="err" id="err"></div>
+  <div class="done" id="done"><div class="tick">✅</div><h2>Booking confirmed!</h2><p id="dmsg"></p></div>
+` : `<div class="done" style="display:block"><div class="tick">🤔</div><h2>This link looks incomplete</h2><p>Please go back to the chat and ask for a fresh booking link.</p></div>`}</div>
+${ok ? `<script>
+var q=new URLSearchParams(location.search);
+document.getElementById('pay').addEventListener('click',function(){
+  var b=this;b.disabled=true;b.textContent='Processing…';
+  var err=document.getElementById('err');err.style.display='none';
+  fetch('/api/concierge/${e(req.params.profile)}/book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    t:q.get('t'),d:q.get('d'),when:q.get('when'),name:document.getElementById('nm').value,phone:document.getElementById('ph').value,session_id:(function(){try{return sessionStorage.getItem('jw-sid')||null}catch(e){return null}})()
+  })}).then(function(r){return r.json().then(function(j){return{s:r.status,j:j}})}).then(function(x){
+    if(x.j&&x.j.ok){
+      ['nm','ph','pay'].forEach(function(i){document.getElementById(i).style.display='none'});
+      document.querySelector('.demo').style.display='none';
+      var dn=document.getElementById('done');dn.style.display='block';
+      document.getElementById('dmsg').textContent='£'+x.j.deposit+' deposit received (demo). '+x.j.label+' — see you then! May has your booking and will message if anything changes.';
+    } else { err.textContent=(x.j&&x.j.error)||'Something went wrong — try again.';err.style.display='block';b.disabled=false;b.textContent='Pay £${dep} deposit & confirm'; }
+  }).catch(function(){err.textContent='Connection problem — try again.';err.style.display='block';b.disabled=false;b.textContent='Pay £${dep} deposit & confirm';});
+});
+</script>` : ''}</body></html>`);
+});
+
+// Owner inbox (demo): private-key URL, mobile-first. Real product = SiamSpa admin tab.
+function _conciergeInboxAuth(req, res) {
+  const concierge = require('./services/conciergeService');
+  const profile = concierge.getProfile(req.params.profile);
+  if (!profile || !profile.inbox_key || req.query.key !== profile.inbox_key) {
+    res.status(404).json({ error: 'not found' });
+    return null;
+  }
+  return profile;
+}
+const CONCIERGE_BOOKING_RE = /book|จอง|appointment|reserve|tomorrow|tonight|พรุ่งนี้|คืนนี้/i;
+app.get('/api/concierge/:profile/inbox', async (req, res) => {
+  try {
+    if (!_conciergeInboxAuth(req, res)) return;
+    const r = await pool.query(
+      `SELECT session_id, role, content, created_at FROM concierge_messages
+       WHERE profile = $1 ORDER BY id DESC LIMIT 600`, [req.params.profile]);
+    const sessions = new Map();
+    // rows are newest-first; first row seen per session = its latest message
+    r.rows.forEach(m => {
+      let s = sessions.get(m.session_id);
+      if (!s) {
+        s = { session_id: m.session_id, last_at: m.created_at, preview: '', count: 0, booking: false };
+        sessions.set(m.session_id, s);
+      }
+      s.count++;
+      if (!s.preview && m.role === 'user') s.preview = String(m.content).slice(0, 120);
+      if (m.role === 'user' && CONCIERGE_BOOKING_RE.test(m.content)) s.booking = true;
+    });
+    let bookings = [];
+    try {
+      const br = await pool.query(
+        `SELECT customer_name, customer_phone, treatment, minutes, start_at, deposit_gbp, status
+         FROM concierge_bookings WHERE profile = $1 AND status <> 'cancelled'
+         ORDER BY start_at ASC LIMIT 100`, [req.params.profile]);
+      const cutoff = Date.now() - 12 * 3600000;
+      bookings = br.rows.filter(b => new Date(b.start_at).getTime() > cutoff);
+    } catch (e) { /* table may not exist on old tills — inbox still works */ }
+    res.json({ sessions: Array.from(sessions.values()).slice(0, 60), bookings });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.get('/api/concierge/:profile/thread/:session', async (req, res) => {
+  try {
+    if (!_conciergeInboxAuth(req, res)) return;
+    const r = await pool.query(
+      `SELECT role, content, created_at FROM concierge_messages
+       WHERE profile = $1 AND session_id = $2 ORDER BY id ASC LIMIT 200`,
+      [req.params.profile, req.params.session]);
+    res.json({ messages: r.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.get('/concierge-inbox/:profile', (req, res) => {
+  const profile = _conciergeInboxAuth(req, res);
+  if (!profile) return;
+  const name = profile.display_name || req.params.profile;
+  res.type('html').send(`<!doctype html><html><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex"><title>${name} — Chat inbox</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#ECE5DD;min-height:100dvh}
+  header{background:#075E54;color:#fff;padding:calc(env(safe-area-inset-top) + 14px) 16px 14px;position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px}
+  header h1{font-size:17px;font-weight:600;flex:1}
+  header .sub{font-size:12px;opacity:.85}
+  #back{display:none;background:none;border:none;color:#fff;font-size:24px;padding:2px 8px 2px 0;cursor:pointer}
+  .row{background:#fff;padding:14px 16px;border-bottom:1px solid #eee;display:flex;gap:12px;align-items:center;cursor:pointer}
+  .row:active{background:#f2f2f2}
+  .ava{width:46px;height:46px;border-radius:50%;background:#2E362E;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;flex:none;font-size:15px}
+  .mid{flex:1;min-width:0}
+  .who{font-weight:600;font-size:15px;display:flex;gap:6px;align-items:center}
+  .pv{color:#667;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
+  .meta{text-align:right;flex:none}
+  .t{color:#889;font-size:12px}
+  .n{display:inline-block;background:#25D366;color:#fff;border-radius:10px;font-size:11px;padding:1px 7px;margin-top:5px}
+  .pin{font-size:13px}
+  .empty{padding:48px 24px;text-align:center;color:#778}
+  #thread{display:none;padding:12px;flex-direction:column;gap:8px}
+  .b{max-width:84%;padding:8px 12px;border-radius:10px;font-size:14.5px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word;box-shadow:0 1px 1px rgba(0,0,0,.08)}
+  .u{background:#fff;align-self:flex-start;border-top-left-radius:2px}
+  .a{background:#DCF8C6;align-self:flex-end;border-top-right-radius:2px}
+  .b .ts{display:block;font-size:10.5px;color:#99a;margin-top:4px;text-align:right}
+  .note{font-size:11.5px;color:#889;text-align:center;padding:10px}
+</style></head><body>
+<header><button id="back" aria-label="Back">&#8249;</button><div style="flex:1"><h1>${name}</h1><div class="sub" id="sub">Customer chats · AI assistant</div></div></header>
+<div id="list"></div><div id="thread"></div>
+<div class="note">Guests are anonymous until they share contact details in chat. 📌 = possible booking request.</div>
+<script>
+var KEY=new URLSearchParams(location.search).get('key');
+var P=${JSON.stringify(req.params.profile)};
+var listEl=document.getElementById('list'),thEl=document.getElementById('thread'),backEl=document.getElementById('back'),subEl=document.getElementById('sub');
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function ago(t){var s=(Date.now()-new Date(t).getTime())/1000;if(s<60)return 'now';if(s<3600)return Math.floor(s/60)+'m';if(s<86400)return Math.floor(s/3600)+'h';return Math.floor(s/86400)+'d'}
+function bookingsHtml(bs){
+  if(!bs||!bs.length)return '';
+  return '<div style="background:#E7F6EC;padding:10px 16px;font-size:13px;font-weight:600;color:#1a6b3c">Confirmed bookings · '+bs.length+'</div>'
+    +bs.map(function(b){
+      var w=new Date(b.start_at).toLocaleString('en-GB',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+      return '<div class="row" style="cursor:default"><div class="ava" style="background:#1a6b3c">✓</div>'
+        +'<div class="mid"><div class="who">'+esc(b.customer_name)+' · '+esc(w)+'</div>'
+        +'<div class="pv">'+esc(b.treatment)+' · '+b.minutes+'min · £'+b.deposit_gbp+' deposit paid'+(b.customer_phone?' · '+esc(b.customer_phone):'')+'</div></div></div>';
+    }).join('');
+}
+function load(){fetch('/api/concierge/'+P+'/inbox?key='+encodeURIComponent(KEY)).then(r=>r.json()).then(function(d){
+  var ss=(d&&d.sessions)||[];
+  var bh=bookingsHtml((d&&d.bookings)||[]);
+  if(!ss.length&&!bh){listEl.innerHTML='<div class="empty">No chats yet.<br>They\\'ll appear here the moment a customer messages the assistant.</div>';return}
+  listEl.innerHTML=bh+ss.map(function(s){
+    return '<div class="row" data-s="'+esc(s.session_id)+'"><div class="ava">'+esc(s.session_id.slice(-2).toUpperCase())+'</div>'
+      +'<div class="mid"><div class="who">Guest '+esc(s.session_id.slice(-4))+(s.booking?' <span class="pin">📌</span>':'')+'</div>'
+      +'<div class="pv">'+esc(s.preview||'…')+'</div></div>'
+      +'<div class="meta"><div class="t">'+ago(s.last_at)+'</div><div class="n">'+s.count+'</div></div></div>';
+  }).join('');
+  Array.prototype.forEach.call(listEl.querySelectorAll('.row'),function(r){r.addEventListener('click',function(){openThread(r.getAttribute('data-s'))})});
+})}
+function openThread(sid){
+  fetch('/api/concierge/'+P+'/thread/'+encodeURIComponent(sid)+'?key='+encodeURIComponent(KEY)).then(r=>r.json()).then(function(d){
+    listEl.style.display='none';thEl.style.display='flex';backEl.style.display='block';
+    subEl.textContent='Guest '+sid.slice(-4);
+    thEl.innerHTML=((d&&d.messages)||[]).map(function(m){
+      return '<div class="b '+(m.role==='user'?'u':'a')+'">'+esc(m.content)+'<span class="ts">'+new Date(m.created_at).toLocaleString('en-GB',{hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'})+'</span></div>';
+    }).join('');
+    window.scrollTo(0,document.body.scrollHeight);
+  });
+}
+backEl.addEventListener('click',function(){thEl.style.display='none';backEl.style.display='none';listEl.style.display='block';subEl.textContent='Customer chats · AI assistant';load()});
+load();setInterval(function(){if(listEl.style.display!=='none')load()},25000);
+</script></body></html>`);
+});
+
 app.get('/api/expenses', async (req, res) => {
   try { const result = await pool.query(`SELECT * FROM expenses ORDER BY date DESC, created_at DESC`); res.json(result.rows); }
   catch (err) { res.status(500).json({ error: err.message }); }
@@ -5943,15 +6444,20 @@ app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
     // set both a restaurant postcode and a radius. The widget uses this
     // flag to decide whether to show the Delivery toggle at all.
     const dr = await pool.query(
-      `SELECT key, value FROM settings WHERE key IN ('restaurant_postcode','delivery_radius_miles')`
+      `SELECT key, value FROM settings WHERE key IN ('restaurant_postcode','delivery_radius_miles','takeaway_discount_percent')`
     );
     const cfg = {};
     dr.rows.forEach(row => { cfg[row.key] = row.value; });
     const deliveryEnabled = !!(cfg.restaurant_postcode && Number(cfg.delivery_radius_miles) > 0);
+    // SEPOS-TAKEAWAY-DISCOUNT — optional % off online takeaway orders (Chart
+    // Thai ask, 2026-07-21). 0 = off. Clamped 0–50 as a fat-finger guard; the
+    // order endpoint clamps identically so widget and server always agree.
+    const discountPercent = Math.min(50, Math.max(0, Number(cfg.takeaway_discount_percent) || 0));
     res.json({
       ...(r.rows[0] || {}),
       delivery_enabled: deliveryEnabled,
       delivery_radius_miles: deliveryEnabled ? Number(cfg.delivery_radius_miles) : 0,
+      discount_percent: discountPercent,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6082,12 +6588,16 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
     let verifiedPaymentIntentId = null;
     let verifiedPaymentPence = null;
     if (payment_intent_id) {
-      if (!process.env.STRIPE_SECRET_KEY) {
+      const spVerify = siampayCfg();
+      if (!process.env.STRIPE_SECRET_KEY && !spVerify) {
         return res.status(400).json({ error: 'Stripe not configured — cannot verify payment' });
       }
       try {
-        const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-        const pi = await stripe.paymentIntents.retrieve(payment_intent_id);
+        // SIAMPAY-002 — a SiamPay PI lives on the CONNECTED account, so the
+        // retrieve must carry the stripeAccount header to find it.
+        const pi = spVerify
+          ? await require('stripe')(spVerify.key).paymentIntents.retrieve(payment_intent_id, {}, { stripeAccount: spVerify.account })
+          : await require('stripe')(process.env.STRIPE_SECRET_KEY).paymentIntents.retrieve(payment_intent_id);
         if (pi.status !== 'succeeded') {
           return res.status(402).json({ error: `Payment not completed (${pi.status})` });
         }
@@ -6217,11 +6727,28 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
       total += it.server_price * (Number(it.quantity) || 1);
     }
 
+    // SEPOS-TAKEAWAY-DISCOUNT — optional % off online orders (Chart Thai,
+    // 2026-07-21). Applied server-side BEFORE the paid-amount check so a
+    // tampered widget can't claim a bigger discount than the setting allows;
+    // clamped identically to /api/takeaway/settings so both sides agree.
+    let discountPercent = 0;
+    try {
+      const dset = await client.query(`SELECT value FROM settings WHERE key = 'takeaway_discount_percent'`);
+      discountPercent = Math.min(50, Math.max(0, Number(dset.rows[0]?.value) || 0));
+    } catch { /* setting absent → no discount */ }
+    if (discountPercent > 0) {
+      total = Math.round(total * (1 - discountPercent / 100) * 100) / 100;
+    }
+
     // SEPOS-047b — the paid amount must match the server-priced total.
     // A mismatch means menu prices changed mid-checkout or the widget
     // was tampered with; either way the order must not land as 'paid'.
-    if (verifiedPaymentIntentId !== null && verifiedPaymentPence !== Math.round(total * 100)) {
-      console.warn(`[takeaway] PI ${verifiedPaymentIntentId} amount ${verifiedPaymentPence}p != order total ${Math.round(total * 100)}p — rejected`);
+    // SIAMPAY-002 (Korakot 21 Jul): the customer pays the menu price ONLY.
+    // The flat SiamPay fee is application_fee_amount — deducted from the
+    // client's settlement by Stripe, never added on top for the customer.
+    const expectedPence = Math.round(total * 100);
+    if (verifiedPaymentIntentId !== null && verifiedPaymentPence !== expectedPence) {
+      console.warn(`[takeaway] PI ${verifiedPaymentIntentId} amount ${verifiedPaymentPence}p != expected ${expectedPence}p — rejected`);
       return res.status(402).json({ error: 'Payment amount does not match the order total — please refresh and try again' });
     }
 
@@ -6250,11 +6777,11 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
           order_type, customer_name, customer_phone, customer_email,
           pickup_time, takeaway_status, payment_status, payment_intent_id, customer_note,
           order_subtype, delivery_address, delivery_notes, marketing_consent,
-          restaurant_id)
+          restaurant_id, discount_type, discount_value, discount_reason)
        VALUES (NULL, 'open', 1, $1, NOW(),
                'takeaway', $2, $3, $4,
                $5, 'pending', $6, $7, $8,
-               $9, $10, $11, $12, $13)
+               $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING id`,
       [total, customer_name.trim(), customer_phone.trim(), (customer_email || '').trim() || null,
        pickup_time, paymentStatus, verifiedPaymentIntentId, notes || null,
@@ -6262,7 +6789,10 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
        subtype === 'delivery' ? delivery_address.trim() : null,
        subtype === 'delivery' ? (delivery_notes || '').trim() || null : null,
        marketing_consent ? 1 : 0,
-       restaurantId]
+       restaurantId,
+       discountPercent > 0 ? 'percent' : null,
+       discountPercent > 0 ? discountPercent : null,
+       discountPercent > 0 ? 'Online order discount' : null]
     );
     const orderId = orderRes.rows[0].id;
 
@@ -6436,6 +6966,16 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
 // confirm, then confirms client-side, then posts the order with the
 // verified payment_intent_id.
 
+// SIAMPAY-002 v1 — SiamPay mode for tenants WITHOUT their own Stripe keys.
+// Nick's hard rule (board 21 Jul, Korakot-approved): DIRECT charges on the
+// client's connected account — the PaymentIntent lives ON acct_…, money
+// settles to the client (merchant of record), we take a flat
+// application_fee_amount (default 10p). Never destination charges, never
+// transfer_data, never a SiamEPOS balance in the flow (FCA/SEIS posture).
+// A tenant's own STRIPE_SECRET_KEY always wins — existing clients unchanged.
+// TEST MODE ONLY until solicitor + SEIS sign-offs (see SIAMPAY-002 ticket).
+const { siampayCfg } = require('./services/siampay'); // shared with voucherService
+
 app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
   // A restaurant can force mock/demo pay (no card field) even with Stripe keys
   // present, via the `takeaway_mock_pay` setting ('1'). Used for the sales-demo
@@ -6445,6 +6985,18 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
   // deployments (no flag) keep real Stripe untouched.
   let mock = false;
   try { const s = await loadSettings(); mock = String(s.takeaway_mock_pay || '') === '1'; } catch {}
+  const sp = siampayCfg();
+  if (!mock && sp) {
+    // SIAMPAY-002 — widget must init Stripe.js WITH the connected account so
+    // the direct charge confirms in the client's own account context.
+    return res.json({
+      configured: true,
+      publishable_key: sp.pk,
+      stripe_account: sp.account,
+      // No fee_pence: the SiamPay fee comes out of the client's settlement
+      // (application_fee_amount), the customer just pays the menu price.
+    });
+  }
   const configured = !mock && !!process.env.STRIPE_PUBLISHABLE_KEY && !!process.env.STRIPE_SECRET_KEY;
   res.json({
     configured,
@@ -6453,7 +7005,8 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
 });
 
 app.post('/api/takeaway/payment-intent', widgetCors, async (req, res) => {
-  if (!process.env.STRIPE_SECRET_KEY) {
+  const sp = siampayCfg();
+  if (!process.env.STRIPE_SECRET_KEY && !sp) {
     return res.status(503).json({ error: 'Stripe not configured on this restaurant. Please ask the restaurant to switch to demo mode.' });
   }
   const amountPence = Number(req.body?.amount_pence);
@@ -6467,8 +7020,7 @@ app.post('/api/takeaway/payment-intent', widgetCors, async (req, res) => {
     return res.status(400).json({ error: 'Amount too large for online takeaway' });
   }
   try {
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-    const pi = await stripe.paymentIntents.create({
+    const params = {
       amount:   amountPence,
       currency: 'gbp',
       description,
@@ -6480,7 +7032,16 @@ app.post('/api/takeaway/payment-intent', widgetCors, async (req, res) => {
         product:       'siamepos_takeaway',
         restaurant_id: resolveRestaurantId(req),
       },
-    });
+    };
+    let pi;
+    if (sp) {
+      // SIAMPAY-002 — DIRECT charge on the connected account + flat app fee.
+      // The client is merchant of record; the fee is Stripe-ledgered to us.
+      params.application_fee_amount = sp.feePence;
+      pi = await require('stripe')(sp.key).paymentIntents.create(params, { stripeAccount: sp.account });
+    } else {
+      pi = await require('stripe')(process.env.STRIPE_SECRET_KEY).paymentIntents.create(params);
+    }
     res.json({
       client_secret:     pi.client_secret,
       payment_intent_id: pi.id,
@@ -6503,6 +7064,103 @@ app.get('/.well-known/apple-developer-merchantid-domain-association', (req, res)
     return res.status(404).type('text/plain').send('Apple Pay not configured for this domain');
   }
   res.type('text/plain').send(content);
+});
+
+// ── SIAMPAY-QR-001 — dine-in QR pay-by-link (Nick's addendum, 21 Jul) ─────
+// Waiter rings up the bill → the till requests a Stripe Checkout session →
+// shows the QR → customer scans and pays with Apple Pay / Google Pay / card
+// → the till polls status and closes the bill through the normal pay flow
+// (method 'QR Card' — buckets as 'Other' on Z, correct because the money
+// arrives via Stripe payout, not the card machine).
+//
+// Rails: same decision as everywhere else — tenant's own STRIPE_SECRET_KEY,
+// else SiamPay platform mode (direct charge on the connected account + flat
+// app fee via payment_intent_data). Stripe-HOSTED Checkout is what makes
+// Apple/Google Pay appear with zero domain setup — checkout.stripe.com is
+// pre-registered, so scan-to-pay is one tap on any modern phone.
+function qrPayRail() {
+  const sp = siampayCfg();
+  if (sp) return { key: sp.key, opts: { stripeAccount: sp.account }, feePence: sp.feePence };
+  if (process.env.STRIPE_SECRET_KEY) return { key: process.env.STRIPE_SECRET_KEY, opts: {}, feePence: 0 };
+  return null;
+}
+
+app.post('/api/orders/:id/qr-pay', requireValidLicense, async (req, res) => {
+  const rail = qrPayRail();
+  if (!rail) return res.status(503).json({ error: 'No card rail configured — set up SiamPay (or Stripe keys) to use QR pay' });
+  const amountPence = Math.round(Number(req.body?.amount) * 100);
+  if (!Number.isInteger(amountPence) || amountPence < 30) {
+    return res.status(400).json({ error: 'Invalid amount (minimum 30p)' });
+  }
+  if (amountPence > 500000) {
+    return res.status(400).json({ error: 'Amount too large for QR pay' });
+  }
+  try {
+    const ord = await pool.query(
+      `SELECT o.id, o.status, t.name AS table_name, t.table_number
+         FROM orders o LEFT JOIN tables t ON t.id = o.table_id
+        WHERE o.id = $1`, [req.params.id]);
+    const order = ord.rows[0];
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.status !== 'open') return res.status(409).json({ error: `This bill is already ${order.status}` });
+    const tableLabel = order.table_name || (order.table_number != null ? `Table ${order.table_number}` : `Order #${order.id}`);
+    const rn = process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant';
+    const params = {
+      mode: 'payment',
+      line_items: [{
+        quantity: 1,
+        price_data: {
+          currency: 'gbp',
+          unit_amount: amountPence,
+          product_data: { name: `${rn} — ${tableLabel}` },
+        },
+      }],
+      // Checkout minimum is 30 min; the till's QR modal is the real timeout.
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+      metadata: { purpose: 'qr_bill', order_id: String(order.id), product: 'siamepos_qr_pay' },
+      success_url: `${req.protocol}://${req.get('host')}/qr-pay-thanks`,
+      cancel_url:  `${req.protocol}://${req.get('host')}/qr-pay-thanks?status=cancelled`,
+    };
+    if (rail.feePence > 0) params.payment_intent_data = { application_fee_amount: rail.feePence };
+    const session = await require('stripe')(rail.key).checkout.sessions.create(params, rail.opts);
+    res.json({ session_id: session.id, url: session.url, amount_pence: amountPence });
+  } catch (err) {
+    console.error('[qr-pay] create', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/orders/:id/qr-pay/status', requireValidLicense, async (req, res) => {
+  const rail = qrPayRail();
+  if (!rail) return res.status(503).json({ error: 'No card rail configured' });
+  const sessionId = String(req.query.session_id || '');
+  if (!sessionId.startsWith('cs_')) return res.status(400).json({ error: 'session_id required' });
+  try {
+    const sess = await require('stripe')(rail.key).checkout.sessions.retrieve(sessionId, {}, rail.opts);
+    // The session must belong to THIS order — stops a paid session for a £5
+    // bill being replayed to close someone else's £80 bill.
+    if (String(sess.metadata?.order_id) !== String(req.params.id)) {
+      return res.status(400).json({ error: 'session does not match this order' });
+    }
+    res.json({
+      paid: sess.payment_status === 'paid',
+      status: sess.status,
+      amount_total: sess.amount_total,
+    });
+  } catch (err) {
+    console.error('[qr-pay] status', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Tiny customer-facing landing after Checkout — they just show the till.
+app.get('/qr-pay-thanks', (req, res) => {
+  const cancelled = req.query.status === 'cancelled';
+  res.type('html').send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
+<body style="margin:0;font-family:system-ui,-apple-system,sans-serif;background:#0D1B3E;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center">
+<div style="padding:32px"><div style="font-size:64px">${cancelled ? '↩️' : '✅'}</div>
+<h1 style="margin:12px 0 8px;font-size:24px">${cancelled ? 'Payment cancelled' : 'Payment received!'}</h1>
+<p style="opacity:.8;font-size:16px">${cancelled ? 'No charge was made — please see a member of staff.' : 'Thank you — your server will confirm it on the till. You can close this page.'}</p></div></body>`);
 });
 
 // Active takeaway orders — for kitchen view + Mac sync pull.
@@ -6544,7 +7202,17 @@ app.post('/api/widget/voucher/purchase', widgetCors, async (req, res) => {
   try {
     const v = voucherSvc.validateAmount(req.body?.amount);
     if (!v.ok) return res.status(400).json({ error: v.error });
-    const pi = await voucherSvc.createPaymentIntent(v.amount);
+    // Demo tenants force mock pay via the same flag the takeaway widget
+    // honours — otherwise a SiamPay/own-keys tenant in TEST mode would show
+    // prospects a real card form their own cards can't complete.
+    let mock = false;
+    try { const s = await loadSettings(); mock = String(s.takeaway_mock_pay || '') === '1'; } catch {}
+    const pi = mock
+      ? { mode: 'mock',
+          payment_intent_id: 'mock_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+          client_secret: 'mock_secret_no_real_payment',
+          publishable_key: null }
+      : await voucherSvc.createPaymentIntent(v.amount);
     res.json({ ...pi, amount: v.amount });
   } catch (err) {
     console.error('[voucher] purchase', err);
@@ -6561,7 +7229,12 @@ app.post('/api/widget/voucher/confirm', widgetCors, async (req, res) => {
     } = req.body || {};
     const v = voucherSvc.validateAmount(amount);
     if (!v.ok) return res.status(400).json({ error: v.error });
-    const verify = await voucherSvc.verifyPaymentIntent(payment_intent_id, v.amount);
+    // allowMock mirrors the purchase endpoint's demo-flag decision, so a
+    // demo tenant's mock voucher confirms but a paying tenant can't be
+    // tricked with a hand-crafted "mock_" id.
+    let mockOk = false;
+    try { const s = await loadSettings(); mockOk = String(s.takeaway_mock_pay || '') === '1'; } catch {}
+    const verify = await voucherSvc.verifyPaymentIntent(payment_intent_id, v.amount, { allowMock: mockOk });
     if (!verify.ok) return res.status(402).json({ error: verify.error });
     // Re-trust server's amount_paid over client's amount — defends
     // against the client submitting a £500 PI then asking for a £1000
@@ -7436,6 +8109,7 @@ async function sendTakeawayConfirmation({ order_id, customer_name, customer_emai
   const { sendBrevoEmail } = require('./services/emailService');
   if (!process.env.BREVO_API_KEY) return;
   const restaurantName = process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant';
+  const th = await require('./services/brandTheme').getBrandTheme(); // restaurant's own brand colours
   const orderNumber = 'T' + String(order_id).padStart(4, '0');
   const pickupDate = new Date(pickup_time);
   // Pin to Europe/London — Railway runs in UTC so without timeZone the
@@ -7451,12 +8125,12 @@ async function sendTakeawayConfirmation({ order_id, customer_name, customer_emai
   const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f5f5f5;font-family:system-ui,sans-serif;color:#1a1a2e;">
   <table cellpadding="0" cellspacing="0" width="100%" style="background:#f5f5f5;padding:24px 0;"><tr><td align="center">
     <table cellpadding="0" cellspacing="0" width="600" style="max-width:600px;background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
-      <tr><td style="background:#0D1B3E;padding:24px 30px;color:#C9A84C;font-family:Georgia,serif;font-size:24px;font-weight:700;">${restaurantName}</td></tr>
+      <tr><td style="background:${th.primaryHex};padding:24px 30px;color:${th.accentHex};font-family:Georgia,serif;font-size:24px;font-weight:700;">${restaurantName}</td></tr>
       <tr><td style="padding:30px;font-size:15px;line-height:1.6;color:#1a1a2e;">
         <p>Hi ${String(customer_name).replace(/[<>]/g,'')},</p>
         <p>Thanks for your takeaway order. We'll have it ready for collection at:</p>
         <p style="background:#fef3c7;padding:14px 18px;border-radius:10px;font-weight:700;text-align:center;">🥡 ${pickupStr}</p>
-        <p>Your order number is <strong style="font-size:18px;color:#C9A84C;">${orderNumber}</strong> — please quote this when collecting.</p>
+        <p>Your order number is <strong style="font-size:18px;color:${th.primaryHex};">${orderNumber}</strong> — please quote this when collecting.</p>
         <table style="width:100%;border-collapse:collapse;margin:14px 0;font-size:14px;">
           ${itemRows}
           <tr><td style="padding:10px 0 6px;border-top:2px solid #eee;font-weight:800;">Total</td>
@@ -7524,7 +8198,9 @@ function parseUnsubscribeToken(token) {
   } catch { return null; }
 }
 
-function buildCampaignEmail({ subject, body, customer_name, customer_email, restaurantName, restaurantAddress }) {
+function buildCampaignEmail({ subject, body, customer_name, customer_email, restaurantName, restaurantAddress, th }) {
+  const primaryHex = (th && th.primaryHex) || '#0D1B3E'; // restaurant brand, SiamEPOS navy fallback
+  const accentHex  = (th && th.accentHex)  || '#C9A84C';
   const safeName = (customer_name || 'there').replace(/[<>]/g, '');
   const personalisedBody = String(body || '').replace(/\{\{\s*name\s*\}\}/gi, safeName);
   const unsubUrl = `${process.env.PUBLIC_API_URL || 'https://restaurant-epos-production.up.railway.app'}/api/unsubscribe?token=${encodeURIComponent(unsubscribeToken(customer_email))}`;
@@ -7534,7 +8210,7 @@ function buildCampaignEmail({ subject, body, customer_name, customer_email, rest
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f5f5f5;padding:24px 0;">
     <tr><td align="center">
       <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
-        <tr><td style="background:#0D1B3E;padding:24px 30px;color:#C9A84C;font-family:Georgia,serif;font-size:24px;font-weight:700;">${restaurantName}</td></tr>
+        <tr><td style="background:${primaryHex};padding:24px 30px;color:${accentHex};font-family:Georgia,serif;font-size:24px;font-weight:700;">${restaurantName}</td></tr>
         <tr><td style="padding:30px;line-height:1.6;font-size:15px;color:#1a1a2e;">${personalisedBody}</td></tr>
         <tr><td style="padding:20px 30px;background:#fafafa;border-top:1px solid #eee;font-size:11px;color:#888;line-height:1.5;">
           <div style="margin-bottom:6px;"><strong>${restaurantName}</strong>${restaurantAddress ? ' · ' + restaurantAddress : ''}</div>
@@ -7658,6 +8334,7 @@ app.post('/api/campaigns/send', requireStaffAuth(['admin', 'manager', 'superviso
     const restaurantName    = process.env.RESTAURANT_NAME    || 'SiamEPOS Restaurant';
     const restaurantAddress = process.env.RESTAURANT_ADDRESS || '';
     const { sendBrevoEmail } = require('./services/emailService');
+    const th = await require('./services/brandTheme').getBrandTheme(); // restaurant brand — fetched once for the whole send
 
     let sent = 0, failed = 0;
     for (const c of recipients) {
@@ -7665,7 +8342,7 @@ app.post('/api/campaigns/send', requireStaffAuth(['admin', 'manager', 'superviso
         subject, body,
         customer_name:  c.customer_name,
         customer_email: c.customer_email,
-        restaurantName, restaurantAddress,
+        restaurantName, restaurantAddress, th,
       });
       try {
         await sendBrevoEmail(c.customer_email, subject, html);

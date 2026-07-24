@@ -299,3 +299,13 @@ Always give complete files, never partial snippets.
 Explain every step clearly — Korakot is learning.
 Reference CLAUDE.md for additional technical detail.
 ```
+
+**📌 STANDING RULE (Korakot, 2026-07-20): update `TEAM-STATUS.md` IN REAL TIME** — the moment you ship, decide, or hit a blocker, put the row on the board THEN AND THERE, not in a batch at session end. Concurrent sessions read the board live; a stale board causes double work and missed handoffs. (End-of-session tidy-up still applies on top.)
+
+**📜 KORAKOT'S PRODUCT & ENGINEERING RULES (taught in-session, overnight 20–21 Jul 2026 — the rolling master copy lives in TEAM-STATUS.md "KORAKOT'S RULES" section; append new ones BOTH places):**
+1. Right lane, right stack — build a client's features on their product's stack (spa client → siamepos-spa, not the restaurant cloud "because it's handy").
+2. AI reads real data, never invents — availability/prices/rota via live server-side tools; if the bot can't look it up, give it a tool.
+3. Owner-facing surfaces live in Admin, mobile-first — no secret-link pages; owners use phones, in-and-out must be practical.
+4. Escalation keeps the customer in the conversation — collect details, "a person will reply right here shortly"; never bounce to a phone number unless asked.
+5. Payment is always a link (Stripe), never in-chat; deposit-due + no-Stripe must refuse to silently confirm (Sam's W3).
+6. Tokens: no short default expiries for CI/service tokens; secrets stay Korakot-side — agents generate + verify, Korakot pastes.

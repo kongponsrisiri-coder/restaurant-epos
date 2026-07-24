@@ -36,6 +36,8 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS stripe_customer_id     TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_clients_stripe_customer     ON clients (stripe_customer_id);
 CREATE INDEX IF NOT EXISTS idx_clients_stripe_subscription ON clients (stripe_subscription_id);
+-- SIAMPAY-002 Phase B — Connect Express account for clients on SiamPay rails
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS siampay_account TEXT;
 -- Backfill existing rows using a slugified version of restaurant_name
 UPDATE clients SET slug = LOWER(REGEXP_REPLACE(
   SUBSTRING(TRIM(restaurant_name) FROM 1 FOR 20), '[^a-z0-9]+', '-', 'g'))

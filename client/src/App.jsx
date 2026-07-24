@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { startMonitoring, onStatusChange, getServerStatus } from './utils/serverDetect';
 import { getRestaurant, getLicenseState, syncLocalOrders, getSettings, TENANT_MISCONFIGURED, getCurrentSession } from './api';
 import { applyBrandTheme } from './theme'; // SEPOS-BRAND-001 — per-client theme
@@ -253,6 +253,74 @@ export default function App() {
     setStaff(null);
   };
 
+  // ── SEPOS-TILL-LOCK-001 — till security ─────────────────────────────
+  // Two behaviours, both from Settings → Till Security (synced to every till):
+  //   • till_send_lock ('1' default): after sending an order the screen
+  //     returns to the PIN sign-in screen, closing the loop visibly.
+  //   • till_idle_minutes ('2' default, '0' = off): auto sign-out after the
+  //     screen goes untouched, with a 20s "still there?" warning first.
+  // Kitchen/Bar role screens are passive wall displays — never auto-locked.
+  const [tillSec, setTillSec]   = useState({ sendLock: true, idleMin: 2 });
+  const [idleWarn, setIdleWarn] = useState(false); // false | seconds-remaining
+  const lastActivity = useRef(Date.now());
+  const warnStart    = useRef(0);
+
+  // Lock to the PIN screen — unlike the Log out button this keeps any
+  // persisted owner (email-login) session, because it's an auto-lock of the
+  // screen, not a deliberate sign-out of the account.
+  const lockStaff = () => {
+    warnStart.current = 0;
+    setIdleWarn(false);
+    setActiveOrder(null);
+    setScreen(readCounterMode() ? 'counter' : 'tables'); // counter tills come back to counter
+    setStaff(null);
+  };
+
+  // Load the till-security settings on each sign-in (so Settings edits take
+  // effect from the next login, no reload needed).
+  useEffect(() => {
+    if (!staff) return;
+    getSettings().then((s) => {
+      if (s && typeof s === 'object' && !s.error) {
+        setTillSec({
+          sendLock: s.till_send_lock !== '0',
+          idleMin:  parseInt(s.till_idle_minutes ?? '2', 10) || 0,
+        });
+      }
+    }).catch(() => {});
+  }, [staff]);
+
+  // Idle engine: any touch/click/key/scroll resets the clock; when the idle
+  // window elapses a 20s countdown overlay shows, and only then do we lock —
+  // unsent basket state lives in OrderScreen and is intentionally kept on the
+  // table as a draft (items not sent are re-shown when the table reopens).
+  useEffect(() => {
+    if (!staff || staff.role === 'kitchen' || staff.role === 'bar' || !tillSec.idleMin) return;
+    lastActivity.current = Date.now();
+    const bump = () => {
+      lastActivity.current = Date.now();
+      if (warnStart.current) { warnStart.current = 0; setIdleWarn(false); }
+    };
+    const evs = ['pointerdown', 'keydown', 'touchstart', 'wheel'];
+    evs.forEach((e) => window.addEventListener(e, bump, { capture: true, passive: true }));
+    const t = setInterval(() => {
+      if (!warnStart.current) {
+        if (Date.now() - lastActivity.current >= tillSec.idleMin * 60000) {
+          warnStart.current = Date.now();
+          setIdleWarn(20);
+        }
+      } else {
+        const left = Math.ceil((20000 - (Date.now() - warnStart.current)) / 1000);
+        if (left <= 0) lockStaff();
+        else setIdleWarn(left);
+      }
+    }, 1000);
+    return () => {
+      evs.forEach((e) => window.removeEventListener(e, bump, { capture: true }));
+      clearInterval(t);
+    };
+  }, [staff, tillSec.idleMin]);
+
   // ── Status badge ──────────────────────────────────────────────
   const StatusBadge = () => (
     <span style={{
@@ -364,6 +432,10 @@ export default function App() {
                 setActiveOrder(null);
                 setScreen('tables');
               }}
+              /* SEPOS-TILL-LOCK-001 — after a successful send, OrderScreen
+                 flashes "✓ sent" then calls this to return to the PIN screen.
+                 Only passed when the setting is on, so OFF = old behaviour. */
+              onSent={tillSec.sendLock ? lockStaff : undefined}
             />
           ) : (
             <UpgradeLocked feature="Dine-in Ordering" />
@@ -543,6 +615,34 @@ export default function App() {
         />
       )}
       <OnlineOrderPrinter />{/* SEPOS-ANDROID-001 — auto-print incoming online orders (native, headless) */}
+      {/* SEPOS-TILL-LOCK-001 — idle warning: 20s countdown before auto sign-out.
+          Any tap anywhere counts as activity (the capture-phase bump listener
+          resets the timer and dismisses this), so no dedicated button needed —
+          but we show one anyway to make the escape route obvious. */}
+      {staff && idleWarn !== false && (
+        <div style={{
+          position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, zIndex: 100002,
+          background: 'rgba(13,27,62,0.82)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', padding: 24, textAlign: 'center',
+        }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: '32px 36px', maxWidth: 380, boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+            <div style={{ fontSize: 44, marginBottom: 10 }}>⏳</div>
+            <div style={{ fontSize: 19, fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)', marginBottom: 6 }}>
+              Still there, {staff.name}?
+            </div>
+            <div style={{ fontSize: 14, color: '#555', marginBottom: 18 }}>
+              Signing out in <strong>{idleWarn}s</strong> — unsent items stay on the table.
+            </div>
+            <button style={{
+              background: 'var(--brand-accent,#C9A84C)', color: 'var(--brand-primary,#0D1B3E)',
+              border: 'none', borderRadius: 10, padding: '12px 28px', fontWeight: 800,
+              fontSize: 15, cursor: 'pointer',
+            }}>
+              I'm still here
+            </button>
+          </div>
+        </div>
+      )}
       <InstallBanner />
       {updateReady && updateBannerAllowed && (
         <div style={{

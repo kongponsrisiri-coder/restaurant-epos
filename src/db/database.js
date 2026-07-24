@@ -521,6 +521,20 @@ async function initDB() {
     await pool.query(`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS unsubscribed_at TIMESTAMP`); // SEPOS-033
     await pool.query(`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS table_ids TEXT`); // multi-table join — CSV of table ids, table_id stays the primary
 
+    // SEPOS-SALESCHAT-001 — AI sales concierge for the marketing site (siamepos.co.uk).
+    // Cloud-only. One row per web visitor session. handoff=true silences the AI so a
+    // human (Korakot, via the Control Room) can take over the thread.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sales_chats (
+        session_id VARCHAR(80) PRIMARY KEY,
+        name       VARCHAR(120),
+        messages   JSONB DEFAULT '[]'::jsonb,
+        handoff    BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     // SEPOS-PRO-008 — link a bill to the booking it belongs to, for accurate
     // per-customer spend. Placed AFTER the reservations table exists so the FK
     // resolves on a fresh database. ON DELETE SET NULL: deleting a reservation
@@ -885,6 +899,35 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date DESC)`);
 
+    // ── SEPOS-CONCIERGE-DEMO — customer AI-chat transcripts (owner inbox) ──
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS concierge_messages (
+        id SERIAL PRIMARY KEY,
+        profile VARCHAR(50) NOT NULL,
+        session_id VARCHAR(64) NOT NULL,
+        role VARCHAR(10) NOT NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_concierge_session ON concierge_messages(profile, session_id, id)`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS concierge_bookings (
+        id SERIAL PRIMARY KEY,
+        profile VARCHAR(50) NOT NULL,
+        session_id VARCHAR(64),
+        customer_name VARCHAR(120) NOT NULL,
+        customer_phone VARCHAR(40),
+        treatment VARCHAR(60) NOT NULL,
+        minutes INTEGER NOT NULL,
+        start_at TIMESTAMP NOT NULL,
+        deposit_gbp NUMERIC(10,2) DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'paid_demo',
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_concierge_bookings ON concierge_bookings(profile, start_at)`);
+
     // ── SEPOS-BATCH-001 — kitchen batch prep ───────────────────────────
     // batch_recipes is the make-template (e.g. "Red Curry Paste: 5kg from
     // ingredients X+Y+Z, shelf life 5 days"). Creating a batch_recipe
@@ -953,6 +996,34 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
     // not manual entry).
     await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS is_batch BOOLEAN DEFAULT FALSE`);
     await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS batch_recipe_id INTEGER`);
+
+    // SEPOS-LOGIN-SEED — fresh-till default admin (parity with the spa till).
+    // A brand-new till (or one reset for a new client) has no staff, so nobody
+    // can PIN-log-in — the owner had to know to use the email login first. Now
+    // every till without an active admin/manager gets an "Admin / PIN 1234"
+    // account. Guarded so it's a NO-OP for live clients that already have an
+    // admin (Chart Thai, Thann Thai, etc.), and self-healing: if a till ever
+    // loses every admin, the next boot restores a login instead of locking out.
+    // Dialect-safe (no PG-only casts) so it works on cloud PG AND local SQLite
+    // tills. PINs are plaintext here (login matches pin directly), unlike spa.
+    try {
+      const admins = await pool.query(
+        "SELECT COUNT(*) AS n FROM staff WHERE is_active = 1 AND role IN ('admin','manager')",
+      );
+      if (Number(admins.rows[0].n) === 0) {
+        const takenRows = await pool.query('SELECT pin FROM staff');
+        const taken = new Set(takenRows.rows.map((r) => String(r.pin)));
+        let pin = '1234';
+        if (taken.has(pin)) { for (let p = 1000; p <= 9999; p++) { if (!taken.has(String(p))) { pin = String(p); break; } } }
+        await pool.query(
+          "INSERT INTO staff (name, pin, role, is_active) VALUES ('Admin', $1, 'admin', 1)",
+          [pin],
+        );
+        console.warn(`[seed] No active admin — created default admin 'Admin' (PIN ${pin}). CHANGE IT.`);
+      }
+    } catch (e) {
+      console.error('[seed] default-admin seed skipped:', e.message);
+    }
 
     console.log('✅ Database ready');
   } catch (err) {

@@ -55,7 +55,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content
 .book-btn{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);padding:13px 26px;border-radius:10px;font-size:15px;font-weight:800;border:none;cursor:pointer;font-family:'Sarabun',sans-serif;transition:transform 0.2s,box-shadow 0.2s;white-space:nowrap;text-decoration:none;}
 .book-btn:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(201,168,76,0.45);}
 .wa-float{position:fixed;bottom:28px;right:28px;z-index:98;}
-.wa-btn{display:flex;align-items:center;gap:10px;background:#25D366;color:white;padding:13px 20px;border-radius:50px;font-size:14px;font-weight:700;text-decoration:none;box-shadow:0 8px 24px rgba(37,211,102,0.4);}
+.wa-btn{display:flex;align-items:center;gap:10px;background:#0D1B3E;color:#C9A84C;padding:13px 20px;border-radius:50px;font-size:14px;font-weight:700;text-decoration:none;box-shadow:0 8px 24px rgba(37,211,102,0.4);}
 
 /* PAGE HERO */
 .page-hero{background:linear-gradient(160deg,var(--navy) 0%,var(--navy-mid) 100%);padding:140px 60px 90px;text-align:center;position:relative;overflow:hidden;}
@@ -304,13 +304,8 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
 </head>
 <body>
 <script>(function(){var s=null;try{s=localStorage.getItem('siamLang')}catch(e){}var th=(s==='th')||(s===null&&/^th/i.test((navigator.language||navigator.userLanguage||'')));if(th){document.body.classList.add('thai');document.documentElement.lang='th';document.addEventListener('DOMContentLoaded',function(){var b=document.querySelector('.lang-toggle');if(b)b.textContent='EN';});}})();</script>
-
-<div class="wa-float">
-  <a href="https://wa.me/447896036386" target="_blank" class="wa-btn">💬 <span class="lang-en" lang="en">WhatsApp Us</span><span class="lang-th" lang="th">ทักเราทาง WhatsApp</span></a>
-</div>
-
 <nav>
-  <a href="index.html" class="nav-logo"><svg width="170" height="50" viewBox="0 0 340 100" xmlns="http://www.w3.org/2000/svg"><circle cx="52" cy="50" r="44" fill="none" stroke="#C9A84C" stroke-width="1.5"/><circle cx="52" cy="50" r="38" fill="none" stroke="#C9A84C" stroke-width="0.5" opacity="0.28"/><g transform="translate(52,50)"><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/><circle cx="0" cy="0" r="8" fill="#0D1B3E"/><circle cx="0" cy="0" r="4.5" fill="#C9A84C"/></g><line x1="110" y1="16" x2="110" y2="84" stroke="#C9A84C" stroke-width="0.8" opacity="0.32"/><text x="126" y="58" font-family="Georgia, serif" font-size="40" font-weight="700" letter-spacing="-1"><tspan fill="white">Siam</tspan><tspan fill="#C9A84C">EPOS</tspan></text></svg></a>
+  <a href="index.html" class="nav-logo"><img src="assets/siamepos-star.png" alt="SiamEPOS" style="height:46px;width:46px;object-fit:contain"><span style="font-family:Georgia,serif;font-size:25px;font-weight:700;letter-spacing:-0.5px;color:#fff">Siam<span style="color:#C9A84C">EPOS</span></span></a>
   <ul class="nav-links">
     <li><a href="features.html" class="lang-en" lang="en">Products</a><a href="features.html" class="lang-th" lang="th">ผลิตภัณฑ์</a></li>
     <li><a href="siampro.html" class="lang-en" lang="en">SiamEPOS Pro</a><a href="siampro.html" class="lang-th" lang="th">SiamEPOS Pro</a></li>
@@ -386,8 +381,8 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
 
         <a href="book-demo.html" class="btn-gold-big lang-en" lang="en">Book a Free 20-Minute Demo</a>
         <a href="book-demo.html" class="btn-gold-big lang-th" lang="th">จองเดโมฟรี 20 นาที</a>
-        <a href="https://wa.me/447896036386" class="btn-ghost lang-en" lang="en">💬 Ask us anything on WhatsApp</a>
-        <a href="https://wa.me/447896036386" class="btn-ghost lang-th" lang="th">💬 สงสัยอะไร ทักถามทาง WhatsApp ได้เลย</a>
+        <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="btn-ghost lang-en" lang="en">💬 Ask us anything on WhatsApp</a>
+        <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="btn-ghost lang-th" lang="th">💬 สงสัยอะไร ทักถามทาง WhatsApp ได้เลย</a>
       </div>
 
       <!-- RIGHT: feature list -->
@@ -538,7 +533,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
   </div>
   <div class="included-grid">
     <div class="inc-card reveal"><div class="inc-icon">🚀</div><div class="inc-title lang-en" lang="en">Free Setup &amp; Onboarding</div><div class="inc-title lang-th" lang="th">ติดตั้งระบบฟรี พร้อม Onboarding</div><p class="inc-desc lang-en" lang="en">We set everything up for you. Menu, table plan, staff accounts. Most restaurants are live within a day.</p><p class="inc-desc lang-th" lang="th">เราจัดการให้ทุกอย่าง ทั้งเมนู แผนผังโต๊ะ และบัญชีพนักงาน ร้านส่วนใหญ่เปิดใช้งานจริงได้ภายในวันเดียว</p><div class="inc-tag lang-en" lang="en">Free always</div><div class="inc-tag lang-th" lang="th">ฟรีเสมอ</div></div>
-    <div class="inc-card reveal"><div class="inc-icon">🇹🇭</div><div class="inc-title lang-en" lang="en">Thai-Speaking WhatsApp Support</div><div class="inc-title lang-th" lang="th">ซัพพอร์ต WhatsApp ภาษาไทย</div><p class="inc-desc lang-en" lang="en">Message us in Thai anytime. We understand your restaurant because we've worked in them.</p><p class="inc-desc lang-th" lang="th">ทักหาเราเป็นภาษาไทยได้ทุกเมื่อ เราเข้าใจหน้างานร้านอาหารดี เพราะเราเคยทำงานในร้านมาเอง</p><div class="inc-tag lang-en" lang="en">Free always</div><div class="inc-tag lang-th" lang="th">ฟรีเสมอ</div></div>
+    <div class="inc-card reveal"><div class="inc-icon">🇹🇭</div><div class="inc-title lang-en" lang="en">Thai-Speaking Live Chat</div><div class="inc-title lang-th" lang="th">ซัพพอร์ต WhatsApp ภาษาไทย</div><p class="inc-desc lang-en" lang="en">Message us in Thai anytime. We understand your restaurant because we've worked in them.</p><p class="inc-desc lang-th" lang="th">ทักหาเราเป็นภาษาไทยได้ทุกเมื่อ เราเข้าใจหน้างานร้านอาหารดี เพราะเราเคยทำงานในร้านมาเอง</p><div class="inc-tag lang-en" lang="en">Free always</div><div class="inc-tag lang-th" lang="th">ฟรีเสมอ</div></div>
     <div class="inc-card reveal"><div class="inc-icon">☁️</div><div class="inc-title lang-en" lang="en">Cloud Hosting &amp; Backups</div><div class="inc-title lang-th" lang="th">Hosting บนคลาวด์และสำรองข้อมูล</div><p class="inc-desc lang-en" lang="en">Your data is backed up automatically. No servers to manage, no IT person required.</p><p class="inc-desc lang-th" lang="th">ข้อมูลร้านถูกสำรองให้อัตโนมัติ ไม่ต้องดูแลเซิร์ฟเวอร์เอง ไม่ต้องจ้างคน IT</p><div class="inc-tag lang-en" lang="en">Free always</div><div class="inc-tag lang-th" lang="th">ฟรีเสมอ</div></div>
     <div class="inc-card reveal"><div class="inc-icon">📱</div><div class="inc-title lang-en" lang="en">Works on Any Device You Own</div><div class="inc-title lang-th" lang="th">ใช้งานได้ทุกอุปกรณ์ที่มี</div><p class="inc-desc lang-en" lang="en">iPad, Android tablet, phone or laptop — no hardware to buy, no apps to install.</p><p class="inc-desc lang-th" lang="th">iPad แท็บเล็ต Android มือถือ หรือแล็ปท็อปก็ใช้ได้หมด ไม่ต้องซื้อเครื่องใหม่ ไม่ต้องลงแอป</p><div class="inc-tag lang-en" lang="en">Free always</div><div class="inc-tag lang-th" lang="th">ฟรีเสมอ</div></div>
     <div class="inc-card reveal"><div class="inc-icon">🔒</div><div class="inc-title lang-en" lang="en">UK GDPR Compliance</div><div class="inc-title lang-th" lang="th">ปฏิบัติตาม GDPR ของ UK</div><p class="inc-desc lang-en" lang="en">Fully compliant with UK data protection law. Customer data stays safe, private, and under your control.</p><p class="inc-desc lang-th" lang="th">ทำตามกฎหมายคุ้มครองข้อมูลของ UK ครบถ้วน ข้อมูลลูกค้าปลอดภัย เป็นความลับ และอยู่ในการควบคุมของคุณเสมอ</p><div class="inc-tag lang-en" lang="en">Free always</div><div class="inc-tag lang-th" lang="th">ฟรีเสมอ</div></div>
@@ -623,7 +618,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <p class="cta-reassure lang-th" lang="th">ภาษาไทยหรืออังกฤษ WhatsApp หรือวิดีโอคอล แบบไหนสะดวกก็ได้เลย</p>
     <div class="cta-pair">
       <a href="book-demo.html" class="book-btn">🚀 <span class="lang-en" lang="en">Book Your Free Demo</span><span class="lang-th" lang="th">จองเดโมฟรีเลย</span></a>
-      <a href="https://wa.me/447896036386" class="btn-outline-white">💬 <span class="lang-en" lang="en">Message us on WhatsApp</span><span class="lang-th" lang="th">ทักเราทาง WhatsApp</span></a>
+      <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="btn-outline-white">💬 <span class="lang-en" lang="en">Message us on WhatsApp</span><span class="lang-th" lang="th">ทักเราทาง WhatsApp</span></a>
     </div>
   </div>
 </div>
@@ -640,22 +635,29 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     </div>
         <div style="max-width:480px;margin:36px auto 0;">
           <div style="background:var(--navy);border:1px solid rgba(201,168,76,0.4);border-radius:20px;padding:36px 32px;position:relative;text-align:left;">
-            <div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--gold),#E8C96A);color:var(--navy);font-size:10px;font-weight:800;padding:4px 18px;border-radius:20px;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;" class="lang-en" lang="en">&#x2713; Everything included &mdash; one price</div>
-            <div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--gold),#E8C96A);color:var(--navy);font-size:10px;font-weight:800;padding:4px 18px;border-radius:20px;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;" class="lang-th" lang="th">&#x2713; รวมทุกอย่าง &mdash; ราคาเดียว</div>
-            <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:10px;" class="lang-en" lang="en">Complete Website</div>
-            <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:10px;" class="lang-th" lang="th">เว็บไซต์ครบชุด</div>
-            <div style="font-family:'Cormorant Garamond',serif;font-size:52px;font-weight:700;color:white;line-height:1;">&pound;199</div>
-            <div style="font-size:12px;color:rgba(255,255,255,0.45);margin-bottom:20px;" class="lang-en" lang="en">one-off payment &nbsp;&middot;&nbsp; ready in 48 hours</div>
-            <div style="font-size:12px;color:rgba(255,255,255,0.45);margin-bottom:20px;" class="lang-th" lang="th">จ่ายครั้งเดียว &nbsp;&middot;&nbsp; เสร็จใน 48 ชั่วโมง</div>
+            <div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--gold),#E8C96A);color:var(--navy);font-size:10px;font-weight:800;padding:4px 18px;border-radius:20px;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;" class="lang-en" lang="en">&#x2713; Everything included &mdash; managed for you</div>
+            <div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--gold),#E8C96A);color:var(--navy);font-size:10px;font-weight:800;padding:4px 18px;border-radius:20px;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;" class="lang-th" lang="th">&#x2713; รวมทุกอย่าง &mdash; เราดูแลให้</div>
+            <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:10px;" class="lang-en" lang="en">Website Service</div>
+            <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:10px;" class="lang-th" lang="th">บริการเว็บไซต์</div>
+            <div style="font-family:'Cormorant Garamond',serif;font-size:52px;font-weight:700;color:white;line-height:1;" class="lang-en" lang="en">&pound;5<span style="font-size:22px;font-weight:600;">/month</span></div>
+            <div style="font-family:'Cormorant Garamond',serif;font-size:52px;font-weight:700;color:white;line-height:1;" class="lang-th" lang="th">&pound;5<span style="font-size:22px;font-weight:600;">/เดือน</span></div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.45);margin-bottom:20px;" class="lang-en" lang="en">website, hosting, domain &amp; updates &nbsp;&middot;&nbsp; ready in 48 hours</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.45);margin-bottom:20px;" class="lang-th" lang="th">เว็บไซต์ โฮสติ้ง โดเมน และอัปเดต &nbsp;&middot;&nbsp; เสร็จใน 48 ชั่วโมง</div>
             <ul style="list-style:none;padding:0;font-size:13px;color:rgba(255,255,255,0.65);line-height:2;">
               <li class="lang-en" lang="en">&#x2713; Up to 8-page bilingual website (Thai + English)</li><li class="lang-th" lang="th">&#x2713; เว็บไซต์สูงสุด 8 หน้า สองภาษา (ไทย + อังกฤษ)</li>
               <li class="lang-en" lang="en">&#x2713; Zero-commission booking &amp; ordering widgets</li><li class="lang-th" lang="th">&#x2713; วิดเจ็ตจองและสั่งอาหาร ค่าคอม 0%</li>
               <li class="lang-en" lang="en">&#x2713; Full menu with photos &amp; allergens</li><li class="lang-th" lang="th">&#x2713; เมนู + รูป + สารก่อภูมิแพ้</li>
               <li class="lang-en" lang="en">&#x2713; Photo gallery, Google Maps, SEO</li><li class="lang-th" lang="th">&#x2713; แกลเลอรี, Google Maps, SEO</li>
               <li class="lang-en" lang="en">&#x2713; Mobile responsive &mdash; ready in 48 hours</li><li class="lang-th" lang="th">&#x2713; รองรับมือถือ เสร็จใน 48 ชั่วโมง</li>
+              <li class="lang-en" lang="en">&#x2713; Your own domain &mdash; registered in your name</li><li class="lang-th" lang="th">&#x2713; โดเมนของคุณเอง จดในชื่อของคุณ</li>
+              <li class="lang-en" lang="en">&#x2713; Hosting, updates &amp; support all managed</li><li class="lang-th" lang="th">&#x2713; โฮสติ้ง อัปเดต และซัพพอร์ต เราดูแลให้</li>
             </ul>
-            <a href="website-design.html" style="display:block;padding:13px;border-radius:10px;background:linear-gradient(135deg,var(--gold),#E8C96A);border:none;color:var(--navy);font-size:14px;font-weight:800;text-decoration:none;text-align:center;margin-top:20px;" class="lang-en" lang="en">Learn More &rarr;</a>
-            <a href="website-design.html" style="display:block;padding:13px;border-radius:10px;background:linear-gradient(135deg,var(--gold),#E8C96A);border:none;color:var(--navy);font-size:14px;font-weight:800;text-decoration:none;text-align:center;margin-top:20px;" class="lang-th" lang="th">ดูเพิ่มเติม &rarr;</a>
+            <div style="margin-top:16px;background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.3);border-radius:10px;padding:12px 14px;">
+              <div class="lang-en" lang="en" style="font-size:12.5px;color:rgba(255,255,255,0.75);line-height:1.6;">One-off build quoted for your restaurant &mdash; every one is different, so we price it honestly. Already have a website? We&rsquo;ll take it over for the same &pound;5 a month.</div>
+              <div class="lang-th" lang="th" style="font-size:12.5px;color:rgba(255,255,255,0.75);line-height:1.6;">ค่าทำเว็บไซต์ครั้งแรกคิดตามงานจริงของแต่ละร้าน &mdash; เสนอราคาตามจริง ถ้ามีเว็บไซต์อยู่แล้ว เรารับดูแลต่อในราคา &pound;5 ต่อเดือนเท่ากัน</div>
+            </div>
+            <div class="lang-en" lang="en"><a href="website-design.html" style="display:block;padding:13px;border-radius:10px;background:linear-gradient(135deg,var(--gold),#E8C96A);border:none;color:var(--navy);font-size:14px;font-weight:800;text-decoration:none;text-align:center;margin-top:20px;">Learn More &rarr;</a></div>
+            <div class="lang-th" lang="th"><a href="website-design.html" style="display:block;padding:13px;border-radius:10px;background:linear-gradient(135deg,var(--gold),#E8C96A);border:none;color:var(--navy);font-size:14px;font-weight:800;text-decoration:none;text-align:center;margin-top:20px;">ดูเพิ่มเติม &rarr;</a></div>
           </div>
         </div>
     <p style="text-align:center;font-size:14px;color:var(--text-muted);" class="lang-en" lang="en">&#x1F4E6; Bundle with any SiamEPOS plan &mdash; one invoice, one system, one call to make.</p>
@@ -664,9 +666,9 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
 </section>
 
 <footer>
-  <div><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><svg width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="none" stroke="#C9A84C" stroke-width="1.8"/><circle cx="50" cy="50" r="39" fill="none" stroke="#C9A84C" stroke-width="0.6" opacity="0.28"/><g transform="translate(50,50)"><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/><circle cx="0" cy="0" r="9" fill="#0D1B3E"/><circle cx="0" cy="0" r="5" fill="#C9A84C"/></g></svg><span style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:#C9A84C;">Siam<span style="color:white;">EPOS</span></span></div><p class="footer-tagline lang-en" lang="en">The complete business system for Thai restaurants in the UK.</p><p class="footer-tagline lang-th" lang="th">ระบบธุรกิจครบวงจรสำหรับร้านอาหารไทยใน UK</p></div>
+  <div><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><img src="assets/siamepos-star.png" width="40" height="40" alt="SiamEPOS logo" style="object-fit:contain"><span style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:#C9A84C;">Siam<span style="color:white;">EPOS</span></span></div><p class="footer-tagline lang-en" lang="en">The complete business system for Thai restaurants in the UK.</p><p class="footer-tagline lang-th" lang="th">ระบบธุรกิจครบวงจรสำหรับร้านอาหารไทยใน UK</p></div>
   <div class="footer-col"><h4 class="lang-en" lang="en">Pages</h4><h4 class="lang-th" lang="th">หน้า</h4><ul><li><a href="index.html" class="lang-en" lang="en">Home</a><a href="index.html" class="lang-th" lang="th">หน้าแรก</a></li><li><a href="features.html" class="lang-en" lang="en">Products</a><a href="features.html" class="lang-th" lang="th">ผลิตภัณฑ์</a></li><li><a href="why-siamepos.html" class="lang-en" lang="en">Why Us</a><a href="why-siamepos.html" class="lang-th" lang="th">ทำไมเรา</a></li><li><a href="faq.html" class="lang-en" lang="en">FAQ</a><a href="faq.html" class="lang-th" lang="th">คำถามที่พบบ่อย</a></li><li><a href="book-demo.html" class="lang-en" lang="en">Book Demo</a><a href="book-demo.html" class="lang-th" lang="th">จองเดโม</a></li></ul></div>
-  <div class="footer-col"><h4 class="lang-en" lang="en">Contact</h4><h4 class="lang-th" lang="th">ติดต่อ</h4><ul><li><a href="https://wa.me/447896036386">💬 WhatsApp</a></li><li><a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></li></ul></div>
+  <div class="footer-col"><h4 class="lang-en" lang="en">Contact</h4><h4 class="lang-th" lang="th">ติดต่อ</h4><ul><li><a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer">💬 WhatsApp</a></li><li><a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></li></ul></div>
 </footer>
 <div style="background:#0a1733;text-align:center;padding:18px 20px;border-top:1px solid rgba(201,168,76,0.18);"><span style="display:inline-block;background:#C9A84C;color:#0D1B3E;padding:8px 20px;border-radius:24px;font-size:13px;font-weight:800;letter-spacing:.2px;"><span class="lang-en" lang="en">🇬🇧 Funded by a UK Government-backed Start Up Loan</span><span class="lang-th" lang="th">🇬🇧 ได้รับเงินทุนจาก Start Up Loan ที่สนับสนุนโดยรัฐบาลสหราชอาณาจักร</span></span></div>
 <div class="footer-bottom"><p>© 2026 SiamEPOS Ltd · Registered in England &amp; Wales · Company No. 17215576</p><p><a href="index.html" class="lang-en" lang="en">← Homepage</a><a href="index.html" class="lang-th" lang="th">← หน้าแรก</a></p></div>
@@ -705,5 +707,7 @@ document.querySelectorAll('.nav-links a').forEach(function(a){a.addEventListener
 })();
 </script>
   <script>document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest('a[href*="wa.me"]'):null;if(a&&typeof gtag==="function"){gtag("event","whatsapp_click",{link_url:a.href});}},true);</script>
+<!-- SiamEPOS AI sales concierge (replaces the WhatsApp float) -->
+<script src="assets/chat-widget.js" defer></script>
 </body>
 </html>

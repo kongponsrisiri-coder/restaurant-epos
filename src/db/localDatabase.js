@@ -569,6 +569,31 @@ function initSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses (date DESC);
 
+    CREATE TABLE IF NOT EXISTS concierge_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      profile TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_concierge_session ON concierge_messages (profile, session_id, id);
+
+    CREATE TABLE IF NOT EXISTS concierge_bookings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      profile TEXT NOT NULL,
+      session_id TEXT,
+      customer_name TEXT NOT NULL,
+      customer_phone TEXT,
+      treatment TEXT NOT NULL,
+      minutes INTEGER NOT NULL,
+      start_at TEXT NOT NULL,
+      deposit_gbp REAL DEFAULT 0,
+      status TEXT DEFAULT 'paid_demo',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_concierge_bookings ON concierge_bookings (profile, start_at);
+
     CREATE TABLE IF NOT EXISTS batch_recipes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -808,13 +833,19 @@ function seedDefaults() {
 
   // Minimum staff so the operator can log in before the first cloud→local pull (Phase 4).
   // Once sync runs this will be overwritten / supplemented with the real cloud staff list.
-  const staffCount = db.prepare('SELECT COUNT(*) AS n FROM staff').get().n;
-  if (staffCount === 0) {
+  // SEPOS-LOGIN-SEED — guard on ACTIVE ADMINS (parity with the PG path + spa),
+  // not just an empty table: self-heals if a till ever loses every admin, and
+  // picks a free PIN if 1234 is taken. No-op once an active admin exists.
+  const adminCount = db.prepare("SELECT COUNT(*) AS n FROM staff WHERE is_active = 1 AND role IN ('admin','manager')").get().n;
+  if (adminCount === 0) {
+    const taken = new Set(db.prepare('SELECT pin FROM staff').all().map((r) => String(r.pin)));
+    let pin = '1234';
+    if (taken.has(pin)) { for (let p = 1000; p <= 9999; p++) { if (!taken.has(String(p))) { pin = String(p); break; } } }
     db.prepare(`
       INSERT INTO staff (name, pin, role, is_active, employment_status)
       VALUES (?, ?, ?, ?, ?)
-    `).run('Admin', '1234', 'admin', 1, 'active');
-    console.log('[db:local] seeded default admin staff (pin 1234) — change after first sync');
+    `).run('Admin', pin, 'admin', 1, 'active');
+    console.log(`[db:local] no active admin — seeded default admin 'Admin' (pin ${pin}) — change it`);
   }
 }
 

@@ -1,4 +1,4 @@
-# SiamEPOS — Developer Context for Krit (Claude Code Agent)
+# SiamEPOS — Developer Context for Krit (Codex Agent)
 
 ## ⚠️ START OF EVERY SESSION — DO THIS FIRST
 1. Read `TEAM-STATUS.md` — see what the whole team is working on
@@ -63,10 +63,10 @@ OUTSIDE the repo, in a single consolidated folder:
                      stress test PDFs)
 ```
 **Rules every agent must follow:**
-1. **New manual or QA report** — write/save it in `~/Documents/SiamEPOS-Docs/{manuals,qa-reports}/`. Do NOT drop new manuals or QA reports anywhere else (not `~/Documents/Claude/Projects/SiamEpos/`, not the repo root).
+1. **New manual or QA report** — write/save it in `~/Documents/SiamEPOS-Docs/{manuals,qa-reports}/`. Do NOT drop new manuals or QA reports anywhere else (not `~/Documents/Codex/Projects/SiamEpos/`, not the repo root).
 2. **Updating an existing manual or QA report** — edit it in place inside `~/Documents/SiamEPOS-Docs/`. If you find one outside, move it in (see README for what belongs).
 3. **Reference a manual in a PR / handoff / TEAM-STATUS entry** — quote the absolute path so it's unambiguous, e.g. `~/Documents/SiamEPOS-Docs/manuals/SiamEPOS-Printer-Setup-Guide.docx`.
-4. **NOT this folder** — ticket specs (SEPOS-* / SPA-* / BO-*) stay in `~/Documents/Claude/Projects/SiamEpos/`. Release notes + agent context files (KRIT/KAI/MAYA/NICK/SANDY.md) stay in the repo root. Code (`test-*.js`) stays in the repo root.
+4. **NOT this folder** — ticket specs (SEPOS-* / SPA-* / BO-*) stay in `~/Documents/Codex/Projects/SiamEpos/`. Release notes + agent context files (KRIT/KAI/MAYA/NICK/SANDY.md) stay in the repo root. Code (`test-*.js`) stays in the repo root.
 
 Index of what's in there is in `~/Documents/SiamEPOS-Docs/README.md`. Read it before adding a new file so you pick the right subfolder and don't duplicate an existing report.
 

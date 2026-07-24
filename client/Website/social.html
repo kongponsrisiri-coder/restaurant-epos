@@ -53,7 +53,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;justify-content
 .nav-cta{background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy)!important;padding:9px 20px;border-radius:8px;font-weight:700!important;}
 .lang-toggle{background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.35);color:var(--gold);padding:6px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:700;font-family:'Sarabun',sans-serif;}
 .wa-float{position:fixed;bottom:28px;right:28px;z-index:98;}
-.wa-btn{display:flex;align-items:center;gap:10px;background:#25D366;color:white;padding:13px 20px;border-radius:50px;font-size:14px;font-weight:700;text-decoration:none;box-shadow:0 8px 24px rgba(37,211,102,0.4);}
+.wa-btn{display:flex;align-items:center;gap:10px;background:#0D1B3E;color:#C9A84C;padding:13px 20px;border-radius:50px;font-size:14px;font-weight:700;text-decoration:none;box-shadow:0 8px 24px rgba(37,211,102,0.4);}
 .hero{background:linear-gradient(160deg,var(--navy) 0%,var(--navy-mid) 100%);padding:140px 60px 90px;position:relative;overflow:hidden;text-align:center;}
 .hero::before{content:'';position:absolute;inset:0;background-image:repeating-linear-gradient(45deg,rgba(201,168,76,0.03) 0,rgba(201,168,76,0.03) 1px,transparent 1px,transparent 52px);}
 .hero-tag{display:inline-flex;align-items:center;gap:8px;background:rgba(201,168,76,0.15);border:1px solid rgba(201,168,76,0.4);color:var(--gold);padding:7px 16px;border-radius:30px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:24px;}
@@ -207,13 +207,8 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
 </head>
 <body>
 <script>(function(){var s=null;try{s=localStorage.getItem('siamLang')}catch(e){}var th=(s==='th')||(s===null&&/^th/i.test((navigator.language||navigator.userLanguage||'')));if(th){document.body.classList.add('thai');document.documentElement.lang='th';document.addEventListener('DOMContentLoaded',function(){var b=document.querySelector('.lang-toggle');if(b)b.textContent='EN';});}})();</script>
-
-<div class="wa-float">
-  <a href="https://wa.me/447896036386" target="_blank" class="wa-btn">&#x1F4AC; <span class="lang-en" lang="en">WhatsApp Us</span><span class="lang-th" lang="th">&#x0E40;&#x0E27;&#x0E47;&#x0E1A;&#x0E44;&#x0E0B;&#x0E15;&#x0E4C;&#x0E23;&#x0E32;&#x0E04;&#x0E32;&#x0E40;&#x0E17;&#x0E48;&#x0E32;&#x0E44;&#x0E2B;&#x0E23;&#x0E48;</span></a>
-</div>
-
 <nav>
-  <a href="index.html" class="nav-logo"><svg width="170" height="50" viewBox="0 0 340 100" xmlns="http://www.w3.org/2000/svg"><circle cx="52" cy="50" r="44" fill="none" stroke="#C9A84C" stroke-width="1.5"/><circle cx="52" cy="50" r="38" fill="none" stroke="#C9A84C" stroke-width="0.5" opacity="0.28"/><g transform="translate(52,50)"><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/><path d="M 0,4 C -8,-6 -6,-30 0,-40 C 6,-30 8,-6 0,4 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/><circle cx="0" cy="0" r="8" fill="#0D1B3E"/><circle cx="0" cy="0" r="4.5" fill="#C9A84C"/></g><line x1="110" y1="16" x2="110" y2="84" stroke="#C9A84C" stroke-width="0.8" opacity="0.32"/><text x="126" y="58" font-family="Georgia, serif" font-size="40" font-weight="700" letter-spacing="-1"><tspan fill="white">Siam</tspan><tspan fill="#C9A84C">EPOS</tspan></text></svg></a>
+  <a href="index.html" class="nav-logo"><img src="assets/siamepos-star.png" alt="SiamEPOS" style="height:46px;width:46px;object-fit:contain"><span style="font-family:Georgia,serif;font-size:25px;font-weight:700;letter-spacing:-0.5px;color:#fff">Siam<span style="color:#C9A84C">EPOS</span></span></a>
   <ul class="nav-links">
     <li><a href="features.html" class="lang-en" lang="en">Products</a><a href="features.html" class="lang-th" lang="th">&#x0E1F;&#x0E35;&#x0E40;&#x0E08;&#x0E2D;&#x0E23;&#x0E4C;</a></li>
     <li><a href="siampro.html" class="lang-en" lang="en">SiamEPOS Pro</a><a href="siampro.html" class="lang-th" lang="th">SiamEPOS Pro</a></li>
@@ -222,7 +217,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <li><a href="siamshop.html" class="lang-en" lang="en">SiamShop</a><a href="siamshop.html" class="lang-th" lang="th">SiamShop</a></li>
     <li><a href="why-siamepos.html" class="lang-en" lang="en">Why Us</a><a href="why-siamepos.html" class="lang-th" lang="th">&#x0E17;&#x0E33;&#x0E44;&#x0E21;&#x0E40;&#x0E23;&#x0E32;</a></li>
     <li><a href="website-design.html" class="lang-en" lang="en">Website Design</a><a href="website-design.html" class="lang-th" lang="th">&#x0E2D;&#x0E2D;&#x0E01;&#x0E41;&#x0E1A;&#x0E1A;&#x0E40;&#x0E27;&#x0E47;&#x0E1A;</a></li>
-    <li><a href="book-demo.html" class="nav-cta lang-en" lang="en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th" lang="th">&#x0E17;&#x0E14;&#x0E25;&#x0E2D;&#x0E07;&#x0E1F;&#x0E23;&#x0E35;</a></li>
+    <li><a href="book-demo.html" class="nav-cta lang-en" lang="en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th" lang="th">จองเดโม</a></li>
   </ul>
   <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;';try{localStorage.setItem('siamLang',th?'th':'en')}catch(e){}">&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;</button>
 </nav>
@@ -238,8 +233,8 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <p class="hero-sub lang-en" lang="en">Too busy to post? We create and schedule your content &mdash; built from your real menu &mdash; and you just approve. Thai and English, on-brand, every week. <strong style="color:white;">£39/month.</strong></p>
     <p class="hero-sub lang-th" lang="th">ยุ่งจนไม่มีเวลาโพสต์? เราสร้างและตั้งเวลาโพสต์ให้ &mdash; ดึงจากเมนูจริงของร้าน &mdash; คุณแค่กดอนุมัติ ทั้งไทยและอังกฤษ ตรงแบรนด์ ทุกสัปดาห์ <strong style="color:white;">£39/เดือน</strong></p>
     <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
-      <a href="https://wa.me/447896036386" class="book-btn lang-en" lang="en">&#x1F4AC; WhatsApp Us Now</a>
-      <a href="https://wa.me/447896036386" class="book-btn lang-th" lang="th">&#x1F4AC; ทัก WhatsApp หาเราเลย</a>
+      <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="book-btn lang-en" lang="en">&#x1F4AC; WhatsApp Us Now</a>
+      <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="book-btn lang-th" lang="th">&#x1F4AC; แชทกับเรา หาเราเลย</a>
       <a href="#packages" class="book-btn ghost lang-en" lang="en">View Packages &darr;</a>
       <a href="#packages" class="book-btn ghost lang-th" lang="th">ดูแพ็กเกจ &darr;</a>
     </div>
@@ -288,8 +283,8 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
           <li class="lang-en" lang="en">Simple monthly report</li><li class="lang-th" lang="th">รายงานประจำเดือนแบบเข้าใจง่าย</li>
           <li class="lang-en" lang="en">£59 one-off setup &mdash; free when bundled with SiamEPOS</li><li class="lang-th" lang="th">ค่าเริ่มต้น £59 ครั้งเดียว &mdash; ฟรีเมื่อใช้คู่กับ SiamEPOS</li>
         </ul>
-        <a href="https://wa.me/447896036386" class="btn-pkg btn-gold lang-en" lang="en">Get Started &rarr;</a>
-        <a href="https://wa.me/447896036386" class="btn-pkg btn-gold lang-th" lang="th">เริ่มต้น &rarr;</a>
+        <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="btn-pkg btn-gold lang-en" lang="en">Get Started &rarr;</a>
+        <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="btn-pkg btn-gold lang-th" lang="th">เริ่มต้น &rarr;</a>
       </div>
     </div>
     <p style="margin-top:24px;font-size:14px;color:var(--text-muted);" class="lang-en" lang="en">&#x1F4E6; Bundle with any SiamEPOS plan and get &pound;10/month off &mdash; one invoice, one system. 3-month minimum.</p>
@@ -304,7 +299,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <h2 class="section-title lang-en" lang="en">How your social gets done</h2>
     <h2 class="section-title lang-th" lang="th">ขั้นตอนการดูแลโซเชียลของคุณ</h2>
     <div class="process-grid">
-      <div class="proc-step"><div class="proc-num">1</div><div class="proc-title lang-en" lang="en">WhatsApp Us</div><div class="proc-title lang-th" lang="th">ทัก WhatsApp มา</div><p class="proc-desc lang-en" lang="en">Tell us your restaurant, your style, and send your Facebook &amp; Instagram links.</p><p class="proc-desc lang-th" lang="th">บอกเรื่องร้าน สไตล์ที่ชอบ และส่งลิงก์ Facebook &amp; Instagram มาให้เรา</p></div>
+      <div class="proc-step"><div class="proc-num">1</div><div class="proc-title lang-en" lang="en">WhatsApp Us</div><div class="proc-title lang-th" lang="th">แชทกับเรา มา</div><p class="proc-desc lang-en" lang="en">Tell us your restaurant, your style, and send your Facebook &amp; Instagram links.</p><p class="proc-desc lang-th" lang="th">บอกเรื่องร้าน สไตล์ที่ชอบ และส่งลิงก์ Facebook &amp; Instagram มาให้เรา</p></div>
       <div class="proc-step"><div class="proc-num">2</div><div class="proc-title lang-en" lang="en">We Draft Your Posts</div><div class="proc-title lang-th" lang="th">เราร่างโพสต์ให้</div><p class="proc-desc lang-en" lang="en">We create your posts from your real menu, in Thai and English, on brand.</p><p class="proc-desc lang-th" lang="th">เราสร้างโพสต์จากเมนูจริงของร้าน ทั้งไทยและอังกฤษ ตรงแบรนด์</p></div>
       <div class="proc-step"><div class="proc-num">3</div><div class="proc-title lang-en" lang="en">You Approve</div><div class="proc-title lang-th" lang="th">คุณอนุมัติ</div><p class="proc-desc lang-en" lang="en">Tweak anything you like. Nothing is posted until you say yes.</p><p class="proc-desc lang-th" lang="th">อยากแก้ตรงไหนบอกได้ ไม่มีอะไรโพสต์จนกว่าคุณจะโอเค</p></div>
       <div class="proc-step"><div class="proc-num">4</div><div class="proc-title lang-en" lang="en">We Post &amp; Report</div><div class="proc-title lang-th" lang="th">เราโพสต์และรายงาน</div><p class="proc-desc lang-en" lang="en">Published every week, plus a simple monthly report so you see the value.</p><p class="proc-desc lang-th" lang="th">โพสต์ให้ทุกสัปดาห์ พร้อมรายงานประจำเดือนให้เห็นผลลัพธ์</p></div>
@@ -317,16 +312,16 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
   <h2 style="font-family:'Cormorant Garamond',serif;font-size:48px;font-weight:700;color:white;margin-bottom:10px;" class="lang-en" lang="en">Ready to fill your feed?</h2>
   <h2 style="font-family:'Cormorant Garamond',serif;font-size:48px;font-weight:700;color:white;margin-bottom:10px;" class="lang-th" lang="th">พร้อมทำให้เพจร้านคึกคักหรือยัง?</h2>
   <p style="font-size:16px;color:rgba(255,255,255,0.55);margin-bottom:36px;" class="lang-en" lang="en">WhatsApp us. Tell us your restaurant name &mdash; we&rsquo;ll show you your first week of posts.</p>
-  <p style="font-size:16px;color:rgba(255,255,255,0.55);margin-bottom:36px;" class="lang-th" lang="th">ทัก WhatsApp มา บอกแค่ชื่อร้าน แล้วเราจะโชว์โพสต์สัปดาห์แรกให้ดู</p>
+  <p style="font-size:16px;color:rgba(255,255,255,0.55);margin-bottom:36px;" class="lang-th" lang="th">แชทกับเรา มา บอกแค่ชื่อร้าน แล้วเราจะโชว์โพสต์สัปดาห์แรกให้ดู</p>
   <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
-    <a href="https://wa.me/447896036386" class="book-btn lang-en" lang="en">&#x1F4AC; WhatsApp Us Now</a>
-    <a href="https://wa.me/447896036386" class="book-btn lang-th" lang="th">&#x1F4AC; ทัก WhatsApp หาเราเลย</a>
+    <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="book-btn lang-en" lang="en">&#x1F4AC; WhatsApp Us Now</a>
+    <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="book-btn lang-th" lang="th">&#x1F4AC; แชทกับเรา หาเราเลย</a>
     <a href="mailto:info@siamepos.co.uk" style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.08);color:white;padding:14px 28px;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none;border:1px solid rgba(255,255,255,0.15);">&#x1F4E7; info@siamepos.co.uk</a>
   </div>
 </section>
 
 <footer>
-  <div><div class="footer-brand-row"><svg width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="none" stroke="#C9A84C" stroke-width="1.8"/><circle cx="50" cy="50" r="39" fill="none" stroke="#C9A84C" stroke-width="0.6" opacity="0.28"/><g transform="translate(50,50)"><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(72)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(144)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.62" transform="rotate(216)"/><path d="M 0,5 C -10,-8 -8,-36 0,-42 C 8,-36 10,-8 0,5 Z" fill="#C9A84C" opacity="0.82" transform="rotate(288)"/><circle cx="0" cy="0" r="9" fill="#0D1B3E"/><circle cx="0" cy="0" r="5" fill="#C9A84C"/></g></svg><div class="footer-wordmark">Siam<span>EPOS</span></div></div>
+  <div><div class="footer-brand-row"><img src="assets/siamepos-star.png" width="40" height="40" alt="SiamEPOS logo" style="object-fit:contain"><div class="footer-wordmark">Siam<span>EPOS</span></div></div>
   <p class="footer-tagline lang-en" lang="en">The Thai Restaurant Management System. Built by Thai, for Thai.</p>
   <p class="footer-tagline lang-th" lang="th">ระบบบริหารร้านอาหารไทยครบวงจร สร้างโดยคนไทย เพื่อคนไทย</p></div>
   <div class="footer-col"><h4 class="lang-en" lang="en">Pages</h4><h4 class="lang-th" lang="th">&#x0E2b;&#x0E19;&#x0E49;&#x0E32;</h4><ul>
@@ -335,7 +330,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <li><a href="pricing.html" class="lang-en" lang="en">Pricing</a><a href="pricing.html" class="lang-th" lang="th">&#x0E23;&#x0E32;&#x0E04;&#x0E32;</a></li>
     <li><a href="book-demo.html" class="lang-en" lang="en">Book Demo</a><a href="book-demo.html" class="lang-th" lang="th">&#x0E08;&#x0E2d;&#x0E07;&#x0E40;&#x0E14;&#x0E42;&#x0E21;</a></li><li><a href="faq.html" class="lang-en" lang="en">FAQ</a><a href="faq.html" class="lang-th" lang="th">คำถามที่พบบ่อย</a></li></ul></div>
   <div class="footer-col"><h4>Contact</h4><ul>
-    <li><a href="https://wa.me/447896036386">&#x1F4AC; WhatsApp</a></li>
+    <li><a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer">&#x1F4AC; WhatsApp</a></li>
     <li><a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></li>
   </ul></div>
 </footer>
@@ -347,5 +342,7 @@ document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
 </script>
 <script>document.querySelectorAll('.nav-burger').forEach(function(b){b.addEventListener('click',function(){document.body.classList.toggle('menu-open');});});document.querySelectorAll('.nav-links a').forEach(function(a){a.addEventListener('click',function(){document.body.classList.remove('menu-open');});});</script>
   <script>document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest('a[href*="wa.me"]'):null;if(a&&typeof gtag==="function"){gtag("event","whatsapp_click",{link_url:a.href});}},true);</script>
+<!-- SiamEPOS AI sales concierge (replaces the WhatsApp float) -->
+<script src="assets/chat-widget.js" defer></script>
 </body>
 </html>

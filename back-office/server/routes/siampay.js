@@ -17,7 +17,7 @@
 
 const express = require('express');
 const { pool } = require('../db/pool');
-const { authRequired } = require('../middleware/auth');
+const { authRequired, adminOnly } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authRequired);
@@ -53,7 +53,7 @@ router.get('/config', (req, res) => {
 
 // POST /api/siampay/clients/:id/enable — create the Express connected
 // account (idempotent: returns the existing one if already created).
-router.post('/clients/:id/enable', async (req, res) => {
+router.post('/clients/:id/enable', adminOnly, async (req, res) => {
   try {
     const client = await getClient(req.params.id);
     if (!client) return res.status(404).json({ error: 'Client not found' });
@@ -86,7 +86,7 @@ router.post('/clients/:id/enable', async (req, res) => {
 // POST /api/siampay/clients/:id/onboarding-link — fresh hosted KYC link.
 // Links expire after a few minutes of non-use, so mint on demand rather
 // than storing one.
-router.post('/clients/:id/onboarding-link', async (req, res) => {
+router.post('/clients/:id/onboarding-link', adminOnly, async (req, res) => {
   try {
     const client = await getClient(req.params.id);
     if (!client) return res.status(404).json({ error: 'Client not found' });

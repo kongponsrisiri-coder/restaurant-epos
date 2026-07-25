@@ -408,6 +408,12 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 🖨️ FERN PRINTER SETUP + SEPOS-PRINT-002 — flexible multi-station routing, 2 desktop bugs FIXED but PARKED (Krit, 2026-07-25)
+Korakot set up Fern's printers on a desktop till (baan-siam demo data) and needs **flexible per-category routing** — sushi / starter / hot-kitchen / bar / bill each to its **own** printer (roles alone = one printer per role, not enough). Workflow diag found + fixed **two real bugs**, committed to branch **`fix/printer-routing-desktop`** (⚠️ NOT shipped — main clean, live tills untouched):
+1. **Category routing wouldn't persist on desktop** (the "Sends category won't stay" report) — `pullMenuTree` dropped `categories.printer_id` from the local sync projection (`syncService.js:738`, same class as SEPOS-047i). Fixed (+ `printer_id` to projection).
+2. **Dead network printer diverted bar tickets to the Mac's default printer** ("bar print going to Mac") — IP CUPS fallback handed the free-text printer name to `lpr -P` (`printService.js:994`). Fixed → IP-matched CUPS queue only.
+**Next time:** verify on a real local install (DB_MODE=local), merge, cut a desktop release, update the till. **Immediate workaround given to Korakot (works today):** delete unreachable printer rows (a dead IP also stalls other tickets ~13-15s via the single _printQueue), run one printer per role, each printer its **own unique IP** on the till's subnet (these POS80 units all ship static `192.168.1.100` → set via `http://<ip>` MODIFY, one on at a time). Paused — Korakot with customers. Fern menu + UK-14 allergens + navy/gold branding + lunch-deal combo already live on baan-siam.
+
 ### 🆕 NUA-WEB-001 — new prospect: Nua, 4-branch Thai group (Maya, 2026-07-20)
 
 **Korakot dropped `eatnua.com`. Extraction + archive DONE** → `~/Documents/SiamEPOS-Docs/client-sites/nua/` (24 pages, 62 photos, 15 menu PDFs, `wp-pages.json`, `notes.md`; siblings use `pages/` for mirrors, `site/` is reserved for the mockup — not built yet). Branches: **Fitzrovia** 55 Cleveland St W1T 4JL · **High Wycombe** 14-15 Easton St HP11 1NT · **Reading** 15 Gun St RG1 2JR · **Kingston** 4 Riverside Walk KT1 1QN. WordPress.

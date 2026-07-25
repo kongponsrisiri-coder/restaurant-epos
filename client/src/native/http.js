@@ -30,13 +30,28 @@ function normaliseBody(data) {
   return data;
 }
 
+// SEPOS-SEC-002 — attach the staff login token to native (Sunmi) calls too,
+// mirroring the web helpers. Read localStorage directly to avoid importing
+// api.js (circular). Additive + backward-compatible.
+function nativeAuthHeader() {
+  try {
+    const raw = localStorage.getItem('siamepos_token') || localStorage.getItem('siamepos_auth');
+    if (!raw) return {};
+    const a = JSON.parse(raw);
+    if (a && a.token && (!a.expires_at || a.expires_at > Date.now())) {
+      return { Authorization: `Bearer ${a.token}` };
+    }
+  } catch {}
+  return {};
+}
+
 export async function nativeRequest(method, fullUrl, { headers, data } = {}) {
   // CapacitorHttp.request throws only on a transport/network failure — let
   // that bubble up so api.js's catch blocks fall back to the offline cache.
   const res = await CapacitorHttp.request({
     method,
     url: fullUrl,
-    headers: headers || {},
+    headers: { ...(headers || {}), ...nativeAuthHeader() },
     // CapacitorHttp serialises objects to JSON when Content-Type is JSON.
     ...(data !== undefined ? { data } : {}),
   });

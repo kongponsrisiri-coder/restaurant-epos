@@ -99,7 +99,7 @@
       {
         "provider": "github",
         "owner": "kongponsrisiri-coder",
-        "repo": "restaurant-epos",
+        "repo": "siamepos-releases",
         "releaseType": "release"
       }
     ]

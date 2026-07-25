@@ -991,12 +991,25 @@ function sendRaw(ip, port, buf, options = {}) {
           // 3) CUPS — last resort, requires the printer to be installed
           //    in the local print queue. Only works when the backend is
           //    running on the Mac (Electron mode), not on Railway cloud.
-          const queueName = await getOrAutoDetectCupsQueue(ip, explicitName);
+          //
+          //    SAFETY (bar-tickets-to-Mac fix): resolve the CUPS queue ONLY
+          //    from the IP — findCupsQueueForIp() matches a queue whose CUPS
+          //    device URI actually points at THIS ip. We deliberately pass
+          //    null (not explicitName) so the operator's free-text printer
+          //    NAME is never handed to `lpr -P`: for a network printer that
+          //    name is a label (e.g. "POS80"), not a CUPS queue, and lpr
+          //    could divert the ticket to the Mac's default / an unrelated
+          //    installed printer (this is how a dead bar printer's tickets
+          //    were landing on the Mac's system printer). A dead network
+          //    printer must fail cleanly, never silently reprint elsewhere.
+          //    The USB by-name path (no IP → _sendToNamedPrinter below) is
+          //    unaffected, and a legit network CUPS queue is still matched by IP.
+          const queueName = await getOrAutoDetectCupsQueue(ip, null);
           if (queueName) {
-            console.warn(`[print] LPR ${ip}:515 also failed (${lprErr.message}) — falling back to CUPS '${queueName}'`);
+            console.warn(`[print] LPR ${ip}:515 also failed (${lprErr.message}) — falling back to IP-matched CUPS '${queueName}'`);
             return _sendCups(queueName, buf);
           }
-          throw new Error(`All print methods failed for ${ip}. RAW: ${rawErr.message}. LPR: ${lprErr.message}. No CUPS queue found.`);
+          throw new Error(`All print methods failed for ${ip}. RAW: ${rawErr.message}. LPR: ${lprErr.message}. No IP-matched CUPS queue.`);
         }
       }
     }

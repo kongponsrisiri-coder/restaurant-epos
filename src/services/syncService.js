@@ -738,6 +738,17 @@ async function pullMenuTree() {
     const flatCategories = categories.map((c) => ({
       id: c.id, name: c.name, sort_order: c.sort_order,
       is_bar: c.is_bar, default_course: c.default_course,
+      // SEPOS-047i (same bug class as the item fields below): printer_id was
+      // omitted here, so a per-category station assignment made on the till —
+      // "Sends: <category> → this printer" — was forwarded to cloud, pulled
+      // back, but never landed in local categories.printer_id. The desktop
+      // print router JOINs the LOCAL categories.printer_id (server.js kitchen/
+      // bar split + takeaway auto-router), so multi-station routing (sushi /
+      // starter / hot / bar printers) silently reverted on every local refetch
+      // and the category "wouldn't stay" in the UI. NOTE: upsertRows drops null
+      // values, so UN-assigning (printer_id → null) still won't clear locally
+      // until a full re-pull — same known limitation as the sibling item fields.
+      printer_id: c.printer_id,
     }));
     const flatSubcategories = categories.flatMap((c) =>
       (c.subcategories || []).map((s) => ({

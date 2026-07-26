@@ -408,6 +408,12 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 💆 SPA-TOUCH-001 + SPA-VOUCHER-CONTACT — Highbury's mobile/tablet complaints FIXED, shipped to web (Krit, 2026-07-26)
+Highbury (paying spa) complained: (1) **therapist turn-swap doesn't work on mobile/tablet**, (2) **online session buyer's contact untraceable** ("Terry" bought a session; staff couldn't find his details even though the system had emailed him). Root causes found + fixed in spa repo `a47de7b`:
+1. **Turn/swap on touch:** the Set-turn-order button was desktop-toolbar-only (phones had NO way in) and every swap gesture was HTML5 drag, which never fires on touch. Fixed: 🔢 button on the mobile toolbar, 44px arrows in the turn modal, and a new **tap-to-swap picker** (tap booking → ⇄ Swap → tap the other booking) in both the mobile action sheet and the desktop bar (iPads get desktop UI ≥768px but can't drag — this is their path too).
+2. **Buyer contact:** voucher card now shows the stored buyer email (was saved but never displayed), till search matches it, and online purchases **auto-find-or-create + link a client record** so buyers appear in Client Search.
+Deployed: spa push → spa-api + jinta auto; `railway up` → highbury-api; Netlify web tills rebuild. **Desktop spa till (Windows v0.2.43) gets the UI fixes only on the next spa release tag** — the complaint surface is web mobile/tablet, so web deploy addresses it. Parked follow-ups: add buyer phone field to the voucher widget; full mobile audit ran — 3-phase touch-pass plan exists (biggest: iPad "dead zone" — touch rules stop at 640px but mobile layout starts at 768px; Phase 1 = CSS-only quick wins). Audit result: `…/tasks/wr8423089.output`.
+
 ### 🖨️ SEPOS-PRINT-002 — flexible multi-station printer routing — ✅ SHIPPED v1.8.3 (Krit, 2026-07-25)
 Fern printer setup surfaced the need for **flexible per-category routing** (sushi / starter / hot-kitchen / bar / bill each to its own printer; roles alone = one printer per role). Workflow diag found + fixed **two real bugs**, merged to main + **shipped in desktop v1.8.3** (data path verified: `/api/menu/all` exposes `printer_id`, local schema has the column, backend live on commit `2e4d7f6`):
 1. **Category routing wouldn't persist on desktop** ("Sends category won't stay") — `pullMenuTree` dropped `categories.printer_id` from the local sync projection (`syncService.js:738`, SEPOS-047i class). Fixed.

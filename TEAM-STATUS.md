@@ -412,7 +412,7 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
-### 🚨 SEPOS-STATION-004 — THE bug that made station routing "not work" from the till — FOUND VIA LIVE TRACE + FIXED, v1.8.7 building (Krit, 2026-07-28)
+### 🚨 SEPOS-STATION-004 — THE bug that made station routing "not work" from the till — FOUND VIA LIVE TRACE + FIXED — ✅ v1.8.7 PUBLISHED, fix VERIFIED on the till (Edamame → .100 from a real UI send) (Krit, 2026-07-28)
 Korakot kept reporting per-dish/station routing failing from the ORDER SCREEN while every direct API test routed perfectly. Root cause nailed with a print-request trace tap on the running till: **`sendOrder`'s `cartAsItems` projection (predates stations) silently DROPPED `menu_item_id` from every printed line** — the station split looks dishes up by that id, so all UI-printed tickets lost routing identity and fell to the role default. One-line fix (include `menu_item_id`, null-safe for Misc lines); verified on the rig: same send now traces `menu_item_id=216 → station .100, def 0`. Also fixes the identical gap in the Sunmi native split (never noticed — Chart Thai has one printer). **v1.8.7 tagged.** Lesson recorded: UI-path testing ≠ API-path testing — verify on the user's actual surface (the trace tap technique is the tool: append req.body log into the installed bundle's plain-file server.js, restart, reproduce, read).
 
 ### 🍣 SEPOS-STATION-003 — per-DISH "Prints at" override — ✅ v1.8.5 PUBLISHED (Krit, 2026-07-28)

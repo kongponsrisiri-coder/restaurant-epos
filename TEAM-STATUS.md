@@ -412,7 +412,7 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
-### 🍣 SEPOS-STATION-003 — per-DISH "Prints at" override — ✅ BUILT + LIVE-TESTED, v1.8.5 building (Krit, 2026-07-28)
+### 🍣 SEPOS-STATION-003 — per-DISH "Prints at" override — ✅ v1.8.5 PUBLISHED (Krit, 2026-07-28)
 Korakot's ask: dishes inside ONE category that belong to different stations. Shipped: `menu_items.printer_id` (NULL = inherit category, dish wins) — PG+SQLite migrations, both server split paths `COALESCE(mi.printer_id, c.printer_id)`, item PUT accepts it, desktop sync projection + null-sync (clearing back to Inherit propagates), Sunmi client split honours it, and an **Edit Item → 🖨️ Prints at** dropdown (under the course picker, only shows when printers exist). **Live-tested on the 4-printer rig:** Seaweed Salad (cat→.101, dish→.102) printed .102 · House Kimchi (no override) .101 · Miso Soup (cat default, dish→.103) .103 — dish-wins proven on paper. Also same session: v1.8.4 multi-station CONFIRMED on the live Fern till (5-ticket mixed order matched perfectly).
 
 ### 🖨️ SEPOS-STATION-002 — TRUE multi-station printing — ✅ v1.8.4 CONFIRMED WORKING ON THE LIVE TILL (Krit, 2026-07-28)

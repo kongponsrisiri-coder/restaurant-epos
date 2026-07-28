@@ -256,7 +256,7 @@ export default function InvoiceScannerTab() {
       if (mode === 'invoice') {
         const inv = data.invoice;
         setInvoiceData({ supplier_name: inv.supplier_name || '', invoice_date: inv.invoice_date || '', invoice_number: inv.invoice_number || '', total_amount: inv.total_amount || 0 });
-        setLineItems((inv.line_items || []).map(item => ({ name_extracted: item.name || '', quantity: item.quantity || 0, unit: (item.unit && item.unit !== 'each') ? item.unit : detectUnit(item.name), unit_price: item.unit_price || 0, line_total: item.line_total || (item.quantity * item.unit_price) || 0, matched_ingredient_id: fuzzyMatch(item.name) })));
+        setLineItems((inv.line_items || []).map(item => ({ name_extracted: item.name || '', quantity: item.quantity || 0, unit: (item.unit && item.unit !== 'each') ? item.unit : detectUnit(item.name), unit_price: item.unit_price || 0, line_total: item.line_total || (item.quantity * item.unit_price) || 0, matched_ingredient_id: fuzzyMatch(item.name), pack_size: item.pack_size || null, pack_unit: item.pack_unit || null })));
       } else {
         const exp = data.expense;
         setExpenseData({ vendor: exp.vendor || '', date: exp.date || today, description: exp.description || '', category: exp.category || 'overhead', total_amount: exp.total_amount || 0 });

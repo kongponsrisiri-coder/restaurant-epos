@@ -9488,6 +9488,61 @@ app.post('/api/print/drawer', async (req, res) => {
   }
 });
 
+// ── SEPOS-STATION-002 — per-station routing for DINE-IN server prints ────────
+// SEPOS-STATION-001 gave takeaway auto-print per-category stations, but the
+// dine-in endpoints below always printed to the single role printer, so a
+// desktop/browser till could never split sushi/starter/hot-kitchen stations
+// (only the native Sunmi till could, client-side). This helper mirrors the
+// takeaway router: items whose category has printers.printer_id assigned go
+// to that station; everything else stays on the role default. Fail-safe: a
+// station whose print FAILS returns its items to the default group so food
+// is never silently lost — worst case it prints at the main kitchen printer.
+async function splitPrintItemsByStation(items) {
+  const list = Array.isArray(items) ? items : [];
+  const menuIds = [...new Set(list.map(it => it && it.menu_item_id).filter(Boolean).map(Number))];
+  if (!menuIds.length) return { def: list, stations: [] };
+  try {
+    const rows = await pool.query(
+      `SELECT mi.id, c.printer_id
+         FROM menu_items mi LEFT JOIN categories c ON mi.category_id = c.id
+        WHERE mi.id = ANY($1)`, [menuIds]);
+    const printerByMenuId = new Map(rows.rows.map(r => [Number(r.id), r.printer_id]));
+    const stationRows = (await pool.query(
+      "SELECT * FROM printers WHERE is_active = 1 AND ip IS NOT NULL AND ip != ''"
+    ).catch(() => ({ rows: [] }))).rows;
+    const stationById = new Map(stationRows.map(p => [Number(p.id), p]));
+    const def = [], groups = new Map(); // printer_id -> { printer, items }
+    for (const it of list) {
+      const pid = it && it.menu_item_id != null ? printerByMenuId.get(Number(it.menu_item_id)) : null;
+      const station = pid != null ? stationById.get(Number(pid)) : null;
+      if (!station) { def.push(it); continue; }
+      if (!groups.has(station.id)) groups.set(station.id, { printer: station, items: [] });
+      groups.get(station.id).items.push(it);
+    }
+    return { def, stations: [...groups.values()] };
+  } catch (err) {
+    // Any lookup problem → behave exactly as before the feature existed.
+    console.warn('[print/stations] split failed, using single-printer path:', err.message);
+    return { def: list, stations: [] };
+  }
+}
+
+// Print station groups; returns items whose station print FAILED (rescue →
+// caller adds them back to the default-kitchen ticket so nothing is lost).
+async function printStationGroups(stations, settings, order) {
+  const rescued = [];
+  for (const g of stations) {
+    try {
+      await printService.printKitchenToPrinter(g.printer, settings, order, g.items);
+      console.log(`🖨️ Station "${g.printer.name}" printed ${g.items.length} item(s) for order #${order.id}`);
+    } catch (err) {
+      console.error(`[print/stations] station "${g.printer.name}" failed (${err.message}) — rescuing items to main kitchen`);
+      rescued.push(...g.items);
+    }
+  }
+  return rescued;
+}
+
 // Print a kitchen ticket for a given order + course
 app.post('/api/print/kitchen', async (req, res) => {
   const { order_id, items, course, printer_name, copies } = req.body;
@@ -9496,13 +9551,24 @@ app.post('/api/print/kitchen', async (req, res) => {
     await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
     if (copies) settings.printer_kitchen_copies = String(copies); // client-resolved copies (per-device or system)
-    if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
       `SELECT orders.*, tables.table_number
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
-    await printService.printKitchenTicket(settings, orderRes.rows[0], items || [], course || 1);
+    const order = orderRes.rows[0];
+    // SEPOS-STATION-002 — split by station, print stations, rescue failures.
+    const split = await splitPrintItemsByStation(items || []);
+    const rescued = split.stations.length ? await printStationGroups(split.stations, settings, order) : [];
+    const defItems = [...split.def, ...rescued];
+    if (defItems.length) {
+      if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
+      await printService.printKitchenTicket(settings, order, defItems, course || 1);
+    } else if (!split.stations.length) {
+      // No items at all and no stations — keep the legacy no_printer contract.
+      if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
+      await printService.printKitchenTicket(settings, order, [], course || 1);
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('[print/kitchen]', err.message);
@@ -9517,13 +9583,21 @@ app.post('/api/print/bar', async (req, res) => {
     const settings = await loadSettings();
     await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_bar_name = printer_name; settings.printer_bar_ip = ''; }
-    if (!settings.printer_bar_ip && !settings.printer_bar_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
       `SELECT orders.*, tables.table_number
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
-    await printService.printBarTicket(settings, orderRes.rows[0], items || []);
+    const order = orderRes.rows[0];
+    // SEPOS-STATION-002 — a drinks category can also be routed to a station
+    // (e.g. a coffee/dessert-bar printer); unmatched items keep the bar default.
+    const split = await splitPrintItemsByStation(items || []);
+    const rescued = split.stations.length ? await printStationGroups(split.stations, settings, order) : [];
+    const defItems = [...split.def, ...rescued];
+    if (defItems.length || !split.stations.length) {
+      if (!settings.printer_bar_ip && !settings.printer_bar_name) return res.json({ success: false, reason: 'no_printer' });
+      await printService.printBarTicket(settings, order, defItems);
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('[print/bar]', err.message);
@@ -9560,13 +9634,21 @@ app.post('/api/print/kitchen-full', async (req, res) => {
     await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
     if (copies) settings.printer_kitchen_copies = String(copies); // client-resolved copies (per-device or system)
-    if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
       `SELECT orders.*, tables.table_number
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
-    await printService.printFullKitchenTicket(settings, orderRes.rows[0], items || []);
+    const order = orderRes.rows[0];
+    // SEPOS-STATION-002 — split by station, print stations, rescue failures
+    // back onto the main kitchen ticket so no dish is silently lost.
+    const split = await splitPrintItemsByStation(items || []);
+    const rescued = split.stations.length ? await printStationGroups(split.stations, settings, order) : [];
+    const defItems = [...split.def, ...rescued];
+    if (defItems.length || !split.stations.length) {
+      if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
+      await printService.printFullKitchenTicket(settings, order, defItems);
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('[print/kitchen-full]', err.message);

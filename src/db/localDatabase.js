@@ -669,6 +669,9 @@ function runMigrations() {
   addColumnIfMissing('z_reports', 'card_difference', 'REAL');
   // Per-item course override (NULL = inherit the category default_course)
   addColumnIfMissing('menu_items', 'default_course', 'INTEGER');
+  // SEPOS-STATION-003: per-dish printer-station override (NULL = inherit
+  // the category's printer_id; dish wins over category when set)
+  addColumnIfMissing('menu_items', 'printer_id', 'INTEGER');
   // SEPOS-PAY-AMEND-001: audit columns on the payments row
   addColumnIfMissing('payments', 'amended_at',     'TIMESTAMP');
   addColumnIfMissing('payments', 'amended_by',     'INTEGER');

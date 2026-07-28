@@ -854,12 +854,15 @@ app.put('/api/menu/items/sort-order', async (req, res) => {
 app.put('/api/menu/items/:id', async (req, res) => {
   if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
-    const { name, name_alt, description, price, is_available, is_online, subcategory_id, category_id, vat_rate, default_course } = req.body;
+    const { name, name_alt, description, price, is_available, is_online, subcategory_id, category_id, vat_rate, default_course, printer_id } = req.body;
     // NULL / '' → inherit the category course; 1-4 → per-item override.
     const dc = (default_course == null || default_course === '') ? null : (Number(default_course) || null);
+    // SEPOS-STATION-003 — per-dish station override. '' / null → inherit the
+    // category's printer route; a printer id → this dish always prints there.
+    const pid = (printer_id == null || printer_id === '') ? null : (Number(printer_id) || null);
     await pool.query(
-      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, is_online=COALESCE($6, is_online), subcategory_id=$7, category_id=$8, vat_rate=COALESCE($9, vat_rate), default_course=$10 WHERE id=$11',
-      [name, name_alt || null, description, price, is_available, is_online ?? null, subcategory_id || null, category_id, vat_rate ?? null, dc, req.params.id]
+      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, is_online=COALESCE($6, is_online), subcategory_id=$7, category_id=$8, vat_rate=COALESCE($9, vat_rate), default_course=$10, printer_id=$11 WHERE id=$12',
+      [name, name_alt || null, description, price, is_available, is_online ?? null, subcategory_id || null, category_id, vat_rate ?? null, dc, pid, req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -6858,7 +6861,8 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
         const metaById = new Map(); // menu_item_id -> { is_bar, printer_id }
         if (menuIds.length) {
           const rows = await pool.query(
-            `SELECT mi.id, COALESCE(c.is_bar, 0) AS is_bar, c.printer_id
+            // SEPOS-STATION-003 — dish-level printer override wins over category.
+            `SELECT mi.id, COALESCE(c.is_bar, 0) AS is_bar, COALESCE(mi.printer_id, c.printer_id) AS printer_id
                FROM menu_items mi LEFT JOIN categories c ON mi.category_id = c.id
               WHERE mi.id = ANY($1)`,
             [menuIds]
@@ -9502,8 +9506,9 @@ async function splitPrintItemsByStation(items) {
   const menuIds = [...new Set(list.map(it => it && it.menu_item_id).filter(Boolean).map(Number))];
   if (!menuIds.length) return { def: list, stations: [] };
   try {
+    // SEPOS-STATION-003 — dish-level override wins over the category route.
     const rows = await pool.query(
-      `SELECT mi.id, c.printer_id
+      `SELECT mi.id, COALESCE(mi.printer_id, c.printer_id) AS printer_id
          FROM menu_items mi LEFT JOIN categories c ON mi.category_id = c.id
         WHERE mi.id = ANY($1)`, [menuIds]);
     const printerByMenuId = new Map(rows.rows.map(r => [Number(r.id), r.printer_id]));

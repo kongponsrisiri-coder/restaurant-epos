@@ -212,8 +212,8 @@ export default function MenuSection() {
     if (cat?.id) setActiveCategory(cat.id);
   };
 
-  const openAddForm  = () => { setForm({ name: '', description: '', price: '', category_id: activeCategory, subcategory_id: null, vat_rate: 20, default_course: '' }); setEditItem(null); setShowForm(true); };
-  const openEditForm = (item) => { setForm({ name: item.name, name_alt: item.name_alt || '', description: item.description || '', price: item.price, category_id: item.category_id, subcategory_id: item.subcategory_id || null, vat_rate: item.vat_rate ?? 20, default_course: item.default_course ?? '' }); setEditItem(item); setShowForm(true); };
+  const openAddForm  = () => { setForm({ name: '', description: '', price: '', category_id: activeCategory, subcategory_id: null, vat_rate: 20, default_course: '', printer_id: '' }); setEditItem(null); setShowForm(true); };
+  const openEditForm = (item) => { setForm({ name: item.name, name_alt: item.name_alt || '', description: item.description || '', price: item.price, category_id: item.category_id, subcategory_id: item.subcategory_id || null, vat_rate: item.vat_rate ?? 20, default_course: item.default_course ?? '', printer_id: item.printer_id ?? '' }); setEditItem(item); setShowForm(true); };
 
   // SEPOS-046v — optimistic item save. Reflects the change in local menu
   // state immediately (including moving the item between categories when
@@ -676,6 +676,13 @@ export default function MenuSection() {
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Price (£) *</label><input value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} type="number" step="0.01" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>VAT rate</label><select value={form.vat_rate ?? 20} onChange={e => setForm({ ...form, vat_rate: Number(e.target.value) })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}><option value={20}>20% (standard)</option><option value={5}>5% (reduced)</option><option value={0}>0% (zero rated)</option></select><div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>Prices are VAT-inclusive — this affects the VAT breakdown on bills + reports.</div></div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Kitchen course</label><select value={form.default_course ?? ''} onChange={e => setForm({ ...form, default_course: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}><option value="">Inherit from category</option><option value={1}>Starter</option><option value={2}>Main</option><option value={3}>Dessert</option><option value={4}>Extra</option></select><div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>Set this for a mixed category (e.g. a Lunch menu) so this dish always prints on the right course — otherwise it follows the category.</div></div>
+              {/* SEPOS-STATION-003 — per-dish printer station override. Same
+                  inherit pattern as the course picker above: blank = follow
+                  the category's route; a printer = this dish always prints
+                  there (sushi bar / hot kitchen / dessert station). */}
+              {printers.length > 0 && (
+                <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>🖨️ Prints at</label><select value={form.printer_id ?? ''} onChange={e => setForm({ ...form, printer_id: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}><option value="">Inherit from category</option>{printers.map(p => <option key={p.id} value={p.id}>{p.name}{p.ip && p.ip !== p.name ? ` (${p.ip})` : ''}</option>)}</select><div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>For dishes that belong to a different station than the rest of their category — e.g. Seaweed Salad → sushi bar while other Starters go to the hot kitchen. Blank = follows the category's printer.</div></div>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 24 }}><button onClick={() => setShowForm(false)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 600 }}>Cancel</button><button onClick={handleSave} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 600 }}>{editItem ? 'Save Changes' : 'Add Item'}</button></div>
           </div>

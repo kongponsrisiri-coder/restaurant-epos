@@ -783,6 +783,9 @@ async function pullMenuTree() {
         // override (7437041, v1.6.115) never reached local-mode tills, so
         // offline ordering dropped every item into the course-bar selection.
         default_course: i.default_course,
+        // SEPOS-STATION-003 — per-dish station override; included from day
+        // one so it can never hit the dropped-projection bug class above.
+        printer_id: i.printer_id,
       }))
     );
 
@@ -790,7 +793,9 @@ async function pullMenuTree() {
     // the till actually clears on desktop (SEPOS-PRINT-002 flexible routing).
     const nCat   = await upsertRows('categories', 'id', flatCategories, ['printer_id']);
     const nSub   = await upsertRows('subcategories', 'id', flatSubcategories);
-    const nItems = await upsertRows('menu_items', 'id', flatItems);
+    // menu_items.printer_id (SEPOS-STATION-003 per-dish override) also
+    // null-syncs, so switching a dish back to "Inherit" clears on desktop.
+    const nItems = await upsertRows('menu_items', 'id', flatItems, ['printer_id']);
 
     // SEPOS-046p — propagate cloud-side deletions. Pull was upsert-only
     // before, so deleting an item / subcategory / category on the web

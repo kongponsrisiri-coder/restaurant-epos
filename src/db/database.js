@@ -135,6 +135,11 @@ async function initDB() {
     // NULL = inherit the category's default_course — lets a mixed category
     // (e.g. "Lunch" holding both starters and mains) file each dish correctly.
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS default_course INTEGER`);
+    // SEPOS-STATION-003 — per-DISH printer-station override. NULL = inherit
+    // the category's printer_id. Dish wins over category, so a mixed category
+    // (Takoyaki → hot kitchen while Seaweed Salad → sushi bar) routes each
+    // dish to its own station. Same inherit pattern as default_course above.
+    await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS printer_id INTEGER`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS modifier_groups (

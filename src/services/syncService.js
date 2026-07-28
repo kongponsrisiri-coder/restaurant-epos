@@ -665,7 +665,7 @@ async function getLocalColumns(table) {
   return r.rows.map((row) => row.name);
 }
 
-async function upsertRows(table, pk, rows) {
+async function upsertRows(table, pk, rows, nullableCols = []) {
   if (!Array.isArray(rows) || rows.length === 0) return 0;
   const localCols = await getLocalColumns(table);
   if (localCols.length === 0) return 0;
@@ -676,9 +676,19 @@ async function upsertRows(table, pk, rows) {
     // they don't clobber non-null local defaults (e.g. staff.is_active=1 from
     // the seed when cloud returns is_active=null, or pin which cloud never
     // sends at all but local needs to keep).
-    const cols = Object.keys(row).filter(
-      (c) => localCols.includes(c) && row[c] !== null && row[c] !== undefined
-    );
+    // EXCEPTION — columns listed in `nullableCols` sync even when the cloud
+    // value is null, so a DELIBERATELY cleared value actually clears locally
+    // instead of sticking forever. This is what makes un-assigning a category
+    // → printer route work on desktop (SEPOS-PRINT-002 flexible multi-station
+    // routing): remove the route in the till → cloud printer_id = null → this
+    // now propagates the null down. `undefined` (a field the cloud never sends)
+    // is still always dropped — only an explicit null on an opted-in column
+    // clears.
+    const cols = Object.keys(row).filter((c) => {
+      if (!localCols.includes(c) || row[c] === undefined) return false;
+      if (row[c] === null) return nullableCols.includes(c);
+      return true;
+    });
     if (!cols.includes(pk)) continue;
 
     const placeholders = cols.map((_, i) => `$${i + 1}`).join(',');
@@ -776,7 +786,9 @@ async function pullMenuTree() {
       }))
     );
 
-    const nCat   = await upsertRows('categories', 'id', flatCategories);
+    // printer_id opted into null-sync so removing a category→printer route in
+    // the till actually clears on desktop (SEPOS-PRINT-002 flexible routing).
+    const nCat   = await upsertRows('categories', 'id', flatCategories, ['printer_id']);
     const nSub   = await upsertRows('subcategories', 'id', flatSubcategories);
     const nItems = await upsertRows('menu_items', 'id', flatItems);
 

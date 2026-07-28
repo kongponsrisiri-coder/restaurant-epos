@@ -443,6 +443,20 @@ export default function InvoiceScannerTab() {
               <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', textAlign: 'left' }}>
                 {confirmResult.created?.length > 0 && (<div style={{ marginBottom: 12 }}><div style={{ fontWeight: 700, fontSize: 13, color: '#22c55e', marginBottom: 6 }}>🆕 {confirmResult.created.length} new ingredient{confirmResult.created.length > 1 ? 's' : ''} created:</div>{confirmResult.created.map(n => <div key={n} style={{ fontSize: 13, color: '#555', padding: '2px 0', paddingLeft: 12 }}>• {n}</div>)}</div>)}
                 {confirmResult.updated?.length > 0 && (<div><div style={{ fontWeight: 700, fontSize: 13, color: '#3b82f6', marginBottom: 6 }}>🔄 {confirmResult.updated.length} ingredient{confirmResult.updated.length > 1 ? 's' : ''} cost updated:</div>{confirmResult.updated.map(n => <div key={n} style={{ fontSize: 13, color: '#555', padding: '2px 0', paddingLeft: 12 }}>• {n}</div>)}</div>)}
+                {/* SEPOS-INV-UNITS-001 — lines the confirm REFUSED because the
+                    invoice unit couldn't be reconciled with the ingredient's
+                    unit. Refusing loudly beats silently corrupting costs. */}
+                {confirmResult.skipped_unit_mismatch?.length > 0 && (
+                  <div style={{ marginTop: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px' }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#dc2626', marginBottom: 6 }}>⚠️ {confirmResult.skipped_unit_mismatch.length} line{confirmResult.skipped_unit_mismatch.length > 1 ? 's' : ''} NOT applied — unit mismatch:</div>
+                    {confirmResult.skipped_unit_mismatch.map((l, i) => (
+                      <div key={i} style={{ fontSize: 12.5, color: '#7f1d1d', padding: '3px 0', paddingLeft: 12 }}>
+                        • <b>{l.name}</b> — invoice says <b>{l.invoice_unit}</b>, ingredient counts in <b>{l.ingredient_unit}</b>.<br />
+                        <span style={{ color: '#b45309', paddingLeft: 12 }}>{l.hint}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div style={{ marginTop: 12, fontSize: 12, color: '#888', borderTop: '1px solid #f0f0f0', paddingTop: 10 }}>📦 All quantities recorded in Stock Log · Go to <strong>📋 Recipes & Costs</strong> to build recipes using these ingredients</div>
               </div>
             )}

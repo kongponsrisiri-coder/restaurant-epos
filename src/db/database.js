@@ -1001,6 +1001,14 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
     // not manual entry).
     await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS is_batch BOOLEAN DEFAULT FALSE`);
     await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS batch_recipe_id INTEGER`);
+    // SEPOS-INV-UNITS-001 — purchase↔usage unit bridge. purchase_unit is what
+    // supplier invoices arrive in ('each','bottle','case','L'…); purchase_to_usage
+    // is how many USAGE units (the ingredient's `unit`) one purchase unit
+    // contains (1 bottle = 1000 ml → 1000; 1 duck ≈ 2.1 kg → 2.1). NULL/0 =
+    // no bridge configured; invoice confirm then only accepts same-unit or
+    // pure-metric-convertible lines and SKIPS anything else loudly.
+    await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS purchase_unit VARCHAR(20)`);
+    await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS purchase_to_usage NUMERIC(12,4)`);
 
     // SEPOS-LOGIN-SEED — fresh-till default admin (parity with the spa till).
     // A brand-new till (or one reset for a new client) has no staff, so nobody

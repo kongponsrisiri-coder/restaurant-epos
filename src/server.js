@@ -5316,7 +5316,7 @@ app.post('/api/ai/scan-invoice', requireStaffAuthOrSyncSecret(['admin', 'manager
       if (relayed) return res.status(relayed.status).json(relayed.json);
       return res.status(500).json({ success: false, error: 'ANTHROPIC_API_KEY not set locally and no cloud relay configured' });
     }
-    const INVOICE_PROMPT = `You are reading a supplier invoice or delivery note for a restaurant.\nExtract all information and return ONLY a valid JSON object — no other text, no markdown, no explanation.\n\nRequired JSON structure:\n{\n  "supplier_name": "string",\n  "invoice_date": "YYYY-MM-DD",\n  "invoice_number": "string",\n  "total_amount": number,\n  "line_items": [\n    { "name": "string", "quantity": number, "unit": "string", "unit_price": number, "line_total": number }\n  ]\n}\n\nRules: If a value is missing use null for strings and 0 for numbers. Convert prices to GBP. Return ONLY the JSON object.`;
+    const INVOICE_PROMPT = `You are reading a supplier invoice or delivery note for a restaurant.\nExtract all information and return ONLY a valid JSON object — no other text, no markdown, no explanation.\n\nRequired JSON structure:\n{\n  "supplier_name": "string",\n  "invoice_date": "YYYY-MM-DD",\n  "invoice_number": "string",\n  "total_amount": number,\n  "line_items": [\n    { "name": "string", "quantity": number, "unit": "string", "unit_price": number, "line_total": number, "pack_size": number, "pack_unit": "string" }\n  ]\n}\n\nRules: If a value is missing use null for strings and 0 for numbers. Convert prices to GBP. pack_size/pack_unit describe what ONE invoiced unit contains when stated — e.g. "6 x 1L Soy Sauce @ \u00a35/bottle" \u2192 quantity 6, unit "bottle", unit_price 5, pack_size 1, pack_unit "L"; "Chicken 2.5kg bag" \u2192 quantity N, unit "bag", pack_size 2.5, pack_unit "kg". Use 0/null when the pack content is not stated. Return ONLY the JSON object.`;
     const https = require('https');
     const requestBody = JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2000, messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: media_type || 'image/jpeg', data: image_base64 } }, { type: 'text', text: INVOICE_PROMPT }] }] });
     const result = await new Promise((resolve, reject) => {
@@ -5817,6 +5817,72 @@ async function recalcRecipesForIngredients(client, ingredientIds) {
   return recipeIds.length;
 }
 
+// ── SEPOS-INV-UNITS-001 — unit intelligence for invoice confirm ──────────────
+// Invoices arrive in purchase-world units (each, bottle, case, L); recipes cost
+// in usage-world units (ml, g, kg). Reconciling wrongly is worse than refusing:
+// stamping a £8/each price onto a per-kg ingredient silently corrupts stock AND
+// every recipe cost. Rules, in priority order:
+//   1. Same unit (after aliasing)            → apply as-is
+//   2. Pure metric conversion (L↔ml, kg↔g)   → convert qty ×1000 / cost ÷1000
+//   3. Ingredient's purchase bridge          → line unit == purchase_unit and
+//      purchase_to_usage set ("1 each = 2.1 kg") → qty×factor, cost÷factor
+//   4. AI-extracted pack info                → "6 × 1L @ £30/bottle" with a
+//      metric pack unit convertible to the usage unit
+//   5. Nothing reconciles                    → SKIP the line and REPORT it —
+//      never guess with money.
+const UNIT_ALIASES = {
+  l: 'l', ltr: 'l', litre: 'l', litres: 'l', liter: 'l', liters: 'l',
+  ml: 'ml', mls: 'ml', millilitre: 'ml', milliliter: 'ml',
+  kg: 'kg', kgs: 'kg', kilo: 'kg', kilos: 'kg', kilogram: 'kg', kilograms: 'kg',
+  g: 'g', gr: 'g', gram: 'g', grams: 'g',
+  each: 'each', ea: 'each', pc: 'each', pcs: 'each', piece: 'each', pieces: 'each', unit: 'each', units: 'each', x: 'each',
+  bottle: 'bottle', bottles: 'bottle', btl: 'bottle',
+  case: 'case', cases: 'case', box: 'case', boxes: 'case', pack: 'case', packs: 'case', pk: 'case',
+  tin: 'tin', tins: 'tin', can: 'tin', cans: 'tin',
+  bag: 'bag', bags: 'bag', sack: 'bag',
+};
+function normalizeUnit(u) {
+  const k = String(u || '').trim().toLowerCase().replace(/[.]/g, '');
+  return UNIT_ALIASES[k] || k;
+}
+// Millilitres/grams per one of the given metric unit; null = not metric.
+const METRIC_BASE = { l: { base: 'ml', per: 1000 }, ml: { base: 'ml', per: 1 }, kg: { base: 'g', per: 1000 }, g: { base: 'g', per: 1 } };
+// How many `toU` are in one `fromU` — 1 for same unit, ×1000/÷1000 across a
+// metric family, null when the units are unrelated (each vs kg etc.).
+function unitsPerUnit(fromU, toU) {
+  const f = normalizeUnit(fromU), t = normalizeUnit(toU);
+  if (!f || !t) return null;
+  if (f === t) return 1;
+  const mf = METRIC_BASE[f], mt = METRIC_BASE[t];
+  if (mf && mt && mf.base === mt.base) return mf.per / mt.per;
+  return null;
+}
+// Resolve an invoice line against an ingredient. Returns
+// { usageQty, usageCost, how } or null when irreconcilable.
+function reconcileInvoiceLine(item, qty, unitPrice, ing) {
+  const lineU = normalizeUnit(item.unit);
+  const ingU  = normalizeUnit(ing.unit);
+  // 1+2 — same unit or metric family
+  const per = unitsPerUnit(lineU, ingU);
+  if (per != null) {
+    return { usageQty: qty * per, usageCost: unitPrice / per, how: per === 1 ? 'same-unit' : `metric ${lineU}→${ingU}` };
+  }
+  // 3 — the ingredient's configured purchase bridge (e.g. 1 each = 2.1 kg)
+  const bridgeU = normalizeUnit(ing.purchase_unit);
+  const factor  = Number(ing.purchase_to_usage) || 0;
+  if (bridgeU && factor > 0 && lineU === bridgeU) {
+    return { usageQty: qty * factor, usageCost: unitPrice / factor, how: `bridge 1 ${bridgeU} = ${factor} ${ingU}` };
+  }
+  // 4 — AI-extracted pack info ("1L bottle" → pack_size 1, pack_unit L)
+  const packSize = Number(item.pack_size) || 0;
+  const packPer  = packSize > 0 ? unitsPerUnit(item.pack_unit, ingU) : null;
+  if (packPer != null && packSize > 0) {
+    const perPurchase = packSize * packPer;
+    return { usageQty: qty * perPurchase, usageCost: unitPrice / perPurchase, how: `pack ${packSize} ${normalizeUnit(item.pack_unit)}/${lineU}` };
+  }
+  return null; // 5 — refuse, never guess
+}
+
 app.post('/api/supplier-invoices', async (req, res) => {
   const client = await pool.connect();
   try {
@@ -5838,6 +5904,7 @@ app.post('/api/supplier-invoices', async (req, res) => {
     const created = [];
     const updated = [];
     const price_changes = [];
+    const skipped_unit_mismatch = []; // SEPOS-INV-UNITS-001 — refused lines, reported loudly
 
     // 2. Process each line item
     for (const item of (line_items || [])) {
@@ -5848,12 +5915,27 @@ app.post('/api/supplier-invoices', async (req, res) => {
       if (item.matched_ingredient_id) {
         // Matched to an existing ingredient
         const ingRes = await client.query(
-          `SELECT id, name_en, cost_per_unit FROM ingredients WHERE id = $1`,
+          `SELECT id, name_en, unit, cost_per_unit, purchase_unit, purchase_to_usage FROM ingredients WHERE id = $1`,
           [item.matched_ingredient_id]
         );
         if (ingRes.rows.length === 0) continue;
         const ing = ingRes.rows[0];
         const oldCost = parseFloat(ing.cost_per_unit) || 0;
+
+        // SEPOS-INV-UNITS-001 — reconcile invoice units to the ingredient's
+        // usage unit, or refuse the line. Stamping mismatched units corrupted
+        // both stock and every recipe cost (the old code applied blindly).
+        const rec = reconcileInvoiceLine(item, qty, unitPrice, ing);
+        if (!rec) {
+          skipped_unit_mismatch.push({
+            name: item.name || ing.name_en,
+            invoice_unit: item.unit || '?',
+            ingredient_unit: ing.unit || '?',
+            hint: `Set a purchase bridge on "${ing.name_en}" (e.g. 1 ${normalizeUnit(item.unit) || 'each'} = X ${ing.unit}) or edit the line to ${ing.unit}.`,
+          });
+          continue;
+        }
+        const newCost = Math.round(rec.usageCost * 10000) / 10000;
 
         await client.query(
           `UPDATE ingredients
@@ -5861,35 +5943,52 @@ app.post('/api/supplier-invoices', async (req, res) => {
                cost_per_unit = $2,
                updated_at = NOW()
            WHERE id = $3`,
-          [qty, unitPrice, ing.id]
+          [rec.usageQty, newCost, ing.id]
         );
 
         await client.query(
           `INSERT INTO stock_movements (ingredient_id, movement_type, quantity, cost_at_time, note, reference)
            VALUES ($1, 'delivery', $2, $3, $4, $5)`,
-          [ing.id, qty, unitPrice, `Invoice ${invoice_number || ''}`, `invoice:${invoiceId}`]
+          [ing.id, rec.usageQty, newCost, `Invoice ${invoice_number || ''}${rec.how !== 'same-unit' ? ` (${rec.how})` : ''}`, `invoice:${invoiceId}`]
         );
 
         updated.push(ing.name_en);
 
-        if (Math.abs(unitPrice - oldCost) > 0.001) {
-          price_changes.push({ id: ing.id, name: ing.name_en, old_cost: oldCost, new_cost: unitPrice });
+        if (Math.abs(newCost - oldCost) > 0.001) {
+          price_changes.push({ id: ing.id, name: ing.name_en, old_cost: oldCost, new_cost: newCost });
         }
 
       } else {
-        // No match — auto-create a new ingredient
+        // No match — auto-create a new ingredient.
+        // SEPOS-INV-UNITS-001 — when the AI extracted metric pack info
+        // ("2 bottles × 1L @ £35"), create the ingredient straight in the
+        // metric base unit (ml/g) with the pro-rated cost, so recipes can use
+        // it in real ml/g from day one. A purchase bridge is stored too, so
+        // the NEXT invoice ("each"/"bottle" lines) reconciles automatically.
         const newName = item.name_extracted || item.name || 'Unknown Item';
+        let cUnit = item.unit || 'unit', cQty = qty, cCost = unitPrice, cPU = null, cPTU = null;
+        const packSize = Number(item.pack_size) || 0;
+        const packU = normalizeUnit(item.pack_unit);
+        if (packSize > 0 && METRIC_BASE[packU]) {
+          const base = METRIC_BASE[packU];
+          const perPurchase = packSize * base.per;      // usage units per each/bottle/case
+          cUnit = base.base;                            // 'ml' or 'g'
+          cQty  = qty * perPurchase;
+          cCost = Math.round((unitPrice / perPurchase) * 10000) / 10000;
+          cPU   = normalizeUnit(item.unit) || 'each';
+          cPTU  = perPurchase;
+        }
         const newIng = await client.query(
-          `INSERT INTO ingredients (name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, supplier_name, updated_at)
-           VALUES ($1, '', $2, $3, 100, 'Other', $4, $5, NOW())
+          `INSERT INTO ingredients (name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, supplier_name, purchase_unit, purchase_to_usage, updated_at)
+           VALUES ($1, '', $2, $3, 100, 'Other', $4, $5, $6, $7, NOW())
            RETURNING id, name_en`,
-          [newName, item.unit || 'unit', unitPrice, qty, supplier_name || '']
+          [newName, cUnit, cCost, cQty, supplier_name || '', cPU, cPTU]
         );
 
         await client.query(
           `INSERT INTO stock_movements (ingredient_id, movement_type, quantity, cost_at_time, note, reference)
            VALUES ($1, 'delivery', $2, $3, $4, $5)`,
-          [newIng.rows[0].id, qty, unitPrice, `Invoice ${invoice_number || ''} (auto-created)`, `invoice:${invoiceId}`]
+          [newIng.rows[0].id, cQty, cCost, `Invoice ${invoice_number || ''} (auto-created)`, `invoice:${invoiceId}`]
         );
 
         created.push(newName);
@@ -5904,7 +6003,7 @@ app.post('/api/supplier-invoices', async (req, res) => {
 
     // 4. Return everything the frontend needs for the done screen
     await client.query('COMMIT');
-    res.json({ id: invoiceId, success: true, created, updated, price_changes, recipes_recalculated });
+    res.json({ id: invoiceId, success: true, created, updated, price_changes, recipes_recalculated, skipped_unit_mismatch });
 
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (e) {}
@@ -5976,16 +6075,16 @@ app.get('/api/ingredients/low-stock', async (req, res) => {
 
 app.post('/api/ingredients', async (req, res) => {
   try {
-    const { name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens } = req.body;
-    const result = await pool.query(`INSERT INTO ingredients (name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()) RETURNING id`, [name_en, name_th || '', unit || 'kg', parseFloat(cost_per_unit) || 0, parseFloat(yield_percentage) || 100, category || 'Other', parseFloat(current_stock) || 0, par_level ? parseFloat(par_level) : null, supplier_name || '', allergens || '[]']);
+    const { name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens, purchase_unit, purchase_to_usage } = req.body;
+    const result = await pool.query(`INSERT INTO ingredients (name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens, purchase_unit, purchase_to_usage, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW()) RETURNING id`, [name_en, name_th || '', unit || 'kg', parseFloat(cost_per_unit) || 0, parseFloat(yield_percentage) || 100, category || 'Other', parseFloat(current_stock) || 0, par_level ? parseFloat(par_level) : null, supplier_name || '', allergens || '[]', purchase_unit || null, purchase_to_usage ? parseFloat(purchase_to_usage) : null]);
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.put('/api/ingredients/:id', async (req, res) => {
   try {
-    const { name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens } = req.body;
-    const result = await pool.query(`UPDATE ingredients SET name_en=$1, name_th=$2, unit=$3, cost_per_unit=$4, yield_percentage=$5, category=$6, current_stock=$7, par_level=$8, supplier_name=$9, allergens=$10, updated_at=NOW() WHERE id=$11`, [name_en, name_th || '', unit || 'kg', parseFloat(cost_per_unit) || 0, parseFloat(yield_percentage) || 100, category || 'Other', parseFloat(current_stock) || 0, par_level ? parseFloat(par_level) : null, supplier_name || '', allergens || '[]', req.params.id]);
+    const { name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens, purchase_unit, purchase_to_usage } = req.body;
+    const result = await pool.query(`UPDATE ingredients SET name_en=$1, name_th=$2, unit=$3, cost_per_unit=$4, yield_percentage=$5, category=$6, current_stock=$7, par_level=$8, supplier_name=$9, allergens=$10, purchase_unit=$11, purchase_to_usage=$12, updated_at=NOW() WHERE id=$13`, [name_en, name_th || '', unit || 'kg', parseFloat(cost_per_unit) || 0, parseFloat(yield_percentage) || 100, category || 'Other', parseFloat(current_stock) || 0, par_level ? parseFloat(par_level) : null, supplier_name || '', allergens || '[]', purchase_unit || null, purchase_to_usage ? parseFloat(purchase_to_usage) : null, req.params.id]);
     res.json({ success: true, changes: result.rowCount });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

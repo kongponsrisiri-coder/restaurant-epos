@@ -711,6 +711,9 @@ function runMigrations() {
   // the inventory CREATE TABLE block. Safe no-ops on fresh installs.
   addColumnIfMissing('ingredients', 'is_batch',        'INTEGER DEFAULT 0');
   addColumnIfMissing('ingredients', 'batch_recipe_id', 'INTEGER');
+  // SEPOS-INV-UNITS-001: purchase↔usage unit bridge (see database.js)
+  addColumnIfMissing('ingredients', 'purchase_unit',     'TEXT');
+  addColumnIfMissing('ingredients', 'purchase_to_usage', 'REAL');
   addColumnIfMissing('stock_movements', 'order_item_id', 'INTEGER');
   // SEPOS-034: takeaway / delivery online ordering
   addColumnIfMissing('orders', 'order_type', "TEXT DEFAULT 'dine_in'");

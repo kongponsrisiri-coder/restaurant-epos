@@ -137,6 +137,18 @@ status with Korakot before escalating to "available now."
 
 **Go-live gate for a SiamPay card/campaign:** (a) true status confirmed, (b) Nick locks the rate, (c) first live client's payout verified, (d) Korakot's approval. Then build the bilingual card (navy/gold, real logo). Source runbook: `~/Documents/SiamEPOS-Docs/manuals/SiamPay-Client-Onboarding-Runbook.md`.
 
+### 🆚 Rented Till vs Whole Restaurant — our 3 winning angles (Korakot ✅ 2026-07-26)
+Against a **typical rented EPOS** (always generic — never name a brand with a £/% claim, ASA):
+
+1. **Thai-first, not Thai-as-an-extra.** Menu, allergens and receipts in Thai + English from day one, at no extra cost — others charge you more just to add Thai.
+   🇹🇭 "ภาษาไทยตั้งแต่วันแรก ไม่คิดเพิ่ม — เจ้าอื่นคิดเงินเพิ่มแค่จะใส่ภาษาไทย"
+2. **One honest price — everything included.** No annual licence-renewal fee, no setup or training charges, no "+£120 just for Thai," no "£50 that quietly becomes £70." The price you're told is the price you pay.
+   🇹🇭 "ราคาเดียว รวมทุกอย่าง — ไม่มีค่าต่อไลเซนส์รายปี ไม่มีค่าติดตั้ง/อบรม ราคาที่บอกคือราคาที่จ่ายจริง"
+3. **A platform, not a till.** Roughly the same monthly outlay, but a rental gives you a cash register — SiamEPOS runs the whole restaurant: 0% bookings + takeaway, CRM, website, offline, any device. It grows revenue; a till just counts it.
+   🇹🇭 "ไม่ใช่แค่เครื่องคิดเงิน — SiamEPOS ดูแลทั้งร้าน: จอง/สั่งกลับบ้าน ค่าคอม 0%, ฐานลูกค้า, เว็บไซต์, ออฟไลน์, ทุกอุปกรณ์"
+
+**✅ "Price-locked" is CONFIRMED for the Founder's Rate** (Korakot, 2026-07-26): £59 stays £59 for clients on it — safe to use, e.g. *"lock in the Founder's Rate £59 — price-locked, it won't go up."* This is a strong counter to the rental's "£50 that quietly becomes £70," and reinforces angle #2. **⚠️ Still guardrails:** keep the comparison **qualitative** — **£59 is +VAT** (never say "all-in"); the "£708 / £1,100" first-year figures are VAT-sensitive, don't quote them in copy without Nick's sign-off. Full sheet (leave-behind/PDF): `~/Documents/SiamEPOS-Docs/marketing/SiamEPOS-vs-Rented-EPOS-Comparison.html`.
+
 ---
 
 ## PRICING TO MENTION IN CAMPAIGNS

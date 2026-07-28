@@ -589,7 +589,15 @@ async function applyPrinterRouting(settings) {
   const byId = new Map(printers.map(p => [String(p.id), p]));
   for (const role of ['receipt', 'kitchen', 'bar']) {
     const defId = settings[`default_${role}_printer_id`];
-    const p = (defId && byId.get(String(defId))) || printers.find(x => Number(x[`role_${role}`]) === 1);
+    // SEPOS-PRINT-STAR-001 — a starred default only counts while that printer
+    // still CARRIES the role. Before this, unticking (say) Bar on the starred
+    // printer and ticking it on another changed nothing: the stale star kept
+    // winning and tickets went to the old printer with no visible reason.
+    // Stale/roleless star → fall through to the first printer flagged with
+    // the role, i.e. what the operator's ticks say.
+    const starred = defId ? byId.get(String(defId)) : null;
+    const p = (starred && Number(starred[`role_${role}`]) === 1 ? starred : null)
+      || printers.find(x => Number(x[`role_${role}`]) === 1);
     if (!p || !(p.ip || p.name)) continue;
     settings[`printer_${role}_ip`]        = p.ip || '';
     settings[`printer_${role}_port`]      = p.port || 9100;

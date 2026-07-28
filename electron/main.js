@@ -598,16 +598,11 @@ function stopLocalServer() {
 }
 
 function createWindow() {
-  // SEPOS-PRO-007 — launch the till filling the screen so it presents like a
-  // dedicated POS terminal. On Windows/Linux that's true fullscreen (F11/Esc).
-  // On macOS we DON'T use native fullscreen: on notched MacBooks it reserves a
-  // black safe-area strip around the notch/menu-bar that visibly jitters as the
-  // menu bar auto-reveals — so we open maximized (windowed, below the menu bar)
-  // instead. Same full-screen POS look, no notch strip, no flicker. Staff can
-  // still go true fullscreen manually (Mac: Ctrl+Cmd+F).
-  const isMac = process.platform === 'darwin';
   mainWindow = new BrowserWindow({
-    fullscreen: !isMac,
+    // SEPOS-PRO-007 — launch the till in true fullscreen so it presents like a
+    // dedicated POS terminal. width/height stay as the restored size if staff
+    // leave fullscreen (Mac: Ctrl+Cmd+F · Windows: F11 · Esc).
+    fullscreen: true,
     width: 1280,
     height: 800,
     minWidth: 1024,
@@ -622,8 +617,6 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
-  // macOS: fill the screen without native fullscreen's notch safe-area.
-  if (isMac) mainWindow.maximize();
 
   const forceDev = process.env.ELECTRON_DEV === '1';
   const indexFile = resolveClientIndex();

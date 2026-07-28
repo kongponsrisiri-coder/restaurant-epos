@@ -2763,6 +2763,47 @@ app.get('/api/reports/daily', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-MENUPERF-001 — per-dish sales vs recipe cost for the Menu
+// Performance report (Inventory → Cost & Sales → Print A4). Read-only
+// aggregate: sold qty + revenue per dish over the range, joined to the
+// dish's recipe cost_per_portion where a recipe exists. Line revenue
+// honours per-item discounts; bill-level discounts and service charge are
+// intentionally NOT allocated down to dishes (menu engineering wants the
+// dish's own pricing performance). Dishes without recipes come back with
+// cost NULL so the client can show "no recipe" rather than a fake margin.
+app.get('/api/reports/menu-performance', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ error: 'from and to required (YYYY-MM-DD)' });
+    const r = await pool.query(`
+      SELECT
+        COALESCE(mi.id, 0)                              AS menu_item_id,
+        COALESCE(mi.name, oi.item_name, 'Unknown item') AS name,
+        COALESCE(c.name, 'Other')                       AS category,
+        SUM(oi.quantity)                                AS qty,
+        SUM(
+          (oi.quantity * oi.unit_price)
+          - CASE
+              WHEN oi.discount_type = 'percent' THEN (oi.quantity * oi.unit_price) * (COALESCE(oi.discount_value,0) / 100.0)
+              WHEN oi.discount_type = 'fixed'   THEN COALESCE(oi.discount_value,0)
+              ELSE 0
+            END
+        )                                               AS revenue,
+        MAX(rec.cost_per_portion)                       AS cost_per_portion
+      FROM order_items oi
+      JOIN orders o        ON o.id = oi.order_id
+      LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+      LEFT JOIN categories c  ON c.id  = mi.category_id
+      LEFT JOIN recipes rec   ON rec.menu_item_id = mi.id
+      WHERE o.status = 'closed' AND oi.voided = 0
+        AND o.closed_at::date >= $1::date AND o.closed_at::date <= $2::date
+      GROUP BY COALESCE(mi.id, 0), COALESCE(mi.name, oi.item_name, 'Unknown item'), COALESCE(c.name, 'Other')
+      ORDER BY revenue DESC
+    `, [from, to]);
+    res.json({ from, to, items: r.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/reports/summary', async (req, res) => {
   try {
     const { from, to } = req.query;

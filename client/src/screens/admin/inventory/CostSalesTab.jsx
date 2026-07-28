@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { getSummaryReport, getWastageReport } from '../../../api';
+import { getSummaryReport, getWastageReport, getMenuPerformance, getSettings } from '../../../api';
 import { invAPI, today } from '../shared';
 import { downloadCsv } from '../../../utils/csv';
+import { fullPagePrint, pageHtml, restaurantName, dateLabel } from '../../../utils/reportPrinter';
 
 export default function CostSalesTab() {
   const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
@@ -98,6 +99,93 @@ export default function CostSalesTab() {
     downloadCsv(`cost-sales_${from}_to_${to}.csv`, rows);
   };
 
+  // SEPOS-MENUPERF-001 — A4 "Menu Performance" dashboard: restaurant P&L
+  // header + per-dish sales vs recipe-cost table with colour-coded margins.
+  const [printing, setPrinting] = useState(false);
+  const printA4 = async () => {
+    setPrinting(true);
+    try {
+      const [perf, settings] = await Promise.all([
+        getMenuPerformance(from, to),
+        getSettings().catch(() => ({})),
+      ]);
+      const items = Array.isArray(perf?.items) ? perf.items : [];
+      const money = (n) => '£' + Number(n || 0).toFixed(2);
+      const pct = (n) => Number(n || 0).toFixed(1) + '%';
+      const dot = (p) => p >= 70 ? '#16a34a' : p >= 55 ? '#ca8a04' : '#dc2626';
+
+      const withCost = items.filter(i => i.cost_per_portion != null).map(i => {
+        const qty = Number(i.qty || 0), rev = Number(i.revenue || 0);
+        const cost = Number(i.cost_per_portion || 0) * qty;
+        const margin = rev - cost;
+        const mpct = rev > 0 ? (margin / rev) * 100 : 0;
+        return { ...i, qty, rev, cost, margin, mpct };
+      });
+      const noCost = items.filter(i => i.cost_per_portion == null);
+      const stars = [...withCost].sort((a, b) => b.margin - a.margin).slice(0, 5);
+      const dogs  = [...withCost].filter(i => i.qty >= 2).sort((a, b) => a.mpct - b.mpct).slice(0, 5);
+
+      const kpi = (label, value, sub, color) => `
+        <div style="flex:1;min-width:130px;border:1px solid #e5e0d0;border-radius:10px;padding:12px 14px">
+          <div style="font-size:11px;color:#8a8a8a;text-transform:uppercase;letter-spacing:.04em">${label}</div>
+          <div style="font-size:22px;font-weight:800;color:${color || '#0D1B3E'};margin-top:2px">${value}</div>
+          ${sub ? `<div style="font-size:11px;color:#8a8a8a">${sub}</div>` : ''}
+        </div>`;
+
+      const dishRows = withCost.map(i => `
+        <tr>
+          <td>${i.name}</td><td style="color:#777">${i.category}</td>
+          <td style="text-align:right">${i.qty}</td>
+          <td style="text-align:right">${money(i.rev)}</td>
+          <td style="text-align:right">${money(i.cost_per_portion)}</td>
+          <td style="text-align:right">${money(i.margin)}</td>
+          <td style="text-align:right;font-weight:700;color:${dot(i.mpct)}">● ${pct(i.mpct)}</td>
+        </tr>`).join('');
+
+      const miniList = (rows, valueFn) => rows.map(i =>
+        `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px dashed #eee">
+           <span>${i.name}</span><b>${valueFn(i)}</b></div>`).join('') || '<div style="font-size:12px;color:#999">—</div>';
+
+      const body = `
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+          <div style="font-size:13px;color:#666">${dateLabel(from)} → ${dateLabel(to)}</div>
+          <div style="font-size:11px;color:#999">Gross of bill-level discounts & service charge</div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+          ${kpi('Revenue', money(totalRevenue))}
+          ${kpi('Stock cost (COGS)', money(cogs))}
+          ${kpi('Gross profit', money(grossProfit), pct(grossMarginPct) + ' margin', grossMarginPct >= 60 ? '#16a34a' : '#ca8a04')}
+          ${kpi('Net profit', money(netProfit), pct(netMarginPct) + ' after overheads/labour', netProfit >= 0 ? '#16a34a' : '#dc2626')}
+          ${wastage?.total?.dish_count > 0 ? kpi('Wastage', money(wastage.total.wastage_cost), wastage.total.dish_count + ' dishes voided', '#dc2626') : ''}
+        </div>
+        <div style="display:flex;gap:14px;margin-bottom:16px">
+          <div style="flex:1;border:1px solid #e5e0d0;border-radius:10px;padding:12px 14px">
+            <div style="font-weight:800;color:#0D1B3E;margin-bottom:6px">⭐ Top profit makers</div>
+            ${miniList(stars, i => money(i.margin))}
+          </div>
+          <div style="flex:1;border:1px solid #e5e0d0;border-radius:10px;padding:12px 14px">
+            <div style="font-weight:800;color:#0D1B3E;margin-bottom:6px">⚠️ Weakest margins</div>
+            ${miniList(dogs, i => pct(i.mpct))}
+          </div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:#0D1B3E;color:#fff">
+            <th style="text-align:left;padding:7px 8px">Dish</th><th style="text-align:left;padding:7px 8px">Category</th>
+            <th style="text-align:right;padding:7px 8px">Sold</th><th style="text-align:right;padding:7px 8px">Revenue</th>
+            <th style="text-align:right;padding:7px 8px">Cost/portion</th><th style="text-align:right;padding:7px 8px">Margin £</th>
+            <th style="text-align:right;padding:7px 8px">Margin %</th>
+          </tr></thead>
+          <tbody>${dishRows || '<tr><td colspan="7" style="padding:10px;color:#999">No dishes with recipes sold in this period.</td></tr>'}</tbody>
+        </table>
+        <style>td{padding:6px 8px;border-bottom:1px solid #f0ede4}</style>
+        ${noCost.length ? `<div style="font-size:11px;color:#999;margin-top:10px">⚠️ ${noCost.length} dish(es) sold without a recipe — excluded from margin figures: ${noCost.slice(0, 8).map(i => i.name).join(', ')}${noCost.length > 8 ? '…' : ''}. Add recipes in Inventory → Recipes for full coverage.</div>` : ''}
+      `;
+      fullPagePrint(pageHtml(`${restaurantName(settings)} — Menu Performance`, body, 'a4'));
+    } catch (e) {
+      alert('Could not build the report: ' + (e?.message || 'unknown error'));
+    } finally { setPrinting(false); }
+  };
+
   const catLabel = { overhead: '🏢 Overhead', labour: '👥 Labour', other: '📌 Other' };
   const catColor = { overhead: { color: '#8b5cf6', bg: '#ede9fe' }, labour: { color: '#3b82f6', bg: '#dbeafe' }, other: { color: '#f97316', bg: '#ffedd5' } };
   const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '—';
@@ -109,6 +197,7 @@ export default function CostSalesTab() {
         <div><label style={{ fontSize: 12, fontWeight: 600, color: '#555', display: 'block', marginBottom: 4 }}>To</label><input type="date" value={to} onChange={e => setTo(e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }} /></div>
         <button onClick={loadData} style={{ padding: '10px 24px', borderRadius: 8, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontWeight: 700, cursor: 'pointer' }}>Calculate</button>
         <button onClick={exportCsv} disabled={loading} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, fontSize: 13, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.5 : 1 }}>⬇ Export CSV</button>
+        <button onClick={printA4} disabled={loading || printing} style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: 'var(--brand-accent, #C9A84C)', color: 'var(--brand-primary, #0D1B3E)', fontWeight: 800, fontSize: 13, cursor: (loading || printing) ? 'not-allowed' : 'pointer', opacity: (loading || printing) ? 0.5 : 1 }}>{printing ? 'Building…' : '🖨️ Print A4 — Menu Performance'}</button>
         <div style={{ display: 'flex', gap: 6 }}>
           {[{ label: 'This Month', from: firstOfMonth, to: today }, { label: 'Last 7 Days', from: new Date(Date.now() - 7 * 864e5).toISOString().split('T')[0], to: today }, { label: 'Today', from: today, to: today }].map(p => (
             <button key={p.label} onClick={() => { setFrom(p.from); setTo(p.to); }} style={{ padding: '6px 12px', borderRadius: 20, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 600, fontSize: 12, color: '#555' }}>{p.label}</button>

@@ -412,6 +412,9 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 📊 SEPOS-MENUPERF-001 — Menu Performance A4 report — ✅ v1.8.9 PUBLISHED (Krit, 2026-07-28)
+Korakot asked for A4 print of menu performance (sale vs cost per dish). Shipped: Inventory → Cost & Sales → "🖨️ Print A4 — Menu Performance" — KPI band (revenue/COGS/gross/net/wastage), ⭐ top-profit + ⚠️ weakest-margin panels, per-dish table (sold/revenue/cost-portion/margin £/colour-coded %), honest no-recipe footnote. New read-only endpoint `GET /api/reports/menu-performance` (per-item discounts honoured; bill-level discounts/service deliberately not allocated). Additive only. Demo: 147 Fern dishes seeded with realistic placeholder recipe costs (28-34% by category, local+cloud) so margins render for the pitch. Lesson re-confirmed: hot-loads get EATEN when the auto-updater applies a release mid-session — ship, don't hot-load, when a tag is in flight.
+
 ### 📦 FERN INSTALL RUNBOOK written — printers de-risked for the real deployment (Krit, 2026-07-28)
 Korakot is worried about printers at a real Fern install (fair — see today). Answer: **bench-build the whole kit, never configure on site.** Runbook at `~/Documents/SiamEPOS-Docs/manuals/Fern-Modern-Sushi-Printer-Install-Runbook.md` + `.pdf`: own travel router + switch (venue network never touched), one-printer-at-a-time bench config (unique IP plan .100-.103 + spare .109, MAC-duplicate check/rewrite), sticker everything, prove the 4-station mixed order on the bench, then install day = plug in by sticker + retest (~30 min). Fail-safes: dead station auto-rescues to main kitchen; hex-mode + swap procedures included. v1.8.8 PUBLISHED (8 assets, manifest verified) — loud saves now official.
 

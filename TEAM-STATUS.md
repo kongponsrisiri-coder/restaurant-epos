@@ -412,6 +412,9 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 🎫 QUEUED — SEPOS-ALLERGEN-STACK-001: allergens roll up from ingredients → recipes → dish chips (Korakot's idea, 2026-07-28)
+Dish allergens = UNION of recipe ingredients' allergens, flowing THROUGH batch preps (soy sauce → curry paste → every dish using the paste inherits Soya). Policy: ADD-only (auto-add missing allergens to dish chips; never auto-remove a manual tag — missing is dangerous, extra is cautious). Recipes screen shows live "recipe contains X · dish chip missing Y ⚠️" check. Recompute on: recipe save, batch save, ingredient-allergen edit (supplier swap ripples to all affected dishes). PREREQ found: vocabulary mismatch — ingredients list says "Soybeans" (and lacks Lupin) vs dish UK14 "Soya" — unify + migrate existing ingredient tags first. Food-safety data → build fresh with proper tests, not as release #9 of a marathon day. Foundations verified present: ingredients.allergens ✓, menu_items.allergens ✓, recipe_lines ✓.
+
 ### 🔧 FOLLOW-UP SHIPPED — scanner pack info dropped by the review screen (v1.8.11 building) (Krit, 2026-07-28)
 Korakot live-tested the AI scanner with a trap-filled test invoice (Desktop: TEST-invoice-Thai-Asia.png). **Extraction + cloud relay + auto-create all worked** — but everything landed in purchase units (case/bottle/sack): InvoiceScannerTab's review mapping dropped pack_size/pack_unit before confirm (same field-must-survive-the-UI-hop lesson as STATION-004). Fixed: one-line pass-through + prompt now teaches case-of-N×size ("2 cases 6×1L @ £28.50" → pack_size 6, pack_unit L). His 5 scanned ingredients hand-repaired to metric+bridges on local+cloud (Kikkoman ml @£0.00475 w/ case=6000ml, Duck kg w/ each=2.1kg, etc.). **Verify after v1.8.11:** rescan the same PNG — all 5 should fuzzy-MATCH and convert via bridges into ml/kg.
 

@@ -412,11 +412,11 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
-### 🖨️ SEPOS-STATION-002 — TRUE multi-station printing on desktop — built + live-tested, v1.8.4 building (Krit, 2026-07-28)
+### 🖨️ SEPOS-STATION-002 — TRUE multi-station printing on desktop — ✅ v1.8.4 PUBLISHED (Krit, 2026-07-28)
 Korakot wired a **4th printer** for multi-station restaurants. Two gaps closed today:
 1. **Per-station dine-in printing on desktop/browser tills** — SEPOS-STATION-001 only routed stations for takeaway + native Sunmi; the dine-in server prints always hit the single role printer. Now `/api/print/kitchen|kitchen-full|bar` split items by `categories.printer_id` (same model as the takeaway router, reuses `printKitchenToPrinter`). **Fail-safe:** a dead station rescues its items onto the main kitchen ticket — food can never be silently lost. No stations assigned = byte-identical behaviour (Thann Thai unaffected). **Live-tested on the Fern 4-printer rig** (dev server on a DB copy): sushi physically printed on the `.103` station, ramen on the kitchen default; dead-station test rescued cleanly, no CUPS diversion.
 2. **Un-assigning a category route now clears on desktop** — `upsertRows` gained opt-in null-sync; `categories.printer_id` opted in (the remove-side of the v1.8.3 add fix).
-**v1.8.4 tagged + building.** Backend pushed (station code inert on cloud — can't reach LAN printers). **Printer field-day lessons (same day):** POS80 units can ship with DUPLICATE MACs from the factory — two twins fought over the network until one MAC was rewritten via config.cgi (fix + full HTTP/0.9 recipe in Krit's memory `project_pos80_ethernet_printer_gotchas`); Fern rig now 4 printers, 4 unique IPs+MACs, all roles correct (Bills .100 / Kitchen .101 / Bar .102 / Sushi station .103). After v1.8.4 lands: restart the Fern till → fire a real dine-in order with sushi + a hot dish → confirm the split on physical paper.
+**v1.8.4 PUBLISHED — 8 assets in BOTH repos, manifests verified 1.8.4.** Backend pushed (station code inert on cloud — can't reach LAN printers). **Printer field-day lessons (same day):** POS80 units can ship with DUPLICATE MACs from the factory — two twins fought over the network until one MAC was rewritten via config.cgi (fix + full HTTP/0.9 recipe in Krit's memory `project_pos80_ethernet_printer_gotchas`); Fern rig now 4 printers, 4 unique IPs+MACs, all roles correct (Bills .100 / Kitchen .101 / Bar .102 / Sushi station .103). After v1.8.4 lands: restart the Fern till → fire a real dine-in order with sushi + a hot dish → confirm the split on physical paper.
 
 ### 🆕 NUA-WEB-001 — new prospect: Nua, 4-branch Thai group (Maya, 2026-07-20)
 

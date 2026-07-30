@@ -429,6 +429,23 @@ function initSchema() {
       last_seen     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- SEPOS-PRINT-ALERT-001 — held tickets from failed kitchen/bar/station
+    -- prints (this is the till-side authority; see printAlertService).
+    CREATE TABLE IF NOT EXISTS print_failures (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT,
+      printer_id INTEGER,
+      printer_name TEXT,
+      printer_ip TEXT,
+      order_id INTEGER,
+      order_label TEXT,
+      items TEXT,
+      reason TEXT,
+      status TEXT DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      resolved_at TIMESTAMP
+    );
+
     -- Offline action queue (Phase 3 consumer)
     CREATE TABLE IF NOT EXISTS sync_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

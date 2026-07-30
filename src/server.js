@@ -15,6 +15,7 @@ const heartbeatClient = require('./services/heartbeatClient'); // SEPOS-PRO-009 
 const tableAllocator = require('./services/tableAllocator');   // SEPOS-027 table-aware reservations
 const makeWebhooks = require('./services/makeWebhooks');
 const printService = require('./services/printService');
+const printAlerts = require('./services/printAlertService'); // SEPOS-PRINT-ALERT-001
 const stuartService = require('./services/stuartService');
 const uberDirectService = require('./services/uberDirectService');
 const deliverooService = require('./services/deliverooService');
@@ -25,6 +26,10 @@ const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: '*' }
 });
+
+// SEPOS-PRINT-ALERT-001 — held-ticket queue + printer health pinger
+// (no-ops entirely unless DB_MODE=local, i.e. a desktop till).
+printAlerts.init({ pool, io, printService });
 
 app.use(cors({
   origin: '*',
@@ -9689,8 +9694,18 @@ async function printStationGroups(stations, settings, order) {
       await printService.printKitchenToPrinter(g.printer, settings, order, g.items);
       console.log(`🖨️ Station "${g.printer.name}" printed ${g.items.length} item(s) for order #${order.id}`);
     } catch (err) {
-      console.error(`[print/stations] station "${g.printer.name}" failed (${err.message}) — rescuing items to main kitchen`);
-      rescued.push(...g.items);
+      if (printAlerts.isLocal) {
+        // SEPOS-PRINT-ALERT-001 — on a till, a dead station must be LOUD,
+        // never a silent hand-off: hold the ticket + banner the staff, who
+        // choose retry or an explicit redirect to the main kitchen.
+        await printAlerts.recordFailure({
+          kind: 'station', printer: g.printer, order, items: g.items, reason: err.message,
+        });
+      } else {
+        // Cloud path keeps the legacy silent rescue (no staff UI to alert).
+        console.error(`[print/stations] station "${g.printer.name}" failed (${err.message}) — rescuing items to main kitchen`);
+        rescued.push(...g.items);
+      }
     }
   }
   return rescued;
@@ -9716,7 +9731,13 @@ app.post('/api/print/kitchen', async (req, res) => {
     const defItems = [...split.def, ...rescued];
     if (defItems.length) {
       if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
-      await printService.printKitchenTicket(settings, order, defItems, course || 1);
+      try {
+        await printService.printKitchenTicket(settings, order, defItems, course || 1);
+      } catch (err) {
+        // SEPOS-PRINT-ALERT-001 — hold + banner on tills; rethrow keeps the API contract.
+        await printAlerts.recordFailure({ kind: 'kitchen', printer: { name: 'Kitchen', ip: settings.printer_kitchen_ip }, order, items: defItems, reason: err.message });
+        throw err;
+      }
     } else if (!split.stations.length) {
       // No items at all and no stations — keep the legacy no_printer contract.
       if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
@@ -9749,7 +9770,12 @@ app.post('/api/print/bar', async (req, res) => {
     const defItems = [...split.def, ...rescued];
     if (defItems.length || !split.stations.length) {
       if (!settings.printer_bar_ip && !settings.printer_bar_name) return res.json({ success: false, reason: 'no_printer' });
-      await printService.printBarTicket(settings, order, defItems);
+      try {
+        await printService.printBarTicket(settings, order, defItems);
+      } catch (err) {
+        await printAlerts.recordFailure({ kind: 'bar', printer: { name: 'Bar', ip: settings.printer_bar_ip }, order, items: defItems, reason: err.message });
+        throw err;
+      }
     }
     res.json({ success: true });
   } catch (err) {
@@ -9800,12 +9826,45 @@ app.post('/api/print/kitchen-full', async (req, res) => {
     const defItems = [...split.def, ...rescued];
     if (defItems.length || !split.stations.length) {
       if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
-      await printService.printFullKitchenTicket(settings, order, defItems);
+      try {
+        await printService.printFullKitchenTicket(settings, order, defItems);
+      } catch (err) {
+        await printAlerts.recordFailure({ kind: 'kitchen', printer: { name: 'Kitchen', ip: settings.printer_kitchen_ip }, order, items: defItems, reason: err.message });
+        throw err;
+      }
     }
     res.json({ success: true });
   } catch (err) {
     console.error('[print/kitchen-full]', err.message);
     res.json({ success: false, error: err.message });
+  }
+});
+
+// ── SEPOS-PRINT-ALERT-001 — held-ticket queue + printer health ───────
+// Till banner polls this; empty on cloud (service is local-gated).
+app.get('/api/print/alerts', async (req, res) => {
+  try {
+    res.json(await printAlerts.list());
+  } catch (err) {
+    res.json({ alerts: [], printers: [], error: err.message });
+  }
+});
+
+// action: 'retry' (original printer, re-resolved from current config) |
+//         'redirect' (main kitchen, ticket marked "REDIRECTED FROM …") |
+//         'dismiss'
+app.post('/api/print/alerts/action', async (req, res) => {
+  try {
+    const { action, ids } = req.body || {};
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids required' });
+    let results;
+    if (action === 'retry') results = await printAlerts.retry(ids);
+    else if (action === 'redirect') results = await printAlerts.redirect(ids);
+    else if (action === 'dismiss') results = await printAlerts.dismiss(ids);
+    else return res.status(400).json({ error: 'unknown action' });
+    res.json({ results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

@@ -19,6 +19,7 @@
 const { io: ioClient } = require('socket.io-client');
 const offlineQueue = require('./offlineQueue');
 const printService = require('./printService');
+const printAlerts = require('./printAlertService'); // SEPOS-PRINT-ALERT-001
 const pool = require('../db/dbAdapter');
 
 const CLOUD_API_URL = process.env.CLOUD_API_URL;
@@ -134,21 +135,23 @@ async function autoPrintIncomingTakeaway(payload) {
       table_number: null,
     };
 
+    // SEPOS-PRINT-ALERT-001 — a failed auto-print on an online order is the
+    // WORST silent failure (no staff even saw an order screen): hold + banner.
     for (const [, grp] of stationGroups) {
       printService.printKitchenToPrinter(grp.printer, settings, printOrder, grp.items)
         .then(() => console.log(`🖨️ [cloud-relay] station "${grp.printer.name}" auto-printed for takeaway #${payload.id}`))
-        .catch(err => console.error(`[cloud-relay] station "${grp.printer.name}" print failed:`, err.message));
+        .catch(err => printAlerts.recordFailure({ kind: 'station', printer: grp.printer, order: printOrder, items: grp.items, reason: err.message }));
     }
     if (mode !== 'kds' && kitchenItems.length &&
         (settings.printer_kitchen_ip || settings.printer_kitchen_name)) {
       printService.printFullKitchenTicket(settings, printOrder, kitchenItems)
         .then(() => console.log(`🖨️ [cloud-relay] kitchen ticket auto-printed for takeaway #${payload.id}`))
-        .catch(err => console.error('[cloud-relay] kitchen print failed:', err.message));
+        .catch(err => printAlerts.recordFailure({ kind: 'kitchen', printer: { name: 'Kitchen', ip: settings.printer_kitchen_ip }, order: printOrder, items: kitchenItems, reason: err.message }));
     }
     if (barItems.length && settings.printer_bar_ip) {
       printService.printBarTicket(settings, printOrder, barItems)
         .then(() => console.log(`🍹 [cloud-relay] bar ticket auto-printed for takeaway #${payload.id}`))
-        .catch(err => console.error('[cloud-relay] bar print failed:', err.message));
+        .catch(err => printAlerts.recordFailure({ kind: 'bar', printer: { name: 'Bar', ip: settings.printer_bar_ip }, order: printOrder, items: barItems, reason: err.message }));
     }
   } catch (err) {
     console.error('[cloud-relay] auto-print error:', err.message);

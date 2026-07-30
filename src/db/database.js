@@ -559,6 +559,25 @@ async function initDB() {
       )
     `);
 
+    // SEPOS-PRINT-ALERT-001 — held tickets from failed kitchen/bar/station
+    // prints (local tills only; cloud rows never created). See printAlertService.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS print_failures (
+        id SERIAL PRIMARY KEY,
+        kind VARCHAR(20),
+        printer_id INTEGER,
+        printer_name VARCHAR(100),
+        printer_ip VARCHAR(50),
+        order_id INTEGER,
+        order_label VARCHAR(120),
+        items TEXT,
+        reason VARCHAR(300),
+        status VARCHAR(20) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT NOW(),
+        resolved_at TIMESTAMP
+      )
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS reservation_reminders (
         id SERIAL PRIMARY KEY,

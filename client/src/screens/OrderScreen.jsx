@@ -483,6 +483,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
     // Snapshot cart before clearing.  Detect bar/kitchen split now (before any await)
     // so we can pre-open popup windows while the user-gesture context is still live.
     const cartAsItems   = cart.map(c => ({
+      // SEPOS-STATION-004 — menu_item_id MUST ride along: the server's
+      // per-station split (and Sunmi's client-side split) look the dish up by
+      // it. This projection predates stations and silently dropped the id, so
+      // every ticket printed from the UI lost its routing identity and fell
+      // back to the role default — while direct API tests (which carried the
+      // id) routed perfectly. Found via the live print trace on the Fern rig.
+      menu_item_id: c.menu_item_id ?? null,
       name: c.name, name_alt: c.name_alt || '', quantity: c.quantity, course: c.course || 1, notes: c.notes || '', item_note: c.item_note || '', is_bar: !!c.is_bar,
     }));
     // Print ONLY what was just added — not the entire order. When a

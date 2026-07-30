@@ -71,7 +71,11 @@ async function getStationRouting() {
         const m = new Map();
         for (const cat of menu) {
           const pid = cat && cat.printer_id != null ? Number(cat.printer_id) : null;
-          for (const it of (cat.items || [])) if (it && it.id != null) m.set(it.id, pid);
+          // SEPOS-STATION-003 — a dish-level printer_id overrides the category
+          // route (same inherit pattern as default_course).
+          for (const it of (cat.items || [])) if (it && it.id != null) {
+            m.set(it.id, it.printer_id != null ? Number(it.printer_id) : pid);
+          }
         }
         _menuPrinterMap = m; _menuMapAt = now;
       }

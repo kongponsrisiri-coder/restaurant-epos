@@ -135,6 +135,11 @@ async function initDB() {
     // NULL = inherit the category's default_course — lets a mixed category
     // (e.g. "Lunch" holding both starters and mains) file each dish correctly.
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS default_course INTEGER`);
+    // SEPOS-STATION-003 — per-DISH printer-station override. NULL = inherit
+    // the category's printer_id. Dish wins over category, so a mixed category
+    // (Takoyaki → hot kitchen while Seaweed Salad → sushi bar) routes each
+    // dish to its own station. Same inherit pattern as default_course above.
+    await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS printer_id INTEGER`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS modifier_groups (
@@ -551,6 +556,25 @@ async function initDB() {
         app_version   VARCHAR(20),
         platform      VARCHAR(20),
         last_seen     TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // SEPOS-PRINT-ALERT-001 — held tickets from failed kitchen/bar/station
+    // prints (local tills only; cloud rows never created). See printAlertService.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS print_failures (
+        id SERIAL PRIMARY KEY,
+        kind VARCHAR(20),
+        printer_id INTEGER,
+        printer_name VARCHAR(100),
+        printer_ip VARCHAR(50),
+        order_id INTEGER,
+        order_label VARCHAR(120),
+        items TEXT,
+        reason VARCHAR(300),
+        status VARCHAR(20) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT NOW(),
+        resolved_at TIMESTAMP
       )
     `);
 
@@ -996,6 +1020,14 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
     // not manual entry).
     await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS is_batch BOOLEAN DEFAULT FALSE`);
     await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS batch_recipe_id INTEGER`);
+    // SEPOS-INV-UNITS-001 — purchase↔usage unit bridge. purchase_unit is what
+    // supplier invoices arrive in ('each','bottle','case','L'…); purchase_to_usage
+    // is how many USAGE units (the ingredient's `unit`) one purchase unit
+    // contains (1 bottle = 1000 ml → 1000; 1 duck ≈ 2.1 kg → 2.1). NULL/0 =
+    // no bridge configured; invoice confirm then only accepts same-unit or
+    // pure-metric-convertible lines and SKIPS anything else loudly.
+    await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS purchase_unit VARCHAR(20)`);
+    await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS purchase_to_usage NUMERIC(12,4)`);
 
     // SEPOS-LOGIN-SEED — fresh-till default admin (parity with the spa till).
     // A brand-new till (or one reset for a new client) has no staff, so nobody

@@ -429,6 +429,23 @@ function initSchema() {
       last_seen     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- SEPOS-PRINT-ALERT-001 — held tickets from failed kitchen/bar/station
+    -- prints (this is the till-side authority; see printAlertService).
+    CREATE TABLE IF NOT EXISTS print_failures (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT,
+      printer_id INTEGER,
+      printer_name TEXT,
+      printer_ip TEXT,
+      order_id INTEGER,
+      order_label TEXT,
+      items TEXT,
+      reason TEXT,
+      status TEXT DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      resolved_at TIMESTAMP
+    );
+
     -- Offline action queue (Phase 3 consumer)
     CREATE TABLE IF NOT EXISTS sync_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -669,6 +686,9 @@ function runMigrations() {
   addColumnIfMissing('z_reports', 'card_difference', 'REAL');
   // Per-item course override (NULL = inherit the category default_course)
   addColumnIfMissing('menu_items', 'default_course', 'INTEGER');
+  // SEPOS-STATION-003: per-dish printer-station override (NULL = inherit
+  // the category's printer_id; dish wins over category when set)
+  addColumnIfMissing('menu_items', 'printer_id', 'INTEGER');
   // SEPOS-PAY-AMEND-001: audit columns on the payments row
   addColumnIfMissing('payments', 'amended_at',     'TIMESTAMP');
   addColumnIfMissing('payments', 'amended_by',     'INTEGER');
@@ -708,6 +728,9 @@ function runMigrations() {
   // the inventory CREATE TABLE block. Safe no-ops on fresh installs.
   addColumnIfMissing('ingredients', 'is_batch',        'INTEGER DEFAULT 0');
   addColumnIfMissing('ingredients', 'batch_recipe_id', 'INTEGER');
+  // SEPOS-INV-UNITS-001: purchase↔usage unit bridge (see database.js)
+  addColumnIfMissing('ingredients', 'purchase_unit',     'TEXT');
+  addColumnIfMissing('ingredients', 'purchase_to_usage', 'REAL');
   addColumnIfMissing('stock_movements', 'order_item_id', 'INTEGER');
   // SEPOS-034: takeaway / delivery online ordering
   addColumnIfMissing('orders', 'order_type', "TEXT DEFAULT 'dine_in'");

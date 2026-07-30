@@ -794,6 +794,9 @@ export const getVatReport = (from, to) =>
 // SEPOS-031 — wastage cost report (date range)
 export const getWastageReport = (from, to) =>
   get(`/api/reports/wastage?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+// SEPOS-MENUPERF-001 — per-dish sales vs recipe cost (menu performance A4 print)
+export const getMenuPerformance = (from, to) =>
+  get(`/api/reports/menu-performance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 
 // SEPOS-033 — customer CRM (Phase 1)
 export const getCustomers = () => get('/api/customers');
@@ -882,3 +885,7 @@ export const createDeposit   = (body) => post('/api/deposits', body);
 export const getOrderDeposit = (orderId) => get(`/api/orders/${orderId}/deposit`);
 // Manual forfeit of a no-show's deposit (kept as income).
 export const forfeitDeposit  = (code) => post(`/api/deposits/${encodeURIComponent(code)}/forfeit`, {});
+
+// ── SEPOS-PRINT-ALERT-001 — held tickets + printer health (local tills) ──
+export const getPrintAlerts    = () => get('/api/print/alerts');
+export const printAlertAction  = (action, ids) => post('/api/print/alerts/action', { action, ids });

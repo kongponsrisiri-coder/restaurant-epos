@@ -19,6 +19,7 @@
 const { io: ioClient } = require('socket.io-client');
 const offlineQueue = require('./offlineQueue');
 const printService = require('./printService');
+const printAlerts = require('./printAlertService'); // SEPOS-PRINT-ALERT-001
 const pool = require('../db/dbAdapter');
 
 const CLOUD_API_URL = process.env.CLOUD_API_URL;
@@ -35,8 +36,15 @@ async function autoPrintIncomingTakeaway(payload) {
     sRes.rows.forEach(r => { settings[r.key] = r.value; });
     const mode = settings.kitchen_print_mode || 'print';
     if (mode === 'kds') return;
+    // SEPOS-STATION-005 — a station-only setup (printers table rows, no
+    // legacy kitchen/bar IP settings) must still print: check both.
+    let hasStations = false;
+    try {
+      const c = await pool.query('SELECT COUNT(*)::int AS n FROM printers');
+      hasStations = (c.rows[0]?.n || 0) > 0;
+    } catch {}
     if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name &&
-        !settings.printer_bar_ip) return;
+        !settings.printer_bar_ip && !hasStations) return;
 
     // Fetch full order + items from cloud. We can't trust the local DB
     // yet — the SQLite pull is racing this print and may not have items
@@ -50,20 +58,39 @@ async function autoPrintIncomingTakeaway(payload) {
     const items = orderData.items || [];
     if (items.length === 0) return;
 
-    // Look up is_bar per menu_item via the existing /api/menu/all (cats
-    // with is_bar flag, nested items). Fall back to kitchen-only routing
-    // if the menu fetch fails.
+    // Look up is_bar AND the effective print station per menu_item via the
+    // existing /api/menu/all (cats with is_bar flag + printer_id, nested
+    // items with per-dish printer_id override — SEPOS-STATION-003: dish
+    // wins over category). Fall back to kitchen-only routing on failure.
     const barIdSet = new Set();
+    const stationIdByItem = new Map(); // menu_item_id -> printer_id
     try {
       const menuRes = await fetch(`${CLOUD_API_URL}/api/menu/all`);
       if (menuRes.ok) {
         const cats = await menuRes.json();
         (Array.isArray(cats) ? cats : []).forEach(c => {
-          if (Number(c.is_bar) === 1 && Array.isArray(c.items)) {
-            c.items.forEach(i => barIdSet.add(i.id));
-          }
+          if (!Array.isArray(c.items)) return;
+          c.items.forEach(i => {
+            if (Number(c.is_bar) === 1) barIdSet.add(i.id);
+            const pid = i.printer_id != null ? Number(i.printer_id)
+                      : (c.printer_id != null ? Number(c.printer_id) : null);
+            if (pid != null) stationIdByItem.set(i.id, pid);
+          });
         });
       }
+    } catch {}
+
+    // SEPOS-STATION-005 — local station rows (extra printers). Only rows
+    // with an IP can be targeted; items whose station is missing/inactive
+    // are rescued to the main kitchen ticket below.
+    const stationById = new Map();
+    try {
+      const pRes = await pool.query('SELECT * FROM printers');
+      pRes.rows.forEach(p => {
+        const active = p.is_active === undefined || p.is_active === null ||
+                       Number(p.is_active) === 1;
+        if (active && p.ip) stationById.set(Number(p.id), p);
+      });
     } catch {}
 
     const toPrintItem = (it) => ({
@@ -78,8 +105,24 @@ async function autoPrintIncomingTakeaway(payload) {
       // Customer per-item note (textarea on the widget, if used).
       item_note: it.item_note || null,
     });
-    const kitchenItems = items.filter(it => !barIdSet.has(it.menu_item_id)).map(toPrintItem);
-    const barItems     = items.filter(it =>  barIdSet.has(it.menu_item_id)).map(toPrintItem);
+    // SEPOS-STATION-005 — 3-way split matching the cloud/dine-in path:
+    // assigned station (live) → that printer; bar → bar printer; everything
+    // else (incl. items whose station is dead/unknown) → main kitchen.
+    const stationGroups = new Map(); // printer_id -> { printer, items[] }
+    const kitchenItems = [];
+    const barItems = [];
+    for (const it of items) {
+      const sid = stationIdByItem.get(it.menu_item_id);
+      const station = sid != null ? stationById.get(sid) : null;
+      if (station) {
+        if (!stationGroups.has(sid)) stationGroups.set(sid, { printer: station, items: [] });
+        stationGroups.get(sid).items.push(toPrintItem(it));
+      } else if (barIdSet.has(it.menu_item_id)) {
+        barItems.push(toPrintItem(it));
+      } else {
+        kitchenItems.push(toPrintItem(it));
+      }
+    }
 
     const printOrder = {
       id: payload.id,
@@ -92,16 +135,23 @@ async function autoPrintIncomingTakeaway(payload) {
       table_number: null,
     };
 
+    // SEPOS-PRINT-ALERT-001 — a failed auto-print on an online order is the
+    // WORST silent failure (no staff even saw an order screen): hold + banner.
+    for (const [, grp] of stationGroups) {
+      printService.printKitchenToPrinter(grp.printer, settings, printOrder, grp.items)
+        .then(() => console.log(`🖨️ [cloud-relay] station "${grp.printer.name}" auto-printed for takeaway #${payload.id}`))
+        .catch(err => printAlerts.recordFailure({ kind: 'station', printer: grp.printer, order: printOrder, items: grp.items, reason: err.message }));
+    }
     if (mode !== 'kds' && kitchenItems.length &&
         (settings.printer_kitchen_ip || settings.printer_kitchen_name)) {
       printService.printFullKitchenTicket(settings, printOrder, kitchenItems)
         .then(() => console.log(`🖨️ [cloud-relay] kitchen ticket auto-printed for takeaway #${payload.id}`))
-        .catch(err => console.error('[cloud-relay] kitchen print failed:', err.message));
+        .catch(err => printAlerts.recordFailure({ kind: 'kitchen', printer: { name: 'Kitchen', ip: settings.printer_kitchen_ip }, order: printOrder, items: kitchenItems, reason: err.message }));
     }
     if (barItems.length && settings.printer_bar_ip) {
       printService.printBarTicket(settings, printOrder, barItems)
         .then(() => console.log(`🍹 [cloud-relay] bar ticket auto-printed for takeaway #${payload.id}`))
-        .catch(err => console.error('[cloud-relay] bar print failed:', err.message));
+        .catch(err => printAlerts.recordFailure({ kind: 'bar', printer: { name: 'Bar', ip: settings.printer_bar_ip }, order: printOrder, items: barItems, reason: err.message }));
     }
   } catch (err) {
     console.error('[cloud-relay] auto-print error:', err.message);

@@ -634,7 +634,30 @@ function StationsCard({ cardStyle, bare }) {
       setDraft({ name: '', ip: '', port: '9100', copies: '1', role_receipt: false, role_kitchen: true, role_bar: false }); await refresh(); }
     finally { setBusy(false); }
   };
-  const saveRow = async (p) => { await savePrinter(p); await refresh(); };
+  // SEPOS-PRINT-NAME-001 — saving a row edit was completely SILENT: no
+  // feedback on success, no feedback on failure (api helpers resolve with
+  // {error} rather than throwing), and pressing Enter in the name/IP fields
+  // did NOTHING — an operator naturally types a printer name and hits Enter,
+  // believes it saved, and later finds the old name back. Save is now loud:
+  // per-row Saving… / ✓ Saved / ✕ error states, Enter-to-save on every row
+  // field, and the Save button highlights when the row has unsaved edits.
+  const [sState, setSState] = useState({});   // { id: saving|ok|fail }
+  const [dirty, setDirty]   = useState({});   // { id: true } — unsaved edits
+  const saveRow = async (p) => {
+    setSState(s => ({ ...s, [p.id]: 'saving' }));
+    try {
+      const r = await savePrinter(p);
+      const ok = r && r.success !== false && !r.error;
+      setSState(s => ({ ...s, [p.id]: ok ? 'ok' : 'fail' }));
+      if (ok) setDirty(d => ({ ...d, [p.id]: false }));
+      if (!ok) console.warn('[printers] save failed:', r?.error);
+    } catch (e) {
+      setSState(s => ({ ...s, [p.id]: 'fail' }));
+      console.warn('[printers] save error:', e?.message);
+    }
+    await refresh();
+    setTimeout(() => setSState(s => ({ ...s, [p.id]: undefined })), 2500);
+  };
   const toggleRole = async (p, role) => { const np = { ...p, [`role_${role}`]: p[`role_${role}`] ? 0 : 1 }; setList(l => l.map(x => x.id === p.id ? np : x)); await savePrinter(np); await refresh(); };
   const makeDefault = async (role, id) => { await setPrinterDefault(role, id); await refresh(); };
   const removeRow = async (p) => { if (!window.confirm(`Remove printer "${p.name}"? Any category pointed here reverts to the default.`)) return; await deletePrinter(p.id); await refresh(); };
@@ -644,7 +667,7 @@ function StationsCard({ cardStyle, bare }) {
     catch { setTState(s => ({ ...s, [p.id]: 'fail' })); }
     setTimeout(() => setTState(s => ({ ...s, [p.id]: 'idle' })), 3000);
   };
-  const patch = (id, k, v) => setList(l => l.map(p => p.id === id ? { ...p, [k]: v } : p));
+  const patch = (id, k, v) => { setDirty(d => ({ ...d, [id]: true })); setList(l => l.map(p => p.id === id ? { ...p, [k]: v } : p)); };
   const inp = { padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' };
 
   const body = (
@@ -654,11 +677,15 @@ function StationsCard({ cardStyle, bare }) {
       {list.map(p => (
         <div key={p.id} style={{ padding: '12px 0', borderTop: '1px solid #f0f0f0' }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input value={p.name || ''} onChange={e => patch(p.id, 'name', e.target.value)} placeholder="Name" style={{ ...inp, flex: '1 1 120px' }} />
-            <input value={p.ip || ''} onChange={e => patch(p.id, 'ip', e.target.value)} placeholder="IP (blank = by name)" style={{ ...inp, flex: '1 1 110px' }} />
-            <input value={p.port || 9100} onChange={e => patch(p.id, 'port', e.target.value)} placeholder="Port" style={{ ...inp, width: 70 }} />
-            <input value={p.copies || 1} onChange={e => patch(p.id, 'copies', e.target.value)} type="number" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
-            <button onClick={() => saveRow(p)} style={{ ...inp, border: 'none', background: 'var(--brand-primary,#0D1B3E)', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Save</button>
+            <input value={p.name || ''} onChange={e => patch(p.id, 'name', e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveRow(p); }} placeholder="Name" style={{ ...inp, flex: '1 1 120px' }} />
+            <input value={p.ip || ''} onChange={e => patch(p.id, 'ip', e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveRow(p); }} placeholder="IP (blank = by name)" style={{ ...inp, flex: '1 1 110px' }} />
+            <input value={p.port || 9100} onChange={e => patch(p.id, 'port', e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveRow(p); }} placeholder="Port" style={{ ...inp, width: 70 }} />
+            <input value={p.copies || 1} onChange={e => patch(p.id, 'copies', e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveRow(p); }} type="number" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
+            <button onClick={() => saveRow(p)} disabled={sState[p.id] === 'saving'} style={{ ...inp, border: 'none',
+              background: sState[p.id] === 'ok' ? '#16a34a' : sState[p.id] === 'fail' ? '#dc2626' : dirty[p.id] ? '#C9A84C' : 'var(--brand-primary,#0D1B3E)',
+              color: dirty[p.id] && !sState[p.id] ? '#0D1B3E' : '#fff', fontWeight: 700, cursor: 'pointer', minWidth: 84 }}>
+              {sState[p.id] === 'saving' ? 'Saving…' : sState[p.id] === 'ok' ? '✓ Saved' : sState[p.id] === 'fail' ? '✕ Failed' : dirty[p.id] ? 'Save ●' : 'Save'}
+            </button>
             <button onClick={() => test(p)} style={{ ...inp, border: '1px solid #ddd', background: tState[p.id] === 'ok' ? '#dcfce7' : tState[p.id] === 'fail' ? '#fee2e2' : '#fff', cursor: 'pointer', fontWeight: 700 }}>{tState[p.id] === 'testing' ? '…' : tState[p.id] === 'ok' ? '✓' : tState[p.id] === 'fail' ? '✕' : 'Test'}</button>
             <button onClick={() => removeRow(p)} style={{ ...inp, border: 'none', background: '#fee2e2', color: '#dc2626', cursor: 'pointer', fontWeight: 700 }}>✕</button>
           </div>
@@ -733,10 +760,10 @@ function StationsCard({ cardStyle, bare }) {
 
       <div style={{ paddingTop: 14, marginTop: 8, borderTop: '2px solid #eee' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} placeholder="New printer name" style={{ ...inp, flex: '1 1 120px' }} />
-          <input value={draft.ip} onChange={e => setDraft({ ...draft, ip: e.target.value })} placeholder="IP" style={{ ...inp, flex: '1 1 110px' }} />
-          <input value={draft.port} onChange={e => setDraft({ ...draft, port: e.target.value })} placeholder="Port" style={{ ...inp, width: 70 }} />
-          <input value={draft.copies} onChange={e => setDraft({ ...draft, copies: e.target.value })} type="number" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
+          <input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') add(); }} placeholder="New printer name" style={{ ...inp, flex: '1 1 120px' }} />
+          <input value={draft.ip} onChange={e => setDraft({ ...draft, ip: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') add(); }} placeholder="IP" style={{ ...inp, flex: '1 1 110px' }} />
+          <input value={draft.port} onChange={e => setDraft({ ...draft, port: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') add(); }} placeholder="Port" style={{ ...inp, width: 70 }} />
+          <input value={draft.copies} onChange={e => setDraft({ ...draft, copies: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') add(); }} type="number" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
           <button onClick={add} disabled={busy || !draft.name.trim()} style={{ ...inp, border: 'none', background: draft.name.trim() ? 'var(--brand-accent,#C9A84C)' : '#eee', color: draft.name.trim() ? '#fff' : '#aaa', fontWeight: 800, cursor: draft.name.trim() ? 'pointer' : 'not-allowed' }}>+ Add printer</button>
         </div>
         <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>

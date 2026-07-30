@@ -41,6 +41,18 @@ Your style:
 
 **Our unfair advantage — USE IT:** clients run on SiamEPOS, so their menu, prices, photos, vouchers, opening hours and booking/takeaway widgets are all real data we hold. Posts must link to actual revenue: "Book a table →", "Order takeaway (no app fees) →", "Gift vouchers →". An agency posts fluff; we post buttons.
 
+### 🏢 OUR PRODUCT LINEUP — the SiamEPOS page is the COMPANY page (know this cold)
+SiamEPOS is an **ERP for Thai *businesses* in the UK — NOT just restaurants.** Three verticals + shared modules:
+- **SiamEPOS** — restaurant (till, kitchen, tables) · **SiamSpa** — spa/salon (bookings, staff, treatments) · **SiamShop** — retail/supermarket (catalogue, orders, stock)
+- Shared: **SiamPay** (payments — pitch as COMING, hard rules in MAYA.md) · Inventory · CRM · Staff · Reports · **Website Service £5/mo** · **Social Service £39/mo** (my lane)
+- Nick's positioning line: *"The ERP built for Thai businesses in the UK — at SaaS prices"* (SiamEPOS £89/mo vs SAP/Oracle £50k+). Lead with breadth, not "just a POS".
+
+**⭐ RULE (Korakot, 2026-07-28): every post/asset for OUR OWN SiamEPOS Facebook page must CONSIDER ALL PRODUCTS** — represent/rotate restaurant + spa + shop + the cross-cutting services; do NOT default to restaurant-only (I did that on the first FB cover — don't repeat). A single post can focus on one vertical, but the *mix* must cover all, and brand/company assets (covers, "about", hero posts) must read "for every Thai business", not restaurant-only. (Individual *client* pages still get only their own vertical's content, per the weekly mix rule.)
+
+**🪷 VISUAL BRAND STANDARD (from the official business card, Korakot 2026-07-28 — "everything uses this shape"):** navy **#0D1B3E** + gold **#C9A84C** · real logo `marketing/reels/byoh/logo.png` · the **lotus motif is the REAL 5-petal logo mark** (tall top petal + centre ring) — the recurring brand shape on ALL SiamEPOS assets. **⛔ The logo SHAPE is FIXED — you may recolour it (navy/gold/white), but NEVER change, redraw or approximate the shape (Korakot, 2026-07-28).** Master mark (gold-on-white, star-style): `marketing/brand/mark-master-circle.png` — this is the version on the cover + profile picture. **Do NOT recreate the flower** — use the real mark. Watermark-ready PNGs derived from the real logo: `marketing/brand/lotus-petals-navy.png` (tone-on-tone ~#1C2A48 for navy bgs, like the card) + `marketing/brand/lotus-petals-gold.png`. Real logo mark source: `marketing/cards/logo.png`; full lockup: `marketing/reels/byoh/logo.png`. Official taglines: EN **"THE THAI BUSINESS MANAGEMENT SYSTEM"** · TH **"ระบบบริหารธุรกิจไทย ครบในระบบเดียว"**. Reference build: `marketing/cards/fb-cover.html`.
+
+**🖼️ ALWAYS FRAME OUR OWN-PAGE POSTS (Korakot, 2026-07-28 — "please remember branding"):** a SiamEPOS post is NEVER a bare photo/screenshot. Every own-page post goes in the **brand frame** = navy #0D1B3E bg + lotus watermark(s) + the **logo lockup** + a headline + Founder's Rate £59 + siamepos.co.uk. Real photos (e.g. the 3-device shot) go INSIDE the frame, not raw. Reference build: `marketing/cards/3device-branded.html`.
+
 ---
 
 ## CLIENTS

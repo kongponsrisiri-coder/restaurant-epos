@@ -20,6 +20,7 @@ import SyncQueuePill from './components/SyncQueuePill';
 import OfflineBanner from './components/OfflineBanner';
 import Clock from './components/Clock';
 import AiHelpAssistant from './components/AiHelpAssistant'; // SEPOS-AI-HELP-001 — Admin-only, now in the top bar
+import PrintAlertBanner from './components/PrintAlertBanner'; // SEPOS-PRINT-ALERT-001 — loud printer-down alerts
 import LockScreen from './screens/LockScreen';
 import OpenDayModal from './components/OpenDayModal'; // SEPOS-OPENDAY-001
 import './App.css';
@@ -565,6 +566,10 @@ export default function App() {
             ))}
           </div>
         )}
+
+        {/* SEPOS-PRINT-ALERT-001 — held-ticket / printer-down banner, visible
+            on EVERY screen (fullscreen tills can't see OS print errors). */}
+        <PrintAlertBanner />
 
         {/* Screen content */}
         <main className="main-content">

@@ -15,6 +15,7 @@ const heartbeatClient = require('./services/heartbeatClient'); // SEPOS-PRO-009 
 const tableAllocator = require('./services/tableAllocator');   // SEPOS-027 table-aware reservations
 const makeWebhooks = require('./services/makeWebhooks');
 const printService = require('./services/printService');
+const printAlerts = require('./services/printAlertService'); // SEPOS-PRINT-ALERT-001
 const stuartService = require('./services/stuartService');
 const uberDirectService = require('./services/uberDirectService');
 const deliverooService = require('./services/deliverooService');
@@ -25,6 +26,10 @@ const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: '*' }
 });
+
+// SEPOS-PRINT-ALERT-001 — held-ticket queue + printer health pinger
+// (no-ops entirely unless DB_MODE=local, i.e. a desktop till).
+printAlerts.init({ pool, io, printService });
 
 app.use(cors({
   origin: '*',
@@ -589,7 +594,15 @@ async function applyPrinterRouting(settings) {
   const byId = new Map(printers.map(p => [String(p.id), p]));
   for (const role of ['receipt', 'kitchen', 'bar']) {
     const defId = settings[`default_${role}_printer_id`];
-    const p = (defId && byId.get(String(defId))) || printers.find(x => Number(x[`role_${role}`]) === 1);
+    // SEPOS-PRINT-STAR-001 — a starred default only counts while that printer
+    // still CARRIES the role. Before this, unticking (say) Bar on the starred
+    // printer and ticking it on another changed nothing: the stale star kept
+    // winning and tickets went to the old printer with no visible reason.
+    // Stale/roleless star → fall through to the first printer flagged with
+    // the role, i.e. what the operator's ticks say.
+    const starred = defId ? byId.get(String(defId)) : null;
+    const p = (starred && Number(starred[`role_${role}`]) === 1 ? starred : null)
+      || printers.find(x => Number(x[`role_${role}`]) === 1);
     if (!p || !(p.ip || p.name)) continue;
     settings[`printer_${role}_ip`]        = p.ip || '';
     settings[`printer_${role}_port`]      = p.port || 9100;
@@ -854,12 +867,15 @@ app.put('/api/menu/items/sort-order', async (req, res) => {
 app.put('/api/menu/items/:id', async (req, res) => {
   if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
-    const { name, name_alt, description, price, is_available, is_online, subcategory_id, category_id, vat_rate, default_course } = req.body;
+    const { name, name_alt, description, price, is_available, is_online, subcategory_id, category_id, vat_rate, default_course, printer_id } = req.body;
     // NULL / '' → inherit the category course; 1-4 → per-item override.
     const dc = (default_course == null || default_course === '') ? null : (Number(default_course) || null);
+    // SEPOS-STATION-003 — per-dish station override. '' / null → inherit the
+    // category's printer route; a printer id → this dish always prints there.
+    const pid = (printer_id == null || printer_id === '') ? null : (Number(printer_id) || null);
     await pool.query(
-      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, is_online=COALESCE($6, is_online), subcategory_id=$7, category_id=$8, vat_rate=COALESCE($9, vat_rate), default_course=$10 WHERE id=$11',
-      [name, name_alt || null, description, price, is_available, is_online ?? null, subcategory_id || null, category_id, vat_rate ?? null, dc, req.params.id]
+      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, is_online=COALESCE($6, is_online), subcategory_id=$7, category_id=$8, vat_rate=COALESCE($9, vat_rate), default_course=$10, printer_id=$11 WHERE id=$12',
+      [name, name_alt || null, description, price, is_available, is_online ?? null, subcategory_id || null, category_id, vat_rate ?? null, dc, pid, req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -2749,6 +2765,47 @@ app.get('/api/reports/daily', async (req, res) => {
     // on split-pay orders.
     const uniqueOrderIds = new Set(result.rows.map(r => r.id));
     res.json({ date, orders: result.rows, total_sales: total, order_count: uniqueOrderIds.size, ...splitByOrderType(result.rows) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-MENUPERF-001 — per-dish sales vs recipe cost for the Menu
+// Performance report (Inventory → Cost & Sales → Print A4). Read-only
+// aggregate: sold qty + revenue per dish over the range, joined to the
+// dish's recipe cost_per_portion where a recipe exists. Line revenue
+// honours per-item discounts; bill-level discounts and service charge are
+// intentionally NOT allocated down to dishes (menu engineering wants the
+// dish's own pricing performance). Dishes without recipes come back with
+// cost NULL so the client can show "no recipe" rather than a fake margin.
+app.get('/api/reports/menu-performance', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ error: 'from and to required (YYYY-MM-DD)' });
+    const r = await pool.query(`
+      SELECT
+        COALESCE(mi.id, 0)                              AS menu_item_id,
+        COALESCE(mi.name, oi.item_name, 'Unknown item') AS name,
+        COALESCE(c.name, 'Other')                       AS category,
+        SUM(oi.quantity)                                AS qty,
+        SUM(
+          (oi.quantity * oi.unit_price)
+          - CASE
+              WHEN oi.discount_type = 'percent' THEN (oi.quantity * oi.unit_price) * (COALESCE(oi.discount_value,0) / 100.0)
+              WHEN oi.discount_type = 'fixed'   THEN COALESCE(oi.discount_value,0)
+              ELSE 0
+            END
+        )                                               AS revenue,
+        MAX(rec.cost_per_portion)                       AS cost_per_portion
+      FROM order_items oi
+      JOIN orders o        ON o.id = oi.order_id
+      LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+      LEFT JOIN categories c  ON c.id  = mi.category_id
+      LEFT JOIN recipes rec   ON rec.menu_item_id = mi.id
+      WHERE o.status = 'closed' AND oi.voided = 0
+        AND o.closed_at::date >= $1::date AND o.closed_at::date <= $2::date
+      GROUP BY COALESCE(mi.id, 0), COALESCE(mi.name, oi.item_name, 'Unknown item'), COALESCE(c.name, 'Other')
+      ORDER BY revenue DESC
+    `, [from, to]);
+    res.json({ from, to, items: r.rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -5264,7 +5321,7 @@ app.post('/api/ai/scan-invoice', requireStaffAuthOrSyncSecret(['admin', 'manager
       if (relayed) return res.status(relayed.status).json(relayed.json);
       return res.status(500).json({ success: false, error: 'ANTHROPIC_API_KEY not set locally and no cloud relay configured' });
     }
-    const INVOICE_PROMPT = `You are reading a supplier invoice or delivery note for a restaurant.\nExtract all information and return ONLY a valid JSON object — no other text, no markdown, no explanation.\n\nRequired JSON structure:\n{\n  "supplier_name": "string",\n  "invoice_date": "YYYY-MM-DD",\n  "invoice_number": "string",\n  "total_amount": number,\n  "line_items": [\n    { "name": "string", "quantity": number, "unit": "string", "unit_price": number, "line_total": number }\n  ]\n}\n\nRules: If a value is missing use null for strings and 0 for numbers. Convert prices to GBP. Return ONLY the JSON object.`;
+    const INVOICE_PROMPT = `You are reading a supplier invoice or delivery note for a restaurant.\nExtract all information and return ONLY a valid JSON object — no other text, no markdown, no explanation.\n\nRequired JSON structure:\n{\n  "supplier_name": "string",\n  "invoice_date": "YYYY-MM-DD",\n  "invoice_number": "string",\n  "total_amount": number,\n  "line_items": [\n    { "name": "string", "quantity": number, "unit": "string", "unit_price": number, "line_total": number, "pack_size": number, "pack_unit": "string" }\n  ]\n}\n\nRules: If a value is missing use null for strings and 0 for numbers. Convert prices to GBP. pack_size/pack_unit describe what ONE invoiced unit contains when stated — a case/box of "6 x 1L" means ONE case contains 6 L, so pack_size 6, pack_unit "L" — e.g. "2 cases Soy Sauce 6 x 1L @ \u00a328.50/case" \u2192 quantity 2, unit "case", unit_price 28.50, pack_size 6, pack_unit "L"; "Mirin 500ml bottle x 6" \u2192 quantity 6, unit "bottle", pack_size 500, pack_unit "ml"; "Chicken 2.5kg bag" \u2192 quantity N, unit "bag", pack_size 2.5, pack_unit "kg". Use 0/null when the pack content is not stated. Return ONLY the JSON object.`;
     const https = require('https');
     const requestBody = JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2000, messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: media_type || 'image/jpeg', data: image_base64 } }, { type: 'text', text: INVOICE_PROMPT }] }] });
     const result = await new Promise((resolve, reject) => {
@@ -5765,6 +5822,72 @@ async function recalcRecipesForIngredients(client, ingredientIds) {
   return recipeIds.length;
 }
 
+// ── SEPOS-INV-UNITS-001 — unit intelligence for invoice confirm ──────────────
+// Invoices arrive in purchase-world units (each, bottle, case, L); recipes cost
+// in usage-world units (ml, g, kg). Reconciling wrongly is worse than refusing:
+// stamping a £8/each price onto a per-kg ingredient silently corrupts stock AND
+// every recipe cost. Rules, in priority order:
+//   1. Same unit (after aliasing)            → apply as-is
+//   2. Pure metric conversion (L↔ml, kg↔g)   → convert qty ×1000 / cost ÷1000
+//   3. Ingredient's purchase bridge          → line unit == purchase_unit and
+//      purchase_to_usage set ("1 each = 2.1 kg") → qty×factor, cost÷factor
+//   4. AI-extracted pack info                → "6 × 1L @ £30/bottle" with a
+//      metric pack unit convertible to the usage unit
+//   5. Nothing reconciles                    → SKIP the line and REPORT it —
+//      never guess with money.
+const UNIT_ALIASES = {
+  l: 'l', ltr: 'l', litre: 'l', litres: 'l', liter: 'l', liters: 'l',
+  ml: 'ml', mls: 'ml', millilitre: 'ml', milliliter: 'ml',
+  kg: 'kg', kgs: 'kg', kilo: 'kg', kilos: 'kg', kilogram: 'kg', kilograms: 'kg',
+  g: 'g', gr: 'g', gram: 'g', grams: 'g',
+  each: 'each', ea: 'each', pc: 'each', pcs: 'each', piece: 'each', pieces: 'each', unit: 'each', units: 'each', x: 'each',
+  bottle: 'bottle', bottles: 'bottle', btl: 'bottle',
+  case: 'case', cases: 'case', box: 'case', boxes: 'case', pack: 'case', packs: 'case', pk: 'case',
+  tin: 'tin', tins: 'tin', can: 'tin', cans: 'tin',
+  bag: 'bag', bags: 'bag', sack: 'bag',
+};
+function normalizeUnit(u) {
+  const k = String(u || '').trim().toLowerCase().replace(/[.]/g, '');
+  return UNIT_ALIASES[k] || k;
+}
+// Millilitres/grams per one of the given metric unit; null = not metric.
+const METRIC_BASE = { l: { base: 'ml', per: 1000 }, ml: { base: 'ml', per: 1 }, kg: { base: 'g', per: 1000 }, g: { base: 'g', per: 1 } };
+// How many `toU` are in one `fromU` — 1 for same unit, ×1000/÷1000 across a
+// metric family, null when the units are unrelated (each vs kg etc.).
+function unitsPerUnit(fromU, toU) {
+  const f = normalizeUnit(fromU), t = normalizeUnit(toU);
+  if (!f || !t) return null;
+  if (f === t) return 1;
+  const mf = METRIC_BASE[f], mt = METRIC_BASE[t];
+  if (mf && mt && mf.base === mt.base) return mf.per / mt.per;
+  return null;
+}
+// Resolve an invoice line against an ingredient. Returns
+// { usageQty, usageCost, how } or null when irreconcilable.
+function reconcileInvoiceLine(item, qty, unitPrice, ing) {
+  const lineU = normalizeUnit(item.unit);
+  const ingU  = normalizeUnit(ing.unit);
+  // 1+2 — same unit or metric family
+  const per = unitsPerUnit(lineU, ingU);
+  if (per != null) {
+    return { usageQty: qty * per, usageCost: unitPrice / per, how: per === 1 ? 'same-unit' : `metric ${lineU}→${ingU}` };
+  }
+  // 3 — the ingredient's configured purchase bridge (e.g. 1 each = 2.1 kg)
+  const bridgeU = normalizeUnit(ing.purchase_unit);
+  const factor  = Number(ing.purchase_to_usage) || 0;
+  if (bridgeU && factor > 0 && lineU === bridgeU) {
+    return { usageQty: qty * factor, usageCost: unitPrice / factor, how: `bridge 1 ${bridgeU} = ${factor} ${ingU}` };
+  }
+  // 4 — AI-extracted pack info ("1L bottle" → pack_size 1, pack_unit L)
+  const packSize = Number(item.pack_size) || 0;
+  const packPer  = packSize > 0 ? unitsPerUnit(item.pack_unit, ingU) : null;
+  if (packPer != null && packSize > 0) {
+    const perPurchase = packSize * packPer;
+    return { usageQty: qty * perPurchase, usageCost: unitPrice / perPurchase, how: `pack ${packSize} ${normalizeUnit(item.pack_unit)}/${lineU}` };
+  }
+  return null; // 5 — refuse, never guess
+}
+
 app.post('/api/supplier-invoices', async (req, res) => {
   const client = await pool.connect();
   try {
@@ -5786,6 +5909,7 @@ app.post('/api/supplier-invoices', async (req, res) => {
     const created = [];
     const updated = [];
     const price_changes = [];
+    const skipped_unit_mismatch = []; // SEPOS-INV-UNITS-001 — refused lines, reported loudly
 
     // 2. Process each line item
     for (const item of (line_items || [])) {
@@ -5796,12 +5920,27 @@ app.post('/api/supplier-invoices', async (req, res) => {
       if (item.matched_ingredient_id) {
         // Matched to an existing ingredient
         const ingRes = await client.query(
-          `SELECT id, name_en, cost_per_unit FROM ingredients WHERE id = $1`,
+          `SELECT id, name_en, unit, cost_per_unit, purchase_unit, purchase_to_usage FROM ingredients WHERE id = $1`,
           [item.matched_ingredient_id]
         );
         if (ingRes.rows.length === 0) continue;
         const ing = ingRes.rows[0];
         const oldCost = parseFloat(ing.cost_per_unit) || 0;
+
+        // SEPOS-INV-UNITS-001 — reconcile invoice units to the ingredient's
+        // usage unit, or refuse the line. Stamping mismatched units corrupted
+        // both stock and every recipe cost (the old code applied blindly).
+        const rec = reconcileInvoiceLine(item, qty, unitPrice, ing);
+        if (!rec) {
+          skipped_unit_mismatch.push({
+            name: item.name || ing.name_en,
+            invoice_unit: item.unit || '?',
+            ingredient_unit: ing.unit || '?',
+            hint: `Set a purchase bridge on "${ing.name_en}" (e.g. 1 ${normalizeUnit(item.unit) || 'each'} = X ${ing.unit}) or edit the line to ${ing.unit}.`,
+          });
+          continue;
+        }
+        const newCost = Math.round(rec.usageCost * 10000) / 10000;
 
         await client.query(
           `UPDATE ingredients
@@ -5809,35 +5948,52 @@ app.post('/api/supplier-invoices', async (req, res) => {
                cost_per_unit = $2,
                updated_at = NOW()
            WHERE id = $3`,
-          [qty, unitPrice, ing.id]
+          [rec.usageQty, newCost, ing.id]
         );
 
         await client.query(
           `INSERT INTO stock_movements (ingredient_id, movement_type, quantity, cost_at_time, note, reference)
            VALUES ($1, 'delivery', $2, $3, $4, $5)`,
-          [ing.id, qty, unitPrice, `Invoice ${invoice_number || ''}`, `invoice:${invoiceId}`]
+          [ing.id, rec.usageQty, newCost, `Invoice ${invoice_number || ''}${rec.how !== 'same-unit' ? ` (${rec.how})` : ''}`, `invoice:${invoiceId}`]
         );
 
         updated.push(ing.name_en);
 
-        if (Math.abs(unitPrice - oldCost) > 0.001) {
-          price_changes.push({ id: ing.id, name: ing.name_en, old_cost: oldCost, new_cost: unitPrice });
+        if (Math.abs(newCost - oldCost) > 0.001) {
+          price_changes.push({ id: ing.id, name: ing.name_en, old_cost: oldCost, new_cost: newCost });
         }
 
       } else {
-        // No match — auto-create a new ingredient
+        // No match — auto-create a new ingredient.
+        // SEPOS-INV-UNITS-001 — when the AI extracted metric pack info
+        // ("2 bottles × 1L @ £35"), create the ingredient straight in the
+        // metric base unit (ml/g) with the pro-rated cost, so recipes can use
+        // it in real ml/g from day one. A purchase bridge is stored too, so
+        // the NEXT invoice ("each"/"bottle" lines) reconciles automatically.
         const newName = item.name_extracted || item.name || 'Unknown Item';
+        let cUnit = item.unit || 'unit', cQty = qty, cCost = unitPrice, cPU = null, cPTU = null;
+        const packSize = Number(item.pack_size) || 0;
+        const packU = normalizeUnit(item.pack_unit);
+        if (packSize > 0 && METRIC_BASE[packU]) {
+          const base = METRIC_BASE[packU];
+          const perPurchase = packSize * base.per;      // usage units per each/bottle/case
+          cUnit = base.base;                            // 'ml' or 'g'
+          cQty  = qty * perPurchase;
+          cCost = Math.round((unitPrice / perPurchase) * 10000) / 10000;
+          cPU   = normalizeUnit(item.unit) || 'each';
+          cPTU  = perPurchase;
+        }
         const newIng = await client.query(
-          `INSERT INTO ingredients (name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, supplier_name, updated_at)
-           VALUES ($1, '', $2, $3, 100, 'Other', $4, $5, NOW())
+          `INSERT INTO ingredients (name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, supplier_name, purchase_unit, purchase_to_usage, updated_at)
+           VALUES ($1, '', $2, $3, 100, 'Other', $4, $5, $6, $7, NOW())
            RETURNING id, name_en`,
-          [newName, item.unit || 'unit', unitPrice, qty, supplier_name || '']
+          [newName, cUnit, cCost, cQty, supplier_name || '', cPU, cPTU]
         );
 
         await client.query(
           `INSERT INTO stock_movements (ingredient_id, movement_type, quantity, cost_at_time, note, reference)
            VALUES ($1, 'delivery', $2, $3, $4, $5)`,
-          [newIng.rows[0].id, qty, unitPrice, `Invoice ${invoice_number || ''} (auto-created)`, `invoice:${invoiceId}`]
+          [newIng.rows[0].id, cQty, cCost, `Invoice ${invoice_number || ''} (auto-created)`, `invoice:${invoiceId}`]
         );
 
         created.push(newName);
@@ -5852,7 +6008,7 @@ app.post('/api/supplier-invoices', async (req, res) => {
 
     // 4. Return everything the frontend needs for the done screen
     await client.query('COMMIT');
-    res.json({ id: invoiceId, success: true, created, updated, price_changes, recipes_recalculated });
+    res.json({ id: invoiceId, success: true, created, updated, price_changes, recipes_recalculated, skipped_unit_mismatch });
 
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (e) {}
@@ -5924,16 +6080,16 @@ app.get('/api/ingredients/low-stock', async (req, res) => {
 
 app.post('/api/ingredients', async (req, res) => {
   try {
-    const { name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens } = req.body;
-    const result = await pool.query(`INSERT INTO ingredients (name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()) RETURNING id`, [name_en, name_th || '', unit || 'kg', parseFloat(cost_per_unit) || 0, parseFloat(yield_percentage) || 100, category || 'Other', parseFloat(current_stock) || 0, par_level ? parseFloat(par_level) : null, supplier_name || '', allergens || '[]']);
+    const { name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens, purchase_unit, purchase_to_usage } = req.body;
+    const result = await pool.query(`INSERT INTO ingredients (name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens, purchase_unit, purchase_to_usage, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW()) RETURNING id`, [name_en, name_th || '', unit || 'kg', parseFloat(cost_per_unit) || 0, parseFloat(yield_percentage) || 100, category || 'Other', parseFloat(current_stock) || 0, par_level ? parseFloat(par_level) : null, supplier_name || '', allergens || '[]', purchase_unit || null, purchase_to_usage ? parseFloat(purchase_to_usage) : null]);
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.put('/api/ingredients/:id', async (req, res) => {
   try {
-    const { name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens } = req.body;
-    const result = await pool.query(`UPDATE ingredients SET name_en=$1, name_th=$2, unit=$3, cost_per_unit=$4, yield_percentage=$5, category=$6, current_stock=$7, par_level=$8, supplier_name=$9, allergens=$10, updated_at=NOW() WHERE id=$11`, [name_en, name_th || '', unit || 'kg', parseFloat(cost_per_unit) || 0, parseFloat(yield_percentage) || 100, category || 'Other', parseFloat(current_stock) || 0, par_level ? parseFloat(par_level) : null, supplier_name || '', allergens || '[]', req.params.id]);
+    const { name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens, purchase_unit, purchase_to_usage } = req.body;
+    const result = await pool.query(`UPDATE ingredients SET name_en=$1, name_th=$2, unit=$3, cost_per_unit=$4, yield_percentage=$5, category=$6, current_stock=$7, par_level=$8, supplier_name=$9, allergens=$10, purchase_unit=$11, purchase_to_usage=$12, updated_at=NOW() WHERE id=$13`, [name_en, name_th || '', unit || 'kg', parseFloat(cost_per_unit) || 0, parseFloat(yield_percentage) || 100, category || 'Other', parseFloat(current_stock) || 0, par_level ? parseFloat(par_level) : null, supplier_name || '', allergens || '[]', purchase_unit || null, purchase_to_usage ? parseFloat(purchase_to_usage) : null, req.params.id]);
     res.json({ success: true, changes: result.rowCount });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -6858,7 +7014,8 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
         const metaById = new Map(); // menu_item_id -> { is_bar, printer_id }
         if (menuIds.length) {
           const rows = await pool.query(
-            `SELECT mi.id, COALESCE(c.is_bar, 0) AS is_bar, c.printer_id
+            // SEPOS-STATION-003 — dish-level printer override wins over category.
+            `SELECT mi.id, COALESCE(c.is_bar, 0) AS is_bar, COALESCE(mi.printer_id, c.printer_id) AS printer_id
                FROM menu_items mi LEFT JOIN categories c ON mi.category_id = c.id
               WHERE mi.id = ANY($1)`,
             [menuIds]
@@ -9488,6 +9645,72 @@ app.post('/api/print/drawer', async (req, res) => {
   }
 });
 
+// ── SEPOS-STATION-002 — per-station routing for DINE-IN server prints ────────
+// SEPOS-STATION-001 gave takeaway auto-print per-category stations, but the
+// dine-in endpoints below always printed to the single role printer, so a
+// desktop/browser till could never split sushi/starter/hot-kitchen stations
+// (only the native Sunmi till could, client-side). This helper mirrors the
+// takeaway router: items whose category has printers.printer_id assigned go
+// to that station; everything else stays on the role default. Fail-safe: a
+// station whose print FAILS returns its items to the default group so food
+// is never silently lost — worst case it prints at the main kitchen printer.
+async function splitPrintItemsByStation(items) {
+  const list = Array.isArray(items) ? items : [];
+  const menuIds = [...new Set(list.map(it => it && it.menu_item_id).filter(Boolean).map(Number))];
+  if (!menuIds.length) return { def: list, stations: [] };
+  try {
+    // SEPOS-STATION-003 — dish-level override wins over the category route.
+    const rows = await pool.query(
+      `SELECT mi.id, COALESCE(mi.printer_id, c.printer_id) AS printer_id
+         FROM menu_items mi LEFT JOIN categories c ON mi.category_id = c.id
+        WHERE mi.id = ANY($1)`, [menuIds]);
+    const printerByMenuId = new Map(rows.rows.map(r => [Number(r.id), r.printer_id]));
+    const stationRows = (await pool.query(
+      "SELECT * FROM printers WHERE is_active = 1 AND ip IS NOT NULL AND ip != ''"
+    ).catch(() => ({ rows: [] }))).rows;
+    const stationById = new Map(stationRows.map(p => [Number(p.id), p]));
+    const def = [], groups = new Map(); // printer_id -> { printer, items }
+    for (const it of list) {
+      const pid = it && it.menu_item_id != null ? printerByMenuId.get(Number(it.menu_item_id)) : null;
+      const station = pid != null ? stationById.get(Number(pid)) : null;
+      if (!station) { def.push(it); continue; }
+      if (!groups.has(station.id)) groups.set(station.id, { printer: station, items: [] });
+      groups.get(station.id).items.push(it);
+    }
+    return { def, stations: [...groups.values()] };
+  } catch (err) {
+    // Any lookup problem → behave exactly as before the feature existed.
+    console.warn('[print/stations] split failed, using single-printer path:', err.message);
+    return { def: list, stations: [] };
+  }
+}
+
+// Print station groups; returns items whose station print FAILED (rescue →
+// caller adds them back to the default-kitchen ticket so nothing is lost).
+async function printStationGroups(stations, settings, order) {
+  const rescued = [];
+  for (const g of stations) {
+    try {
+      await printService.printKitchenToPrinter(g.printer, settings, order, g.items);
+      console.log(`🖨️ Station "${g.printer.name}" printed ${g.items.length} item(s) for order #${order.id}`);
+    } catch (err) {
+      if (printAlerts.isLocal) {
+        // SEPOS-PRINT-ALERT-001 — on a till, a dead station must be LOUD,
+        // never a silent hand-off: hold the ticket + banner the staff, who
+        // choose retry or an explicit redirect to the main kitchen.
+        await printAlerts.recordFailure({
+          kind: 'station', printer: g.printer, order, items: g.items, reason: err.message,
+        });
+      } else {
+        // Cloud path keeps the legacy silent rescue (no staff UI to alert).
+        console.error(`[print/stations] station "${g.printer.name}" failed (${err.message}) — rescuing items to main kitchen`);
+        rescued.push(...g.items);
+      }
+    }
+  }
+  return rescued;
+}
+
 // Print a kitchen ticket for a given order + course
 app.post('/api/print/kitchen', async (req, res) => {
   const { order_id, items, course, printer_name, copies } = req.body;
@@ -9496,13 +9719,30 @@ app.post('/api/print/kitchen', async (req, res) => {
     await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
     if (copies) settings.printer_kitchen_copies = String(copies); // client-resolved copies (per-device or system)
-    if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
       `SELECT orders.*, tables.table_number
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
-    await printService.printKitchenTicket(settings, orderRes.rows[0], items || [], course || 1);
+    const order = orderRes.rows[0];
+    // SEPOS-STATION-002 — split by station, print stations, rescue failures.
+    const split = await splitPrintItemsByStation(items || []);
+    const rescued = split.stations.length ? await printStationGroups(split.stations, settings, order) : [];
+    const defItems = [...split.def, ...rescued];
+    if (defItems.length) {
+      if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
+      try {
+        await printService.printKitchenTicket(settings, order, defItems, course || 1);
+      } catch (err) {
+        // SEPOS-PRINT-ALERT-001 — hold + banner on tills; rethrow keeps the API contract.
+        await printAlerts.recordFailure({ kind: 'kitchen', printer: { name: 'Kitchen', ip: settings.printer_kitchen_ip }, order, items: defItems, reason: err.message });
+        throw err;
+      }
+    } else if (!split.stations.length) {
+      // No items at all and no stations — keep the legacy no_printer contract.
+      if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
+      await printService.printKitchenTicket(settings, order, [], course || 1);
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('[print/kitchen]', err.message);
@@ -9517,13 +9757,26 @@ app.post('/api/print/bar', async (req, res) => {
     const settings = await loadSettings();
     await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_bar_name = printer_name; settings.printer_bar_ip = ''; }
-    if (!settings.printer_bar_ip && !settings.printer_bar_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
       `SELECT orders.*, tables.table_number
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
-    await printService.printBarTicket(settings, orderRes.rows[0], items || []);
+    const order = orderRes.rows[0];
+    // SEPOS-STATION-002 — a drinks category can also be routed to a station
+    // (e.g. a coffee/dessert-bar printer); unmatched items keep the bar default.
+    const split = await splitPrintItemsByStation(items || []);
+    const rescued = split.stations.length ? await printStationGroups(split.stations, settings, order) : [];
+    const defItems = [...split.def, ...rescued];
+    if (defItems.length || !split.stations.length) {
+      if (!settings.printer_bar_ip && !settings.printer_bar_name) return res.json({ success: false, reason: 'no_printer' });
+      try {
+        await printService.printBarTicket(settings, order, defItems);
+      } catch (err) {
+        await printAlerts.recordFailure({ kind: 'bar', printer: { name: 'Bar', ip: settings.printer_bar_ip }, order, items: defItems, reason: err.message });
+        throw err;
+      }
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('[print/bar]', err.message);
@@ -9560,17 +9813,58 @@ app.post('/api/print/kitchen-full', async (req, res) => {
     await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
     if (copies) settings.printer_kitchen_copies = String(copies); // client-resolved copies (per-device or system)
-    if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
       `SELECT orders.*, tables.table_number
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
-    await printService.printFullKitchenTicket(settings, orderRes.rows[0], items || []);
+    const order = orderRes.rows[0];
+    // SEPOS-STATION-002 — split by station, print stations, rescue failures
+    // back onto the main kitchen ticket so no dish is silently lost.
+    const split = await splitPrintItemsByStation(items || []);
+    const rescued = split.stations.length ? await printStationGroups(split.stations, settings, order) : [];
+    const defItems = [...split.def, ...rescued];
+    if (defItems.length || !split.stations.length) {
+      if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
+      try {
+        await printService.printFullKitchenTicket(settings, order, defItems);
+      } catch (err) {
+        await printAlerts.recordFailure({ kind: 'kitchen', printer: { name: 'Kitchen', ip: settings.printer_kitchen_ip }, order, items: defItems, reason: err.message });
+        throw err;
+      }
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('[print/kitchen-full]', err.message);
     res.json({ success: false, error: err.message });
+  }
+});
+
+// ── SEPOS-PRINT-ALERT-001 — held-ticket queue + printer health ───────
+// Till banner polls this; empty on cloud (service is local-gated).
+app.get('/api/print/alerts', async (req, res) => {
+  try {
+    res.json(await printAlerts.list());
+  } catch (err) {
+    res.json({ alerts: [], printers: [], error: err.message });
+  }
+});
+
+// action: 'retry' (original printer, re-resolved from current config) |
+//         'redirect' (main kitchen, ticket marked "REDIRECTED FROM …") |
+//         'dismiss'
+app.post('/api/print/alerts/action', async (req, res) => {
+  try {
+    const { action, ids } = req.body || {};
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids required' });
+    let results;
+    if (action === 'retry') results = await printAlerts.retry(ids);
+    else if (action === 'redirect') results = await printAlerts.redirect(ids);
+    else if (action === 'dismiss') results = await printAlerts.dismiss(ids);
+    else return res.status(400).json({ error: 'unknown action' });
+    res.json({ results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

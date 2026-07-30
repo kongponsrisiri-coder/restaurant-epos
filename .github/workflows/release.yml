@@ -192,6 +192,9 @@ jobs:
       - name: Show downloaded files
         run: ls -laR dist
 
+      # Existing tills auto-update from restaurant-epos (their baked-in updater
+      # target) — keep publishing here until every till has moved to a build
+      # that points at siamepos-releases (SEC-2026-07 repo-privacy transition).
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -203,6 +206,29 @@ jobs:
           fail_on_unmatched_files: false
           # Attach the installers AND the electron-updater manifest /
           # blockmap files so existing installs can auto-update.
+          files: |
+            dist/mac-installer/*.dmg
+            dist/mac-installer/*.zip
+            dist/mac-installer/*.blockmap
+            dist/mac-installer/latest-mac.yml
+            dist/windows-installer/*.exe
+            dist/windows-installer/*.blockmap
+            dist/windows-installer/latest.yml
+
+      # ── SEC-2026-07 transition: ALSO publish to the PUBLIC releases-only repo
+      # so tills built to check siamepos-releases get the same release. New
+      # builds' updater target is siamepos-releases (electron/package.json).
+      # Once every till is migrated, drop the step ABOVE and make restaurant-epos
+      # private. Needs RELEASES_REPO_TOKEN secret (PAT with repo scope).
+      - name: Publish to public releases repo (siamepos-releases)
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: kongponsrisiri-coder/siamepos-releases
+          token: ${{ secrets.RELEASES_REPO_TOKEN }}
+          tag_name: ${{ github.ref_name }}
+          name: SiamEPOS ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: false
           files: |
             dist/mac-installer/*.dmg
             dist/mac-installer/*.zip

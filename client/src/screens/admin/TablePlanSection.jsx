@@ -64,6 +64,7 @@ export default function TablePlanSection() {
   const [tiers,   setTiers]   = useState(DEFAULT_TIERS);
 
   const [dragging, setDragging] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState(null);
   const [offset,   setOffset]   = useState({ x: 0, y: 0 });
 
@@ -183,6 +184,35 @@ export default function TablePlanSection() {
           pos_x: w.pos_x, pos_y: w.pos_y, width: w.width, height: w.height,
         });
       }
+    }
+  };
+
+  // Explicit "Save layout" — commits EVERY table + wall position in one batch so
+  // the whole plan is guaranteed persisted (and forwarded to the cloud, which
+  // the Floor map reads), not just the last item dragged. Then re-reads the
+  // committed truth so the editor and the Floor screen always agree.
+  const handleSaveLayout = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      for (const t of tablesRef.current) {
+        await updateTablePlan(t.id, {
+          pos_x: t.pos_x, pos_y: t.pos_y,
+          shape: t.shape, width: t.width, height: t.height,
+          name: t.name, capacity: t.capacity, table_number: t.table_number,
+        });
+      }
+      for (const w of wallsRef.current) {
+        await apiPut(`/api/table-walls/${w.id}`, {
+          pos_x: w.pos_x, pos_y: w.pos_y, width: w.width, height: w.height,
+        });
+      }
+      await fetchAll();
+      showToast('✓ Layout saved — floor updated');
+    } catch (e) {
+      showToast('Save failed — please try again', 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -386,6 +416,15 @@ export default function TablePlanSection() {
             style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#f0f0f0', color: '#555', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
             title="Reload from server">
             ↻</button>
+
+          <div style={{ width: 1, height: 24, background: '#e0e0e0' }} />
+
+          <button onClick={handleSaveLayout} disabled={saving}
+            style={{ padding: '8px 20px', borderRadius: 8, border: 'none',
+              background: saving ? '#86efac' : '#16a34a', color: 'white',
+              cursor: saving ? 'wait' : 'pointer', fontWeight: 700, fontSize: 13 }}
+            title="Save the whole layout and apply it to the floor">
+            {saving ? 'Saving…' : '💾 Save Layout'}</button>
         </div>
       </div>
 

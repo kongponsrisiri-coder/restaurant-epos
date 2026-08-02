@@ -408,10 +408,10 @@ export default function TablePlanSection() {
         {/* Canvas */}
         <div
           ref={canvasRef}
-          onMouseDown={handleCanvasMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
+          onPointerDown={handleCanvasMouseDown}
+          onPointerMove={handleMouseMove}
+          onPointerUp={handleMouseUp}
+          onPointerLeave={handleMouseUp}
           style={{
             flex: 1, height: 640, minWidth: 0,
             background: '#f0ede8', borderRadius: 16, position: 'relative',
@@ -419,6 +419,9 @@ export default function TablePlanSection() {
             cursor: mode === 'link' ? 'crosshair' : dragging ? 'grabbing' : 'default',
             backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)',
             backgroundSize: '30px 30px', overflow: 'auto',
+            // Pointer events + touch-action:none so tables drag by FINGER on a
+            // touch till, not just by mouse (editor was mouse-only before).
+            touchAction: 'none',
           }}
         >
           {/* SVG sized to the full floor so link lines + the scroll area cover
@@ -457,12 +460,12 @@ export default function TablePlanSection() {
           {walls.map(wall => (
             <div
               key={wall.id}
-              onMouseDown={e => handleMouseDown(e, 'wall', wall.id)}
+              onPointerDown={e => handleMouseDown(e, 'wall', wall.id)}
               style={{
                 position: 'absolute', left: wall.pos_x, top: wall.pos_y,
                 width: wall.width || 12, height: wall.height || 100,
                 background: selected?.id === wall.id ? '#e94560' : '#4a4a4a',
-                borderRadius: 3, cursor: 'grab', zIndex: 2,
+                borderRadius: 3, cursor: 'grab', zIndex: 2, touchAction: 'none',
                 outline: selected?.id === wall.id ? '2px solid #e94560' : 'none',
                 outlineOffset: 2,
               }}
@@ -477,9 +480,9 @@ export default function TablePlanSection() {
             return (
               <div
                 key={table.id}
-                onMouseDown={e => handleMouseDown(e, 'table', table.id)}
+                onPointerDown={e => handleMouseDown(e, 'table', table.id)}
                 style={{
-                  position: 'absolute',
+                  position: 'absolute', touchAction: 'none',
                   left: table.pos_x, top: table.pos_y,
                   width: table.width || 80, height: table.height || 80,
                   borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,

@@ -297,7 +297,7 @@ footer{background:#070F24;padding:56px 60px;display:grid;grid-template-columns:2
     <li><a href="siamshop.html" class="lang-en" lang="en">SiamShop</a><a href="siamshop.html" class="lang-th" lang="th">SiamShop</a></li>
     <li><a href="why-siamepos.html" class="lang-en" lang="en">Why Us</a><a href="why-siamepos.html" class="lang-th" lang="th">ทำไมเรา</a></li>
     <li><a href="website-design.html" class="lang-en" lang="en">Website Design</a><a href="website-design.html" class="lang-th" lang="th">ออกแบบเว็บ</a></li>
-    <li><a href="book-demo.html" class="nav-cta lang-en" lang="en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th" lang="th">จองเดโม</a></li>
+    <li><a href="#" class="nav-cta lang-en" lang="en" onclick="if(window.openSiamChat)openSiamChat();return false;">Chat with us</a><a href="#" class="nav-cta lang-th" lang="th" onclick="if(window.openSiamChat)openSiamChat();return false;">แชทกับเรา</a></li>
   </ul>
   <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'ภาษาไทย';try{localStorage.setItem('siamLang',th?'th':'en')}catch(e){}">ภาษาไทย</button>
 </nav>
@@ -310,8 +310,8 @@ footer{background:#070F24;padding:56px 60px;display:grid;grid-template-columns:2
     <p class="hero-sub lang-en" lang="en">See who's in, who's booked, who's free — right now, from any device. Customers pick their therapist and book online without calling you. No more LINE messages at midnight. No more double bookings. No more paper diaries.</p>
     <p class="hero-sub lang-th" lang="th">เห็นครบว่าใครกำลังให้บริการ ใครมีคิวจอง ใครว่าง — แบบเรียลไทม์ จากอุปกรณ์ไหนก็ได้ ลูกค้าเลือกเทอราพิสต์และจองคิวออนไลน์ได้เองโดยไม่ต้องโทรหาคุณ ไม่มีข้อความ LINE ตอนเที่ยงคืนอีกต่อไป ไม่มีจองซ้อน ไม่ต้องพึ่งสมุดจดคิวอีกแล้ว</p>
     <div class="hero-actions">
-      <a href="book-demo.html" class="book-btn"><span class="lang-en" lang="en">Book a Free Demo</span><span class="lang-th" lang="th">จองเดโมฟรี</span></a>
-      <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="book-btn ghost" style="text-decoration:none;">💬 <span class="lang-en" lang="en">WhatsApp us first</span><span class="lang-th" lang="th">แชทกับเรา มาก่อนได้เลย</span></a>
+      
+      
     </div>
     <div class="hero-stats">
       <div><div class="hstat-num">£0</div><div class="hstat-label lang-en" lang="en">Booking commission</div><div class="hstat-label lang-th" lang="th">ค่าคอมมิชชั่นการจอง</div></div>
@@ -619,7 +619,7 @@ footer{background:#070F24;padding:56px 60px;display:grid;grid-template-columns:2
       <li class="lang-en" lang="en">Thai-speaking WhatsApp support</li>
       <li class="lang-th" lang="th">ซัพพอร์ตภาษาไทยผ่านแชท</li>
     </ul>
-    <a href="book-demo.html" class="book-btn" style="display:block;text-align:center;width:100%;justify-content:center;"><span class="lang-en" lang="en">Book a Free Demo</span><span class="lang-th" lang="th">จองเดโมฟรี</span></a>
+    
     <p class="lang-en" style="margin-top:14px;font-size:12px;color:rgba(255,255,255,0.35);text-align:center;" lang="en">No contract · No setup fee · Cancel anytime</p>
     <p class="lang-th" style="margin-top:14px;font-size:12px;color:rgba(255,255,255,0.35);text-align:center;" lang="th">ไม่ผูกสัญญา · ไม่มีค่าติดตั้ง · ยกเลิกได้ทุกเมื่อ</p>
   </div>
@@ -642,10 +642,7 @@ footer{background:#070F24;padding:56px 60px;display:grid;grid-template-columns:2
     <h2 class="section-title white"><span class="lang-en" lang="en">Book a free 20-minute demo.<br>We'll show you everything.</span><span class="lang-th" lang="th">จองเดโมฟรี 20 นาที<br>เราโชว์ให้ดูครบทุกอย่าง</span></h2>
     <p class="lang-en" style="max-width:520px;margin:0 auto 32px;font-size:16px;color:rgba(255,255,255,0.55);line-height:1.8;font-weight:300;font-style:italic;" lang="en">"No contract. No pressure. A Thai-speaking person who understands how your massage shop works — showing you exactly how SiamSpa would work for yours."</p>
     <p class="lang-th" style="max-width:520px;margin:0 auto 32px;font-size:16px;color:rgba(255,255,255,0.55);line-height:1.8;font-weight:300;font-style:italic;" lang="th">"ไม่ผูกสัญญา ไม่มีการกดดัน มีคนไทยที่เข้าใจการทำงานของร้านนวดจริงๆ มาโชว์ให้คุณดูว่า SiamSpa จะช่วยร้านของคุณได้อย่างไรบ้าง"</p>
-    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
-      <a href="book-demo.html" class="book-btn"><span class="lang-en" lang="en">Book Your Free Demo</span><span class="lang-th" lang="th">จองเดโมฟรีของคุณ</span></a>
-      <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="book-btn ghost" style="text-decoration:none;">💬 <span class="lang-en" lang="en">Chat with us</span><span class="lang-th" lang="th">หรือแชทกับเรา มาก็ได้</span></a>
-    </div>
+    
     <div class="cta-trust-row">
       <span class="cta-trust-chip"><span class="lang-en" lang="en">✅ No contract</span><span class="lang-th" lang="th">✅ ไม่ผูกสัญญา</span></span>
       <span class="cta-trust-chip"><span class="lang-en" lang="en">✅ No setup fee</span><span class="lang-th" lang="th">✅ ไม่มีค่าติดตั้ง</span></span>
@@ -661,7 +658,7 @@ footer{background:#070F24;padding:56px 60px;display:grid;grid-template-columns:2
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><img src="assets/siamepos-star.png" width="40" height="40" alt="SiamEPOS logo" style="object-fit:contain"><span style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:#C9A84C;">Siam<span style="color:white;">EPOS</span></span></div>
     <p class="footer-tagline lang-en" lang="en">The Thai Business Management System. Built for Thai restaurants and spas in the UK.</p>
     <p class="footer-tagline lang-th" lang="th">ระบบบริหารธุรกิจไทย สร้างมาเพื่อร้านอาหารไทยและสปาไทยใน UK</p>
-    <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;background:#0D1B3E;color:#C9A84C;padding:10px 18px;border-radius:50px;font-size:13px;font-weight:700;text-decoration:none;margin-top:4px;">💬 Chat with us</a>
+    
   </div>
   <div class="footer-col">
     <h4 class="lang-en" lang="en">Products</h4>
@@ -678,9 +675,9 @@ footer{background:#070F24;padding:56px 60px;display:grid;grid-template-columns:2
     <h4 class="lang-en" lang="en">Support</h4>
     <h4 class="lang-th" lang="th">ซัพพอร์ต</h4>
     <ul>
-      <li><a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="lang-en" lang="en">Live Chat</a><a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="lang-th" lang="th">ซัพพอร์ตทาง WhatsApp</a></li>
+      <li></li>
       <li><a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></li>
-      <li><a href="book-demo.html" class="lang-en" lang="en">Book a Demo</a><a href="book-demo.html" class="lang-th" lang="th">จองเดโม</a></li>
+      <li></li>
     </ul>
   </div>
   <div class="footer-col">

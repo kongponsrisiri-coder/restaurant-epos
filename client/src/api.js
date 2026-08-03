@@ -582,6 +582,9 @@ export const createKitchenTemplate = (body) => post('/api/kitchen-templates', bo
 export const updateKitchenTemplate = (id, body) => put(`/api/kitchen-templates/${id}`, body);
 export const deleteKitchenTemplate = (id) => del(`/api/kitchen-templates/${id}`);
 export const sendKitchenMessage   = (body) => post('/api/print/kitchen-message', body);
+// SEPOS-KITCHEN-MSG-002 — attach a kitchen note to the order (prints at the
+// bottom of that order's kitchen ticket). Empty note clears it.
+export const saveOrderNote        = (orderId, note) => put(`/api/orders/${orderId}/note`, { note });
 // SEPOS-ANDROID-001 — kitchen-message buffer for the native app to print on-device
 export const getKitchenMessageBuffer = (body) => post('/api/print/buffers/kitchen-message', body);
 export const serverPrintReceipt   = (order_id, payment_details, printer_name) => post('/api/print/receipt', { order_id, payment_details, printer_name });

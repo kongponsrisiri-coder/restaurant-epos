@@ -318,6 +318,20 @@ section { padding:100px 60px; }
 .final-cta .section-title { color:white; }
 .final-cta .section-sub { color:rgba(255,255,255,0.6); margin:0 auto 40px; }
 .cta-personal { max-width:560px; margin:0 auto 32px; font-size:16px; color:rgba(255,255,255,0.55); line-height:1.8; font-weight:300; font-style:italic; }
+/* MEET THE FOUNDER */
+.founder { background:linear-gradient(180deg,#FCFAF2,#F5EEDC); }
+.founder-wrap { max-width:1080px; margin:0 auto; display:grid; grid-template-columns:.82fr 1.18fr; gap:58px; align-items:center; }
+.founder-photo { position:relative; }
+.founder-photo img { width:100%; border-radius:18px; display:block; box-shadow:0 30px 64px rgba(13,27,62,0.22); }
+.founder-photo::after { content:""; position:absolute; left:-14px; top:26px; bottom:26px; width:4px; border-radius:4px; background:linear-gradient(var(--gold),var(--gold-light)); }
+.founder-quote { font-family:'Cormorant Garamond',serif; font-size:29px; line-height:1.35; color:var(--navy); font-style:italic; margin:4px 0 20px; }
+.founder-body { font-size:16px; color:var(--text-muted); line-height:1.85; }
+.founder-body p { margin-bottom:14px; }
+.founder-sign { display:flex; align-items:center; gap:14px; margin-top:26px; }
+.founder-sign .dot { width:34px; height:1px; background:var(--gold); flex-shrink:0; }
+.founder-sign .nm { font-family:'Cormorant Garamond',serif; font-size:22px; font-weight:700; color:var(--navy); }
+.founder-sign .rl { font-size:13px; color:var(--text-muted); letter-spacing:.3px; }
+@media(max-width:1100px){ .founder-wrap { grid-template-columns:1fr; gap:34px; } .founder-photo { max-width:360px; margin:0 auto; } .founder-quote { font-size:25px; } }
 .cta-trust-row { display:flex; justify-content:center; align-items:center; gap:28px; flex-wrap:wrap; margin-top:28px; }
 .cta-trust-chip { display:flex; align-items:center; gap:6px; font-size:12px; color:rgba(255,255,255,0.45); font-weight:600; }
 
@@ -488,7 +502,7 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
     <li><a href="siamshop.html" class="lang-en" lang="en">SiamShop</a><a href="siamshop.html" class="lang-th" lang="th">SiamShop</a></li>
     <li><a href="why-siamepos.html" class="lang-en" lang="en">Why Us</a><a href="why-siamepos.html" class="lang-th" lang="th">ทำไมต้องเรา</a></li>
     <li><a href="website-design.html" class="lang-en" lang="en">Website Design</a><a href="website-design.html" class="lang-th" lang="th">&#x0E2d;&#x0E2d;&#x0E01;&#x0E41;&#x0E1a;&#x0E1a;&#x0E40;&#x0E27;&#x0E47;&#x0E1a;</a></li>
-    <li><a href="book-demo.html" class="nav-cta lang-en" lang="en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th" lang="th">จองเดโม</a></li>
+    <li><a href="#" class="nav-cta lang-en" lang="en" onclick="if(window.openSiamChat)openSiamChat();return false;">Chat with us</a><a href="#" class="nav-cta lang-th" lang="th" onclick="if(window.openSiamChat)openSiamChat();return false;">แชทกับเรา</a></li>
   </ul>
   <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'ภาษาไทย';try{localStorage.setItem('siamLang',th?'th':'en')}catch(e){}">ภาษาไทย</button>
 </nav>
@@ -504,10 +518,10 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
     <p class="hero-sub lang-en" lang="en">Your till, kitchen, bookings, online ordering, stock, staff, customers and reports — one connected system for Thai businesses in the UK, with Thai-speaking support from day one. Whether you run a restaurant, a spa or a supermarket, there's a SiamEPOS made for you — and <strong style="color:white;">zero marketplace commission</strong>.</p>
     <p class="hero-sub lang-th" lang="th">ขายหน้าร้าน ครัว จองคิว สั่งออนไลน์ สต๊อก พนักงาน ลูกค้า และรายงาน — ระบบเดียวที่เชื่อมกันครบ สร้างมาเพื่อธุรกิจไทยในสหราชอาณาจักร พร้อมซัพพอร์ตภาษาไทยตั้งแต่วันแรก ไม่ว่าคุณจะมีร้านอาหาร สปา หรือซูเปอร์มาร์เก็ต ก็มี SiamEPOS ที่สร้างมาเพื่อคุณ — และ<strong style="color:white;">ไม่มีค่าคอมมิชชั่นมาร์เก็ตเพลส</strong></p>
     <div class="hero-actions">
-      <a href="book-demo.html" class="book-btn lang-en" lang="en">Book a Free Demo</a>
-      <a href="book-demo.html" class="book-btn lang-th" lang="th">จองเดโมฟรี</a>
-      <a href="#products" style="color:rgba(255,255,255,0.6);font-size:15px;font-weight:600;text-decoration:none;" class="lang-en" lang="en">Explore our products ↓</a>
-      <a href="#products" style="color:rgba(255,255,255,0.6);font-size:15px;font-weight:600;text-decoration:none;" class="lang-th" lang="th">ดูผลิตภัณฑ์ทั้งหมด ↓</a>
+      
+      
+      <a href="#products" class="book-btn ghost lang-en" lang="en">Explore our products ↓</a>
+      <a href="#products" class="book-btn ghost lang-th" lang="th">ดูผลิตภัณฑ์ทั้งหมด ↓</a>
     </div>
   </div>
 </section>
@@ -593,8 +607,41 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
   <div class="erp-hook">
     <div class="erp-hook-text lang-en" lang="en">SAP and Oracle charge <strong>£50,000+</strong> and need a consultant. SiamEPOS is <strong>£59/month</strong> and sets up in an afternoon — <strong>the ERP built for Thai businesses, at SaaS prices.</strong></div>
     <div class="erp-hook-text lang-th" lang="th">SAP และ Oracle คิดค่าติดตั้ง <strong>£50,000+</strong> และต้องมีที่ปรึกษา แต่ SiamEPOS แค่ <strong>£59/เดือน</strong> ติดตั้งเสร็จในบ่ายเดียว — <strong>ระบบ ERP ที่สร้างมาเพื่อธุรกิจไทย ในราคาซอฟต์แวร์</strong></div>
-    <a href="book-demo.html" class="erp-hook-pill lang-en" lang="en" style="text-decoration:none;">See it in 20 min →</a>
-    <a href="book-demo.html" class="erp-hook-pill lang-th" lang="th" style="text-decoration:none;">ดูใน 20 นาที →</a>
+    
+    
+  </div>
+</section>
+
+<!-- MEET THE FOUNDER -->
+<section class="founder">
+  <div class="founder-wrap reveal">
+    <div class="founder-photo">
+      <img src="assets/founder-korakot.jpg" alt="Korakot, founder of SiamEPOS, in the restaurant" loading="lazy">
+    </div>
+    <div class="founder-text">
+      <div class="section-label lang-en" lang="en">Meet the founder</div>
+      <div class="section-label lang-th" lang="th">จากผู้ก่อตั้ง</div>
+      <h2 class="section-title lang-en" lang="en">Built by someone who's<br>lived it — for 20 years</h2>
+      <h2 class="section-title lang-th" lang="th">สร้างโดยคนที่อยู่ใน<br>วงการจริงมา 20 ปี</h2>
+      <p class="founder-quote lang-en" lang="en">"I built the system I wish I'd had."</p>
+      <p class="founder-quote lang-th" lang="th">"ผมสร้างระบบที่ผมเองอยากมีมาตลอด"</p>
+      <div class="founder-body lang-en" lang="en">
+        <p>For 20 years I've worked in this trade — and for 20 years I watched Thai businesses pay for things that never felt fair. Expensive tills and software, a monthly fee on top. A charge just to load your menu — and more again to have it in Thai. Long contracts that lock you in. Steep commissions on every online booking and takeaway. Websites that cost a fortune, and software so complicated no one on the floor could actually use it.</p>
+        <p>So I built the opposite — one honest system that does what a restaurant really needs, from someone who's stood behind the counter, not just sold software. That's SiamEPOS.</p>
+      </div>
+      <div class="founder-body lang-th" lang="th">
+        <p>ผมอยู่ในวงการนี้มา 20 ปี และตลอดเวลานั้นผมเห็นร้านคนไทยต้องจ่ายในสิ่งที่ไม่ยุติธรรม — เครื่องและซอฟต์แวร์ราคาแพง แถมค่ารายเดือน ค่าติดตั้งเมนู และคิดเพิ่มอีกถ้าอยากได้ภาษาไทย สัญญาผูกมัดระยะยาว ค่าคอมมิชชั่นการจองและสั่งกลับบ้านที่เอาเปรียบ เว็บไซต์ราคาแพงเกินจริง และซอฟต์แวร์ที่ซับซ้อนจนพนักงานหน้าร้านใช้งานจริงไม่ได้</p>
+        <p>ผมเลยสร้างสิ่งที่ตรงกันข้าม — ระบบเดียวที่ซื่อตรง และทำในสิ่งที่ร้านต้องการจริง ๆ จากคนที่เคยยืนอยู่หน้าร้าน ไม่ใช่แค่คนขายซอฟต์แวร์ นั่นคือ SiamEPOS</p>
+      </div>
+      <div class="founder-sign">
+        <span class="dot"></span>
+        <div>
+          <div class="nm">Korakot Kongponsrisiri</div>
+          <div class="rl lang-en" lang="en">Founder, SiamEPOS · 20 years in the trade</div>
+          <div class="rl lang-th" lang="th">ผู้ก่อตั้ง SiamEPOS · 20 ปีในวงการ</div>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -603,16 +650,11 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
   <div style="position:relative;z-index:1;max-width:640px;margin:0 auto;" class="reveal">
     <div class="section-label lang-en" lang="en">Let's talk</div>
     <div class="section-label lang-th" lang="th">คุยกันได้เลย</div>
-    <h2 class="section-title white lang-en" lang="en">Book a free 20-minute demo.<br>In English or Thai.</h2>
-    <h2 class="section-title white lang-th" lang="th">จองเดโมฟรี 20 นาที<br>คุยไทยหรืออังกฤษก็ได้</h2>
-    <p class="cta-personal lang-en" lang="en">"No contract. No pressure. No jargon. Just a Thai-speaking person who actually understands your restaurant — showing you exactly how SiamEPOS would work for yours."</p>
-    <p class="cta-personal lang-th" lang="th">"ไม่ผูกสัญญา ไม่กดดัน ไม่มีศัพท์เทคนิคให้ปวดหัว แค่คนพูดไทยที่เข้าใจร้านอาหารจริง ๆ มาโชว์ให้ดูว่า SiamEPOS จะช่วยร้านของคุณได้ยังไง"</p>
-    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
-      <a href="book-demo.html" class="book-btn lang-en" lang="en">Book Your Free Demo</a>
-      <a href="book-demo.html" class="book-btn lang-th" lang="th">จองเดโมฟรีเลย</a>
-      <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="book-btn ghost lang-en" style="text-decoration:none;" lang="en">💬 Chat with us</a>
-      <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="book-btn ghost lang-th" style="text-decoration:none;" lang="th">💬 แชทกับเราเลย</a>
-    </div>
+    <h2 class="section-title white lang-en" lang="en">Chat with us —<br>in English or Thai.</h2>
+    <h2 class="section-title white lang-th" lang="th">แชทกับเรา<br>คุยไทยหรืออังกฤษก็ได้</h2>
+    <p class="cta-personal lang-en" lang="en">"No contract. No pressure. No jargon. Just a Thai-speaking person who actually understands your restaurant — ready to answer anything, right here."</p>
+    <p class="cta-personal lang-th" lang="th">"ไม่ผูกสัญญา ไม่กดดัน ไม่มีศัพท์เทคนิคให้ปวดหัว แค่คนพูดไทยที่เข้าใจร้านอาหารจริง ๆ พร้อมตอบทุกคำถามได้เลย"</p>
+    
     <div class="cta-trust-row">
       <span class="cta-trust-chip">✅ <span class="lang-en" lang="en">No contract</span><span class="lang-th" lang="th">ไม่ผูกสัญญา</span></span>
       <span class="cta-trust-chip">✅ <span class="lang-en" lang="en">No setup fee</span><span class="lang-th" lang="th">ไม่มีค่าติดตั้ง</span></span>
@@ -628,7 +670,7 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;"><img src="assets/siamepos-star.png" width="40" height="40" alt="SiamEPOS logo" style="object-fit:contain"><span style="font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:#C9A84C;">Siam<span style="color:white;">EPOS</span></span></div>
     <p class="footer-tagline lang-en" lang="en">The Thai Restaurant Management System. Built for Thai restaurants in the UK.</p>
     <p class="footer-tagline lang-th" lang="th">ระบบจัดการร้านอาหารไทย สร้างมาเพื่อร้านอาหารไทยในสหราชอาณาจักร</p>
-    <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;background:#0D1B3E;color:#C9A84C;padding:10px 18px;border-radius:50px;font-size:13px;font-weight:700;text-decoration:none;margin-top:4px;">💬 <span class="lang-en" lang="en">Chat with us</span><span class="lang-th" lang="th">Chat with us</span></a>
+    
   </div>
   <div class="footer-col">
     <h4 class="lang-en" lang="en">Product</h4><h4 class="lang-th" lang="th">ผลิตภัณฑ์</h4>
@@ -638,15 +680,15 @@ footer { background:#070F24; padding:56px 60px; display:grid; grid-template-colu
       <li><a href="spa.html" class="lang-en" lang="en">SiamSpa</a><a href="spa.html" class="lang-th" lang="th">SiamSpa</a></li>
       <li><a href="siamshop.html" class="lang-en" lang="en">SiamShop</a><a href="siamshop.html" class="lang-th" lang="th">SiamShop</a></li>
       <li><a href="why-siamepos.html" class="lang-en" lang="en">Why SiamEPOS</a><a href="why-siamepos.html" class="lang-th" lang="th">ทำไมต้อง SiamEPOS</a></li>
-      <li><a href="faq.html" class="lang-en" lang="en">FAQ</a><a href="faq.html" class="lang-th" lang="th">คำถามที่พบบ่อย</a></li><li><a href="book-demo.html" class="lang-en" lang="en">Book Demo</a><a href="book-demo.html" class="lang-th" lang="th">จองเดโม</a></li>
+      <li><a href="faq.html" class="lang-en" lang="en">FAQ</a><a href="faq.html" class="lang-th" lang="th">คำถามที่พบบ่อย</a></li><li></li>
     </ul>
   </div>
   <div class="footer-col">
     <h4 class="lang-en" lang="en">Support</h4><h4 class="lang-th" lang="th">ซัพพอร์ต</h4>
     <ul>
-      <li><a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="lang-en" lang="en">Live Chat</a><a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="lang-th" lang="th">แชทสด</a></li>
+      <li></li>
       <li><a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></li>
-      <li><a href="book-demo.html" class="lang-en" lang="en">Thai support available</a><a href="book-demo.html" class="lang-th" lang="th">ซัพพอร์ตภาษาไทย</a></li>
+      <li></li>
     </ul>
   </div>
   <div class="footer-col">

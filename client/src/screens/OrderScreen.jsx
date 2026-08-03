@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder } from '../api';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote } from '../api';
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
 import { isNativeApp } from '../native/printer';
@@ -477,6 +477,16 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
     }
   };
 
+  // SEPOS-KITCHEN-MSG-002 — attach a kitchen note to THIS order. It prints at
+  // the bottom of the order's kitchen ticket on the next send/fire (the server
+  // reads customer_note from the order), and shows as a chip here so the waiter
+  // can edit or clear it. Optimistic local update so the chip appears at once.
+  const handleSaveKitchenNote = async (text) => {
+    const note = String(text || '').trim();
+    setOrder(prev => prev ? { ...prev, customer_note: note } : prev);
+    assertOk(await saveOrderNote(orderId, note));
+  };
+
   const sendOrder = async () => {
     if (cart.length === 0) return alert('No items to send!');
 
@@ -887,6 +897,17 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             )}
           </div>
 
+          {/* SEPOS-KITCHEN-MSG-002 — the attached kitchen note, shown so the
+              waiter can see it's on and edit/remove it. Prints at the bottom
+              of the kitchen ticket. */}
+          {order?.customer_note && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: 10, padding: '8px 12px', margin: '0 0 10px' }}>
+              <span style={{ fontSize: 15 }}>📢</span>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: '#92400E', wordBreak: 'break-word' }}>Kitchen note: {order.customer_note}</span>
+              <button onClick={() => setShowKitchenMsg(true)} style={{ border: 'none', background: 'transparent', color: '#92400E', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Edit</button>
+              <button onClick={() => handleSaveKitchenNote('')} title="Remove note" style={{ border: 'none', background: 'transparent', color: '#92400E', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
+          )}
 
           {/* Course selector */}
           {/* SEPOS-046w — course bar stays visible on bar categories too.
@@ -1778,8 +1799,9 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             tableNumber={order?.table_number}
             customerName={order?.customer_name}
             waiterName={order?.staff_name || ''}
+            initialMessage={order?.customer_note || ''}
+            onSaveNote={handleSaveKitchenNote}
             onClose={() => setShowKitchenMsg(false)}
-            onSent={() => {}}
           />
         )}
 

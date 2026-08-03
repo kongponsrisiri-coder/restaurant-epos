@@ -308,6 +308,7 @@ export default function KitchenScreen() {
     socket.on('new_order_items', () => fetchOrders());
     socket.on('item_status_changed', () => { fetchOrders(); fetchCompleted(); });
     socket.on('order_closed', () => { fetchOrders(); fetchCompleted(); });
+    socket.on('order_note_updated', () => fetchOrders()); // SEPOS-KITCHEN-MSG-002 — note attached/edited → refresh the card
     socket.on('kitchen_message', (data) => {
       // Newest first, capped at 8 visible so the screen doesn't get
       // taken over by stale messages. Chef dismisses each one with ✕.

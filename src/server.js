@@ -2714,6 +2714,35 @@ app.post('/api/print/kitchen-message', async (req, res) => {
   }
 });
 
+// SEPOS-KITCHEN-MSG-002 — attach a kitchen note to an ORDER so it prints at the
+// BOTTOM of that order's kitchen ticket (buildFullKitchenTicket already renders
+// order.customer_note in big bold) instead of a lone standalone slip. Written
+// local-first — that's what the kitchen-print endpoints read from the DB — and
+// the 5s active-order pull won't clobber it because it drops null cloud values.
+// Best-effort cloud push + socket so reprints, other devices and the KDS agree.
+app.put('/api/orders/:id/note', async (req, res) => {
+  try {
+    const note = String(req.body?.note ?? '').slice(0, 200);
+    await pool.query('UPDATE orders SET customer_note = $1 WHERE id = $2', [note, req.params.id]);
+    io.emit('order_note_updated', { order_id: Number(req.params.id), note });
+    try {
+      const archiveService = require('./services/archiveService');
+      if (archiveService.isLocalInstall() && process.env.CLOUD_API_URL) {
+        const cloudId = await localOrderCloudId(req.params.id);
+        if (cloudId) {
+          const headers = { 'Content-Type': 'application/json' };
+          if (process.env.SYNC_SECRET) headers['x-sync-secret'] = process.env.SYNC_SECRET;
+          fetch(`${process.env.CLOUD_API_URL}/api/orders/${cloudId}/note`, {
+            method: 'PUT', headers, body: JSON.stringify({ note }),
+            signal: AbortSignal.timeout(6000),
+          }).catch(e => console.warn('[order-note] cloud push failed:', e.message));
+        }
+      }
+    } catch (e) { console.warn('[order-note] push skipped:', e.message); }
+    res.json({ success: true, note });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Helper: split a list of closed-order rows into dine-in vs takeaway
 // totals so every reports endpoint exposes the same shape.
 function splitByOrderType(rows) {

@@ -182,6 +182,7 @@ const RELAY_EVENTS = [
   'payment_amended',
   'kitchen_message',
   'delivery_status',
+  'order_note_updated',  // SEPOS-KITCHEN-MSG-002 — kitchen note attached to an order
 ];
 
 let cloudSocket = null;

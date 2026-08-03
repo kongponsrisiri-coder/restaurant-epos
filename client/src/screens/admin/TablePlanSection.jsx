@@ -111,7 +111,13 @@ export default function TablePlanSection() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  const lastToastRef = useRef({ msg: '', at: 0 });
   function showToast(msg, type = 'success') {
+    // Collapse repeats — per-keystroke/per-drag saves can fail in bursts and a
+    // toast per failure reads as spam. One identical message per 4s is enough.
+    const now = Date.now();
+    if (msg === lastToastRef.current.msg && now - lastToastRef.current.at < 4000) return;
+    lastToastRef.current = { msg, at: now };
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   }
@@ -153,8 +159,13 @@ export default function TablePlanSection() {
   const handleMouseMove = (e) => {
     if (!draggingRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = Math.max(0, e.clientX - rect.left + canvasRef.current.scrollLeft - offset.x);
-    const y = Math.max(0, e.clientY - rect.top  + canvasRef.current.scrollTop  - offset.y);
+    // Math.round — getBoundingClientRect()/pointer coords are sub-pixel floats
+    // (trackpad, browser zoom); pos_x/pos_y are INTEGER columns, so a float
+    // position 500'd EVERY save of that table ("invalid input syntax for type
+    // integer: 42.121…") — including later name/capacity edits, which send the
+    // whole row. One drag poisoned the table until reload.
+    const x = Math.max(0, Math.round(e.clientX - rect.left + canvasRef.current.scrollLeft - offset.x));
+    const y = Math.max(0, Math.round(e.clientY - rect.top  + canvasRef.current.scrollTop  - offset.y));
     if (draggingRef.current.type === 'table') {
       setTables(prev => prev.map(t => t.id === draggingRef.current.id ? { ...t, pos_x: x, pos_y: y } : t));
     } else {

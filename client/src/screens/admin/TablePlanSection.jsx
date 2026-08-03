@@ -256,6 +256,12 @@ export default function TablePlanSection() {
     const t = tablesRef.current.find(t => t.id === selected.id);
     if (!t) return;
     const u = { ...t, ...changes };
+    // Sync the ref IMMEDIATELY (not just via the post-render effect): the
+    // rename input commits on BLUR, which fires in the same instant as a
+    // "Save Layout" click — Save reads tablesRef and would otherwise snapshot
+    // the PRE-rename list and push the old name straight back over the new
+    // one (Korakot, Baan Siam 2026-08-03: renamed 13→2, Save reverted it).
+    tablesRef.current = tablesRef.current.map(tbl => tbl.id === u.id ? u : tbl);
     setTables(prev => prev.map(tbl => tbl.id === u.id ? u : tbl));
     await updateTablePlan(u.id, {
       pos_x: u.pos_x, pos_y: u.pos_y,
@@ -285,6 +291,8 @@ export default function TablePlanSection() {
     const w = wallsRef.current.find(w => w.id === id);
     if (!w) return;
     const u = { ...w, ...changes };
+    // Same blur-vs-Save race guard as updateSelectedTable — keep the ref fresh.
+    wallsRef.current = wallsRef.current.map(wl => wl.id === id ? u : wl);
     setWalls(prev => prev.map(wl => wl.id === id ? u : wl));
     await apiPut(`/api/table-walls/${id}`, { pos_x: u.pos_x, pos_y: u.pos_y, width: u.width, height: u.height });
   };

@@ -4,4 +4,4 @@
 //
 // ⚠️ Bump this in the SAME commit as android/app/build.gradle versionName on
 // every release.
-export const APP_VERSION = '1.4.41';
+export const APP_VERSION = '1.4.42';

@@ -102,6 +102,23 @@ export default function ZReportSection() {
       ].filter(Boolean).join('');
       if (!await confirm(msg + '\n\nAre you sure you want to close the report?')) return;
     }
+    // SEPOS-Z-REPLACE — like saving a file under an existing name: if a Z for
+    // this exact period is already in history, ASK before replacing it. (The
+    // server supersedes the old one on save; this makes the replacement a
+    // conscious choice and catches an accidental double End-of-Day.)
+    {
+      const dayOf = (v) => { const d = new Date(v); return isNaN(d) ? String(v).slice(0, 10) : d.toISOString().slice(0, 10); };
+      const existing = (history || []).find(r =>
+        r.type === reportType && (
+          reportType === 'day'     ? dayOf(r.opened_at) === dayOf(reportData.from)
+        : reportType === 'session' ? new Date(r.opened_at).getTime() === new Date(reportData.from).getTime()
+        : false));
+      if (existing) {
+        const when = formatDateTime(existing.created_at || existing.closed_at);
+        const label = reportType === 'day' ? 'An End of Day Z report for this date' : 'A Z report for this shift';
+        if (!await confirm(`⚠️ ${label} was already saved (${when}).\n\nReplace it with this new report?\n\nThe old one will disappear from history and the day's saved file will be rebuilt with these corrected figures.`)) return;
+      }
+    }
     const pettyNum = parseFloat(pettyCash) || 0;
     const actualNum = parseFloat(actualCash) || 0;
     // SEPOS-AUDIT-001 — gift vouchers sold at the till for CASH put money in

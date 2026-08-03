@@ -787,6 +787,33 @@ function StationsCard({ cardStyle, bare }) {
   );
 }
 
+// SEPOS-OSK-001 — per-device toggle for the on-screen keyboard (localStorage,
+// not a synced cloud setting — whether a device needs it depends on the device).
+function DeviceKeyboardToggle({ cardStyle }) {
+  const [on, setOn] = useState(() => {
+    try { return localStorage.getItem('onscreen_keyboard') !== '0'; } catch { return true; }
+  });
+  const toggle = () => {
+    const next = !on;
+    setOn(next);
+    try { localStorage.setItem('onscreen_keyboard', next ? '1' : '0'); } catch {}
+  };
+  return (
+    <div style={cardStyle}>
+      <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:6 }}>⌨️ On-screen keyboard</h2>
+      <div onClick={toggle} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 0', cursor:'pointer' }}>
+        <div style={{ width:44, height:26, borderRadius:13, background: on ? 'var(--brand-primary,#0D1B3E)' : '#cbd5e1', position:'relative', transition:'background .15s', flexShrink:0 }}>
+          <div style={{ position:'absolute', top:3, left: on ? 21 : 3, width:20, height:20, borderRadius:'50%', background:'#fff', transition:'left .15s' }} />
+        </div>
+        <div>
+          <div style={{ fontSize:14, fontWeight:700, color:'var(--brand-primary,#0D1B3E)' }}>Pop up a keyboard for text fields</div>
+          <div style={{ fontSize:12, color:'#888', marginTop:2 }}>For touch tills with no physical keyboard: taps into a text box (names, notes, search) bring up a keyboard. Never covers the number / PIN pads. This setting is for <b>this device only</b> and takes effect right away.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PrintersSection() {
   const [settings, setSettings] = useState({});
   const [loaded, setLoaded]     = useState(false);
@@ -859,6 +886,8 @@ export default function PrintersSection() {
           </div>
         ); })()}
       </div>
+
+      <DeviceKeyboardToggle cardStyle={cardStyle} />
 
       <button onClick={handleSave} disabled={saving}
         style={{ width:'100%', padding:'14px', borderRadius:10, border:'none',

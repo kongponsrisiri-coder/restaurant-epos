@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getTables, createOrder, getOrders, getTableStatus, moveTable, mergeTables, getReservations, assertOk } from '../api';
+import { tableLabel } from '../utils/orderLabel'; // SEPOS-TABLE-NAME
 import TakeawayStrip    from '../components/TakeawayStrip';
 import BillPeek         from '../components/BillPeek';
 import SyncHealthBanner from '../components/SyncHealthBanner';
@@ -414,7 +415,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                   onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
                 >
                   <div style={{ fontSize: w > 90 ? 16 : 13, fontWeight: 800, color: colours.text, textAlign: 'center', padding: '0 4px' }}>
-                    {table.is_takeaway ? '🥡 ' : ''}{table.table_number}
+                    {table.is_takeaway ? '🥡 ' : ''}{tableLabel(table)}
                   </div>
                   {time && (
                     <div style={{
@@ -505,7 +506,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
 
                     {/* Table number */}
                     <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-                      {table.is_takeaway ? '🥡 ' : ''}{table.table_number}
+                      {table.is_takeaway ? '🥡 ' : ''}{tableLabel(table)}
                     </div>
                     <div style={{ fontSize: 12.5, color: '#9A9488', marginTop: 6, fontWeight: 600 }}>
                       {table.is_takeaway ? 'Takeaway' : `${table.capacity} seats`}

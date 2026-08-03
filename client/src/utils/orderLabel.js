@@ -78,3 +78,13 @@ export function orderSubLabel(order) {
   if (order.covers) return `${order.covers} cvr`;
   return '';
 }
+
+// SEPOS-TABLE-NAME — what to print on a table block. Tables can carry a text
+// label ("Bar 1") in `name`; the server materialises "Table {n}" as a fallback
+// for unnamed tables, so only a name that ISN'T that auto pattern counts as a
+// custom label. Falls back to the number.
+export function tableLabel(t) {
+  const name = (t?.name || '').trim();
+  if (name && !/^Table\s+\d+$/i.test(name)) return name;
+  return t?.table_number;
+}

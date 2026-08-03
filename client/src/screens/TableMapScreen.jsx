@@ -387,8 +387,12 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
               const colours = getTableColour(table);
               const w = table.width || 80;
               const h = table.height || 80;
-              const x = table.pos_x || 40;
-              const y = table.pos_y || 40;
+              // ?? not || — a table dragged flush to the top/left edge is saved
+              // at pos 0, and `0 || 40` silently bumped it 40px on the FLOOR
+              // while the editor drew it at 0 → "I saved but the layout still
+              // differs" (Korakot, 2026-08-03: only T1/T2 at y=0 were off).
+              const x = table.pos_x ?? 40;
+              const y = table.pos_y ?? 40;
               const time = getTableTime(table.id);
               const timeColor = getTimeColor(table.id);
               const isSelected = tableActionPopup?.table.id === table.id;

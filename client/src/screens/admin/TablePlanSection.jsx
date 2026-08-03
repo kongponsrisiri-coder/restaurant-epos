@@ -568,7 +568,13 @@ export default function TablePlanSection() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
                   <label style={lbl}>Table Number / Name</label>
-                  <input defaultValue={selectedTable.table_number} key={selectedTable.id + '_n'} onBlur={e => updateSelectedTable({ table_number: e.target.value })} style={inp} />
+                  {/* Save on CHANGE (like Capacity), not blur — blur fires in the same
+                      instant as deselect/Save-Layout clicks and the typed name was
+                      silently dropped (deselect nulls `selected` → the blur save
+                      no-ops; or the input unmounts and blur never fires at all). */}
+                  <input defaultValue={selectedTable.table_number} key={selectedTable.id + '_n'}
+                    onChange={e => { if (e.target.value !== '') updateSelectedTable({ table_number: e.target.value }); }}
+                    style={inp} />
                 </div>
                 <div>
                   <label style={lbl}>Capacity (seats)</label>

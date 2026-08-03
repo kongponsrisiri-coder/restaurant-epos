@@ -482,6 +482,10 @@ async function initDB() {
     // the table existed on live tenants, so migrate in place.
     await pool.query(`ALTER TABLE z_reports ADD COLUMN IF NOT EXISTS actual_card DECIMAL(10,2)`);
     await pool.query(`ALTER TABLE z_reports ADD COLUMN IF NOT EXISTS card_difference DECIMAL(10,2)`);
+    // SEPOS-Z-REPLACE — soft-supersede: re-running a Z for the SAME period marks
+    // the old one superseded (hidden from history/UI, kept for audit — never a
+    // hard delete of a financial record).
+    await pool.query(`ALTER TABLE z_reports ADD COLUMN IF NOT EXISTS superseded_at TIMESTAMP`);
 
     // SEPOS-053 — till trading sessions (EposNow-style Open Shift → Close
     // Shift). At most ONE open session per restaurant (partial unique index

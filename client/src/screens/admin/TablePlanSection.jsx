@@ -64,6 +64,7 @@ export default function TablePlanSection() {
   const [tiers,   setTiers]   = useState(DEFAULT_TIERS);
 
   const [dragging, setDragging] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState(null);
   const [offset,   setOffset]   = useState({ x: 0, y: 0 });
 
@@ -183,6 +184,35 @@ export default function TablePlanSection() {
           pos_x: w.pos_x, pos_y: w.pos_y, width: w.width, height: w.height,
         });
       }
+    }
+  };
+
+  // Explicit "Save layout" — commits EVERY table + wall position in one batch so
+  // the whole plan is guaranteed persisted (and forwarded to the cloud, which
+  // the Floor map reads), not just the last item dragged. Then re-reads the
+  // committed truth so the editor and the Floor screen always agree.
+  const handleSaveLayout = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      for (const t of tablesRef.current) {
+        await updateTablePlan(t.id, {
+          pos_x: t.pos_x, pos_y: t.pos_y,
+          shape: t.shape, width: t.width, height: t.height,
+          name: t.name, capacity: t.capacity, table_number: t.table_number,
+        });
+      }
+      for (const w of wallsRef.current) {
+        await apiPut(`/api/table-walls/${w.id}`, {
+          pos_x: w.pos_x, pos_y: w.pos_y, width: w.width, height: w.height,
+        });
+      }
+      await fetchAll();
+      showToast('✓ Layout saved — floor updated');
+    } catch (e) {
+      showToast('Save failed — please try again', 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -386,6 +416,15 @@ export default function TablePlanSection() {
             style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#f0f0f0', color: '#555', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
             title="Reload from server">
             ↻</button>
+
+          <div style={{ width: 1, height: 24, background: '#e0e0e0' }} />
+
+          <button onClick={handleSaveLayout} disabled={saving}
+            style={{ padding: '8px 20px', borderRadius: 8, border: 'none',
+              background: saving ? '#86efac' : '#16a34a', color: 'white',
+              cursor: saving ? 'wait' : 'pointer', fontWeight: 700, fontSize: 13 }}
+            title="Save the whole layout and apply it to the floor">
+            {saving ? 'Saving…' : '💾 Save Layout'}</button>
         </div>
       </div>
 
@@ -408,10 +447,10 @@ export default function TablePlanSection() {
         {/* Canvas */}
         <div
           ref={canvasRef}
-          onMouseDown={handleCanvasMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
+          onPointerDown={handleCanvasMouseDown}
+          onPointerMove={handleMouseMove}
+          onPointerUp={handleMouseUp}
+          onPointerLeave={handleMouseUp}
           style={{
             flex: 1, height: 640, minWidth: 0,
             background: '#f0ede8', borderRadius: 16, position: 'relative',
@@ -419,6 +458,9 @@ export default function TablePlanSection() {
             cursor: mode === 'link' ? 'crosshair' : dragging ? 'grabbing' : 'default',
             backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)',
             backgroundSize: '30px 30px', overflow: 'auto',
+            // Pointer events + touch-action:none so tables drag by FINGER on a
+            // touch till, not just by mouse (editor was mouse-only before).
+            touchAction: 'none',
           }}
         >
           {/* SVG sized to the full floor so link lines + the scroll area cover
@@ -457,12 +499,12 @@ export default function TablePlanSection() {
           {walls.map(wall => (
             <div
               key={wall.id}
-              onMouseDown={e => handleMouseDown(e, 'wall', wall.id)}
+              onPointerDown={e => handleMouseDown(e, 'wall', wall.id)}
               style={{
                 position: 'absolute', left: wall.pos_x, top: wall.pos_y,
                 width: wall.width || 12, height: wall.height || 100,
                 background: selected?.id === wall.id ? '#e94560' : '#4a4a4a',
-                borderRadius: 3, cursor: 'grab', zIndex: 2,
+                borderRadius: 3, cursor: 'grab', zIndex: 2, touchAction: 'none',
                 outline: selected?.id === wall.id ? '2px solid #e94560' : 'none',
                 outlineOffset: 2,
               }}
@@ -477,9 +519,9 @@ export default function TablePlanSection() {
             return (
               <div
                 key={table.id}
-                onMouseDown={e => handleMouseDown(e, 'table', table.id)}
+                onPointerDown={e => handleMouseDown(e, 'table', table.id)}
                 style={{
-                  position: 'absolute',
+                  position: 'absolute', touchAction: 'none',
                   left: table.pos_x, top: table.pos_y,
                   width: table.width || 80, height: table.height || 80,
                   borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,

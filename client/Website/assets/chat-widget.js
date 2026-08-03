@@ -110,4 +110,6 @@
   sendEl.addEventListener('click', send);
   inEl.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
   inEl.addEventListener('input', function () { inEl.style.height = 'auto'; inEl.style.height = Math.min(inEl.scrollHeight, 96) + 'px'; });
+  // Public opener so any "Chat with us" CTA on the page can open the chat (opens only; never closes)
+  window.openSiamChat = function () { if (!panel.classList.contains('se-open')) fab.click(); };
 })();

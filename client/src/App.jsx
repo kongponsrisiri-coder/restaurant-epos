@@ -23,6 +23,7 @@ import AiHelpAssistant from './components/AiHelpAssistant'; // SEPOS-AI-HELP-001
 import PrintAlertBanner from './components/PrintAlertBanner'; // SEPOS-PRINT-ALERT-001 — loud printer-down alerts
 import LockScreen from './screens/LockScreen';
 import OpenDayModal from './components/OpenDayModal'; // SEPOS-OPENDAY-001
+import OnScreenKeyboard from './components/OnScreenKeyboard'; // SEPOS-OSK-001 — touch-till keyboard
 import './App.css';
 
 // ── Sandy: Lotus badge logo mark — replaces SVG flags ─────────────
@@ -608,6 +609,7 @@ export default function App() {
     <>
       <OfflineBanner />{/* SEPOS-ANDROID-002 — only visible when internet drops */}
       {body}
+      <OnScreenKeyboard />{/* SEPOS-OSK-001 — pops for text fields on touch tills */}
       {/* SEPOS-OPENDAY-001 — first-login-of-the-day "Open the day" prompt. Only
           renders on a positive {session:null}; fail-open + Skip keep it from ever
           bricking the floor. Sits after {body}; the licenseLock / tenant-setup

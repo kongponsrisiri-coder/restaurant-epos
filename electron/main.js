@@ -178,6 +178,38 @@ ipcMain.handle('print-html', async (event, opts) => {
   });
 });
 
+// Electron BrowserWindows have NO clipboard shortcuts or right-click menu by
+// default. On Windows that means Ctrl+V AND paste-by-mouse both silently do
+// nothing, which makes the setup card impossible to paste into (e.g. the
+// 64-char sync secret on a keyboard-less touchscreen till). Wire both:
+//  - a right-click / long-press context menu with Cut/Copy/Paste/Select All
+//    (works with touch alone — no keyboard required)
+//  - keyboard Ctrl+C/V/X/A on Windows & Linux (macOS already has these via its
+//    default application menu, so we skip it there to avoid a double-paste)
+function enableClipboardShortcuts(win) {
+  const wc = win.webContents;
+  wc.on('context-menu', (event, params) => {
+    const f = params.editFlags || {};
+    Menu.buildFromTemplate([
+      { role: 'cut', enabled: !!f.canCut },
+      { role: 'copy', enabled: !!f.canCopy },
+      { role: 'paste', enabled: !!f.canPaste },
+      { type: 'separator' },
+      { role: 'selectAll' },
+    ]).popup({ window: win });
+  });
+  if (process.platform !== 'darwin') {
+    wc.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown' || !(input.control || input.meta)) return;
+      const key = (input.key || '').toLowerCase();
+      if (key === 'v') { wc.paste(); event.preventDefault(); }
+      else if (key === 'c') { wc.copy(); event.preventDefault(); }
+      else if (key === 'x') { wc.cut(); event.preventDefault(); }
+      else if (key === 'a') { wc.selectAll(); event.preventDefault(); }
+    });
+  }
+}
+
 async function runSetupWizard() {
   return new Promise((resolve) => {
     const setupWin = new BrowserWindow({
@@ -197,6 +229,7 @@ async function runSetupWizard() {
       },
     });
     setupWin.setMenuBarVisibility(false);
+    enableClipboardShortcuts(setupWin);
 
     const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>SiamEPOS — First-time Setup</title>
@@ -374,6 +407,7 @@ async function showSetupWindow() {
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
   setupWindow.setMenuBarVisibility(false);
+  enableClipboardShortcuts(setupWindow);
 
   const safeUrl = url.replace(/"/g, '&quot;');
   const html = `<!doctype html>

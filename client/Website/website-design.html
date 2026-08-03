@@ -217,7 +217,7 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <li><a href="siamshop.html" class="lang-en" lang="en">SiamShop</a><a href="siamshop.html" class="lang-th" lang="th">SiamShop</a></li>
     <li><a href="why-siamepos.html" class="lang-en" lang="en">Why Us</a><a href="why-siamepos.html" class="lang-th" lang="th">&#x0E17;&#x0E33;&#x0E44;&#x0E21;&#x0E40;&#x0E23;&#x0E32;</a></li>
     <li><a href="website-design.html" class="active lang-en" lang="en">Website Design</a><a href="website-design.html" class="active lang-th" lang="th">&#x0E2D;&#x0E2D;&#x0E01;&#x0E41;&#x0E1A;&#x0E1A;&#x0E40;&#x0E27;&#x0E47;&#x0E1A;</a></li>
-    <li><a href="book-demo.html" class="nav-cta lang-en" lang="en">Book a Demo</a><a href="book-demo.html" class="nav-cta lang-th" lang="th">จองเดโม</a></li>
+    <li><a href="#" class="nav-cta lang-en" lang="en" onclick="if(window.openSiamChat)openSiamChat();return false;">Chat with us</a><a href="#" class="nav-cta lang-th" lang="th" onclick="if(window.openSiamChat)openSiamChat();return false;">แชทกับเรา</a></li>
   </ul>
   <button class="nav-burger" aria-label="Open menu">☰</button><button class="lang-toggle" aria-label="Switch between English and Thai" onclick="document.body.classList.toggle('thai');var th=document.body.classList.contains('thai');document.documentElement.lang=th?'th':'en';this.textContent=th?'EN':'&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;';try{localStorage.setItem('siamLang',th?'th':'en')}catch(e){}">&#x0E20;&#x0E32;&#x0E29;&#x0E32;&#x0E44;&#x0E17;&#x0E22;</button>
 </nav>
@@ -233,8 +233,8 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <p class="hero-sub lang-en" lang="en">Too busy to build a website? We do it for you. Menu, bookings, online ordering, photos, Google Maps &mdash; ready in 48 hours. In Thai and English.</p>
     <p class="hero-sub lang-th" lang="th">ยุ่งจนไม่มีเวลาทำเว็บไซต์? ให้เราทำให้ — เมนู จองโต๊ะ สั่งอาหารออนไลน์ รูปภาพ Google Maps ครบ ทั้งภาษาไทยและอังกฤษ เสร็จใน 48 ชั่วโมง</p>
     <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
-      <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="book-btn lang-en" lang="en">&#x1F4AC; WhatsApp Us Now</a>
-      <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="book-btn lang-th" lang="th">&#x1F4AC; แชทกับเรา หาเราเลย</a>
+      
+      
       <a href="#packages" class="book-btn ghost lang-en" lang="en">View Packages &darr;</a>
       <a href="#packages" class="book-btn ghost lang-th" lang="th">ดูแพ็กเกจ &darr;</a>
     </div>
@@ -288,8 +288,8 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
           <li class="lang-en" lang="en">Hosting, updates &amp; support all managed for you</li><li class="lang-th" lang="th">โฮสติ้ง อัปเดต และซัพพอร์ต เราดูแลให้ทั้งหมด</li>
           <li class="lang-en" lang="en">Ready in 48 hours</li><li class="lang-th" lang="th">เสร็จใน 48 ชั่วโมง</li>
         </ul>
-        <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="btn-pkg btn-gold lang-en" lang="en">Get Started &rarr;</a>
-        <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="btn-pkg btn-gold lang-th" lang="th">เริ่มต้น &rarr;</a>
+        
+        
       </div>
       <!-- PRICING MODEL (Korakot, 2026-07-20): £5/mo is the headline. Build cost is quoted per restaurant — no public one-off figure. -->
       <div style="margin-top:14px;text-align:center;background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.35);border-radius:12px;padding:14px 18px;">
@@ -368,8 +368,8 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
         </div>
       </div>
     </div>
-    <p style="text-align:center;margin-top:24px;font-size:14px;color:rgba(255,255,255,0.35);" class="lang-en" lang="en">Want your restaurant featured here? <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer;color:var(--gold);">WhatsApp us</a> — early clients get a discount.</p>
-    <p style="text-align:center;margin-top:24px;font-size:14px;color:rgba(255,255,255,0.35);" class="lang-th" lang="th">อยากให้ร้านคุณมาอยู่ตรงนี้บ้างไหม? <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer;color:var(--gold);">แชทกับเรา มา</a> — ลูกค้ากลุ่มแรกมีส่วนลดให้</p>
+    <p style="text-align:center;margin-top:24px;font-size:14px;color:rgba(255,255,255,0.35);" class="lang-en" lang="en">Want your restaurant featured here?  — early clients get a discount.</p>
+    <p style="text-align:center;margin-top:24px;font-size:14px;color:rgba(255,255,255,0.35);" class="lang-th" lang="th">อยากให้ร้านคุณมาอยู่ตรงนี้บ้างไหม?  — ลูกค้ากลุ่มแรกมีส่วนลดให้</p>
   </div>
 </section>
 
@@ -380,8 +380,8 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
   <p style="font-size:16px;color:rgba(255,255,255,0.55);margin-bottom:36px;" class="lang-en" lang="en">WhatsApp us now. Tell us your restaurant name. We&rsquo;ll have a first draft for you in 48 hours.</p>
   <p style="font-size:16px;color:rgba(255,255,255,0.55);margin-bottom:36px;" class="lang-th" lang="th">แชทกับเรา มาตอนนี้ บอกแค่ชื่อร้าน แล้วรอดูแบบร่างแรกได้ภายใน 48 ชั่วโมง</p>
   <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
-    <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="book-btn lang-en" lang="en">&#x1F4AC; WhatsApp Us Now</a>
-    <a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer" class="book-btn lang-th" lang="th">&#x1F4AC; แชทกับเรา หาเราเลย</a>
+    
+    
     <a href="mailto:info@siamepos.co.uk" style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.08);color:white;padding:14px 28px;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none;border:1px solid rgba(255,255,255,0.15);">&#x1F4E7; info@siamepos.co.uk</a>
   </div>
 </section>
@@ -394,9 +394,9 @@ footer{background:#070F24;padding:48px 60px;display:grid;grid-template-columns:2
     <li><a href="index.html" class="lang-en" lang="en">Home</a><a href="index.html" class="lang-th" lang="th">&#x0E2b;&#x0E19;&#x0E49;&#x0E32;&#x0E41;&#x0E23;&#x0E01;</a></li>
     <li><a href="features.html" class="lang-en" lang="en">Products</a><a href="features.html" class="lang-th" lang="th">&#x0E1f;&#x0E35;&#x0E40;&#x0E08;&#x0E2d;&#x0E23;&#x0E4c;</a></li>
     <li><a href="pricing.html" class="lang-en" lang="en">Pricing</a><a href="pricing.html" class="lang-th" lang="th">&#x0E23;&#x0E32;&#x0E04;&#x0E32;</a></li>
-    <li><a href="book-demo.html" class="lang-en" lang="en">Book Demo</a><a href="book-demo.html" class="lang-th" lang="th">&#x0E08;&#x0E2d;&#x0E07;&#x0E40;&#x0E14;&#x0E42;&#x0E21;</a></li><li><a href="faq.html" class="lang-en" lang="en">FAQ</a><a href="faq.html" class="lang-th" lang="th">คำถามที่พบบ่อย</a></li></ul></div>
+    <li></li><li><a href="faq.html" class="lang-en" lang="en">FAQ</a><a href="faq.html" class="lang-th" lang="th">คำถามที่พบบ่อย</a></li></ul></div>
   <div class="footer-col"><h4>Contact</h4><ul>
-    <li><a href="#" onclick="var f=document.getElementById('se-fab');if(f)f.click();return false;" style="cursor:pointer">&#x1F4AC; WhatsApp</a></li>
+    <li></li>
     <li><a href="mailto:info@siamepos.co.uk">info@siamepos.co.uk</a></li>
   </ul></div>
 </footer>

@@ -10,11 +10,16 @@ import { isNativeApp, sendRawToPrinter } from '../native/printer';
 import { sunmiAvailable, sunmiPrintOps, printTarget } from '../native/sunmiPrinter';
 import { buildKitchenMessageOps, opsForSunmi } from '../native/escpos';
 
-export default function KitchenMessageModal({ orderId, tableNumber, customerName, waiterName, onClose, onSent }) {
+// SEPOS-KITCHEN-MSG-002 — when `onSaveNote` is passed (order context), the modal
+// ATTACHES the message to the order so it prints at the bottom of that order's
+// kitchen ticket, instead of firing a standalone 📢 slip. Without it (floor-wide
+// shout, no order open) it keeps the original send-standalone behaviour.
+export default function KitchenMessageModal({ orderId, tableNumber, customerName, waiterName, onClose, onSent, onSaveNote, initialMessage }) {
   const [templates, setTemplates] = useState([]);
-  const [message, setMessage]     = useState('');
+  const [message, setMessage]     = useState(initialMessage || '');
   const [sending, setSending]     = useState(false);
   const [error, setError]         = useState('');
+  const attachMode = typeof onSaveNote === 'function';
 
   useEffect(() => {
     getKitchenTemplates().then(setTemplates).catch(() => setTemplates([]));
@@ -28,6 +33,18 @@ export default function KitchenMessageModal({ orderId, tableNumber, customerName
   const handleSend = async () => {
     const text = message.trim();
     if (!text) { setError('Type a message or pick a template'); return; }
+    // Attach-to-order mode: save the note onto the order (prints at the bottom
+    // of the kitchen ticket on the next send/fire) — no standalone slip.
+    if (attachMode) {
+      setSending(true); setError('');
+      try {
+        await onSaveNote(text);
+        onClose?.();
+      } catch (e) {
+        setError(e?.message || 'Could not attach note');
+      } finally { setSending(false); }
+      return;
+    }
     setSending(true); setError('');
     try {
       const payload = {
@@ -75,7 +92,10 @@ export default function KitchenMessageModal({ orderId, tableNumber, customerName
       <div style={{ background:'white', borderRadius:14, maxWidth:560, width:'100%', maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden' }}>
         <div style={{ background:'var(--brand-primary,#0D1B3E)', color:'white', padding:'16px 20px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div>
-            <div style={{ fontSize:18, fontWeight:800, letterSpacing:0.3 }}>📢 Message Kitchen</div>
+            <div style={{ fontSize:18, fontWeight:800, letterSpacing:0.3 }}>{attachMode ? '📢 Note for this order' : '📢 Message Kitchen'}</div>
+            {attachMode && (
+              <div style={{ fontSize:12, color:'rgba(255,255,255,0.7)', marginTop:2 }}>Prints at the bottom of the kitchen ticket</div>
+            )}
             {(tableNumber || customerName) && (
               <div style={{ fontSize:12, color:'rgba(255,255,255,0.7)', marginTop:2 }}>
                 {tableNumber && `Table ${tableNumber}`}
@@ -127,7 +147,7 @@ export default function KitchenMessageModal({ orderId, tableNumber, customerName
           </button>
           <button onClick={handleSend} disabled={sending || !message.trim()}
             style={{ flex:2, padding:14, borderRadius:10, border:'none', background:'var(--brand-primary,#0D1B3E)', color:'white', cursor:'pointer', fontWeight:800, fontSize:15, opacity: sending || !message.trim() ? 0.5 : 1 }}>
-            {sending ? 'Sending…' : '📢 Send to Kitchen'}
+            {attachMode ? (sending ? 'Attaching…' : '📎 Attach to ticket') : (sending ? 'Sending…' : '📢 Send to Kitchen')}
           </button>
         </div>
       </div>

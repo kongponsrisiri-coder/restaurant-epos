@@ -479,6 +479,9 @@ function LocalArchiveCard({ cardStyle }) {
   const [status, setStatus] = useState(null);
   const [busy, setBusy]     = useState(false);
   const [toast, setToast]   = useState('');
+  // SEPOS-Z-REPLACE — rebuild the saved file for ANY past day (after amending
+  // an old bill + re-running its Z, that day's archive file needs a rebuild).
+  const [reDate, setReDate] = useState('');
 
   const refresh = async () => {
     try { setStatus(await getArchiveStatus()); } catch { setStatus({ error: true }); }
@@ -554,6 +557,31 @@ function LocalArchiveCard({ cardStyle }) {
               style={{ padding:'9px 16px', borderRadius:8, border:'1px solid #ddd', background:'white', color:'#555', fontWeight:700, fontSize:13, cursor:'pointer', opacity: busy ? 0.5 : 1 }}>
               ↺ Re-archive Yesterday
             </button>
+          </div>
+
+          {/* SEPOS-Z-REPLACE — any past day: after correcting an old bill and
+              re-running that day's Z, rebuild that day's saved file here. */}
+          <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginBottom:12 }}>
+            <input type="date" value={reDate} onChange={e => setReDate(e.target.value)}
+              max={new Date().toISOString().slice(0, 10)}
+              style={{ padding:'8px 10px', borderRadius:8, border:'1px solid #ddd', fontSize:13 }} />
+            <button
+              onClick={async () => {
+                if (!reDate) return;
+                setBusy(true); setToast('');
+                try {
+                  const r = await runArchive(reDate, true);
+                  if (r?.ok) setToast(`✓ ${reDate.split('-').reverse().join('/')} archived — file rebuilt with current figures`);
+                  else       setToast(`⚠ ${reDate.split('-').reverse().join('/')} skipped — ${r?.reason || 'unknown'}`);
+                  await refresh();
+                } catch (e) { setToast(`✗ Re-archive failed — ${e.message}`); }
+                finally { setBusy(false); setTimeout(() => setToast(''), 6000); }
+              }}
+              disabled={busy || !reDate}
+              style={{ padding:'9px 16px', borderRadius:8, border:'1px solid #ddd', background:'white', color:'#555', fontWeight:700, fontSize:13, cursor: (busy || !reDate) ? 'not-allowed' : 'pointer', opacity: (busy || !reDate) ? 0.5 : 1 }}>
+              📅 Re-archive that date
+            </button>
+            <span style={{ fontSize:11, color:'#aaa' }}>Fixed an old bill? Rebuild that day's saved file.</span>
           </div>
 
           {toast && (

@@ -283,6 +283,7 @@ function initSchema() {
       actual_card REAL,
       card_difference REAL,
       report_data TEXT,
+      superseded_at TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -684,6 +685,7 @@ function runMigrations() {
   // Card reconciliation on the Z report (actual card-machine takings + variance)
   addColumnIfMissing('z_reports', 'actual_card',     'REAL');
   addColumnIfMissing('z_reports', 'card_difference', 'REAL');
+  addColumnIfMissing('z_reports', 'superseded_at',   'TEXT'); // SEPOS-Z-REPLACE
   // Per-item course override (NULL = inherit the category default_course)
   addColumnIfMissing('menu_items', 'default_course', 'INTEGER');
   // SEPOS-STATION-003: per-dish printer-station override (NULL = inherit

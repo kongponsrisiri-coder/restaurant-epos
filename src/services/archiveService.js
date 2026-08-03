@@ -356,7 +356,7 @@ async function archiveForDate(pool, dateStr, opts = {}) {
   let reportData;
   const zRes = await pool.query(
     `SELECT report_data FROM z_reports
-     WHERE closed_at::date = $1::date
+     WHERE closed_at::date = $1::date AND superseded_at IS NULL
      ORDER BY closed_at DESC LIMIT 1`,
     [dateStr]
   ).catch(() => ({ rows: [] }));

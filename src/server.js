@@ -3722,6 +3722,43 @@ app.get('/api/z-report/preview', async (req, res) => {
 app.post('/api/z-report/save', async (req, res) => {
   try {
     const { type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, actual_card, card_difference } = req.body;
+
+    // SEPOS-Z-REPLACE — re-running a Z for the SAME period supersedes the old
+    // one, so amend-a-bill → run again leaves ONE authoritative Z, not a
+    // confusing pair. Soft (superseded_at stamp, hidden from history) — never
+    // a hard delete of a financial record, so the audit trail survives.
+    // Matching rules (portable: candidates fetched + compared in JS so PG and
+    // SQLite date handling can't diverge):
+    //   'day'     → same calendar day (an End of Day always covers the whole
+    //               trading day, so a second EOD that day IS a re-run)
+    //   'session' → same exact shift-open instant (lunch + dinner closes have
+    //               different opens → both kept; only a true re-close replaces)
+    //   'custom'  → never auto-replaced (ad-hoc ranges, keep everything)
+    try {
+      if (type === 'day' || type === 'session') {
+        const prior = await pool.query(
+          `SELECT id, opened_at FROM z_reports WHERE type = $1 AND superseded_at IS NULL`,
+          [type],
+        );
+        const dayOf = (v) => {
+          const d = new Date(v);
+          return isNaN(d) ? String(v).slice(0, 10) : d.toISOString().slice(0, 10);
+        };
+        const ids = prior.rows
+          .filter((r) => type === 'day'
+            ? dayOf(r.opened_at) === dayOf(from)
+            : new Date(r.opened_at).getTime() === new Date(from).getTime())
+          .map((r) => r.id);
+        for (const id of ids) {
+          await pool.query(`UPDATE z_reports SET superseded_at = CURRENT_TIMESTAMP WHERE id = $1`, [id]);
+        }
+        if (ids.length) console.log(`[z-replace] superseded ${type} Z id(s) ${ids.join(',')} — re-run for the same period`);
+      }
+    } catch (e) {
+      // Never block the save itself — worst case the old row stays visible.
+      console.warn('[z-replace] supersede check failed:', e.message);
+    }
+
     const result = await pool.query(
       `INSERT INTO z_reports (type, opened_at, closed_at, total_sales, total_cash, total_card, total_other, total_covers, total_orders, discounts, voids, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, actual_card, card_difference, report_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
       [type, from, to, data.total_sales, data.total_cash, data.total_card, data.total_other, data.total_covers, data.total_orders, data.total_discounts, data.void_count, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, actual_card ?? null, card_difference ?? null, JSON.stringify(data)]
@@ -3933,7 +3970,9 @@ app.post('/api/local/archive-run', async (req, res) => {
 
 app.get('/api/z-report/history', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM z_reports ORDER BY closed_at DESC LIMIT 30');
+    // SEPOS-Z-REPLACE — superseded rows (replaced by a re-run) stay in the DB
+    // for audit but are hidden from the operator's history.
+    const result = await pool.query('SELECT * FROM z_reports WHERE superseded_at IS NULL ORDER BY closed_at DESC LIMIT 30');
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

@@ -244,11 +244,19 @@ app.put('/api/tables/:id/plan', async (req, res) => {
   if (await maybeForwardTableWriteToCloud(req, res)) return;
   try {
     const { pos_x, pos_y, shape, width, height, name, capacity, table_number, is_takeaway } = req.body;
+    // SEPOS-TABLE-NAME hardening — pos/size/capacity are INTEGER columns but
+    // browsers report sub-pixel drag coords (42.121…), which used to 500 the
+    // whole row (and with it any name/capacity change riding along). Round
+    // every numeric here so no client version can poison a table again.
+    const int = (v, fallback = null) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? Math.round(n) : fallback;
+    };
     // COALESCE keeps the existing is_takeaway flag when a partial plan update
     // (e.g. drag/resize) doesn't include it — only an explicit toggle changes it.
     await pool.query(
       'UPDATE tables SET pos_x=$1, pos_y=$2, shape=$3, width=$4, height=$5, name=$6, capacity=$7, table_number=$8, is_takeaway=COALESCE($9, is_takeaway) WHERE id=$10',
-      [pos_x, pos_y, shape, width, height, name, capacity, table_number, (is_takeaway == null ? null : (is_takeaway ? 1 : 0)), req.params.id]
+      [int(pos_x, 0), int(pos_y, 0), shape, int(width, 80), int(height, 80), name, int(capacity, 4), int(table_number), (is_takeaway == null ? null : (is_takeaway ? 1 : 0)), req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -258,9 +266,10 @@ app.post('/api/tables', async (req, res) => {
   if (await maybeForwardTableWriteToCloud(req, res)) return;
   try {
     const { table_number, capacity, pos_x, pos_y, shape, is_takeaway } = req.body;
+    const int = (v, fb) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n) : fb; };
     const result = await pool.query(
       'INSERT INTO tables (table_number, capacity, pos_x, pos_y, shape, is_takeaway) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
-      [table_number, capacity || 4, pos_x || 0, pos_y || 0, shape || 'square', is_takeaway ? 1 : 0]
+      [int(table_number, null), int(capacity, 4), int(pos_x, 0), int(pos_y, 0), shape || 'square', is_takeaway ? 1 : 0]
     );
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -331,9 +340,10 @@ app.post('/api/table-walls', async (req, res) => {
 app.put('/api/table-walls/:id', async (req, res) => {
   try {
     const { pos_x, pos_y, width, height } = req.body;
+    const int = (v, fb) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n) : fb; };
     await pool.query(
       'UPDATE table_walls SET pos_x=$1, pos_y=$2, width=$3, height=$4 WHERE id=$5',
-      [pos_x, pos_y, width, height, req.params.id]
+      [int(pos_x, 0), int(pos_y, 0), int(width, 12), int(height, 100), req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }

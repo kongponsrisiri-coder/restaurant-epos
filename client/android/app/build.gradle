@@ -14,7 +14,7 @@ android {
         aidl true
     }
     defaultConfig {
-        applicationId "uk.co.siamepos.app"
+        applicationId "uk.co.siamepos.host"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 20

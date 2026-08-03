@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SERVER_URL, getTables, updateTablePlan, addTable, deleteTable } from '../../api';
+import { tableLabel } from '../../utils/orderLabel'; // SEPOS-TABLE-NAME
 import { confirm } from '../../utils/confirm';
 
 // SEPOS-TABLE-SIZE — sizes are per-shape now (the Shape dropdown picks the
@@ -263,13 +264,16 @@ export default function TablePlanSection() {
     // one (Korakot, Baan Siam 2026-08-03: renamed 13→2, Save reverted it).
     tablesRef.current = tablesRef.current.map(tbl => tbl.id === u.id ? u : tbl);
     setTables(prev => prev.map(tbl => tbl.id === u.id ? u : tbl));
-    await updateTablePlan(u.id, {
+    const r = await updateTablePlan(u.id, {
       pos_x: u.pos_x, pos_y: u.pos_y,
       shape: u.shape, width: u.width, height: u.height,
       name: u.name, capacity: u.capacity,
       table_number: u.table_number,
       is_takeaway: u.is_takeaway ? 1 : 0,
     });
+    // Never fail silently — the "Bar 1" 500 looked like the app ignoring the
+    // operator. api.js resolves {error} instead of throwing, so check it.
+    if (r && r.error) showToast(`⚠ Not saved — ${r.error}`, 'error');
   };
 
   const handleRotateTable = () => {
@@ -543,7 +547,7 @@ export default function TablePlanSection() {
                 }}
               >
                 <div style={{ fontSize: 15, fontWeight: 800, color: isLinkFirst || isSelected ? 'white' : (table.is_takeaway ? '#b45309' : 'var(--brand-primary, #1a1a2e)'), textAlign: 'center' }}>
-                  {table.is_takeaway ? '🥡' : ''}{table.table_number}
+                  {table.is_takeaway ? '🥡' : ''}{tableLabel(table)}
                 </div>
                 <div style={{ fontSize: 10, color: isLinkFirst || isSelected ? 'rgba(255,255,255,0.7)' : '#888' }}>
                   {table.is_takeaway ? 'Takeaway' : `${table.capacity}p`}
@@ -564,17 +568,26 @@ export default function TablePlanSection() {
 
           {selectedTable && (
             <div style={{ background: 'white', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 14 }}>{selectedTable.is_takeaway ? `🥡 Takeaway ${selectedTable.table_number}` : `Table ${selectedTable.table_number}`}</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 14 }}>{selectedTable.is_takeaway ? `🥡 Takeaway ${tableLabel(selectedTable)}` : `Table ${tableLabel(selectedTable)}`}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
                   <label style={lbl}>Table Number / Name</label>
                   {/* Save on CHANGE (like Capacity), not blur — blur fires in the same
                       instant as deselect/Save-Layout clicks and the typed name was
                       silently dropped (deselect nulls `selected` → the blur save
-                      no-ops; or the input unmounts and blur never fires at all). */}
-                  <input defaultValue={selectedTable.table_number} key={selectedTable.id + '_n'}
-                    onChange={e => { if (e.target.value !== '') updateSelectedTable({ table_number: e.target.value }); }}
+                      no-ops; or the input unmounts and blur never fires at all).
+                      SEPOS-TABLE-NAME — digits go to table_number (an INTEGER
+                      column; text used to 500 "invalid input syntax" SILENTLY);
+                      anything else is a display label saved to `name` ("Bar 1"). */}
+                  <input defaultValue={String(tableLabel(selectedTable) ?? '')} key={selectedTable.id + '_n'}
+                    onChange={e => {
+                      const v = e.target.value.trim();
+                      if (v === '') return;
+                      if (/^\d+$/.test(v)) updateSelectedTable({ table_number: Number(v), name: null });
+                      else updateSelectedTable({ name: v });
+                    }}
                     style={inp} />
+                  <div style={{ fontSize: 10, color: '#aaa', marginTop: 3 }}>A number, or a label like “Bar 1”</div>
                 </div>
                 <div>
                   <label style={lbl}>Capacity (seats)</label>

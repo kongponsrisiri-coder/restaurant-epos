@@ -256,6 +256,12 @@ export default function TablePlanSection() {
     const t = tablesRef.current.find(t => t.id === selected.id);
     if (!t) return;
     const u = { ...t, ...changes };
+    // Sync the ref IMMEDIATELY (not just via the post-render effect): the
+    // rename input commits on BLUR, which fires in the same instant as a
+    // "Save Layout" click — Save reads tablesRef and would otherwise snapshot
+    // the PRE-rename list and push the old name straight back over the new
+    // one (Korakot, Baan Siam 2026-08-03: renamed 13→2, Save reverted it).
+    tablesRef.current = tablesRef.current.map(tbl => tbl.id === u.id ? u : tbl);
     setTables(prev => prev.map(tbl => tbl.id === u.id ? u : tbl));
     await updateTablePlan(u.id, {
       pos_x: u.pos_x, pos_y: u.pos_y,
@@ -285,6 +291,8 @@ export default function TablePlanSection() {
     const w = wallsRef.current.find(w => w.id === id);
     if (!w) return;
     const u = { ...w, ...changes };
+    // Same blur-vs-Save race guard as updateSelectedTable — keep the ref fresh.
+    wallsRef.current = wallsRef.current.map(wl => wl.id === id ? u : wl);
     setWalls(prev => prev.map(wl => wl.id === id ? u : wl));
     await apiPut(`/api/table-walls/${id}`, { pos_x: u.pos_x, pos_y: u.pos_y, width: u.width, height: u.height });
   };
@@ -560,7 +568,13 @@ export default function TablePlanSection() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
                   <label style={lbl}>Table Number / Name</label>
-                  <input defaultValue={selectedTable.table_number} key={selectedTable.id + '_n'} onBlur={e => updateSelectedTable({ table_number: e.target.value })} style={inp} />
+                  {/* Save on CHANGE (like Capacity), not blur — blur fires in the same
+                      instant as deselect/Save-Layout clicks and the typed name was
+                      silently dropped (deselect nulls `selected` → the blur save
+                      no-ops; or the input unmounts and blur never fires at all). */}
+                  <input defaultValue={selectedTable.table_number} key={selectedTable.id + '_n'}
+                    onChange={e => { if (e.target.value !== '') updateSelectedTable({ table_number: e.target.value }); }}
+                    style={inp} />
                 </div>
                 <div>
                   <label style={lbl}>Capacity (seats)</label>

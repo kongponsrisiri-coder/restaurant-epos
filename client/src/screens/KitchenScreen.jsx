@@ -308,6 +308,7 @@ export default function KitchenScreen() {
     socket.on('new_order_items', () => fetchOrders());
     socket.on('item_status_changed', () => { fetchOrders(); fetchCompleted(); });
     socket.on('order_closed', () => { fetchOrders(); fetchCompleted(); });
+    socket.on('order_note_updated', () => fetchOrders()); // SEPOS-KITCHEN-MSG-002 — note attached/edited → refresh the card
     socket.on('kitchen_message', (data) => {
       // Newest first, capped at 8 visible so the screen doesn't get
       // taken over by stale messages. Chef dismisses each one with ✕.
@@ -400,7 +401,7 @@ export default function KitchenScreen() {
               <div style={{ fontSize:24 }}>📢</div>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:13, fontWeight:800, marginBottom:2, display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-                  <span>{m.table_number ? `TABLE ${m.table_number}` : (m.order_type === 'takeaway' ? `TAKEAWAY${m.order_id ? ' #' + m.order_id : ''}` : 'KITCHEN')}</span>
+                  <span>{m.order_type === 'takeaway' ? `🥡 TAKEAWAY ${m.table_number ? m.table_number : (m.order_id ? '#' + m.order_id : '')}` : (m.table_number ? `TABLE ${m.table_number}` : 'KITCHEN')}</span>
                   {m.customer_name && <span style={{ fontWeight:600, color:'#92400e' }}>· {m.customer_name}</span>}
                   {m.waiter_name && <span style={{ fontWeight:500, color:'#92400e', fontSize:11 }}>· from {m.waiter_name}</span>}
                 </div>
@@ -466,8 +467,8 @@ export default function KitchenScreen() {
           <button onClick={toggleAlt} style={{
             padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
             fontWeight: 800, fontSize: 14,
-            background: showAlt ? '#C9A84C' : '#333',
-            color: showAlt ? '#0D1B3E' : '#aaa',
+            background: showAlt ? 'var(--brand-accent,#C9A84C)' : '#333',
+            color: showAlt ? 'var(--brand-primary,#0D1B3E)' : '#aaa',
             transition: 'all 0.2s'
           }}>
             {showAlt ? `🌐 EN + ภาษา` : `🌐 EN only`}
@@ -524,7 +525,7 @@ export default function KitchenScreen() {
           </div>
         ))}
         {showAlt && (
-          <div style={{ marginLeft: 'auto', background: '#C9A84C', color: '#0D1B3E', padding: '3px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800 }}>
+          <div style={{ marginLeft: 'auto', background: 'var(--brand-accent,#C9A84C)', color: 'var(--brand-primary,#0D1B3E)', padding: '3px 12px', borderRadius: 20, fontSize: 12, fontWeight: 800 }}>
             🌐 Bilingual Mode ON
           </div>
         )}
@@ -666,7 +667,7 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                     {item.resend_reason && (
                       <div style={{
                         display:'inline-block', marginTop:6, padding:'3px 10px',
-                        background:'#fbbf24', color:'#1a1a2e', borderRadius:6,
+                        background:'#fbbf24', color:'var(--brand-primary, #1a1a2e)', borderRadius:6,
                         fontSize:11, fontWeight:800, letterSpacing:0.5
                       }}>🔄 RESEND · {item.resend_reason}</div>
                     )}
@@ -800,7 +801,7 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                                       {item.quantity}× {item.name}
                                     </div>
                                     {showAlt && item.name_alt && (
-                                      <div style={{ color: '#C9A84C', fontWeight: 600, fontSize: 14, marginTop: 2 }}>
+                                      <div style={{ color: 'var(--brand-accent,#C9A84C)', fontWeight: 600, fontSize: 14, marginTop: 2 }}>
                                         {item.quantity}× {item.name_alt}
                                       </div>
                                     )}
@@ -866,7 +867,7 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                           ✅ {item.quantity}× {item.name}
                         </div>
                         {showAlt && item.name_alt && (
-                          <div style={{ color: '#C9A84C', fontSize: 13, marginTop: 2 }}>
+                          <div style={{ color: 'var(--brand-accent,#C9A84C)', fontSize: 13, marginTop: 2 }}>
                             {item.quantity}× {item.name_alt}
                           </div>
                         )}

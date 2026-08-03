@@ -19,11 +19,15 @@ export default function DeleteOrderModal({ order, onClose, onDeleted }) {
 
   if (!order) return null;
 
+  // Number(...) guard: bill rows come back from the API with numeric columns
+  // serialised as STRINGS (e.g. total: "42.50"). `"42.50".toFixed(2)` throws a
+  // TypeError, which — with no boundary — unmounted the app to a blank screen.
+  const totalStr = Number(order.total || 0).toFixed(2);
   const summary = (() => {
     if (order.order_type === 'takeaway') {
-      return `🥡 Online Order #${order.id}${order.customer_name ? ' · ' + order.customer_name : ''} · £${(order.total || 0).toFixed(2)}`;
+      return `🥡 Online Order #${order.id}${order.customer_name ? ' · ' + order.customer_name : ''} · £${totalStr}`;
     }
-    return `Table ${order.table_number ?? '—'} · Order #${order.id} · £${(order.total || 0).toFixed(2)}${order.method ? ' · ' + order.method : ''}`;
+    return `Table ${order.table_number ?? '—'} · Order #${order.id} · £${totalStr}${order.method ? ' · ' + order.method : ''}`;
   })();
 
   const submit = async (e) => {
@@ -61,7 +65,7 @@ export default function DeleteOrderModal({ order, onClose, onDeleted }) {
         <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 16, gap: 12 }}>
           <div style={{ fontSize: 28 }}>🗑️</div>
           <div style={{ flex: 1 }}>
-            <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, color: '#1a1a2e' }}>Delete this order?</h2>
+            <h2 style={{ margin: 0, fontSize: 19, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>Delete this order?</h2>
             <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{summary}</div>
           </div>
           <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, color: '#94a3b8', cursor: 'pointer' }}>×</button>

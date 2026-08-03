@@ -66,7 +66,9 @@ function BillBody({ bill }) {
   const { order, settings } = bill;
   const billItems = (order.items || []).filter(i => !i.voided);
   const serviceChargePercent = parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5) / 100;
-  const serviceChargeEnabled = settings.service_charge_enabled !== '0' && settings.service_charge_enabled !== 'false' && !isTakeaway(order);
+  // SEPOS — honour the per-order "Remove service charge" flag (persisted from
+  // the Order screen) so this preview total matches what the Bill will charge.
+  const serviceChargeEnabled = settings.service_charge_enabled !== '0' && settings.service_charge_enabled !== 'false' && !isTakeaway(order) && !order.no_service_charge;
 
   const subtotal = billItems.reduce((s, i) => {
     const p = i.unit_price * i.quantity;
@@ -91,7 +93,7 @@ function BillBody({ bill }) {
         {order.covers != null && <span>{order.covers} {order.covers === 1 ? 'cover' : 'covers'}</span>}
         {order.opened_at && <span>Opened {formatTime(order.opened_at)}</span>}
         {isTakeaway(order) && order.pickup_time && <span>Pickup {formatTime(order.pickup_time)}</span>}
-        {order.status && <span style={{ marginLeft: 'auto', fontWeight: 700, color: order.status === 'closed' ? '#16a34a' : '#0d1b3e' }}>{order.status.toUpperCase()}</span>}
+        {order.status && <span style={{ marginLeft: 'auto', fontWeight: 700, color: order.status === 'closed' ? '#16a34a' : 'var(--brand-primary,#0d1b3e)' }}>{order.status.toUpperCase()}</span>}
       </div>
 
       {/* Items */}
@@ -134,7 +136,7 @@ function BillBody({ bill }) {
 
 function Row({ label, value, strong }) {
   return (
-    <div style={{ display: 'flex', padding: '4px 0', fontWeight: strong ? 800 : 500, fontSize: strong ? 17 : 14, color: strong ? '#0d1b3e' : '#444' }}>
+    <div style={{ display: 'flex', padding: '4px 0', fontWeight: strong ? 800 : 500, fontSize: strong ? 17 : 14, color: strong ? 'var(--brand-primary,#0d1b3e)' : '#444' }}>
       <span style={{ flex: 1 }}>{label}</span>
       <span style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</span>
     </div>
@@ -175,7 +177,7 @@ const ghostBtn = {
   padding: '9px 14px', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: 'pointer',
 };
 const primaryBtn = {
-  background: '#0d1b3e', color: 'white', border: 'none',
+  background: 'var(--brand-primary,#0d1b3e)', color: 'white', border: 'none',
   padding: '9px 16px', borderRadius: 8, fontWeight: 800, fontSize: 14, cursor: 'pointer',
 };
 const errBox = {

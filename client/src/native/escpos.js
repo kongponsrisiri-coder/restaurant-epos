@@ -10,13 +10,26 @@
 // n=normal · t=tall · b=big · h=huge (table number).
 
 const WIDTH = 32;                 // network printer: 32 chars per 80mm line (Font A)
-const SUNMI_BILL_WIDTH = 46;      // Sunmi bill at the small 'r' font: ~46 chars per 80mm
+const SUNMI_BILL_WIDTH = 36;      // Sunmi bill at the 'r' font (30px): ~37 chars per 80mm (bumped bigger per operator feedback)
+const SUNMI_KITCHEN_WIDTH = 26;   // Sunmi kitchen at the big 'n' font: ~28 chars fit — 26 stays clear of wrapping (a full 32 wraps to a stray '----')
 const COURSE = { 1: 'STARTERS', 2: 'MAINS', 3: 'DESSERTS', 4: 'EXTRAS' };
 // Sunmi printText font sizes. KITCHEN uses the big ones (n/t/b/h). The BILL uses
 // 'r' (compact receipt font) and fills the width via more columns, not a bigger
 // font — at 40 the bill wrapped and looked oversized.
-const SUNMI_SIZE = { r: 24, n: 40, t: 48, b: 54, h: 74 };
+const SUNMI_SIZE = { r: 30, n: 40, t: 48, b: 54, h: 74 };  // 'r' bumped 24→30 for a bigger, more legible receipt
 const BYTE_SIZE  = { r: 0x00, n: 0x00, t: 0x01, b: 0x11, h: 0x22 };
+
+// SEPOS-PRINT-FONT-001 — per-role font scale. large = TODAY's size (no regression):
+// kitchen item lines were 'b', receipt body 'r'. normal = one step smaller (more on
+// paper), xlarge = one step bigger. Widths recompute so bigger fonts don't wrap.
+const KITCHEN_TOKEN = { normal: 't', large: 'b', xlarge: 'h' };
+const KITCHEN_WIDTH = { normal: 30, large: 26, xlarge: 19 };
+const BILL_TOKEN    = { normal: 'r', large: 'n', xlarge: 't' };
+const BILL_WIDTH    = { normal: 36, large: 27, xlarge: 22 };
+const kToken = (s) => KITCHEN_TOKEN[s] || 'b';
+const kWidth = (s) => KITCHEN_WIDTH[s] || 26;
+const bToken = (s) => BILL_TOKEN[s] || 'r';
+const bWidth = (s) => BILL_WIDTH[s] || 36;
 
 function money(n) { return '£' + (parseFloat(n || 0)).toFixed(2); }
 function rule() { return '-'.repeat(WIDTH); }
@@ -27,50 +40,71 @@ function pad(left, right, width = WIDTH) {
   return left + ' '.repeat(width - left.length - right.length) + right;
 }
 
-function headerOps(ops, order, title) {
+function headerOps(ops, order, title, kw = SUNMI_KITCHEN_WIDTH) {
+  // Head room at the top so the KITCHEN/TABLE header clears the ticket-rail
+  // clip — otherwise the clip hides the table number when the ticket is hung.
+  ops.push({ op: 'feed', v: 4 });
   ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: title }, { op: 'size', v: 'n' });
   let label;
   const t = order && order.order_type;
-  if (t && t !== 'dine_in') label = t === 'counter' ? 'COUNTER' : 'ONLINE ORDER';
-  else label = 'TABLE ' + ((order && (order.table_number ?? order.table_id)) ?? '');
+  if (t && t !== 'dine_in') {
+    // A walk-in takeaway rung up at the till sits on a takeaway table → show
+    // "TAKEAWAY N" so the kitchen knows which collection number it is.
+    // "ONLINE ORDER" is only for website orders that have no table.
+    label = t === 'counter' ? 'COUNTER'
+      : (t === 'takeaway' && order.table_number != null && order.table_number !== '') ? `TAKEAWAY ${order.table_number}`
+      : 'ONLINE ORDER';
+  } else label = 'TABLE ' + ((order && (order.table_number ?? order.table_id)) ?? '');
   ops.push({ op: 'size', v: 'h' }, { op: 'text', v: label }, { op: 'size', v: 'n' }, { op: 'bold', v: false }); // big table no.
   if (order && order.id != null) ops.push({ op: 'text', v: 'Order #' + order.id });
-  ops.push({ op: 'align', v: 0 }, { op: 'text', v: rule() });
+  // 'krule' = a rule sized per printer (kitchen font is big, so the Sunmi needs a
+  // shorter dash run than the network 32 or it wraps). See renderers below.
+  ops.push({ op: 'align', v: 0 }, { op: 'krule', w: Math.min(kw, SUNMI_KITCHEN_WIDTH) });
 }
 
-function kitchenItemOps(ops, it) {
-  ops.push({ op: 'size', v: 'b' }, { op: 'text', v: `${it.quantity || 1} x ${it.name || it.item_name || ''}` }, { op: 'size', v: 'n' });
-  if (it.name_alt)  ops.push({ op: 'size', v: 't' }, { op: 'text', v: '  ' + it.name_alt }, { op: 'size', v: 'n' });
-  if (it.item_note) ops.push({ op: 'bold', v: true }, { op: 'size', v: 't' }, { op: 'text', v: '  ** ' + it.item_note + ' **' }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
-  if (it.notes)     ops.push({ op: 'size', v: 't' }, { op: 'text', v: '  ' + it.notes }, { op: 'size', v: 'n' });
+function kitchenItemOps(ops, it, bilingual = true, sz = 'b') {
+  // SEPOS-PRINT-FONT-001 — item + option/2nd-lang/note lines all print at the
+  // configured kitchen size `sz` (default 'b' = today). Bold for emphasis.
+  ops.push({ op: 'bold', v: true }, { op: 'size', v: sz }, { op: 'text', v: `${it.quantity || 1} x ${it.name || it.item_name || ''}` }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
+  if (bilingual && it.name_alt)  ops.push({ op: 'size', v: sz }, { op: 'text', v: '  ' + it.name_alt }, { op: 'size', v: 'n' });
+  if (it.item_note) ops.push({ op: 'bold', v: true }, { op: 'size', v: sz }, { op: 'text', v: '  ** ' + it.item_note + ' **' }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
+  if (it.notes)     ops.push({ op: 'size', v: sz }, { op: 'text', v: '  ' + it.notes }, { op: 'size', v: 'n' });
 }
 
 // ── Kitchen / bar / fire-notice layout → ops ──────────────────────────────────
 export function buildKitchenOps(native) {
-  const { order, items, course, kind } = native || {};
+  const { order, items, course, kind, bilingual = true, fontScale } = native || {};
+  // SEPOS-PRINT-FONT-001 — kitchen/bar font scale (large = today). Item lines +
+  // krule width both derive from it so bigger fonts don't wrap.
+  const sz = kToken(fontScale);
+  const kw = kWidth(fontScale);
   const ops = [];
   if (kind === 'fire-notice') {
-    headerOps(ops, order, 'FIRE');
+    headerOps(ops, order, 'FIRE', kw);
     ops.push({ op: 'feed', v: 1 }, { op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' },
              { op: 'text', v: COURSE[course] || ('COURSE ' + course) }, { op: 'size', v: 'n' }, { op: 'bold', v: false },
              { op: 'align', v: 0 }, { op: 'feed', v: 2 }, { op: 'cut' });
     return ops;
   }
   if (kind === 'bar') {
-    headerOps(ops, order, 'BAR');
-    for (const it of (items || []).filter(i => i && !i.voided)) kitchenItemOps(ops, it);
+    headerOps(ops, order, 'BAR', kw);
+    for (const it of (items || []).filter(i => i && !i.voided)) kitchenItemOps(ops, it, bilingual, sz);
     ops.push({ op: 'feed', v: 2 }, { op: 'cut' });
     return ops;
   }
-  headerOps(ops, order, 'KITCHEN');
+  headerOps(ops, order, 'KITCHEN', kw);
   const list = (items || []).filter(i => i && !i.voided && (course == null || (Number(i.course) || 1) === Number(course)));
   const byCourse = {};
   for (const it of list) { const c = Number(it.course) || 1; (byCourse[c] = byCourse[c] || []).push(it); }
-  for (const c of Object.keys(byCourse).map(Number).sort((a, b) => a - b)) {
+  const courseKeys = Object.keys(byCourse).map(Number).sort((a, b) => a - b);
+  courseKeys.forEach((c, idx) => {
+    // Separator between courses so the chef can eye-scan where one course ends
+    // and the next begins (matches the HTML/desktop ticket's rule between courses).
+    if (idx > 0) ops.push({ op: 'krule', w: Math.min(kw, SUNMI_KITCHEN_WIDTH) });
     ops.push({ op: 'bold', v: true }, { op: 'text', v: COURSE[c] || ('COURSE ' + c) }, { op: 'bold', v: false });
-    for (const it of byCourse[c]) kitchenItemOps(ops, it);
+    for (const it of byCourse[c]) kitchenItemOps(ops, it, bilingual, sz);
     ops.push({ op: 'feed', v: 1 });
-  }
+  });
   ops.push({ op: 'feed', v: 1 }, { op: 'cut' });
   return ops;
 }
@@ -98,6 +132,9 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
   const change = parseFloat(paymentDetails.change ?? Math.max(0, amountPaid - billTotal));
   const method = paymentDetails.method || '';
 
+  // SEPOS-PRINT-FONT-001 — receipt font scale (normal='r' = today, no regression).
+  const rsz = bToken(s.receipt_font_scale);
+  const rw  = bWidth(s.receipt_font_scale);
   // Compact receipt font ('r'); rows/rules fill the width via column count.
   const ops = [{ op: 'size', v: 'r' }];
   // Logo (base64 data URL → bare base64) — printed on the Sunmi via printBitmap.
@@ -117,19 +154,39 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
   ops.push({ op: 'align', v: 0 }, { op: 'rule' });
 
   if (order && order.order_type && order.order_type !== 'dine_in') {
-    ops.push({ op: 'row', l: 'Type', r: order.order_type === 'counter' ? 'Counter' : 'Online Order' });
+    // A walk-in takeaway rung up at the till sits on a takeaway "table", so it
+    // carries a table_number — show "Takeaway N" (not "Online Order", which is
+    // for website orders that have no table).
+    const typeLabel = order.order_type === 'counter' ? 'Counter'
+      : (order.order_type === 'takeaway' && order.table_number != null && order.table_number !== '')
+        ? `Takeaway ${order.table_number}`
+        : 'Online Order';
+    ops.push({ op: 'row', l: 'Type', r: typeLabel });
     if (order.customer_name) ops.push({ op: 'row', l: 'Customer', r: order.customer_name });
   } else {
-    ops.push({ op: 'row', l: 'Table', r: String((order && (order.table_number ?? order.table_id)) ?? '-') });
+    // Table number BIG + bold + centred so it's obvious at a glance.
+    ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' },
+             { op: 'text', v: `TABLE ${(order && (order.table_number ?? order.table_id)) ?? '-'}` },
+             { op: 'size', v: 'r' }, { op: 'bold', v: false }, { op: 'align', v: 0 });
     ops.push({ op: 'row', l: 'Covers', r: String((order && order.covers) || '-') });
   }
   ops.push({ op: 'row', l: 'Date', r: date }, { op: 'row', l: 'Time', r: time });
   if (order && order.id != null) ops.push({ op: 'row', l: 'Order #', r: String(order.id) });
-  ops.push({ op: 'rule' });
+  // Bold from here down (items + totals) so the receipt body prints thick.
+  ops.push({ op: 'rule' }, { op: 'bold', v: true });
 
-  // Flat item list (no course headers) — matches the network receipt.
+  // Flat item list (no course headers). Merge identical order-items (same dish +
+  // options + price, no discount) into one "N x" line — separate sends of the
+  // same item must not print as multiple 1x rows.
   const active = (items || []).filter(i => !i.voided);
+  const aggMap = new Map(), aggList = [];
   for (const it of active) {
+    if (Number(it.discount_value) > 0) { aggList.push({ ...it, quantity: Number(it.quantity) || 0 }); continue; }
+    const key = [it.menu_item_id, it.name || it.item_name, it.notes || '', it.item_note || '', it.unit_price].join('|');
+    if (aggMap.has(key)) aggMap.get(key).quantity += (Number(it.quantity) || 0);
+    else { const e = { ...it, quantity: Number(it.quantity) || 0 }; aggMap.set(key, e); aggList.push(e); }
+  }
+  for (const it of aggList) {
     const itemTotal = (it.quantity || 0) * (it.unit_price || 0);
     let price = itemTotal;
     if (it.discount_type === 'percent') price = itemTotal * (1 - (it.discount_value || 0) / 100);
@@ -152,6 +209,15 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
   }
   ops.push({ op: 'rule' });
   ops.push({ op: 'align', v: 1 }, { op: 'text', v: footer }, { op: 'text', v: 'ขอบคุณที่มาใช้บริการ' }, { op: 'align', v: 0 }, { op: 'feed', v: 2 }, { op: 'cut' });
+  // SEPOS-PRINT-FONT-001 — apply the receipt scale uniformly: the compact 'r'
+  // body font → the scaled token, and rows/rules carry the matching (narrower)
+  // width so a bigger font doesn't wrap. normal = no-op (rsz='r', rw=36).
+  if (rsz !== 'r' || rw !== SUNMI_BILL_WIDTH) {
+    for (const o of ops) {
+      if (o.op === 'size' && o.v === 'r') o.v = rsz;
+      else if (o.op === 'row' || o.op === 'rule') o.w = rw;
+    }
+  }
   return ops;
 }
 
@@ -161,8 +227,9 @@ export function opsForSunmi(ops) {
   const out = [];
   for (const o of ops) {
     if (o.op === 'size') out.push({ op: 'size', v: SUNMI_SIZE[o.v] || SUNMI_SIZE.n });
-    else if (o.op === 'row') out.push({ op: 'text', v: pad(o.l, o.r, SUNMI_BILL_WIDTH) });
-    else if (o.op === 'rule') out.push({ op: 'text', v: '-'.repeat(SUNMI_BILL_WIDTH) });
+    else if (o.op === 'row') out.push({ op: 'text', v: pad(o.l, o.r, o.w || SUNMI_BILL_WIDTH) });
+    else if (o.op === 'rule') out.push({ op: 'text', v: '-'.repeat(o.w || SUNMI_BILL_WIDTH) });
+    else if (o.op === 'krule') out.push({ op: 'text', v: '-'.repeat(o.w || SUNMI_KITCHEN_WIDTH) });
     else out.push(o);
   }
   return out;
@@ -198,6 +265,7 @@ export function renderOpsToBytes(ops, { thaiCp = null } = {}) {
       case 'text':  enc(o.v); b.push(LF); break;
       case 'row':   enc(pad(o.l, o.r, WIDTH)); b.push(LF); break;
       case 'rule':  enc('-'.repeat(WIDTH)); b.push(LF); break;
+      case 'krule': enc('-'.repeat(WIDTH)); b.push(LF); break;
       case 'feed':  for (let i = 0; i < (o.v || 1); i++) b.push(LF); break;
       case 'cut':   b.push(GS, 0x56, 0x42, 0x00); break;
     }

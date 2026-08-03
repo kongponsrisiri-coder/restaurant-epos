@@ -130,7 +130,7 @@ export default function ClockRecordsSection() {
 
   return (
     <div style={{ padding:24, maxWidth:960 }}>
-      <h1 style={{ fontSize:22, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>🕐 Clock Records</h1>
+      <h1 style={{ fontSize:22, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🕐 Clock Records</h1>
 
       {/* Filters */}
       <div style={{ ...cardStyle, display:'flex', gap:10, alignItems:'flex-end', flexWrap:'wrap' }}>
@@ -144,20 +144,20 @@ export default function ClockRecordsSection() {
         </div>
         <button onClick={load} disabled={loading} style={{
           padding:'10px 18px', borderRadius:8, border:'none',
-          background:'#1a1a2e', color:'white', fontWeight:700, fontSize:13,
+          background:'var(--brand-primary, #1a1a2e)', color:'white', fontWeight:700, fontSize:13,
           cursor: loading ? 'wait' : 'pointer'
         }}>{loading ? 'Loading…' : 'Refresh'}</button>
         <button onClick={exportCsv} disabled={summary.length === 0} style={{
           padding:'10px 18px', borderRadius:8, border:'none',
-          background: summary.length ? '#C9A84C' : '#e5d9b2',
-          color:'#0D1B3E', fontWeight:700, fontSize:13,
+          background: summary.length ? 'var(--brand-accent,#C9A84C)' : '#e5d9b2',
+          color:'var(--brand-primary,#0D1B3E)', fontWeight:700, fontSize:13,
           cursor: summary.length ? 'pointer' : 'not-allowed'
         }}>⬇ Export CSV</button>
       </div>
 
       {/* Weekly summary */}
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:12 }}>Summary</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:12 }}>Summary</h2>
         {summary.length === 0 ? (
           <div style={{ color:'#888', fontSize:14 }}>No clock events in this range.</div>
         ) : (
@@ -175,7 +175,7 @@ export default function ClockRecordsSection() {
             <tbody>
               {summary.map(s => (
                 <tr key={s.id} style={{ borderTop:'1px solid #f0f0f0' }}>
-                  <td style={{ padding:'8px 4px', fontWeight:600, color:'#1a1a2e' }}>{s.name}</td>
+                  <td style={{ padding:'8px 4px', fontWeight:600, color:'var(--brand-primary, #1a1a2e)' }}>{s.name}</td>
                   <td style={{ padding:'8px 4px', color:'#666' }}>{s.role || '—'}</td>
                   <td style={{ padding:'8px 4px', color:'#666' }}>{s.sessions.length}</td>
                   <td style={{ padding:'8px 4px', textAlign:'right', fontWeight:700 }}>{fmtHours(s.totalHours)}</td>
@@ -199,7 +199,7 @@ export default function ClockRecordsSection() {
       {/* Per-session detail */}
       {summary.map(s => (
         <div key={s.id} style={cardStyle}>
-          <h3 style={{ fontSize:14, fontWeight:700, color:'#1a1a2e', marginBottom:10 }}>
+          <h3 style={{ fontSize:14, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:10 }}>
             {s.name} <span style={{ color:'#888', fontWeight:400 }}>· {fmtHours(s.totalHours)}</span>
           </h3>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>

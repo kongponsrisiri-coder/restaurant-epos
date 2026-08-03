@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
-import { C, card, btn, input, label, fmtRelTime, fmtMoney, PLAN_LABEL, STATUS_STYLE, PRODUCT_BADGE } from '../theme.js';
+import { C, card, btn, input, label, fmtRelTime, fmtMoney, PLAN_LABEL, STATUS_STYLE, productBadge } from '../theme.js';
 import StatusPill from '../components/StatusPill.jsx';
 import HealthDot from '../components/HealthDot.jsx';
 
 export default function DashboardPage() {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [productFilter, setProductFilter] = useState('all');
@@ -57,7 +56,12 @@ export default function DashboardPage() {
 
   const counts = clients.reduce((a, c) => ({ ...a, [c.status]: (a[c.status] || 0) + 1 }), {});
   const onlineCount = clients.filter(c => c.last_is_online).length;
-  const totalMRR = clients.filter(c => c.status === 'active').reduce((s, c) => s + (Number(c.monthly_fee) || 0), 0);
+  // A paying client shows as 'active' (billing) OR 'live' (went live via the
+  // go-live gate) — both are subscribed & using the till, so count both.
+  const PAYING = ['active', 'live'];
+  const payingClients = clients.filter(c => PAYING.includes(c.status));
+  const activeSubs = payingClients.length;
+  const totalMRR = payingClients.reduce((s, c) => s + (Number(c.monthly_fee) || 0), 0);
 
   return (
     <div>
@@ -78,9 +82,6 @@ export default function DashboardPage() {
           >
             {copiedLink ? '✓ Copied!' : '🔗 Founder link'}
           </button>
-          <button onClick={() => setShowAdd(true)} style={btn.ghost} title="Add a placeholder row only">
-            + Quick add
-          </button>
           {/* SEPOS-029 — primary CTA → full onboarding wizard. */}
           <Link to="/clients/new" style={{ ...btn.gold, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
             🚀 Onboard new client
@@ -90,7 +91,7 @@ export default function DashboardPage() {
 
       {/* Stat tiles */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 28 }}>
-        <StatTile label="Active subs"  value={counts.active || 0} sub={`${fmtMoney(totalMRR)} MRR`}    accent={C.success} />
+        <StatTile label="Active subs"  value={activeSubs}         sub={`${fmtMoney(totalMRR)} MRR`}    accent={C.success} />
         <StatTile label="On trial"     value={counts.trial  || 0}                                      accent={C.info} />
         <StatTile label="In setup"     value={counts.setup  || 0}                                      accent={C.warning} />
         <StatTile label="Online now"   value={onlineCount}        sub={`/ ${clients.length} total`}    accent={C.gold} />
@@ -99,7 +100,7 @@ export default function DashboardPage() {
 
       {/* Product filter chips */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-        {[['all', 'All'], ['restaurant', '🍽 Restaurant'], ['spa', '🌿 Spa']].map(([k, l]) => (
+        {[['all', 'All'], ['restaurant', '🍽 Restaurant'], ['spa', '🌿 Spa'], ['website', '🌐 Website'], ['social', '📣 Social']].map(([k, l]) => (
           <button key={k} onClick={() => setProductFilter(k)} style={{
             padding: '6px 14px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer',
             border: `1px solid ${productFilter === k ? C.navy : C.border}`,
@@ -134,7 +135,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {showAdd && <AddClientModal onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); load(); }} />}
     </div>
   );
 }
@@ -153,7 +153,7 @@ function StatTile({ label, value, sub, accent }) {
 function ClientCard({ client, onClick }) {
   const online = client.last_is_online;
   const lastChecked = client.last_checked_at;
-  const prod = PRODUCT_BADGE[client.product || 'restaurant'];
+  const prod = productBadge(client.product);
   return (
     <div onClick={onClick} style={{
       ...card, padding: 18, cursor: 'pointer', transition: 'transform 0.12s, box-shadow 0.12s',

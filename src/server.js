@@ -15,6 +15,7 @@ const heartbeatClient = require('./services/heartbeatClient'); // SEPOS-PRO-009 
 const tableAllocator = require('./services/tableAllocator');   // SEPOS-027 table-aware reservations
 const makeWebhooks = require('./services/makeWebhooks');
 const printService = require('./services/printService');
+const printAlerts = require('./services/printAlertService'); // SEPOS-PRINT-ALERT-001
 const stuartService = require('./services/stuartService');
 const uberDirectService = require('./services/uberDirectService');
 const deliverooService = require('./services/deliverooService');
@@ -25,6 +26,10 @@ const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: '*' }
 });
+
+// SEPOS-PRINT-ALERT-001 — held-ticket queue + printer health pinger
+// (no-ops entirely unless DB_MODE=local, i.e. a desktop till).
+printAlerts.init({ pool, io, printService });
 
 app.use(cors({
   origin: '*',
@@ -84,6 +89,52 @@ function billDiscountFactors(rows) {
     factor.set(row.order_id, f);
   }
   return factor;
+}
+
+// SEPOS-SVCFIX-001 — service charge must be computed PER BILL, not derived from
+// (money-taken − subtotal). The old derivation swept tips / overpayments / a
+// double-charge into "service" (Thann Thai showed £124.18 where the real 10%
+// on dine-in was £46.04). Service applies to DINE-IN only (takeaway + counter
+// never carry it) and honours the per-order no_service_charge opt-out.
+function orderIsDineIn(o) {
+  const t = o.order_type || 'dine_in';
+  return t !== 'takeaway' && t !== 'counter';
+}
+function serviceChargeForOrder(o, scEnabled, scRatePct) {
+  // SEPOS-AUDIT-001 — prefer the close-time SNAPSHOT (orders.service_charge,
+  // stamped by /pay since this fix). Deriving from today's settings rewrote
+  // history whenever the rate changed. NULL = legacy row → derive as before.
+  if (o.service_charge !== null && o.service_charge !== undefined) return Number(o.service_charge) || 0;
+  if (!scEnabled) return 0;
+  if (o.no_service_charge) return 0;
+  if (!orderIsDineIn(o)) return 0;
+  // SEPOS-SVCFIX-001 fix — charge on the base AFTER any bill-level discount,
+  // matching what the till actually took (BillScreen applies service to
+  // subtotal − bill discount). Using o.total (pre-bill-discount) overstated
+  // service on discounted bills. Per-item discounts are already baked into total.
+  let base = Number(o.total ?? 0);
+  if (o.discount_value > 0) {
+    base = o.discount_type === 'percent'
+      ? base * (1 - Number(o.discount_value) / 100)
+      : Math.max(0, base - Number(o.discount_value));
+  }
+  return base * (Number(scRatePct || 0) / 100);
+}
+
+// SEPOS-VATMODE-001 — VAT is computed one of two ways per restaurant, chosen by
+// the `vat_mode` setting (default 'inclusive' so every existing tenant is
+// unchanged). Service charge is always OUTSIDE the VAT base either way.
+//   'inclusive' — UK convention: menu prices already contain VAT.
+//                 net = gross × 100/(100+rate),  vat = gross − net.
+//   'exclusive' — menu prices are net of VAT; VAT is 20% ON TOP of the sale.
+//                 net = gross,  vat = gross × rate/100.
+function vatLine(gross, rate, mode) {
+  const g = Number(gross || 0);
+  const r = Number(rate || 0);
+  if (r <= 0) return { net: g, vat: 0 };
+  if (mode === 'exclusive') return { net: g, vat: g * (r / 100) };
+  const net = g * (100 / (100 + r));
+  return { net, vat: g - net };
 }
 
 // When the desktop shell sets CLIENT_DIST_PATH (Electron does — pointed at
@@ -158,6 +209,9 @@ let sendBookingSms = async () => {};
 try {
   const emailSvc = require('./services/emailService');
   sendBookingConfirmation = emailSvc.sendBookingConfirmation;
+  // SEPOS-027 — the SMS sender was never assigned here, so the dormant
+  // stub swallowed every booking SMS even once TWILIO_* env landed.
+  sendBookingSms = emailSvc.sendBookingSms;
   console.log('✅ Email service loaded');
 } catch (e) {
   console.log('ℹ️  Email service not configured yet — skipping');
@@ -189,10 +243,12 @@ app.put('/api/tables/:id', async (req, res) => {
 app.put('/api/tables/:id/plan', async (req, res) => {
   if (await maybeForwardTableWriteToCloud(req, res)) return;
   try {
-    const { pos_x, pos_y, shape, width, height, name, capacity, table_number } = req.body;
+    const { pos_x, pos_y, shape, width, height, name, capacity, table_number, is_takeaway } = req.body;
+    // COALESCE keeps the existing is_takeaway flag when a partial plan update
+    // (e.g. drag/resize) doesn't include it — only an explicit toggle changes it.
     await pool.query(
-      'UPDATE tables SET pos_x=$1, pos_y=$2, shape=$3, width=$4, height=$5, name=$6, capacity=$7, table_number=$8 WHERE id=$9',
-      [pos_x, pos_y, shape, width, height, name, capacity, table_number, req.params.id]
+      'UPDATE tables SET pos_x=$1, pos_y=$2, shape=$3, width=$4, height=$5, name=$6, capacity=$7, table_number=$8, is_takeaway=COALESCE($9, is_takeaway) WHERE id=$10',
+      [pos_x, pos_y, shape, width, height, name, capacity, table_number, (is_takeaway == null ? null : (is_takeaway ? 1 : 0)), req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -201,10 +257,10 @@ app.put('/api/tables/:id/plan', async (req, res) => {
 app.post('/api/tables', async (req, res) => {
   if (await maybeForwardTableWriteToCloud(req, res)) return;
   try {
-    const { table_number, capacity, pos_x, pos_y, shape } = req.body;
+    const { table_number, capacity, pos_x, pos_y, shape, is_takeaway } = req.body;
     const result = await pool.query(
-      'INSERT INTO tables (table_number, capacity, pos_x, pos_y, shape) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-      [table_number, capacity || 4, pos_x || 0, pos_y || 0, shape || 'square']
+      'INSERT INTO tables (table_number, capacity, pos_x, pos_y, shape, is_takeaway) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+      [table_number, capacity || 4, pos_x || 0, pos_y || 0, shape || 'square', is_takeaway ? 1 : 0]
     );
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -343,7 +399,9 @@ async function forwardWriteToCloud(req, res, label, afterPull) {
   } catch { return false; }
   try {
     const url = `${process.env.CLOUD_API_URL}${req.originalUrl}`;
-    const init = { method: req.method, headers: { 'Content-Type': 'application/json' } };
+    // Verify pass — bounded: a wedged cloud (accepts TCP, never answers) used
+    // to hang the till's request forever. 8s then fall back to local.
+    const init = { method: req.method, headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8000) };
     if (req.method !== 'GET' && req.method !== 'HEAD' && req.body && Object.keys(req.body).length) {
       init.body = JSON.stringify(req.body);
     }
@@ -363,6 +421,52 @@ async function forwardWriteToCloud(req, res, label, afterPull) {
     console.warn(`[${label}] cloud unreachable for ${req.method} ${req.originalUrl}: ${err.message} — falling back to local (change will be lost on next pull)`);
     return false;
   }
+}
+
+// SEPOS-AUDIT-001 — like forwardWriteToCloud but with URL/body overrides, for
+// endpoints whose path or payload carries a LOCAL order id that must be
+// translated to the cloud id before forwarding (vouchers, deposits). Returns
+// false (→ caller falls back to the local handler) when this isn't a local
+// install, the cloud is unreachable, or the caller couldn't build overrides.
+async function forwardToCloudWith(req, res, label, { path, body, afterOk } = {}) {
+  try {
+    const archiveService = require('./services/archiveService');
+    if (!archiveService.isLocalInstall() || !process.env.CLOUD_API_URL) return false;
+  } catch { return false; }
+  try {
+    const url = `${process.env.CLOUD_API_URL}${path || req.originalUrl}`;
+    // Verify pass — bounded (see forwardWriteToCloud): 8s then local fallback.
+    // REG-1 (Nook) — carry the install's SYNC_SECRET so forwards to now-gated
+    // cloud endpoints (voucher list etc.) authenticate server-to-server.
+    const fwdHeaders = { 'Content-Type': 'application/json' };
+    if (process.env.SYNC_SECRET) fwdHeaders['x-sync-secret'] = process.env.SYNC_SECRET;
+    const init = { method: req.method, headers: fwdHeaders, signal: AbortSignal.timeout(8000) };
+    const payload = body !== undefined ? body : req.body;
+    if (req.method !== 'GET' && req.method !== 'HEAD' && payload && Object.keys(payload).length) {
+      init.body = JSON.stringify(payload);
+    }
+    const r = await fetch(url, init);
+    const text = await r.text();
+    console.log(`[${label}] forwarded ${req.method} ${path || req.originalUrl} → cloud ${r.status}`);
+    if (r.ok && afterOk) {
+      try { await afterOk(JSON.parse(text || '{}')); }
+      catch (afterErr) { console.warn(`[${label}] after-forward step failed: ${afterErr.message}`); }
+    }
+    res.status(r.status).type('application/json').send(text);
+    return true;
+  } catch (err) {
+    console.warn(`[${label}] cloud unreachable for ${req.method} ${req.originalUrl}: ${err.message} — falling back to local`);
+    return false;
+  }
+}
+
+// SEPOS-AUDIT-001 — local order id → cloud id (local installs only; the
+// orders.cloud_id column exists in the local SQLite schema). Null when unbound.
+async function localOrderCloudId(orderId) {
+  try {
+    const r = await pool.query('SELECT cloud_id FROM orders WHERE id = $1', [orderId]);
+    return r.rows[0]?.cloud_id ?? null;
+  } catch { return null; }
 }
 
 // SEPOS-046q — desktop installs forward menu admin writes to cloud so the
@@ -462,6 +566,189 @@ app.put('/api/categories/:id/default-course', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-STATION-001 — assign a category to an extra printer station (or NULL to
+// fall back to the default kitchen/bar routing by is_bar).
+app.put('/api/categories/:id/printer', async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  try {
+    const pid = req.body.printer_id ? Number(req.body.printer_id) : null;
+    await pool.query('UPDATE categories SET printer_id = $1 WHERE id = $2', [pid, req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── SEPOS-STATION-001 — extra printer stations (wok/grill/cold…) ──────────
+// The built-in receipt/kitchen/bar printers stay in settings; these are ADDED
+// stations a category can be routed to. Kitchen printing groups items by their
+// resolved printer (see routing rework).
+// SEPOS-PRINT-UNIFY-001 — overlay the unified printers table onto the legacy
+// settings.printer_<role>_* keys the print paths read. Default per role =
+// settings.default_<role>_printer_id, else the first active printer flagged with
+// that role. No unified printer for a role → legacy settings untouched
+// (migration-safe: today's output is unchanged until the operator sets it up).
+async function applyPrinterRouting(settings) {
+  let printers;
+  try { printers = (await pool.query('SELECT * FROM printers WHERE is_active = 1 ORDER BY sort_order, id')).rows; }
+  catch { return settings; }
+  if (!printers || !printers.length) return settings;
+  const byId = new Map(printers.map(p => [String(p.id), p]));
+  for (const role of ['receipt', 'kitchen', 'bar']) {
+    const defId = settings[`default_${role}_printer_id`];
+    // SEPOS-PRINT-STAR-001 — a starred default only counts while that printer
+    // still CARRIES the role. Before this, unticking (say) Bar on the starred
+    // printer and ticking it on another changed nothing: the stale star kept
+    // winning and tickets went to the old printer with no visible reason.
+    // Stale/roleless star → fall through to the first printer flagged with
+    // the role, i.e. what the operator's ticks say.
+    const starred = defId ? byId.get(String(defId)) : null;
+    const p = (starred && Number(starred[`role_${role}`]) === 1 ? starred : null)
+      || printers.find(x => Number(x[`role_${role}`]) === 1);
+    if (!p || !(p.ip || p.name)) continue;
+    settings[`printer_${role}_ip`]        = p.ip || '';
+    settings[`printer_${role}_port`]      = p.port || 9100;
+    settings[`printer_${role}_name`]      = p.name || '';
+    settings[`printer_${role}_lpr_queue`] = p.lpr_queue || settings[`printer_${role}_lpr_queue`] || 'lp';
+    if (role === 'kitchen' && p.copies) settings.printer_kitchen_copies = String(p.copies);
+  }
+  return settings;
+}
+
+// One-time: surface the operator's existing fixed Receipt/Kitchen/Bar config as
+// rows in the unified list so it isn't empty on first open. Runs only until any
+// printer carries a role flag; after that the operator's list is authoritative.
+async function ensurePrintersSeeded() {
+  try {
+    const existing = (await pool.query('SELECT * FROM printers')).rows;
+    if (existing.some(p => Number(p.role_receipt) || Number(p.role_kitchen) || Number(p.role_bar))) return;
+    const s = {};
+    (await pool.query(`SELECT key, value FROM settings WHERE key LIKE 'printer_%'`)).rows.forEach(r => { s[r.key] = r.value; });
+    for (const role of ['receipt', 'kitchen', 'bar']) {
+      const ip = s[`printer_${role}_ip`], name = s[`printer_${role}_name`];
+      if (!ip && !name) continue;
+      const roleCol = `role_${role}`;
+      const match = existing.find(p => (ip && p.ip === ip) || (name && p.name === name));
+      if (match) { await pool.query(`UPDATE printers SET ${roleCol} = 1 WHERE id = $1`, [match.id]); }
+      else {
+        const label = role[0].toUpperCase() + role.slice(1) + ' printer';
+        await pool.query(
+          `INSERT INTO printers (name, ip, port, lpr_queue, copies, ${roleCol}) VALUES ($1,$2,$3,$4,$5,1)`,
+          [name || label, ip || null, Number(s[`printer_${role}_port`]) || 9100, s[`printer_${role}_lpr_queue`] || null, Number(s[`printer_${role}_copies`]) || 1]
+        );
+      }
+    }
+  } catch (e) { console.warn('[printers] seed skipped:', e.message); }
+}
+
+app.get('/api/printers', async (req, res) => {
+  try {
+    await ensurePrintersSeeded();
+    const r = await pool.query('SELECT * FROM printers WHERE is_active = 1 ORDER BY sort_order, id');
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.post('/api/printers', async (req, res) => {
+  try {
+    const { name, ip, port, mac, kind, copies, sort_order, role_receipt, role_kitchen, role_bar, lpr_queue } = req.body || {};
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'Printer name required' });
+    const r = await pool.query(
+      `INSERT INTO printers (name, ip, port, mac, kind, copies, sort_order, restaurant_id, role_receipt, role_kitchen, role_bar, lpr_queue)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [String(name).trim(), ip || null, Number(port) || 9100, mac || null,
+       kind === 'receipt' ? 'receipt' : 'kitchen', Math.max(1, Math.min(5, Number(copies) || 1)),
+       Number(sort_order) || 0, resolveRestaurantId(req),
+       role_receipt ? 1 : 0, role_kitchen ? 1 : 0, role_bar ? 1 : 0, lpr_queue || null]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.put('/api/printers/:id', async (req, res) => {
+  try {
+    const { name, ip, port, mac, kind, copies, sort_order, role_receipt, role_kitchen, role_bar, lpr_queue } = req.body || {};
+    await pool.query(
+      `UPDATE printers SET name=COALESCE($1,name), ip=$2, port=$3, mac=$4,
+         kind=COALESCE($5,kind), copies=$6, sort_order=$7,
+         role_receipt=$8, role_kitchen=$9, role_bar=$10, lpr_queue=$11 WHERE id=$12`,
+      [name != null ? String(name).trim() : null, ip || null, Number(port) || 9100, mac || null,
+       kind, Math.max(1, Math.min(5, Number(copies) || 1)), Number(sort_order) || 0,
+       role_receipt ? 1 : 0, role_kitchen ? 1 : 0, role_bar ? 1 : 0, lpr_queue || null, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+// Set the default printer for a role (receipt|kitchen|bar). Body: { role, printer_id }.
+app.post('/api/printers/set-default', async (req, res) => {
+  try {
+    const role = String(req.body?.role || '');
+    if (!['receipt', 'kitchen', 'bar'].includes(role)) return res.status(400).json({ error: 'role must be receipt|kitchen|bar' });
+    const pid = req.body?.printer_id != null ? String(Number(req.body.printer_id)) : '';
+    await pool.query('INSERT INTO settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', [`default_${role}_printer_id`, pid]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+// SEPOS-PRINT-UNIFY-001 — "Scan for printers". Probes this server's own /24
+// subnet on the RAW print port (9100) and returns whatever answers, so the
+// operator doesn't have to hunt for IPs. Only meaningful when the server is ON
+// the restaurant's LAN — i.e. the desktop (Electron) / Sunmi local install. On
+// the cloud backend it can't reach a private LAN, so we return local:false and
+// the UI tells the operator to run it from the till app or type the IP.
+app.get('/api/printers/scan', async (req, res) => {
+  // Local install = the server is ON the restaurant LAN (desktop/Sunmi). Inline
+  // the DB_MODE check — archiveService is require()'d locally per-function, not
+  // module-scoped, so referencing it here would throw.
+  const isLocal = String(process.env.DB_MODE || '').toLowerCase() === 'local';
+  if (!isLocal) {
+    return res.json({ local: false, printers: [], message: 'Scanning finds printers on the same network — run it from the till / desktop app, or enter the IP manually.' });
+  }
+  try {
+    const os = require('os'), net = require('net');
+    // Find this machine's LAN IPv4 → derive the /24 to sweep.
+    let base = null;
+    for (const ifaces of Object.values(os.networkInterfaces())) {
+      for (const ni of ifaces || []) {
+        if (ni.family === 'IPv4' && !ni.internal) { base = ni.address.split('.').slice(0, 3).join('.'); break; }
+      }
+      if (base) break;
+    }
+    if (!base) return res.json({ local: true, printers: [], message: 'No LAN connection found on this device.' });
+    const port = 9100;
+    const probe = (host) => new Promise((resolve) => {
+      const s = new net.Socket();
+      let done = false;
+      const finish = (ok) => { if (done) return; done = true; try { s.destroy(); } catch {} resolve(ok ? host : null); };
+      s.setTimeout(500);
+      s.once('connect', () => finish(true));
+      s.once('timeout', () => finish(false));
+      s.once('error', () => finish(false));
+      s.connect(port, host);
+    });
+    const hosts = Array.from({ length: 254 }, (_, i) => `${base}.${i + 1}`);
+    const found = (await Promise.all(hosts.map(probe))).filter(Boolean);
+    res.json({ local: true, subnet: `${base}.0/24`, printers: found.map(ip => ({ ip, port })) });
+  } catch (err) { res.status(500).json({ local: true, printers: [], error: err.message }); }
+});
+app.delete('/api/printers/:id', async (req, res) => {
+  try {
+    // Detach any categories pointed here (they fall back to default kitchen/bar).
+    await pool.query('UPDATE categories SET printer_id = NULL WHERE printer_id = $1', [req.params.id]);
+    await pool.query('DELETE FROM printers WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+// Test-print to a specific station.
+app.post('/api/printers/:id/test', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM printers WHERE id = $1', [req.params.id]);
+    const p = r.rows[0];
+    if (!p) return res.status(404).json({ error: 'Printer not found' });
+    if (!p.ip) return res.status(400).json({ error: 'This station has no IP set' });
+    // testPrint's 3rd arg is a CUPS/named-printer fallback, NOT a MAC — passing
+    // the MAC made the fallback try to print to a queue named after the MAC.
+    // A station is IP-addressed, so leave the named-printer arg empty.
+    await printService.testPrint(p.ip, p.port || 9100, '');
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/subcategories', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM subcategories ORDER BY category_id, sort_order');
@@ -527,7 +814,7 @@ app.get('/api/menu', async (req, res) => {
     const [catRes, subRes, itemRes] = await Promise.all([
       pool.query('SELECT * FROM categories ORDER BY sort_order'),
       pool.query('SELECT * FROM subcategories ORDER BY sort_order'),
-      pool.query('SELECT * FROM menu_items WHERE is_available = 1 ORDER BY sort_order ASC')
+      pool.query('SELECT * FROM menu_items WHERE is_available = 1 ORDER BY sort_order ASC, id ASC')
     ]);
     res.json(catRes.rows.map(cat => ({ ...cat, subcategories: subRes.rows.filter(s => s.category_id === cat.id), items: itemRes.rows.filter(i => i.category_id === cat.id) })));
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -538,7 +825,7 @@ app.get('/api/menu/all', async (req, res) => {
     const [catRes, subRes, itemRes] = await Promise.all([
       pool.query('SELECT * FROM categories ORDER BY sort_order'),
       pool.query('SELECT * FROM subcategories ORDER BY sort_order'),
-      pool.query('SELECT * FROM menu_items ORDER BY sort_order ASC')
+      pool.query('SELECT * FROM menu_items ORDER BY sort_order ASC, id ASC')
     ]);
     res.json(catRes.rows.map(cat => ({ ...cat, subcategories: subRes.rows.filter(s => s.category_id === cat.id), items: itemRes.rows.filter(i => i.category_id === cat.id) })));
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -547,15 +834,20 @@ app.get('/api/menu/all', async (req, res) => {
 app.post('/api/menu/items', async (req, res) => {
   if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
-    const { category_id, subcategory_id, name, name_alt, description, price, vat_rate, allergens } = req.body;
+    const { category_id, subcategory_id, name, name_alt, description, price, vat_rate, allergens, default_course } = req.body;
     // AI scanner sends allergens as ["Fish","Soybeans"]; normalise to JSON
     // string for the column so the Allergen Matrix sees the scanned source.
     let allergensStr = null;
     if (Array.isArray(allergens) && allergens.length > 0) allergensStr = JSON.stringify(allergens);
     else if (typeof allergens === 'string' && allergens.trim()) allergensStr = JSON.stringify([allergens]);
+    const dc = (default_course == null || default_course === '') ? null : (Number(default_course) || null);
+    // Append to the end of the category so a new item gets a real position
+    // (not sort_order=0, which sorts to the top and the boot migration rewrites).
+    const soRes = await pool.query('SELECT COALESCE(MAX(sort_order), 0) + 1 AS next FROM menu_items WHERE category_id = $1', [category_id]);
+    const nextSort = Number(soRes.rows[0]?.next) || 1;
     const result = await pool.query(
-      'INSERT INTO menu_items (category_id, subcategory_id, name, name_alt, description, price, vat_rate, allergens) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
-      [category_id, subcategory_id || null, name, name_alt || null, description, price, vat_rate ?? 20, allergensStr]
+      'INSERT INTO menu_items (category_id, subcategory_id, name, name_alt, description, price, vat_rate, allergens, default_course, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id',
+      [category_id, subcategory_id || null, name, name_alt || null, description, price, vat_rate ?? 20, allergensStr, dc, nextSort]
     );
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -575,10 +867,15 @@ app.put('/api/menu/items/sort-order', async (req, res) => {
 app.put('/api/menu/items/:id', async (req, res) => {
   if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
-    const { name, name_alt, description, price, is_available, is_online, subcategory_id, category_id, vat_rate } = req.body;
+    const { name, name_alt, description, price, is_available, is_online, subcategory_id, category_id, vat_rate, default_course, printer_id } = req.body;
+    // NULL / '' → inherit the category course; 1-4 → per-item override.
+    const dc = (default_course == null || default_course === '') ? null : (Number(default_course) || null);
+    // SEPOS-STATION-003 — per-dish station override. '' / null → inherit the
+    // category's printer route; a printer id → this dish always prints there.
+    const pid = (printer_id == null || printer_id === '') ? null : (Number(printer_id) || null);
     await pool.query(
-      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, is_online=COALESCE($6, is_online), subcategory_id=$7, category_id=$8, vat_rate=COALESCE($9, vat_rate) WHERE id=$10',
-      [name, name_alt || null, description, price, is_available, is_online ?? null, subcategory_id || null, category_id, vat_rate ?? null, req.params.id]
+      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, is_online=COALESCE($6, is_online), subcategory_id=$7, category_id=$8, vat_rate=COALESCE($9, vat_rate), default_course=$10, printer_id=$11 WHERE id=$12',
+      [name, name_alt || null, description, price, is_available, is_online ?? null, subcategory_id || null, category_id, vat_rate ?? null, dc, pid, req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -589,11 +886,15 @@ app.get('/api/menu/items/:id/modifiers', async (req, res) => {
     // SEPOS-059 — resolve BOTH per-dish (legacy) groups AND attached library
     // groups (shared, linked via menu_item_modifier_groups). A library group
     // is reusable, so the same group id can appear on many dishes.
+    // SEPOS-ALLERGEN-OPT-001 — also union GLOBAL groups (is_global=1), which apply
+    // to every item with no per-item link (e.g. the dietary/allergen group). Item-
+    // specific groups sort first, global ones (dietary) after.
     const groupRes = await pool.query(
       `SELECT * FROM modifier_groups
         WHERE menu_item_id = $1
            OR id IN (SELECT group_id FROM menu_item_modifier_groups WHERE menu_item_id = $1)
-        ORDER BY id`, [req.params.id]);
+           OR COALESCE(is_global, 0) = 1
+        ORDER BY COALESCE(is_global, 0), id`, [req.params.id]);
     if (groupRes.rows.length === 0) return res.json([]);
     const groupsWithMods = await Promise.all(groupRes.rows.map(async group => {
       const modRes = await pool.query('SELECT * FROM modifiers WHERE group_id = $1 AND is_available = 1', [group.id]);
@@ -621,6 +922,30 @@ app.post('/api/modifier-groups/:id/options', async (req, res) => {
     const { name, extra_price } = req.body;
     const result = await pool.query('INSERT INTO modifiers (group_id, name, extra_price) VALUES ($1,$2,$3) RETURNING id', [req.params.id, name, extra_price || 0]);
     res.json({ id: result.rows[0].id, success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-ALLERGEN-OPT-001 — one-tap standard GLOBAL dietary/allergen group.
+// Idempotent: creates it once (menu_item_id NULL so it's a library group,
+// is_global=1 so getItemModifiers unions it onto EVERY item, is_allergen=1 so
+// it prints with emphasis + its options are free, multi_select=1). Operators
+// edit its options afterwards via the normal options endpoints.
+app.post('/api/menu/dietary-preset', async (req, res) => {
+  if (await maybeForwardModifierWriteToCloud(req, res)) return;
+  try {
+    const existing = await pool.query('SELECT id FROM modifier_groups WHERE is_allergen = 1 AND is_global = 1 LIMIT 1');
+    if (existing.rows[0]) return res.json({ id: existing.rows[0].id, created: false });
+    const g = await pool.query(
+      `INSERT INTO modifier_groups (menu_item_id, name, required, multi_select, is_global, is_allergen)
+       VALUES (NULL, $1, 0, 1, 1, 1) RETURNING id`,
+      ['Dietary / Allergen requests']
+    );
+    const gid = g.rows[0].id;
+    const opts = ['No nuts', 'No peanuts', 'No gluten / wheat', 'No shellfish', 'No dairy', 'No egg', 'No fish sauce', 'Vegan', 'Vegetarian'];
+    for (const name of opts) {
+      await pool.query('INSERT INTO modifiers (group_id, name, extra_price) VALUES ($1,$2,0)', [gid, name]);
+    }
+    res.status(201).json({ id: gid, created: true, options: opts.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -720,8 +1045,24 @@ app.delete('/api/menu/items/:id', async (req, res) => {
 
 app.get('/api/orders', async (req, res) => {
   try {
-    const result = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status = 'open' ORDER BY orders.created_at DESC`);
-    res.json(result.rows);
+    const result = await pool.query(`SELECT orders.*, tables.table_number,
+        (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = orders.id AND oi.voided = 0) AS item_count
+      FROM orders LEFT JOIN tables ON orders.table_id = tables.id
+      WHERE orders.status = 'open' ORDER BY orders.created_at DESC`);
+    // SEPOS-GHOST-001 — hide phantom/ghost orders. An OPEN order with 0 items
+    // that's older than a short grace window was abandoned (a double-tap on
+    // "new order", or a backed-out create) and must NOT keep its table (esp. a
+    // takeaway slot) occupied on the floor — that's the recurring "ghost table".
+    // The grace window keeps a just-created order visible until its first item
+    // is rung in, so live seating/creation still works.
+    const GRACE_MS = 3 * 60 * 1000;
+    const now = Date.now();
+    const rows = result.rows.filter((o) => {
+      if (Number(o.item_count) > 0) return true;               // real order — keep
+      const t = o.created_at ? new Date(o.created_at).getTime() : now;
+      return Number.isFinite(t) ? (now - t) < GRACE_MS : true; // empty: keep only if just created
+    });
+    res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -729,6 +1070,10 @@ app.get('/api/orders', async (req, res) => {
 // SiamEPOS Back Office cron. Intentionally unauthenticated so the ops
 // dashboard can ping any client URL without rotating per-client secrets.
 // Returns only aggregate counts — no PII, no menu, no order details.
+// Captured once at boot so /api/health can prove which build + when a tenant
+// last redeployed (ops verification — no build-version marker existed before).
+const SERVER_STARTED_AT = new Date().toISOString();
+const SERVER_COMMIT = process.env.RAILWAY_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT || process.env.GIT_COMMIT || null;
 app.get('/api/health', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -751,6 +1096,8 @@ app.get('/api/health', async (req, res) => {
     } catch (_) { /* devices table not present yet */ }
     res.json({
       status: 'ok',
+      commit: SERVER_COMMIT,
+      started_at: SERVER_STARTED_AT,
       orders_today: parseInt(result.rows[0].orders_today, 10) || 0,
       last_order_at: result.rows[0].last_order_at,
       tills,
@@ -793,7 +1140,7 @@ app.get('/api/orders/bar', async (req, res) => {
     if (!orders.length) return res.json([]);
     const orderIds = orders.map(o => o.id);
     const itemsRes = await pool.query(
-      `SELECT order_items.*, menu_items.name, menu_items.name_alt, categories.is_bar FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON menu_items.category_id = categories.id WHERE order_items.order_id = ANY($1) AND order_items.voided = 0 AND order_items.status != 'served' AND categories.is_bar = 1`,
+      `SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt, categories.is_bar FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON categories.id = COALESCE(menu_items.category_id, order_items.dest_category_id) WHERE order_items.order_id = ANY($1) AND order_items.voided = 0 AND order_items.status != 'served' AND categories.is_bar = 1`,
       [orderIds]
     );
     res.json(orders.map(order => ({ ...order, items: itemsRes.rows.filter(i => i.order_id === order.id) })).filter(o => o.items.length > 0));
@@ -806,12 +1153,62 @@ app.get('/api/orders/:id', async (req, res) => {
     const order = orderRes.rows[0];
     if (!order) return res.status(404).json({ error: 'Order not found' });
     const itemsRes = await pool.query(
-      `SELECT order_items.*, menu_items.name, menu_items.name_alt, menu_items.category_id, categories.is_bar FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON menu_items.category_id = categories.id WHERE order_items.order_id = $1`,
+      `SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt, menu_items.category_id, categories.is_bar FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON categories.id = COALESCE(menu_items.category_id, order_items.dest_category_id) WHERE order_items.order_id = $1`,
       [req.params.id]
     );
     res.json({ ...order, items: itemsRes.rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// SEPOS-GHOST-001 — per-key async mutex. Serialises async critical sections
+// that share a key so a double-tapped "open table" can't race two INSERTs into
+// two open orders on the same table (the "ghost table" phantom: one order gets
+// the items, the empty twin lingers on the floor). Chains each call after the
+// previous one for the key; swallows prior rejections so one failure doesn't
+// poison the chain, and GCs the map entry once the tail settles.
+const _orderCreateLocks = new Map();
+function runExclusive(key, fn) {
+  const prev = _orderCreateLocks.get(key) || Promise.resolve();
+  const run = prev.then(fn, fn);
+  const tail = run.catch(() => {});
+  _orderCreateLocks.set(key, tail);
+  tail.then(() => { if (_orderCreateLocks.get(key) === tail) _orderCreateLocks.delete(key); });
+  return run;
+}
+
+// SEPOS-AUDIT-001 — shared dine-in order creation for the reservation SEAT and
+// WALK-IN endpoints, which used to INSERT orders directly and so bypassed the
+// SEPOS-GHOST-001 mutex + dedupe (a double-tapped "Seat" on two devices still
+// spawned twin open orders on the same table). Uses the SAME lock keyspace as
+// POST /api/orders, so seat/walk-in/table-open races all serialise together.
+async function openDineInOrderDeduped({ tableId, covers, staffId }) {
+  return runExclusive(`order-create:table:${tableId}`, async () => {
+    const existing = await pool.query(
+      `SELECT o.id
+         FROM orders o
+        WHERE o.table_id = $1 AND o.status = 'open'
+          AND (o.order_type IS NULL OR o.order_type = 'dine_in')
+        ORDER BY CASE WHEN EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id) THEN 1 ELSE 0 END DESC,
+                 o.id DESC
+        LIMIT 1`,
+      [tableId]
+    );
+    if (existing.rows[0]) {
+      const full = await pool.query('SELECT * FROM orders WHERE id = $1', [existing.rows[0].id]);
+      return { order: full.rows[0], reused: true };
+    }
+    const ins = await pool.query(
+      `INSERT INTO orders (table_id, staff_id, status, covers, opened_at)
+       VALUES ($1, $2, 'open', $3, NOW()) RETURNING *`,
+      [tableId, staffId || null, covers || 1]
+    );
+    await offlineQueue.enqueue('create_order', {
+      localOrderId: ins.rows[0].id, table_id: tableId,
+      covers: covers || 1, staff_id: staffId || null,
+    });
+    return { order: ins.rows[0], reused: false };
+  });
+}
 
 app.post('/api/orders', requireActiveSubscription, requireValidLicense, async (req, res) => {
   try {
@@ -820,21 +1217,56 @@ app.post('/api/orders', requireActiveSubscription, requireValidLicense, async (r
     // status flip and don't enforce covers.
     const type = order_type === 'counter' || order_type === 'takeaway'
       ? order_type : 'dine_in';
-    const result = await pool.query(
-      `INSERT INTO orders (table_id, staff_id, status, covers, order_type, opened_at)
-       VALUES ($1, $2, 'open', $3, $4, NOW()) RETURNING id`,
-      [table_id || null, staff_id || null, covers || 1, type]
-    );
-    if (table_id) {
-      await pool.query("UPDATE tables SET status = 'occupied' WHERE id = $1", [table_id]);
-    }
-    const localOrderId = result.rows[0].id;
-    await offlineQueue.enqueue('create_order', {
-      localOrderId, table_id: table_id || null,
-      covers: covers || 1, staff_id: staff_id || null,
-      order_type: type,
+
+    // SEPOS-GHOST-001 — de-duplicate a double-tapped table-open. A dine-in table
+    // is single-bill by nature, so a second create on a table that already has an
+    // open dine-in order should return that SAME order, not spawn an empty twin.
+    // Takeaway/counter legitimately run several concurrent orders on one pseudo-
+    // table, so they always create a fresh order (keyed uniquely to avoid a lock).
+    const dedupe = type === 'dine_in' && table_id;
+    const lockKey = dedupe
+      ? `order-create:table:${table_id}`
+      : `order-create:new:${staff_id || ''}:${table_id || 'none'}`;
+
+    const out = await runExclusive(lockKey, async () => {
+      if (dedupe) {
+        // Prefer an existing open order that already has items, then the newest.
+        // NB: order by a CASE/EXISTS expression, NOT a SELECT-list alias —
+        // Postgres rejects an output alias used inside an ORDER BY expression
+        // (SQLite tolerates it), so an aliased `(item_count > 0)` would 500 every
+        // dine-in table-open on the cloud. This form runs on both backends.
+        const existing = await pool.query(
+          `SELECT o.id
+             FROM orders o
+            WHERE o.table_id = $1 AND o.status = 'open'
+              AND (o.order_type IS NULL OR o.order_type = 'dine_in')
+            ORDER BY CASE WHEN EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id) THEN 1 ELSE 0 END DESC,
+                     o.id DESC
+            LIMIT 1`,
+          [table_id]
+        );
+        if (existing.rows.length > 0) {
+          await pool.query("UPDATE tables SET status = 'occupied' WHERE id = $1", [table_id]);
+          return { id: existing.rows[0].id, success: true, reused: true };
+        }
+      }
+      const result = await pool.query(
+        `INSERT INTO orders (table_id, staff_id, status, covers, order_type, opened_at)
+         VALUES ($1, $2, 'open', $3, $4, NOW()) RETURNING id`,
+        [table_id || null, staff_id || null, covers || 1, type]
+      );
+      if (table_id) {
+        await pool.query("UPDATE tables SET status = 'occupied' WHERE id = $1", [table_id]);
+      }
+      const localOrderId = result.rows[0].id;
+      await offlineQueue.enqueue('create_order', {
+        localOrderId, table_id: table_id || null,
+        covers: covers || 1, staff_id: staff_id || null,
+        order_type: type,
+      });
+      return { id: localOrderId, success: true };
     });
-    res.json({ id: localOrderId, success: true });
+    res.json(out);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -847,10 +1279,18 @@ app.post('/api/orders/:id/items', requireValidLicense, async (req, res) => {
     // BUG-001 — adding items to a non-existent order used to throw a
     // raw FK violation → 500. Check the order exists first and return
     // a clean 404.
-    const orderCheck = await client.query('SELECT id FROM orders WHERE id = $1', [orderId]);
+    const orderCheck = await client.query('SELECT id, status FROM orders WHERE id = $1', [orderId]);
     if (orderCheck.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Order not found' });
+    }
+    // Never add items to an already-closed/cancelled order — that created the
+    // "closed order with items but no payment" phantom (inflates the sales
+    // report, never appears in Bills). The floor should open a fresh order.
+    const st = orderCheck.rows[0].status;
+    if (st === 'closed' || st === 'cancelled') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'This order is already closed — start a new order for the table.' });
     }
     const firedBarIds = []; // SEPOS-032: bar items deplete stock on add
     const queuedItems = [];  // SEPOS-PRO-002: paired with local row id for cloud_id mapping
@@ -882,9 +1322,13 @@ app.post('/api/orders/:id/items', requireValidLicense, async (req, res) => {
         }
         unitPrice = (Number(unitPrice) || 0) + extra;
       }
+      // SEPOS-MISC-001 — Misc/open lines carry a chosen destination category so
+      // routing (kitchen/bar + printer) + name + VAT resolve through it. Normal
+      // lines leave it null and route via menu_items.category_id as before.
+      const destCategoryId = item.category_id != null ? Number(item.category_id) : null;
       const ins = await client.query(
-        `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at, item_name) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
-        [orderId, item.menu_item_id, item.quantity, unitPrice, item.notes || '', item.course || 1, item.item_note || '', isBar, firedAt, firedAt, itemName]
+        `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at, item_name, dest_category_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+        [orderId, item.menu_item_id, item.quantity, unitPrice, item.notes || '', item.course || 1, item.item_note || '', isBar, firedAt, firedAt, itemName, destCategoryId]
       );
       const newRowId = ins.rows[0].id;
       if (isBar) firedBarIds.push(newRowId);
@@ -895,7 +1339,7 @@ app.post('/api/orders/:id/items', requireValidLicense, async (req, res) => {
     await client.query('UPDATE orders SET total = $1 WHERE id = $2', [total, orderId]);
     await client.query('COMMIT');
     const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
-    const newItemsRes = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id = $1 AND order_items.is_fired = 1 AND order_items.status = 'cooking'`, [orderId]);
+    const newItemsRes = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id = $1 AND order_items.is_fired = 1 AND order_items.status = 'cooking'`, [orderId]);
     io.emit('new_order_items', { order: orderRes.rows[0], items: newItemsRes.rows });
     await offlineQueue.enqueue('add_items', { localOrderId: Number(orderId), items: queuedItems });
     // SEPOS-032: bar items go is_fired=1 immediately → deplete stock now
@@ -919,17 +1363,17 @@ app.put('/api/orders/:id/fire-course/:course', async (req, res) => {
     // SEPOS-032: capture ids about-to-be-fired before the UPDATE so we
     // can deplete stock for exactly that set.
     const aboutToFireRes = await pool.query(
-      `SELECT id FROM order_items WHERE order_id=$1 AND course=$2 AND is_fired=0 AND voided=0 AND menu_item_id IN (SELECT menu_items.id FROM menu_items LEFT JOIN categories ON menu_items.category_id = categories.id WHERE categories.is_bar = 0 OR categories.is_bar IS NULL)`,
+      `SELECT id FROM order_items WHERE order_id=$1 AND course=$2 AND is_fired=0 AND voided=0 AND (menu_item_id IN (SELECT menu_items.id FROM menu_items LEFT JOIN categories ON menu_items.category_id = categories.id WHERE categories.is_bar = 0 OR categories.is_bar IS NULL) OR (menu_item_id IS NULL AND (dest_category_id IS NULL OR dest_category_id IN (SELECT id FROM categories WHERE is_bar = 0))))`,
       [id, course]
     );
     const firedIds = aboutToFireRes.rows.map(r => r.id);
     const result = await pool.query(
-      `UPDATE order_items SET is_fired=1, fired_at=$1, status='cooking', cooking_started_at=$2 WHERE order_id=$3 AND course=$4 AND is_fired=0 AND voided=0 AND menu_item_id IN (SELECT menu_items.id FROM menu_items LEFT JOIN categories ON menu_items.category_id = categories.id WHERE categories.is_bar = 0 OR categories.is_bar IS NULL)`,
+      `UPDATE order_items SET is_fired=1, fired_at=$1, status='cooking', cooking_started_at=$2 WHERE order_id=$3 AND course=$4 AND is_fired=0 AND voided=0 AND (menu_item_id IN (SELECT menu_items.id FROM menu_items LEFT JOIN categories ON menu_items.category_id = categories.id WHERE categories.is_bar = 0 OR categories.is_bar IS NULL) OR (menu_item_id IS NULL AND (dest_category_id IS NULL OR dest_category_id IN (SELECT id FROM categories WHERE is_bar = 0))))`,
       [now, now, id, course]
     );
     await depleteStockForItems(firedIds, 'sale');
     const orderRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [id]);
-    const itemsRes = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id = $1 AND order_items.course = $2 AND order_items.is_fired = 1`, [id, course]);
+    const itemsRes = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id = $1 AND order_items.course = $2 AND order_items.is_fired = 1`, [id, course]);
     io.emit('course_fired', { order: orderRes.rows[0], course: Number(course), items: itemsRes.rows });
     await offlineQueue.enqueue('fire_course', { localOrderId: Number(id), course: Number(course) });
     res.json({ success: true, changes: result.rowCount });
@@ -1017,18 +1461,19 @@ app.put('/api/order-items/:id/void', async (req, res) => {
       const ghostRes = await pool.query(
         `INSERT INTO order_items
            (order_id, menu_item_id, item_name, quantity, unit_price, notes, course, item_note,
-            status, is_fired, fired_at, cooking_started_at, served_at, voided, void_reason,
+            status, is_fired, fired_at, cooking_started_at, served_at, voided, voided_at, void_reason,
             void_type, discount_type, discount_value)
          SELECT order_id, menu_item_id, item_name, $1, unit_price, notes, course, item_note,
-            status, is_fired, fired_at, cooking_started_at, served_at, 1, $2,
+            status, is_fired, fired_at, cooking_started_at, served_at, 1, CURRENT_TIMESTAMP, $2,
             $3, discount_type, discount_value
          FROM order_items WHERE id=$4 RETURNING id`,
         [qtyToVoid, reason, void_type || null, req.params.id]
       );
       ghostItemId = ghostRes.rows[0]?.id ?? null;
     } else {
-      // Full void — existing behaviour.
-      await pool.query('UPDATE order_items SET voided=1, void_reason=$1, void_type=$2 WHERE id=$3', [reason, void_type || null, req.params.id]);
+      // Full void — existing behaviour. SEPOS-AUDIT-001: stamp WHEN the void
+      // happened so the Z windows on the real instant, not orders.created_at.
+      await pool.query('UPDATE order_items SET voided=1, voided_at=CURRENT_TIMESTAMP, void_reason=$1, void_type=$2 WHERE id=$3', [reason, void_type || null, req.params.id]);
     }
     // SEPOS-047c — forward quantity + void_type so the cloud voids the SAME
     // amount (was sending only {reason}, so the cloud defaulted to a FULL
@@ -1048,7 +1493,12 @@ app.put('/api/order-items/:id/void', async (req, res) => {
       io.emit('item_voided', { item_id: req.params.id });
       const countRes = await pool.query('SELECT COUNT(*) as remaining FROM order_items WHERE order_id=$1 AND voided=0', [item.order_id]);
       if (parseInt(countRes.rows[0].remaining) === 0) {
-        await pool.query(`UPDATE orders SET status='closed', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [item.order_id]);
+        // SEPOS-AUDIT-001 — stamp a £0 'zero' payment row (like close-zero
+        // does) and a £0 service snapshot, so this auto-closed order counts
+        // identically in the Z, Reports and Bills instead of being a
+        // no-payment shell that only the Z counted.
+        await pool.query(`UPDATE orders SET status='closed', closed_at=NOW(), service_charge=0, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [item.order_id]);
+        await pool.query(`INSERT INTO payments (order_id, amount, method) VALUES ($1, 0, 'zero')`, [item.order_id]);
         const orderRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [item.order_id]);
         if (orderRes.rows[0]) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [orderRes.rows[0].table_id]);
       }
@@ -1063,7 +1513,29 @@ app.put('/api/orders/:id/discount', async (req, res) => {
   try {
     const { discount_type, discount_value, discount_reason } = req.body;
     await pool.query('UPDATE orders SET discount_type=$1, discount_value=$2, discount_reason=$3 WHERE id=$4', [discount_type, discount_value, discount_reason, req.params.id]);
+    // SEPOS-AUDIT-001 — push to cloud on local installs (no-op on cloud);
+    // without this the 5s cloud-wins pull reverted the discount within a tick.
+    await offlineQueue.enqueue('apply_discount', {
+      localOrderId: Number(req.params.id), discount_type, discount_value, discount_reason,
+    });
     res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS — persist the Order screen's "Remove service charge" toggle per order.
+// Was local React state only, so the Bill / receipt / splits re-added service
+// charge from the global setting. Body: { no_service_charge: 0 | 1 }.
+app.put('/api/orders/:id/service-charge', async (req, res) => {
+  try {
+    const flag = req.body.no_service_charge ? 1 : 0;
+    await pool.query('UPDATE orders SET no_service_charge = $1 WHERE id = $2', [flag, req.params.id]);
+    // SEPOS-AUDIT-001 — CRITICAL on local tills: cloud defaults this flag to 0,
+    // so without a push the next 5s pull re-added the service charge the
+    // manager explicitly removed and the guest was overcharged.
+    await offlineQueue.enqueue('update_order_flags', {
+      localOrderId: Number(req.params.id), no_service_charge: flag,
+    });
+    res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1117,8 +1589,11 @@ app.post('/api/orders/:id/close-zero', async (req, res) => {
     }
 
     await client.query('INSERT INTO payments (order_id, amount, method) VALUES ($1, 0, $2)', [orderId, 'zero']);
-    await client.query(`UPDATE orders SET status='closed', closed_at=NOW(), total=0, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
+    await client.query(`UPDATE orders SET status='closed', closed_at=NOW(), total=0, service_charge=0, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
     await client.query('COMMIT');
+    // SEPOS-AUDIT-001 — close the CLOUD copy too (no-op on cloud installs);
+    // otherwise it stayed 'open' forever and the pull reopened the local row.
+    await offlineQueue.enqueue('close_zero', { localOrderId: Number(orderId) });
     io.emit('order_closed', { order_id: Number(orderId) });
     res.json({ success: true, total: 0 });
   } catch (err) {
@@ -1131,36 +1606,21 @@ app.post('/api/orders/:id/close-zero', async (req, res) => {
 });
 
 app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
-  try {
-    const { amount, method } = req.body;
-    const orderId = req.params.id;
-    // BUG-006 — return 404 if the order does not exist, instead of letting
-    // the INSERT blow up with a FK violation and returning a raw 500.
-    const existing = await pool.query('SELECT id FROM orders WHERE id=$1', [orderId]);
-    if (!existing.rows[0]) return res.status(404).json({ error: 'Order not found' });
-    // SEPOS-047c — explicit cancel of an empty/all-voided order. The
-    // OrderScreen Back button sends amount=0, method='cancelled'; the
-    // BUG-002 positive-amount guard below was rejecting it (400), so the
-    // order stayed 'open' and the table stayed occupied forever. Honour
-    // the cancel here (no payment row), then fall through to the shared
-    // table-freeing logic by marking status='cancelled'.
-    if (String(method).toLowerCase() === 'cancelled' && Number(amount) === 0) {
-      await pool.query(`UPDATE orders SET status='cancelled', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
-      const cRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [orderId]);
-      const cTableId = cRes.rows[0]?.table_id;
-      if (cTableId) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [cTableId]);
-      return res.json({ success: true, cancelled: true });
-    }
-    // SEPOS-062 — split payments. When the bill is settled with more than one
-    // tender (e.g. £50 cash + £50 card), the client sends `payments: [{amount,
-    // method}, …]` and we record ONE payments row per tender with its REAL
-    // method. Previously a split wrote a single row with method 'Split', which
-    // the Z-report buckets into "Other" — so cash-drawer reconciliation was
-    // wrong on any day with split bills. Single-tender stays on {amount,method}.
-    // BUG-002 — reject non-positive / non-numeric amounts (a negative used to
-    // record 200 OK, a way to quietly reduce takings).
-    const tenders = Array.isArray(req.body.payments) && req.body.payments.length ? req.body.payments : null;
-    let paymentRows;
+  const { amount, method } = req.body;
+  const orderId = req.params.id;
+  const isCancel = String(method).toLowerCase() === 'cancelled' && Number(amount) === 0;
+  // SEPOS-062 — split payments. When the bill is settled with more than one
+  // tender (e.g. £50 cash + £50 card), the client sends `payments: [{amount,
+  // method}, …]` and we record ONE payments row per tender with its REAL
+  // method. Previously a split wrote a single row with method 'Split', which
+  // the Z-report buckets into "Other" — so cash-drawer reconciliation was
+  // wrong on any day with split bills. Single-tender stays on {amount,method}.
+  // BUG-002 — reject non-positive / non-numeric amounts (a negative used to
+  // record 200 OK, a way to quietly reduce takings). Validated up front (pure,
+  // no DB) so a bad request fails before we open a transaction.
+  const tenders = Array.isArray(req.body.payments) && req.body.payments.length ? req.body.payments : null;
+  let paymentRows = null;
+  if (!isCancel) {
     if (tenders) {
       paymentRows = [];
       for (const t of tenders) {
@@ -1177,12 +1637,71 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
       }
       paymentRows = [{ amount: amt, method }];
     }
-    for (const p of paymentRows) {
-      await pool.query('INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3)', [orderId, p.amount, p.method]);
+  }
+  // SEPOS-DBLPAY-001 — transactional, row-locked payment. The old flow only
+  // checked the order EXISTED, not that it was still open, so a double-tapped
+  // "Done — Close" button (or a retried request) wrote a SECOND payment row
+  // and closed the order twice → the Thann Thai T1 £78.14 double-charge
+  // (05 Jul 2026). Now we lock the row (FOR UPDATE serialises concurrent
+  // requests on PG; SQLite is single-writer) and gate on status='open': the
+  // first request closes the bill, any later request finds it already closed
+  // and is rejected with 409 — no duplicate payment can ever be recorded.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // SEPOS-AUDIT-001 — SELECT * (was id/status/table_id): the close now stamps
+    // a service-charge snapshot, which needs total/discounts/order_type/
+    // no_service_charge from this locked row.
+    const ord = await client.query('SELECT * FROM orders WHERE id=$1 FOR UPDATE', [orderId]);
+    const order = ord.rows[0];
+    // BUG-006 — 404 if the order does not exist (was a raw 500 on FK violation).
+    if (!order) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Order not found' }); }
+
+    // SEPOS-047c — explicit cancel of an empty/all-voided order. The
+    // OrderScreen Back button sends amount=0, method='cancelled'; honour the
+    // cancel here (no payment row) then free the table below.
+    if (isCancel) {
+      if (order.status !== 'open') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: `This bill is already ${order.status}.`, alreadyClosed: true });
+      }
+      await client.query(`UPDATE orders SET status='cancelled', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
+      await client.query('COMMIT');
+      if (order.table_id) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [order.table_id]);
+      // SEPOS-AUDIT-001 — this early-return path skipped the pay enqueue below,
+      // so the cloud copy stayed 'open' and the pull reopened the cancelled
+      // order on the till. Push the cancel too (no-op on cloud installs).
+      await offlineQueue.enqueue('cancel_order', { localOrderId: Number(orderId) });
+      return res.json({ success: true, cancelled: true });
     }
-    await pool.query(`UPDATE orders SET status='closed', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
-    const orderRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [orderId]);
-    const tableId = orderRes.rows[0]?.table_id;
+
+    // Double-charge guard — only an OPEN bill can be paid.
+    if (order.status !== 'open') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'This bill has already been paid.', alreadyPaid: true });
+    }
+
+    for (const p of paymentRows) {
+      await client.query('INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3)', [orderId, p.amount, p.method]);
+    }
+    // SEPOS-AUDIT-001 — snapshot the service charge AT CLOSE with the rate in
+    // force right now. Reports/Z used to re-derive historical bills from
+    // TODAY'S settings, so changing the rate (12.5% → 10%) silently rewrote
+    // every past total. Legacy rows (service_charge NULL) still derive.
+    let closeServiceCharge = 0;
+    try {
+      const scRes = await client.query(
+        `SELECT key, value FROM settings WHERE key IN ('service_charge_enabled','service_charge_rate','service_charge_percent')`);
+      const scCfg = {}; for (const r of scRes.rows) scCfg[r.key] = r.value;
+      const scOn = String(scCfg.service_charge_enabled ?? 'true') !== '0' && String(scCfg.service_charge_enabled ?? 'true') !== 'false';
+      const scPct = Number(scCfg.service_charge_rate ?? scCfg.service_charge_percent ?? 12.5) || 0;
+      closeServiceCharge = Number(serviceChargeForOrder({ ...order, service_charge: null }, scOn, scPct).toFixed(2));
+    } catch { closeServiceCharge = 0; }
+    await client.query(`UPDATE orders SET status='closed', closed_at=NOW(), service_charge=$2, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId, closeServiceCharge]);
+    await client.query('COMMIT');
+
+    // ---- post-commit side effects (the order is now closed) ----
+    const tableId = order.table_id;
     if (tableId) {
       await pool.query("UPDATE tables SET status='available' WHERE id=$1", [tableId]);
       // SEPOS-044 — free linked partner tables ONLY if the order actually
@@ -1240,14 +1759,19 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
     io.emit('order_closed', { order_id: orderId });
     await offlineQueue.enqueue('pay_order', { localOrderId: Number(orderId), amount, method, payments: tenders || undefined });
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch {}
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
 });
 
 app.get('/api/orders/:id/bill', async (req, res) => {
   try {
     const [orderRes, itemsRes, settingsRes] = await Promise.all([
       pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id=$1`, [req.params.id]),
-      pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt, menu_items.vat_rate FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id=$1 AND order_items.voided=0`, [req.params.id]),
+      pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt, menu_items.vat_rate FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id=$1 AND order_items.voided=0`, [req.params.id]),
       pool.query('SELECT * FROM settings')
     ]);
     // Missing order used to return 200 with `{order:{items:[]}}` — the
@@ -1261,18 +1785,62 @@ app.get('/api/orders/:id/bill', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-SEC-LOGIN — brute-force lockout for the PIN login. The till login is a
+// PUBLIC page and the PIN is 4 digits; previously this endpoint had NO throttle
+// at all → unlimited guesses. Failure-based: 8 wrong PINs in 15 min from one IP
+// → that IP is locked 15 min. A good login clears the counter (legit staff who
+// know their PIN are unaffected). Email login stays as the escape hatch.
+const _loginFails = new Map();
+const _FAIL_MAX = 8, _FAIL_WIN = 15 * 60 * 1000;
+function _loginLockedOut(ip) {
+  const now = Date.now();
+  const arr = (_loginFails.get(ip) || []).filter((t) => now - t < _FAIL_WIN);
+  _loginFails.set(ip, arr);
+  if (_loginFails.size > 5000) _loginFails.clear();
+  return arr.length >= _FAIL_MAX;
+}
+function _recordLoginFail(ip) { const a = _loginFails.get(ip) || []; a.push(Date.now()); _loginFails.set(ip, a); }
+const _WEAK_PINS = new Set(['1234', '0000', '1111', '2222', '3333', '4444', '5555', '6666',
+  '7777', '8888', '9999', '4321', '1212', '2580', '0123', '123456', '000000', '111111']);
+function _isWeakPin(p) { return _WEAK_PINS.has(String(p || '')); }
+
 app.post('/api/staff/login', async (req, res) => {
   try {
     const { pin } = req.body;
+    const ip = 'ip:' + (req.ip || req.get('x-forwarded-for') || '');
+    if (_loginLockedOut(ip)) {
+      return res.status(429).json({ error: 'Too many wrong PINs — locked for a few minutes. Try again shortly, or use “Sign in with email”.' });
+    }
     const result = await pool.query('SELECT * FROM staff WHERE pin=$1 AND is_active=1', [pin]);
     const staff = result.rows[0];
-    if (!staff) return res.status(401).json({ error: 'Invalid PIN' });
+    if (!staff) { _recordLoginFail(ip); return res.status(401).json({ error: 'Invalid PIN' }); }
+    _loginFails.delete(ip); // good login — reset brute-force counter for this IP
     // SEPOS-047a — PIN login now issues the same HMAC session token as
     // email login (signToken below), so staff-gated endpoints can verify
     // the caller. Old clients ignore the extra fields harmlessly.
     const exp = Date.now() + 14 * 24 * 60 * 60 * 1000;
     const token = signToken({ sid: staff.id, name: staff.name, role: staff.role, exp });
-    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp });
+    // SEPOS-SEC-LOGIN — an operator still on a weak/default PIN (the seeded 1234)
+    // must set a real one before using the till; the public default can't persist.
+    const must_change_pin = _isWeakPin(pin) && ['admin', 'manager', 'supervisor'].includes(staff.role);
+    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp, must_change_pin });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-SEC-LOGIN — POST /api/staff/change-pin { new_pin } — signed-in staff
+// set their OWN PIN. Used by the forced change off the default. Plaintext PIN
+// (matches the login query) + UNIQUE constraint, so validate + dedupe here.
+app.post('/api/staff/change-pin', requireStaffAuth(), async (req, res) => {
+  try {
+    const newPin = String((req.body || {}).new_pin || '').trim();
+    if (!/^\d{4,6}$/.test(newPin)) return res.status(400).json({ error: 'PIN must be 4–6 digits' });
+    if (_isWeakPin(newPin)) return res.status(400).json({ error: 'That PIN is too easy to guess — pick another' });
+    const myId = req.staffAuth && req.staffAuth.sid;
+    if (!myId) return res.status(401).json({ error: 'not authenticated' });
+    const dup = await pool.query('SELECT id FROM staff WHERE pin=$1 AND id<>$2', [newPin, myId]);
+    if (dup.rows[0]) return res.status(409).json({ error: 'That PIN is already in use — choose another' });
+    await pool.query('UPDATE staff SET pin=$1 WHERE id=$2', [newPin, myId]);
+    res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1879,6 +2447,14 @@ app.get('/api/settings', async (req, res) => {
     const result = await pool.query('SELECT * FROM settings');
     const settings = {};
     result.rows.forEach(r => settings[r.key] = r.value);
+    // SEPOS-PRINT-UNIFY-001 fix — overlay the Network Printers list onto the
+    // legacy printer_<role>_ip keys the clients read. Without this, a printer
+    // configured ONLY via the unified list (roles + ⭐ default) never reaches
+    // the client, so orders/bills silently don't print even though a manual
+    // Test (which hits the IP directly) works. The print endpoints already do
+    // this server-side, but the client gates the print call on these keys, so
+    // GET must expose them too.
+    await applyPrinterRouting(settings);
     res.json(settings);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2138,6 +2714,35 @@ app.post('/api/print/kitchen-message', async (req, res) => {
   }
 });
 
+// SEPOS-KITCHEN-MSG-002 — attach a kitchen note to an ORDER so it prints at the
+// BOTTOM of that order's kitchen ticket (buildFullKitchenTicket already renders
+// order.customer_note in big bold) instead of a lone standalone slip. Written
+// local-first — that's what the kitchen-print endpoints read from the DB — and
+// the 5s active-order pull won't clobber it because it drops null cloud values.
+// Best-effort cloud push + socket so reprints, other devices and the KDS agree.
+app.put('/api/orders/:id/note', async (req, res) => {
+  try {
+    const note = String(req.body?.note ?? '').slice(0, 200);
+    await pool.query('UPDATE orders SET customer_note = $1 WHERE id = $2', [note, req.params.id]);
+    io.emit('order_note_updated', { order_id: Number(req.params.id), note });
+    try {
+      const archiveService = require('./services/archiveService');
+      if (archiveService.isLocalInstall() && process.env.CLOUD_API_URL) {
+        const cloudId = await localOrderCloudId(req.params.id);
+        if (cloudId) {
+          const headers = { 'Content-Type': 'application/json' };
+          if (process.env.SYNC_SECRET) headers['x-sync-secret'] = process.env.SYNC_SECRET;
+          fetch(`${process.env.CLOUD_API_URL}/api/orders/${cloudId}/note`, {
+            method: 'PUT', headers, body: JSON.stringify({ note }),
+            signal: AbortSignal.timeout(6000),
+          }).catch(e => console.warn('[order-note] cloud push failed:', e.message));
+        }
+      }
+    } catch (e) { console.warn('[order-note] push skipped:', e.message); }
+    res.json({ success: true, note });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Helper: split a list of closed-order rows into dine-in vs takeaway
 // totals so every reports endpoint exposes the same shape.
 function splitByOrderType(rows) {
@@ -2166,13 +2771,24 @@ function splitByOrderType(rows) {
 
 app.get('/api/reports/daily', async (req, res) => {
   try {
-    const date = req.query.date || new Date().toISOString().split('T')[0];
+    // SEPOS-048 — "today" is the RESTAURANT's today, and the day runs from
+    // the restaurant's midnight to the next one. The old `::date` bucketing
+    // grouped by UTC day, so in BST an order closed 00:30 local counted on
+    // the previous day's report (and after 11pm the default date was wrong).
+    const tz = await restaurantTz();
+    const date = req.query.date || dateInZone(new Date(), tz);
+    const dayStart = zonedMidnightUtc(date, tz);
+    if (!dayStart) return res.status(400).json({ error: 'Invalid date' });
+    const nextYmd = new Date(Date.parse(`${date}T12:00:00Z`) + 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const dayEnd = zonedMidnightUtc(nextYmd, tz);
     // BUG-EPOS-005 (Nook): /reports/daily was reporting orders.total
     // (the bare subtotal) where /reports/summary was already reporting
     // payments.amount (the money actually taken, including 12.5%
     // service charge). Mirror the summary pattern so the two reports
     // agree to the penny.
-    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date = $1::date ORDER BY orders.closed_at DESC`, [date]);
+    // SEPOS-AUDIT-001 — mirror SEPOS-REPREC-001's cancelled exclusion here too:
+    // written-off bills were still counted in daily totals/order_count.
+    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled') ORDER BY orders.closed_at DESC`, [dayStart.toISOString(), dayEnd.toISOString()]);
     const total = result.rows.reduce((sum, r) => sum + Number(r.paid_amount ?? r.total ?? 0), 0);
     // Dedupe order_count by orders.id — LEFT JOIN payments multiplies rows
     // on split-pay orders.
@@ -2181,52 +2797,106 @@ app.get('/api/reports/daily', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-MENUPERF-001 — per-dish sales vs recipe cost for the Menu
+// Performance report (Inventory → Cost & Sales → Print A4). Read-only
+// aggregate: sold qty + revenue per dish over the range, joined to the
+// dish's recipe cost_per_portion where a recipe exists. Line revenue
+// honours per-item discounts; bill-level discounts and service charge are
+// intentionally NOT allocated down to dishes (menu engineering wants the
+// dish's own pricing performance). Dishes without recipes come back with
+// cost NULL so the client can show "no recipe" rather than a fake margin.
+app.get('/api/reports/menu-performance', async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ error: 'from and to required (YYYY-MM-DD)' });
+    const r = await pool.query(`
+      SELECT
+        COALESCE(mi.id, 0)                              AS menu_item_id,
+        COALESCE(mi.name, oi.item_name, 'Unknown item') AS name,
+        COALESCE(c.name, 'Other')                       AS category,
+        SUM(oi.quantity)                                AS qty,
+        SUM(
+          (oi.quantity * oi.unit_price)
+          - CASE
+              WHEN oi.discount_type = 'percent' THEN (oi.quantity * oi.unit_price) * (COALESCE(oi.discount_value,0) / 100.0)
+              WHEN oi.discount_type = 'fixed'   THEN COALESCE(oi.discount_value,0)
+              ELSE 0
+            END
+        )                                               AS revenue,
+        MAX(rec.cost_per_portion)                       AS cost_per_portion
+      FROM order_items oi
+      JOIN orders o        ON o.id = oi.order_id
+      LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+      LEFT JOIN categories c  ON c.id  = mi.category_id
+      LEFT JOIN recipes rec   ON rec.menu_item_id = mi.id
+      WHERE o.status = 'closed' AND oi.voided = 0
+        AND o.closed_at::date >= $1::date AND o.closed_at::date <= $2::date
+      GROUP BY COALESCE(mi.id, 0), COALESCE(mi.name, oi.item_name, 'Unknown item'), COALESCE(c.name, 'Other')
+      ORDER BY revenue DESC
+    `, [from, to]);
+    res.json({ from, to, items: r.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/reports/summary', async (req, res) => {
   try {
     const { from, to } = req.query;
-    const [result, foodDrinkRes, voucherSoldRes, voucherRedeemedRes] = await Promise.all([
+    const [result, foodDrinkRes, voucherSoldRes, voucherRedeemedRes, settingsRes] = await Promise.all([
       // Korakot 2026-06-02: pull payments.amount as paid_amount so the
       // Reports tab can show what was actually collected (incl. service
       // charge) instead of the bare subtotal.
-      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date ORDER BY orders.closed_at DESC`, [from, to]),
+      // (verify pass: orders.service_charge added — without it in the SELECT,
+      // serviceChargeForOrder saw undefined and silently fell back to deriving
+      // from today's rate, defeating the snapshot.)
+      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.no_service_charge, orders.service_charge, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled') ORDER BY orders.closed_at DESC`, [from, to]),
+      // SEPOS-REPREC-001 — a cancelled/void bill closes with a payment row
+      // method='cancelled', £0. It collected nothing, so it must NOT count as a
+      // sale or an order here — otherwise Trading's "Total Sales" (orders.total)
+      // and "Orders" count outrun the Bills page (which already excludes them),
+      // and the £0 'cancelled' line litters the Payment Methods list. Mirrors the
+      // /api/bills filter so Trading, Bills and the Z report reconcile.
       // Korakot 2026-06-02: food vs drink split based on categories.is_bar.
       // Per-item discounts applied. Service charge + bill-level discounts
       // are handled separately above.
+      // SEPOS-AUDIT-001 — per-order rows aggregated in JS with the bill-level
+      // discount factor (like VAT), + written-off-bill exclusion, so Food/Drink
+      // foots to total_sales on comp/write-off days. (Was a flat SUM that
+      // ignored bill discounts and counted cancelled-payment bills.)
       pool.query(`
-        SELECT COALESCE(c.is_bar, 0) AS is_bar,
-               SUM(
-                 CASE
-                   WHEN oi.discount_type = 'percent' THEN oi.quantity * oi.unit_price * (1 - COALESCE(oi.discount_value,0)/100.0)
-                   WHEN oi.discount_type = 'fixed'   THEN GREATEST(0, oi.quantity * oi.unit_price - COALESCE(oi.discount_value,0))
-                   ELSE oi.quantity * oi.unit_price
-                 END
-               ) AS subtotal
+        SELECT oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value,
+               COALESCE(c.is_bar, 0) AS is_bar,
+               o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value
         FROM order_items oi
         LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
         LEFT JOIN categories  c  ON c.id  = mi.category_id
         LEFT JOIN orders      o  ON o.id  = oi.order_id
         WHERE o.status='closed' AND oi.voided=0
           AND o.closed_at::date >= $1::date AND o.closed_at::date <= $2::date
-        GROUP BY COALESCE(c.is_bar, 0)
+          AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.method = 'cancelled')) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled'))
       `, [from, to]),
       // SEPOS-VOUCHER-001 — vouchers sold in the date range, split by method
       pool.query(`SELECT payment_method, COUNT(*)::int AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at::date >= $1::date AND created_at::date <= $2::date GROUP BY payment_method`, [from, to]).catch(() => ({ rows: [] })),
       pool.query(`SELECT COUNT(*)::int AS count, COALESCE(SUM(amount_used), 0) AS total FROM voucher_redemptions WHERE used_at::date >= $1::date AND used_at::date <= $2::date`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
+      pool.query(`SELECT key, value FROM settings WHERE key IN ('service_charge_enabled','service_charge_rate','service_charge_percent')`),
     ]);
     const rows = result.rows;
-    // paid_amount = subtotal + service charge (12.5% of subtotal when
-    // enabled). Falls back to orders.total for any historical row whose
-    // payment row was never written.
+    const cfg = {}; for (const r of (settingsRes?.rows || [])) cfg[r.key] = r.value;
+    const scEnabled = String(cfg.service_charge_enabled ?? 'true') !== '0' && String(cfg.service_charge_enabled ?? 'true') !== 'false';
+    const scRate    = Number(cfg.service_charge_rate ?? cfg.service_charge_percent ?? 12.5) || 0;
     // 2026-06-02 follow-up: LEFT JOIN payments multiplies orders on
-    // split-pay days. Sums that read PER PAYMENT (total_sales, by_method)
+    // split-pay days. Sums that read PER PAYMENT (total_paid, by_method)
     // stay on the flat row set; sums that read PER ORDER
-    // (total_subtotal/covers/count) dedupe by orders.id.
-    const total_sales = rows.reduce((sum, r) => sum + Number(r.paid_amount ?? r.total ?? 0), 0);
+    // (total_subtotal/covers/count/service) dedupe by orders.id.
+    const total_paid = rows.reduce((sum, r) => sum + Number(r.paid_amount ?? r.total ?? 0), 0);
     const byOrder = new Map();
     for (const r of rows) if (!byOrder.has(r.id)) byOrder.set(r.id, r);
     const uniqueOrders = [...byOrder.values()];
     const total_subtotal = uniqueOrders.reduce((sum, r) => sum + Number(r.total ?? 0), 0);
-    const total_service  = Math.max(0, total_sales - total_subtotal);
+    const total_discounts = uniqueOrders.reduce((s, r) => { if (!r.discount_value) return s; return s + (r.discount_type === 'percent' ? (r.total || 0) * (r.discount_value / 100) : r.discount_value); }, 0);
+    // SEPOS-SVCFIX-001 — service charge summed PER BILL (dine-in only × rate),
+    // not money-taken − subtotal. total_sales foots to items − discounts + service.
+    const total_service  = uniqueOrders.reduce((sum, r) => sum + serviceChargeForOrder(r, scEnabled, scRate), 0);
+    const total_sales    = Math.max(0, total_subtotal - total_discounts) + total_service;
     const total_covers   = uniqueOrders.reduce((sum, r) => sum + (r.covers || 0), 0);
     const by_method = {};
     rows.forEach(r => { if (r.method) by_method[r.method] = (by_method[r.method] || 0) + Number(r.paid_amount ?? r.total ?? 0); });
@@ -2247,14 +2917,22 @@ app.get('/api/reports/summary', async (req, res) => {
     }
     const vRedeemed = voucherRedeemedRes.rows[0] || { count: 0, total: 0 };
 
+    // SEPOS-AUDIT-001 — aggregate the per-item rows with the bill-level
+    // discount factor (see the query comment above).
+    const fdFactors = billDiscountFactors(foodDrinkRes.rows);
     let total_food = 0, total_drink = 0;
     for (const r of foodDrinkRes.rows) {
-      if (Number(r.is_bar) === 1) total_drink += Number(r.subtotal || 0);
-      else                        total_food  += Number(r.subtotal || 0);
+      let net = Number(r.quantity || 0) * Number(r.unit_price || 0);
+      if (r.discount_type === 'percent') net *= 1 - (Number(r.discount_value || 0) / 100);
+      else if (r.discount_type === 'fixed') net = Math.max(0, net - Number(r.discount_value || 0));
+      net *= (fdFactors.get(r.order_id) ?? 1);
+      if (Number(r.is_bar) === 1) total_drink += net;
+      else                        total_food  += net;
     }
 
     res.json({
-      orders: rows, total_sales, total_subtotal, total_service,
+      orders: rows, total_sales, total_paid, total_subtotal, total_service, total_discounts,
+      service_charge_rate: scRate, service_charge_enabled: scEnabled,
       total_food, total_drink,
       order_count: byOrder.size, total_covers, by_method,
       vouchers_sold: {
@@ -2273,7 +2951,9 @@ app.get('/api/reports/summary', async (req, res) => {
 app.get('/api/reports/items', async (req, res) => {
   try {
     const { from, to } = req.query;
-    const result = await pool.query(`SELECT menu_items.name, menu_items.price, SUM(order_items.quantity) as qty_sold, SUM(order_items.quantity * order_items.unit_price) as total_revenue FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN orders ON order_items.order_id = orders.id WHERE orders.status='closed' AND order_items.voided=0 AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date GROUP BY menu_items.id, menu_items.name, menu_items.price ORDER BY qty_sold DESC`, [from, to]);
+    // SEPOS-AUDIT-001 — exclude written-off bills (all payments 'cancelled')
+    // so Item Sales stops counting items the sales totals exclude.
+    const result = await pool.query(`SELECT menu_items.name, menu_items.price, SUM(order_items.quantity) as qty_sold, SUM(order_items.quantity * order_items.unit_price) as total_revenue FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN orders ON order_items.order_id = orders.id WHERE orders.status='closed' AND order_items.voided=0 AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date AND ((orders.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = orders.id AND p.method = 'cancelled')) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = orders.id AND COALESCE(p.method,'') <> 'cancelled')) GROUP BY menu_items.id, menu_items.name, menu_items.price ORDER BY qty_sold DESC`, [from, to]);
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2288,6 +2968,10 @@ app.get('/api/kitchen/completed', async (req, res) => {
 app.put('/api/orders/:id/bill-printed', async (req, res) => {
   try {
     await pool.query('UPDATE orders SET bill_printed=1 WHERE id=$1', [req.params.id]);
+    // SEPOS-AUDIT-001 — push so the floor-map colour survives the cloud pull.
+    await offlineQueue.enqueue('update_order_flags', {
+      localOrderId: Number(req.params.id), bill_printed: 1,
+    });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2301,8 +2985,17 @@ app.get('/api/tables/status', async (req, res) => {
     const itemsRes = await pool.query(`SELECT order_items.*, categories.is_bar FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON menu_items.category_id = categories.id WHERE order_items.order_id = ANY($1) AND order_items.voided=0`, [orderIds]);
     const itemsByOrder = {};
     itemsRes.rows.forEach(item => { if (!itemsByOrder[item.order_id]) itemsByOrder[item.order_id] = []; itemsByOrder[item.order_id].push(item); });
+    const GHOST_GRACE_MS = 3 * 60 * 1000;
+    const nowMs = Date.now();
     const result = orders.map(order => {
       const items = itemsByOrder[order.id] || [];
+      // SEPOS-GHOST-001 — a phantom order (0 items) past the grace window was
+      // abandoned or double-tapped open; drop it so it doesn't ghost-occupy its
+      // table. Without this a 0-item open order defaults to 'occupied' below.
+      if (items.length === 0) {
+        const t = order.created_at ? new Date(order.created_at).getTime() : nowMs;
+        if (Number.isFinite(t) && (nowMs - t) >= GHOST_GRACE_MS) return null;
+      }
       const kitchenItems = items.filter(i => !i.is_bar);
       const starters = kitchenItems.filter(i => Number(i.course) === 1);
       const mains = kitchenItems.filter(i => Number(i.course) === 2);
@@ -2317,51 +3010,14 @@ app.get('/api/tables/status', async (req, res) => {
       else if (starters.some(i => i.is_fired)) colourStatus = 'starters_fired';
       if (order.bill_printed && !hasFiredItems) colourStatus = 'bill_printed';
       return { ...order, colour_status: colourStatus };
-    });
+    }).filter(Boolean);
 
-    // SEPOS-044 — propagate occupied state across linked tables ONLY when
-    // the party actually needs the linked group. Linked-table groups are
-    // primarily a booking-widget capacity hack (e.g. 26+27+28+29 linked so
-    // an online party of 8 sees availability) — most of the time staff
-    // seat smaller parties at a single table within the group and the
-    // other tables in the group should stay free for other walk-ins.
-    // Rule: propagate iff order.covers > primary table.capacity.
-    try {
-      const [combosRes, tablesRes] = await Promise.all([
-        pool.query('SELECT table_id_a, table_id_b FROM table_combinations'),
-        pool.query('SELECT id, capacity FROM tables'),
-      ]);
-      const capacityById = {};
-      for (const t of tablesRes.rows) capacityById[t.id] = Number(t.capacity) || 0;
-      // Union-find to compute connected components.
-      const parent = {};
-      const find = (x) => parent[x] == null ? x : (parent[x] = find(parent[x]));
-      const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; };
-      for (const c of combosRes.rows) union(c.table_id_a, c.table_id_b);
-      // Group → component members.
-      const members = {};
-      const allIds = new Set();
-      for (const c of combosRes.rows) { allIds.add(c.table_id_a); allIds.add(c.table_id_b); }
-      for (const id of allIds) (members[find(id)] ||= []).push(id);
-      // Existing per-table colour map so we don't double-up.
-      const have = new Map(result.map(r => [r.table_id, r]));
-      for (const seedRow of result) {
-        const primaryCap = capacityById[seedRow.table_id] || 0;
-        const orderCovers = Number(seedRow.covers) || 0;
-        // Single-table sitting → don't drag the rest of the group along.
-        if (orderCovers <= primaryCap) continue;
-        const root = find(seedRow.table_id);
-        const groupMembers = members[root];
-        if (!groupMembers) continue;
-        for (const mId of groupMembers) {
-          if (have.has(mId)) continue;
-          have.set(mId, { ...seedRow, id: null, table_id: mId, linked_from: seedRow.table_id });
-          result.push(have.get(mId));
-        }
-      }
-    } catch (err) {
-      console.warn('[tables/status] linked-table propagation skipped:', err.message);
-    }
+    // SEPOS-044 (reverted 2026-07-04 per Korakot): NO auto-occupy of linked
+    // tables. Only the table the staff actually seats is marked occupied — the
+    // floor never grabs linked partners on its own. Linked-table combinations
+    // still exist, but only for booking capacity (reservation availability);
+    // they no longer drive floor occupancy. If a party needs more tables, staff
+    // seat/merge those tables themselves.
 
     res.json(result);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -2385,6 +3041,10 @@ app.put('/api/orders/:id/move', async (req, res) => {
     await pool.query('UPDATE orders SET table_id=$1 WHERE id=$2', [new_table_id, orderId]);
     await pool.query("UPDATE tables SET status='available' WHERE id=$1", [oldTableId]);
     await pool.query("UPDATE tables SET status='occupied' WHERE id=$1", [new_table_id]);
+    // SEPOS-AUDIT-001 — push the move (table ids are shared cloud/local since
+    // the tables pull keeps cloud pks); without it the pull snapped the party
+    // back to the old table within 5s.
+    await offlineQueue.enqueue('move_order', { localOrderId: Number(orderId), new_table_id });
     io.emit('table_moved', { order_id: orderId, old_table_id: oldTableId, new_table_id });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -2394,12 +3054,37 @@ app.put('/api/orders/:id/merge', async (req, res) => {
   try {
     const { merge_order_id } = req.body;
     const targetOrderId = req.params.id;
+    // SEPOS-AUDIT-001 (verify pass) — capture the moving item ids BEFORE the
+    // UPDATE: they go into the merge push payload so itemsWithPendingPush
+    // protects them from the pull while the push is in flight (without this a
+    // single failed push tick let the pull snap the merged items back onto
+    // the closed £0 source shell).
+    const movedItemsRes = await pool.query('SELECT id FROM order_items WHERE order_id=$1', [merge_order_id]);
+    const movedItemIds = movedItemsRes.rows.map(r => Number(r.id));
     await pool.query('UPDATE order_items SET order_id=$1 WHERE order_id=$2', [targetOrderId, merge_order_id]);
-    const mergeRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [merge_order_id]);
+    const mergeRes = await pool.query('SELECT table_id, covers FROM orders WHERE id=$1', [merge_order_id]);
     if (mergeRes.rows[0]) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [mergeRes.rows[0].table_id]);
-    await pool.query(`UPDATE orders SET status='closed', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [merge_order_id]);
+    // SEPOS-AUDIT-001 — the party physically merged: move the source's covers
+    // onto the target and zero the shell's, so cover counts stay right on
+    // every report (the shell used to keep its covers, inflating the Z's
+    // totals while Reports/Bills excluded it — the counts never agreed).
+    const srcCovers = Number(mergeRes.rows[0]?.covers) || 0;
+    if (srcCovers > 0) {
+      await pool.query('UPDATE orders SET covers = COALESCE(covers,0) + $1 WHERE id=$2', [srcCovers, targetOrderId]);
+    }
+    // Zero the merged (source) order's total — its items moved to the target,
+    // so leaving the old total made it a "closed, no payment" phantom that
+    // inflated the sales report. total=0 keeps it out of the figures.
+    // covers=0 + service_charge=0: it's an artifact, not a sale.
+    await pool.query(`UPDATE orders SET status='closed', closed_at=NOW(), total=0, covers=0, service_charge=0, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [merge_order_id]);
     const totalRes = await pool.query(`SELECT ${ORDER_TOTAL_EXPR} as total FROM order_items WHERE order_id=$1 AND voided=0`, [targetOrderId]); // SEPOS-047c — keep per-item discounts
     await pool.query('UPDATE orders SET total=$1 WHERE id=$2', [totalRes.rows[0].total || 0, targetOrderId]);
+    // SEPOS-AUDIT-001 — replay the merge on the cloud; without it the pull
+    // fully un-merged (items snapped back to the source order, which reopened).
+    await offlineQueue.enqueue('merge_orders', {
+      localOrderId: Number(targetOrderId), mergeLocalOrderId: Number(merge_order_id),
+      localItemIds: movedItemIds, // pull-protects the relocated items (verify pass)
+    });
     io.emit('table_merged', { target_order_id: targetOrderId, merged_order_id: merge_order_id });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -2408,7 +3093,6 @@ app.put('/api/orders/:id/merge', async (req, res) => {
 // SEPOS-042 — manager-gated order deletion.
 // Used by Admin → Bills → Delete to remove a fault transaction.
 // Validates the supplied PIN belongs to a manager / admin / supervisor,
-// writes an audit row to order_deletions BEFORE the destructive deletes,
 // then wipes order_items + payments + sale-source stock_movements, then
 // the order itself. Each delete is independent (no transaction) so the
 // per-step result tells us exactly what cleared.
@@ -2467,16 +3151,6 @@ app.delete('/api/orders/:id', async (req, res) => {
       if (ordRes.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
       order = ordRes.rows[0];
     }
-
-    // Audit row goes in FIRST so we have the record even if a later
-    // step partially fails.
-    await pool.query(
-      `INSERT INTO order_deletions
-       (order_id, staff_id, staff_name, reason, deleted_total, order_type, opened_at, closed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [order.id, staff.id, staff.name, String(reason).trim(),
-       order.total, order.order_type, order.opened_at, order.closed_at]
-    );
 
     // Step-by-step cleanup. Errors logged per step; the final response
     // tells the UI what cleared.
@@ -2544,6 +3218,161 @@ app.delete('/api/orders/:id', async (req, res) => {
 // locally; we don't replay PIN here, just trust the authenticated sync
 // channel). Mirrors the same cascade-delete + audit-row pattern as the
 // public DELETE /api/orders/:id endpoint.
+// SEPOS-AUDIT-001 — cloud-side replay of a till's closed-bill payment edit
+// (SEPOS-BILLEDIT-001). Local payment row ids don't exist on the cloud, so the
+// till pushes an id-free description and this endpoint matches each edit to a
+// cloud payments row by (order, from_method, from_amount). Idempotent: a
+// replayed edit whose from-row no longer exists (already applied) is skipped.
+app.post('/api/sync/edit-payment', async (req, res) => {
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected) return res.status(503).json({ error: 'SYNC_SECRET not set on this server' });
+  if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+  try {
+    const orderId = parseInt(req.body?.order_id, 10) || 0;
+    const edits = Array.isArray(req.body?.edits) ? req.body.edits : [];
+    const reason = req.body?.reason || null;
+    const byName = req.body?.amended_by_name || 'till';
+    if (!orderId || edits.length === 0) return res.status(400).json({ error: 'order_id and edits[] required' });
+    // Verify pass — idempotency: if this sync_key was already applied (replay
+    // after a lost markSynced), skip instead of re-matching — semantic
+    // matching alone double-applies when TWO identical (method, amount) rows
+    // exist and one was already amended.
+    const syncKey = req.body?.sync_key ? String(req.body.sync_key).slice(0, 64) : null;
+    if (syncKey) {
+      const seen = await pool.query(
+        `SELECT 1 FROM payment_amendments WHERE order_id = $1 AND reason LIKE $2 LIMIT 1`,
+        [orderId, `%[sync:${syncKey}]%`]
+      );
+      if (seen.rows[0]) return res.json({ ok: true, applied: 0, skipped: edits.length, alreadyApplied: true });
+    }
+    const cur = await pool.query(
+      `SELECT id, method, amount FROM payments WHERE order_id = $1 AND COALESCE(method,'') != 'cancelled' ORDER BY id ASC`,
+      [orderId]
+    );
+    const rows = [...cur.rows];
+    let applied = 0, skipped = 0;
+    for (const e of edits) {
+      const idx = rows.findIndex(p =>
+        String(p.method) === String(e.from_method) &&
+        Math.abs(Number(p.amount || 0) - Number(e.from_amount || 0)) < 0.005);
+      if (idx === -1) { skipped++; continue; }             // already applied / diverged — idempotent skip
+      const row = rows.splice(idx, 1)[0];
+      const remove = !!e.remove;
+      const newAmt = remove ? 0 : Number(e.to_amount);
+      const newMethod = remove ? 'cancelled' : (e.to_method || row.method);
+      if (!remove && (!Number.isFinite(newAmt) || newAmt <= 0)) { skipped++; continue; }
+      const note = (remove
+        ? `Removed payment: £${Number(row.amount).toFixed(2)} ${row.method} (till sync)`
+        : `Payment corrected: £${Number(row.amount).toFixed(2)} ${row.method} → £${newAmt.toFixed(2)} ${newMethod} (till sync by ${byName})`)
+        + (syncKey ? ` [sync:${syncKey}]` : '');
+      await pool.query(
+        `INSERT INTO payment_amendments (payment_id, order_id, from_method, to_method, reason, amended_by)
+         VALUES ($1,$2,$3,$4,$5,NULL)`,
+        [row.id, orderId, row.method, newMethod, [reason, note].filter(Boolean).join(' — ')]
+      );
+      await pool.query(
+        `UPDATE payments SET amount = $1, method = $2, amended_at = CURRENT_TIMESTAMP,
+             amend_reason = $3, amended_from = COALESCE(amended_from, $4)
+         WHERE id = $5`,
+        [newAmt, newMethod, [reason, note].filter(Boolean).join(' — '), row.method, row.id]
+      );
+      applied++;
+    }
+    io.emit('payment_amended', { order_id: orderId, by: byName });
+    res.json({ ok: true, applied, skipped });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-AUDIT-001 (verify pass) — cloud-side replay of a till's method
+// amendment. The PIN was validated ON THE TILL at request time; persisting it
+// in sync_queue (readable via the unauthenticated queue endpoints) was a
+// credential leak, so the replay authenticates with SYNC_SECRET instead and
+// carries only the amender's name for the audit row.
+app.post('/api/sync/amend-method', async (req, res) => {
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected) return res.status(503).json({ error: 'SYNC_SECRET not set on this server' });
+  if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+  try {
+    const orderId = parseInt(req.body?.order_id, 10) || 0;
+    const newMethod = req.body?.new_method;
+    const reason = req.body?.reason || null;
+    const byName = req.body?.amended_by_name || 'till';
+    const allowed = ['Cash', 'Card', 'Other', 'Stripe'];
+    if (!orderId || !allowed.includes(newMethod)) return res.status(400).json({ error: 'order_id and valid new_method required' });
+    const payRes = await pool.query(
+      `SELECT id, method, amount FROM payments WHERE order_id = $1 AND COALESCE(method,'') != 'cancelled' ORDER BY id DESC LIMIT 1`,
+      [orderId]
+    );
+    const payment = payRes.rows[0];
+    if (!payment) return res.status(404).json({ error: 'No payment to amend on this bill' });
+    if (payment.method === newMethod) return res.json({ ok: true, alreadyAmended: true });
+    if (String(payment.method).toLowerCase() === 'voucher') return res.status(400).json({ error: 'Voucher payments cannot be amended' });
+    await pool.query(
+      `INSERT INTO payment_amendments (payment_id, order_id, from_method, to_method, reason, amended_by)
+       VALUES ($1,$2,$3,$4,$5,NULL)`,
+      [payment.id, orderId, payment.method, newMethod, [reason, `(till sync by ${byName})`].filter(Boolean).join(' — ')]
+    );
+    await pool.query(
+      `UPDATE payments SET method = $1, amended_at = CURRENT_TIMESTAMP, amend_reason = $2, amended_from = COALESCE(amended_from, $3) WHERE id = $4`,
+      [newMethod, [reason, `(till sync by ${byName})`].filter(Boolean).join(' — '), payment.method, payment.id]
+    );
+    io.emit('payment_amended', { order_id: orderId, by: byName });
+    res.json({ ok: true, from_method: payment.method, to_method: newMethod });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-AUDIT-001 (verify pass) — raw voucher_redemptions feed for the
+// desktop pull. Vouchers became cloud-authoritative (redeem/sell forward to
+// the cloud), so the till's LOCAL voucher tables went empty and the Z's
+// voucher figures (incl. the drawer reconciliation) regressed to zero. This
+// (with vouchers, which /api/vouchers already serves) mirrors both tables
+// cloud→local read-only so reports see them again. Recent window only.
+// REG-1 (Nook 2026-07-14) — gated: this was live-leaking redemption rows to
+// the anonymous internet. The desktop pull authenticates with x-sync-secret.
+app.get('/api/voucher-redemptions', requireStaffAuthOrSyncSecret(), async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT id, voucher_id, bill_id, amount_used, redeemed_by, used_at, restaurant_id
+         FROM voucher_redemptions
+        WHERE used_at >= (CURRENT_DATE - INTERVAL '120 days')
+        ORDER BY id DESC LIMIT 5000`
+    );
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-AUDIT-001 (verify pass) — replay a voucher SOLD OFFLINE on a till.
+// Re-INSERTs with the SAME code the customer already holds; idempotent via
+// ON CONFLICT(code) so a replay after a lost markSynced is a no-op.
+app.post('/api/sync/sell-voucher', async (req, res) => {
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected) return res.status(503).json({ error: 'SYNC_SECRET not set on this server' });
+  if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+  try {
+    const b = req.body || {};
+    const code = String(b.code || '').trim();
+    const amt = Number(b.original_amount);
+    if (!code || !(amt > 0)) return res.status(400).json({ error: 'code and original_amount required' });
+    const method = ['cash', 'card'].includes(String(b.payment_method)) ? String(b.payment_method) : 'cash';
+    const r = await pool.query(
+      `INSERT INTO vouchers
+         (code, original_amount, balance, recipient_name, recipient_email,
+          sender_name, message, delivery_date, expires_at, payment_method, restaurant_id)
+       VALUES ($1,$2,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (code) DO NOTHING
+       RETURNING id`,
+      [code, amt, b.recipient_name || null, b.recipient_email || null,
+       b.sender_name || null, b.message || null, b.delivery_date || null,
+       b.expires_at || voucherSvc.defaultExpiryDate(), method,
+       b.restaurant_id || process.env.RESTAURANT_ID || 'siamepos'],
+    );
+    res.json({ ok: true, created: r.rows.length > 0, alreadyExists: r.rows.length === 0 });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/sync/delete-order', async (req, res) => {
   const provided = req.get('x-sync-secret') || '';
   const expected = process.env.SYNC_SECRET || '';
@@ -2597,12 +3426,6 @@ app.post('/api/sync/delete-order', async (req, res) => {
       return res.json({ success: true, already_deleted: true, order_id: orderId });
     }
     const order = ordRes.rows[0];
-
-    await pool.query(
-      `INSERT INTO order_deletions (order_id, staff_id, staff_name, reason, deleted_total, order_type, opened_at, closed_at)
-       VALUES ($1, NULL, $2, $3, $4, $5, $6, $7)`,
-      [order.id, `${staffName} (sync)`, reason, order.total, order.order_type, order.opened_at, order.closed_at]
-    );
 
     // SEPOS-046i — per-step try/catch so a missing table (e.g. tenant
     // never had stock_movements migrated) doesn't strand the order in a
@@ -2688,6 +3511,13 @@ app.post('/api/till-sessions/open', async (req, res) => {
        VALUES ('open', NOW(), $1, $2, $3) RETURNING *`,
       [staff_id || null, Number(float_amount) || 0, rid]
     );
+    // SEPOS-AUDIT-001 — we only reach this INSERT on a local install when the
+    // cloud forward failed (offline). Queue a replay so the shift exists on
+    // the cloud once connectivity returns (cloud open handler dedupes via its
+    // unique open-session index — a 409 replay counts as success).
+    await offlineQueue.enqueue('session_open', {
+      staff_id: staff_id || null, float_amount: Number(float_amount) || 0,
+    });
     res.json({ session: r.rows[0], success: true });
   } catch (err) {
     // Unique partial index race — another terminal opened first. Return theirs.
@@ -2713,6 +3543,12 @@ app.post('/api/till-sessions/close', async (req, res) => {
       "UPDATE till_sessions SET status='closed', closed_at=NOW(), closed_by=$1, z_report_id=$2 WHERE id=$3 RETURNING *",
       [closed_by || null, z_report_id || null, open.rows[0].id]
     );
+    // SEPOS-AUDIT-001 — offline close: replay on the cloud when back online so
+    // the shift doesn't reopen from the next sessions pull (409 'no open
+    // shift' on replay counts as success — someone already closed it there).
+    await offlineQueue.enqueue('session_close', {
+      closed_by: closed_by || null, z_report_id: z_report_id || null,
+    });
     res.json({ session: r.rows[0], success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2734,42 +3570,79 @@ app.get('/api/z-report/preview', async (req, res) => {
       from = sessionMeta.opened_at;
       to   = sessionMeta.closed_at || new Date().toISOString(); // open shift → up to now
     }
-    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, foodDrinkRes, vouchersSoldRes, vouchersRedeemedRes] = await Promise.all([
-      pool.query(`SELECT orders.*, tables.table_number, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp ORDER BY orders.closed_at DESC`, [from, to]),
+    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, foodDrinkRes, vouchersSoldRes, vouchersRedeemedRes, settingsRes, depTakenRes, depRedeemedRes, depForfeitedRes, depHeldRes] = await Promise.all([
+      // SEPOS-REPREC-001 — exclude cancelled/void bills (payment method='cancelled', £0)
+      // from the Z so its Total Sales + order count reconcile with Trading and Bills.
+      // A closed order with no payment row (method NULL) is still kept.
+      pool.query(`SELECT orders.*, tables.table_number, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp AND (payments.method IS NULL OR payments.method != 'cancelled') ORDER BY orders.closed_at DESC`, [from, to]),
       pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='open'`),
-      pool.query(`SELECT COUNT(*) as void_count, SUM(order_items.unit_price * order_items.quantity) as void_value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp`, [from, to]),
+      // SEPOS-AUDIT-001 — window on WHEN the void happened (voided_at, stamped
+      // by the void endpoint since this fix), not on orders.created_at: a void
+      // during the shift on a table seated BEFORE the shift used to vanish
+      // from that shift's Z. Legacy rows (voided_at NULL) fall back to the old
+      // created_at behaviour.
+      pool.query(`SELECT COUNT(*) as void_count, SUM(order_items.unit_price * order_items.quantity) as void_value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND ((order_items.voided_at IS NOT NULL AND order_items.voided_at >= $1::timestamp AND order_items.voided_at <= $2::timestamp) OR (order_items.voided_at IS NULL AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp))`, [from, to]),
       // SEPOS-023: breakdown by void_type
-      pool.query(`SELECT COALESCE(order_items.void_type, 'Uncategorised') AS void_type, COUNT(*) AS count, COALESCE(SUM(order_items.unit_price * order_items.quantity), 0) AS value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp GROUP BY order_items.void_type ORDER BY value DESC`, [from, to]),
+      pool.query(`SELECT COALESCE(order_items.void_type, 'Uncategorised') AS void_type, COUNT(*) AS count, COALESCE(SUM(order_items.unit_price * order_items.quantity), 0) AS value FROM order_items LEFT JOIN orders ON order_items.order_id = orders.id WHERE order_items.voided=1 AND ((order_items.voided_at IS NOT NULL AND order_items.voided_at >= $1::timestamp AND order_items.voided_at <= $2::timestamp) OR (order_items.voided_at IS NULL AND orders.created_at >= $1::timestamp AND orders.created_at <= $2::timestamp)) GROUP BY order_items.void_type ORDER BY value DESC`, [from, to]),
       // SEPOS-021: rows for VAT breakdown (aggregated in JS)
-      pool.query(`SELECT COALESCE(mi.vat_rate, 20) AS vat_rate, oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value, o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id LEFT JOIN orders o ON o.id = oi.order_id WHERE o.status='closed' AND oi.voided=0 AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp`, [from, to]),
+      // SEPOS-AUDIT-001 — exclude bills whose payments were all written off
+      // (method='cancelled' via the Bills editor): their items counted in the
+      // VAT/food/drink breakdowns while total_sales excluded them.
+      pool.query(`SELECT COALESCE(mi.vat_rate, 20) AS vat_rate, oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value, o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id LEFT JOIN orders o ON o.id = oi.order_id WHERE o.status='closed' AND oi.voided=0 AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.method = 'cancelled')) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled'))`, [from, to]),
       // Korakot 2026-06-02: food vs drink split via categories.is_bar.
+      // SEPOS-AUDIT-001 — per-order rows (aggregated in JS with the bill-level
+      // discount factor, like VAT): the flat SUM ignored bill discounts, so a
+      // 100%-comped bill counted full price in Food/Drink while contributing
+      // £0 to total_sales. Same cancelled-bill exclusion as above.
       pool.query(`
-        SELECT COALESCE(c.is_bar, 0) AS is_bar,
-               SUM(
-                 CASE
-                   WHEN oi.discount_type = 'percent' THEN oi.quantity * oi.unit_price * (1 - COALESCE(oi.discount_value,0)/100.0)
-                   WHEN oi.discount_type = 'fixed'   THEN GREATEST(0, oi.quantity * oi.unit_price - COALESCE(oi.discount_value,0))
-                   ELSE oi.quantity * oi.unit_price
-                 END
-               ) AS subtotal
+        SELECT oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value,
+               COALESCE(c.is_bar, 0) AS is_bar,
+               o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value
         FROM order_items oi
         LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
         LEFT JOIN categories  c  ON c.id  = mi.category_id
         LEFT JOIN orders      o  ON o.id  = oi.order_id
         WHERE o.status='closed' AND oi.voided=0
           AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
-        GROUP BY COALESCE(c.is_bar, 0)
+          AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.method = 'cancelled')) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled'))
       `, [from, to]),
       // SEPOS-VOUCHER-001: vouchers sold in the range (Stripe — off till)
-      pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at >= $1::timestamp AND created_at <= $2::timestamp AND payment_method != 'mock'`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
-      // SEPOS-VOUCHER-001: vouchers redeemed in the range (off till — already paid for at sale time)
-      pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(amount_used), 0) AS total FROM voucher_redemptions WHERE used_at >= $1::timestamp AND used_at <= $2::timestamp`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
+      // SEPOS-DEPOSIT-001: GIFT vouchers only (deposits excluded — reported separately below).
+      // SEPOS-AUDIT-001 — split by payment_method so till cash/card voucher
+      // sales reconcile the drawer (a £50 cash voucher sale used to read
+      // 'Over £50' at close and was mislabelled as settled to Stripe).
+      pool.query(`SELECT payment_method, COUNT(*) AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at >= $1::timestamp AND created_at <= $2::timestamp AND payment_method != 'mock' AND COALESCE(type,'gift') != 'deposit' GROUP BY payment_method`, [from, to]).catch(() => ({ rows: [] })),
+      // SEPOS-VOUCHER-001: GIFT vouchers redeemed in the range (off till — already paid for at sale time)
+      pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(vr.amount_used), 0) AS total FROM voucher_redemptions vr JOIN vouchers v ON v.id = vr.voucher_id WHERE vr.used_at >= $1::timestamp AND vr.used_at <= $2::timestamp AND COALESCE(v.type,'gift') != 'deposit'`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
+      // Service-charge + VAT + deposits-flag settings.
+      pool.query(`SELECT key, value FROM settings WHERE key IN ('service_charge_enabled','service_charge_rate','service_charge_percent','vat_mode','deposits_enabled')`),
+      // SEPOS-DEPOSIT-001 — deposit flows. Taken today = money in the bank now but
+      // NOT in today's sales (future revenue). Redeemed = the non-cash tender applied
+      // to bills today (excluded from till cash). Forfeited = no-shows kept as income.
+      // Held = current outstanding deposit liability (closing held).
+      pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE type='deposit' AND created_at >= $1::timestamp AND created_at <= $2::timestamp`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
+      pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(vr.amount_used), 0) AS total FROM voucher_redemptions vr JOIN vouchers v ON v.id = vr.voucher_id WHERE v.type='deposit' AND vr.used_at >= $1::timestamp AND vr.used_at <= $2::timestamp`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
+      pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE type='deposit' AND status='forfeited' AND voided_at >= $1::timestamp AND voided_at <= $2::timestamp`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
+      pool.query(`SELECT COALESCE(SUM(balance), 0) AS total, COUNT(*) AS count FROM vouchers WHERE type='deposit' AND status='active' AND balance > 0`).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
     ]);
     const orders = ordersRes.rows;
     const voids = voidsRes.rows[0];
     const voidsByType = voidsByTypeRes.rows;
+    const cfg = {}; for (const r of (settingsRes?.rows || [])) cfg[r.key] = r.value;
+    const scEnabled = String(cfg.service_charge_enabled ?? 'true') !== '0' && String(cfg.service_charge_enabled ?? 'true') !== 'false';
+    const scRate    = Number(cfg.service_charge_rate ?? cfg.service_charge_percent ?? 12.5) || 0;
+    const vatMode   = cfg.vat_mode === 'exclusive' ? 'exclusive' : 'inclusive';
+    // SEPOS-DEPOSIT-001 — deposit flows + liability (0/empty unless the tenant uses them).
+    const depositsEnabled = String(cfg.deposits_enabled ?? '0') === '1';
+    const depTaken     = depTakenRes.rows[0]     || { count: 0, total: 0 };
+    const depRedeemed  = depRedeemedRes.rows[0]  || { count: 0, total: 0 };
+    const depForfeited = depForfeitedRes.rows[0] || { count: 0, total: 0 };
+    const depHeld      = depHeldRes.rows[0]      || { count: 0, total: 0 };
 
-    // VAT breakdown — same maths as /api/reports/vat
+    // VAT breakdown — SEPOS-VATMODE-001: service charge is OUTSIDE the VAT
+    // base (this loop only sees order_items), and the per-rate net/vat split
+    // follows the restaurant's vat_mode ('exclusive' = VAT 20% on top of the
+    // sale, 'inclusive' = VAT backed out of a VAT-inclusive price).
     const vatBuckets = new Map();
     const vatFactors = billDiscountFactors(vatRowsRes.rows); // SEPOS-047j — bill-level discount
     for (const row of vatRowsRes.rows) {
@@ -2778,51 +3651,117 @@ app.get('/api/z-report/preview', async (req, res) => {
       if (row.discount_type === 'percent') gross *= 1 - (Number(row.discount_value || 0) / 100);
       else if (row.discount_type === 'fixed') gross = Math.max(0, gross - Number(row.discount_value || 0));
       gross *= (vatFactors.get(row.order_id) ?? 1); // distribute the order's bill-level discount
-      const net = rate > 0 ? gross * (100 / (100 + rate)) : gross;
-      const vat = gross - net;
+      const { net, vat } = vatLine(gross, rate, vatMode);
       const b = vatBuckets.get(rate) || { rate, net: 0, vat: 0, gross: 0 };
-      b.net += net; b.vat += vat; b.gross += gross;
+      b.net += net; b.vat += vat; b.gross += (net + vat);
       vatBuckets.set(rate, b);
     }
     const vatBreakdown = [...vatBuckets.values()].sort((a, b) => a.rate - b.rate);
     const vatTotal = vatBreakdown.reduce((a, b) => a + b.vat, 0);
-    // Korakot 2026-06-02: report totals = money actually taken (paid_amount,
-    // which includes 12.5% service charge), with subtotal kept separately so
-    // we can derive the service-charge line shown in the Sales Summary.
-    // 2026-06-02 follow-up: LEFT JOIN payments multiplies rows on split-pay
-    // orders. Per-payment sums (totalSales / Cash / Card / Other) stay on
-    // the flat row set; per-order sums (subtotal / covers / discounts /
-    // count) dedupe by orders.id.
-    const totalSales = orders.reduce((s, o) => s + Number(o.paid_amount ?? o.total ?? 0), 0);
+    // Per-order sums dedupe by orders.id; per-payment sums (paid / Cash / Card /
+    // Other) stay on the flat LEFT JOIN payments row set (split-pay = N rows).
     const byOrder = new Map();
     for (const o of orders) if (!byOrder.has(o.id)) byOrder.set(o.id, o);
-    const uniqueOrders = [...byOrder.values()];
+    // SEPOS-AUDIT-001 — exclude merge-shell artifacts from COUNTS: a merge's
+    // source order closes with no payment row and £0 (its items moved to the
+    // target), so the Z counted an extra order + its covers while Reports and
+    // Bills excluded it — the three screens never agreed on merge nights.
+    // (Legit £0 bills — close-zero / all-voided — carry a 'zero' payment row
+    // and still count everywhere.)
+    const isShellArtifact = (o) => o.method == null && Number(o.total || 0) === 0
+      && (o.order_type || 'dine_in') !== 'takeaway';
+    const uniqueOrders = [...byOrder.values()].filter(o => !isShellArtifact(o));
+    const countableRows = orders.filter(o => !isShellArtifact(o));
     const totalSubtotal  = uniqueOrders.reduce((s, o) => s + Number(o.total ?? 0), 0);
-    const totalService   = Math.max(0, totalSales - totalSubtotal);
+    const totalDiscounts = uniqueOrders.reduce((s, o) => { if (!o.discount_value) return s; return s + (o.discount_type === 'percent' ? (o.total || 0) * (o.discount_value / 100) : o.discount_value); }, 0);
+    // SEPOS-SVCFIX-001 — service charge is the SUM of each dine-in bill's own
+    // charge (subtotal × rate), NOT money-taken − subtotal. Immune to tips,
+    // overpayments and double-charges leaking into the service line.
+    const totalService   = uniqueOrders.reduce((s, o) => s + serviceChargeForOrder(o, scEnabled, scRate), 0);
+    // Sales value = item sales − bill-level discounts + service. This FOOTS to
+    // the Food+Drink+Service breakdown. Money actually taken is total_paid;
+    // any gap between the two (e.g. a double-charge) is now visible, not hidden.
+    const totalSales     = Math.max(0, totalSubtotal - totalDiscounts) + totalService;
+    const totalPaid      = orders.reduce((s, o) => s + Number(o.paid_amount ?? o.total ?? 0), 0);
     const totalCovers    = uniqueOrders.reduce((s, o) => s + (o.covers || 0), 0);
     const totalCash      = orders.filter(o => o.method === 'Cash').reduce((s, o) => s + Number(o.paid_amount ?? o.total ?? 0), 0);
     const totalCard      = orders.filter(o => o.method === 'Card').reduce((s, o) => s + Number(o.paid_amount ?? o.total ?? 0), 0);
     const totalOther     = orders.filter(o => o.method !== 'Cash' && o.method !== 'Card').reduce((s, o) => s + Number(o.paid_amount ?? o.total ?? 0), 0);
-    const totalDiscounts = uniqueOrders.reduce((s, o) => { if (!o.discount_value) return s; return s + (o.discount_type === 'percent' ? (o.total || 0) * (o.discount_value / 100) : o.discount_value); }, 0);
-    const totalOrders    = byOrder.size;
-    const orderTypeSplit = splitByOrderType(orders);
+    const totalOrders    = uniqueOrders.length;
+    const orderTypeSplit = splitByOrderType(countableRows);
+    // SEPOS-AUDIT-001 — food/drink now aggregates per-item rows in JS with the
+    // bill-level discount factor (same treatment as VAT), so a comped bill's
+    // items scale down exactly like they do in total_sales.
+    const fdFactors = billDiscountFactors(foodDrinkRes.rows);
     let totalFood = 0, totalDrink = 0;
     for (const r of foodDrinkRes.rows) {
-      if (Number(r.is_bar) === 1) totalDrink += Number(r.subtotal || 0);
-      else                        totalFood  += Number(r.subtotal || 0);
+      let net = Number(r.quantity || 0) * Number(r.unit_price || 0);
+      if (r.discount_type === 'percent') net *= 1 - (Number(r.discount_value || 0) / 100);
+      else if (r.discount_type === 'fixed') net = Math.max(0, net - Number(r.discount_value || 0));
+      net *= (fdFactors.get(r.order_id) ?? 1);
+      if (Number(r.is_bar) === 1) totalDrink += net;
+      else                        totalFood  += net;
     }
-    const vouchersSold     = vouchersSoldRes.rows[0]     || { count: 0, total: 0 };
+    // SEPOS-AUDIT-001 — voucher sales split by method (cash/card = through the
+    // till drawer; stripe = off-till). Keeps the legacy aggregate shape too.
+    const vouchersSoldByMethod = {};
+    let vSoldCount = 0, vSoldTotal = 0, vSoldTillCash = 0, vSoldTillCard = 0;
+    for (const r of (vouchersSoldRes.rows || [])) {
+      const m = String(r.payment_method || 'unknown').toLowerCase();
+      vouchersSoldByMethod[m] = { count: Number(r.count || 0), total: Number(r.total || 0) };
+      vSoldCount += Number(r.count || 0); vSoldTotal += Number(r.total || 0);
+      if (m === 'cash') vSoldTillCash += Number(r.total || 0);
+      if (m === 'card') vSoldTillCard += Number(r.total || 0);
+    }
+    const vouchersSold     = { count: vSoldCount, total: vSoldTotal };
     const vouchersRedeemed = vouchersRedeemedRes.rows[0] || { count: 0, total: 0 };
-    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_subtotal: totalSubtotal, total_service: totalService, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: totalOrders, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: totalOrders > 0 ? totalSales / totalOrders : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0) }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, session: sessionMeta, from, to, ...orderTypeSplit });
+    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_paid: totalPaid, total_subtotal: totalSubtotal, total_service: totalService, service_charge_rate: scRate, service_charge_enabled: scEnabled, vat_mode: vatMode, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: totalOrders, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: totalOrders > 0 ? totalSales / totalOrders : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0), by_method: vouchersSoldByMethod, till_cash: vSoldTillCash, till_card: vSoldTillCard }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, deposits_enabled: depositsEnabled, deposits_taken: { count: Number(depTaken.count || 0), total: Number(depTaken.total || 0) }, deposits_redeemed: { count: Number(depRedeemed.count || 0), total: Number(depRedeemed.total || 0) }, deposits_forfeited: { count: Number(depForfeited.count || 0), total: Number(depForfeited.total || 0) }, deposits_held: { count: Number(depHeld.count || 0), total: Number(depHeld.total || 0) }, session: sessionMeta, from, to, ...orderTypeSplit });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/z-report/save', async (req, res) => {
   try {
-    const { type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference } = req.body;
+    const { type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, actual_card, card_difference } = req.body;
+
+    // SEPOS-Z-REPLACE — re-running a Z for the SAME period supersedes the old
+    // one, so amend-a-bill → run again leaves ONE authoritative Z, not a
+    // confusing pair. Soft (superseded_at stamp, hidden from history) — never
+    // a hard delete of a financial record, so the audit trail survives.
+    // Matching rules (portable: candidates fetched + compared in JS so PG and
+    // SQLite date handling can't diverge):
+    //   'day'     → same calendar day (an End of Day always covers the whole
+    //               trading day, so a second EOD that day IS a re-run)
+    //   'session' → same exact shift-open instant (lunch + dinner closes have
+    //               different opens → both kept; only a true re-close replaces)
+    //   'custom'  → never auto-replaced (ad-hoc ranges, keep everything)
+    try {
+      if (type === 'day' || type === 'session') {
+        const prior = await pool.query(
+          `SELECT id, opened_at FROM z_reports WHERE type = $1 AND superseded_at IS NULL`,
+          [type],
+        );
+        const dayOf = (v) => {
+          const d = new Date(v);
+          return isNaN(d) ? String(v).slice(0, 10) : d.toISOString().slice(0, 10);
+        };
+        const ids = prior.rows
+          .filter((r) => type === 'day'
+            ? dayOf(r.opened_at) === dayOf(from)
+            : new Date(r.opened_at).getTime() === new Date(from).getTime())
+          .map((r) => r.id);
+        for (const id of ids) {
+          await pool.query(`UPDATE z_reports SET superseded_at = CURRENT_TIMESTAMP WHERE id = $1`, [id]);
+        }
+        if (ids.length) console.log(`[z-replace] superseded ${type} Z id(s) ${ids.join(',')} — re-run for the same period`);
+      }
+    } catch (e) {
+      // Never block the save itself — worst case the old row stays visible.
+      console.warn('[z-replace] supersede check failed:', e.message);
+    }
+
     const result = await pool.query(
-      `INSERT INTO z_reports (type, opened_at, closed_at, total_sales, total_cash, total_card, total_other, total_covers, total_orders, discounts, voids, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, report_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
-      [type, from, to, data.total_sales, data.total_cash, data.total_card, data.total_other, data.total_covers, data.total_orders, data.total_discounts, data.void_count, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, JSON.stringify(data)]
+      `INSERT INTO z_reports (type, opened_at, closed_at, total_sales, total_cash, total_card, total_other, total_covers, total_orders, discounts, voids, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, actual_card, card_difference, report_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
+      [type, from, to, data.total_sales, data.total_cash, data.total_card, data.total_other, data.total_covers, data.total_orders, data.total_discounts, data.void_count, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, actual_card ?? null, card_difference ?? null, JSON.stringify(data)]
     );
 
     // SEPOS-LOCAL-001 Phase 1 — Z-report close is the natural end-of-day
@@ -3031,7 +3970,9 @@ app.post('/api/local/archive-run', async (req, res) => {
 
 app.get('/api/z-report/history', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM z_reports ORDER BY closed_at DESC LIMIT 30');
+    // SEPOS-Z-REPLACE — superseded rows (replaced by a re-run) stay in the DB
+    // for audit but are hidden from the operator's history.
+    const result = await pool.query('SELECT * FROM z_reports WHERE superseded_at IS NULL ORDER BY closed_at DESC LIMIT 30');
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -3039,15 +3980,53 @@ app.get('/api/z-report/history', async (req, res) => {
 app.get('/api/bills', async (req, res) => {
   try {
     const { from, to, method } = req.query;
-    let query = `SELECT orders.id, orders.total, orders.covers, orders.closed_at, orders.discount_type, orders.discount_value, orders.discount_reason, tables.table_number, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.total > 0 AND payments.method IS NOT NULL AND payments.method != 'cancelled'`;
+    // SEPOS-SPLITBILL-001 — one row per PAYMENT still comes back from the JOIN,
+    // but we GROUP by order so a split-tender bill (e.g. £50 cash + £50 card)
+    // shows as a SINGLE "Split" line carrying a `tenders` array, instead of two
+    // separate rows. The method filter is applied at the ORDER level (keep any
+    // bill that has a matching tender) so a split bill still appears under its
+    // Cash or Card filter. Single-payment bills keep their real method.
+    let query = `SELECT orders.id, orders.total, orders.covers, orders.closed_at, orders.discount_type, orders.discount_value, orders.discount_reason, orders.order_type, orders.no_service_charge, orders.service_charge, tables.table_number, payments.method, payments.amount as paid_amount, payments.id AS payment_id FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.total > 0 AND payments.method IS NOT NULL AND payments.method != 'cancelled'`;
     const params = [];
     let n = 1;
     if (from) { query += ` AND orders.closed_at::date >= $${n}::date`; params.push(from); n++; }
     if (to) { query += ` AND orders.closed_at::date <= $${n}::date`; params.push(to); n++; }
-    if (method && method !== 'all') { query += ` AND payments.method = $${n}`; params.push(method); n++; }
-    query += ' ORDER BY orders.closed_at DESC';
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    query += ' ORDER BY orders.closed_at DESC, payments.id ASC';
+    const [result, scRes] = await Promise.all([
+      pool.query(query, params),
+      pool.query(`SELECT key, value FROM settings WHERE key IN ('service_charge_enabled','service_charge_rate','service_charge_percent')`),
+    ]);
+    const scCfg = {}; for (const r of scRes.rows) scCfg[r.key] = r.value;
+    const scEnabled = String(scCfg.service_charge_enabled ?? 'true') !== '0' && String(scCfg.service_charge_enabled ?? 'true') !== 'false';
+    const scRate    = Number(scCfg.service_charge_rate ?? scCfg.service_charge_percent ?? 12.5) || 0;
+
+    const byOrder = new Map();
+    for (const r of result.rows) {
+      let b = byOrder.get(r.id);
+      if (!b) {
+        b = { id: r.id, total: r.total, covers: r.covers, closed_at: r.closed_at,
+              discount_type: r.discount_type, discount_value: r.discount_value,
+              discount_reason: r.discount_reason, table_number: r.table_number,
+              order_type: r.order_type, no_service_charge: r.no_service_charge,
+              service_charge_rate: scRate,
+              service_charge: serviceChargeForOrder(r, scEnabled, scRate),
+              tenders: [], paid_amount: 0 };
+        byOrder.set(r.id, b);
+      }
+      b.tenders.push({ id: r.payment_id, method: r.method, amount: Number(r.paid_amount || 0) });
+      b.paid_amount += Number(r.paid_amount || 0);
+    }
+    let bills = [...byOrder.values()].map(b => ({
+      ...b,
+      is_split: b.tenders.length > 1,
+      // Single tender → its real method; multiple → "Split" (details in tenders[]).
+      method: b.tenders.length > 1 ? 'Split' : (b.tenders[0]?.method || ''),
+    }));
+    // Order-level method filter: keep bills that have at least one matching tender.
+    if (method && method !== 'all') {
+      bills = bills.filter(b => b.tenders.some(t => t.method === method));
+    }
+    res.json(bills);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -3134,6 +4113,18 @@ app.put('/api/bills/:id/amend-method', async (req, res) => {
     );
 
     await client.query('COMMIT');
+    // SEPOS-AUDIT-001 — replay the amendment on the CLOUD (no-op on cloud
+    // installs). Without this the exact remediation workflow used for the
+    // Thann Thai £78 double-charge fixed only the till's copy of the books —
+    // the owner's cloud/ops reports kept the wrong method forever. The public
+    // amend-method endpoint carries no payment ids (it flips the latest
+    // non-cancelled row), so it replays cleanly with the same PIN.
+    // (verify pass: NO pin in the payload — sync_queue is readable via the
+    // unauthenticated queue endpoints; the replay authenticates with
+    // SYNC_SECRET via POST /api/sync/amend-method instead.)
+    await offlineQueue.enqueue('amend_method', {
+      localOrderId: orderId, new_method, reason: reason || null, amended_by_name: staff.name,
+    });
     io.emit('payment_amended', { order_id: orderId, payment_id: payment.id, from: fromMethod, to: new_method, by: staff.name });
     res.json({
       ok: true,
@@ -3146,6 +4137,119 @@ app.put('/api/bills/:id/amend-method', async (req, res) => {
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch {}
     console.error('[amend-method]', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// SEPOS-BILLEDIT-001 — closed-bill payment editor. Corrects a wrong/duplicate
+// PAID amount on a closed bill (e.g. the Thann Thai T1 double £78.14). Operates
+// on the EXISTING payment rows: edits amounts in place, and "remove" marks a
+// row cancelled (reports exclude cancelled) rather than DELETE — a delete would
+// cascade-wipe the payment_amendments audit trail. PIN-gated to admin/manager
+// (money edit — stricter than the method amend). NOTE: this fixes the SYSTEM
+// record only; refunding a genuine card double-charge is done on the terminal.
+app.put('/api/bills/:id/edit-payment', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const orderId = parseInt(req.params.id, 10);
+    if (!orderId) return res.status(400).json({ error: 'invalid order id' });
+    const { payments: edits, reason, pin } = req.body || {};
+    if (!Array.isArray(edits) || edits.length === 0) return res.status(400).json({ error: 'payments[] required' });
+    if (!pin) return res.status(400).json({ error: 'Manager PIN required' });
+
+    // PIN gate — admin / manager only (editing money on a closed bill is as
+    // sensitive as deleting one; supervisors are excluded, mirroring delete).
+    const staffRes = await client.query(
+      `SELECT id, name, role FROM staff WHERE pin = $1 AND is_active = 1
+         AND LOWER(role) IN ('manager','admin') LIMIT 1`,
+      [String(pin).trim()]
+    );
+    if (staffRes.rows.length === 0) return res.status(403).json({ error: 'Invalid manager PIN (admin or manager only)' });
+    const staff = staffRes.rows[0];
+
+    const allowed = ['Cash', 'Card', 'Other', 'Stripe'];
+
+    await client.query('BEGIN');
+    const ordRes = await client.query('SELECT id, status FROM orders WHERE id = $1', [orderId]);
+    const order = ordRes.rows[0];
+    if (!order)                   { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Order not found' }); }
+    if (order.status !== 'closed'){ await client.query('ROLLBACK'); return res.status(409).json({ error: 'Bill is not closed' }); }
+
+    // Snapshot current non-cancelled payment rows for this order.
+    const curRes = await client.query(
+      `SELECT id, method, amount FROM payments WHERE order_id = $1 AND COALESCE(method,'') != 'cancelled'`,
+      [orderId]
+    );
+    const current = new Map(curRes.rows.map(p => [Number(p.id), p]));
+
+    let changed = 0;
+    const semanticEdits = []; // SEPOS-AUDIT-001 — id-free description for the cloud replay
+    for (const e of edits) {
+      const pid = Number(e.id);
+      const row = current.get(pid);
+      if (!row) { await client.query('ROLLBACK'); return res.status(400).json({ error: `Payment ${e.id} is not on this bill` }); }
+      if (String(row.method).toLowerCase() === 'voucher') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Voucher payments cannot be edited — void the voucher redemption instead' });
+      }
+      const oldAmt = Number(row.amount || 0), oldMethod = row.method;
+      const remove = !!e.remove;
+      let newAmt = remove ? 0 : Number(e.amount);
+      let newMethod = remove ? 'cancelled' : (e.method || oldMethod);
+      if (!remove) {
+        if (!Number.isFinite(newAmt) || newAmt <= 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Each amount must be a positive number' }); }
+        if (!allowed.includes(newMethod)) { await client.query('ROLLBACK'); return res.status(400).json({ error: `method must be one of ${allowed.join(', ')}` }); }
+      }
+      // Skip no-ops.
+      if (!remove && newMethod === oldMethod && Math.abs(newAmt - oldAmt) < 0.005) continue;
+
+      // Audit BEFORE mutating (survives because we never DELETE the row).
+      const note = remove
+        ? `Removed payment: £${oldAmt.toFixed(2)} ${oldMethod}`
+        : `Payment corrected: £${oldAmt.toFixed(2)} ${oldMethod} → £${newAmt.toFixed(2)} ${newMethod}`;
+      await client.query(
+        `INSERT INTO payment_amendments (payment_id, order_id, from_method, to_method, reason, amended_by)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [pid, orderId, oldMethod, newMethod, [reason, note].filter(Boolean).join(' — '), staff.id]
+      );
+      await client.query(
+        `UPDATE payments SET amount = $1, method = $2, amended_at = CURRENT_TIMESTAMP,
+             amended_by = $3, amend_reason = $4, amended_from = COALESCE(amended_from, $5)
+         WHERE id = $6`,
+        [newAmt, newMethod, staff.id, [reason, note].filter(Boolean).join(' — '), oldMethod, pid]
+      );
+      changed++;
+      semanticEdits.push({
+        from_method: oldMethod, from_amount: oldAmt,
+        to_method: newMethod, to_amount: newAmt, remove,
+      });
+    }
+
+    if (changed === 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'No changes to apply' }); }
+    await client.query('COMMIT');
+    // SEPOS-AUDIT-001 — replay on the cloud by (method, amount) matching:
+    // local payment row ids don't exist on the cloud, so the replay endpoint
+    // (POST /api/sync/edit-payment, SYNC_SECRET-gated) matches semantically.
+    await offlineQueue.enqueue('edit_payment', {
+      localOrderId: orderId, edits: semanticEdits,
+      reason: reason || null, amended_by_name: staff.name,
+      // Verify pass — idempotency key: the cloud replay records it in the
+      // amendment audit and skips a re-delivery, so a replay after a lost
+      // markSynced can't double-apply when the bill holds two identical
+      // (method, amount) rows.
+      sync_key: require('crypto').randomUUID(),
+    });
+    io.emit('payment_amended', { order_id: orderId, by: staff.name });
+    const after = await pool.query(
+      `SELECT id, method, amount FROM payments WHERE order_id = $1 AND COALESCE(method,'') != 'cancelled' ORDER BY id ASC`,
+      [orderId]
+    );
+    res.json({ ok: true, order_id: orderId, changed, tenders: after.rows, amended_by: staff.name });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch {}
+    console.error('[edit-payment]', err);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
@@ -3185,8 +4289,14 @@ app.post('/api/orders/:id/resend', async (req, res) => {
     );
     // SEPOS-032: resend = kitchen makes the dish again → consume ingredients again
     await depleteStockForItems(item_ids, 'sale');
+    // SEPOS-AUDIT-001 — mirror the resend on the cloud (no-op on cloud
+    // installs); without it the pull flipped the items back off 'cooking' on
+    // the KDS within 5s. Item ids are translated to cloud ids at push time.
+    await offlineQueue.enqueue('resend_items', {
+      localOrderId: Number(req.params.id), localItemIds: item_ids, reason: reason || null,
+    });
     const orderRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [req.params.id]);
-    const itemsRes = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.id = ANY($1::int[])`, [item_ids]);
+    const itemsRes = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.id = ANY($1::int[])`, [item_ids]);
     io.emit('course_fired', { order: orderRes.rows[0], course: 0, items: itemsRes.rows });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -3196,6 +4306,10 @@ app.put('/api/order-items/:id/discount', async (req, res) => {
   try {
     const { discount_type, discount_value } = req.body;
     await pool.query('UPDATE order_items SET discount_type=$1, discount_value=$2 WHERE id=$3', [discount_type, discount_value, req.params.id]);
+    // SEPOS-AUDIT-001 — push the per-item discount so the pull can't revert it.
+    await offlineQueue.enqueue('apply_item_discount', {
+      localItemId: Number(req.params.id), discount_type, discount_value,
+    });
     const itemRes = await pool.query('SELECT order_id FROM order_items WHERE id=$1', [req.params.id]);
     if (itemRes.rows[0]) {
       const totalRes = await pool.query(`SELECT ${ORDER_TOTAL_EXPR} as total FROM order_items WHERE order_id=$1 AND voided=0`, [itemRes.rows[0].order_id]); // SEPOS-047c — shared discounted-total expr
@@ -3254,6 +4368,123 @@ app.post('/api/website/demo-request', widgetCors, async (req, res) => {
   }
 });
 
+// ─── SEPOS-SALESCHAT-001 — AI sales concierge for the marketing site ───
+// Public: /api/saleschat/message + /poll (CORS-open, rate-limited). Admin
+// (Control Room, x-saleschat-secret gated): list / thread / reply / handoff.
+// handoff=TRUE silences the AI so a human can take over the thread.
+const SALESCHAT_SECRET = process.env.SALESCHAT_SECRET || '';
+const SALESCHAT_SYSTEM = `You are Tara, the friendly assistant for SiamEPOS — a UK restaurant & spa management system built for Thai businesses. You chat with prospective customers on the SiamEPOS marketing website.
+
+WHO YOU ARE
+- Introduce yourself as Tara, the SiamEPOS assistant. Warm, concise, helpful — not salesy.
+- Tara is female. Reply in the visitor's language. In Thai, always use feminine politeness — end sentences with ค่ะ/คะ and refer to yourself as หนู or by your name Tara. Do NOT use the stiff/formal ดิฉัน, and never use the male ครับ/ผม.
+- Be honest: if asked whether you're a person or a bot, say you're SiamEPOS's digital assistant and can connect them with the team. Never pose as a real human staff member.
+
+WHAT SIAMEPOS IS (answer only from this — never invent features or prices)
+- All-in-one till (POS) for Thai restaurants & spas in the UK: table plan + kitchen display (KDS), online reservations, online takeaway ordering (0% commission), spa appointments, customer CRM + email campaigns, reports, staff clock-in, inventory, and you can use any tablet or phone as a terminal.
+- Runs in a browser AND as a desktop app (Mac & Windows), works offline.
+- Add-ons: a client Website (£5/mo), a Social Media service (£39/mo, Facebook + Instagram), SiamPay card payments (1.5% + 30p, no monthly fee), and an AI booking concierge.
+
+PRICING (quote only these; if unsure of a number, say you'll have the team confirm — never guess)
+- SiamEPOS: £89/month. Founder's Rate £59/month for early customers. No long tie-in; free onboarding.
+- Website £5/mo · Social £39/mo · SiamPay 1.5% + 30p.
+
+HOW TO HELP
+- Answer questions about features, pricing, setup and the fit for a Thai UK business.
+- Nudge gently toward a demo: point them to "Book a demo" on this site, or offer to take their name + phone so the team calls them.
+- For a serious buyer, or anything you can't answer, offer to connect them with the team.
+- Keep replies short.`;
+
+function anthropicChat(system, messages) {
+  return new Promise((resolve) => {
+    const body = JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 600, system, messages });
+    const https = require('https');
+    const r = https.request({ hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body),
+                 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' } },
+      (rs) => { let d = ''; rs.on('data', c => d += c); rs.on('end', () => {
+        try { const j = JSON.parse(d); resolve((j.content || []).map(b => b.text || '').join('').trim() || null); }
+        catch { resolve(null); } }); });
+    r.on('error', () => resolve(null)); r.write(body); r.end();
+  });
+}
+const _salesHits = new Map();
+function _salesAllow(ip) { const now = Date.now();
+  const a = (_salesHits.get(ip) || []).filter(t => now - t < 5 * 60 * 1000);
+  if (a.length >= 30) { _salesHits.set(ip, a); return false; }
+  a.push(now); _salesHits.set(ip, a); if (_salesHits.size > 5000) _salesHits.clear(); return true; }
+function salesAdminAuth(req, res, next) {
+  if (!SALESCHAT_SECRET || req.headers['x-saleschat-secret'] !== SALESCHAT_SECRET)
+    return res.status(401).json({ error: 'unauthorized' });
+  next();
+}
+const _salesMsgs = (m) => (typeof m === 'string' ? JSON.parse(m) : m) || [];
+
+app.post('/api/saleschat/message', widgetCors, async (req, res) => {
+  try {
+    const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip;
+    if (!_salesAllow(ip)) return res.status(429).json({ reply: 'One moment — please try again shortly.' });
+    const { session_id, message } = req.body || {};
+    if (typeof session_id !== 'string' || !/^[a-z0-9-]{8,80}$/i.test(session_id)) return res.status(400).json({ error: 'bad session' });
+    const text = String(message || '').trim();
+    if (!text || text.length > 2000) return res.status(400).json({ error: 'bad message' });
+    const cur = (await pool.query('SELECT messages, handoff FROM sales_chats WHERE session_id=$1', [session_id])).rows[0];
+    const msgs = cur ? _salesMsgs(cur.messages) : [];
+    msgs.push({ role: 'user', content: text, ts: new Date().toISOString() });
+    let reply = null;
+    if (cur && cur.handoff) {
+      // a human is handling this thread — AI stays quiet; the widget poll delivers the human's reply
+    } else if (!process.env.ANTHROPIC_API_KEY) {
+      reply = 'Thanks! Our team will reply shortly — you can also book a demo on this site. 🙏';
+      msgs.push({ role: 'assistant', content: reply, ts: new Date().toISOString() });
+    } else {
+      const aiMsgs = msgs.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }));
+      reply = (await anthropicChat(SALESCHAT_SYSTEM, aiMsgs)) || 'Sorry — I had a hiccup. Please try again, or book a demo on this site.';
+      msgs.push({ role: 'assistant', content: reply, ts: new Date().toISOString() });
+    }
+    await pool.query(`INSERT INTO sales_chats (session_id, messages) VALUES ($1,$2)
+      ON CONFLICT (session_id) DO UPDATE SET messages=$2, updated_at=NOW()`, [session_id, JSON.stringify(msgs)]);
+    res.json({ reply, handoff: !!(cur && cur.handoff) });
+  } catch (e) { console.error('[saleschat] message', e.message); res.status(500).json({ reply: 'Sorry — please try again in a moment.' }); }
+});
+
+app.get('/api/saleschat/poll', widgetCors, async (req, res) => {
+  try {
+    const sid = String(req.query.session_id || ''); const after = parseInt(req.query.after || '0', 10) || 0;
+    const cur = (await pool.query('SELECT messages FROM sales_chats WHERE session_id=$1', [sid])).rows[0];
+    if (!cur) return res.json({ total: 0, messages: [] });
+    const ops = _salesMsgs(cur.messages).filter(m => m.role === 'assistant' && m.operator).map(m => m.content);
+    res.json({ total: ops.length, messages: after < ops.length ? ops.slice(after) : [] });
+  } catch (e) { res.json({ total: 0, messages: [] }); }
+});
+
+app.get('/api/saleschat/admin/conversations', salesAdminAuth, async (req, res) => {
+  const rows = (await pool.query(`SELECT session_id, name, messages, handoff, updated_at FROM sales_chats ORDER BY updated_at DESC LIMIT 100`)).rows;
+  res.json(rows.map(r => { const m = _salesMsgs(r.messages); const last = m[m.length - 1] || {};
+    return { session_id: r.session_id, name: r.name, handoff: !!r.handoff, updated_at: r.updated_at,
+             count: m.length, last: String(last.content || '').slice(0, 90), last_role: last.role, last_operator: !!last.operator }; }));
+});
+app.get('/api/saleschat/admin/conversations/:sid', salesAdminAuth, async (req, res) => {
+  const r = (await pool.query('SELECT session_id,name,messages,handoff FROM sales_chats WHERE session_id=$1', [req.params.sid])).rows[0];
+  if (!r) return res.status(404).json({ error: 'not found' });
+  res.json({ session_id: r.session_id, name: r.name, handoff: !!r.handoff, messages: _salesMsgs(r.messages) });
+});
+app.post('/api/saleschat/admin/conversations/:sid/reply', salesAdminAuth, async (req, res) => {
+  const text = String(req.body?.text || '').trim();
+  if (!text || text.length > 2000) return res.status(400).json({ error: 'text required' });
+  const r = (await pool.query('SELECT messages FROM sales_chats WHERE session_id=$1', [req.params.sid])).rows[0];
+  if (!r) return res.status(404).json({ error: 'not found' });
+  const msgs = _salesMsgs(r.messages);
+  msgs.push({ role: 'assistant', content: text, operator: true, ts: new Date().toISOString() });
+  await pool.query('UPDATE sales_chats SET messages=$2, handoff=TRUE, updated_at=NOW() WHERE session_id=$1', [req.params.sid, JSON.stringify(msgs)]);
+  res.json({ ok: true, handoff: true });
+});
+app.post('/api/saleschat/admin/conversations/:sid/handoff', salesAdminAuth, async (req, res) => {
+  const on = !!req.body?.handoff;
+  await pool.query('UPDATE sales_chats SET handoff=$2, updated_at=NOW() WHERE session_id=$1', [req.params.sid, on]);
+  res.json({ ok: true, handoff: on });
+});
+
 // Helper to convert "HH:MM" string to total minutes
 function toMins(t) {
   const [h, m] = String(t).slice(0, 5).split(':').map(Number);
@@ -3277,6 +4508,59 @@ function minutesInZone(date, timeZone) {
   } catch {
     return date.getHours() * 60 + date.getMinutes();
   }
+}
+
+// SEPOS-048 (cont.) — restaurant-local calendar date (YYYY-MM-DD) and
+// wall-clock (HH:MM). Same rule as minutesInZone: NEVER derive a
+// customer-facing date/time from the Node process's clock directly —
+// Railway runs UTC, so walk-in reservations were stamped 1h early all
+// summer and "today" flipped at 1am local.
+function dateInZone(date, timeZone) {
+  try {
+    // en-CA gives ISO-style YYYY-MM-DD directly.
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timeZone || 'Europe/London',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(date);
+  } catch { return date.toISOString().slice(0, 10); }
+}
+function hhmmInZone(date, timeZone) {
+  const mins = minutesInZone(date, timeZone) % 1440;
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+}
+
+// Tenant timezone from settings (each Railway is per-tenant). Cached 60s so
+// hot report/walk-in paths don't add a query per hit.
+let _tzCache = { value: null, at: 0 };
+async function restaurantTz() {
+  if (_tzCache.value && Date.now() - _tzCache.at < 60000) return _tzCache.value;
+  try {
+    const r = await pool.query(`SELECT value FROM settings WHERE key = 'timezone'`);
+    _tzCache = { value: r.rows[0]?.value || 'Europe/London', at: Date.now() };
+  } catch { _tzCache = { value: 'Europe/London', at: Date.now() }; }
+  return _tzCache.value;
+}
+
+// UTC instant of local midnight for a YYYY-MM-DD in the given zone.
+// Iterative: start from UTC midnight, measure what local wall-clock that
+// instant shows, and correct by the difference (converges in ≤2 steps,
+// DST transitions included). Lets day-windowed reports bound on the
+// RESTAURANT's midnight instead of bucketing rows by UTC date.
+function zonedMidnightUtc(ymd, timeZone) {
+  const tz = timeZone || 'Europe/London';
+  let t = Date.parse(`${ymd}T00:00:00Z`);
+  if (Number.isNaN(t)) return null;
+  try {
+    for (let i = 0; i < 3; i++) {
+      const localYmd = dateInZone(new Date(t), tz);
+      const localMins = minutesInZone(new Date(t), tz) % 1440;
+      const have = Date.parse(`${localYmd}T00:00:00Z`) + localMins * 60000;
+      const want = Date.parse(`${ymd}T00:00:00Z`);
+      if (have === want) break;
+      t -= (have - want);
+    }
+  } catch { /* fall through with the UTC-midnight guess */ }
+  return new Date(t);
 }
 
 // SEPOS-027 — parse a reservation's assigned tables (table_ids CSV, or table_id).
@@ -3356,6 +4640,17 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
     maxDate.setDate(maxDate.getDate() + (s.booking_advance_days || 60));
     if (requestedDate < today) return res.json({ slots: [], message: 'Date is in the past' });
     if (requestedDate > maxDate) return res.json({ slots: [], message: 'Date too far in advance' });
+
+    // SEPOS-051 — weekly closed days
+    let closedDays = [];
+    try { closedDays = JSON.parse(s.closed_days || '[]'); } catch {}
+    const DAY_KEYS  = ['sun','mon','tue','wed','thu','fri','sat'];
+    const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const dow = requestedDate.getDay();
+    if (closedDays.includes(DAY_KEYS[dow])) {
+      return res.json({ date, covers: coversNum, restaurant_id, slots: [], closed: true,
+        message: `We are closed on ${DAY_NAMES[dow]}s — please choose another day.` });
+    }
 
     const interval = s.slot_interval_mins || 15;
 
@@ -3475,7 +4770,7 @@ app.get('/api/reservations/settings', async (req, res) => {
               booking_lead_hours, booking_advance_days, is_active,
               takeaway_busy_threshold, takeaway_very_busy_threshold,
               takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
-              timezone
+              timezone, closed_days
        FROM restaurant_settings WHERE restaurant_id = $1`, [rid]
     );
     const s = result.rows[0] || { restaurant_id: rid, is_active: true };
@@ -3500,13 +4795,14 @@ app.get('/api/reservations/settings/:restaurantId', widgetCors, async (req, res)
               booking_lead_hours, booking_advance_days, is_active,
               takeaway_busy_threshold, takeaway_very_busy_threshold,
               takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
-              timezone
+              timezone, closed_days
        FROM restaurant_settings WHERE restaurant_id = $1`,
       [req.params.restaurantId]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Restaurant not found' });
     const s = result.rows[0];
     if (!s.is_active) return res.status(403).json({ error: 'Online booking is currently disabled' });
+    try { s.closed_days = JSON.parse(s.closed_days || '[]'); } catch { s.closed_days = []; }
     res.json(s);
   } catch (err) {
     console.error('GET /api/reservations/settings error:', err);
@@ -3539,13 +4835,24 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
     // BUG-004 — reject bookings for a date already in the past.
     // reservation_date arrives as 'YYYY-MM-DD'; lexical compare against
     // today works for that format. Same-day bookings are allowed.
-    if (String(reservation_date).slice(0, 10) < new Date().toISOString().slice(0, 10)) {
+    // SEPOS-048 — "today" in the restaurant's timezone, not UTC: after 11pm
+    // BST the UTC date was still yesterday, so a booking for "today" made
+    // just after midnight was wrongly rejected as in-the-past (and vice versa).
+    if (String(reservation_date).slice(0, 10) < dateInZone(new Date(), await restaurantTz())) {
       return res.status(400).json({ error: 'Reservation date cannot be in the past' });
     }
     const coversNum = parseInt(covers, 10);
     if (!coversNum || coversNum < 1) return res.status(400).json({ error: 'Covers must be at least 1' });
     const slotCheck = await pool.query(`SELECT COALESCE(SUM(covers), 0) AS booked FROM reservations WHERE reservation_date = $1 AND TO_CHAR(reservation_time, 'HH24:MI') = $2 AND restaurant_id = $3 AND status NOT IN ('cancelled','no-show')`, [reservation_date, reservation_time.slice(0, 5), restaurant_id]);
-    const settingsRes = await pool.query('SELECT max_covers_per_slot, max_party_size, restaurant_phone FROM restaurant_settings WHERE restaurant_id = $1', [restaurant_id]);
+    const settingsRes = await pool.query('SELECT max_covers_per_slot, max_party_size, restaurant_phone, closed_days FROM restaurant_settings WHERE restaurant_id = $1', [restaurant_id]);
+    // SEPOS-051 — refuse bookings on weekly closed days (authoritative; widgets also hide them)
+    try {
+      const cd = JSON.parse(settingsRes.rows[0]?.closed_days || '[]');
+      const dowB = new Date(String(reservation_date) + 'T12:00:00').getDay();
+      if (cd.includes(['sun','mon','tue','wed','thu','fri','sat'][dowB])) {
+        return res.status(400).json({ error: 'The restaurant is closed on that day — please choose another date.' });
+      }
+    } catch {}
     // SEPOS-050 — online (widget) bookings are capped to the restaurant's
     // max party size. Staff-created bookings are NOT capped — staff can
     // link tables and judge their own floor.
@@ -3670,15 +4977,11 @@ app.post('/api/reservations/:id/seat', async (req, res) => {
       await pool.query("UPDATE tables SET status='occupied' WHERE id=$1", [reservation.table_id]);
       io.emit('tableStatusChanged', { id: reservation.table_id, status: 'occupied' });
       if (open_order) {
-        const orderRes = await pool.query(
-          "INSERT INTO orders (table_id, staff_id, status, covers, opened_at) VALUES ($1, $2, 'open', $3, NOW()) RETURNING *",
-          [reservation.table_id, staff_id || null, reservation.covers || 1]
-        );
-        order = orderRes.rows[0];
-        await offlineQueue.enqueue('create_order', {
-          localOrderId: order.id, table_id: reservation.table_id,
-          covers: reservation.covers || 1, staff_id: staff_id || null,
+        // SEPOS-AUDIT-001 — through the shared mutex + dedupe (see helper).
+        const { order: o } = await openDineInOrderDeduped({
+          tableId: reservation.table_id, covers: reservation.covers || 1, staffId: staff_id,
         });
+        order = o;
       }
     }
     io.emit('reservation_updated', reservation);
@@ -3703,9 +5006,13 @@ app.post('/api/reservations/walk-in', async (req, res) => {
     const coversNum = parseInt(covers, 10);
     if (!coversNum || coversNum < 1) return res.status(400).json({ error: 'covers must be at least 1' });
 
+    // SEPOS-048 — stamp the walk-in with the RESTAURANT's date + wall-clock,
+    // not the container's (Railway = UTC → walk-ins were logged 1h early in
+    // BST, and just before 1am they landed on yesterday's date).
     const now = new Date();
-    const today = now.toISOString().slice(0, 10);
-    const hhmm  = now.toTimeString().slice(0, 5);
+    const walkinTz = await restaurantTz();
+    const today = dateInZone(now, walkinTz);
+    const hhmm  = hhmmInZone(now, walkinTz);
 
     const resvIns = await pool.query(
       `INSERT INTO reservations
@@ -3717,16 +5024,13 @@ app.post('/api/reservations/walk-in', async (req, res) => {
     );
     const reservation = resvIns.rows[0];
 
-    const orderRes = await pool.query(
-      "INSERT INTO orders (table_id, staff_id, status, covers, opened_at) VALUES ($1, $2, 'open', $3, NOW()) RETURNING *",
-      [table_id, staff_id, coversNum]
-    );
-    const order = orderRes.rows[0];
+    // SEPOS-AUDIT-001 — through the shared mutex + dedupe: a double-tapped
+    // "Seat walk-in" on two devices used to spawn twin open orders (ghosts).
+    const { order } = await openDineInOrderDeduped({
+      tableId: table_id, covers: coversNum, staffId: staff_id,
+    });
 
     await pool.query("UPDATE tables SET status='occupied' WHERE id=$1", [table_id]);
-    await offlineQueue.enqueue('create_order', {
-      localOrderId: order.id, table_id, covers: coversNum, staff_id,
-    });
 
     io.emit('new_reservation', reservation);
     io.emit('tableStatusChanged', { id: table_id, status: 'occupied' });
@@ -3787,7 +5091,13 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
       takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
       // SEPOS-048 — IANA timezone (e.g. 'Europe/London', 'Asia/Bangkok')
       timezone,
+      // SEPOS-051 — weekly closed days, array of 'mon'..'sun'
+      closed_days,
     } = req.body;
+    const VALID_DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
+    const closedDaysJson = Array.isArray(closed_days)
+      ? JSON.stringify(closed_days.filter(d => VALID_DAYS.includes(String(d).toLowerCase())))
+      : null;
     await pool.query(
       `INSERT INTO restaurant_settings
          (restaurant_id, restaurant_name, brand_colour, opening_time, last_booking_time,
@@ -3796,8 +5106,8 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
           slot_interval_mins, max_covers_per_slot, max_party_size, restaurant_phone,
           booking_lead_hours, booking_advance_days, is_active,
           takeaway_busy_threshold, takeaway_very_busy_threshold,
-          takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy, timezone)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+          takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy, timezone, closed_days)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
        ON CONFLICT (restaurant_id) DO UPDATE SET
          restaurant_name      = EXCLUDED.restaurant_name,
          brand_colour         = EXCLUDED.brand_colour,
@@ -3820,7 +5130,8 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
          takeaway_wait_quiet          = EXCLUDED.takeaway_wait_quiet,
          takeaway_wait_busy           = EXCLUDED.takeaway_wait_busy,
          takeaway_wait_very_busy      = EXCLUDED.takeaway_wait_very_busy,
-         timezone                     = EXCLUDED.timezone`,
+         timezone                     = EXCLUDED.timezone,
+         closed_days                  = EXCLUDED.closed_days`,
       [req.params.restaurantId, restaurant_name, brand_colour, opening_time, last_booking_time,
        service_type || 'all_day', lunch_service_start || '11:00', lunch_service_end || '14:30',
        dinner_service_start || '17:30', dinner_service_end || '21:30',
@@ -3835,7 +5146,7 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
        takeaway_wait_quiet          ?? 20,
        takeaway_wait_busy           ?? 35,
        takeaway_wait_very_busy      ?? 50,
-       timezone || 'Europe/London']
+       timezone || 'Europe/London', closedDaysJson]
     );
 
     // SEPOS-049 + SEPOS-050 — durable write-through to cloud. On a desktop
@@ -3902,17 +5213,40 @@ app.post('/api/menu/import-batch', async (req, res) => {
       return match ? match.id : null;
     }
     await client.query('BEGIN');
+    // Ensure a category exists for every item. Previously the importer only
+    // matched EXISTING categories; a scanned menu's categories rarely match the
+    // seeded ones, so items were inserted with category_id=NULL and vanished
+    // from the menu tree. Create the category on the fly (keeps the in-memory
+    // list in sync so we don't duplicate within a batch).
+    async function ensureCategoryId(categoryName) {
+      const existing = findCategoryId(categoryName);
+      if (existing) return existing;
+      const name = (categoryName && String(categoryName).trim()) || 'Menu';
+      const dup = categories.find(c => c.name.toLowerCase() === name.toLowerCase());
+      if (dup) return dup.id;
+      const created = await client.query('INSERT INTO categories (name, sort_order) VALUES ($1, $2) RETURNING id, name', [name, categories.length + 1]);
+      categories.push({ id: created.rows[0].id, name: created.rows[0].name });
+      return created.rows[0].id;
+    }
     const results = { inserted: [], skipped: [], errors: [] };
     for (const item of items) {
       try {
-        if (!item.name_en || !item.name_en.trim()) { results.skipped.push({ item, reason: 'Missing name_en' }); continue; }
-        const price = parseFloat(item.price);
+        // Name: prefer English, fall back to Thai / generic name so a Thai-only
+        // menu still imports (was silently dropping "Missing name_en").
+        const nameEn = (item.name_en && item.name_en.trim())
+          || (item.name_th && item.name_th.trim())
+          || (item.name && String(item.name).trim()) || '';
+        if (!nameEn) { results.skipped.push({ item, reason: 'Missing name' }); continue; }
+        // Price: strip currency symbols / spaces (฿, £, "120.-") before parsing.
+        const price = parseFloat(String(item.price == null ? '' : item.price).replace(/[^0-9.]/g, ''));
         if (isNaN(price) || price < 0) { results.skipped.push({ item, reason: 'Invalid price' }); continue; }
-        const categoryId = findCategoryId(item.category);
+        const categoryId = await ensureCategoryId(item.category);
+        const nameTh = (item.name_th && item.name_th.trim()) || null;
+        const nameAlt = (nameTh && nameTh !== nameEn) ? nameTh : null;
         let allergensStr = null;
         if (Array.isArray(item.allergens) && item.allergens.length > 0) allergensStr = JSON.stringify(item.allergens);
         else if (typeof item.allergens === 'string' && item.allergens.trim()) allergensStr = JSON.stringify([item.allergens]);
-        const insertRes = await client.query(`INSERT INTO menu_items (category_id, name, name_alt, description, price, allergens, is_available) VALUES ($1,$2,$3,$4,$5,$6,1) RETURNING id, name`, [categoryId, item.name_en.trim(), item.name_th ? item.name_th.trim() : null, item.description ? item.description.trim() : null, price, allergensStr]);
+        const insertRes = await client.query(`INSERT INTO menu_items (category_id, name, name_alt, description, price, allergens, is_available) VALUES ($1,$2,$3,$4,$5,$6,1) RETURNING id, name`, [categoryId, nameEn, nameAlt, item.description ? item.description.trim() : null, price, allergensStr]);
         results.inserted.push({ id: insertRes.rows[0].id, name: insertRes.rows[0].name, category_id: categoryId, category_name: item.category || null });
       } catch (itemErr) { results.errors.push({ item, error: itemErr.message }); }
     }
@@ -3979,6 +5313,23 @@ async function relayAiToCloud(path, body) {
   }
 }
 
+// SEPOS-AI-HELP-001 — forward each answered Q&A to the ops back-office so
+// Korakot can see, across ALL restaurants, what clients ask. Fire-and-forget:
+// never blocks or fails the reply, and ops being down is a no-op. Only the
+// CLOUD forwards (it holds the SYNC_SECRET ops matches to a client row);
+// desktop/Sunmi relay to their cloud, which does the forward. The ops domain
+// ops-api.siamepos.co.uk does NOT resolve — the Railway URL is the real one
+// (override with OPS_API_URL env if it ever changes).
+const OPS_API_URL = process.env.OPS_API_URL || 'https://restaurant-epos-back-office-production.up.railway.app';
+function forwardAiHelpToOps(entry) {
+  if (!process.env.SYNC_SECRET || !OPS_API_URL) return;
+  fetch(OPS_API_URL.replace(/\/+$/, '') + '/api/ai-help', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-sync-secret': process.env.SYNC_SECRET },
+    body: JSON.stringify(entry),
+  }).catch(() => { /* best-effort — ops outages must never touch the client */ });
+}
+
 app.post('/api/ai/scan-menu', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     const { image_base64, media_type } = req.body;
@@ -4038,7 +5389,7 @@ app.post('/api/ai/scan-invoice', requireStaffAuthOrSyncSecret(['admin', 'manager
       if (relayed) return res.status(relayed.status).json(relayed.json);
       return res.status(500).json({ success: false, error: 'ANTHROPIC_API_KEY not set locally and no cloud relay configured' });
     }
-    const INVOICE_PROMPT = `You are reading a supplier invoice or delivery note for a restaurant.\nExtract all information and return ONLY a valid JSON object — no other text, no markdown, no explanation.\n\nRequired JSON structure:\n{\n  "supplier_name": "string",\n  "invoice_date": "YYYY-MM-DD",\n  "invoice_number": "string",\n  "total_amount": number,\n  "line_items": [\n    { "name": "string", "quantity": number, "unit": "string", "unit_price": number, "line_total": number }\n  ]\n}\n\nRules: If a value is missing use null for strings and 0 for numbers. Convert prices to GBP. Return ONLY the JSON object.`;
+    const INVOICE_PROMPT = `You are reading a supplier invoice or delivery note for a restaurant.\nExtract all information and return ONLY a valid JSON object — no other text, no markdown, no explanation.\n\nRequired JSON structure:\n{\n  "supplier_name": "string",\n  "invoice_date": "YYYY-MM-DD",\n  "invoice_number": "string",\n  "total_amount": number,\n  "line_items": [\n    { "name": "string", "quantity": number, "unit": "string", "unit_price": number, "line_total": number, "pack_size": number, "pack_unit": "string" }\n  ]\n}\n\nRules: If a value is missing use null for strings and 0 for numbers. Convert prices to GBP. pack_size/pack_unit describe what ONE invoiced unit contains when stated — a case/box of "6 x 1L" means ONE case contains 6 L, so pack_size 6, pack_unit "L" — e.g. "2 cases Soy Sauce 6 x 1L @ \u00a328.50/case" \u2192 quantity 2, unit "case", unit_price 28.50, pack_size 6, pack_unit "L"; "Mirin 500ml bottle x 6" \u2192 quantity 6, unit "bottle", pack_size 500, pack_unit "ml"; "Chicken 2.5kg bag" \u2192 quantity N, unit "bag", pack_size 2.5, pack_unit "kg". Use 0/null when the pack content is not stated. Return ONLY the JSON object.`;
     const https = require('https');
     const requestBody = JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2000, messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: media_type || 'image/jpeg', data: image_base64 } }, { type: 'text', text: INVOICE_PROMPT }] }] });
     const result = await new Promise((resolve, reject) => {
@@ -4093,6 +5444,395 @@ app.post('/api/ai/scan-expense', requireStaffAuthOrSyncSecret(['admin', 'manager
   } catch (err) { return res.status(500).json({ success: false, error: err.message }); }
 });
 
+// SEPOS-AI-HELP-001 — in-app "Ask AI" help assistant. Any logged-in staff
+// (roles=null) OR a desktop/Sunmi relay via SYNC_SECRET. Desktop/Sunmi hold
+// no ANTHROPIC_API_KEY, so they relay to the cloud exactly like the scanners.
+app.post('/api/ai/help', requireStaffAuthOrSyncSecret(), async (req, res) => {
+  try {
+    const { messages, platform } = req.body || {};
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: 'messages[] is required' });
+    }
+    // Sanitise: only {role, content} strings, last 12 turns, length-capped.
+    const clean = messages
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+      .slice(-12)
+      .map(m => ({ role: m.role, content: m.content.slice(0, 2000) }));
+    if (clean.length === 0 || clean[clean.length - 1].role !== 'user') {
+      return res.status(400).json({ error: 'the last message must be from the user' });
+    }
+    // No key here (desktop/Sunmi till) → relay to cloud, same as the scanners.
+    if (!process.env.ANTHROPIC_API_KEY) {
+      const relayed = await relayAiToCloud('/api/ai/help', { messages: clean, platform });
+      if (relayed) return res.status(relayed.status).json(relayed.json);
+      return res.json({ reply: "I can't reach the help service right now — check your internet connection, or contact SiamEPOS support (message Korakot on LINE, or email info@siamepos.co.uk)." });
+    }
+    // Ground the answer in this restaurant's live settings (KV settings table).
+    const ctx = { platform: platform || null, settings: {}, restaurant_name: process.env.RESTAURANT_NAME || null };
+    try {
+      const sres = await pool.query(
+        `SELECT key, value FROM settings WHERE key IN
+           ('service_charge_enabled','service_charge_rate','vat_mode','deposits_enabled')`);
+      sres.rows.forEach(r => { ctx.settings[r.key] = r.value; });
+    } catch { /* grounding is best-effort — answer generically if it fails */ }
+    const aiHelp = require('./services/aiHelpService');
+    const out = await aiHelp.askHelp(clean, ctx);
+    if (!out.reply) {
+      return res.json({ reply: "Sorry, I hit a technical problem just then. Try again in a moment — or if it keeps happening, contact SiamEPOS support (Korakot on LINE / info@siamepos.co.uk)." });
+    }
+    // Fire-and-forget: log this Q&A to ops (what clients ask = gold).
+    forwardAiHelpToOps({
+      question: clean[clean.length - 1].content,
+      reply: out.reply,
+      platform: platform || null,
+      staff_role: (req.staffAuth && req.staffAuth.role) || null,
+      escalated: /contact SiamEPOS support|info@siamepos\.co\.uk|Korakot on LINE/i.test(out.reply),
+      restaurant_name: process.env.RESTAURANT_NAME || null,
+    });
+    res.json({ reply: out.reply });
+  } catch (err) {
+    console.error('POST /api/ai/help error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// SEPOS-CONCIERGE-DEMO — public customer-chat concierge (WhatsApp-bot brain).
+// Grounded per-profile in conciergeService; CORS locked to the profile's own
+// site origins; small per-IP rate limit since this is unauthenticated.
+const _conciergeHits = new Map(); // ip -> [timestamps]
+function _conciergeAllow(ip) {
+  const now = Date.now();
+  const arr = (_conciergeHits.get(ip) || []).filter(t => now - t < 5 * 60 * 1000);
+  if (arr.length >= 25) { _conciergeHits.set(ip, arr); return false; }
+  arr.push(now); _conciergeHits.set(ip, arr);
+  if (_conciergeHits.size > 5000) _conciergeHits.clear(); // memory guard
+  return true;
+}
+function _conciergeCors(req, res) {
+  const concierge = require('./services/conciergeService');
+  const profile = concierge.getProfile(req.params.profile);
+  const origin = req.headers.origin;
+  if (profile && origin && profile.origin_whitelist.includes(origin)) {
+    res.set('Access-Control-Allow-Origin', origin);
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.set('Vary', 'Origin');
+  }
+  return profile;
+}
+app.options('/api/concierge/:profile', (req, res) => { _conciergeCors(req, res); res.sendStatus(204); });
+app.post('/api/concierge/:profile', async (req, res) => {
+  try {
+    const concierge = require('./services/conciergeService');
+    const profile = _conciergeCors(req, res);
+    if (!profile) return res.status(404).json({ error: 'unknown profile' });
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip;
+    if (!_conciergeAllow(ip)) return res.status(429).json({ error: 'slow down a little — try again in a few minutes' });
+    const { messages } = req.body || {};
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.json({ reply: profile.greeting });
+    }
+    const clean = messages
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+      .slice(-12)
+      .map(m => ({ role: m.role, content: m.content.slice(0, 1000) }));
+    if (clean.length === 0 || clean[clean.length - 1].role !== 'user') {
+      return res.status(400).json({ error: 'the last message must be from the user' });
+    }
+    const diary = profile.treatments ? await _conciergeDiary(req.params.profile, profile) : '';
+    const out = await concierge.askConcierge(req.params.profile, clean, diary);
+    const reply = out.reply || profile.fallback || 'Sorry — please try again in a moment.';
+    // Owner-inbox transcript (fire-and-forget; never blocks the reply).
+    const sid = typeof req.body.session_id === 'string' && /^[a-z0-9-]{8,64}$/i.test(req.body.session_id)
+      ? req.body.session_id : null;
+    if (sid) {
+      const userMsg = clean[clean.length - 1].content;
+      pool.query(
+        `INSERT INTO concierge_messages (profile, session_id, role, content) VALUES ($1,$2,$3,$4)`,
+        [req.params.profile, sid, 'user', userMsg]
+      ).then(() => pool.query(
+        `INSERT INTO concierge_messages (profile, session_id, role, content) VALUES ($1,$2,$3,$4)`,
+        [req.params.profile, sid, 'assistant', reply]
+      )).catch(e => console.error('[concierge] transcript insert failed:', e.message));
+    }
+    res.json({ reply });
+  } catch (err) {
+    console.error('POST /api/concierge error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Live diary grounding: booked ranges for the next 7 days, computed server-side
+// so the AI reads availability instead of inventing it. One-therapist demo model.
+const LONDON = 'Europe/London';
+function _lonDate(d) { return d.toLocaleDateString('en-GB', { timeZone: LONDON, weekday: 'short', day: 'numeric', month: 'short' }); }
+function _lonHM(d) { return d.toLocaleTimeString('en-GB', { timeZone: LONDON, hour: '2-digit', minute: '2-digit', hour12: false }); }
+function _lonYMD(d) { return d.toLocaleDateString('en-CA', { timeZone: LONDON }); }
+async function _conciergeDiary(profileId, profile) {
+  try {
+    const now = new Date();
+    const r = await pool.query(
+      `SELECT customer_name, treatment, minutes, start_at FROM concierge_bookings
+       WHERE profile = $1 AND status <> 'cancelled' ORDER BY start_at ASC LIMIT 200`, [profileId]);
+    const byDay = new Map();
+    r.rows.forEach(b => {
+      const start = new Date(b.start_at);
+      const end = new Date(start.getTime() + b.minutes * 60000);
+      if (end < now || start.getTime() > now.getTime() + 7 * 86400000) return;
+      const key = _lonYMD(start);
+      if (!byDay.has(key)) byDay.set(key, []);
+      byDay.get(key).push(_lonHM(start) + '–' + _lonHM(end));
+    });
+    const lines = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(now.getTime() + i * 86400000);
+      const booked = byDay.get(_lonYMD(d));
+      lines.push(_lonDate(d) + ' (' + _lonYMD(d) + '): ' + (booked && booked.length ? 'booked ' + booked.join(', ') : 'free all day'));
+    }
+    return 'DIARY — right now it is ' + _lonDate(now) + ' ' + _lonHM(now)
+      + ' (UK time). Open ' + String(profile.open_hour).padStart(2, '0') + ':00–' + profile.close_hour + ':00 daily. Booked ranges for the next 7 days:\n'
+      + lines.join('\n')
+      + '\nEverything not listed as booked (and inside opening hours, finishing by close, and not in the past) is available.';
+  } catch (e) {
+    console.error('[concierge] diary build failed:', e.message);
+    return '';
+  }
+}
+
+// Booking creation — validates the slot server-side (hours + overlap) so a
+// stale/hand-edited link can never double-book. Demo payment (SEPOS-034
+// mock-pay pattern); real Stripe lands when the client signs.
+app.post('/api/concierge/:profile/book', async (req, res) => {
+  try {
+    const concierge = require('./services/conciergeService');
+    const profile = _conciergeCors(req, res) || concierge.getProfile(req.params.profile);
+    if (!profile || !profile.treatments) return res.status(404).json({ error: 'unknown profile' });
+    const { t, d, when, name, phone, session_id } = req.body || {};
+    const treatment = profile.treatments[t];
+    const minutes = parseInt(d, 10);
+    if (!treatment) return res.status(400).json({ error: 'Unknown treatment.' });
+    if (!treatment.prices[minutes]) return res.status(400).json({ error: 'That duration is not offered for this treatment.' });
+    if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'Please give a name for the booking.' });
+    if (!phone || String(phone).replace(/\D/g, '').length < 10) return res.status(400).json({ error: 'Please give a contact number so May can reach you.' });
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(when))) return res.status(400).json({ error: 'Invalid time.' });
+    const start = new Date(when + ':00+01:00'); // demo: UK summer offset
+    const end = new Date(start.getTime() + minutes * 60000);
+    if (isNaN(start) || start < new Date()) return res.status(400).json({ error: 'That time is in the past — please pick a new one in the chat.' });
+    const sh = parseInt(when.slice(11, 13), 10), sm = parseInt(when.slice(14, 16), 10);
+    const endMins = sh * 60 + sm + minutes;
+    if (sh < profile.open_hour || endMins > profile.close_hour * 60) {
+      return res.status(400).json({ error: 'That time falls outside opening hours (10am–8pm).' });
+    }
+    // Overlap check in JS (dialect-safe).
+    const dayRows = await pool.query(
+      `SELECT minutes, start_at FROM concierge_bookings WHERE profile = $1 AND status <> 'cancelled'`, [req.params.profile]);
+    const clash = dayRows.rows.some(b => {
+      const bs = new Date(b.start_at); const be = new Date(bs.getTime() + b.minutes * 60000);
+      return bs < end && be > start;
+    });
+    if (clash) return res.status(409).json({ error: 'Sorry — that slot has just been taken. Pop back to the chat and pick another time.' });
+    await pool.query(
+      `INSERT INTO concierge_bookings (profile, session_id, customer_name, customer_phone, treatment, minutes, start_at, deposit_gbp, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'paid_demo')`,
+      [req.params.profile, (typeof session_id === 'string' && session_id.slice(0, 64)) || null,
+       String(name).trim().slice(0, 120), String(phone).trim().slice(0, 40),
+       treatment.label, minutes, start.toISOString(), profile.deposit_gbp || 0]);
+    res.json({ ok: true, label: treatment.label, price: treatment.prices[minutes], deposit: profile.deposit_gbp || 0 });
+  } catch (err) {
+    console.error('POST /api/concierge/book error:', err);
+    res.status(500).json({ error: 'Something went wrong — please try again.' });
+  }
+});
+
+// The booking + demo-payment page the bot links to. Mobile-first, self-contained.
+app.get('/concierge-book/:profile', (req, res) => {
+  const concierge = require('./services/conciergeService');
+  const profile = concierge.getProfile(req.params.profile);
+  if (!profile || !profile.treatments) return res.status(404).send('Not found');
+  const t = String(req.query.t || ''); const d = parseInt(req.query.d, 10);
+  const when = String(req.query.when || ''); const name = String(req.query.name || '').slice(0, 60);
+  const tr = profile.treatments[t];
+  const ok = tr && tr.prices[d] && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(when);
+  const price = ok ? tr.prices[d] : 0; const dep = profile.deposit_gbp || 0;
+  const whenNice = ok ? new Date(when + ':00+01:00').toLocaleString('en-GB', { timeZone: LONDON, weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '';
+  const e = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  res.type('html').send(`<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex">
+<title>Book — ${e(profile.display_name)}</title><style>
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#F8F1E8;min-height:100dvh;display:flex;flex-direction:column;align-items:center;padding:0 16px 40px}
+header{background:#2E362E;color:#fff;width:100vw;padding:calc(env(safe-area-inset-top) + 16px) 20px 16px;text-align:center}
+h1{font-size:18px;font-weight:600}.sub{font-size:12.5px;opacity:.8;margin-top:2px}
+.card{background:#fff;border-radius:14px;box-shadow:0 4px 18px rgba(0,0,0,.08);max-width:430px;width:100%;margin-top:20px;padding:22px}
+.rowl{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #f0ece4;font-size:15px}
+.rowl b{text-align:right}.tot{font-size:16px;border-bottom:none;padding-top:12px}
+label{display:block;font-size:13px;color:#556;margin:14px 0 5px}
+input{width:100%;padding:12px;border:1px solid #ddd;border-radius:9px;font-size:16px}
+button{width:100%;margin-top:18px;padding:15px;border:none;border-radius:10px;background:#2E362E;color:#fff;font-size:16px;font-weight:600;cursor:pointer}
+button:disabled{opacity:.6}.demo{margin-top:10px;text-align:center;font-size:11.5px;color:#998}
+.err{background:#fdecea;color:#b3261e;border-radius:9px;padding:12px;font-size:14px;margin-top:14px;display:none}
+.done{display:none;text-align:center;padding:14px 0}.done .tick{font-size:52px}.done h2{font-size:19px;margin:10px 0 6px}.done p{color:#556;font-size:14.5px;line-height:1.5}
+</style></head><body>
+<header><h1>${e(profile.display_name)}</h1><div class="sub">Secure booking · Kensington Church Street, W8</div></header>
+<div class="card" id="card">${ok ? `
+  <div class="rowl"><span>Treatment</span><b>${e(tr.label)}</b></div>
+  <div class="rowl"><span>Duration</span><b>${d} minutes</b></div>
+  <div class="rowl"><span>When</span><b>${e(whenNice)}</b></div>
+  <div class="rowl"><span>Price on the day</span><b>£${price - dep} (after deposit)</b></div>
+  <div class="rowl tot"><span>Deposit to pay now</span><b>£${dep}</b></div>
+  <label>Your name</label><input id="nm" value="${e(name)}" autocomplete="name">
+  <label>Mobile number (May will confirm on this)</label><input id="ph" type="tel" inputmode="tel" autocomplete="tel" placeholder="07…">
+  <button id="pay">Pay £${dep} deposit &amp; confirm</button>
+  <div class="demo">Demo checkout — no real card is charged. Live payments use Stripe.</div>
+  <div class="err" id="err"></div>
+  <div class="done" id="done"><div class="tick">✅</div><h2>Booking confirmed!</h2><p id="dmsg"></p></div>
+` : `<div class="done" style="display:block"><div class="tick">🤔</div><h2>This link looks incomplete</h2><p>Please go back to the chat and ask for a fresh booking link.</p></div>`}</div>
+${ok ? `<script>
+var q=new URLSearchParams(location.search);
+document.getElementById('pay').addEventListener('click',function(){
+  var b=this;b.disabled=true;b.textContent='Processing…';
+  var err=document.getElementById('err');err.style.display='none';
+  fetch('/api/concierge/${e(req.params.profile)}/book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    t:q.get('t'),d:q.get('d'),when:q.get('when'),name:document.getElementById('nm').value,phone:document.getElementById('ph').value,session_id:(function(){try{return sessionStorage.getItem('jw-sid')||null}catch(e){return null}})()
+  })}).then(function(r){return r.json().then(function(j){return{s:r.status,j:j}})}).then(function(x){
+    if(x.j&&x.j.ok){
+      ['nm','ph','pay'].forEach(function(i){document.getElementById(i).style.display='none'});
+      document.querySelector('.demo').style.display='none';
+      var dn=document.getElementById('done');dn.style.display='block';
+      document.getElementById('dmsg').textContent='£'+x.j.deposit+' deposit received (demo). '+x.j.label+' — see you then! May has your booking and will message if anything changes.';
+    } else { err.textContent=(x.j&&x.j.error)||'Something went wrong — try again.';err.style.display='block';b.disabled=false;b.textContent='Pay £${dep} deposit & confirm'; }
+  }).catch(function(){err.textContent='Connection problem — try again.';err.style.display='block';b.disabled=false;b.textContent='Pay £${dep} deposit & confirm';});
+});
+</script>` : ''}</body></html>`);
+});
+
+// Owner inbox (demo): private-key URL, mobile-first. Real product = SiamSpa admin tab.
+function _conciergeInboxAuth(req, res) {
+  const concierge = require('./services/conciergeService');
+  const profile = concierge.getProfile(req.params.profile);
+  if (!profile || !profile.inbox_key || req.query.key !== profile.inbox_key) {
+    res.status(404).json({ error: 'not found' });
+    return null;
+  }
+  return profile;
+}
+const CONCIERGE_BOOKING_RE = /book|จอง|appointment|reserve|tomorrow|tonight|พรุ่งนี้|คืนนี้/i;
+app.get('/api/concierge/:profile/inbox', async (req, res) => {
+  try {
+    if (!_conciergeInboxAuth(req, res)) return;
+    const r = await pool.query(
+      `SELECT session_id, role, content, created_at FROM concierge_messages
+       WHERE profile = $1 ORDER BY id DESC LIMIT 600`, [req.params.profile]);
+    const sessions = new Map();
+    // rows are newest-first; first row seen per session = its latest message
+    r.rows.forEach(m => {
+      let s = sessions.get(m.session_id);
+      if (!s) {
+        s = { session_id: m.session_id, last_at: m.created_at, preview: '', count: 0, booking: false };
+        sessions.set(m.session_id, s);
+      }
+      s.count++;
+      if (!s.preview && m.role === 'user') s.preview = String(m.content).slice(0, 120);
+      if (m.role === 'user' && CONCIERGE_BOOKING_RE.test(m.content)) s.booking = true;
+    });
+    let bookings = [];
+    try {
+      const br = await pool.query(
+        `SELECT customer_name, customer_phone, treatment, minutes, start_at, deposit_gbp, status
+         FROM concierge_bookings WHERE profile = $1 AND status <> 'cancelled'
+         ORDER BY start_at ASC LIMIT 100`, [req.params.profile]);
+      const cutoff = Date.now() - 12 * 3600000;
+      bookings = br.rows.filter(b => new Date(b.start_at).getTime() > cutoff);
+    } catch (e) { /* table may not exist on old tills — inbox still works */ }
+    res.json({ sessions: Array.from(sessions.values()).slice(0, 60), bookings });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.get('/api/concierge/:profile/thread/:session', async (req, res) => {
+  try {
+    if (!_conciergeInboxAuth(req, res)) return;
+    const r = await pool.query(
+      `SELECT role, content, created_at FROM concierge_messages
+       WHERE profile = $1 AND session_id = $2 ORDER BY id ASC LIMIT 200`,
+      [req.params.profile, req.params.session]);
+    res.json({ messages: r.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+app.get('/concierge-inbox/:profile', (req, res) => {
+  const profile = _conciergeInboxAuth(req, res);
+  if (!profile) return;
+  const name = profile.display_name || req.params.profile;
+  res.type('html').send(`<!doctype html><html><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex"><title>${name} — Chat inbox</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#ECE5DD;min-height:100dvh}
+  header{background:#075E54;color:#fff;padding:calc(env(safe-area-inset-top) + 14px) 16px 14px;position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px}
+  header h1{font-size:17px;font-weight:600;flex:1}
+  header .sub{font-size:12px;opacity:.85}
+  #back{display:none;background:none;border:none;color:#fff;font-size:24px;padding:2px 8px 2px 0;cursor:pointer}
+  .row{background:#fff;padding:14px 16px;border-bottom:1px solid #eee;display:flex;gap:12px;align-items:center;cursor:pointer}
+  .row:active{background:#f2f2f2}
+  .ava{width:46px;height:46px;border-radius:50%;background:#2E362E;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;flex:none;font-size:15px}
+  .mid{flex:1;min-width:0}
+  .who{font-weight:600;font-size:15px;display:flex;gap:6px;align-items:center}
+  .pv{color:#667;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
+  .meta{text-align:right;flex:none}
+  .t{color:#889;font-size:12px}
+  .n{display:inline-block;background:#25D366;color:#fff;border-radius:10px;font-size:11px;padding:1px 7px;margin-top:5px}
+  .pin{font-size:13px}
+  .empty{padding:48px 24px;text-align:center;color:#778}
+  #thread{display:none;padding:12px;flex-direction:column;gap:8px}
+  .b{max-width:84%;padding:8px 12px;border-radius:10px;font-size:14.5px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word;box-shadow:0 1px 1px rgba(0,0,0,.08)}
+  .u{background:#fff;align-self:flex-start;border-top-left-radius:2px}
+  .a{background:#DCF8C6;align-self:flex-end;border-top-right-radius:2px}
+  .b .ts{display:block;font-size:10.5px;color:#99a;margin-top:4px;text-align:right}
+  .note{font-size:11.5px;color:#889;text-align:center;padding:10px}
+</style></head><body>
+<header><button id="back" aria-label="Back">&#8249;</button><div style="flex:1"><h1>${name}</h1><div class="sub" id="sub">Customer chats · AI assistant</div></div></header>
+<div id="list"></div><div id="thread"></div>
+<div class="note">Guests are anonymous until they share contact details in chat. 📌 = possible booking request.</div>
+<script>
+var KEY=new URLSearchParams(location.search).get('key');
+var P=${JSON.stringify(req.params.profile)};
+var listEl=document.getElementById('list'),thEl=document.getElementById('thread'),backEl=document.getElementById('back'),subEl=document.getElementById('sub');
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function ago(t){var s=(Date.now()-new Date(t).getTime())/1000;if(s<60)return 'now';if(s<3600)return Math.floor(s/60)+'m';if(s<86400)return Math.floor(s/3600)+'h';return Math.floor(s/86400)+'d'}
+function bookingsHtml(bs){
+  if(!bs||!bs.length)return '';
+  return '<div style="background:#E7F6EC;padding:10px 16px;font-size:13px;font-weight:600;color:#1a6b3c">Confirmed bookings · '+bs.length+'</div>'
+    +bs.map(function(b){
+      var w=new Date(b.start_at).toLocaleString('en-GB',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+      return '<div class="row" style="cursor:default"><div class="ava" style="background:#1a6b3c">✓</div>'
+        +'<div class="mid"><div class="who">'+esc(b.customer_name)+' · '+esc(w)+'</div>'
+        +'<div class="pv">'+esc(b.treatment)+' · '+b.minutes+'min · £'+b.deposit_gbp+' deposit paid'+(b.customer_phone?' · '+esc(b.customer_phone):'')+'</div></div></div>';
+    }).join('');
+}
+function load(){fetch('/api/concierge/'+P+'/inbox?key='+encodeURIComponent(KEY)).then(r=>r.json()).then(function(d){
+  var ss=(d&&d.sessions)||[];
+  var bh=bookingsHtml((d&&d.bookings)||[]);
+  if(!ss.length&&!bh){listEl.innerHTML='<div class="empty">No chats yet.<br>They\\'ll appear here the moment a customer messages the assistant.</div>';return}
+  listEl.innerHTML=bh+ss.map(function(s){
+    return '<div class="row" data-s="'+esc(s.session_id)+'"><div class="ava">'+esc(s.session_id.slice(-2).toUpperCase())+'</div>'
+      +'<div class="mid"><div class="who">Guest '+esc(s.session_id.slice(-4))+(s.booking?' <span class="pin">📌</span>':'')+'</div>'
+      +'<div class="pv">'+esc(s.preview||'…')+'</div></div>'
+      +'<div class="meta"><div class="t">'+ago(s.last_at)+'</div><div class="n">'+s.count+'</div></div></div>';
+  }).join('');
+  Array.prototype.forEach.call(listEl.querySelectorAll('.row'),function(r){r.addEventListener('click',function(){openThread(r.getAttribute('data-s'))})});
+})}
+function openThread(sid){
+  fetch('/api/concierge/'+P+'/thread/'+encodeURIComponent(sid)+'?key='+encodeURIComponent(KEY)).then(r=>r.json()).then(function(d){
+    listEl.style.display='none';thEl.style.display='flex';backEl.style.display='block';
+    subEl.textContent='Guest '+sid.slice(-4);
+    thEl.innerHTML=((d&&d.messages)||[]).map(function(m){
+      return '<div class="b '+(m.role==='user'?'u':'a')+'">'+esc(m.content)+'<span class="ts">'+new Date(m.created_at).toLocaleString('en-GB',{hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'})+'</span></div>';
+    }).join('');
+    window.scrollTo(0,document.body.scrollHeight);
+  });
+}
+backEl.addEventListener('click',function(){thEl.style.display='none';backEl.style.display='none';listEl.style.display='block';subEl.textContent='Customer chats · AI assistant';load()});
+load();setInterval(function(){if(listEl.style.display!=='none')load()},25000);
+</script></body></html>`);
+});
+
 app.get('/api/expenses', async (req, res) => {
   try { const result = await pool.query(`SELECT * FROM expenses ORDER BY date DESC, created_at DESC`); res.json(result.rows); }
   catch (err) { res.status(500).json({ error: err.message }); }
@@ -4102,7 +5842,8 @@ app.post('/api/expenses', async (req, res) => {
   try {
     const { category, description, amount, date } = req.body;
     if (!description || !amount) return res.status(400).json({ error: 'description and amount are required' });
-    const result = await pool.query(`INSERT INTO expenses (category, description, amount, date) VALUES ($1,$2,$3,$4) RETURNING id`, [category || 'other', description, parseFloat(amount), date || new Date().toISOString().split('T')[0]]);
+    // SEPOS-048 — default the expense to the restaurant's date, not UTC's.
+    const result = await pool.query(`INSERT INTO expenses (category, description, amount, date) VALUES ($1,$2,$3,$4) RETURNING id`, [category || 'other', description, parseFloat(amount), date || dateInZone(new Date(), await restaurantTz())]);
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -4111,6 +5852,109 @@ app.delete('/api/expenses/:id', async (req, res) => {
   try { const result = await pool.query(`DELETE FROM expenses WHERE id = $1`, [req.params.id]); res.json({ success: true, deleted: result.rowCount }); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// SEPOS-046 (Nook's POTENTIAL BUG #2) — recipe costs were stored at save time
+// and never refreshed, so after a supplier price change every food-cost %
+// badge and the wastage report kept costing dishes at the OLD ingredient
+// price. Called from the invoice confirm below for the ingredients whose
+// cost actually changed: refresh each affected recipe_line from the CURRENT
+// cost/yield (same formula as client calcLineCost), then re-foot the recipe.
+async function recalcRecipesForIngredients(client, ingredientIds) {
+  if (!ingredientIds.length) return 0;
+  const linesRes = await client.query(
+    `SELECT rl.id, rl.recipe_id, rl.quantity_used, i.cost_per_unit, i.yield_percentage
+       FROM recipe_lines rl JOIN ingredients i ON i.id = rl.ingredient_id
+      WHERE rl.ingredient_id = ANY($1::int[])`,
+    [ingredientIds]
+  );
+  if (!linesRes.rows.length) return 0;
+  for (const l of linesRes.rows) {
+    const q = Number(l.quantity_used) || 0;
+    const c = Number(l.cost_per_unit) || 0;
+    const y = Number(l.yield_percentage) || 100;
+    const lineCost = (!q || !c) ? 0 : (q * c) / (y / 100);
+    await client.query(`UPDATE recipe_lines SET line_cost = $1 WHERE id = $2`, [lineCost, l.id]);
+  }
+  const recipeIds = [...new Set(linesRes.rows.map(r => r.recipe_id))];
+  for (const rid of recipeIds) {
+    await client.query(
+      `UPDATE recipes SET
+         total_cost = (SELECT COALESCE(SUM(line_cost), 0) FROM recipe_lines WHERE recipe_id = $1),
+         cost_per_portion = (SELECT COALESCE(SUM(line_cost), 0) FROM recipe_lines WHERE recipe_id = $1)
+                            / CASE WHEN COALESCE(serves, 1) > 0 THEN COALESCE(serves, 1) ELSE 1 END,
+         last_calculated = NOW()
+       WHERE id = $1`,
+      [rid]
+    );
+  }
+  return recipeIds.length;
+}
+
+// ── SEPOS-INV-UNITS-001 — unit intelligence for invoice confirm ──────────────
+// Invoices arrive in purchase-world units (each, bottle, case, L); recipes cost
+// in usage-world units (ml, g, kg). Reconciling wrongly is worse than refusing:
+// stamping a £8/each price onto a per-kg ingredient silently corrupts stock AND
+// every recipe cost. Rules, in priority order:
+//   1. Same unit (after aliasing)            → apply as-is
+//   2. Pure metric conversion (L↔ml, kg↔g)   → convert qty ×1000 / cost ÷1000
+//   3. Ingredient's purchase bridge          → line unit == purchase_unit and
+//      purchase_to_usage set ("1 each = 2.1 kg") → qty×factor, cost÷factor
+//   4. AI-extracted pack info                → "6 × 1L @ £30/bottle" with a
+//      metric pack unit convertible to the usage unit
+//   5. Nothing reconciles                    → SKIP the line and REPORT it —
+//      never guess with money.
+const UNIT_ALIASES = {
+  l: 'l', ltr: 'l', litre: 'l', litres: 'l', liter: 'l', liters: 'l',
+  ml: 'ml', mls: 'ml', millilitre: 'ml', milliliter: 'ml',
+  kg: 'kg', kgs: 'kg', kilo: 'kg', kilos: 'kg', kilogram: 'kg', kilograms: 'kg',
+  g: 'g', gr: 'g', gram: 'g', grams: 'g',
+  each: 'each', ea: 'each', pc: 'each', pcs: 'each', piece: 'each', pieces: 'each', unit: 'each', units: 'each', x: 'each',
+  bottle: 'bottle', bottles: 'bottle', btl: 'bottle',
+  case: 'case', cases: 'case', box: 'case', boxes: 'case', pack: 'case', packs: 'case', pk: 'case',
+  tin: 'tin', tins: 'tin', can: 'tin', cans: 'tin',
+  bag: 'bag', bags: 'bag', sack: 'bag',
+};
+function normalizeUnit(u) {
+  const k = String(u || '').trim().toLowerCase().replace(/[.]/g, '');
+  return UNIT_ALIASES[k] || k;
+}
+// Millilitres/grams per one of the given metric unit; null = not metric.
+const METRIC_BASE = { l: { base: 'ml', per: 1000 }, ml: { base: 'ml', per: 1 }, kg: { base: 'g', per: 1000 }, g: { base: 'g', per: 1 } };
+// How many `toU` are in one `fromU` — 1 for same unit, ×1000/÷1000 across a
+// metric family, null when the units are unrelated (each vs kg etc.).
+function unitsPerUnit(fromU, toU) {
+  const f = normalizeUnit(fromU), t = normalizeUnit(toU);
+  if (!f || !t) return null;
+  if (f === t) return 1;
+  const mf = METRIC_BASE[f], mt = METRIC_BASE[t];
+  if (mf && mt && mf.base === mt.base) return mf.per / mt.per;
+  return null;
+}
+// Resolve an invoice line against an ingredient. Returns
+// { usageQty, usageCost, how } or null when irreconcilable.
+function reconcileInvoiceLine(item, qty, unitPrice, ing) {
+  const lineU = normalizeUnit(item.unit);
+  const ingU  = normalizeUnit(ing.unit);
+  // 1+2 — same unit or metric family
+  const per = unitsPerUnit(lineU, ingU);
+  if (per != null) {
+    return { usageQty: qty * per, usageCost: unitPrice / per, how: per === 1 ? 'same-unit' : `metric ${lineU}→${ingU}` };
+  }
+  // 3 — the ingredient's configured purchase bridge (e.g. 1 each = 2.1 kg)
+  const bridgeU = normalizeUnit(ing.purchase_unit);
+  const factor  = Number(ing.purchase_to_usage) || 0;
+  if (bridgeU && factor > 0 && lineU === bridgeU) {
+    return { usageQty: qty * factor, usageCost: unitPrice / factor, how: `bridge 1 ${bridgeU} = ${factor} ${ingU}` };
+  }
+  // 4 — AI-extracted pack info ("1L bottle" → pack_size 1, pack_unit L)
+  const packSize = Number(item.pack_size) || 0;
+  const packPer  = packSize > 0 ? unitsPerUnit(item.pack_unit, ingU) : null;
+  if (packPer != null && packSize > 0) {
+    const perPurchase = packSize * packPer;
+    return { usageQty: qty * perPurchase, usageCost: unitPrice / perPurchase, how: `pack ${packSize} ${normalizeUnit(item.pack_unit)}/${lineU}` };
+  }
+  return null; // 5 — refuse, never guess
+}
 
 app.post('/api/supplier-invoices', async (req, res) => {
   const client = await pool.connect();
@@ -4133,6 +5977,7 @@ app.post('/api/supplier-invoices', async (req, res) => {
     const created = [];
     const updated = [];
     const price_changes = [];
+    const skipped_unit_mismatch = []; // SEPOS-INV-UNITS-001 — refused lines, reported loudly
 
     // 2. Process each line item
     for (const item of (line_items || [])) {
@@ -4143,12 +5988,27 @@ app.post('/api/supplier-invoices', async (req, res) => {
       if (item.matched_ingredient_id) {
         // Matched to an existing ingredient
         const ingRes = await client.query(
-          `SELECT id, name_en, cost_per_unit FROM ingredients WHERE id = $1`,
+          `SELECT id, name_en, unit, cost_per_unit, purchase_unit, purchase_to_usage FROM ingredients WHERE id = $1`,
           [item.matched_ingredient_id]
         );
         if (ingRes.rows.length === 0) continue;
         const ing = ingRes.rows[0];
         const oldCost = parseFloat(ing.cost_per_unit) || 0;
+
+        // SEPOS-INV-UNITS-001 — reconcile invoice units to the ingredient's
+        // usage unit, or refuse the line. Stamping mismatched units corrupted
+        // both stock and every recipe cost (the old code applied blindly).
+        const rec = reconcileInvoiceLine(item, qty, unitPrice, ing);
+        if (!rec) {
+          skipped_unit_mismatch.push({
+            name: item.name || ing.name_en,
+            invoice_unit: item.unit || '?',
+            ingredient_unit: ing.unit || '?',
+            hint: `Set a purchase bridge on "${ing.name_en}" (e.g. 1 ${normalizeUnit(item.unit) || 'each'} = X ${ing.unit}) or edit the line to ${ing.unit}.`,
+          });
+          continue;
+        }
+        const newCost = Math.round(rec.usageCost * 10000) / 10000;
 
         await client.query(
           `UPDATE ingredients
@@ -4156,44 +6016,67 @@ app.post('/api/supplier-invoices', async (req, res) => {
                cost_per_unit = $2,
                updated_at = NOW()
            WHERE id = $3`,
-          [qty, unitPrice, ing.id]
+          [rec.usageQty, newCost, ing.id]
         );
 
         await client.query(
           `INSERT INTO stock_movements (ingredient_id, movement_type, quantity, cost_at_time, note, reference)
            VALUES ($1, 'delivery', $2, $3, $4, $5)`,
-          [ing.id, qty, unitPrice, `Invoice ${invoice_number || ''}`, `invoice:${invoiceId}`]
+          [ing.id, rec.usageQty, newCost, `Invoice ${invoice_number || ''}${rec.how !== 'same-unit' ? ` (${rec.how})` : ''}`, `invoice:${invoiceId}`]
         );
 
         updated.push(ing.name_en);
 
-        if (Math.abs(unitPrice - oldCost) > 0.001) {
-          price_changes.push({ name: ing.name_en, old_cost: oldCost, new_cost: unitPrice });
+        if (Math.abs(newCost - oldCost) > 0.001) {
+          price_changes.push({ id: ing.id, name: ing.name_en, old_cost: oldCost, new_cost: newCost });
         }
 
       } else {
-        // No match — auto-create a new ingredient
+        // No match — auto-create a new ingredient.
+        // SEPOS-INV-UNITS-001 — when the AI extracted metric pack info
+        // ("2 bottles × 1L @ £35"), create the ingredient straight in the
+        // metric base unit (ml/g) with the pro-rated cost, so recipes can use
+        // it in real ml/g from day one. A purchase bridge is stored too, so
+        // the NEXT invoice ("each"/"bottle" lines) reconciles automatically.
         const newName = item.name_extracted || item.name || 'Unknown Item';
+        let cUnit = item.unit || 'unit', cQty = qty, cCost = unitPrice, cPU = null, cPTU = null;
+        const packSize = Number(item.pack_size) || 0;
+        const packU = normalizeUnit(item.pack_unit);
+        if (packSize > 0 && METRIC_BASE[packU]) {
+          const base = METRIC_BASE[packU];
+          const perPurchase = packSize * base.per;      // usage units per each/bottle/case
+          cUnit = base.base;                            // 'ml' or 'g'
+          cQty  = qty * perPurchase;
+          cCost = Math.round((unitPrice / perPurchase) * 10000) / 10000;
+          cPU   = normalizeUnit(item.unit) || 'each';
+          cPTU  = perPurchase;
+        }
         const newIng = await client.query(
-          `INSERT INTO ingredients (name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, supplier_name, updated_at)
-           VALUES ($1, '', $2, $3, 100, 'Other', $4, $5, NOW())
+          `INSERT INTO ingredients (name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, supplier_name, purchase_unit, purchase_to_usage, updated_at)
+           VALUES ($1, '', $2, $3, 100, 'Other', $4, $5, $6, $7, NOW())
            RETURNING id, name_en`,
-          [newName, item.unit || 'unit', unitPrice, qty, supplier_name || '']
+          [newName, cUnit, cCost, cQty, supplier_name || '', cPU, cPTU]
         );
 
         await client.query(
           `INSERT INTO stock_movements (ingredient_id, movement_type, quantity, cost_at_time, note, reference)
            VALUES ($1, 'delivery', $2, $3, $4, $5)`,
-          [newIng.rows[0].id, qty, unitPrice, `Invoice ${invoice_number || ''} (auto-created)`, `invoice:${invoiceId}`]
+          [newIng.rows[0].id, cQty, cCost, `Invoice ${invoice_number || ''} (auto-created)`, `invoice:${invoiceId}`]
         );
 
         created.push(newName);
       }
     }
 
-    // 3. Return everything the frontend needs for the done screen
+    // 3. SEPOS-046 — refresh recipe costs for price-changed ingredients so
+    // food-cost badges and the wastage report track the new supplier price.
+    const recipes_recalculated = await recalcRecipesForIngredients(
+      client, price_changes.map(p => p.id).filter(Boolean)
+    );
+
+    // 4. Return everything the frontend needs for the done screen
     await client.query('COMMIT');
-    res.json({ id: invoiceId, success: true, created, updated, price_changes });
+    res.json({ id: invoiceId, success: true, created, updated, price_changes, recipes_recalculated, skipped_unit_mismatch });
 
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (e) {}
@@ -4227,6 +6110,32 @@ app.get('/api/supplier-invoices', async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// (auth note) GET /api/vouchers and GET /api/voucher-redemptions are gated
+// with requireStaffAuthOrSyncSecret — Nook's REG-1 (2026-07-14): both leaked
+// voucher codes/balances/redemptions to the anonymous internet. Staff UIs
+// send the Bearer token (api.js attaches it globally); the desktop pull
+// sends x-sync-secret. The public widget balance check stays on
+// GET /api/widget/voucher/:code (exact-code lookup only).
+
+// SEPOS-046 — itemised detail for the invoice history expander. The confirm
+// endpoint already writes one stock_movements row per line with
+// reference='invoice:<id>', so the lines live there (including for every
+// invoice recorded since the transaction fix shipped) — no new table needed.
+app.get('/api/supplier-invoices/:id/lines', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT sm.quantity, sm.cost_at_time, sm.note, sm.created_at,
+              i.name_en, i.unit
+         FROM stock_movements sm
+         LEFT JOIN ingredients i ON i.id = sm.ingredient_id
+        WHERE sm.reference = $1
+        ORDER BY sm.id ASC`,
+      [`invoice:${parseInt(req.params.id, 10) || 0}`]
+    );
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/ingredients', async (req, res) => {
   try { const result = await pool.query(`SELECT * FROM ingredients ORDER BY category, name_en`); res.json(result.rows); }
   catch (err) { res.status(500).json({ error: err.message }); }
@@ -4239,16 +6148,16 @@ app.get('/api/ingredients/low-stock', async (req, res) => {
 
 app.post('/api/ingredients', async (req, res) => {
   try {
-    const { name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens } = req.body;
-    const result = await pool.query(`INSERT INTO ingredients (name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW()) RETURNING id`, [name_en, name_th || '', unit || 'kg', parseFloat(cost_per_unit) || 0, parseFloat(yield_percentage) || 100, category || 'Other', parseFloat(current_stock) || 0, par_level ? parseFloat(par_level) : null, supplier_name || '', allergens || '[]']);
+    const { name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens, purchase_unit, purchase_to_usage } = req.body;
+    const result = await pool.query(`INSERT INTO ingredients (name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens, purchase_unit, purchase_to_usage, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW()) RETURNING id`, [name_en, name_th || '', unit || 'kg', parseFloat(cost_per_unit) || 0, parseFloat(yield_percentage) || 100, category || 'Other', parseFloat(current_stock) || 0, par_level ? parseFloat(par_level) : null, supplier_name || '', allergens || '[]', purchase_unit || null, purchase_to_usage ? parseFloat(purchase_to_usage) : null]);
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.put('/api/ingredients/:id', async (req, res) => {
   try {
-    const { name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens } = req.body;
-    const result = await pool.query(`UPDATE ingredients SET name_en=$1, name_th=$2, unit=$3, cost_per_unit=$4, yield_percentage=$5, category=$6, current_stock=$7, par_level=$8, supplier_name=$9, allergens=$10, updated_at=NOW() WHERE id=$11`, [name_en, name_th || '', unit || 'kg', parseFloat(cost_per_unit) || 0, parseFloat(yield_percentage) || 100, category || 'Other', parseFloat(current_stock) || 0, par_level ? parseFloat(par_level) : null, supplier_name || '', allergens || '[]', req.params.id]);
+    const { name_en, name_th, unit, cost_per_unit, yield_percentage, category, current_stock, par_level, supplier_name, allergens, purchase_unit, purchase_to_usage } = req.body;
+    const result = await pool.query(`UPDATE ingredients SET name_en=$1, name_th=$2, unit=$3, cost_per_unit=$4, yield_percentage=$5, category=$6, current_stock=$7, par_level=$8, supplier_name=$9, allergens=$10, purchase_unit=$11, purchase_to_usage=$12, updated_at=NOW() WHERE id=$13`, [name_en, name_th || '', unit || 'kg', parseFloat(cost_per_unit) || 0, parseFloat(yield_percentage) || 100, category || 'Other', parseFloat(current_stock) || 0, par_level ? parseFloat(par_level) : null, supplier_name || '', allergens || '[]', purchase_unit || null, purchase_to_usage ? parseFloat(purchase_to_usage) : null, req.params.id]);
     res.json({ success: true, changes: result.rowCount });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -4666,17 +6575,30 @@ io.on('connection', (socket) => {
 app.get('/api/network-info', (req, res) => {
   const os = require('os');
   const port = process.env.PORT || 3001;
-  const ifaces = os.networkInterfaces();
-  for (const name of Object.keys(ifaces)) {
+  // Only a LOCAL install (desktop / Sunmi host) is a real LAN host worth
+  // pointing tablets at. On the cloud (Railway) this endpoint would otherwise
+  // report the datacenter container's private IP (e.g. 10.x:8080) — a real
+  // address, but meaningless outside the container. `local` lets the client
+  // hide the LAN "Network Setup" card in the cloud web app.
+  const local = String(process.env.DB_MODE || '').toLowerCase() === 'local';
+  // Prefer the Wi-Fi/Ethernet LAN interface: 192.168.x first, then other
+  // private ranges — so a machine with both Wi-Fi and a cellular/hotspot
+  // interface reports the address tablets can actually reach.
+  const os_ = os.networkInterfaces();
+  const candidates = [];
+  for (const name of Object.keys(os_)) {
     if (/^(tun|utun|tap|ipsec|vpn|wg|zt)/i.test(name)) continue;
-    for (const iface of (ifaces[name] || [])) {
+    for (const iface of (os_[name] || [])) {
       if (iface.family !== 'IPv4' || iface.internal) continue;
       if (/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(iface.address)) {
-        return res.json({ ip: iface.address, port, url: `http://${iface.address}:${port}` });
+        candidates.push(iface.address);
       }
     }
   }
-  res.json({ ip: '127.0.0.1', port, url: `http://127.0.0.1:${port}` });
+  // 192.168.x are ordinary home/shop routers — the address tablets share.
+  candidates.sort((a, b) => (b.startsWith('192.168.') ? 1 : 0) - (a.startsWith('192.168.') ? 1 : 0));
+  const ip = candidates[0] || '127.0.0.1';
+  res.json({ ip, port, url: `http://${ip}:${port}`, local });
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -4746,15 +6668,20 @@ app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
     // set both a restaurant postcode and a radius. The widget uses this
     // flag to decide whether to show the Delivery toggle at all.
     const dr = await pool.query(
-      `SELECT key, value FROM settings WHERE key IN ('restaurant_postcode','delivery_radius_miles')`
+      `SELECT key, value FROM settings WHERE key IN ('restaurant_postcode','delivery_radius_miles','takeaway_discount_percent')`
     );
     const cfg = {};
     dr.rows.forEach(row => { cfg[row.key] = row.value; });
     const deliveryEnabled = !!(cfg.restaurant_postcode && Number(cfg.delivery_radius_miles) > 0);
+    // SEPOS-TAKEAWAY-DISCOUNT — optional % off online takeaway orders (Chart
+    // Thai ask, 2026-07-21). 0 = off. Clamped 0–50 as a fat-finger guard; the
+    // order endpoint clamps identically so widget and server always agree.
+    const discountPercent = Math.min(50, Math.max(0, Number(cfg.takeaway_discount_percent) || 0));
     res.json({
       ...(r.rows[0] || {}),
       delivery_enabled: deliveryEnabled,
       delivery_radius_miles: deliveryEnabled ? Number(cfg.delivery_radius_miles) : 0,
+      discount_percent: discountPercent,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -4885,12 +6812,16 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
     let verifiedPaymentIntentId = null;
     let verifiedPaymentPence = null;
     if (payment_intent_id) {
-      if (!process.env.STRIPE_SECRET_KEY) {
+      const spVerify = siampayCfg();
+      if (!process.env.STRIPE_SECRET_KEY && !spVerify) {
         return res.status(400).json({ error: 'Stripe not configured — cannot verify payment' });
       }
       try {
-        const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-        const pi = await stripe.paymentIntents.retrieve(payment_intent_id);
+        // SIAMPAY-002 — a SiamPay PI lives on the CONNECTED account, so the
+        // retrieve must carry the stripeAccount header to find it.
+        const pi = spVerify
+          ? await require('stripe')(spVerify.key).paymentIntents.retrieve(payment_intent_id, {}, { stripeAccount: spVerify.account })
+          : await require('stripe')(process.env.STRIPE_SECRET_KEY).paymentIntents.retrieve(payment_intent_id);
         if (pi.status !== 'succeeded') {
           return res.status(402).json({ error: `Payment not completed (${pi.status})` });
         }
@@ -5020,11 +6951,28 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
       total += it.server_price * (Number(it.quantity) || 1);
     }
 
+    // SEPOS-TAKEAWAY-DISCOUNT — optional % off online orders (Chart Thai,
+    // 2026-07-21). Applied server-side BEFORE the paid-amount check so a
+    // tampered widget can't claim a bigger discount than the setting allows;
+    // clamped identically to /api/takeaway/settings so both sides agree.
+    let discountPercent = 0;
+    try {
+      const dset = await client.query(`SELECT value FROM settings WHERE key = 'takeaway_discount_percent'`);
+      discountPercent = Math.min(50, Math.max(0, Number(dset.rows[0]?.value) || 0));
+    } catch { /* setting absent → no discount */ }
+    if (discountPercent > 0) {
+      total = Math.round(total * (1 - discountPercent / 100) * 100) / 100;
+    }
+
     // SEPOS-047b — the paid amount must match the server-priced total.
     // A mismatch means menu prices changed mid-checkout or the widget
     // was tampered with; either way the order must not land as 'paid'.
-    if (verifiedPaymentIntentId !== null && verifiedPaymentPence !== Math.round(total * 100)) {
-      console.warn(`[takeaway] PI ${verifiedPaymentIntentId} amount ${verifiedPaymentPence}p != order total ${Math.round(total * 100)}p — rejected`);
+    // SIAMPAY-002 (Korakot 21 Jul): the customer pays the menu price ONLY.
+    // The flat SiamPay fee is application_fee_amount — deducted from the
+    // client's settlement by Stripe, never added on top for the customer.
+    const expectedPence = Math.round(total * 100);
+    if (verifiedPaymentIntentId !== null && verifiedPaymentPence !== expectedPence) {
+      console.warn(`[takeaway] PI ${verifiedPaymentIntentId} amount ${verifiedPaymentPence}p != expected ${expectedPence}p — rejected`);
       return res.status(402).json({ error: 'Payment amount does not match the order total — please refresh and try again' });
     }
 
@@ -5053,11 +7001,11 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
           order_type, customer_name, customer_phone, customer_email,
           pickup_time, takeaway_status, payment_status, payment_intent_id, customer_note,
           order_subtype, delivery_address, delivery_notes, marketing_consent,
-          restaurant_id)
+          restaurant_id, discount_type, discount_value, discount_reason)
        VALUES (NULL, 'open', 1, $1, NOW(),
                'takeaway', $2, $3, $4,
                $5, 'pending', $6, $7, $8,
-               $9, $10, $11, $12, $13)
+               $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING id`,
       [total, customer_name.trim(), customer_phone.trim(), (customer_email || '').trim() || null,
        pickup_time, paymentStatus, verifiedPaymentIntentId, notes || null,
@@ -5065,7 +7013,10 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
        subtype === 'delivery' ? delivery_address.trim() : null,
        subtype === 'delivery' ? (delivery_notes || '').trim() || null : null,
        marketing_consent ? 1 : 0,
-       restaurantId]
+       restaurantId,
+       discountPercent > 0 ? 'percent' : null,
+       discountPercent > 0 ? discountPercent : null,
+       discountPercent > 0 ? 'Online order discount' : null]
     );
     const orderId = orderRes.rows[0].id;
 
@@ -5124,19 +7075,23 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
         const printSettings = await loadSettings();
         const mode = printSettings.kitchen_print_mode || 'print';
 
-        // Look up is_bar per menu_item via category
+        // SEPOS-STATION-001 — resolve each item's target: its category's assigned
+        // printer station, else the default (bar printer if is_bar, else kitchen).
+        // Look up is_bar + printer_id per menu_item, and load active stations.
         const menuIds = items.map(it => it.menu_item_id).filter(Boolean);
-        const barIdSet = new Set();
+        const metaById = new Map(); // menu_item_id -> { is_bar, printer_id }
         if (menuIds.length) {
           const rows = await pool.query(
-            `SELECT mi.id, COALESCE(c.is_bar, 0) AS is_bar
-               FROM menu_items mi
-               LEFT JOIN categories c ON mi.category_id = c.id
+            // SEPOS-STATION-003 — dish-level printer override wins over category.
+            `SELECT mi.id, COALESCE(c.is_bar, 0) AS is_bar, COALESCE(mi.printer_id, c.printer_id) AS printer_id
+               FROM menu_items mi LEFT JOIN categories c ON mi.category_id = c.id
               WHERE mi.id = ANY($1)`,
             [menuIds]
           );
-          rows.rows.forEach(r => { if (Number(r.is_bar) === 1) barIdSet.add(r.id); });
+          rows.rows.forEach(r => metaById.set(r.id, { is_bar: Number(r.is_bar) === 1, printer_id: r.printer_id }));
         }
+        const stationRows = (await pool.query('SELECT * FROM printers WHERE is_active = 1 AND ip IS NOT NULL').catch(() => ({ rows: [] }))).rows;
+        const stationById = new Map(stationRows.map(p => [p.id, p]));
 
         const toPrintItem = (it) => ({
           course: 1,
@@ -5147,8 +7102,15 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
             : '',
         });
 
-        const kitchenItems = items.filter(it => !barIdSet.has(it.menu_item_id)).map(toPrintItem);
-        const barItems     = items.filter(it =>  barIdSet.has(it.menu_item_id)).map(toPrintItem);
+        // Group items by target key: 'kitchen' | 'bar' | station:<id>.
+        const groups = new Map(); // key -> { station|null, items[] }
+        for (const it of items) {
+          const meta = metaById.get(it.menu_item_id) || {};
+          const station = meta.printer_id != null ? stationById.get(meta.printer_id) : null;
+          const key = station ? `station:${station.id}` : (meta.is_bar ? 'bar' : 'kitchen');
+          if (!groups.has(key)) groups.set(key, { station: station || null, items: [] });
+          groups.get(key).items.push(toPrintItem(it));
+        }
 
         const printOrder = {
           id: orderId,
@@ -5161,22 +7123,28 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
           table_number: null,
         };
 
-        // Kitchen ticket — gated by kitchen_print_mode
-        if (mode !== 'kds'
-            && kitchenItems.length
-            && (printSettings.printer_kitchen_ip || printSettings.printer_kitchen_name)) {
-          printService.printFullKitchenTicket(printSettings, printOrder, kitchenItems)
-            .then(() => console.log(`🖨️ Kitchen ticket auto-printed for takeaway #${orderId}`))
-            .catch(err => console.error('[takeaway] kitchen print failed:', err.message));
-        }
-
-        // Bar ticket — no separate mode toggle today, prints whenever
-        // the bar IP is set (printer_bar_name is per-device localStorage,
-        // not available server-side, so we gate on IP only).
-        if (barItems.length && printSettings.printer_bar_ip) {
-          printService.printBarTicket(printSettings, printOrder, barItems)
-            .then(() => console.log(`🍹 Bar ticket auto-printed for takeaway #${orderId}`))
-            .catch(err => console.error('[takeaway] bar print failed:', err.message));
+        for (const [key, grp] of groups) {
+          if (!grp.items.length) continue;
+          if (grp.station) {
+            // Assigned station (extra printer) — SEPOS-STATION-001.
+            printService.printKitchenToPrinter(grp.station, printSettings, printOrder, grp.items)
+              .then(() => console.log(`🖨️ Station "${grp.station.name}" auto-printed for takeaway #${orderId}`))
+              .catch(err => console.error(`[takeaway] station "${grp.station.name}" print failed:`, err.message));
+          } else if (key === 'bar') {
+            // Default bar printer — unchanged path.
+            if (printSettings.printer_bar_ip) {
+              printService.printBarTicket(printSettings, printOrder, grp.items)
+                .then(() => console.log(`🍹 Bar ticket auto-printed for takeaway #${orderId}`))
+                .catch(err => console.error('[takeaway] bar print failed:', err.message));
+            }
+          } else {
+            // Default kitchen printer — unchanged path (gated by kitchen_print_mode).
+            if (mode !== 'kds' && (printSettings.printer_kitchen_ip || printSettings.printer_kitchen_name)) {
+              printService.printFullKitchenTicket(printSettings, printOrder, grp.items)
+                .then(() => console.log(`🖨️ Kitchen ticket auto-printed for takeaway #${orderId}`))
+                .catch(err => console.error('[takeaway] kitchen print failed:', err.message));
+            }
+          }
         }
       } catch (err) {
         console.error('[takeaway] auto print setup failed:', err.message);
@@ -5223,6 +7191,16 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
 // confirm, then confirms client-side, then posts the order with the
 // verified payment_intent_id.
 
+// SIAMPAY-002 v1 — SiamPay mode for tenants WITHOUT their own Stripe keys.
+// Nick's hard rule (board 21 Jul, Korakot-approved): DIRECT charges on the
+// client's connected account — the PaymentIntent lives ON acct_…, money
+// settles to the client (merchant of record), we take a flat
+// application_fee_amount (default 10p). Never destination charges, never
+// transfer_data, never a SiamEPOS balance in the flow (FCA/SEIS posture).
+// A tenant's own STRIPE_SECRET_KEY always wins — existing clients unchanged.
+// TEST MODE ONLY until solicitor + SEIS sign-offs (see SIAMPAY-002 ticket).
+const { siampayCfg } = require('./services/siampay'); // shared with voucherService
+
 app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
   // A restaurant can force mock/demo pay (no card field) even with Stripe keys
   // present, via the `takeaway_mock_pay` setting ('1'). Used for the sales-demo
@@ -5232,6 +7210,18 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
   // deployments (no flag) keep real Stripe untouched.
   let mock = false;
   try { const s = await loadSettings(); mock = String(s.takeaway_mock_pay || '') === '1'; } catch {}
+  const sp = siampayCfg();
+  if (!mock && sp) {
+    // SIAMPAY-002 — widget must init Stripe.js WITH the connected account so
+    // the direct charge confirms in the client's own account context.
+    return res.json({
+      configured: true,
+      publishable_key: sp.pk,
+      stripe_account: sp.account,
+      // No fee_pence: the SiamPay fee comes out of the client's settlement
+      // (application_fee_amount), the customer just pays the menu price.
+    });
+  }
   const configured = !mock && !!process.env.STRIPE_PUBLISHABLE_KEY && !!process.env.STRIPE_SECRET_KEY;
   res.json({
     configured,
@@ -5240,7 +7230,8 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
 });
 
 app.post('/api/takeaway/payment-intent', widgetCors, async (req, res) => {
-  if (!process.env.STRIPE_SECRET_KEY) {
+  const sp = siampayCfg();
+  if (!process.env.STRIPE_SECRET_KEY && !sp) {
     return res.status(503).json({ error: 'Stripe not configured on this restaurant. Please ask the restaurant to switch to demo mode.' });
   }
   const amountPence = Number(req.body?.amount_pence);
@@ -5254,8 +7245,7 @@ app.post('/api/takeaway/payment-intent', widgetCors, async (req, res) => {
     return res.status(400).json({ error: 'Amount too large for online takeaway' });
   }
   try {
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-    const pi = await stripe.paymentIntents.create({
+    const params = {
       amount:   amountPence,
       currency: 'gbp',
       description,
@@ -5267,7 +7257,16 @@ app.post('/api/takeaway/payment-intent', widgetCors, async (req, res) => {
         product:       'siamepos_takeaway',
         restaurant_id: resolveRestaurantId(req),
       },
-    });
+    };
+    let pi;
+    if (sp) {
+      // SIAMPAY-002 — DIRECT charge on the connected account + flat app fee.
+      // The client is merchant of record; the fee is Stripe-ledgered to us.
+      params.application_fee_amount = sp.feePence;
+      pi = await require('stripe')(sp.key).paymentIntents.create(params, { stripeAccount: sp.account });
+    } else {
+      pi = await require('stripe')(process.env.STRIPE_SECRET_KEY).paymentIntents.create(params);
+    }
     res.json({
       client_secret:     pi.client_secret,
       payment_intent_id: pi.id,
@@ -5292,6 +7291,103 @@ app.get('/.well-known/apple-developer-merchantid-domain-association', (req, res)
   res.type('text/plain').send(content);
 });
 
+// ── SIAMPAY-QR-001 — dine-in QR pay-by-link (Nick's addendum, 21 Jul) ─────
+// Waiter rings up the bill → the till requests a Stripe Checkout session →
+// shows the QR → customer scans and pays with Apple Pay / Google Pay / card
+// → the till polls status and closes the bill through the normal pay flow
+// (method 'QR Card' — buckets as 'Other' on Z, correct because the money
+// arrives via Stripe payout, not the card machine).
+//
+// Rails: same decision as everywhere else — tenant's own STRIPE_SECRET_KEY,
+// else SiamPay platform mode (direct charge on the connected account + flat
+// app fee via payment_intent_data). Stripe-HOSTED Checkout is what makes
+// Apple/Google Pay appear with zero domain setup — checkout.stripe.com is
+// pre-registered, so scan-to-pay is one tap on any modern phone.
+function qrPayRail() {
+  const sp = siampayCfg();
+  if (sp) return { key: sp.key, opts: { stripeAccount: sp.account }, feePence: sp.feePence };
+  if (process.env.STRIPE_SECRET_KEY) return { key: process.env.STRIPE_SECRET_KEY, opts: {}, feePence: 0 };
+  return null;
+}
+
+app.post('/api/orders/:id/qr-pay', requireValidLicense, async (req, res) => {
+  const rail = qrPayRail();
+  if (!rail) return res.status(503).json({ error: 'No card rail configured — set up SiamPay (or Stripe keys) to use QR pay' });
+  const amountPence = Math.round(Number(req.body?.amount) * 100);
+  if (!Number.isInteger(amountPence) || amountPence < 30) {
+    return res.status(400).json({ error: 'Invalid amount (minimum 30p)' });
+  }
+  if (amountPence > 500000) {
+    return res.status(400).json({ error: 'Amount too large for QR pay' });
+  }
+  try {
+    const ord = await pool.query(
+      `SELECT o.id, o.status, t.name AS table_name, t.table_number
+         FROM orders o LEFT JOIN tables t ON t.id = o.table_id
+        WHERE o.id = $1`, [req.params.id]);
+    const order = ord.rows[0];
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.status !== 'open') return res.status(409).json({ error: `This bill is already ${order.status}` });
+    const tableLabel = order.table_name || (order.table_number != null ? `Table ${order.table_number}` : `Order #${order.id}`);
+    const rn = process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant';
+    const params = {
+      mode: 'payment',
+      line_items: [{
+        quantity: 1,
+        price_data: {
+          currency: 'gbp',
+          unit_amount: amountPence,
+          product_data: { name: `${rn} — ${tableLabel}` },
+        },
+      }],
+      // Checkout minimum is 30 min; the till's QR modal is the real timeout.
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
+      metadata: { purpose: 'qr_bill', order_id: String(order.id), product: 'siamepos_qr_pay' },
+      success_url: `${req.protocol}://${req.get('host')}/qr-pay-thanks`,
+      cancel_url:  `${req.protocol}://${req.get('host')}/qr-pay-thanks?status=cancelled`,
+    };
+    if (rail.feePence > 0) params.payment_intent_data = { application_fee_amount: rail.feePence };
+    const session = await require('stripe')(rail.key).checkout.sessions.create(params, rail.opts);
+    res.json({ session_id: session.id, url: session.url, amount_pence: amountPence });
+  } catch (err) {
+    console.error('[qr-pay] create', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/orders/:id/qr-pay/status', requireValidLicense, async (req, res) => {
+  const rail = qrPayRail();
+  if (!rail) return res.status(503).json({ error: 'No card rail configured' });
+  const sessionId = String(req.query.session_id || '');
+  if (!sessionId.startsWith('cs_')) return res.status(400).json({ error: 'session_id required' });
+  try {
+    const sess = await require('stripe')(rail.key).checkout.sessions.retrieve(sessionId, {}, rail.opts);
+    // The session must belong to THIS order — stops a paid session for a £5
+    // bill being replayed to close someone else's £80 bill.
+    if (String(sess.metadata?.order_id) !== String(req.params.id)) {
+      return res.status(400).json({ error: 'session does not match this order' });
+    }
+    res.json({
+      paid: sess.payment_status === 'paid',
+      status: sess.status,
+      amount_total: sess.amount_total,
+    });
+  } catch (err) {
+    console.error('[qr-pay] status', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Tiny customer-facing landing after Checkout — they just show the till.
+app.get('/qr-pay-thanks', (req, res) => {
+  const cancelled = req.query.status === 'cancelled';
+  res.type('html').send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
+<body style="margin:0;font-family:system-ui,-apple-system,sans-serif;background:#0D1B3E;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center">
+<div style="padding:32px"><div style="font-size:64px">${cancelled ? '↩️' : '✅'}</div>
+<h1 style="margin:12px 0 8px;font-size:24px">${cancelled ? 'Payment cancelled' : 'Payment received!'}</h1>
+<p style="opacity:.8;font-size:16px">${cancelled ? 'No charge was made — please see a member of staff.' : 'Thank you — your server will confirm it on the till. You can close this page.'}</p></div></body>`);
+});
+
 // Active takeaway orders — for kitchen view + Mac sync pull.
 app.get('/api/takeaway/orders/active', async (req, res) => {
   try {
@@ -5301,7 +7397,8 @@ app.get('/api/takeaway/orders/active', async (req, res) => {
       FROM orders o
       WHERE o.order_type = 'takeaway'
         AND COALESCE(o.takeaway_status, 'pending') <> 'collected'
-        AND o.status <> 'closed'
+        AND o.status NOT IN ('closed', 'cancelled')
+        AND o.table_id IS NULL
       ORDER BY o.pickup_time ASC NULLS LAST, o.id ASC
     `);
     res.json(r.rows);
@@ -5330,7 +7427,17 @@ app.post('/api/widget/voucher/purchase', widgetCors, async (req, res) => {
   try {
     const v = voucherSvc.validateAmount(req.body?.amount);
     if (!v.ok) return res.status(400).json({ error: v.error });
-    const pi = await voucherSvc.createPaymentIntent(v.amount);
+    // Demo tenants force mock pay via the same flag the takeaway widget
+    // honours — otherwise a SiamPay/own-keys tenant in TEST mode would show
+    // prospects a real card form their own cards can't complete.
+    let mock = false;
+    try { const s = await loadSettings(); mock = String(s.takeaway_mock_pay || '') === '1'; } catch {}
+    const pi = mock
+      ? { mode: 'mock',
+          payment_intent_id: 'mock_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+          client_secret: 'mock_secret_no_real_payment',
+          publishable_key: null }
+      : await voucherSvc.createPaymentIntent(v.amount);
     res.json({ ...pi, amount: v.amount });
   } catch (err) {
     console.error('[voucher] purchase', err);
@@ -5347,7 +7454,12 @@ app.post('/api/widget/voucher/confirm', widgetCors, async (req, res) => {
     } = req.body || {};
     const v = voucherSvc.validateAmount(amount);
     if (!v.ok) return res.status(400).json({ error: v.error });
-    const verify = await voucherSvc.verifyPaymentIntent(payment_intent_id, v.amount);
+    // allowMock mirrors the purchase endpoint's demo-flag decision, so a
+    // demo tenant's mock voucher confirms but a paying tenant can't be
+    // tricked with a hand-crafted "mock_" id.
+    let mockOk = false;
+    try { const s = await loadSettings(); mockOk = String(s.takeaway_mock_pay || '') === '1'; } catch {}
+    const verify = await voucherSvc.verifyPaymentIntent(payment_intent_id, v.amount, { allowMock: mockOk });
     if (!verify.ok) return res.status(402).json({ error: verify.error });
     // Re-trust server's amount_paid over client's amount — defends
     // against the client submitting a £500 PI then asking for a £1000
@@ -5405,6 +7517,12 @@ app.post('/api/widget/voucher/confirm', widgetCors, async (req, res) => {
 // Public-ish — lookup by code. Used by widget success screen + EPOS
 // redemption modal to preview balance before applying.
 app.get('/api/widget/voucher/:code', widgetCors, async (req, res) => {
+  // SEPOS-AUDIT-001 — vouchers are CLOUD-authoritative. A local till's SQLite
+  // has no voucher rows (they're not in the sync pull), so this lookup used to
+  // 404 for every cloud-sold voucher — pushing BillScreen into the external-
+  // bypass tender and letting the same voucher redeem at full value forever.
+  // Forward to the cloud; fall back to local only when offline.
+  if (await forwardToCloudWith(req, res, 'voucher-lookup')) return;
   try {
     const code = String(req.params.code || '').trim().toUpperCase();
     if (!code) return res.status(400).json({ error: 'code required' });
@@ -5423,6 +7541,8 @@ app.get('/api/widget/voucher/:code', widgetCors, async (req, res) => {
       expires_at:      v.expires_at,
       status:          v.status,
       recipient_name:  v.recipient_name,
+      type:            v.type || 'gift',            // SEPOS-DEPOSIT-001 — gift vs deposit
+      reservation_id:  v.reservation_id ?? null,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -5467,6 +7587,25 @@ app.get('/api/widget/voucher/:code/wallet-pass', widgetCors, async (req, res) =>
 // terminals can't double-spend the same voucher. Returns the new balance
 // + amount_used so the caller can compose the discount line.
 app.post('/api/vouchers/:code/redeem', async (req, res) => {
+  // SEPOS-AUDIT-001 — redeem against the CLOUD balance on local installs
+  // (that's where the voucher lives and where FOR UPDATE serialises the
+  // decrement). bill_id is a LOCAL order id here — translate it to the cloud
+  // id so the redemption links to the right cloud bill (null when unbound;
+  // the balance still decrements correctly). Falls back to the local table
+  // only when the cloud is unreachable.
+  {
+    const cloudBillId = req.body?.bill_id ? await localOrderCloudId(req.body.bill_id) : null;
+    // Verify pass — forward ONLY when the bill translates (or none was given):
+    // forwarding with bill_id:null recorded an ORPHANED redemption on the
+    // cloud that voucher-remove could never find (404 → balance unrestorable
+    // on an undo). Unbound = the order's create push hasn't landed (seconds) —
+    // fall through to the local handler like the offline path.
+    if (!req.body?.bill_id || cloudBillId) {
+      if (await forwardToCloudWith(req, res, 'voucher-redeem', {
+        body: { ...(req.body || {}), bill_id: cloudBillId },
+      })) return;
+    }
+  }
   const code = String(req.params.code || '').trim().toUpperCase();
   const { amount, bill_id, redeemed_by } = req.body || {};
   const amtNum = Number(amount);
@@ -5519,10 +7658,47 @@ app.post('/api/vouchers/:code/redeem', async (req, res) => {
 // on the order. Refuses to act on closed bills (those need a proper
 // refund/reverse flow which v1 leaves to admin).
 app.post('/api/orders/:id/voucher-remove', async (req, res) => {
+  // SEPOS-AUDIT-001 — the redemption we're undoing lives on the CLOUD (redeem
+  // is forwarded there on local installs), keyed by the CLOUD bill id.
+  // Forward the restore with the translated path; on success also clear the
+  // LOCAL order's voucher discount — the pull's null-drop rule would keep it
+  // stuck otherwise (cloud sends discount fields as null after clearing).
+  {
+    const cloudId = await localOrderCloudId(req.params.id);
+    if (cloudId) {
+      const localId = req.params.id;
+      if (await forwardToCloudWith(req, res, 'voucher-remove', {
+        path: `/api/orders/${cloudId}/voucher-remove`,
+        afterOk: async (j) => {
+          if (j && j.voucher_code) {
+            await pool.query(
+              `UPDATE orders SET discount_type = NULL, discount_value = NULL, discount_reason = NULL
+               WHERE id = $1 AND discount_reason LIKE $2`,
+              [localId, `Voucher ${j.voucher_code}%`]
+            );
+            // SEPOS-AUDIT-001 (verify pass) — the clear must travel through
+            // the SAME FIFO queue as the voucher's original apply_discount
+            // push: if that push is still queued, it would otherwise land on
+            // the cloud AFTER the balance was restored and re-instate the
+            // discount (bill £N cheaper with no redemption on record).
+            await offlineQueue.enqueue('apply_discount', {
+              localOrderId: Number(localId),
+              discount_type: null, discount_value: null, discount_reason: null,
+            });
+          }
+        },
+      })) return;
+    }
+  }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const orderId = req.params.id;
+    // SEPOS-DEPOSIT-001 fix — a bill can now carry BOTH a voucher AND a deposit
+    // redemption (both write voucher_redemptions rows). Restoring "most-recent"
+    // would credit back the wrong one. When the caller names a specific code,
+    // restore THAT redemption; otherwise keep the legacy most-recent behaviour.
+    const targetCode = (req.body && req.body.code) ? String(req.body.code).trim().toUpperCase() : null;
 
     // Bill must still be open — undoing a closed bill needs a different
     // flow (refund payment + reopen) so we punt that to admin.
@@ -5531,14 +7707,14 @@ app.post('/api/orders/:id/voucher-remove', async (req, res) => {
     if (!order)             { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Order not found' }); }
     if (order.status !== 'open') { await client.query('ROLLBACK'); return res.status(409).json({ error: 'Bill is already closed — use refund flow' }); }
 
-    // Find the most recent voucher redemption for this bill.
+    // Find the redemption to undo — the named code's if given, else most-recent.
     const r = await client.query(
       `SELECT vr.id, vr.voucher_id, vr.amount_used, v.code, v.status AS voucher_status
        FROM voucher_redemptions vr
        JOIN vouchers v ON v.id = vr.voucher_id
-       WHERE vr.bill_id = $1
+       WHERE vr.bill_id = $1 ${targetCode ? 'AND UPPER(v.code) = $2' : ''}
        ORDER BY vr.used_at DESC LIMIT 1`,
-      [orderId]
+      targetCode ? [orderId, targetCode] : [orderId]
     );
     const vr = r.rows[0];
     if (!vr) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'No voucher on this bill' }); }
@@ -5557,14 +7733,25 @@ app.post('/api/orders/:id/voucher-remove', async (req, res) => {
 
     // Clear the discount on the order — but only if it's THIS voucher's
     // discount (defends against a stray non-voucher discount being wiped).
+    let clearedDiscount = false;
     if (order.discount_reason && order.discount_reason.startsWith(`Voucher ${vr.code}`)) {
       await client.query(
         `UPDATE orders SET discount_type = NULL, discount_value = NULL, discount_reason = NULL WHERE id = $1`,
         [orderId]
       );
+      clearedDiscount = true;
     }
 
     await client.query('COMMIT');
+    // SEPOS-AUDIT-001 (verify pass) — local-fallback path: push the clear
+    // through the queue so it lands AFTER any queued voucher apply_discount
+    // (no-op on cloud installs).
+    if (clearedDiscount) {
+      await offlineQueue.enqueue('apply_discount', {
+        localOrderId: Number(orderId),
+        discount_type: null, discount_value: null, discount_reason: null,
+      });
+    }
     res.json({ ok: true, restored: Number(vr.amount_used), voucher_code: vr.code });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -5576,7 +7763,9 @@ app.post('/api/orders/:id/voucher-remove', async (req, res) => {
 });
 
 // Admin — list (auto-expires any active+past while reading)
-app.get('/api/vouchers', async (req, res) => {
+app.get('/api/vouchers', requireStaffAuthOrSyncSecret(), async (req, res) => {
+  // SEPOS-AUDIT-001 — cloud-authoritative on local installs (see voucher-lookup).
+  if (await forwardToCloudWith(req, res, 'voucher-list')) return;
   try {
     const { q, status } = req.query;
     let where = 'WHERE 1=1';
@@ -5599,6 +7788,9 @@ app.get('/api/vouchers', async (req, res) => {
 
 // Admin — voucher detail + redemption history
 app.get('/api/vouchers/:id', async (req, res) => {
+  // SEPOS-AUDIT-001 — cloud-authoritative on local installs (ids come from the
+  // forwarded list above, so they're cloud ids).
+  if (await forwardToCloudWith(req, res, 'voucher-detail')) return;
   try {
     const v = await pool.query('SELECT * FROM vouchers WHERE id = $1', [req.params.id]);
     if (!v.rows[0]) return res.status(404).json({ error: 'not found' });
@@ -5616,6 +7808,8 @@ app.get('/api/vouchers/:id', async (req, res) => {
 
 // Admin — soft-void (manager-PIN gated by frontend; backend trusts staff_id)
 app.post('/api/vouchers/:id/void', async (req, res) => {
+  // SEPOS-AUDIT-001 — cloud-authoritative on local installs.
+  if (await forwardToCloudWith(req, res, 'voucher-void')) return;
   try {
     const { voided_by } = req.body || {};
     const r = await pool.query(
@@ -5634,6 +7828,12 @@ app.post('/api/vouchers/:id/void', async (req, res) => {
 // row records payment_method='cash' or 'card' so the Z-Report shows
 // it as on-till revenue (not the off-till Stripe block).
 app.post('/api/vouchers/sell', async (req, res) => {
+  // SEPOS-AUDIT-001 — sell on the CLOUD from local installs: the voucher then
+  // exists where redemptions/lookups are served, the gift email's Add-to-Wallet
+  // link (built against the cloud host) actually resolves, and cloud/ops
+  // reporting sees the liability. Falls back to a local-only sale when offline
+  // (degraded but not lost — same as before this fix).
+  if (await forwardToCloudWith(req, res, 'voucher-sell')) return;
   try {
     const {
       amount, payment_method,
@@ -5674,6 +7874,19 @@ app.post('/api/vouchers/sell', async (req, res) => {
         })
         .catch((e) => console.error('[voucher] gift email failed', e));
     }
+    // SEPOS-AUDIT-001 (verify pass) — OFFLINE fallback only reaches here on a
+    // local install (the forward above returned false = cloud unreachable).
+    // Replay the sale to the cloud with the SAME printed code so the
+    // customer's voucher works once connectivity returns (without this the
+    // code lived only in local SQLite and every later cloud lookup 404'd).
+    // No-op on cloud installs (enqueue is inert in cloud mode).
+    await offlineQueue.enqueue('sell_voucher', {
+      code: voucher.code, original_amount: Number(voucher.original_amount),
+      recipient_name: recipient_name || null, recipient_email: recipient_email || null,
+      sender_name: sender_name || null, message: message || null,
+      delivery_date: delivery_date || null, expires_at: voucher.expires_at,
+      payment_method: method, restaurant_id: rid,
+    });
     res.status(201).json({
       voucher: { ...voucher, balance: Number(voucher.balance), original_amount: Number(voucher.original_amount) },
     });
@@ -5685,6 +7898,9 @@ app.post('/api/vouchers/sell', async (req, res) => {
 
 // Admin — resend gift email (operator-initiated, e.g. lost-in-spam)
 app.post('/api/vouchers/:id/resend-email', async (req, res) => {
+  // SEPOS-AUDIT-001 — resend from the CLOUD so the emailed wallet/balance
+  // links point at a host that actually has the voucher.
+  if (await forwardToCloudWith(req, res, 'voucher-resend')) return;
   try {
     const r = await pool.query('SELECT * FROM vouchers WHERE id = $1', [req.params.id]);
     const v = r.rows[0];
@@ -5696,6 +7912,105 @@ app.post('/api/vouchers/:id/resend-email', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── SEPOS-DEPOSIT-001 — booking deposits (typed vouchers) ──────────
+// A deposit is a PREPAID TENDER: taken now, redeemed on the day against the
+// bill's balance owed (never a discount). Stored as a vouchers row
+// type='deposit' with a DEP- code, linked to a reservation, expiry =
+// reservation date + 7 grace. Redemption reuses /api/vouchers/:code/redeem
+// (the same atomic decrement + voucher_redemptions ledger as gift vouchers);
+// the Bill screen applies it as a 'Deposit' tender. Phase A = manual create
+// (deposit taken by phone / card machine); Stripe capture = Phase B (widget).
+app.post('/api/deposits', async (req, res) => {
+  try {
+    const { amount, payment_method, reservation_id, customer_name, customer_email } = req.body || {};
+    const v = voucherSvc.validateAmount(amount);
+    if (!v.ok) return res.status(400).json({ error: v.error });
+    const method = String(payment_method || 'card').toLowerCase();
+    if (!['cash', 'card', 'mock'].includes(method)) {
+      return res.status(400).json({ error: 'payment_method must be cash, card or mock' });
+    }
+    // Expiry = reservation date + 7 days grace (fallback to default if unlinked).
+    let expires = voucherSvc.defaultExpiryDate();
+    let resId = reservation_id ? Number(reservation_id) : null;
+    if (resId) {
+      const rres = await pool.query('SELECT reservation_date FROM reservations WHERE id = $1', [resId]);
+      const rdate = rres.rows[0]?.reservation_date;
+      if (rdate) {
+        const d = new Date(rdate); d.setDate(d.getDate() + 7);
+        expires = d.toISOString().slice(0, 10);
+      } else {
+        resId = null; // unknown reservation → don't link a phantom id
+      }
+    }
+    let code;
+    for (let i = 0; i < 10; i++) {
+      code = voucherSvc.generateCode('DEP-');
+      const exists = await pool.query('SELECT id FROM vouchers WHERE code = $1', [code]);
+      if (!exists.rows[0]) break;
+    }
+    const rid = resolveRestaurantId(req);
+    const result = await pool.query(
+      `INSERT INTO vouchers
+         (code, original_amount, balance, recipient_name, recipient_email,
+          expires_at, payment_method, restaurant_id, type, reservation_id, take_date)
+       VALUES ($1,$2,$2,$3,$4,$5,$6,$7,'deposit',$8, CURRENT_DATE) RETURNING *`,
+      [code, v.amount, customer_name || null, customer_email || null,
+       expires, method, rid, resId],
+    );
+    const dep = result.rows[0];
+    res.status(201).json({ ...dep, balance: Number(dep.balance), original_amount: Number(dep.original_amount) });
+  } catch (err) {
+    console.error('[deposit] create', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Auto-suggest the active deposit for a bill, matched via the order's booking.
+app.get('/api/orders/:id/deposit', async (req, res) => {
+  // SEPOS-AUDIT-001 — deposits are vouchers, which are cloud-authoritative on
+  // local installs. Translate the LOCAL order id to its cloud id and ask the
+  // cloud; fall back to the local table when offline or unbound.
+  {
+    const cloudId = await localOrderCloudId(req.params.id);
+    if (cloudId && await forwardToCloudWith(req, res, 'deposit-lookup', {
+      path: `/api/orders/${cloudId}/deposit`,
+    })) return;
+  }
+  try {
+    const ordRes = await pool.query('SELECT reservation_id FROM orders WHERE id = $1', [req.params.id]);
+    const resId = ordRes.rows[0]?.reservation_id;
+    if (!resId) return res.json({ deposit: null });
+    const d = await pool.query(
+      `SELECT code, balance, original_amount, reservation_id FROM vouchers
+        WHERE type='deposit' AND reservation_id=$1 AND status='active' AND balance > 0
+        ORDER BY created_at DESC LIMIT 1`,
+      [resId],
+    );
+    const dep = d.rows[0];
+    res.json({ deposit: dep ? { ...dep, balance: Number(dep.balance), original_amount: Number(dep.original_amount) } : null });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Manual forfeit — a no-show's deposit is kept as income (own report line).
+app.post('/api/deposits/:code/forfeit', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const code = String(req.params.code || '').trim().toUpperCase();
+    await client.query('BEGIN');
+    const r = await client.query("SELECT * FROM vouchers WHERE code=$1 AND type='deposit' FOR UPDATE", [code]);
+    const dep = r.rows[0];
+    if (!dep) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Deposit not found' }); }
+    if (dep.status !== 'active') { await client.query('ROLLBACK'); return res.status(409).json({ error: `Deposit is already ${dep.status}` }); }
+    // Reuse voided_at as the forfeit timestamp so "forfeited today" is date-scoped.
+    await client.query("UPDATE vouchers SET status='forfeited', voided_at=NOW() WHERE id=$1", [dep.id]);
+    await client.query('COMMIT');
+    res.json({ ok: true, code, forfeited: Number(dep.balance) });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch {}
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
 // Status transitions — kitchen / admin use.
 app.put('/api/orders/:id/takeaway-status', async (req, res) => {
   try {
@@ -5704,9 +8019,17 @@ app.put('/api/orders/:id/takeaway-status', async (req, res) => {
     if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status' });
     await pool.query('UPDATE orders SET takeaway_status=$1 WHERE id=$2 AND order_type=\'takeaway\'', [status, req.params.id]);
     if (status === 'collected') {
-      await pool.query(`UPDATE orders SET status='closed', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [req.params.id]);
+      // (service_charge=0 — takeaway never carries service; stamps the snapshot)
+      await pool.query(`UPDATE orders SET status='closed', closed_at=NOW(), service_charge=0, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [req.params.id]);
       await pool.query("UPDATE order_items SET status='served', served_at=NOW() WHERE order_id=$1 AND status<>'served'", [req.params.id]);
     }
+    // SEPOS-AUDIT-001 — push the status (and the 'collected' close) to the
+    // cloud; without it the cloud copy stayed open and the pull reopened the
+    // collected takeaway on the Kitchen screen no matter how often staff
+    // tapped Collected.
+    await offlineQueue.enqueue('takeaway_status', {
+      localOrderId: Number(req.params.id), status,
+    });
     io.emit('takeaway_status', { order_id: Number(req.params.id), status });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -6011,6 +8334,7 @@ async function sendTakeawayConfirmation({ order_id, customer_name, customer_emai
   const { sendBrevoEmail } = require('./services/emailService');
   if (!process.env.BREVO_API_KEY) return;
   const restaurantName = process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant';
+  const th = await require('./services/brandTheme').getBrandTheme(); // restaurant's own brand colours
   const orderNumber = 'T' + String(order_id).padStart(4, '0');
   const pickupDate = new Date(pickup_time);
   // Pin to Europe/London — Railway runs in UTC so without timeZone the
@@ -6026,12 +8350,12 @@ async function sendTakeawayConfirmation({ order_id, customer_name, customer_emai
   const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f5f5f5;font-family:system-ui,sans-serif;color:#1a1a2e;">
   <table cellpadding="0" cellspacing="0" width="100%" style="background:#f5f5f5;padding:24px 0;"><tr><td align="center">
     <table cellpadding="0" cellspacing="0" width="600" style="max-width:600px;background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
-      <tr><td style="background:#0D1B3E;padding:24px 30px;color:#C9A84C;font-family:Georgia,serif;font-size:24px;font-weight:700;">${restaurantName}</td></tr>
+      <tr><td style="background:${th.primaryHex};padding:24px 30px;color:${th.accentHex};font-family:Georgia,serif;font-size:24px;font-weight:700;">${restaurantName}</td></tr>
       <tr><td style="padding:30px;font-size:15px;line-height:1.6;color:#1a1a2e;">
         <p>Hi ${String(customer_name).replace(/[<>]/g,'')},</p>
         <p>Thanks for your takeaway order. We'll have it ready for collection at:</p>
         <p style="background:#fef3c7;padding:14px 18px;border-radius:10px;font-weight:700;text-align:center;">🥡 ${pickupStr}</p>
-        <p>Your order number is <strong style="font-size:18px;color:#C9A84C;">${orderNumber}</strong> — please quote this when collecting.</p>
+        <p>Your order number is <strong style="font-size:18px;color:${th.primaryHex};">${orderNumber}</strong> — please quote this when collecting.</p>
         <table style="width:100%;border-collapse:collapse;margin:14px 0;font-size:14px;">
           ${itemRows}
           <tr><td style="padding:10px 0 6px;border-top:2px solid #eee;font-weight:800;">Total</td>
@@ -6099,7 +8423,9 @@ function parseUnsubscribeToken(token) {
   } catch { return null; }
 }
 
-function buildCampaignEmail({ subject, body, customer_name, customer_email, restaurantName, restaurantAddress }) {
+function buildCampaignEmail({ subject, body, customer_name, customer_email, restaurantName, restaurantAddress, th }) {
+  const primaryHex = (th && th.primaryHex) || '#0D1B3E'; // restaurant brand, SiamEPOS navy fallback
+  const accentHex  = (th && th.accentHex)  || '#C9A84C';
   const safeName = (customer_name || 'there').replace(/[<>]/g, '');
   const personalisedBody = String(body || '').replace(/\{\{\s*name\s*\}\}/gi, safeName);
   const unsubUrl = `${process.env.PUBLIC_API_URL || 'https://restaurant-epos-production.up.railway.app'}/api/unsubscribe?token=${encodeURIComponent(unsubscribeToken(customer_email))}`;
@@ -6109,7 +8435,7 @@ function buildCampaignEmail({ subject, body, customer_name, customer_email, rest
   <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f5f5f5;padding:24px 0;">
     <tr><td align="center">
       <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="max-width:600px;background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
-        <tr><td style="background:#0D1B3E;padding:24px 30px;color:#C9A84C;font-family:Georgia,serif;font-size:24px;font-weight:700;">${restaurantName}</td></tr>
+        <tr><td style="background:${primaryHex};padding:24px 30px;color:${accentHex};font-family:Georgia,serif;font-size:24px;font-weight:700;">${restaurantName}</td></tr>
         <tr><td style="padding:30px;line-height:1.6;font-size:15px;color:#1a1a2e;">${personalisedBody}</td></tr>
         <tr><td style="padding:20px 30px;background:#fafafa;border-top:1px solid #eee;font-size:11px;color:#888;line-height:1.5;">
           <div style="margin-bottom:6px;"><strong>${restaurantName}</strong>${restaurantAddress ? ' · ' + restaurantAddress : ''}</div>
@@ -6233,6 +8559,7 @@ app.post('/api/campaigns/send', requireStaffAuth(['admin', 'manager', 'superviso
     const restaurantName    = process.env.RESTAURANT_NAME    || 'SiamEPOS Restaurant';
     const restaurantAddress = process.env.RESTAURANT_ADDRESS || '';
     const { sendBrevoEmail } = require('./services/emailService');
+    const th = await require('./services/brandTheme').getBrandTheme(); // restaurant brand — fetched once for the whole send
 
     let sent = 0, failed = 0;
     for (const c of recipients) {
@@ -6240,7 +8567,7 @@ app.post('/api/campaigns/send', requireStaffAuth(['admin', 'manager', 'superviso
         subject, body,
         customer_name:  c.customer_name,
         customer_email: c.customer_email,
-        restaurantName, restaurantAddress,
+        restaurantName, restaurantAddress, th,
       });
       try {
         await sendBrevoEmail(c.customer_email, subject, html);
@@ -6553,11 +8880,11 @@ app.get('/api/reports/wastage', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// SEPOS-021 — VAT report (date range)
-// Treats prices as VAT-inclusive (UK hospitality convention). For each
-// closed order_item in the window, group by vat_rate and compute net /
-// vat / gross from the item's quantity * unit_price (post any per-item
-// discount). Service charge + bill-level discounts are out of scope.
+// SEPOS-021 / SEPOS-VATMODE-001 — VAT report (date range)
+// vat_mode='inclusive' (default): prices contain VAT, net = gross ÷ (1+rate).
+// vat_mode='exclusive': prices are net, VAT is rate% ON TOP (Thann Thai).
+// For each closed order_item in the window, group by vat_rate. Service charge
+// + bill-level discounts are out of the VAT base either way.
 // ─────────────────────────────────────────────────────────────────────
 app.get('/api/reports/vat', async (req, res) => {
   try {
@@ -6568,7 +8895,8 @@ app.get('/api/reports/vat', async (req, res) => {
     // line so we can render the breakdown split by category type on the
     // VAT report. Per-item AND bill-level discounts are both applied
     // (SEPOS-047j) so the VAT figure matches money actually taken.
-    const r = await pool.query(`
+    const [r, vatModeRes] = await Promise.all([
+      pool.query(`
       SELECT COALESCE(mi.vat_rate, 20) AS vat_rate,
              COALESCE(c.is_bar, 0) AS is_bar,
              oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value,
@@ -6579,19 +8907,23 @@ app.get('/api/reports/vat', async (req, res) => {
       LEFT JOIN orders      o  ON o.id  = oi.order_id
       WHERE o.status='closed' AND oi.voided=0
         AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
-    `, [fromTs, toTs]);
+        AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.method = 'cancelled')) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled'))
+    `, [fromTs, toTs]),
+      pool.query(`SELECT value FROM settings WHERE key='vat_mode'`),
+    ]);
+    const vatMode = vatModeRes.rows[0]?.value === 'exclusive' ? 'exclusive' : 'inclusive';
 
     const byRate = new Map();
     const byKind = { food: { net: 0, vat: 0, gross: 0, items: 0 }, drink: { net: 0, vat: 0, gross: 0, items: 0 } };
     const vatFactors = billDiscountFactors(r.rows); // SEPOS-047j — bill-level discount
     for (const row of r.rows) {
       const rate = Number(row.vat_rate ?? 20);
-      let gross = Number(row.quantity || 0) * Number(row.unit_price || 0);
-      if (row.discount_type === 'percent') gross *= 1 - (Number(row.discount_value || 0) / 100);
-      else if (row.discount_type === 'fixed') gross = Math.max(0, gross - Number(row.discount_value || 0));
-      gross *= (vatFactors.get(row.order_id) ?? 1); // distribute the order's bill-level discount
-      const net = rate > 0 ? gross * (100 / (100 + rate)) : gross;
-      const vat = gross - net;
+      let base = Number(row.quantity || 0) * Number(row.unit_price || 0);
+      if (row.discount_type === 'percent') base *= 1 - (Number(row.discount_value || 0) / 100);
+      else if (row.discount_type === 'fixed') base = Math.max(0, base - Number(row.discount_value || 0));
+      base *= (vatFactors.get(row.order_id) ?? 1); // distribute the order's bill-level discount
+      const { net, vat } = vatLine(base, rate, vatMode); // SEPOS-VATMODE-001
+      const gross = net + vat;
       const qty = Number(row.quantity || 0);
       const bucket = byRate.get(rate) || { rate, net: 0, vat: 0, gross: 0, items: 0 };
       bucket.net   += net;
@@ -6611,7 +8943,7 @@ app.get('/api/reports/vat', async (req, res) => {
       (a, b) => ({ net: a.net + b.net, vat: a.vat + b.vat, gross: a.gross + b.gross, items: a.items + b.items }),
       { net: 0, vat: 0, gross: 0, items: 0 }
     );
-    res.json({ from: fromTs, to: toTs, breakdown, total, by_kind: byKind });
+    res.json({ from: fromTs, to: toTs, breakdown, total, by_kind: byKind, vat_mode: vatMode });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -6700,6 +9032,27 @@ async function recordClockEvent(req, res, eventType) {
 app.post('/api/clock/in',  (req, res) => recordClockEvent(req, res, 'in'));
 app.post('/api/clock/out', (req, res) => recordClockEvent(req, res, 'out'));
 
+// SEPOS-CLOCK-002 — one-button clock toggle for the login screen's clock mode.
+// The till can't know whether the staff member is currently in or out, so the
+// server looks at their LAST event and records the opposite. Returns which
+// action was taken so the screen can confirm "Clocked IN/OUT at HH:MM".
+app.post('/api/clock/toggle', async (req, res) => {
+  try {
+    const { pin } = req.body;
+    if (!pin) return res.status(400).json({ error: 'PIN required' });
+    const staffRes = await pool.query('SELECT id, name FROM staff WHERE pin=$1 AND is_active=1', [pin]);
+    const staff = staffRes.rows[0];
+    if (!staff) return res.status(401).json({ error: 'Invalid PIN' });
+    const last = await pool.query(
+      'SELECT event_type FROM clock_events WHERE staff_id=$1 ORDER BY event_at DESC, id DESC LIMIT 1',
+      [staff.id]
+    );
+    const next = last.rows[0] && last.rows[0].event_type === 'in' ? 'out' : 'in';
+    await pool.query('INSERT INTO clock_events (staff_id, event_type) VALUES ($1, $2)', [staff.id, next]);
+    res.json({ success: true, staff_id: staff.id, name: staff.name, event_type: next, event_at: new Date().toISOString() });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Returns staff who are currently clocked in (their latest event is 'in').
 app.get('/api/clock/status', async (req, res) => {
   try {
@@ -6743,17 +9096,21 @@ app.get('/api/sync/health', async (req, res) => {
   const dbMode = (process.env.DB_MODE || 'cloud').toLowerCase();
   const syncSecretSet = !!process.env.SYNC_SECRET;
   let pending = 0;
+  let failed = 0;
   try {
     const r = await pool.query("SELECT COUNT(*) AS n FROM sync_queue WHERE synced = 0");
     pending = Number(r.rows[0]?.n || 0);
+    const rf = await pool.query("SELECT COUNT(*) AS n FROM sync_queue WHERE synced = 2");
+    failed = Number(rf.rows[0]?.n || 0);
   } catch {}
   res.json({
     db_mode: dbMode,
     sync_secret_set: syncSecretSet,
     pending_actions: pending,
-    // Healthy when in cloud mode (no sync needed) OR in local mode
-    // with the secret set and no stuck items.
-    healthy: dbMode === 'cloud' || (syncSecretSet && pending < 20),
+    failed_actions: failed,
+    // Healthy when in cloud mode (no sync needed) OR in local mode with the
+    // secret set, no big pending backlog, and nothing quarantined.
+    healthy: dbMode === 'cloud' || (syncSecretSet && pending < 20 && failed === 0),
   });
 });
 
@@ -6766,20 +9123,32 @@ app.get('/api/sync/queue', async (req, res) => {
   const dbMode = (process.env.DB_MODE || 'cloud').toLowerCase();
   if (dbMode !== 'local') return res.json({ db_mode: dbMode, entries: [] });
   try {
+    // synced: 0 = pending, 2 = quarantined (a push that will never succeed —
+    // surfaced so a failed payment/order is visible, not silently dropped).
     const r = await pool.query(
-      `SELECT id, action_type, payload, created_at
-       FROM sync_queue WHERE synced = 0 ORDER BY id ASC`
+      `SELECT id, action_type, payload, created_at, attempts, last_error, failed_at, synced
+       FROM sync_queue WHERE synced IN (0, 2) ORDER BY synced ASC, id ASC`
     );
-    const entries = r.rows.map(row => {
+    const map = row => {
       let parsed = null;
       try { parsed = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload; }
       catch {}
       return {
         id: row.id, action_type: row.action_type,
         created_at: row.created_at, payload: parsed,
+        attempts: Number(row.attempts) || 0,
+        last_error: row.last_error || null,
+        failed_at: row.failed_at || null,
+        failed: row.synced === 2,
       };
+    };
+    const rows = r.rows.map(map);
+    // entries = pending (back-compat with the existing modal); failed = quarantined.
+    res.json({
+      db_mode: dbMode,
+      entries: rows.filter(e => !e.failed),
+      failed: rows.filter(e => e.failed),
     });
-    res.json({ db_mode: dbMode, entries });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -6810,9 +9179,10 @@ app.post('/api/sync/queue/:id/skip', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ error: 'invalid id' });
+    // Clear a pending (0) OR quarantined (2) entry — dismiss it without pushing.
     const r = await pool.query(
       `UPDATE sync_queue SET synced = 1, synced_at = CURRENT_TIMESTAMP
-       WHERE id = $1 AND synced = 0`,
+       WHERE id = $1 AND synced IN (0, 2)`,
       [id]
     );
     res.json({ success: true, affected: r.rowCount });
@@ -7176,7 +9546,7 @@ app.post('/api/print/buffers/receipt', async (req, res) => {
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ ok: false, error: 'Order not found' });
     const itemsRes = await pool.query(
-      `SELECT order_items.*, menu_items.name, menu_items.name_alt
+      `SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt
        FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
        WHERE order_items.order_id = $1`, [order_id]);
     const buf = printService.buildReceipt({
@@ -7201,7 +9571,7 @@ app.post('/api/print/buffers/kitchen', async (req, res) => {
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ ok: false, error: 'Order not found' });
     const itemsRes = await pool.query(
-      `SELECT order_items.*, menu_items.name, menu_items.name_alt
+      `SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt
        FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
        WHERE order_items.order_id = $1`, [order_id]);
     const bilingual    = settings.kitchen_language === 'en_th';
@@ -7293,6 +9663,7 @@ app.post('/api/print/receipt', async (req, res) => {
     // passes printer_name (the desktop's selected device), print by name via
     // the platform raw path (Windows spooler RAW / CUPS) instead of requiring
     // an IP. This gives crisp ESC/POS black + silent, vs the faint HTML/GDI path.
+    await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_receipt_name = printer_name; settings.printer_receipt_ip = ''; }
     if (!settings.printer_receipt_ip && !settings.printer_receipt_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
@@ -7304,7 +9675,7 @@ app.post('/api/print/receipt', async (req, res) => {
     // JOIN menu_items so item.name is populated (order_items only carries
     // item_name as a denormalised snapshot — old data may have it blank).
     const itemsRes = await pool.query(
-      `SELECT order_items.*, menu_items.name, menu_items.name_alt
+      `SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt
        FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
        WHERE order_items.order_id = $1`, [order_id]);
     await printService.printReceipt(settings, order, itemsRes.rows, payment_details || {});
@@ -7315,20 +9686,131 @@ app.post('/api/print/receipt', async (req, res) => {
   }
 });
 
+// SEPOS-DRAWER-001 — open the cash drawer on payment. Kicks the RECEIPT
+// printer's drawer port (raw ESC/POS). Gated by open_drawer_on_payment
+// (default ON — only '0' disables). No printer / unreachable → silent skip;
+// never blocks the payment. printer_name overrides the receipt device.
+app.post('/api/print/drawer', async (req, res) => {
+  const { printer_name } = req.body || {};
+  // The drawer kicks a printer on the LAN — only reachable from a local-server
+  // till (desktop/Sunmi, DB_MODE=local). On the cloud backend the printer is
+  // unreachable and the RAW→LPR→CUPS fallback would burn ~15s per payment, so
+  // skip instantly. (Fires per payment, so speed matters.)
+  if (String(process.env.DB_MODE || '').toLowerCase() !== 'local') {
+    return res.json({ success: false, skipped: 'not a local till' });
+  }
+  try {
+    const settings = await loadSettings();
+    if (settings.open_drawer_on_payment === '0') return res.json({ success: false, skipped: 'disabled' });
+    await applyPrinterRouting(settings);
+    if (printer_name) { settings.printer_receipt_name = printer_name; settings.printer_receipt_ip = ''; }
+    if (!settings.printer_receipt_ip && !settings.printer_receipt_name) return res.json({ success: false, reason: 'no_printer' });
+    await printService.openCashDrawer(settings);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[print/drawer]', err.message);
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// ── SEPOS-STATION-002 — per-station routing for DINE-IN server prints ────────
+// SEPOS-STATION-001 gave takeaway auto-print per-category stations, but the
+// dine-in endpoints below always printed to the single role printer, so a
+// desktop/browser till could never split sushi/starter/hot-kitchen stations
+// (only the native Sunmi till could, client-side). This helper mirrors the
+// takeaway router: items whose category has printers.printer_id assigned go
+// to that station; everything else stays on the role default. Fail-safe: a
+// station whose print FAILS returns its items to the default group so food
+// is never silently lost — worst case it prints at the main kitchen printer.
+async function splitPrintItemsByStation(items) {
+  const list = Array.isArray(items) ? items : [];
+  const menuIds = [...new Set(list.map(it => it && it.menu_item_id).filter(Boolean).map(Number))];
+  if (!menuIds.length) return { def: list, stations: [] };
+  try {
+    // SEPOS-STATION-003 — dish-level override wins over the category route.
+    const rows = await pool.query(
+      `SELECT mi.id, COALESCE(mi.printer_id, c.printer_id) AS printer_id
+         FROM menu_items mi LEFT JOIN categories c ON mi.category_id = c.id
+        WHERE mi.id = ANY($1)`, [menuIds]);
+    const printerByMenuId = new Map(rows.rows.map(r => [Number(r.id), r.printer_id]));
+    const stationRows = (await pool.query(
+      "SELECT * FROM printers WHERE is_active = 1 AND ip IS NOT NULL AND ip != ''"
+    ).catch(() => ({ rows: [] }))).rows;
+    const stationById = new Map(stationRows.map(p => [Number(p.id), p]));
+    const def = [], groups = new Map(); // printer_id -> { printer, items }
+    for (const it of list) {
+      const pid = it && it.menu_item_id != null ? printerByMenuId.get(Number(it.menu_item_id)) : null;
+      const station = pid != null ? stationById.get(Number(pid)) : null;
+      if (!station) { def.push(it); continue; }
+      if (!groups.has(station.id)) groups.set(station.id, { printer: station, items: [] });
+      groups.get(station.id).items.push(it);
+    }
+    return { def, stations: [...groups.values()] };
+  } catch (err) {
+    // Any lookup problem → behave exactly as before the feature existed.
+    console.warn('[print/stations] split failed, using single-printer path:', err.message);
+    return { def: list, stations: [] };
+  }
+}
+
+// Print station groups; returns items whose station print FAILED (rescue →
+// caller adds them back to the default-kitchen ticket so nothing is lost).
+async function printStationGroups(stations, settings, order) {
+  const rescued = [];
+  for (const g of stations) {
+    try {
+      await printService.printKitchenToPrinter(g.printer, settings, order, g.items);
+      console.log(`🖨️ Station "${g.printer.name}" printed ${g.items.length} item(s) for order #${order.id}`);
+    } catch (err) {
+      if (printAlerts.isLocal) {
+        // SEPOS-PRINT-ALERT-001 — on a till, a dead station must be LOUD,
+        // never a silent hand-off: hold the ticket + banner the staff, who
+        // choose retry or an explicit redirect to the main kitchen.
+        await printAlerts.recordFailure({
+          kind: 'station', printer: g.printer, order, items: g.items, reason: err.message,
+        });
+      } else {
+        // Cloud path keeps the legacy silent rescue (no staff UI to alert).
+        console.error(`[print/stations] station "${g.printer.name}" failed (${err.message}) — rescuing items to main kitchen`);
+        rescued.push(...g.items);
+      }
+    }
+  }
+  return rescued;
+}
+
 // Print a kitchen ticket for a given order + course
 app.post('/api/print/kitchen', async (req, res) => {
   const { order_id, items, course, printer_name, copies } = req.body;
   try {
     const settings = await loadSettings();
+    await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
     if (copies) settings.printer_kitchen_copies = String(copies); // client-resolved copies (per-device or system)
-    if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
       `SELECT orders.*, tables.table_number
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
-    await printService.printKitchenTicket(settings, orderRes.rows[0], items || [], course || 1);
+    const order = orderRes.rows[0];
+    // SEPOS-STATION-002 — split by station, print stations, rescue failures.
+    const split = await splitPrintItemsByStation(items || []);
+    const rescued = split.stations.length ? await printStationGroups(split.stations, settings, order) : [];
+    const defItems = [...split.def, ...rescued];
+    if (defItems.length) {
+      if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
+      try {
+        await printService.printKitchenTicket(settings, order, defItems, course || 1);
+      } catch (err) {
+        // SEPOS-PRINT-ALERT-001 — hold + banner on tills; rethrow keeps the API contract.
+        await printAlerts.recordFailure({ kind: 'kitchen', printer: { name: 'Kitchen', ip: settings.printer_kitchen_ip }, order, items: defItems, reason: err.message });
+        throw err;
+      }
+    } else if (!split.stations.length) {
+      // No items at all and no stations — keep the legacy no_printer contract.
+      if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
+      await printService.printKitchenTicket(settings, order, [], course || 1);
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('[print/kitchen]', err.message);
@@ -7341,14 +9823,28 @@ app.post('/api/print/bar', async (req, res) => {
   const { order_id, items, printer_name } = req.body;
   try {
     const settings = await loadSettings();
+    await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_bar_name = printer_name; settings.printer_bar_ip = ''; }
-    if (!settings.printer_bar_ip && !settings.printer_bar_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
       `SELECT orders.*, tables.table_number
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
-    await printService.printBarTicket(settings, orderRes.rows[0], items || []);
+    const order = orderRes.rows[0];
+    // SEPOS-STATION-002 — a drinks category can also be routed to a station
+    // (e.g. a coffee/dessert-bar printer); unmatched items keep the bar default.
+    const split = await splitPrintItemsByStation(items || []);
+    const rescued = split.stations.length ? await printStationGroups(split.stations, settings, order) : [];
+    const defItems = [...split.def, ...rescued];
+    if (defItems.length || !split.stations.length) {
+      if (!settings.printer_bar_ip && !settings.printer_bar_name) return res.json({ success: false, reason: 'no_printer' });
+      try {
+        await printService.printBarTicket(settings, order, defItems);
+      } catch (err) {
+        await printAlerts.recordFailure({ kind: 'bar', printer: { name: 'Bar', ip: settings.printer_bar_ip }, order, items: defItems, reason: err.message });
+        throw err;
+      }
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('[print/bar]', err.message);
@@ -7361,6 +9857,7 @@ app.post('/api/print/kitchen-fire', async (req, res) => {
   const { order_id, course, printer_name } = req.body;
   try {
     const settings = await loadSettings();
+    await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
     if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
@@ -7381,19 +9878,61 @@ app.post('/api/print/kitchen-full', async (req, res) => {
   const { order_id, items, printer_name, copies } = req.body;
   try {
     const settings = await loadSettings();
+    await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
     if (copies) settings.printer_kitchen_copies = String(copies); // client-resolved copies (per-device or system)
-    if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
       `SELECT orders.*, tables.table_number
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
-    await printService.printFullKitchenTicket(settings, orderRes.rows[0], items || []);
+    const order = orderRes.rows[0];
+    // SEPOS-STATION-002 — split by station, print stations, rescue failures
+    // back onto the main kitchen ticket so no dish is silently lost.
+    const split = await splitPrintItemsByStation(items || []);
+    const rescued = split.stations.length ? await printStationGroups(split.stations, settings, order) : [];
+    const defItems = [...split.def, ...rescued];
+    if (defItems.length || !split.stations.length) {
+      if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
+      try {
+        await printService.printFullKitchenTicket(settings, order, defItems);
+      } catch (err) {
+        await printAlerts.recordFailure({ kind: 'kitchen', printer: { name: 'Kitchen', ip: settings.printer_kitchen_ip }, order, items: defItems, reason: err.message });
+        throw err;
+      }
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('[print/kitchen-full]', err.message);
     res.json({ success: false, error: err.message });
+  }
+});
+
+// ── SEPOS-PRINT-ALERT-001 — held-ticket queue + printer health ───────
+// Till banner polls this; empty on cloud (service is local-gated).
+app.get('/api/print/alerts', async (req, res) => {
+  try {
+    res.json(await printAlerts.list());
+  } catch (err) {
+    res.json({ alerts: [], printers: [], error: err.message });
+  }
+});
+
+// action: 'retry' (original printer, re-resolved from current config) |
+//         'redirect' (main kitchen, ticket marked "REDIRECTED FROM …") |
+//         'dismiss'
+app.post('/api/print/alerts/action', async (req, res) => {
+  try {
+    const { action, ids } = req.body || {};
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids required' });
+    let results;
+    if (action === 'retry') results = await printAlerts.retry(ids);
+    else if (action === 'redirect') results = await printAlerts.redirect(ids);
+    else if (action === 'dismiss') results = await printAlerts.dismiss(ids);
+    else return res.status(400).json({ error: 'unknown action' });
+    res.json({ results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

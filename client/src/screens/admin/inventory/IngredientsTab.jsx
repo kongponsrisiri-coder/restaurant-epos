@@ -9,7 +9,7 @@ export default function IngredientsTab() {
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
 
-  const emptyForm = { name_en: '', name_th: '', unit: 'kg', cost_per_unit: '', yield_percentage: '100', category: 'Meat', current_stock: '0', par_level: '', supplier_name: '', allergens: [] };
+  const emptyForm = { name_en: '', name_th: '', unit: 'kg', cost_per_unit: '', yield_percentage: '100', category: 'Meat', current_stock: '0', par_level: '', supplier_name: '', allergens: [], purchase_unit: '', purchase_to_usage: '' };
   const [form, setForm] = useState(emptyForm);
 
   const CATEGORIES = ['Meat', 'Seafood', 'Vegetables', 'Dry Goods', 'Sauces', 'Dairy', 'Other'];
@@ -69,16 +69,16 @@ export default function IngredientsTab() {
             return (
               <div key={ing.id} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 80px 70px 80px 100px 90px', padding: '12px 16px', borderBottom: '1px solid #f0f0f0', fontSize: 13, alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontWeight: 600, color: '#1a1a2e' }}>{ing.name_en}</div>
-                  {ing.name_th && <div style={{ fontSize: 11, color: '#C9A84C', marginTop: 1 }}>{ing.name_th}</div>}
+                  <div style={{ fontWeight: 600, color: 'var(--brand-primary, #1a1a2e)' }}>{ing.name_en}</div>
+                  {ing.name_th && <div style={{ fontSize: 11, color: 'var(--brand-accent,#C9A84C)', marginTop: 1 }}>{ing.name_th}</div>}
                   {allergens.length > 0 && <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>{allergens.map(a => <span key={a} style={{ background: '#fee2e2', color: '#991b1b', fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4 }}>{a}</span>)}</div>}
                   {ing.supplier_name && <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>📦 {ing.supplier_name}</div>}
                 </div>
                 <span style={{ fontSize: 12, color: '#555' }}>{ing.category}</span>
                 <span style={{ fontSize: 12, color: '#555' }}>{ing.unit}</span>
-                <span style={{ textAlign: 'right', fontWeight: 700, color: '#1a1a2e' }}>£{Number(ing.cost_per_unit || 0).toFixed(2)}</span>
+                <span style={{ textAlign: 'right', fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>£{Number(ing.cost_per_unit || 0).toFixed(2)}</span>
                 <span style={{ textAlign: 'right', color: '#555' }}>{ing.yield_percentage}%</span>
-                <span style={{ textAlign: 'right', fontWeight: 600, color: Number(ing.current_stock) <= 0 ? '#ef4444' : '#1a1a2e' }}>{Number(ing.current_stock || 0).toFixed(1)}{ing.unit}</span>
+                <span style={{ textAlign: 'right', fontWeight: 600, color: Number(ing.current_stock) <= 0 ? '#ef4444' : 'var(--brand-primary, #1a1a2e)' }}>{Number(ing.current_stock || 0).toFixed(1)}{ing.unit}</span>
                 <div style={{ textAlign: 'center' }}><span style={{ background: status.bg, color: status.color, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 20 }}>{status.label}</span></div>
                 <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
                   <button onClick={() => openEdit(ing)} style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Edit</button>
@@ -92,7 +92,7 @@ export default function IngredientsTab() {
       {showForm && (
         <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
           <div style={{ background: 'white', borderRadius: 16, padding: 28, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto' }}>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', marginBottom: 20 }}>{editItem ? '✏️ Edit Ingredient' : '+ New Ingredient'}</h2>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 20 }}>{editItem ? '✏️ Edit Ingredient' : '+ New Ingredient'}</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div><label style={labelStyle}>Name (English) *</label><input value={form.name_en} onChange={e => setForm({ ...form, name_en: e.target.value })} placeholder="e.g. Chicken Breast" style={inputStyle} /></div>
@@ -100,13 +100,26 @@ export default function IngredientsTab() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div><label style={labelStyle}>Category</label><select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={inputStyle}>{CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-                <div><label style={labelStyle}>Purchase Unit</label><select value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} style={inputStyle}>{UNITS.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
+                <div><label style={labelStyle}>Recipe / Stock Unit</label><select value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} style={inputStyle}>{UNITS.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div><label style={labelStyle}>Cost per Unit (£) *</label><input type="number" step="0.01" value={form.cost_per_unit} onChange={e => setForm({ ...form, cost_per_unit: e.target.value })} placeholder="e.g. 6.00" style={inputStyle} /></div>
                 <div><label style={labelStyle}>Yield % (post-prep)</label><input type="number" step="1" min="1" max="100" value={form.yield_percentage} onChange={e => setForm({ ...form, yield_percentage: e.target.value })} placeholder="e.g. 78" style={inputStyle} /></div>
               </div>
               <div style={{ background: '#f0f7ff', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#1e40af' }}>💡 Yield = usable amount after prep. Chicken breast = 78%. Fish sauce = 100%.</div>
+              {/* SEPOS-INV-UNITS-001 — purchase↔usage bridge. Invoices often
+                  arrive as each/bottle/case while recipes cost in ml/g/kg; the
+                  bridge lets the invoice scanner convert automatically. */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div><label style={labelStyle}>Bought as (invoice unit)</label><select value={form.purchase_unit || ''} onChange={e => setForm({ ...form, purchase_unit: e.target.value })} style={inputStyle}>
+                  <option value="">Same as recipe unit</option>
+                  {['each','bottle','case','bag','tin','kg','L'].map(u => <option key={u} value={u}>{u}</option>)}
+                </select></div>
+                {form.purchase_unit && (
+                  <div><label style={labelStyle}>1 {form.purchase_unit} = ? {form.unit}</label><input type="number" step="0.001" value={form.purchase_to_usage || ''} onChange={e => setForm({ ...form, purchase_to_usage: e.target.value })} placeholder={`e.g. 1 ${form.purchase_unit} = 1000 ${form.unit}`} style={inputStyle} /></div>
+                )}
+              </div>
+              {form.purchase_unit && <div style={{ background: '#fefce8', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#854d0e' }}>📦 e.g. soy sauce priced per <b>ml</b>, bought as <b>bottle</b>: 1 bottle = 1000 ml. Duck priced per <b>kg</b>, bought <b>each</b>: 1 each = 2.1 kg. The invoice scanner then converts each/bottle lines automatically — without this, mismatched lines are skipped (never guessed).</div>}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div><label style={labelStyle}>Current Stock ({form.unit})</label><input type="number" step="0.1" value={form.current_stock} onChange={e => setForm({ ...form, current_stock: e.target.value })} style={inputStyle} /></div>
                 <div><label style={labelStyle}>PAR Level ({form.unit})</label><input type="number" step="0.1" value={form.par_level} onChange={e => setForm({ ...form, par_level: e.target.value })} placeholder="Min before reorder" style={inputStyle} /></div>

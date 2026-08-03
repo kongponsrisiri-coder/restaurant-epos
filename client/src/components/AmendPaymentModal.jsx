@@ -49,7 +49,7 @@ export default function AmendPaymentModal({ bill, onClose, onDone }) {
   return (
     <div style={{ position:'fixed', top: 0, right: 0, bottom: 0, left: 0, background:'rgba(0,0,0,0.6)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:'white', borderRadius:14, maxWidth:480, width:'100%', overflow:'hidden' }}>
-        <div style={{ background:'#0D1B3E', color:'white', padding:'16px 20px' }}>
+        <div style={{ background:'var(--brand-primary,#0D1B3E)', color:'white', padding:'16px 20px' }}>
           <div style={{ fontSize:18, fontWeight:800 }}>🔄 Change Payment Method</div>
           {/* Korakot 2026-06-02: identify by Table + date, not Bill # —
               "i dont need bill number, as we can check it on daily and
@@ -62,7 +62,7 @@ export default function AmendPaymentModal({ bill, onClose, onDone }) {
         <div style={{ padding:'18px 20px' }}>
           <div style={{ background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:8, padding:'10px 12px', marginBottom:14, fontSize:13 }}>
             <span style={{ color:'#888' }}>Currently:</span>{' '}
-            <strong style={{ color:'#1a1a2e' }}>{currentMethod}</strong>
+            <strong style={{ color:'var(--brand-primary, #1a1a2e)' }}>{currentMethod}</strong>
           </div>
 
           <div style={{ fontSize:12, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:0.5, marginBottom:6 }}>Change to</div>
@@ -71,9 +71,9 @@ export default function AmendPaymentModal({ bill, onClose, onDone }) {
               <button key={m.value}
                 onClick={() => setNewMethod(m.value)}
                 style={{
-                  padding:'10px 14px', borderRadius:8, border: newMethod === m.value ? '2px solid #0D1B3E' : '1px solid #ddd',
-                  background: newMethod === m.value ? '#0D1B3E' : 'white',
-                  color: newMethod === m.value ? 'white' : '#1a1a2e',
+                  padding:'10px 14px', borderRadius:8, border: newMethod === m.value ? '2px solid var(--brand-primary,#0D1B3E)' : '1px solid #ddd',
+                  background: newMethod === m.value ? 'var(--brand-primary,#0D1B3E)' : 'white',
+                  color: newMethod === m.value ? 'white' : 'var(--brand-primary, #1a1a2e)',
                   fontWeight:700, fontSize:14, cursor:'pointer',
                 }}>
                 {m.label}
@@ -109,7 +109,7 @@ export default function AmendPaymentModal({ bill, onClose, onDone }) {
             Cancel
           </button>
           <button onClick={handleSave} disabled={saving || !newMethod || !pin}
-            style={{ flex:2, padding:12, borderRadius:8, border:'none', background:'#0D1B3E', color:'white', fontWeight:800, fontSize:14, cursor:'pointer', opacity: (saving || !newMethod || !pin) ? 0.5 : 1 }}>
+            style={{ flex:2, padding:12, borderRadius:8, border:'none', background:'var(--brand-primary,#0D1B3E)', color:'white', fontWeight:800, fontSize:14, cursor:'pointer', opacity: (saving || !newMethod || !pin) ? 0.5 : 1 }}>
             {saving ? 'Saving…' : 'Save change'}
           </button>
         </div>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SiamEPOS brand mark: gold 5-petal lotus, centred in the adaptive-icon
+     safe zone. Petals match the SVG used in SetupScreen/LoginScreen
+     (M 0,6 C -11,-9 -9,-38 0,-44 C 9,-38 11,-9 0,6 Z) rotated 0/72/144/216/288
+     around the centre, with a navy inner circle + small gold centre.
+     Translated to (54,54) and scaled 0.8 so it sits inside the ~66% safe area. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:translateX="54" android:translateY="54" android:scaleX="0.8" android:scaleY="0.8">
+        <!-- petal 0 -->
+        <group android:rotation="0">
+            <path android:fillColor="#C9A84C" android:fillAlpha="1.0"
+                android:pathData="M 0,6 C -11,-9 -9,-38 0,-44 C 9,-38 11,-9 0,6 Z" />
+        </group>
+        <!-- petal 72 -->
+        <group android:rotation="72">
+            <path android:fillColor="#C9A84C" android:fillAlpha="0.82"
+                android:pathData="M 0,6 C -11,-9 -9,-38 0,-44 C 9,-38 11,-9 0,6 Z" />
+        </group>
+        <!-- petal 144 -->
+        <group android:rotation="144">
+            <path android:fillColor="#C9A84C" android:fillAlpha="0.62"
+                android:pathData="M 0,6 C -11,-9 -9,-38 0,-44 C 9,-38 11,-9 0,6 Z" />
+        </group>
+        <!-- petal 216 -->
+        <group android:rotation="216">
+            <path android:fillColor="#C9A84C" android:fillAlpha="0.62"
+                android:pathData="M 0,6 C -11,-9 -9,-38 0,-44 C 9,-38 11,-9 0,6 Z" />
+        </group>
+        <!-- petal 288 -->
+        <group android:rotation="288">
+            <path android:fillColor="#C9A84C" android:fillAlpha="0.82"
+                android:pathData="M 0,6 C -11,-9 -9,-38 0,-44 C 9,-38 11,-9 0,6 Z" />
+        </group>
+        <!-- navy inner circle (r=10) -->
+        <path android:fillColor="#0D1B3E"
+            android:pathData="M -10,0 a 10,10 0 1,0 20,0 a 10,10 0 1,0 -20,0 Z" />
+        <!-- gold centre (r=5) -->
+        <path android:fillColor="#C9A84C"
+            android:pathData="M -5,0 a 5,5 0 1,0 10,0 a 5,5 0 1,0 -10,0 Z" />
+    </group>
+</vector>

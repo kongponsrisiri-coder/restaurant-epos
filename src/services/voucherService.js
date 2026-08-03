@@ -31,13 +31,15 @@ const RESTAURANT_SITE    = process.env.RESTAURANT_SITE    || ''; // optional
 const PUBLIC_API_URL_DEFAULT = (process.env.PUBLIC_API_URL || 'https://restaurant-epos-production.up.railway.app').replace(/\/$/, '');
 
 // ── Code generation ───────────────────────────────────────────────
-// 8 chars, no I/O/0/1 ambiguity. Prefix GIFT- so codes are scannable
-// from a printed gift card without typo-prone "is that an O or a 0?".
-function generateCode() {
+// 8 chars, no I/O/0/1 ambiguity. Prefixed so codes are scannable from a
+// printed card without typo-prone "is that an O or a 0?". SEPOS-DEPOSIT-001:
+// gift vouchers stay GIFT-, booking deposits use DEP- so staff + reports can
+// tell them apart at a glance.
+function generateCode(prefix = 'GIFT-') {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let body = '';
   for (let i = 0; i < 8; i++) body += chars[Math.floor(Math.random() * chars.length)];
-  return 'GIFT-' + body;
+  return prefix + body;
 }
 
 // ── Expiry helpers ────────────────────────────────────────────────
@@ -74,11 +76,16 @@ function validateAmount(amount) {
 }
 
 // ── Stripe payment intent (with mock fallback) ────────────────────
-// If STRIPE_SECRET_KEY isn't set, we hand back a fake PI shape so the
-// widget can still demo end-to-end on Baan Siam. The created voucher
-// is tagged payment_method='mock' so reports + admin can distinguish.
+// Three tenant modes (SIAMPAY-002): own STRIPE_SECRET_KEY → today's flow;
+// SiamPay platform mode → direct charge on the connected account + flat
+// app fee from the client's settlement (customer pays the voucher value
+// only); neither → mock PI so the demo widget still works end-to-end.
+// The created voucher is tagged payment_method='mock' in mock mode.
+const { siampayCfg } = require('./siampay');
+
 async function createPaymentIntent(amountGbp) {
-  if (!process.env.STRIPE_SECRET_KEY) {
+  const sp = siampayCfg();
+  if (!process.env.STRIPE_SECRET_KEY && !sp) {
     return {
       mode: 'mock',
       payment_intent_id: 'mock_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
@@ -86,13 +93,25 @@ async function createPaymentIntent(amountGbp) {
       publishable_key: null,
     };
   }
-  const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-  const intent = await stripe.paymentIntents.create({
+  const params = {
     amount: Math.round(Number(amountGbp) * 100),
     currency: 'gbp',
     automatic_payment_methods: { enabled: true },
     metadata: { product: 'siamepos_gift_voucher' },
-  });
+  };
+  if (sp) {
+    params.application_fee_amount = sp.feePence;
+    const intent = await require('stripe')(sp.key).paymentIntents.create(params, { stripeAccount: sp.account });
+    return {
+      mode: 'stripe',
+      payment_intent_id: intent.id,
+      client_secret: intent.client_secret,
+      publishable_key: sp.pk,
+      stripe_account: sp.account, // widget must init Stripe.js with this
+    };
+  }
+  const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+  const intent = await stripe.paymentIntents.create(params);
   return {
     mode: 'stripe',
     payment_intent_id: intent.id,
@@ -105,17 +124,29 @@ async function createPaymentIntent(amountGbp) {
 // For mock PIs we accept by prefix; for real PIs we re-fetch from Stripe
 // and check status. Returns the actual amount paid (defends against
 // client tampering with the amount field).
-async function verifyPaymentIntent(piId, expectedAmountGbp) {
+async function verifyPaymentIntent(piId, expectedAmountGbp, opts = {}) {
   if (!piId) return { ok: false, error: 'No payment_intent_id' };
   if (String(piId).startsWith('mock_')) {
-    return { ok: true, mode: 'mock', amount_paid: Number(expectedAmountGbp) };
+    // Mock PIs are only legitimate when the tenant genuinely has no payment
+    // rail (demo / pre-go-live) OR the demo flag forced mock at purchase
+    // time (opts.allowMock). On a paying tenant, a hand-crafted "mock_" id
+    // must NOT mint a free voucher.
+    if (opts.allowMock || (!process.env.STRIPE_SECRET_KEY && !siampayCfg())) {
+      return { ok: true, mode: 'mock', amount_paid: Number(expectedAmountGbp) };
+    }
+    return { ok: false, error: 'mock payment not accepted on this restaurant' };
   }
-  if (!process.env.STRIPE_SECRET_KEY) {
+  const sp = siampayCfg();
+  if (!process.env.STRIPE_SECRET_KEY && !sp) {
     return { ok: false, error: 'Stripe not configured but real PI submitted' };
   }
   try {
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-    const pi = await stripe.paymentIntents.retrieve(piId);
+    // SIAMPAY-002 — a SiamPay PI lives on the connected account, so the
+    // retrieve must carry stripeAccount as request OPTIONS (3rd arg — the
+    // 2-arg form sends it as an API param and Stripe rejects it).
+    const pi = sp
+      ? await require('stripe')(sp.key).paymentIntents.retrieve(piId, {}, { stripeAccount: sp.account })
+      : await require('stripe')(process.env.STRIPE_SECRET_KEY).paymentIntents.retrieve(piId);
     if (pi.status !== 'succeeded') return { ok: false, error: `Payment not completed (${pi.status})` };
     return { ok: true, mode: 'stripe', amount_paid: (pi.amount_received || 0) / 100 };
   } catch (err) {
@@ -128,11 +159,26 @@ async function verifyPaymentIntent(piId, expectedAmountGbp) {
 // delivery_date if it's in the future (scheduling is handled by the
 // caller; this function just composes + dispatches). Returns the
 // Brevo result; caller is responsible for stamping email_sent_at.
+// SEPOS-WALLET-002 — the Add-to-Wallet link is emailed to the customer and
+// opened on THEIR phone, so it must be a public URL. A voucher sold on the
+// DESKTOP app hits the local server, so the caller-derived host is
+// `localhost:3001` (or a LAN IP) — unreachable off the till. Reject any
+// local/private host and fall back to the tenant cloud this install syncs to
+// (CLOUD_API_URL), then the PUBLIC_API_URL env, then the main Railway.
+function isLocalHost(u) {
+  return /(localhost|127\.0\.0\.1|0\.0\.0\.0|::1|\/\/(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.))/i.test(u || '');
+}
+function resolveWalletBase(baseUrl) {
+  if (baseUrl && !isLocalHost(baseUrl)) return baseUrl.replace(/\/$/, '');
+  const cloud = process.env.CLOUD_API_URL;
+  if (cloud && !isLocalHost(cloud)) return cloud.replace(/\/$/, '');
+  return PUBLIC_API_URL_DEFAULT;
+}
+
 async function sendVoucherGiftEmail(voucher, options = {}) {
   if (!voucher.recipient_email) return { skipped: true, reason: 'no recipient' };
-  // SEPOS-WALLET-001 — prefer the caller-derived host so the Add-to-Wallet
-  // link always points back to the same backend that processed the sale.
-  const PUBLIC_API_URL = (options.baseUrl || PUBLIC_API_URL_DEFAULT).replace(/\/$/, '');
+  // SEPOS-WALLET-001/002 — public base for the Add-to-Wallet link (never local).
+  const PUBLIC_API_URL = resolveWalletBase(options.baseUrl);
   const code      = voucher.code;
   const amount    = Number(voucher.original_amount || 0).toFixed(2);
   const fromName  = voucher.sender_name    || 'A friend';
@@ -142,25 +188,26 @@ async function sendVoucherGiftEmail(voucher, options = {}) {
     ? new Date(String(voucher.expires_at).slice(0, 10) + 'T12:00:00')
         .toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
     : '';
+  const th        = await require('./brandTheme').getBrandTheme(); // restaurant's own brand colours
 
   const html = `
     <div style="font-family:Georgia,serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e7e3da">
-      <div style="background:#1e3a6e;padding:36px 24px;text-align:center">
-        <div style="color:#C9A84C;font-size:13px;letter-spacing:3px;text-transform:uppercase;margin-bottom:10px">A Gift For You</div>
-        <h1 style="color:white;margin:0;font-size:30px;font-weight:400">${RESTAURANT_NAME}</h1>
+      <div style="background:${th.primaryHex};padding:36px 24px;text-align:center">
+        <div style="color:${th.accentHex};font-size:13px;letter-spacing:3px;text-transform:uppercase;margin-bottom:10px">A Gift For You</div>
+        <h1 style="color:${th.textOnPrimaryHex};margin:0;font-size:30px;font-weight:400">${RESTAURANT_NAME}</h1>
       </div>
 
       <div style="padding:32px 28px;text-align:center">
         <p style="font-size:16px;color:#444;margin:0 0 4px">Dear <strong>${escapeHtml(toName)}</strong>,</p>
         <p style="font-size:15px;color:#666;margin:0 0 22px"><strong>${escapeHtml(fromName)}</strong> has sent you a gift voucher.</p>
 
-        ${message ? `<div style="background:#fdf6ec;border-left:4px solid #C9A84C;padding:14px 18px;margin:0 0 24px;text-align:left;font-style:italic;color:#5b4a2a;font-size:14px">"${escapeHtml(message)}"</div>` : ''}
+        ${message ? `<div style="background:#fdf6ec;border-left:4px solid ${th.accentHex};padding:14px 18px;margin:0 0 24px;text-align:left;font-style:italic;color:#5b4a2a;font-size:14px">"${escapeHtml(message)}"</div>` : ''}
 
-        <div style="background:linear-gradient(135deg,#1e3a6e,#2a4d8a);border-radius:12px;padding:28px 20px;margin:18px 0">
-          <div style="color:#C9A84C;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">Voucher Value</div>
-          <div style="color:white;font-size:48px;font-weight:700;letter-spacing:-1px">£${amount}</div>
-          <div style="margin-top:18px;background:rgba(255,255,255,0.1);border:1px dashed rgba(255,255,255,0.3);border-radius:8px;padding:12px 16px;font-family:Menlo,Consolas,monospace;color:white;font-size:22px;letter-spacing:3px;font-weight:700">${code}</div>
-          <div style="color:rgba(255,255,255,0.7);font-size:11px;margin-top:10px">Quote this code when paying your bill</div>
+        <div style="background:${th.primaryHex};border-radius:12px;padding:28px 20px;margin:18px 0">
+          <div style="color:${th.accentHex};font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">Voucher Value</div>
+          <div style="color:${th.textOnPrimaryHex};font-size:48px;font-weight:700;letter-spacing:-1px">£${amount}</div>
+          <div style="margin-top:18px;background:rgba(255,255,255,0.1);border:1px dashed ${th.accentHex};border-radius:8px;padding:12px 16px;font-family:Menlo,Consolas,monospace;color:${th.textOnPrimaryHex};font-size:22px;letter-spacing:3px;font-weight:700">${code}</div>
+          <div style="color:${th.softOnPrimary};font-size:11px;margin-top:10px">Quote this code when paying your bill</div>
         </div>
 
         <p style="color:#888;font-size:13px;margin:24px 0 4px">Valid until <strong>${expiry}</strong></p>
@@ -173,7 +220,7 @@ async function sendVoucherGiftEmail(voucher, options = {}) {
         </p>
         <p style="color:#aaa;font-size:11px;margin:8px 0 0">Open this email on your iPhone to save the voucher to Wallet</p>
 
-        ${RESTAURANT_SITE ? `<p style="margin:18px 0 0"><a href="${RESTAURANT_SITE}" style="display:inline-block;padding:11px 24px;background:#C9A84C;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;letter-spacing:0.5px">Book a table →</a></p>` : ''}
+        ${RESTAURANT_SITE ? `<p style="margin:18px 0 0"><a href="${RESTAURANT_SITE}" style="display:inline-block;padding:11px 24px;background:${th.accentHex};color:${th.primaryHex};text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;letter-spacing:0.5px">Book a table →</a></p>` : ''}
       </div>
 
       <div style="background:#fafaf7;padding:18px 24px;text-align:center;border-top:1px solid #eee;color:#888;font-size:11px">

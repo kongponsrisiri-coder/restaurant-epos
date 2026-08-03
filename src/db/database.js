@@ -1,8 +1,19 @@
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+
+// SEPOS-048b — read TIMESTAMP WITHOUT TIME ZONE (OID 1114) as UTC, regardless
+// of the container's TZ env. We store UTC wall-clock (SET timezone='UTC'
+// below), but node-postgres otherwise parses these tz-naive columns using the
+// process TZ — so TZ=Europe/London read every opened_at/closed_at 1h off in
+// BST, making open-table timers wrong. Pinning the parser to UTC makes the read
+// correct no matter what TZ is set (and is a no-op when TZ is already UTC).
+types.setTypeParser(1114, (v) => (v == null ? null : new Date(String(v).replace(' ', 'T') + 'Z')));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  // SEPOS-AUDIT-001 — local Postgres (dev/test) doesn't speak SSL; Railway
+  // always does. Gate on the host so `DATABASE_URL=postgresql://localhost/...`
+  // works for local testing without touching production behaviour.
+  ssl: /localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL || '') ? false : { rejectUnauthorized: false },
   min: 2,
   max: 10,
   idleTimeoutMillis: 60000,
@@ -38,9 +49,14 @@ async function initDB() {
         pos_y INTEGER DEFAULT 0,
         shape VARCHAR(50) DEFAULT 'square',
         width INTEGER DEFAULT 80,
-        height INTEGER DEFAULT 80
+        height INTEGER DEFAULT 80,
+        is_takeaway INTEGER DEFAULT 0
       )
     `);
+    // SEPOS-TAKEAWAY-TABLE — a table flagged is_takeaway rings up takeaway
+    // orders (no service charge, kitchen ticket labelled Takeaway) instead
+    // of dine-in. Added after the CREATE for existing deployments.
+    await pool.query(`ALTER TABLE tables ADD COLUMN IF NOT EXISTS is_takeaway INTEGER DEFAULT 0`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS categories (
@@ -48,9 +64,43 @@ async function initDB() {
         name VARCHAR(100) NOT NULL,
         sort_order INTEGER DEFAULT 0,
         is_bar INTEGER DEFAULT 0,
-        default_course INTEGER DEFAULT 1
+        default_course INTEGER DEFAULT 1,
+        printer_id INTEGER
       )
     `);
+    // SEPOS-STATION-001 — flexible multi-printer routing. Each category can be
+    // pointed at a specific printer (a "station"). NULL = today's rule: bar
+    // printer if is_bar, else the kitchen printer — so nothing changes until an
+    // operator adds printers + assigns categories. is_bar is retained (reports).
+    await pool.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS printer_id INTEGER`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS printers (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        ip VARCHAR(64),
+        port INTEGER DEFAULT 9100,
+        mac VARCHAR(64),
+        kind VARCHAR(20) DEFAULT 'kitchen',
+        copies INTEGER DEFAULT 1,
+        sort_order INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos',
+        role_receipt INTEGER DEFAULT 0,
+        role_kitchen INTEGER DEFAULT 0,
+        role_bar INTEGER DEFAULT 0,
+        lpr_queue VARCHAR(64)
+      )
+    `);
+    // SEPOS-PRINT-UNIFY-001 — one flexible printer list. Each printer declares
+    // which of Receipt/Kitchen/Bar it prints (role_* flags); the default per
+    // role is a settings key (default_<role>_printer_id). The print endpoints
+    // overlay the chosen printer onto settings.printer_<role>_* at send time,
+    // falling back to the legacy fixed settings when no row is configured
+    // (migration-safe — today's output is unchanged until set up).
+    await pool.query(`ALTER TABLE printers ADD COLUMN IF NOT EXISTS role_receipt INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE printers ADD COLUMN IF NOT EXISTS role_kitchen INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE printers ADD COLUMN IF NOT EXISTS role_bar INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE printers ADD COLUMN IF NOT EXISTS lpr_queue VARCHAR(64)`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS subcategories (
@@ -81,6 +131,15 @@ async function initDB() {
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS is_online INTEGER DEFAULT 1`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS name_alt VARCHAR(255)`);
+    // Per-item course override (1 Starter · 2 Main · 3 Dessert · 4 Extra).
+    // NULL = inherit the category's default_course — lets a mixed category
+    // (e.g. "Lunch" holding both starters and mains) file each dish correctly.
+    await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS default_course INTEGER`);
+    // SEPOS-STATION-003 — per-DISH printer-station override. NULL = inherit
+    // the category's printer_id. Dish wins over category, so a mixed category
+    // (Takoyaki → hot kitchen while Seaweed Salad → sushi bar) routes each
+    // dish to its own station. Same inherit pattern as default_course above.
+    await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS printer_id INTEGER`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS modifier_groups (
@@ -88,9 +147,15 @@ async function initDB() {
         menu_item_id INTEGER REFERENCES menu_items(id) ON DELETE CASCADE,
         name VARCHAR(100) NOT NULL,
         required INTEGER DEFAULT 0,
-        multi_select INTEGER DEFAULT 0
+        multi_select INTEGER DEFAULT 0,
+        is_global INTEGER DEFAULT 0,
+        is_allergen INTEGER DEFAULT 0
       )
     `);
+    // SEPOS-ALLERGEN-OPT-001 — a global group applies to EVERY item (no per-item
+    // link row); an allergen group's selections print with ⚠️ emphasis + are free.
+    await pool.query(`ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_global INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_allergen INTEGER DEFAULT 0`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS modifiers (
@@ -126,6 +191,7 @@ async function initDB() {
         discount_type VARCHAR(50),
         discount_value DECIMAL(10,2),
         discount_reason TEXT,
+        no_service_charge INTEGER DEFAULT 0,
         bill_printed INTEGER DEFAULT 0,
         opened_at TIMESTAMP DEFAULT NOW(),
         closed_at TIMESTAMP,
@@ -152,13 +218,21 @@ async function initDB() {
         voided INTEGER DEFAULT 0,
         void_reason TEXT,
         discount_type VARCHAR(50),
-        discount_value DECIMAL(10,2)
+        discount_value DECIMAL(10,2),
+        dest_category_id INTEGER
       )
     `);
 
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS item_name VARCHAR(255)`);
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS resend_reason TEXT`);  // SEPOS-024
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS void_type VARCHAR(50)`); // SEPOS-023
+    // SEPOS-MISC-001 — a Misc/open line has no menu_item_id, so it can't inherit
+    // kitchen/bar + printer routing via menu_items.category_id. Persist the
+    // operator-chosen destination category HERE (named dest_category_id to avoid
+    // colliding with menu_items.category_id in the many `order_items.*` SELECTs)
+    // so reads resolve routing + name + VAT via
+    // COALESCE(menu_items.category_id, order_items.dest_category_id).
+    await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS dest_category_id INTEGER`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS vat_rate DECIMAL(5,2) DEFAULT 20.0`); // SEPOS-021
 
     // SEPOS-034: takeaway / delivery online ordering
@@ -174,6 +248,15 @@ async function initDB() {
     // overnight shifts). NULL when no shift was open at close time; the
     // date-range Z-report still catches those.
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS session_id INTEGER`);
+    // SEPOS-AUDIT-001 — service charge SNAPSHOT stamped at close time. Reports
+    // used to derive every historical bill's service from TODAY'S rate setting,
+    // so a rate change silently rewrote past Z/report totals. NULL = legacy row
+    // (falls back to the derivation).
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS service_charge NUMERIC(10,2)`);
+    // SEPOS-AUDIT-001 — when the void actually happened. Z void figures used to
+    // window on orders.created_at, so a void during the shift on a table seated
+    // before it vanished from that shift's Z.
+    await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS voided_at TIMESTAMP`);
     // SEPOS-DELIVERY-002 — collection vs delivery for takeaway orders.
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_subtype VARCHAR(20) DEFAULT 'collection'`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT`);
@@ -190,6 +273,10 @@ async function initDB() {
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_url TEXT`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_eta TIMESTAMP`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS deliveroo_order_id VARCHAR(255)`);
+    // SEPOS — per-order service-charge removal. Persists the Order screen's
+    // "Remove service charge" toggle so the Bill / receipt / splits honour it
+    // (was local React state only, so the Bill re-added it from settings).
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS no_service_charge INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE orders ALTER COLUMN table_id DROP NOT NULL`).catch(() => {});
 
     // SEPOS-033 Phase 2 — campaign audit log
@@ -294,6 +381,11 @@ async function initDB() {
       INSERT INTO settings (key, value) VALUES
         ('service_charge_enabled', 'true'),
         ('service_charge_rate', '12.5'),
+        ('vat_mode', 'inclusive'),
+        ('deposits_enabled', '0'),
+        ('kitchen_font_scale', 'large'),
+        ('receipt_font_scale', 'normal'),
+        ('bar_font_scale', 'large'),
         ('restaurant_name', 'SiamEPOS')
       ON CONFLICT (key) DO NOTHING
     `);
@@ -379,10 +471,21 @@ async function initDB() {
         petty_cash_reason TEXT,
         actual_cash DECIMAL(10,2),
         cash_difference DECIMAL(10,2),
+        actual_card DECIMAL(10,2),
+        card_difference DECIMAL(10,2),
         report_data JSONB,
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    // Card reconciliation (operator enters the card-machine takings; card total
+    // from the terminal always differs slightly from the system). Added after
+    // the table existed on live tenants, so migrate in place.
+    await pool.query(`ALTER TABLE z_reports ADD COLUMN IF NOT EXISTS actual_card DECIMAL(10,2)`);
+    await pool.query(`ALTER TABLE z_reports ADD COLUMN IF NOT EXISTS card_difference DECIMAL(10,2)`);
+    // SEPOS-Z-REPLACE — soft-supersede: re-running a Z for the SAME period marks
+    // the old one superseded (hidden from history/UI, kept for audit — never a
+    // hard delete of a financial record).
+    await pool.query(`ALTER TABLE z_reports ADD COLUMN IF NOT EXISTS superseded_at TIMESTAMP`);
 
     // SEPOS-053 — till trading sessions (EposNow-style Open Shift → Close
     // Shift). At most ONE open session per restaurant (partial unique index
@@ -427,6 +530,20 @@ async function initDB() {
     await pool.query(`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS unsubscribed_at TIMESTAMP`); // SEPOS-033
     await pool.query(`ALTER TABLE reservations ADD COLUMN IF NOT EXISTS table_ids TEXT`); // multi-table join — CSV of table ids, table_id stays the primary
 
+    // SEPOS-SALESCHAT-001 — AI sales concierge for the marketing site (siamepos.co.uk).
+    // Cloud-only. One row per web visitor session. handoff=true silences the AI so a
+    // human (Korakot, via the Control Room) can take over the thread.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sales_chats (
+        session_id VARCHAR(80) PRIMARY KEY,
+        name       VARCHAR(120),
+        messages   JSONB DEFAULT '[]'::jsonb,
+        handoff    BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     // SEPOS-PRO-008 — link a bill to the booking it belongs to, for accurate
     // per-customer spend. Placed AFTER the reservations table exists so the FK
     // resolves on a fresh database. ON DELETE SET NULL: deleting a reservation
@@ -443,6 +560,25 @@ async function initDB() {
         app_version   VARCHAR(20),
         platform      VARCHAR(20),
         last_seen     TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // SEPOS-PRINT-ALERT-001 — held tickets from failed kitchen/bar/station
+    // prints (local tills only; cloud rows never created). See printAlertService.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS print_failures (
+        id SERIAL PRIMARY KEY,
+        kind VARCHAR(20),
+        printer_id INTEGER,
+        printer_name VARCHAR(100),
+        printer_ip VARCHAR(50),
+        order_id INTEGER,
+        order_label VARCHAR(120),
+        items TEXT,
+        reason VARCHAR(300),
+        status VARCHAR(20) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT NOW(),
+        resolved_at TIMESTAMP
       )
     `);
 
@@ -481,6 +617,8 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS resta
 // SEPOS-048 — per-restaurant timezone so cloud validators don't depend on Railway's
 // process TZ (defaults to Europe/London since current customers are UK).
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) DEFAULT 'Europe/London'`);
+// SEPOS-051 — weekly closed days for online booking (JSON array of 'mon'..'sun')
+await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS closed_days TEXT`);
 // SEPOS-047 — kitchen-load wait time for the takeaway widget
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takeaway_busy_threshold      INTEGER DEFAULT 5`);
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takeaway_very_busy_threshold INTEGER DEFAULT 10`);
@@ -555,8 +693,16 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
       ON CONFLICT (restaurant_id, covers_min) DO NOTHING
     `);
 
+    // One-time initial spread ONLY. This used to run every boot and reset any
+    // item at sort_order=0 back to its id — which silently undid the item an
+    // operator dragged to the TOP (top = sort_order 0) on the next restart
+    // ("prawn crackers always moves away"). Now it fires only when NO item has
+    // ever been arranged (nothing has sort_order > 0); the moment any menu has
+    // been reordered it becomes a no-op, so arrangements are never clobbered.
     await pool.query(`
-      UPDATE menu_items SET sort_order = id WHERE sort_order = 0 OR sort_order IS NULL
+      UPDATE menu_items SET sort_order = id
+      WHERE (sort_order = 0 OR sort_order IS NULL)
+        AND NOT EXISTS (SELECT 1 FROM menu_items WHERE sort_order > 0)
     `);
 
     // SEPOS-042 repair: an earlier PUT /api/staff/:id bug wrote
@@ -646,11 +792,21 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
         voided_by TEXT,
         voided_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        restaurant_id VARCHAR(100) DEFAULT 'siamepos'
+        restaurant_id VARCHAR(100) DEFAULT 'siamepos',
+        type VARCHAR(20) DEFAULT 'gift',
+        reservation_id INTEGER,
+        take_date DATE
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_vouchers_code        ON vouchers (code)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_vouchers_restaurant  ON vouchers (restaurant_id)`);
+    // SEPOS-DEPOSIT-001 — booking deposits live in the vouchers table as a typed
+    // row (type='deposit', DEP- code, linked to a reservation). Additive columns;
+    // type defaults to 'gift' so every existing voucher + flow is unchanged.
+    await pool.query(`ALTER TABLE vouchers ADD COLUMN IF NOT EXISTS type VARCHAR(20) DEFAULT 'gift'`);
+    await pool.query(`ALTER TABLE vouchers ADD COLUMN IF NOT EXISTS reservation_id INTEGER`);
+    await pool.query(`ALTER TABLE vouchers ADD COLUMN IF NOT EXISTS take_date DATE`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_vouchers_type ON vouchers (type)`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS voucher_redemptions (
@@ -771,6 +927,35 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date DESC)`);
 
+    // ── SEPOS-CONCIERGE-DEMO — customer AI-chat transcripts (owner inbox) ──
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS concierge_messages (
+        id SERIAL PRIMARY KEY,
+        profile VARCHAR(50) NOT NULL,
+        session_id VARCHAR(64) NOT NULL,
+        role VARCHAR(10) NOT NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_concierge_session ON concierge_messages(profile, session_id, id)`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS concierge_bookings (
+        id SERIAL PRIMARY KEY,
+        profile VARCHAR(50) NOT NULL,
+        session_id VARCHAR(64),
+        customer_name VARCHAR(120) NOT NULL,
+        customer_phone VARCHAR(40),
+        treatment VARCHAR(60) NOT NULL,
+        minutes INTEGER NOT NULL,
+        start_at TIMESTAMP NOT NULL,
+        deposit_gbp NUMERIC(10,2) DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'paid_demo',
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_concierge_bookings ON concierge_bookings(profile, start_at)`);
+
     // ── SEPOS-BATCH-001 — kitchen batch prep ───────────────────────────
     // batch_recipes is the make-template (e.g. "Red Curry Paste: 5kg from
     // ingredients X+Y+Z, shelf life 5 days"). Creating a batch_recipe
@@ -839,6 +1024,42 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
     // not manual entry).
     await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS is_batch BOOLEAN DEFAULT FALSE`);
     await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS batch_recipe_id INTEGER`);
+    // SEPOS-INV-UNITS-001 — purchase↔usage unit bridge. purchase_unit is what
+    // supplier invoices arrive in ('each','bottle','case','L'…); purchase_to_usage
+    // is how many USAGE units (the ingredient's `unit`) one purchase unit
+    // contains (1 bottle = 1000 ml → 1000; 1 duck ≈ 2.1 kg → 2.1). NULL/0 =
+    // no bridge configured; invoice confirm then only accepts same-unit or
+    // pure-metric-convertible lines and SKIPS anything else loudly.
+    await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS purchase_unit VARCHAR(20)`);
+    await pool.query(`ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS purchase_to_usage NUMERIC(12,4)`);
+
+    // SEPOS-LOGIN-SEED — fresh-till default admin (parity with the spa till).
+    // A brand-new till (or one reset for a new client) has no staff, so nobody
+    // can PIN-log-in — the owner had to know to use the email login first. Now
+    // every till without an active admin/manager gets an "Admin / PIN 1234"
+    // account. Guarded so it's a NO-OP for live clients that already have an
+    // admin (Chart Thai, Thann Thai, etc.), and self-healing: if a till ever
+    // loses every admin, the next boot restores a login instead of locking out.
+    // Dialect-safe (no PG-only casts) so it works on cloud PG AND local SQLite
+    // tills. PINs are plaintext here (login matches pin directly), unlike spa.
+    try {
+      const admins = await pool.query(
+        "SELECT COUNT(*) AS n FROM staff WHERE is_active = 1 AND role IN ('admin','manager')",
+      );
+      if (Number(admins.rows[0].n) === 0) {
+        const takenRows = await pool.query('SELECT pin FROM staff');
+        const taken = new Set(takenRows.rows.map((r) => String(r.pin)));
+        let pin = '1234';
+        if (taken.has(pin)) { for (let p = 1000; p <= 9999; p++) { if (!taken.has(String(p))) { pin = String(p); break; } } }
+        await pool.query(
+          "INSERT INTO staff (name, pin, role, is_active) VALUES ('Admin', $1, 'admin', 1)",
+          [pin],
+        );
+        console.warn(`[seed] No active admin — created default admin 'Admin' (PIN ${pin}). CHANGE IT.`);
+      }
+    } catch (e) {
+      console.error('[seed] default-admin seed skipped:', e.message);
+    }
 
     console.log('✅ Database ready');
   } catch (err) {

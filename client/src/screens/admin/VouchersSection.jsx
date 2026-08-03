@@ -7,6 +7,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   listVouchers, getVoucherDetail, voidVoucher, resendVoucherEmail, sellVoucher,
+  createDeposit, forfeitDeposit, getSettings,
   assertOk,
 } from '../../api';
 import { downloadCsv } from '../../utils/csv';
@@ -17,6 +18,7 @@ const STATUS_PILL = {
   depleted: { bg: '#e0e7ff', fg: '#4338ca', label: '⊘ Depleted' },
   expired:  { bg: '#fef3c7', fg: '#92400e', label: '⏱ Expired' },
   voided:   { bg: '#fee2e2', fg: '#991b1b', label: '✕ Voided' },
+  forfeited:{ bg: '#fef3c7', fg: '#92400e', label: '🧾 Forfeited' },
 };
 
 function fmtMoney(n) { return '£' + Number(n || 0).toFixed(2); }
@@ -43,6 +45,10 @@ export default function VouchersSection() {
   const [busy,         setBusy]         = useState(false);
   const [sellOpen,     setSellOpen]     = useState(false);
   const [sold,         setSold]         = useState(null); // success-modal state
+  // SEPOS-DEPOSIT-001 — booking deposit (gated by deposits_enabled)
+  const [depositsOn,   setDepositsOn]   = useState(false);
+  const [depositOpen,  setDepositOpen]  = useState(false);
+  useEffect(() => { getSettings().then(s => setDepositsOn((s?.deposits_enabled ?? s?.settings?.deposits_enabled) === '1')).catch(() => {}); }, []);
 
   async function load() {
     setLoading(true);
@@ -108,6 +114,21 @@ export default function VouchersSection() {
     }
   }
 
+  // SEPOS-DEPOSIT-001 — no-show: forfeit a deposit (kept as income). Optimistic
+  // flip, mirrors handleVoid; keyed by DEP- code (the forfeit endpoint's key).
+  async function handleForfeit(code, id) {
+    if (!await confirm('Forfeit this deposit? The customer did not show — the deposit is kept as income and can no longer be redeemed.')) return;
+    setRows(prev => prev.map(v => v.id === id ? { ...v, status: 'forfeited' } : v));
+    setDetail(prev => prev?.voucher?.id === id ? { ...prev, voucher: { ...prev.voucher, status: 'forfeited' } } : prev);
+    try {
+      assertOk(await forfeitDeposit(code));
+    } catch (e) {
+      alert('Forfeit failed: ' + e.message);
+      load();
+      if (detailId) openDetail(detailId);
+    }
+  }
+
   async function handleResend(id) {
     setBusy(true);
     try {
@@ -123,16 +144,22 @@ export default function VouchersSection() {
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>🎁 Gift Vouchers</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 4 }}>🎁 Gift Vouchers</h1>
           <p style={{ fontSize: 13, color: '#888', margin: 0 }}>Vouchers sold via the public widget — redeemed at checkout</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => setSellOpen(true)}
-            style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: '#C9A84C', color: '#1a1a2e', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+            style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
             + Sell voucher
           </button>
+          {depositsOn && (
+            <button onClick={() => setDepositOpen(true)}
+              style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: 'var(--brand-primary,#0D1B3E)', color: 'white', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
+              🧾 Take deposit
+            </button>
+          )}
           <button onClick={exportCsv}
-            style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid #1a1a2e', background: 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             ⬇ Export CSV
           </button>
         </div>
@@ -141,7 +168,7 @@ export default function VouchersSection() {
       {/* Stats */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         {[
-          { label: 'Total sold',         value: fmtMoney(stats.soldTotal),     color: '#1a1a2e' },
+          { label: 'Total sold',         value: fmtMoney(stats.soldTotal),     color: 'var(--brand-primary, #1a1a2e)' },
           { label: 'Sold last 30 days',  value: fmtMoney(stats.sold30),        color: '#3b82f6' },
           { label: 'Active vouchers',    value: stats.activeCount,             color: '#22c55e' },
           { label: 'Outstanding balance',value: fmtMoney(stats.activeBalance), color: '#eab308' },
@@ -161,12 +188,12 @@ export default function VouchersSection() {
           placeholder="Search code, email or name…"
           style={{ flex: 1, minWidth: 220, padding: '10px 14px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}/>
         <button onClick={load}
-          style={{ padding: '10px 16px', borderRadius: 8, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+          style={{ padding: '10px 16px', borderRadius: 8, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
           Search
         </button>
         {['', 'active', 'depleted', 'expired', 'voided'].map(s => (
           <button key={s || 'all'} onClick={() => setStatusFilter(s)}
-            style={{ padding: '8px 14px', borderRadius: 20, border: 'none', background: statusFilter === s ? '#1a1a2e' : '#e0e0e0', color: statusFilter === s ? 'white' : '#555', fontWeight: 600, fontSize: 12, cursor: 'pointer', textTransform: 'capitalize' }}>
+            style={{ padding: '8px 14px', borderRadius: 20, border: 'none', background: statusFilter === s ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0', color: statusFilter === s ? 'white' : '#555', fontWeight: 600, fontSize: 12, cursor: 'pointer', textTransform: 'capitalize' }}>
             {s || 'all'}
           </button>
         ))}
@@ -212,6 +239,17 @@ export default function VouchersSection() {
         />
       )}
 
+      {/* SEPOS-DEPOSIT-001 — take booking deposit modal */}
+      {depositOpen && (
+        <TakeDepositModal
+          onClose={() => setDepositOpen(false)}
+          onTaken={(voucher) => {
+            setDepositOpen(false); setSold(voucher);
+            if (voucher) setRows(prev => [voucher, ...prev]);
+          }}
+        />
+      )}
+
       {/* Sold success */}
       {sold && (
         <SoldSuccessModal voucher={sold} onClose={() => setSold(null)} />
@@ -244,7 +282,7 @@ export default function VouchersSection() {
                 </div>
 
                 {detail.voucher.message && (
-                  <div style={{ background: '#fdf6ec', borderLeft: '3px solid #C9A84C', padding: '10px 14px', borderRadius: '0 8px 8px 0', fontSize: 13, color: '#5b4a2a', fontStyle: 'italic', marginBottom: 16 }}>
+                  <div style={{ background: '#fdf6ec', borderLeft: '3px solid var(--brand-accent,#C9A84C)', padding: '10px 14px', borderRadius: '0 8px 8px 0', fontSize: 13, color: '#5b4a2a', fontStyle: 'italic', marginBottom: 16 }}>
                     "{detail.voucher.message}"
                   </div>
                 )}
@@ -277,6 +315,13 @@ export default function VouchersSection() {
                     <button onClick={() => handleVoid(detail.voucher.id)} disabled={busy}
                       style={{ flex: 1, padding: '12px', borderRadius: 8, border: 'none', background: '#fee2e2', color: '#991b1b', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: busy ? 0.5 : 1 }}>
                       ✕ Void voucher
+                    </button>
+                  )}
+                  {/* SEPOS-DEPOSIT-001 — no-show: forfeit the deposit (kept as income). */}
+                  {detail.voucher.type === 'deposit' && detail.voucher.status === 'active' && (
+                    <button onClick={() => handleForfeit(detail.voucher.code, detail.voucher.id)} disabled={busy}
+                      style={{ flex: 1, padding: '12px', borderRadius: 8, border: 'none', background: '#fef3c7', color: '#92400e', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: busy ? 0.5 : 1 }}>
+                      🧾 Forfeit (no-show)
                     </button>
                   )}
                 </div>
@@ -333,7 +378,7 @@ function SellVoucherModal({ onClose, onSold }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 8 }}>
             {PRESETS.map(p => (
               <button key={p} onClick={() => setAmount(p)}
-                style={{ padding: '14px 8px', borderRadius: 8, border: `2px solid ${amount === p ? '#1e3a6e' : '#e0e0e0'}`, background: amount === p ? '#fdf6ec' : 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 16, cursor: 'pointer' }}>
+                style={{ padding: '14px 8px', borderRadius: 8, border: `2px solid ${amount === p ? '#1e3a6e' : '#e0e0e0'}`, background: amount === p ? '#fdf6ec' : 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, fontSize: 16, cursor: 'pointer' }}>
                 £{p}
               </button>
             ))}
@@ -356,7 +401,7 @@ function SellVoucherModal({ onClose, onSold }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {[{ k: 'cash', label: '💵 Cash' }, { k: 'card', label: '💳 Card' }].map(m => (
               <button key={m.k} onClick={() => setMethod(m.k)}
-                style={{ padding: '14px', borderRadius: 8, border: `2px solid ${method === m.k ? '#1e3a6e' : '#e0e0e0'}`, background: method === m.k ? '#fdf6ec' : 'white', color: '#1a1a2e', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+                style={{ padding: '14px', borderRadius: 8, border: `2px solid ${method === m.k ? '#1e3a6e' : '#e0e0e0'}`, background: method === m.k ? '#fdf6ec' : 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
                 {m.label}
               </button>
             ))}
@@ -365,12 +410,93 @@ function SellVoucherModal({ onClose, onSold }) {
           {err && <div style={{ marginTop: 14, background: '#fee2e2', color: '#991b1b', padding: '10px 12px', borderRadius: 8, fontSize: 13 }}>⚠️ {err}</div>}
 
           <button onClick={submit} disabled={!valid || busy}
-            style={{ marginTop: 20, width: '100%', padding: 16, borderRadius: 10, border: 'none', background: '#C9A84C', color: '#1a1a2e', fontWeight: 800, fontSize: 16, cursor: 'pointer', opacity: (!valid || busy) ? 0.5 : 1 }}>
+            style={{ marginTop: 20, width: '100%', padding: 16, borderRadius: 10, border: 'none', background: 'var(--brand-accent,#C9A84C)', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 800, fontSize: 16, cursor: 'pointer', opacity: (!valid || busy) ? 0.5 : 1 }}>
             {busy ? 'Creating…' : `Sell £${amount} voucher`}
           </button>
           <p style={{ fontSize: 11, color: '#888', marginTop: 10, lineHeight: 1.4 }}>
             Take payment at the till like a normal Cash/Card sale. The voucher code is generated immediately and (if an email is provided) sent to the recipient automatically.
           </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// SEPOS-DEPOSIT-001 — take a booking deposit (manual, Phase A). Creates a
+// type='deposit' voucher tied to a reservation; redeemed on the day as a
+// 'Deposit' tender (never a discount). Expiry = reservation date + 7 (server).
+function TakeDepositModal({ onClose, onTaken }) {
+  const PRESETS = [10, 20, 50, 100];
+  const [amount, setAmount]       = useState(20);
+  const [method, setMethod]       = useState(null);
+  const [reservationId, setReservationId] = useState('');
+  const [custName, setCustName]   = useState('');
+  const [custEmail, setCustEmail] = useState('');
+  const [busy, setBusy]           = useState(false);
+  const [err, setErr]             = useState('');
+
+  const valid = amount > 0 && amount <= 1000 && !!method;
+
+  async function submit() {
+    if (!valid || busy) return;
+    setErr(''); setBusy(true);
+    try {
+      const r = await createDeposit({
+        amount,
+        payment_method: method,
+        reservation_id: reservationId ? Number(reservationId) : null,
+        customer_name:  custName  || null,
+        customer_email: custEmail || null,
+      });
+      if (r.error) throw new Error(r.error);
+      onTaken(r.voucher || r);
+    } catch (e) { setErr(e.message || 'Could not take deposit'); }
+    finally     { setBusy(false); }
+  }
+
+  return (
+    <div onClick={(e) => e.target === e.currentTarget && onClose()}
+      style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+      <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 500, maxHeight: '92vh', overflowY: 'auto' }}>
+        <div style={{ padding: '18px 22px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontWeight: 800, fontSize: 18 }}>🧾 Take a Booking Deposit</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>×</button>
+        </div>
+        <div style={{ padding: 22 }}>
+          <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, fontWeight: 700 }}>Deposit amount</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 8 }}>
+            {PRESETS.map(p => (
+              <button key={p} onClick={() => setAmount(p)}
+                style={{ padding: '14px 8px', borderRadius: 8, border: `2px solid ${amount === p ? '#0D1B3E' : '#e0e0e0'}`, background: amount === p ? '#eef6ff' : 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, fontSize: 16, cursor: 'pointer' }}>
+                £{p}
+              </button>
+            ))}
+          </div>
+          <input type="number" min="1" max="1000" step="1" value={amount}
+            onChange={(e) => setAmount(parseInt(e.target.value, 10) || 0)}
+            placeholder="Custom amount"
+            style={{ width: '100%', padding: '12px', border: '1px solid #ccc', borderRadius: 8, fontSize: 16, fontWeight: 700, marginBottom: 16, boxSizing: 'border-box' }}/>
+
+          <Field label="Reservation ID (optional — leave blank if the booking isn't in the system yet)"
+            value={reservationId} onChange={setReservationId} />
+          <Field label="Customer name (optional)" value={custName} onChange={setCustName} />
+          <Field label="Customer email (optional — sends a confirmation)" value={custEmail} onChange={setCustEmail} type="email" />
+
+          <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, fontWeight: 700, marginTop: 8 }}>How was the deposit paid?</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
+            {[{ k: 'cash', label: '💵 Cash' }, { k: 'card', label: '💳 Card' }, { k: 'mock', label: '🧪 Test' }].map(m => (
+              <button key={m.k} onClick={() => setMethod(m.k)}
+                style={{ padding: '14px', borderRadius: 8, border: `2px solid ${method === m.k ? '#0D1B3E' : '#e0e0e0'}`, background: method === m.k ? '#eef6ff' : 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          {err && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 10 }}>{err}</div>}
+          <button onClick={submit} disabled={!valid || busy}
+            style={{ width: '100%', padding: '14px', borderRadius: 10, border: 'none', background: (!valid || busy) ? '#ccc' : 'var(--brand-primary,#0D1B3E)', color: 'white', fontWeight: 800, fontSize: 16, cursor: (!valid || busy) ? 'not-allowed' : 'pointer' }}>
+            {busy ? 'Taking…' : `Take deposit £${Number(amount || 0).toFixed(2)}`}
+          </button>
         </div>
       </div>
     </div>
@@ -404,14 +530,14 @@ function SoldSuccessModal({ voucher, onClose }) {
               : 'No email on file — write the code on a printed card or read it to the customer'}
           </p>
           <div style={{ background: 'linear-gradient(135deg,#1e3a6e,#2a4d8a)', borderRadius: 12, padding: 22, color: 'white' }}>
-            <div style={{ color: '#C9A84C', fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, marginBottom: 6 }}>Voucher value</div>
+            <div style={{ color: 'var(--brand-accent,#C9A84C)', fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 700, marginBottom: 6 }}>Voucher value</div>
             <div style={{ fontSize: 36, fontWeight: 800, marginBottom: 14 }}>£{Number(voucher.original_amount).toFixed(2)}</div>
             <div style={{ background: 'rgba(255,255,255,0.1)', border: '1px dashed rgba(255,255,255,0.4)', borderRadius: 8, padding: 12, fontFamily: 'Menlo,Consolas,monospace', fontSize: 20, letterSpacing: 3, fontWeight: 700 }}>
               {voucher.code}
             </div>
           </div>
           <button onClick={onClose}
-            style={{ marginTop: 20, width: '100%', padding: 14, borderRadius: 10, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+            style={{ marginTop: 20, width: '100%', padding: 14, borderRadius: 10, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
             Done
           </button>
         </div>
@@ -424,7 +550,7 @@ function KV({ label, value, big, highlight }) {
   return (
     <div style={{ background: highlight ? '#fdf6ec' : '#fafaf7', borderRadius: 8, padding: '10px 14px' }}>
       <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: big ? 18 : 13, fontWeight: big ? 800 : 600, color: highlight ? '#5b4a2a' : '#1a1a2e' }}>{value}</div>
+      <div style={{ fontSize: big ? 18 : 13, fontWeight: big ? 800 : 600, color: highlight ? '#5b4a2a' : 'var(--brand-primary, #1a1a2e)' }}>{value}</div>
     </div>
   );
 }

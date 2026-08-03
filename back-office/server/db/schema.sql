@@ -36,6 +36,8 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS stripe_customer_id     TEXT;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_clients_stripe_customer     ON clients (stripe_customer_id);
 CREATE INDEX IF NOT EXISTS idx_clients_stripe_subscription ON clients (stripe_subscription_id);
+-- SIAMPAY-002 Phase B — Connect Express account for clients on SiamPay rails
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS siampay_account TEXT;
 -- Backfill existing rows using a slugified version of restaurant_name
 UPDATE clients SET slug = LOWER(REGEXP_REPLACE(
   SUBSTRING(TRIM(restaurant_name) FROM 1 FOR 20), '[^a-z0-9]+', '-', 'g'))
@@ -227,3 +229,21 @@ CREATE TABLE IF NOT EXISTS transaction_attachments (
   uploaded_at      TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_tx_attach_txid ON transaction_attachments (transaction_id);
+
+-- SEPOS-AI-HELP-001 — questions clients ask the in-app "Ask AI" assistant,
+-- forwarded from each tenant cloud (authed by matching the tenant's
+-- x-sync-secret to a client's stored sync_secret → client_id). Gold data on
+-- what clients struggle with; feeds the assistant's knowledge base back.
+CREATE TABLE IF NOT EXISTS ai_help_logs (
+  id               SERIAL PRIMARY KEY,
+  client_id        INT REFERENCES clients(id) ON DELETE SET NULL,
+  restaurant_name  TEXT,                    -- denormalised label (survives client delete)
+  question         TEXT NOT NULL,
+  reply            TEXT,
+  platform         TEXT,                    -- Mac / Windows / iPad / Sunmi / web
+  staff_role       TEXT,
+  escalated        BOOLEAN DEFAULT FALSE,   -- reply told them to contact support
+  created_at       TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_ai_help_logs_client ON ai_help_logs (client_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_help_logs_time   ON ai_help_logs (created_at DESC);

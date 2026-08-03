@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
-import { C, card, btn, input, label, fmtRelTime, fmtMoney, STATUS_STYLE, PLAN_LABEL, PRODUCT_BADGE } from '../theme.js';
+import { C, card, btn, input, label, fmtRelTime, fmtMoney, STATUS_STYLE, PLAN_LABEL, productBadge } from '../theme.js';
 import StatusPill from '../components/StatusPill.jsx';
 import HealthDot from '../components/HealthDot.jsx';
 import Avatar from '../components/Avatar.jsx';
@@ -29,6 +29,12 @@ export default function ClientDetailPage() {
   const [noteCategory, setNoteCategory] = useState('general');
   const [noteText, setNoteText] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [payLink, setPayLink] = useState('');
+  const [linking, setLinking] = useState(false);
+  const [copiedPay, setCopiedPay] = useState(false);
+  const [billingPlans, setBillingPlans] = useState([]);
+  const [deleting, setDeleting] = useState(false);
+  const [linkingSub, setLinkingSub] = useState(false);
 
   const me = (() => {
     try { return JSON.parse(localStorage.getItem('ops_user') || 'null'); } catch { return null; }
@@ -40,12 +46,14 @@ export default function ClientDetailPage() {
     catch (e) { console.error(e); }
   };
   useEffect(() => { load(); }, [id]);
+  // BO-BILLING-001 — live plans from Stripe so new products appear automatically.
+  useEffect(() => { api.getBillingPlans().then(r => setBillingPlans(r?.plans || [])).catch(() => {}); }, []);
 
   if (!data) return <div style={{ color: C.textMuted }}>Loading…</div>;
   const { client, health, notes, tills = [] } = data;
   const latest = health[0];
   const isSpa = (client.product || 'restaurant') === 'spa';
-  const prod = PRODUCT_BADGE[client.product || 'restaurant'];
+  const prod = productBadge(client.product);
 
   const saveField = async (field, value) => {
     setSaving(true);
@@ -82,6 +90,50 @@ export default function ClientDetailPage() {
       await load();
     } catch (e) { window.alert(e.message); }
     finally { setCancelling(false); }
+  };
+
+  // BO-BILLING-001 — generate a Stripe Checkout link for this client's plan.
+  // Send it to a remote client, or open it on your iPad on-site to enter their
+  // card. Paying flips them to 'active' automatically (via the webhook).
+  const createPayLink = async () => {
+    setLinking(true); setCopiedPay(false);
+    try {
+      const r = await api.createCheckoutLink(id);
+      if (r?.url) setPayLink(r.url);
+      else window.alert(r?.error || 'Could not create payment link');
+    } catch (e) { window.alert(e.message); }
+    finally { setLinking(false); }
+  };
+  const copyPayLink = async () => {
+    try { await navigator.clipboard.writeText(payLink); setCopiedPay(true); setTimeout(() => setCopiedPay(false), 2000); }
+    catch { /* clipboard blocked — the link is visible to copy by hand */ }
+  };
+
+  // Link a subscription created outside ops (matched by client email in Stripe).
+  const linkSub = async () => {
+    setLinkingSub(true);
+    try {
+      const r = await api.linkSubscription(id);
+      if (r?.linked) { await load(); window.alert('Linked the existing Stripe subscription ✓'); }
+      else window.alert(r?.error || 'No matching Stripe subscription found.');
+    } catch (e) { window.alert(e.message); }
+    finally { setLinkingSub(false); }
+  };
+
+  // Delete a client record (admin only). Blocks if a live Stripe subscription
+  // is still attached — cancel that first so we don't orphan a paying sub.
+  const deleteClient = async () => {
+    if (data.client.stripe_subscription_id && data.client.status !== 'churned') {
+      window.alert('This client still has an active Stripe subscription. Cancel the subscription first (in the Subscription card), then delete.');
+      return;
+    }
+    if (!window.confirm(
+      `Permanently delete ${data.client.restaurant_name} from the back office?\n\n` +
+      `This removes the client record only. It does NOT delete their Stripe data or any provisioned Railway/Netlify — handle those separately if needed.`
+    )) return;
+    setDeleting(true);
+    try { await api.deleteClient(id); nav('/'); }
+    catch (e) { window.alert(e.message); setDeleting(false); }
   };
 
   return (
@@ -168,10 +220,15 @@ export default function ClientDetailPage() {
           <SectionCard title="Subscription">
             <FormRow label="Plan">
               <select value={client.plan || 'trial'} onChange={(e) => saveField('plan', e.target.value)} disabled={saving} style={miniInput}>
-                {isSpa
-                  ? <option value="spa">Spa £49/mo</option>
-                  : <><option value="trial">Trial</option><option value="cloud">Cloud</option><option value="pro">Pro</option><option value="founder">Founder's Pack £59/mo</option></>
-                }
+                <option value="trial">Trial (no charge)</option>
+                {/* Live from Stripe — new products appear here automatically */}
+                {billingPlans.map(p => (
+                  <option key={p.value} value={p.value}>{p.name} — {fmtMoney((p.amount || 0) / 100)}/{p.interval || 'mo'}</option>
+                ))}
+                {/* keep the current plan visible even if it's a legacy value not in Stripe */}
+                {client.plan && client.plan !== 'trial' && !billingPlans.some(p => p.value === client.plan) && (
+                  <option value={client.plan}>{client.plan} (legacy — no Stripe price)</option>
+                )}
               </select>
             </FormRow>
             <FormRow label="Status">
@@ -232,14 +289,59 @@ export default function ClientDetailPage() {
                   </div>
                 </>
               ) : (
-                <div style={{ fontSize: 13, color: C.textFaint }}>
-                  No Stripe subscription on file. {client.metadata?.signed_up_via === 'kiosk'
-                    ? 'This client signed up before billing linkage was added, or pays another way.'
-                    : 'Added manually — bill them outside Stripe, or have them self-pay via the kiosk link.'}
+                <div>
+                  <div style={{ fontSize: 13, color: C.textFaint, marginBottom: 10 }}>
+                    No active subscription yet. Create a payment link — <strong>send it to the client</strong>, or <strong>open it on your iPad on-site</strong> to enter their card. Paying activates them automatically.
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      onClick={createPayLink}
+                      disabled={linking}
+                      style={{ ...btn.gold, fontSize: 13, opacity: linking ? 0.6 : 1, cursor: linking ? 'wait' : 'pointer' }}
+                      title={`Create a Stripe Checkout link for the ${PLAN_LABEL[client.plan] || client.plan || 'current'} plan`}
+                    >
+                      {linking ? 'Creating…' : `💳 Create payment link${client.plan ? ` (${PLAN_LABEL[client.plan] || client.plan})` : ''}`}
+                    </button>
+                    <button
+                      onClick={linkSub}
+                      disabled={linkingSub}
+                      style={{ ...btn.ghost, fontSize: 13, opacity: linkingSub ? 0.6 : 1, cursor: linkingSub ? 'wait' : 'pointer' }}
+                      title="Already subscribed in Stripe (paid outside ops)? Match by email and link it."
+                    >
+                      {linkingSub ? 'Linking…' : '🔗 Link existing subscription'}
+                    </button>
+                  </div>
+                  {payLink && (
+                    <div style={{ marginTop: 12, padding: 12, background: C.surfaceAlt || '#f6f7fb', borderRadius: 10, border: `1px solid ${C.border}` }}>
+                      <div style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all', color: C.text, marginBottom: 10 }}>{payLink}</div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button onClick={copyPayLink} style={{ ...btn.ghost, fontSize: 12 }}>{copiedPay ? '✓ Copied!' : '📋 Copy link'}</button>
+                        <a href={payLink} target="_blank" rel="noopener noreferrer" style={{ ...btn.gold, fontSize: 12, textDecoration: 'none' }}>Open to pay now ↗</a>
+                      </div>
+                      <div style={{ fontSize: 11, color: C.textMuted, marginTop: 8 }}>Open it on the iPad in front of the client, or send it to them. They enter the card; the client flips to “active” once paid.</div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </SectionCard>
+
+          <SiamPayCard client={client} />
+
+          {isAdmin && (
+            <SectionCard title="Danger zone">
+              <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 10 }}>
+                Permanently remove this client record from the back office (e.g. a test or mistaken entry). Cancel any Stripe subscription first.
+              </div>
+              <button
+                onClick={deleteClient}
+                disabled={deleting}
+                style={{ ...btn.ghost, fontSize: 13, color: C.danger || '#991b1b', borderColor: C.danger || '#fecaca', opacity: deleting ? 0.6 : 1, cursor: deleting ? 'wait' : 'pointer' }}
+              >
+                {deleting ? 'Deleting…' : '🗑 Delete client'}
+              </button>
+            </SectionCard>
+          )}
 
           <SectionCard title="Recent health">
             {health.length === 0 ? (
@@ -498,6 +600,133 @@ function HeroStat({ label, value, sub }) {
       <div style={{ fontSize: 20, fontWeight: 800, color: 'white', marginTop: 4 }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>{sub}</div>}
     </div>
+  );
+}
+
+// SIAMPAY-002 Phase B — Connect Express onboarding card.
+// Enable → creates the client's Express account; link → hosted Stripe KYC;
+// chips show live charges/payouts state. Once charges are enabled, the env
+// block below is what goes on the client's tenant Railway (secret key is
+// pasted from .infra-keys — the server never sends it to the browser).
+function SiamPayCard({ client }) {
+  const [cfg, setCfg] = useState(null);        // { configured, mode }
+  const [status, setStatus] = useState(null);  // status payload or { enabled:false }
+  const [busy, setBusy] = useState('');
+  const [link, setLink] = useState('');
+  const [copied, setCopied] = useState('');
+  const [error, setError] = useState('');
+
+  const refresh = () => {
+    api.siampayConfig().then(setCfg).catch(() => setCfg({ configured: false }));
+    api.siampayStatus(client.id).then(setStatus).catch(e => setError(e.message || 'status failed'));
+  };
+  useEffect(refresh, [client.id]);
+
+  const enable = async () => {
+    setBusy('enable'); setError('');
+    try { await api.siampayEnable(client.id); refresh(); }
+    catch (e) { setError(e.message || 'enable failed'); }
+    setBusy('');
+  };
+  const makeLink = async () => {
+    setBusy('link'); setError('');
+    try { const r = await api.siampayOnboardingLink(client.id); setLink(r.url); }
+    catch (e) { setError(e.message || 'link failed'); }
+    setBusy('');
+  };
+  const copy = (text, tag) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(tag); setTimeout(() => setCopied(''), 1500);
+    });
+  };
+
+  const chip = (on, labelOn, labelOff) => (
+    <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20,
+      background: on ? '#dcfce7' : '#fef3c7', color: on ? '#166534' : '#92400e' }}>
+      {on ? labelOn : labelOff}
+    </span>
+  );
+
+  if (cfg && !cfg.configured) {
+    return (
+      <SectionCard title="💳 SiamPay">
+        <div style={{ fontSize: 13, color: C.textFaint }}>
+          Not configured on ops yet — set <code>SIAMPAY_PLATFORM_SECRET_KEY</code> (+ publishable key) on the Back Office Railway to activate this card. Keys live in Control Room .infra-keys.
+        </div>
+      </SectionCard>
+    );
+  }
+
+  return (
+    <SectionCard title={`💳 SiamPay${cfg?.mode === 'test' ? ' (TEST mode)' : ''}`}>
+      {!status?.enabled ? (
+        <div>
+          <div style={{ fontSize: 13, color: C.textFaint, marginBottom: 10 }}>
+            For clients <strong>without their own Stripe</strong>: creates their SiamPay account (Stripe Express — Stripe does the KYC), then online payments (takeaway orders, booking deposits, vouchers, payment links) settle straight to <strong>their</strong> bank. We take a flat 10p per transaction from their settlement; the customer always pays the quoted price.
+          </div>
+          <button onClick={enable} disabled={busy === 'enable'}
+            style={{ ...btn.gold, fontSize: 13, opacity: busy === 'enable' ? 0.6 : 1, cursor: busy === 'enable' ? 'wait' : 'pointer' }}>
+            {busy === 'enable' ? 'Creating…' : '💳 Enable SiamPay'}
+          </button>
+        </div>
+      ) : (
+        <div>
+          <div style={{ fontSize: 12, color: C.textMuted, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all', marginBottom: 10 }}>
+            {status.account}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+            {chip(status.details_submitted, 'KYC submitted', 'KYC pending')}
+            {chip(status.charges_enabled, 'Charges enabled', 'Charges off')}
+            {chip(status.payouts_enabled, 'Payouts enabled', 'Payouts off')}
+          </div>
+          {!status.charges_enabled && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 13, color: C.textFaint, marginBottom: 8 }}>
+                {status.requirements_due?.length
+                  ? `Stripe still needs: ${status.requirements_due.slice(0, 4).join(', ')}${status.requirements_due.length > 4 ? '…' : ''}`
+                  : 'Send the client their onboarding link — Stripe collects ID + bank details.'}
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={makeLink} disabled={busy === 'link'}
+                  style={{ ...btn.gold, fontSize: 13, opacity: busy === 'link' ? 0.6 : 1, cursor: busy === 'link' ? 'wait' : 'pointer' }}>
+                  {busy === 'link' ? 'Creating…' : '🔗 Create onboarding link'}
+                </button>
+                <button onClick={refresh} style={{ ...btn.ghost, fontSize: 13 }}>↻ Refresh status</button>
+              </div>
+              {link && (
+                <div style={{ marginTop: 10, padding: 12, background: C.surfaceAlt || '#f6f7fb', borderRadius: 10, border: `1px solid ${C.border}` }}>
+                  <div style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all', marginBottom: 8 }}>{link}</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => copy(link, 'link')} style={{ ...btn.ghost, fontSize: 12 }}>{copied === 'link' ? '✓ Copied!' : '📋 Copy link'}</button>
+                    <a href={link} target="_blank" rel="noopener noreferrer" style={{ ...btn.gold, fontSize: 12, textDecoration: 'none' }}>Open ↗</a>
+                  </div>
+                  <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>Links expire quickly — mint a fresh one if the client stalls. Send it, or open it with the client on-site.</div>
+                </div>
+              )}
+            </div>
+          )}
+          {status.charges_enabled && (
+            <div style={{ padding: 12, background: C.surfaceAlt || '#f6f7fb', borderRadius: 10, border: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: C.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Tenant Railway env vars (last step)
+              </div>
+              {Object.entries(status.tenant_env || {}).map(([k, v]) => (
+                <div key={k} style={{ fontSize: 11, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all', marginBottom: 4 }}>
+                  {k}={v}{' '}
+                  {!v.startsWith('(') && (
+                    <button onClick={() => copy(`${k}=${v}`, k)} style={{ ...btn.ghost, fontSize: 10, padding: '1px 6px' }}>{copied === k ? '✓' : '📋'}</button>
+                  )}
+                </div>
+              ))}
+              <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>
+                Paste all three on the client's Railway app service, then redeploy it. A tenant's own STRIPE_SECRET_KEY (if set) overrides SiamPay — remove it first.
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {error && <div style={{ fontSize: 12, color: C.danger || '#991b1b', marginTop: 10 }}>{error}</div>}
+    </SectionCard>
   );
 }
 

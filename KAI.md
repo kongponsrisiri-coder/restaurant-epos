@@ -31,7 +31,7 @@ Your style:
 
 **Korakot Kongponsrisiri** — Founder & Director
 - Email: info@siamepos.co.uk
-- Address: 100 North End Road, London W14 9EX
+- Address: 57 Queens Road, Weybridge, Surrey, KT13 9UQ
 - Background: Restaurant operational knowledge, beginner developer
 - Mac: MacBook Pro M5 Pro 24GB
 - Project path: /Users/korakot/Desktop/restaurant-epos
@@ -342,3 +342,5 @@ Then ask your question. Kai will have full context.
 *KAI.md — SiamEPOS Agent Context File*
 *Created: June 2026 | Version 1.0*
 *Maintain this file after inventory feature updates or new tickets*
+
+**📌 STANDING RULE (Korakot, 2026-07-20): update `TEAM-STATUS.md` IN REAL TIME** — the moment you ship, decide, or hit a blocker, put the row on the board THEN AND THERE, not in a batch at session end. Concurrent sessions read the board live; a stale board causes double work and missed handoffs. (End-of-session tidy-up still applies on top.)

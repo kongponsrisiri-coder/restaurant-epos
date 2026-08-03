@@ -90,7 +90,7 @@ export default function VATReportSection() {
 
   return (
     <div style={{ padding:24, maxWidth:840 }}>
-      <h1 style={{ fontSize:22, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>🧾 VAT Report</h1>
+      <h1 style={{ fontSize:22, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🧾 VAT Report</h1>
 
       <div style={{ ...cardStyle, display:'flex', gap:10, alignItems:'flex-end', flexWrap:'wrap' }}>
         <div>
@@ -103,25 +103,25 @@ export default function VATReportSection() {
         </div>
         <button onClick={load} disabled={loading} style={{
           padding:'10px 18px', borderRadius:8, border:'none',
-          background:'#1a1a2e', color:'white', fontWeight:700, fontSize:13,
+          background:'var(--brand-primary, #1a1a2e)', color:'white', fontWeight:700, fontSize:13,
           cursor: loading ? 'wait' : 'pointer'
         }}>{loading ? 'Loading…' : 'Refresh'}</button>
         <button onClick={() => doPrintVat('thermal')} disabled={!data?.breakdown?.length} style={{
           padding:'10px 18px', borderRadius:8, border:'none',
-          background: data?.breakdown?.length ? '#1a1a2e' : '#bbb',
+          background: data?.breakdown?.length ? 'var(--brand-primary, #1a1a2e)' : '#bbb',
           color:'white', fontWeight:700, fontSize:13,
           cursor: data?.breakdown?.length ? 'pointer' : 'not-allowed'
         }}>🖨 Print</button>
         <button onClick={() => doPrintVat('full')} disabled={!data?.breakdown?.length} style={{
-          padding:'10px 18px', borderRadius:8, border:'1px solid #1a1a2e',
-          background: 'white', color:'#1a1a2e', fontWeight:700, fontSize:13,
+          padding:'10px 18px', borderRadius:8, border:'1px solid var(--brand-primary, #1a1a2e)',
+          background: 'white', color:'var(--brand-primary, #1a1a2e)', fontWeight:700, fontSize:13,
           cursor: data?.breakdown?.length ? 'pointer' : 'not-allowed',
           opacity: data?.breakdown?.length ? 1 : 0.5,
         }}>📄 Export</button>
         <button onClick={exportCsv} disabled={!data || !data.breakdown?.length} style={{
           padding:'10px 18px', borderRadius:8, border:'none',
-          background: data?.breakdown?.length ? '#C9A84C' : '#e5d9b2',
-          color:'#0D1B3E', fontWeight:700, fontSize:13,
+          background: data?.breakdown?.length ? 'var(--brand-accent,#C9A84C)' : '#e5d9b2',
+          color:'var(--brand-primary,#0D1B3E)', fontWeight:700, fontSize:13,
           cursor: data?.breakdown?.length ? 'pointer' : 'not-allowed'
         }}>⬇ CSV</button>
       </div>
@@ -151,7 +151,7 @@ export default function VATReportSection() {
                     <td style={{ padding:'10px 6px', textAlign:'right', color:'#888' }}>{b.items || 0}</td>
                   </tr>
                 ))}
-                <tr style={{ borderTop:'2px solid #1a1a2e', background:'#f8f8f8' }}>
+                <tr style={{ borderTop:'2px solid var(--brand-primary, #1a1a2e)', background:'#f8f8f8' }}>
                   <td style={{ padding:'12px 6px', fontWeight:800 }}>TOTAL</td>
                   <td style={{ padding:'12px 6px', textAlign:'right', fontWeight:800 }}>£{Number(data.total.net).toFixed(2)}</td>
                   <td style={{ padding:'12px 6px', textAlign:'right', fontWeight:800, color:'#1e40af' }}>£{Number(data.total.vat).toFixed(2)}</td>
@@ -168,8 +168,8 @@ export default function VATReportSection() {
             {data.by_kind && (
               <div style={{ marginTop:18, display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                 {[
-                  { key:'food',  label:'🍽️ Food',  tone:'#0D1B3E' },
-                  { key:'drink', label:'🍺 Drink', tone:'#0D1B3E' },
+                  { key:'food',  label:'🍽️ Food',  tone:'var(--brand-primary,#0D1B3E)' },
+                  { key:'drink', label:'🍺 Drink', tone:'var(--brand-primary,#0D1B3E)' },
                 ].map(k => {
                   const b = data.by_kind[k.key] || { net:0, vat:0, gross:0, items:0 };
                   return (

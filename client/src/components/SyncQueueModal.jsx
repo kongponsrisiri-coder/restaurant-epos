@@ -44,13 +44,14 @@ function ago(ts) {
 
 export default function SyncQueueModal({ onClose }) {
   const [entries, setEntries] = useState(null);
+  const [failed, setFailed] = useState([]);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
   const load = async () => {
     setErr('');
-    try { const r = await getSyncQueue(); setEntries(r.entries || []); }
-    catch (e) { setErr(e.message || String(e)); setEntries([]); }
+    try { const r = await getSyncQueue(); setEntries(r.entries || []); setFailed(r.failed || []); }
+    catch (e) { setErr(e.message || String(e)); setEntries([]); setFailed([]); }
   };
   useEffect(() => { load(); }, []);
 
@@ -87,7 +88,7 @@ export default function SyncQueueModal({ onClose }) {
       <div style={panel}>
         <div style={header}>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: '#0d1b3e' }}>Sync queue</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--brand-primary,#0d1b3e)' }}>Sync queue</div>
             <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
               {entries === null ? 'Loading…'
                 : entries.length === 0 ? 'Queue is empty.'
@@ -105,7 +106,7 @@ export default function SyncQueueModal({ onClose }) {
 
         <div style={body}>
           {entries === null && <div style={{ color: '#888', padding: 24, textAlign: 'center' }}>Loading…</div>}
-          {entries?.length === 0 && (
+          {entries?.length === 0 && failed.length === 0 && (
             <div style={{ color: '#94a3b8', padding: 32, textAlign: 'center' }}>
               Nothing pending. Everything's synced. 🎉
             </div>
@@ -116,7 +117,7 @@ export default function SyncQueueModal({ onClose }) {
               <div key={e.id} style={row}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: '#0d1b3e' }}>{label}</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--brand-primary,#0d1b3e)' }}>{label}</span>
                     <span style={{ fontSize: 11, color: '#94a3b8' }}>#{e.id} · {ago(e.created_at)}</span>
                   </div>
                   <div style={{ fontSize: 12, color: '#475569', marginTop: 3, fontFamily: 'ui-monospace, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -127,6 +128,34 @@ export default function SyncQueueModal({ onClose }) {
               </div>
             );
           })}
+
+          {failed.length > 0 && (
+            <div style={{ marginTop: entries?.length ? 10 : 0 }}>
+              <div style={failedHeader}>
+                ⚠ Failed to sync ({failed.length}) — auto-skipped so the rest could push
+              </div>
+              {failed.map(e => {
+                const label = ACTION_LABEL[e.action_type] || e.action_type;
+                return (
+                  <div key={e.id} style={{ ...row, background: '#fffbeb' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: '#92400e' }}>{label}</span>
+                        <span style={{ fontSize: 11, color: '#b45309' }}>#{e.id} · {ago(e.created_at)} · {e.attempts} tries</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#475569', marginTop: 3, fontFamily: 'ui-monospace, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {describePayload(e.action_type, e.payload)}
+                      </div>
+                      {e.last_error && (
+                        <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 3 }}>{e.last_error}</div>
+                      )}
+                    </div>
+                    <button onClick={() => skip(e.id, label)} disabled={busy} style={dismissBtn}>Dismiss</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div style={footer}>
@@ -163,7 +192,7 @@ const refreshBtn = {
   width: 32, height: 32, borderRadius: 8, fontSize: 16, cursor: 'pointer',
 };
 const syncNowBtn = {
-  background: '#0d1b3e', color: 'white', border: 'none',
+  background: 'var(--brand-primary,#0d1b3e)', color: 'white', border: 'none',
   padding: '7px 12px', borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: 'pointer',
   whiteSpace: 'nowrap',
 };
@@ -175,6 +204,15 @@ const row = {
 const skipBtn = {
   background: '#fef3c7', color: '#92400e', border: '1px solid #fbbf24',
   padding: '7px 14px', borderRadius: 7, fontWeight: 800, fontSize: 12, cursor: 'pointer',
+  whiteSpace: 'nowrap',
+};
+const failedHeader = {
+  padding: '10px 18px', fontSize: 12, fontWeight: 800, color: '#92400e',
+  background: '#fef3c7', borderTop: '1px solid #fde68a', borderBottom: '1px solid #fde68a',
+};
+const dismissBtn = {
+  background: 'white', color: '#92400e', border: '1px solid #fbbf24',
+  padding: '7px 14px', borderRadius: 7, fontWeight: 700, fontSize: 12, cursor: 'pointer',
   whiteSpace: 'nowrap',
 };
 const footer = {

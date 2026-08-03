@@ -12,7 +12,7 @@ const SEGMENTS = [
   { id: 'VIP',     label: '⭐ VIP',     color: '#5b21b6' },
   { id: 'Regular', label: '🔁 Regular', color: '#1e40af' },
   { id: 'Lapsed',  label: '😴 Lapsed',  color: '#991b1b' },
-  { id: 'All',     label: '👥 All',     color: '#1a1a2e' },
+  { id: 'All',     label: '👥 All',     color: 'var(--brand-primary, #1a1a2e)' },
 ];
 
 const PLACEHOLDER_BODY = `<p>Hi {{name}},</p>
@@ -39,16 +39,16 @@ function PreviewModal({ subject, body, onClose }) {
         <div style={{ padding:'16px 24px', borderBottom:'1px solid #e0e0e0', background:'white', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
             <div style={{ fontSize:11, fontWeight:700, color:'#888', textTransform:'uppercase', letterSpacing:0.5 }}>Subject</div>
-            <div style={{ fontSize:15, fontWeight:700, color:'#1a1a2e' }}>{subject || '(empty)'}</div>
+            <div style={{ fontSize:15, fontWeight:700, color:'var(--brand-primary, #1a1a2e)' }}>{subject || '(empty)'}</div>
           </div>
           <button onClick={onClose} style={{ background:'#f0f0f0', border:'none', borderRadius:8, padding:'8px 16px', cursor:'pointer', fontWeight:700 }}>Close</button>
         </div>
         <div style={{ background:'#f5f5f5', padding:24 }}>
           <div style={{ background:'white', borderRadius:12, maxWidth:600, margin:'0 auto', boxShadow:'0 2px 8px rgba(0,0,0,0.06)' }}>
-            <div style={{ background:'#0D1B3E', color:'#C9A84C', padding:'24px 30px', fontFamily:'Georgia, serif', fontSize:24, fontWeight:700, borderRadius:'12px 12px 0 0' }}>
+            <div style={{ background:'var(--brand-primary,#0D1B3E)', color:'var(--brand-accent,#C9A84C)', padding:'24px 30px', fontFamily:'Georgia, serif', fontSize:24, fontWeight:700, borderRadius:'12px 12px 0 0' }}>
               Your Restaurant Name
             </div>
-            <div style={{ padding:30, lineHeight:1.6, fontSize:15, color:'#1a1a2e' }} dangerouslySetInnerHTML={{ __html: personalised }} />
+            <div style={{ padding:30, lineHeight:1.6, fontSize:15, color:'var(--brand-primary, #1a1a2e)' }} dangerouslySetInnerHTML={{ __html: personalised }} />
             <div style={{ padding:'20px 30px', background:'#fafafa', borderTop:'1px solid #eee', fontSize:11, color:'#888', lineHeight:1.5, borderRadius:'0 0 12px 12px' }}>
               <div style={{ marginBottom:6 }}><strong>Your Restaurant Name</strong> · Address (configured in env)</div>
               <div>You're receiving this because you opted in to marketing emails. <span style={{ textDecoration:'underline' }}>Unsubscribe</span> at any time.</div>
@@ -133,7 +133,7 @@ export default function CampaignsSection() {
 
   return (
     <div style={{ padding:24, maxWidth:880 }}>
-      <h1 style={{ fontSize:22, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>📧 Email Campaigns</h1>
+      <h1 style={{ fontSize:22, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>📧 Email Campaigns</h1>
 
       <div style={cardStyle}>
         <label style={{ fontSize:11, fontWeight:700, color:'#888', textTransform:'uppercase', display:'block', marginBottom:8 }}>Audience</label>
@@ -153,7 +153,7 @@ export default function CampaignsSection() {
         <div style={{ fontSize:13, color:'#555' }}>
           {count === null
             ? <span style={{ color:'#888' }}>Counting recipients…</span>
-            : <>Sending to <strong style={{ color:'#1a1a2e' }}>{count}</strong> opted-in customer{count === 1 ? '' : 's'} in <strong>{segment}</strong></>}
+            : <>Sending to <strong style={{ color:'var(--brand-primary, #1a1a2e)' }}>{count}</strong> opted-in customer{count === 1 ? '' : 's'} in <strong>{segment}</strong></>}
         </div>
       </div>
 
@@ -168,8 +168,8 @@ export default function CampaignsSection() {
                   style={{ ...inputStyle, fontFamily:'Menlo, Consolas, monospace', fontSize:13 }} />
         <div style={{ display:'flex', gap:10, marginTop:14, flexWrap:'wrap' }}>
           <button onClick={() => setPreview(true)} disabled={!subject.trim() && !body.trim()} style={{
-            padding:'12px 22px', borderRadius:10, border:'2px solid #1a1a2e', background:'white',
-            color:'#1a1a2e', fontWeight:700, fontSize:14, cursor:'pointer'
+            padding:'12px 22px', borderRadius:10, border:'2px solid var(--brand-primary, #1a1a2e)', background:'white',
+            color:'var(--brand-primary, #1a1a2e)', fontWeight:700, fontSize:14, cursor:'pointer'
           }}>👁 Preview</button>
           <button onClick={handleSend} disabled={sending || count === 0} style={{
             padding:'12px 22px', borderRadius:10, border:'none',
@@ -193,10 +193,10 @@ export default function CampaignsSection() {
       {history.length > 0 && (
         <div style={cardStyle}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-            <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>History</h2>
+            <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', margin:0 }}>History</h2>
             <button onClick={exportHistoryCsv} style={{
-              padding:'8px 14px', borderRadius:8, border:'1px solid #1a1a2e',
-              background:'white', color:'#1a1a2e', fontWeight:700, fontSize:12, cursor:'pointer'
+              padding:'8px 14px', borderRadius:8, border:'1px solid var(--brand-primary, #1a1a2e)',
+              background:'white', color:'var(--brand-primary, #1a1a2e)', fontWeight:700, fontSize:12, cursor:'pointer'
             }}>⬇ Export CSV</button>
           </div>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>

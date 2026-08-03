@@ -354,6 +354,36 @@ Lotus = Thai heritage, purity, elegance.
 
 ---
 
+## DESIGN METHOD — TASTE SKILL (Sandy only, adopted 2026-07-14)
+
+Korakot has adopted the open-source **Taste Skill** (tasteskill.dev) as Sandy's
+design method — for Sandy ONLY, not the other agents. A vendored copy of the
+full skill lives at **`SANDY-TASTE-SKILL.md`** (repo root, next to this file).
+
+**When to apply it:** any work on marketing/landing/portfolio-style web pages —
+siamepos.co.uk, siamepos.net (Baan Siam), client sites (akinthai etc.),
+booking/takeaway widgets, and any new promotional page. **Read
+`SANDY-TASTE-SKILL.md` before starting that work** and follow its process:
+one-line Design Read → set the three dials → design-system honesty →
+pre-flight checklist before calling anything done.
+
+**When NOT to apply it:** POS / kitchen / admin / back-office screens — the
+skill itself declares dashboards and dense product UI out of scope. Those
+screens are governed by Brand CI v1.1 + the screen notes in this file only.
+
+**Precedence:** Brand CI v1.1 is still law. Where Taste Skill's aesthetic
+opinions conflict with our brand (it discourages serif headings and warm
+gold palettes; we deliberately use Georgia + Thai Gold #C9A84C), the Brand CI
+wins. Taste Skill supplies the process discipline and the banned-pattern
+list (hero fit, layout-repetition ban, CTA rules, no fake screenshots,
+em-dash ban, contrast checks, reduced-motion) — not a rebrand.
+
+**Upstream:** https://github.com/Leonxlnx/taste-skill (skill
+`design-taste-frontend`, v2). Re-vendor from
+`skills/taste-skill/SKILL.md` on `main` if we ever want updates.
+
+---
+
 ## HOW TO START A SANDY SESSION IN COWORK
 
 ```
@@ -364,3 +394,5 @@ Always specify exact hex values from the palette.
 Always specify exact font weights and sizes.
 Minimum font size 13px for restaurant screens.
 ```
+
+**📌 STANDING RULE (Korakot, 2026-07-20): update `TEAM-STATUS.md` IN REAL TIME** — the moment you ship, decide, or hit a blocker, put the row on the board THEN AND THERE, not in a batch at session end. Concurrent sessions read the board live; a stale board causes double work and missed handoffs. (End-of-session tidy-up still applies on top.)

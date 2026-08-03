@@ -1,4 +1,15 @@
 import { cachePut, cacheGet, cacheLogin, lookupLogin, localOrderCreate, localOrderGet, localOrderUpdate, localOrderListOpen, localItemPatch, localOrderListUnsynced, localOrderMarkSynced } from './native/localdb';
+import { nativeRequest } from './native/http';
+
+// SEPOS-ANDROID — old Sunmi WebViews choke on `fetch` against some tenant
+// backends; route every request through the native Android HTTP stack
+// (CapacitorHttp) on-device. Web POS / Electron desktop keep `fetch` untouched.
+const useNativeHttp = () => {
+  try {
+    return !!(typeof window !== 'undefined' && window.Capacitor &&
+      typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+  } catch { return false; }
+};
 
 // SEPOS-ANDROID-002 — offline orders carry a temp string id like "L1719…".
 const isLocalId = (id) => typeof id === 'string' && String(id).startsWith('L');
@@ -18,6 +29,20 @@ export const isHostMode = () => {
       localStorage.getItem(HOST_MODE_KEY) === '1');
   } catch { return false; }
 };
+
+// The shared MAIN SiamEPOS cloud, and the ONLY public host allowed to use it
+// without an explicit VITE_API_URL. Every other public host MUST declare its
+// restaurant's backend via the VITE_API_URL build env var — otherwise it is a
+// misconfigured per-tenant deploy and we refuse to silently serve the main
+// cloud's data (the tenant-leak that made siamepos-thannthai show app.siamepos
+// data — SEPOS-TENANT-GUARD-001).
+const MAIN_CLOUD = 'https://restaurant-epos-production.up.railway.app';
+const MAIN_HOSTS = ['app.siamepos.co.uk'];
+// Set true by getServerURL() when a per-tenant site is missing its VITE_API_URL.
+// Snapshotted into the exported TENANT_MISCONFIGURED const below (after
+// getServerURL runs at module init) and read by App.jsx to block with a loud
+// setup-error screen instead of loading another restaurant's data.
+let tenantMisconfigured = false;
 
 const getServerURL = () => {
   // Electron desktop: the bundled local server lives on :3001 regardless of
@@ -50,15 +75,25 @@ const getServerURL = () => {
   ) {
     return `http://${host}:3001`;
   }
-  // Per-client Netlify deploy: set VITE_API_URL env var to override
+  // Per-client Netlify deploy: the site declares its restaurant's backend via
+  // the VITE_API_URL build env var.
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  // Otherwise use cloud
-  return 'https://restaurant-epos-production.up.railway.app';
+  // No VITE_API_URL on a public host. Only the shared MAIN site may use the main
+  // cloud without one; ANY other public host here is a per-tenant site built
+  // without its VITE_API_URL. Do NOT silently serve the main cloud — flag it so
+  // App.jsx blocks with a setup error instead of showing the wrong restaurant.
+  if (!MAIN_HOSTS.includes(host)) {
+    tenantMisconfigured = true;
+    try { console.error(`[SiamEPOS] Misconfigured deploy: ${host} has no VITE_API_URL. Refusing to fall back to the main cloud.`); } catch {}
+  }
+  return MAIN_CLOUD;
 };
 
 export const SERVER_URL = getServerURL();
+// Snapshot AFTER getServerURL() has run (it sets the flag as a side effect).
+export const TENANT_MISCONFIGURED = tenantMisconfigured;
 
 // SEPOS-047a — both login paths store a Bearer token; attach it to every
 // request so staff-gated endpoints (customers, campaigns, AI scan) work.
@@ -87,8 +122,9 @@ export const storePinSession = (r) => {
 // no-op, so behaviour is unchanged.
 const get = async (url) => {
   try {
-    const r = await fetch(SERVER_URL + url, { headers: authHeaders() });
-    const json = await r.json();
+    const json = useNativeHttp()
+      ? await nativeRequest('GET', SERVER_URL + url, { headers: authHeaders() })
+      : await (await fetch(SERVER_URL + url, { headers: authHeaders() })).json();
     if (json && !json.error) cachePut(url, json);   // fire-and-forget
     return json;
   } catch (e) {
@@ -97,15 +133,21 @@ const get = async (url) => {
     throw e;
   }
 };
-const post = (url, data) => fetch(SERVER_URL + url, {
-  method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
-  body: JSON.stringify(data)
-}).then(r => r.json());
-const put = (url, data) => fetch(SERVER_URL + url, {
-  method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() },
-  body: JSON.stringify(data)
-}).then(r => r.json());
-const del = (url) => fetch(SERVER_URL + url, { method: 'DELETE', headers: authHeaders() }).then(r => r.json());
+const post = (url, data) => useNativeHttp()
+  ? nativeRequest('POST', SERVER_URL + url, { headers: { 'Content-Type': 'application/json', ...authHeaders() }, data })
+  : fetch(SERVER_URL + url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(data)
+    }).then(r => r.json());
+const put = (url, data) => useNativeHttp()
+  ? nativeRequest('PUT', SERVER_URL + url, { headers: { 'Content-Type': 'application/json', ...authHeaders() }, data })
+  : fetch(SERVER_URL + url, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(data)
+    }).then(r => r.json());
+const del = (url) => useNativeHttp()
+  ? nativeRequest('DELETE', SERVER_URL + url, { headers: authHeaders() })
+  : fetch(SERVER_URL + url, { method: 'DELETE', headers: authHeaders() }).then(r => r.json());
 
 // SEPOS-046y — the helpers above resolve (not reject) on HTTP 4xx/5xx, so a
 // try/catch around them only sees network failures. Optimistic-UI handlers
@@ -202,6 +244,7 @@ async function localAppendItems(lid, items) {
       notes: it.notes || '', item_note: it.item_note || '',
       course: it.course || 1,
       is_bar: it.is_bar ? 1 : 0,
+      category_id: it.category_id ?? null,   // SEPOS-MISC-001 — drives kitchen/bar + printer routing for custom (menu_item_id=null) lines
       status: it.is_bar ? 'cooking' : 'pending',
       is_fired: it.is_bar ? 1 : 0,
       voided: 0,
@@ -233,8 +276,9 @@ export const getOrder = async (id) => {
     try { const p = await localOrderGet(String(id)); if (p && p.synced === 0) return p; } catch {}
   }
   try {
-    const r = await fetch(SERVER_URL + `/api/orders/${id}`, { headers: authHeaders() });
-    const json = await r.json();
+    const json = useNativeHttp()
+      ? await nativeRequest('GET', SERVER_URL + `/api/orders/${id}`, { headers: authHeaders() })
+      : await (await fetch(SERVER_URL + `/api/orders/${id}`, { headers: authHeaders() })).json();
     if (json && !json.error) cachePut(`/api/orders/${id}`, json);
     return json;
   } catch (e) {
@@ -247,9 +291,12 @@ export const getOrder = async (id) => {
 };
 // Online → cloud. Offline (network fail) → create the order locally with a temp
 // id so the floor + order screen work; it syncs to the cloud later.
-export const createOrder = async (table_id, covers, staff_id) => {
+// SEPOS-TAKEAWAY-TABLE — order_type defaults to dine_in; a takeaway-flagged
+// table passes 'takeaway' so the order skips service charge and is labelled
+// as a takeaway (it still carries the table_id / table_number).
+export const createOrder = async (table_id, covers, staff_id, order_type = 'dine_in') => {
   try {
-    return await post('/api/orders', { table_id, covers, staff_id });
+    return await post('/api/orders', { table_id, covers, staff_id, order_type });
   } catch (e) {
     if (!isNative()) throw e;   // web POS / desktop: original behaviour — never create a local order
     let table_number = table_id;
@@ -257,7 +304,7 @@ export const createOrder = async (table_id, covers, staff_id) => {
     const now = new Date().toISOString();
     const id = 'L' + Date.now();
     const doc = { id, table_id, table_number, covers, staff_id, status: 'open', total: 0,
-      items: [], opened_at: now, created_at: now, order_type: 'dine_in', offline: true };
+      items: [], opened_at: now, created_at: now, order_type: order_type || 'dine_in', offline: true };
     await localOrderCreate(doc);
     return { id };
   }
@@ -401,11 +448,12 @@ async function hashPin(pin) {
 }
 export const loginStaff = async (pin) => {
   try {
-    const r = await fetch(SERVER_URL + '/api/staff/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ pin }),
-    });
-    const json = await r.json();
+    const json = useNativeHttp()
+      ? await nativeRequest('POST', SERVER_URL + '/api/staff/login', { headers: { 'Content-Type': 'application/json', ...authHeaders() }, data: { pin } })
+      : await (await fetch(SERVER_URL + '/api/staff/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ pin }),
+        })).json();
     if (json && json.id && !json.error) hashPin(pin).then(h => cacheLogin(h, json)); // enable offline re-login
     return json;
   } catch (e) {
@@ -414,6 +462,8 @@ export const loginStaff = async (pin) => {
     return { error: "No internet — and this PIN hasn't signed in on this device yet. Connect once, then it works offline." };
   }
 };
+// SEPOS-SEC-LOGIN — signed-in staff set their own PIN (forced off the default 1234).
+export const changeStaffPin = (new_pin) => post('/api/staff/change-pin', { new_pin });
 // SEPOS-LITE-003 — email + password login (Lite restaurant owners).
 export const emailLogin = (email, password) => post('/api/auth/email-login', { email, password });
 export const getDailyReport = (date) => get(`/api/reports/daily${date ? `?date=${date}` : ''}`);
@@ -423,6 +473,8 @@ export const getItemModifiers = async (itemId) => {
   catch { return []; }   // offline + uncached: no modifiers, but the item still adds
 };
 export const addModifierGroup = (itemId, group) => post(`/api/menu/items/${itemId}/modifiers`, group);
+// SEPOS-ALLERGEN-OPT-001 — one-tap create of the global dietary/allergen group (idempotent server-side).
+export const createDietaryPreset = () => post('/api/menu/dietary-preset', {});
 export const addModifierOption = (groupId, option) => post(`/api/modifier-groups/${groupId}/options`, option);
 export const deleteModifierGroup = (groupId) => del(`/api/modifier-groups/${groupId}`);
 export const deleteModifier = (modifierId) => del(`/api/modifiers/${modifierId}`);
@@ -454,9 +506,22 @@ export const applyDiscount = async (orderId, discount_type, discount_value, disc
   }
   return put(`/api/orders/${orderId}/discount`, { discount_type, discount_value, discount_reason });
 };
+// SEPOS — persist per-order "Remove service charge" toggle so the Bill honours it.
+export const setOrderServiceCharge = async (orderId, removed) => {
+  const flag = removed ? 1 : 0;
+  const lid = await localTarget(orderId);
+  if (lid) {
+    const doc = await localOrderGet(lid);
+    if (!doc) return { error: 'Order not found' };
+    doc.no_service_charge = flag;
+    await localOrderUpdate(lid, doc);
+    return { ok: true };
+  }
+  return put(`/api/orders/${orderId}/service-charge`, { no_service_charge: flag });
+};
 // SEPOS-VOUCHER-REMOVE-001 — undo a partial voucher redemption while bill is open
-export const removeVoucherFromBill = async (orderId) =>
-  (await localTarget(orderId)) ? { success: true } : post(`/api/orders/${orderId}/voucher-remove`, {});
+export const removeVoucherFromBill = async (orderId, code) =>
+  (await localTarget(orderId)) ? { success: true } : post(`/api/orders/${orderId}/voucher-remove`, code ? { code } : {});
 // SEPOS-CLOSE-ZERO — close an order that's at £0 (all voided / fully discounted)
 export const closeOrderZero       = async (orderId) => {
   const lid = await localTarget(orderId);
@@ -473,6 +538,9 @@ export const closeOrderZero       = async (orderId) => {
 // SEPOS-PAY-AMEND-001 — change payment method on a closed bill (manager PIN)
 export const amendBillMethod      = (orderId, body) => put(`/api/bills/${orderId}/amend-method`, body);
 export const getBillAmendments    = (orderId) => get(`/api/bills/${orderId}/amendments`);
+// SEPOS-BILLEDIT-001 — correct a wrong/duplicate paid amount on a closed bill.
+// body: { payments: [{ id, amount, method, remove }], reason, pin }
+export const editBillPayment      = (orderId, body) => put(`/api/bills/${orderId}/edit-payment`, body);
 export const getSettings = () => get('/api/settings');
 export const updateSettings = (settings) => put('/api/settings', settings);
 // SEPOS-060 phase 2 — desktop offline license lock state + manual re-check
@@ -481,6 +549,27 @@ export const getLicenseState = () => get('/api/license-state');
 export const recheckLicense  = () => post('/api/license-recheck', {});
 // SEPOS-LITE-001 — restaurant record incl. subscription plan.
 export const getRestaurant = () => get('/api/restaurant');
+
+// SEPOS-STATION-001 — extra printer stations (wok/grill/cold…) + category routing.
+export const getPrinters        = () => get('/api/printers');
+export const createPrinter      = (body) => post('/api/printers', body);
+export const updatePrinter      = (id, body) => put(`/api/printers/${id}`, body);
+export const deletePrinter      = (id) => del(`/api/printers/${id}`);
+export const testPrinter        = (id) => post(`/api/printers/${id}/test`, {});
+export const setCategoryPrinter = (id, printer_id) => put(`/api/categories/${id}/printer`, { printer_id });
+// SEPOS-PRINT-UNIFY-001 — set the default printer for a role (receipt|kitchen|bar)
+export const setPrinterDefault  = (role, printer_id) => post('/api/printers/set-default', { role, printer_id });
+// SEPOS-PRINT-UNIFY-001 — scan the local network for printers on :9100 (local install only)
+export const scanPrinters       = () => get('/api/printers/scan');
+// SEPOS-DRAWER-001 — open the cash drawer (kick via the receipt printer) on payment
+export const serverOpenDrawer   = (printer_name) => post('/api/print/drawer', printer_name ? { printer_name } : {});
+
+// SIAMPAY-QR-001 — dine-in QR pay-by-link.
+export const createQrPay  = (orderId, amount)     => post(`/api/orders/${orderId}/qr-pay`, { amount });
+export const qrPayStatus  = (orderId, sessionId)  => get(`/api/orders/${orderId}/qr-pay/status?session_id=${encodeURIComponent(sessionId)}`);
+// Print a dine-in kitchen ticket to a specific station (server routes by printer_id).
+export const serverPrintKitchenToStation = (order_id, items, printer_id, printer_name) =>
+  post('/api/print/kitchen-station', { order_id, items, printer_id, printer_name });
 
 // SEPOS-025/026 — Network printing (server-side ESC/POS to TCP port 9100)
 export const testNetworkPrinter   = (ip, port, printer_name) => post('/api/print/test',    { ip, port, printer_name });
@@ -519,6 +608,9 @@ export const createKitchenTemplate = (body) => post('/api/kitchen-templates', bo
 export const updateKitchenTemplate = (id, body) => put(`/api/kitchen-templates/${id}`, body);
 export const deleteKitchenTemplate = (id) => del(`/api/kitchen-templates/${id}`);
 export const sendKitchenMessage   = (body) => post('/api/print/kitchen-message', body);
+// SEPOS-KITCHEN-MSG-002 — attach a kitchen note to the order (prints at the
+// bottom of that order's kitchen ticket). Empty note clears it.
+export const saveOrderNote        = (orderId, note) => put(`/api/orders/${orderId}/note`, { note });
 // SEPOS-ANDROID-001 — kitchen-message buffer for the native app to print on-device
 export const getKitchenMessageBuffer = (body) => post('/api/print/buffers/kitchen-message', body);
 export const serverPrintReceipt   = (order_id, payment_details, printer_name) => post('/api/print/receipt', { order_id, payment_details, printer_name });
@@ -568,6 +660,9 @@ export const getBarOrders = async () => {
 export const getCategories = () => get('/api/categories');
 export const updateCategoryBar = (id, is_bar) => put(`/api/categories/${id}/bar`, { is_bar });
 export const updateCategorySortOrder = (items) => put('/api/categories/sort-order', { items });
+// Menu-item drag reorder — via the native-safe put() so it also persists on the
+// Sunmi app (a raw fetch from the native WebView silently fails → reorder reverts).
+export const updateMenuItemsSortOrder = (items) => put('/api/menu/items/sort-order', { items });
 export const updateCategoryDefaultCourse = (id, default_course) => put(`/api/categories/${id}/default-course`, { default_course });
 export const addCategory = (name) => post('/api/categories', { name });
 export const updateCategory = (id, name) => put(`/api/categories/${id}`, { name });
@@ -644,8 +739,8 @@ export const mergeTables = async (targetOrderId, mergeOrderId) => {
   return put(`/api/orders/${targetOrderId}/merge`, { merge_order_id: mergeOrderId });
 };
 export const getZReportPreview = (from, to) => get(`/api/z-report/preview?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
-export const saveZReport = (type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference) => 
-  post('/api/z-report/save', { type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference });
+export const saveZReport = (type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, actual_card, card_difference) =>
+  post('/api/z-report/save', { type, from, to, data, float_amount, petty_cash, petty_cash_reason, actual_cash, cash_difference, actual_card, card_difference });
 export const getZReportHistory = () => get('/api/z-report/history');
 // SEPOS-053 — till sessions (EposNow-style Open Shift → Close Shift)
 export const getZReportPreviewBySession = (sessionId) => get(`/api/z-report/preview?session_id=${encodeURIComponent(sessionId)}`);
@@ -671,6 +766,8 @@ export const deleteStaff = (id) => del(`/api/staff/${id}`);
 // ─────────────────────────────────────────────
 
 export const importMenuBatch = async (items) => {
+  if (useNativeHttp())
+    return nativeRequest('POST', `${SERVER_URL}/api/menu/import-batch`, { headers: { 'Content-Type': 'application/json' }, data: { items } });
   const res = await fetch(`${SERVER_URL}/api/menu/import-batch`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -679,6 +776,8 @@ export const importMenuBatch = async (items) => {
   return res.json();
 };
 export const deleteMenuItem = async (id) => {
+  if (useNativeHttp())
+    return nativeRequest('DELETE', `${SERVER_URL}/api/menu/items/${id}`, {});
   const res = await fetch(`${SERVER_URL}/api/menu/items/${id}`, {
     method: 'DELETE',
   });
@@ -709,6 +808,7 @@ export const getNetworkInfo = () => get('/api/network-info');
 // SEPOS-022 — staff clock-in / clock-out
 export const clockIn        = (pin)        => post('/api/clock/in',  { pin });
 export const clockOut       = (pin)        => post('/api/clock/out', { pin });
+export const clockToggle    = (pin)        => post('/api/clock/toggle', { pin }); // SEPOS-CLOCK-002 — auto in/out
 export const getClockStatus = ()           => get('/api/clock/status');
 export const getClockRecords = (from, to)  => get(`/api/clock/records?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 
@@ -723,6 +823,9 @@ export const getVatReport = (from, to) =>
 // SEPOS-031 — wastage cost report (date range)
 export const getWastageReport = (from, to) =>
   get(`/api/reports/wastage?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+// SEPOS-MENUPERF-001 — per-dish sales vs recipe cost (menu performance A4 print)
+export const getMenuPerformance = (from, to) =>
+  get(`/api/reports/menu-performance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 
 // SEPOS-033 — customer CRM (Phase 1)
 export const getCustomers = () => get('/api/customers');
@@ -770,6 +873,9 @@ export const getReservations = () => get('/api/reservations');
 // risk) or when the queue is backing up.
 export const getSyncHealth = () => get('/api/sync/health');
 
+// SEPOS-AI-HELP-001 — in-app "Ask AI" help assistant. messages = [{role,content}].
+export const askAi = (messages, platform) => post('/api/ai/help', { messages, platform });
+
 // SEPOS-044 follow-up — sync queue inspector (local mode only).
 export const getSyncQueue = () => get('/api/sync/queue');
 export const skipSyncQueueEntry = (id) => post(`/api/sync/queue/${id}/skip`, {});
@@ -779,11 +885,13 @@ export const runSyncNow = () => post('/api/sync/run-now', {});
 // Backend requires PIN to belong to a staff row with role manager/admin/supervisor,
 // writes an audit row to order_deletions, then cascade-deletes the order.
 export const deleteOrder = (orderId, pin, reason) =>
-  fetch(`${SERVER_URL}/api/orders/${orderId}`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pin, reason }),
-  }).then(r => r.json());
+  useNativeHttp()
+    ? nativeRequest('DELETE', `${SERVER_URL}/api/orders/${orderId}`, { headers: { 'Content-Type': 'application/json' }, data: { pin, reason } })
+    : fetch(`${SERVER_URL}/api/orders/${orderId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin, reason }),
+      }).then(r => r.json());
 
 // ── SEPOS-VOUCHER-001 — gift voucher API ─────────────────────────
 export const getVoucher    = (code) => get(`/api/widget/voucher/${encodeURIComponent(code)}`);
@@ -800,3 +908,13 @@ export const getVoucherDetail   = (id) => get(`/api/vouchers/${id}`);
 export const voidVoucher        = (id, voided_by) => post(`/api/vouchers/${id}/void`, { voided_by });
 export const resendVoucherEmail = (id) => post(`/api/vouchers/${id}/resend-email`, {});
 export const sellVoucher        = (body) => post('/api/vouchers/sell', body);
+
+// ── SEPOS-DEPOSIT-001 — booking deposits (typed vouchers, redeemed as a tender) ──
+export const createDeposit   = (body) => post('/api/deposits', body);
+export const getOrderDeposit = (orderId) => get(`/api/orders/${orderId}/deposit`);
+// Manual forfeit of a no-show's deposit (kept as income).
+export const forfeitDeposit  = (code) => post(`/api/deposits/${encodeURIComponent(code)}/forfeit`, {});
+
+// ── SEPOS-PRINT-ALERT-001 — held tickets + printer health (local tills) ──
+export const getPrintAlerts    = () => get('/api/print/alerts');
+export const printAlertAction  = (action, ids) => post('/api/print/alerts/action', { action, ids });

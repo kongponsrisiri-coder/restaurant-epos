@@ -1,6 +1,11 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  # Skip the build unless something in this site's base dir (client/) actually
+  # changed since the last build — stops backend-only / docs-only / tag pushes
+  # from rebuilding this site and draining Netlify minutes. Exit 0 = skip build,
+  # non-zero (a diff, or empty refs on first build) = build.
+  ignore = "git diff --quiet \"$CACHED_COMMIT_REF\" \"$COMMIT_REF\" -- ."
 
 [build.environment]
   NODE_VERSION = "20"

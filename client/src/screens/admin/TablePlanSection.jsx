@@ -2,6 +2,14 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { SERVER_URL, getTables, updateTablePlan, addTable, deleteTable } from '../../api';
 import { confirm } from '../../utils/confirm';
 
+// SEPOS-TABLE-SIZE — sizes are per-shape now (the Shape dropdown picks the
+// shape; the Size dropdown only offers that shape's sizes — no repeating both).
+const SIZE_OPTIONS = {
+  square:    [['70x70', 'Small (2p)'], ['80x80', 'Medium (4p)'], ['100x100', 'Large (6p)'], ['120x120', 'Extra large (8p+)']],
+  round:     [['70x70', 'Small (2p)'], ['80x80', 'Medium (4p)'], ['100x100', 'Large (6p)'], ['120x120', 'Extra large (8p+)']],
+  rectangle: [['120x70', 'Small (4p)'], ['160x70', 'Medium (6p)'], ['200x70', 'Large (8p)'], ['240x70', 'XL (10p)']],
+};
+
 const apiGet  = url       => fetch(SERVER_URL + url).then(r => r.json());
 const apiPost = (url, d)  => fetch(SERVER_URL + url, { method: 'POST',   headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) }).then(r => r.json());
 const apiPut  = (url, d)  => fetch(SERVER_URL + url, { method: 'PUT',    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(d) }).then(r => r.json());
@@ -56,6 +64,7 @@ export default function TablePlanSection() {
   const [tiers,   setTiers]   = useState(DEFAULT_TIERS);
 
   const [dragging, setDragging] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState(null);
   const [offset,   setOffset]   = useState({ x: 0, y: 0 });
 
@@ -132,9 +141,10 @@ export default function TablePlanSection() {
       ? tablesRef.current.find(t => t.id === id)
       : wallsRef.current.find(w => w.id === id);
     if (item) {
+      // +scrollLeft/Top so coords are in the (scrollable) canvas content space.
       setOffset({
-        x: e.clientX - rect.left - (item.pos_x || 0),
-        y: e.clientY - rect.top  - (item.pos_y || 0),
+        x: e.clientX - rect.left + canvasRef.current.scrollLeft - (item.pos_x || 0),
+        y: e.clientY - rect.top  + canvasRef.current.scrollTop  - (item.pos_y || 0),
       });
     }
   };
@@ -142,8 +152,8 @@ export default function TablePlanSection() {
   const handleMouseMove = (e) => {
     if (!draggingRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = Math.max(0, e.clientX - rect.left - offset.x);
-    const y = Math.max(0, e.clientY - rect.top  - offset.y);
+    const x = Math.max(0, e.clientX - rect.left + canvasRef.current.scrollLeft - offset.x);
+    const y = Math.max(0, e.clientY - rect.top  + canvasRef.current.scrollTop  - offset.y);
     if (draggingRef.current.type === 'table') {
       setTables(prev => prev.map(t => t.id === draggingRef.current.id ? { ...t, pos_x: x, pos_y: y } : t));
     } else {
@@ -177,6 +187,35 @@ export default function TablePlanSection() {
     }
   };
 
+  // Explicit "Save layout" — commits EVERY table + wall position in one batch so
+  // the whole plan is guaranteed persisted (and forwarded to the cloud, which
+  // the Floor map reads), not just the last item dragged. Then re-reads the
+  // committed truth so the editor and the Floor screen always agree.
+  const handleSaveLayout = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      for (const t of tablesRef.current) {
+        await updateTablePlan(t.id, {
+          pos_x: t.pos_x, pos_y: t.pos_y,
+          shape: t.shape, width: t.width, height: t.height,
+          name: t.name, capacity: t.capacity, table_number: t.table_number,
+        });
+      }
+      for (const w of wallsRef.current) {
+        await apiPut(`/api/table-walls/${w.id}`, {
+          pos_x: w.pos_x, pos_y: w.pos_y, width: w.width, height: w.height,
+        });
+      }
+      await fetchAll();
+      showToast('✓ Layout saved — floor updated');
+    } catch (e) {
+      showToast('Save failed — please try again', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // ── Table operations — optimistic, no fetchAll ─────────────────
   const handleAddTable = async () => {
     const maxNum = Math.max(...tablesRef.current.map(t => Number(t.table_number) || 0), 0);
@@ -186,6 +225,20 @@ export default function TablePlanSection() {
     if (result?.id) {
       setTables(prev => [...prev, { ...newTable, id: result.id, status: 'available' }]);
     }
+  };
+
+  // SEPOS-TAKEAWAY-TABLE — a takeaway "table": sits on the floor like a table
+  // but orders rung up on it are takeaway (no service charge, kitchen ticket
+  // says "Takeaway {number}").
+  const handleAddTakeaway = async () => {
+    const maxNum = Math.max(...tablesRef.current.map(t => Number(t.table_number) || 0), 0);
+    const newNum = maxNum + 1;
+    const newTable = { table_number: newNum, capacity: 1, pos_x: 40, pos_y: 40, shape: 'square', width: 80, height: 80, is_takeaway: 1 };
+    const result = await addTable(newTable);
+    if (result?.id) {
+      setTables(prev => [...prev, { ...newTable, id: result.id, status: 'available' }]);
+    }
+    showToast('🥡 Takeaway table added');
   };
 
   const handleDeleteTable = async (id) => {
@@ -209,6 +262,7 @@ export default function TablePlanSection() {
       shape: u.shape, width: u.width, height: u.height,
       name: u.name, capacity: u.capacity,
       table_number: u.table_number,
+      is_takeaway: u.is_takeaway ? 1 : 0,
     });
   };
 
@@ -280,6 +334,12 @@ export default function TablePlanSection() {
   const selectedWall  = selected?.type === 'wall'  ? walls.find(w => w.id === selected.id)  : null;
   const groups        = getAllGroups(combos, tables.map(t => t.id));
 
+  // Canvas content size — the floor can be wider/taller than the visible box,
+  // so size an inner area to the furthest table/wall and let the canvas scroll
+  // (otherwise tables on the right/bottom get cut off).
+  const contentW = Math.max(1100, ...[...tables, ...walls].map(e => (e.pos_x || 0) + (e.width || 80)), 0) + 80;
+  const contentH = Math.max(560,  ...[...tables, ...walls].map(e => (e.pos_y || 0) + (e.height || 80)), 0) + 80;
+
   function groupCap(ids) {
     return ids.reduce((s, id) => s + (tables.find(t => t.id === id)?.capacity || 0), 0);
   }
@@ -318,20 +378,20 @@ export default function TablePlanSection() {
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1a1a2e', margin: 0 }}>Table Plan</h2>
+        <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', margin: 0 }}>Table Plan</h2>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
 
           <button
             onClick={() => { setMode('select'); setLinkFrom(null); }}
             style={{ padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13,
-              background: mode === 'select' ? '#1a1a2e' : '#f0f0f0',
+              background: mode === 'select' ? 'var(--brand-primary, #1a1a2e)' : '#f0f0f0',
               color:      mode === 'select' ? 'white'   : '#555' }}
           >✥ Select</button>
 
           <button
             onClick={() => { setMode(m => m === 'link' ? 'select' : 'link'); setLinkFrom(null); setSelected(null); }}
             style={{ padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13,
-              background: mode === 'link' ? '#C9A84C' : '#f0f0f0',
+              background: mode === 'link' ? 'var(--brand-accent,#C9A84C)' : '#f0f0f0',
               color:      mode === 'link' ? 'white'   : '#555' }}
           >⊕ {mode === 'link' && linkFrom ? 'Click 2nd table…' : 'Link Tables'}</button>
 
@@ -340,6 +400,10 @@ export default function TablePlanSection() {
           <button onClick={handleAddTable}
             style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
             + Table</button>
+
+          <button onClick={handleAddTakeaway}
+            style={{ padding: '8px 12px', borderRadius: 8, border: '2px solid #f59e0b', background: '#fff', color: '#b45309', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+            🥡 Takeaway</button>
 
           <button onClick={() => handleAddWall('vertical')}
             style={{ padding: '8px 10px', borderRadius: 8, border: 'none', background: '#555', color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
@@ -352,6 +416,15 @@ export default function TablePlanSection() {
             style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#f0f0f0', color: '#555', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
             title="Reload from server">
             ↻</button>
+
+          <div style={{ width: 1, height: 24, background: '#e0e0e0' }} />
+
+          <button onClick={handleSaveLayout} disabled={saving}
+            style={{ padding: '8px 20px', borderRadius: 8, border: 'none',
+              background: saving ? '#86efac' : '#16a34a', color: 'white',
+              cursor: saving ? 'wait' : 'pointer', fontWeight: 700, fontSize: 13 }}
+            title="Save the whole layout and apply it to the floor">
+            {saving ? 'Saving…' : '💾 Save Layout'}</button>
         </div>
       </div>
 
@@ -374,28 +447,33 @@ export default function TablePlanSection() {
         {/* Canvas */}
         <div
           ref={canvasRef}
-          onMouseDown={handleCanvasMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
+          onPointerDown={handleCanvasMouseDown}
+          onPointerMove={handleMouseMove}
+          onPointerUp={handleMouseUp}
+          onPointerLeave={handleMouseUp}
           style={{
-            flex: 1, height: 600,
+            flex: 1, height: 640, minWidth: 0,
             background: '#f0ede8', borderRadius: 16, position: 'relative',
-            border: `2px solid ${mode === 'link' ? '#C9A84C' : '#ddd'}`,
+            border: `2px solid ${mode === 'link' ? 'var(--brand-accent,#C9A84C)' : '#ddd'}`,
             cursor: mode === 'link' ? 'crosshair' : dragging ? 'grabbing' : 'default',
             backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)',
-            backgroundSize: '30px 30px', overflow: 'hidden',
+            backgroundSize: '30px 30px', overflow: 'auto',
+            // Pointer events + touch-action:none so tables drag by FINGER on a
+            // touch till, not just by mouse (editor was mouse-only before).
+            touchAction: 'none',
           }}
         >
-          <svg style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1 }}>
+          {/* SVG sized to the full floor so link lines + the scroll area cover
+              every table (a sized absolute child extends the scrollable width). */}
+          <svg style={{ position: 'absolute', top: 0, left: 0, width: contentW, height: contentH, pointerEvents: 'none', zIndex: 1 }}>
             {combos.map(c => {
               const a = tableCenter(c.table_id_a);
               const b = tableCenter(c.table_id_b);
               if (!a || !b) return null;
               return (
                 <g key={c.id}>
-                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#C9A84C" strokeWidth="2.5" strokeDasharray="6 4" />
-                  <circle cx={(a.x + b.x) / 2} cy={(a.y + b.y) / 2} r="6" fill="#C9A84C" />
+                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--brand-accent,#C9A84C)" strokeWidth="2.5" strokeDasharray="6 4" />
+                  <circle cx={(a.x + b.x) / 2} cy={(a.y + b.y) / 2} r="6" fill="var(--brand-accent,#C9A84C)" />
                 </g>
               );
             })}
@@ -411,7 +489,7 @@ export default function TablePlanSection() {
               const my    = maxY + 10;
               return (
                 <g key={gi}>
-                  <rect x={mx - tw/2} y={my} width={tw} height={22} rx="11" fill="#FAEEDA" stroke="#C9A84C" strokeWidth="1" />
+                  <rect x={mx - tw/2} y={my} width={tw} height={22} rx="11" fill="#FAEEDA" stroke="var(--brand-accent,#C9A84C)" strokeWidth="1" />
                   <text x={mx} y={my + 14.5} textAnchor="middle" fontSize="11" fill="#854F0B" fontWeight="500" fontFamily="system-ui, -apple-system, sans-serif">{label}</text>
                 </g>
               );
@@ -421,12 +499,12 @@ export default function TablePlanSection() {
           {walls.map(wall => (
             <div
               key={wall.id}
-              onMouseDown={e => handleMouseDown(e, 'wall', wall.id)}
+              onPointerDown={e => handleMouseDown(e, 'wall', wall.id)}
               style={{
                 position: 'absolute', left: wall.pos_x, top: wall.pos_y,
                 width: wall.width || 12, height: wall.height || 100,
                 background: selected?.id === wall.id ? '#e94560' : '#4a4a4a',
-                borderRadius: 3, cursor: 'grab', zIndex: 2,
+                borderRadius: 3, cursor: 'grab', zIndex: 2, touchAction: 'none',
                 outline: selected?.id === wall.id ? '2px solid #e94560' : 'none',
                 outlineOffset: 2,
               }}
@@ -441,14 +519,14 @@ export default function TablePlanSection() {
             return (
               <div
                 key={table.id}
-                onMouseDown={e => handleMouseDown(e, 'table', table.id)}
+                onPointerDown={e => handleMouseDown(e, 'table', table.id)}
                 style={{
-                  position: 'absolute',
+                  position: 'absolute', touchAction: 'none',
                   left: table.pos_x, top: table.pos_y,
                   width: table.width || 80, height: table.height || 80,
                   borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,
-                  background: isLinkFirst ? '#C9A84C' : isSelected ? '#1a1a2e' : isLinked ? '#fef9c3' : '#fff',
-                  border: `3px solid ${isLinkFirst ? '#C9A84C' : isSelected ? '#e94560' : isLinked ? '#C9A84C' : '#1a1a2e'}`,
+                  background: isLinkFirst ? 'var(--brand-accent,#C9A84C)' : isSelected ? 'var(--brand-primary, #1a1a2e)' : isLinked ? '#fef9c3' : (table.is_takeaway ? '#fffbeb' : '#fff'),
+                  border: `3px solid ${isLinkFirst ? 'var(--brand-accent,#C9A84C)' : isSelected ? '#e94560' : isLinked ? 'var(--brand-accent,#C9A84C)' : (table.is_takeaway ? '#f59e0b' : 'var(--brand-primary, #1a1a2e)')}`,
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
                   cursor: mode === 'link' ? 'crosshair' : 'grab',
@@ -456,11 +534,11 @@ export default function TablePlanSection() {
                   boxShadow: isSelected ? '0 4px 20px rgba(0,0,0,0.2)' : '0 2px 8px rgba(0,0,0,0.1)',
                 }}
               >
-                <div style={{ fontSize: 15, fontWeight: 800, color: isLinkFirst || isSelected ? 'white' : '#1a1a2e', textAlign: 'center' }}>
-                  {table.table_number}
+                <div style={{ fontSize: 15, fontWeight: 800, color: isLinkFirst || isSelected ? 'white' : (table.is_takeaway ? '#b45309' : 'var(--brand-primary, #1a1a2e)'), textAlign: 'center' }}>
+                  {table.is_takeaway ? '🥡' : ''}{table.table_number}
                 </div>
                 <div style={{ fontSize: 10, color: isLinkFirst || isSelected ? 'rgba(255,255,255,0.7)' : '#888' }}>
-                  {table.capacity}p
+                  {table.is_takeaway ? 'Takeaway' : `${table.capacity}p`}
                 </div>
               </div>
             );
@@ -478,7 +556,7 @@ export default function TablePlanSection() {
 
           {selectedTable && (
             <div style={{ background: 'white', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 14 }}>Table {selectedTable.table_number}</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 14 }}>{selectedTable.is_takeaway ? `🥡 Takeaway ${selectedTable.table_number}` : `Table ${selectedTable.table_number}`}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
                   <label style={lbl}>Table Number / Name</label>
@@ -490,7 +568,15 @@ export default function TablePlanSection() {
                 </div>
                 <div>
                   <label style={lbl}>Shape</label>
-                  <select value={selectedTable.shape || 'square'} onChange={e => updateSelectedTable({ shape: e.target.value })} style={inp}>
+                  <select value={selectedTable.shape || 'square'} onChange={e => {
+                    const shape = e.target.value;
+                    const opts = SIZE_OPTIONS[shape] || [];
+                    const cur = `${selectedTable.width}x${selectedTable.height}`;
+                    if (opts.some(([v]) => v === cur)) { updateSelectedTable({ shape }); return; }
+                    // Current dims don't fit the new shape → snap to that shape's default (Medium).
+                    const [w, h] = (opts[1] || opts[0] || ['80x80', ''])[0].split('x').map(Number);
+                    updateSelectedTable({ shape, width: w, height: h });
+                  }} style={inp}>
                     <option value="square">Square</option>
                     <option value="round">Round</option>
                     <option value="rectangle">Rectangle</option>
@@ -498,23 +584,22 @@ export default function TablePlanSection() {
                 </div>
                 <div>
                   <label style={lbl}>Size</label>
-                  <select onChange={e => { const [w, h] = e.target.value.split('x').map(Number); updateSelectedTable({ width: w, height: h }); }} style={inp}>
-                    <option value="">— select size —</option>
-                    <option value="70x70">Small square (2p)</option>
-                    <option value="80x80">Medium square (4p)</option>
-                    <option value="100x100">Large square (6p)</option>
-                    <option value="120x120">Extra large (8p+)</option>
-                    <option value="120x70">Rectangle small (4p)</option>
-                    <option value="160x70">Rectangle medium (6p)</option>
-                    <option value="200x70">Rectangle large (8p)</option>
-                    <option value="240x70">Rectangle XL (10p)</option>
+                  <select value={`${selectedTable.width}x${selectedTable.height}`} onChange={e => { const [w, h] = e.target.value.split('x').map(Number); updateSelectedTable({ width: w, height: h }); }} style={inp}>
+                    {(SIZE_OPTIONS[selectedTable.shape || 'square'] || []).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
                   </select>
                 </div>
 
                 <button onClick={handleRotateTable}
-                  style={{ padding: '8px', borderRadius: 8, border: '1.5px solid #1a1a2e', background: 'white', color: '#1a1a2e', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+                  style={{ padding: '8px', borderRadius: 8, border: '1.5px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
                   ↻ Rotate Table
                 </button>
+
+                {/* SEPOS-TAKEAWAY-TABLE — flag this table as a takeaway table */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', borderRadius: 8, background: selectedTable.is_takeaway ? '#fffbeb' : '#f8f8f8', border: `1px solid ${selectedTable.is_takeaway ? '#f59e0b' : '#eee'}`, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={!!selectedTable.is_takeaway} onChange={e => updateSelectedTable({ is_takeaway: e.target.checked ? 1 : 0 })} style={{ width: 16, height: 16 }} />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#b45309' }}>🥡 Takeaway table</span>
+                </label>
+                <div style={{ fontSize: 11, color: '#999', marginTop: -4 }}>Orders here skip service charge and print as “Takeaway {selectedTable.table_number}”.</div>
 
                 <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: '#555', marginBottom: 8 }}>Can combine with</div>
@@ -540,7 +625,7 @@ export default function TablePlanSection() {
                     return null;
                   })()}
                   <button onClick={() => { setMode('link'); setLinkFrom(selectedTable.id); setSelected(null); }}
-                    style={{ width: '100%', marginTop: 8, padding: '8px', border: '1.5px dashed #C9A84C', borderRadius: 8, background: 'none', cursor: 'pointer', fontSize: 12, color: '#854F0B', fontWeight: 600 }}>
+                    style={{ width: '100%', marginTop: 8, padding: '8px', border: '1.5px dashed var(--brand-accent,#C9A84C)', borderRadius: 8, background: 'none', cursor: 'pointer', fontSize: 12, color: '#854F0B', fontWeight: 600 }}>
                     ⊕ Link with adjacent table
                   </button>
                 </div>
@@ -555,7 +640,7 @@ export default function TablePlanSection() {
 
           {selectedWall && (
             <div style={{ background: 'white', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 14 }}>Partition Wall</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 14 }}>Partition Wall</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
                   <label style={lbl}>Orientation</label>
@@ -611,7 +696,7 @@ export default function TablePlanSection() {
           {!selectedTable && !selectedWall && (
             <>
               <div style={{ background: 'white', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e', marginBottom: 12 }}>Linked Groups</div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 12 }}>Linked Groups</div>
                 {groups.length === 0 ? (
                   <div style={{ fontSize: 12, color: '#aaa', lineHeight: 1.6 }}>No combinations set yet.<br />Use ⊕ Link Tables to connect adjacent tables.</div>
                 ) : groups.map((group, gi) => {
@@ -623,7 +708,7 @@ export default function TablePlanSection() {
                         <div style={{ fontSize: 13, fontWeight: 700, color: '#854F0B' }}>{names}</div>
                         <div style={{ fontSize: 11, color: '#BA7517', marginTop: 2 }}>max combined capacity</div>
                       </div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#C9A84C' }}>{cap}p</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--brand-accent,#C9A84C)' }}>{cap}p</div>
                       <button onClick={() => handleRemoveGroup(group)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444', fontWeight: 700, fontSize: 16, padding: 0 }}>×</button>
                     </div>
                   );
@@ -631,7 +716,7 @@ export default function TablePlanSection() {
               </div>
 
               <div style={{ background: 'white', borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e', marginBottom: 4 }}>Dining Duration</div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 4 }}>Dining Duration</div>
                 <div style={{ fontSize: 11, color: '#888', marginBottom: 12 }}>Applied automatically by party size when checking availability</div>
                 {tiers.map((tier, i) => (
                   <div key={tier.id || i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>

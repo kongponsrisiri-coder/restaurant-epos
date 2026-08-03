@@ -9,7 +9,7 @@ const express = require('express');
 const crypto = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk');
 const { pool } = require('../db/pool');
-const { authRequired } = require('../middleware/auth');
+const { authRequired, adminOnly } = require('../middleware/auth');
 const { netlifyApi } = require('../services/provisioning');
 
 const router = express.Router();
@@ -156,7 +156,7 @@ Use an empty string for any field not found.`,
 // them here; we create/reuse the client's WEBSITE Netlify site (separate
 // from the EPOS app site), push a file-digest deploy, and record a
 // publish row with a full config snapshot for history/restore.
-router.post('/client/:clientId/publish', async (req, res) => {
+router.post('/client/:clientId/publish', adminOnly, async (req, res) => {
   try {
     const clientId = parseInt(req.params.clientId, 10);
     const files = (req.body || {}).files;
@@ -261,7 +261,7 @@ router.get('/client/:clientId/publishes', async (req, res) => {
 
 // Restore a published snapshot into the draft config. Does NOT republish —
 // the operator reviews in the builder, then hits Publish again.
-router.post('/client/:clientId/restore/:publishId', async (req, res) => {
+router.post('/client/:clientId/restore/:publishId', adminOnly, async (req, res) => {
   try {
     const clientId  = parseInt(req.params.clientId, 10);
     const publishId = parseInt(req.params.publishId, 10);

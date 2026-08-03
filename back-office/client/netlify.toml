@@ -1,0 +1,18 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  # Skip the build unless something in this site's base dir (back-office/client/)
+  # actually changed since the last build. The ops.siamepos + (stray)
+  # dreamy-mermaid sites were rebuilding on EVERY push to this repo — even
+  # client-only, backend-only, docs, and tag pushes that never touched the
+  # back-office — draining Netlify minutes. Exit 0 = skip build, non-zero = build
+  # (so an empty $CACHED_COMMIT_REF on the first run still builds).
+  ignore = "git diff --quiet \"$CACHED_COMMIT_REF\" \"$COMMIT_REF\" -- ."
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

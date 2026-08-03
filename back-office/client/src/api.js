@@ -143,6 +143,48 @@ export const api = {
       headers: { 'Content-Type': 'application/json', ...tokenHeader() },
     }).then(handle),
 
+  // Delete a client record (admin only). For test/mistaken entries.
+  deleteClient: (id) =>
+    fetch(`${API}/api/clients/${id}`, { method: 'DELETE', headers: tokenHeader() }).then(handle),
+
+  // BO-BILLING-001 — live billable plans discovered from Stripe.
+  getBillingPlans: () =>
+    fetch(`${API}/api/clients/billing/plans`, { headers: tokenHeader() }).then(handle),
+
+  // BO-BILLING-001 — link an existing (manually-created) Stripe subscription by email.
+  linkSubscription: (id) =>
+    fetch(`${API}/api/clients/${id}/billing/link-subscription`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+    }).then(handle),
+
+  // BO-BILLING-001 — Stripe Checkout link for a client's subscription.
+  createCheckoutLink: (id, plan) =>
+    fetch(`${API}/api/clients/${id}/billing/checkout-link`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify(plan ? { plan } : {}),
+    }).then(handle),
+
+  // SIAMPAY-002 Phase B — Connect Express onboarding for SiamPay.
+  siampayConfig: () =>
+    fetch(`${API}/api/siampay/config`, { headers: tokenHeader() }).then(handle),
+
+  siampayStatus: (id) =>
+    fetch(`${API}/api/siampay/clients/${id}/status`, { headers: tokenHeader() }).then(handle),
+
+  siampayEnable: (id) =>
+    fetch(`${API}/api/siampay/clients/${id}/enable`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+    }).then(handle),
+
+  siampayOnboardingLink: (id) =>
+    fetch(`${API}/api/siampay/clients/${id}/onboarding-link`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+    }).then(handle),
+
   runHealth: (clientId) =>
     fetch(`${API}/api/health/run`, {
       method: 'POST',
@@ -165,6 +207,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json', ...tokenHeader() },
       body: JSON.stringify(body),
     }).then(handle),
+
+  // SEPOS-AI-HELP-001 — in-app assistant question logs
+  listAiHelpLogs: (clientId) => fetch(`${API}/api/ai-help${clientId ? `?client=${clientId}` : ''}`, { headers: tokenHeader() }).then(handle),
+  aiHelpStats: () => fetch(`${API}/api/ai-help/stats`, { headers: tokenHeader() }).then(handle),
 
   listTickets: () => fetch(`${API}/api/tickets`, { headers: tokenHeader() }).then(handle),
 

@@ -9,6 +9,7 @@ import TicketsPage from './pages/TicketsPage.jsx';
 import WebsitePage from './pages/WebsitePage.jsx';
 import NewClientWizard from './pages/NewClientWizard.jsx';
 import FinancePage from './pages/FinancePage.jsx';
+import AiHelpPage from './pages/AiHelpPage.jsx'; // SEPOS-AI-HELP-001
 import OnboardKiosk from './pages/OnboardKiosk.jsx';
 import { C } from './theme.js';
 import { api } from './api.js';
@@ -157,6 +158,7 @@ export default function App() {
       <Route path="/tickets/:id" element={<RequireAuth><TicketsPage /></RequireAuth>} />
       <Route path="/website" element={<RequireAuth><WebsitePage /></RequireAuth>} />
       <Route path="/finance" element={<RequireAuth><FinancePage /></RequireAuth>} />
+      <Route path="/ai-help" element={<RequireAuth><AiHelpPage /></RequireAuth>} />{/* SEPOS-AI-HELP-001 */}
       {/* BO-ONBOARD-001 — clean kiosk, no sidebar, no nav */}
       <Route path="/onboard" element={<RequireAuthKiosk><OnboardKiosk /></RequireAuthKiosk>} />
       <Route path="*" element={<Navigate to="/" replace />} />

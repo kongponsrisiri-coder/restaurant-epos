@@ -8,8 +8,32 @@ const { spawn } = require('child_process');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const DEV_URL = 'http://localhost:5173';
 
-// Single source of truth for the app icon — same lotus the PWA uses.
-const APP_ICON_PATH = path.join(PROJECT_ROOT, 'client', 'public', 'icon-512.png');
+// SEPOS-EXIT-001 — single-instance lock. When something looks stuck, staff
+// sometimes force-quit and re-open SiamEPOS, ending up with TWO instances both
+// running a local Express server against the SAME SQLite DB
+// (userData/siamepos-local.db) — lock contention + sync races. Hold the OS
+// single-instance lock; a second launch hands control to the first (focus its
+// window) and exits immediately. Packaged-only, so a dev `npm start` can still
+// run alongside an installed copy on the same machine.
+const gotSingleInstanceLock = app.isPackaged ? app.requestSingleInstanceLock() : true;
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
+// Single source of truth for the app icon — the SiamEPOS lotus. Use the
+// bundled electron/build/icon.png (shipped via package.json "files": build/**),
+// so it resolves in BOTH dev and the packaged app. The old client/public path
+// is NOT bundled (only client-dist is), so at runtime the file was missing and
+// Windows fell back to the generic Electron icon in the taskbar + window.
+const APP_ICON_PATH = path.join(__dirname, 'build', 'icon.png');
 
 // Per-install config — restaurant name, cloud URL, restaurant id. Lives at
 // electron/config.json in dev (matches your repo layout) and in userData
@@ -54,6 +78,27 @@ ipcMain.handle('save-config', async (event, data) => {
   if (!payload.sync_secret) delete payload.sync_secret;
   saveConfig(payload);
   return { success: true };
+});
+
+// SEPOS-RESET-001 — reset this install so it can be handed to a different
+// client. Deletes config.json + the local SQLite DB, then relaunches into the
+// first-run setup wizard. Safe: all real data lives on the client's cloud.
+ipcMain.handle('reset-config', async () => {
+  try {
+    const cfg = getConfigPath();
+    if (fs.existsSync(cfg)) fs.unlinkSync(cfg);
+    const dbBase = path.join(app.getPath('userData'), 'siamepos-local.db');
+    for (const suffix of ['', '-wal', '-shm']) {
+      const f = dbBase + suffix;
+      try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch (e) { console.warn('[reset] db unlink failed:', f, e.message); }
+    }
+    app.relaunch();
+    app.exit(0);
+    return { success: true };
+  } catch (err) {
+    console.error('[reset] failed:', err);
+    return { success: false, error: err.message };
+  }
 });
 
 // ── Printing (SEPOS-025 receipts / SEPOS-026 kitchen tickets) ────────
@@ -133,6 +178,38 @@ ipcMain.handle('print-html', async (event, opts) => {
   });
 });
 
+// Electron BrowserWindows have NO clipboard shortcuts or right-click menu by
+// default. On Windows that means Ctrl+V AND paste-by-mouse both silently do
+// nothing, which makes the setup card impossible to paste into (e.g. the
+// 64-char sync secret on a keyboard-less touchscreen till). Wire both:
+//  - a right-click / long-press context menu with Cut/Copy/Paste/Select All
+//    (works with touch alone — no keyboard required)
+//  - keyboard Ctrl+C/V/X/A on Windows & Linux (macOS already has these via its
+//    default application menu, so we skip it there to avoid a double-paste)
+function enableClipboardShortcuts(win) {
+  const wc = win.webContents;
+  wc.on('context-menu', (event, params) => {
+    const f = params.editFlags || {};
+    Menu.buildFromTemplate([
+      { role: 'cut', enabled: !!f.canCut },
+      { role: 'copy', enabled: !!f.canCopy },
+      { role: 'paste', enabled: !!f.canPaste },
+      { type: 'separator' },
+      { role: 'selectAll' },
+    ]).popup({ window: win });
+  });
+  if (process.platform !== 'darwin') {
+    wc.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown' || !(input.control || input.meta)) return;
+      const key = (input.key || '').toLowerCase();
+      if (key === 'v') { wc.paste(); event.preventDefault(); }
+      else if (key === 'c') { wc.copy(); event.preventDefault(); }
+      else if (key === 'x') { wc.cut(); event.preventDefault(); }
+      else if (key === 'a') { wc.selectAll(); event.preventDefault(); }
+    });
+  }
+}
+
 async function runSetupWizard() {
   return new Promise((resolve) => {
     const setupWin = new BrowserWindow({
@@ -152,6 +229,7 @@ async function runSetupWizard() {
       },
     });
     setupWin.setMenuBarVisibility(false);
+    enableClipboardShortcuts(setupWin);
 
     const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>SiamEPOS — First-time Setup</title>
@@ -329,6 +407,7 @@ async function showSetupWindow() {
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
   setupWindow.setMenuBarVisibility(false);
+  enableClipboardShortcuts(setupWindow);
 
   const safeUrl = url.replace(/"/g, '&quot;');
   const html = `<!doctype html>
@@ -752,7 +831,27 @@ ipcMain.handle('siamepos:check-for-updates', async () => {
   }
 });
 
+// SEPOS-EXIT-001 — quit cleanly from the login screen's Exit button. Goes
+// through before-quit (which stops the local server child) so nothing is left
+// holding the SQLite DB.
+ipcMain.handle('quit-app', () => {
+  app.quit();
+});
+
 app.whenReady().then(async () => {
+  // SEPOS-EXIT-001 — a second instance that failed to get the lock is already
+  // quitting; don't spawn a server or create a window from it.
+  if (!gotSingleInstanceLock) return;
+
+  // Windows: bind the app + its taskbar icon to a stable AppUserModelID (the
+  // installer appId). Without this, Windows shows the generic Electron icon in
+  // the taskbar and won't group the app's windows under one icon.
+  if (process.platform === 'win32') {
+    try { app.setAppUserModelId('uk.co.siamepos.pro'); } catch (err) {
+      console.warn('[win] setAppUserModelId failed:', err.message);
+    }
+  }
+
   // Dock icon (macOS only — Linux/Windows ignore this).
   if (process.platform === 'darwin' && app.dock && fs.existsSync(APP_ICON_PATH)) {
     try { app.dock.setIcon(APP_ICON_PATH); } catch (err) {

@@ -146,7 +146,7 @@ export default function SeatActionSheet({
         <div style={header}>
           <div>
             <div style={{ fontSize: 11, fontWeight: 800, color: '#888', textTransform: 'uppercase', letterSpacing: 0.8 }}>Table</div>
-            <div style={{ fontSize: 22, fontWeight: 800, color: '#0d1b3e' }}>{table.table_number}</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--brand-primary,#0d1b3e)' }}>{table.table_number}</div>
             <div style={{ fontSize: 12, color: '#666' }}>Capacity {table.capacity} · {isOccupied ? 'Occupied' : 'Empty'}</div>
           </div>
           <button onClick={onClose} style={closeBtn}>×</button>
@@ -161,7 +161,7 @@ export default function SeatActionSheet({
               <div style={sectionLabel}>Currently seated</div>
               <div style={{ ...candidateRow, background: '#dcfce7', borderColor: '#22c55e', cursor: 'default' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: '#0d1b3e' }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--brand-primary,#0d1b3e)' }}>
                     {currentBooking.customer_name}
                     <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: '#16a34a' }}>· {currentBooking.covers} {currentBooking.covers === 1 ? 'guest' : 'guests'}</span>
                   </div>
@@ -187,7 +187,7 @@ export default function SeatActionSheet({
                     dueNow.map(b => (
                       <button key={b.id} onClick={() => seatBooking(b)} disabled={busy} style={candidateRow}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 15, fontWeight: 800, color: '#0d1b3e' }}>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--brand-primary,#0d1b3e)' }}>
                             {b.customer_name}
                             <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: '#64748b' }}>· {b.covers} {b.covers === 1 ? 'guest' : 'guests'}</span>
                           </div>
@@ -229,7 +229,7 @@ export default function SeatActionSheet({
                     disabled={busy || alreadyOnThisTable}
                     style={{ ...candidateRow, opacity: alreadyOnThisTable ? 0.65 : 1 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: '#0d1b3e' }}>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--brand-primary,#0d1b3e)' }}>
                         {b.customer_name}
                         <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: '#64748b' }}>· {b.covers} {b.covers === 1 ? 'guest' : 'guests'}</span>
                       </div>
@@ -295,7 +295,7 @@ const candidateRow = {
   cursor: 'pointer', textAlign: 'left', font: 'inherit',
 };
 const seatBtn = {
-  background: '#0d1b3e', color: 'white', padding: '8px 14px',
+  background: 'var(--brand-primary,#0d1b3e)', color: 'white', padding: '8px 14px',
   borderRadius: 8, fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap',
 };
 const walkInBtn = {

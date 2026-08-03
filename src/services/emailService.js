@@ -1,4 +1,5 @@
 const https = require('https');
+const { getBrandTheme } = require('./brandTheme'); // SEPOS-EMAIL-BRAND-001 — per-restaurant email colours
 
 const RESTAURANT_NAME    = process.env.RESTAURANT_NAME  || 'SiamEPOS Restaurant';
 const RESTAURANT_EMAIL   = process.env.RESTAURANT_EMAIL || 'info@siamepos.co.uk';
@@ -141,21 +142,22 @@ async function sendBookingConfirmation(reservation) {
   const covers = reservation.covers;
   const notes  = escapeHtml(reservation.notes || '—');
   const ref    = reservation.id;
+  const th     = await getBrandTheme(); // restaurant's own brand colours
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e0e0e0">
 
-      <div style="background:#1a472a;padding:32px;text-align:center">
-        <h1 style="color:white;margin:0;font-size:26px">✅ Booking Confirmed!</h1>
-        <p style="color:#a8d5b5;margin:8px 0 0;font-size:15px">${RESTAURANT_NAME}</p>
+      <div style="background:${th.primaryHex};padding:32px;text-align:center">
+        <h1 style="color:${th.textOnPrimaryHex};margin:0;font-size:26px">✅ Booking Confirmed!</h1>
+        <p style="color:${th.softOnPrimary};margin:8px 0 0;font-size:15px">${RESTAURANT_NAME}</p>
       </div>
 
       <div style="padding:32px">
         <p style="font-size:16px;color:#333">Dear <strong>${name}</strong>,</p>
         <p style="color:#555;font-size:15px">Thank you for your reservation at <strong>${RESTAURANT_NAME}</strong>. Your booking has been confirmed!</p>
 
-        <div style="background:#f8fdf9;border:2px solid #1a472a;border-radius:10px;padding:24px;margin:24px 0">
-          <h3 style="margin:0 0 16px;color:#1a472a;font-size:16px">📋 BOOKING DETAILS</h3>
+        <div style="background:${th.tintHex};border:2px solid ${th.primaryHex};border-radius:10px;padding:24px;margin:24px 0">
+          <h3 style="margin:0 0 16px;color:${th.primaryHex};font-size:16px">📋 BOOKING DETAILS</h3>
           <p style="margin:8px 0;font-size:15px">📅 <strong>Date:</strong> ${date}</p>
           <p style="margin:8px 0;font-size:15px">⏰ <strong>Time:</strong> ${time}</p>
           <p style="margin:8px 0;font-size:15px">👥 <strong>Guests:</strong> ${covers}</p>
@@ -193,20 +195,21 @@ async function sendReminderEmail(reservation) {
   const time   = formatTime(reservation.reservation_time);
   const name   = escapeHtml(reservation.customer_name);
   const covers = reservation.covers;
+  const th     = await getBrandTheme(); // restaurant's own brand colours
 
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e0e0e0">
 
-      <div style="background:#1a472a;padding:32px;text-align:center">
-        <h1 style="color:white;margin:0;font-size:24px">⏰ Reminder: Your booking is tomorrow!</h1>
-        <p style="color:#a8d5b5;margin:8px 0 0">${RESTAURANT_NAME}</p>
+      <div style="background:${th.primaryHex};padding:32px;text-align:center">
+        <h1 style="color:${th.textOnPrimaryHex};margin:0;font-size:24px">⏰ Reminder: Your booking is tomorrow!</h1>
+        <p style="color:${th.softOnPrimary};margin:8px 0 0">${RESTAURANT_NAME}</p>
       </div>
 
       <div style="padding:32px">
         <p style="font-size:16px;color:#333">Dear <strong>${name}</strong>,</p>
         <p style="color:#555;font-size:15px">This is a reminder that you have a reservation <strong>tomorrow</strong> at <strong>${RESTAURANT_NAME}</strong>.</p>
 
-        <div style="background:#f8fdf9;border:2px solid #1a472a;border-radius:10px;padding:24px;margin:24px 0">
+        <div style="background:${th.tintHex};border:2px solid ${th.primaryHex};border-radius:10px;padding:24px;margin:24px 0">
           <p style="margin:8px 0;font-size:15px">📅 <strong>Date:</strong> ${date}</p>
           <p style="margin:8px 0;font-size:15px">⏰ <strong>Time:</strong> ${time}</p>
           <p style="margin:8px 0;font-size:15px">👥 <strong>Guests:</strong> ${covers}</p>
@@ -233,6 +236,70 @@ async function sendReminderEmail(reservation) {
   );
 }
 
-async function sendBookingSms() {}
+// SEPOS-027 — booking-confirmation SMS via Twilio. Dormant unless
+// TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN are set (per-tenant Railway env).
+// Sender defaults to the free UK alphanumeric id "SiamEPOS" (one-way, no
+// number purchase needed); set TWILIO_FROM to a bought number to override.
+const TWILIO_SID   = process.env.TWILIO_ACCOUNT_SID || '';
+const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN  || '';
+const TWILIO_FROM  = process.env.TWILIO_FROM        || 'SiamEPOS';
+
+// UK-centric E.164 normalisation: "07700 900123" → "+447700900123".
+// Returns null when the number can't be made into something sendable.
+function toE164Uk(phone) {
+  if (!phone) return null;
+  let p = String(phone).replace(/[^\d+]/g, '');
+  if (p.startsWith('+')) return /^\+\d{10,15}$/.test(p) ? p : null;
+  if (p.startsWith('00')) p = p.slice(2);
+  if (p.startsWith('44')) return /^\d{11,13}$/.test(p) ? '+' + p : null;
+  if (p.startsWith('07') && p.length === 11) return '+44' + p.slice(1);
+  return null;
+}
+
+function sendBookingSms(reservation) {
+  return new Promise((resolve) => {
+    if (!TWILIO_SID || !TWILIO_TOKEN) return resolve();
+    const to = toE164Uk(reservation.customer_phone);
+    if (!to) {
+      console.log('ℹ️  Booking #' + reservation.id + ' phone not SMS-able — skipping SMS');
+      return resolve();
+    }
+
+    const date = formatDate(reservation.reservation_date);
+    const time = formatTime(reservation.reservation_time);
+    const text = RESTAURANT_NAME + ': booking confirmed — ' + reservation.covers +
+      ' guest' + (reservation.covers === 1 ? '' : 's') + ', ' + date + ' at ' + time +
+      '. Ref #' + reservation.id + '. We look forward to seeing you!';
+
+    const body = new URLSearchParams({ To: to, From: TWILIO_FROM, Body: text }).toString();
+    const req = https.request({
+      hostname: 'api.twilio.com',
+      path:     '/2010-04-01/Accounts/' + TWILIO_SID + '/Messages.json',
+      method:   'POST',
+      auth:     TWILIO_SID + ':' + TWILIO_TOKEN,
+      headers: {
+        'Content-Type':   'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          console.log('✅ Booking SMS sent to ' + to + ' (booking #' + reservation.id + ')');
+        } else {
+          console.error('❌ Twilio error ' + res.statusCode + ':', data);
+        }
+        resolve(); // SMS is best-effort — never fail the booking flow
+      });
+    });
+    req.on('error', err => {
+      console.error('❌ Twilio request error:', err.message);
+      resolve();
+    });
+    req.write(body);
+    req.end();
+  });
+}
 
 module.exports = { sendBookingConfirmation, sendReminderEmail, sendBookingSms, sendBrevoEmail };

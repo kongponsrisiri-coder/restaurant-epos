@@ -59,6 +59,15 @@ export default function TablePlanScreen() {
     fetchTables();
   };
 
+  // SEPOS-TAKEAWAY-TABLE — a takeaway "table". Sits on the floor like a table
+  // but orders rung up on it are takeaway (no service charge, kitchen ticket
+  // says "Takeaway {number}").
+  const handleAddTakeaway = async () => {
+    const maxNum = Math.max(...tables.map(t => Number(t.table_number) || 0), 0);
+    await addTable({ table_number: maxNum + 1, capacity: 1, pos_x: 40, pos_y: 40, shape: 'square', width: 80, height: 80, is_takeaway: 1 });
+    fetchTables();
+  };
+
   const handleDelete = async (id) => {
     if (!confirm('Delete this table?')) return;
     await deleteTable(id);
@@ -75,7 +84,8 @@ export default function TablePlanScreen() {
       pos_x: updated.pos_x, pos_y: updated.pos_y,
       shape: updated.shape, width: updated.width,
       height: updated.height, name: updated.name,
-      capacity: updated.capacity
+      capacity: updated.capacity,
+      is_takeaway: updated.is_takeaway ? 1 : 0
     });
     fetchTables();
   };
@@ -83,10 +93,15 @@ export default function TablePlanScreen() {
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>Table Plan Editor</h1>
-        <button onClick={handleAddTable} style={{ background: '#e94560', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }}>
-          + Add Table
-        </button>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Table Plan Editor</h1>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={handleAddTakeaway} style={{ background: '#fff', color: '#b45309', border: '2px solid #f59e0b', padding: '9px 16px', borderRadius: 10, cursor: 'pointer', fontWeight: 700 }}>
+            🥡 Add Takeaway
+          </button>
+          <button onClick={handleAddTable} style={{ background: '#e94560', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }}>
+            + Add Table
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 16 }}>
@@ -114,19 +129,19 @@ export default function TablePlanScreen() {
                 width: table.width || 80,
                 height: table.height || 80,
                 borderRadius: table.shape === 'round' ? '50%' : table.shape === 'rectangle' ? 8 : 12,
-                background: selected === table.id ? '#1a1a2e' : '#fff',
-                border: `3px solid ${selected === table.id ? '#e94560' : '#1a1a2e'}`,
+                background: selected === table.id ? 'var(--brand-primary, #1a1a2e)' : (table.is_takeaway ? '#fffbeb' : '#fff'),
+                border: `3px solid ${selected === table.id ? '#e94560' : (table.is_takeaway ? '#f59e0b' : 'var(--brand-primary, #1a1a2e)')}`,
                 display: 'flex', flexDirection: 'column',
                 alignItems: 'center', justifyContent: 'center',
                 cursor: 'grab', userSelect: 'none',
                 boxShadow: selected === table.id ? '0 4px 20px rgba(0,0,0,0.2)' : '0 2px 8px rgba(0,0,0,0.1)',
               }}
             >
-              <div style={{ fontSize: 16, fontWeight: 800, color: selected === table.id ? 'white' : '#1a1a2e', textAlign: 'center', padding: '0 4px' }}>
-                {table.table_number}
+              <div style={{ fontSize: 16, fontWeight: 800, color: selected === table.id ? 'white' : (table.is_takeaway ? '#b45309' : 'var(--brand-primary, #1a1a2e)'), textAlign: 'center', padding: '0 4px' }}>
+                {table.is_takeaway ? '🥡' : ''}{table.table_number}
               </div>
               <div style={{ fontSize: 10, color: selected === table.id ? 'rgba(255,255,255,0.7)' : '#888' }}>
-                {table.capacity} seats
+                {table.is_takeaway ? 'Takeaway' : `${table.capacity} seats`}
               </div>
             </div>
           ))}
@@ -140,8 +155,8 @@ export default function TablePlanScreen() {
 
         {/* Properties panel */}
         <div style={{ width: 240, background: 'white', borderRadius: 16, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', alignSelf: 'flex-start' }}>
-          <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 16 }}>
-            {selectedTable ? `Table ${selectedTable.table_number}` : 'Select a table'}
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 16 }}>
+            {selectedTable ? (selectedTable.is_takeaway ? `🥡 Takeaway ${selectedTable.table_number}` : `Table ${selectedTable.table_number}`) : 'Select a table'}
           </div>
 
           {selectedTable ? (
@@ -203,6 +218,20 @@ export default function TablePlanScreen() {
                   <option value="200x70">Rectangle large (8 seats)</option>
                   <option value="240x70">Rectangle extra large (10 seats)</option>
                 </select>
+              </div>
+
+              {/* SEPOS-TAKEAWAY-TABLE — flag this table as a takeaway table */}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px', borderRadius: 8, background: selectedTable.is_takeaway ? '#fffbeb' : '#f8f8f8', border: `1px solid ${selectedTable.is_takeaway ? '#f59e0b' : '#eee'}`, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={!!selectedTable.is_takeaway}
+                  onChange={e => updateSelected({ is_takeaway: e.target.checked ? 1 : 0 })}
+                  style={{ width: 16, height: 16 }}
+                />
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#b45309' }}>🥡 Takeaway table</span>
+              </label>
+              <div style={{ fontSize: 11, color: '#999', marginTop: -6 }}>
+                Orders here skip service charge and print as “Takeaway {selectedTable.table_number}” to the kitchen.
               </div>
 
               {/* Delete button */}

@@ -56,7 +56,7 @@ export default function StaffPerformanceSection() {
 
   return (
     <div style={{ padding:24, maxWidth:1080 }}>
-      <h1 style={{ fontSize:22, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>📊 Staff Performance</h1>
+      <h1 style={{ fontSize:22, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>📊 Staff Performance</h1>
 
       <div style={{ ...cardStyle, display:'flex', gap:10, alignItems:'flex-end', flexWrap:'wrap' }}>
         <div>
@@ -69,12 +69,12 @@ export default function StaffPerformanceSection() {
         </div>
         <button onClick={load} disabled={loading} style={{
           padding:'10px 18px', borderRadius:8, border:'none',
-          background:'#1a1a2e', color:'white', fontWeight:700, fontSize:13,
+          background:'var(--brand-primary, #1a1a2e)', color:'white', fontWeight:700, fontSize:13,
           cursor: loading ? 'wait' : 'pointer'
         }}>{loading ? 'Loading…' : 'Refresh'}</button>
         <button onClick={exportCsv} disabled={!data.length} style={{
-          padding:'10px 18px', borderRadius:8, border:'1px solid #1a1a2e',
-          background:'white', color:'#1a1a2e', fontWeight:700, fontSize:13,
+          padding:'10px 18px', borderRadius:8, border:'1px solid var(--brand-primary, #1a1a2e)',
+          background:'white', color:'var(--brand-primary, #1a1a2e)', fontWeight:700, fontSize:13,
           cursor: data.length ? 'pointer' : 'not-allowed', opacity: data.length ? 1 : 0.5,
         }}>⬇ Export CSV</button>
       </div>
@@ -100,7 +100,7 @@ export default function StaffPerformanceSection() {
             <tbody>
               {data.map((s, i) => (
                 <tr key={s.staff_id ?? `u-${i}`} style={{ borderTop:'1px solid #f0f0f0' }}>
-                  <td style={{ padding:'10px 6px', fontWeight:600, color:'#1a1a2e' }}>
+                  <td style={{ padding:'10px 6px', fontWeight:600, color:'var(--brand-primary, #1a1a2e)' }}>
                     {s.staff_name}
                     {s.staff_role && (
                       <span style={{ marginLeft:6, fontSize:10, color:'#888', fontWeight:400 }}>· {s.staff_role}</span>

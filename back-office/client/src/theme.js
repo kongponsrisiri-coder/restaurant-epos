@@ -95,6 +95,7 @@ export const label = {
 
 export const STATUS_STYLE = {
   setup:   { bg: '#fef3c7', color: '#92400e', label: 'Setup' },
+  live:    { bg: '#dcfce7', color: '#166534', label: 'Live' },
   active:  { bg: '#dcfce7', color: '#166534', label: 'Active' },
   trial:   { bg: '#dbeafe', color: '#1e40af', label: 'Trial' },
   past_due:{ bg: '#ffedd5', color: '#9a3412', label: 'Past due' },
@@ -104,11 +105,19 @@ export const STATUS_STYLE = {
 
 export const PLAN_LABEL = { trial: 'Trial', cloud: 'Cloud', pro: 'Pro', founder: "Founder's Pack £59/mo", spa: 'Spa £49/mo' };
 
-// BO-SPA-001 — product type badges
+// BO-SPA-001 — product type badges. Records may carry service-only products
+// (website / social) with no till, so unknown values must render, not crash —
+// always look up via productBadge(), never index PRODUCT_BADGE directly.
 export const PRODUCT_BADGE = {
   restaurant: { emoji: '🍽', label: 'Restaurant', bg: '#f0fdf4', color: '#166534' },
   spa:        { emoji: '🌿', label: 'Spa',        bg: '#fdf4ff', color: '#7e22ce' },
+  website:    { emoji: '🌐', label: 'Website',    bg: '#eff6ff', color: '#1d4ed8' },
+  social:     { emoji: '📣', label: 'Social',     bg: '#fff7ed', color: '#c2410c' },
 };
+export function productBadge(product) {
+  return PRODUCT_BADGE[product || 'restaurant']
+    || { emoji: '📦', label: product, bg: '#f1f5f9', color: '#475569' };
+}
 
 // Helpers
 export function initials(name) {

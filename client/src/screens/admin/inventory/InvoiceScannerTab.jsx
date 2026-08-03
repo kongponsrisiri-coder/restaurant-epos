@@ -30,6 +30,9 @@ function InvoiceHistory() {
   const [invoices, setInvoices]             = useState([]);
   const [loading, setLoading]               = useState(true);
   const [expandedId, setExpandedId]         = useState(null);
+  // SEPOS-046 — itemised lines per invoice, fetched lazily on expand
+  // (from stock_movements reference='invoice:<id>' via the new endpoint).
+  const [linesById, setLinesById]           = useState({});
   const [filterMonth, setFilterMonth]       = useState(currentMonthStr());
   const [filterSupplier, setFilterSupplier] = useState('all');
   const [search, setSearch]                 = useState('');
@@ -84,10 +87,10 @@ function InvoiceHistory() {
 
       {/* Stat cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
-        <div style={hStatCard}><div style={hStatLabel}>Total Spend</div><div style={{ fontSize: 26, fontWeight: 800, color: '#0D1B3E' }}>{fmtCurrency(stats.total)}</div><div style={hStatSub}>{filterMonth || 'all time'}</div></div>
-        <div style={hStatCard}><div style={hStatLabel}>Invoices</div><div style={{ fontSize: 26, fontWeight: 800, color: '#0D1B3E' }}>{stats.count}</div><div style={hStatSub}>{stats.uniqueSuppliers} supplier{stats.uniqueSuppliers !== 1 ? 's' : ''}</div></div>
-        <div style={hStatCard}><div style={hStatLabel}>Avg Invoice</div><div style={{ fontSize: 26, fontWeight: 800, color: '#0D1B3E' }}>{fmtCurrency(stats.count > 0 ? stats.total / stats.count : 0)}</div><div style={hStatSub}>per invoice</div></div>
-        {stats.topSupplier && <div style={{ ...hStatCard, borderTop: '3px solid #C9A84C' }}><div style={hStatLabel}>Top Supplier</div><div style={{ fontSize: 15, fontWeight: 700, color: '#0D1B3E', marginTop: 4 }}>{stats.topSupplier[0]}</div><div style={hStatSub}>{fmtCurrency(stats.topSupplier[1])}</div></div>}
+        <div style={hStatCard}><div style={hStatLabel}>Total Spend</div><div style={{ fontSize: 26, fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)' }}>{fmtCurrency(stats.total)}</div><div style={hStatSub}>{filterMonth || 'all time'}</div></div>
+        <div style={hStatCard}><div style={hStatLabel}>Invoices</div><div style={{ fontSize: 26, fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)' }}>{stats.count}</div><div style={hStatSub}>{stats.uniqueSuppliers} supplier{stats.uniqueSuppliers !== 1 ? 's' : ''}</div></div>
+        <div style={hStatCard}><div style={hStatLabel}>Avg Invoice</div><div style={{ fontSize: 26, fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)' }}>{fmtCurrency(stats.count > 0 ? stats.total / stats.count : 0)}</div><div style={hStatSub}>per invoice</div></div>
+        {stats.topSupplier && <div style={{ ...hStatCard, borderTop: '3px solid var(--brand-accent,#C9A84C)' }}><div style={hStatLabel}>Top Supplier</div><div style={{ fontSize: 15, fontWeight: 700, color: 'var(--brand-primary,#0D1B3E)', marginTop: 4 }}>{stats.topSupplier[0]}</div><div style={hStatSub}>{fmtCurrency(stats.topSupplier[1])}</div></div>}
       </div>
 
       {/* Supplier spend breakdown */}
@@ -99,11 +102,11 @@ function InvoiceHistory() {
             return (
               <div key={name} style={{ marginBottom: 10 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
-                  <span style={{ fontWeight: 600, color: '#0D1B3E' }}>{name}</span>
+                  <span style={{ fontWeight: 600, color: 'var(--brand-primary,#0D1B3E)' }}>{name}</span>
                   <span style={{ color: '#555' }}>{fmtCurrency(amount)} · {pct.toFixed(0)}%</span>
                 </div>
                 <div style={{ height: 6, background: '#f0f0f0', borderRadius: 3, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${pct}%`, background: '#C9A84C', borderRadius: 3, transition: 'width 0.3s' }} />
+                  <div style={{ height: '100%', width: `${pct}%`, background: 'var(--brand-accent,#C9A84C)', borderRadius: 3, transition: 'width 0.3s' }} />
                 </div>
               </div>
             );
@@ -124,14 +127,23 @@ function InvoiceHistory() {
             const isOpen = expandedId === inv.id;
             const sc     = STATUS_STYLE[inv.status] || STATUS_STYLE.processed;
             return (
-              <div key={inv.id} style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: isOpen ? '0 4px 16px rgba(13,27,62,0.1)' : '0 1px 4px rgba(0,0,0,0.06)', border: isOpen ? '2px solid #0D1B3E' : '2px solid transparent', transition: 'box-shadow 0.15s, border 0.15s' }}>
-                <div onClick={() => setExpandedId(isOpen ? null : inv.id)} style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flexWrap: 'wrap' }}>
-                  <span style={{ color: '#0D1B3E', fontSize: 13, fontWeight: 700, flexShrink: 0, width: 14 }}>{isOpen ? '▼' : '▶'}</span>
+              <div key={inv.id} style={{ background: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: isOpen ? '0 4px 16px rgba(13,27,62,0.1)' : '0 1px 4px rgba(0,0,0,0.06)', border: isOpen ? '2px solid var(--brand-primary,#0D1B3E)' : '2px solid transparent', transition: 'box-shadow 0.15s, border 0.15s' }}>
+                <div onClick={() => {
+                  const opening = !isOpen;
+                  setExpandedId(opening ? inv.id : null);
+                  if (opening && linesById[inv.id] === undefined) {
+                    fetch(`${SERVER_URL}/api/supplier-invoices/${inv.id}/lines`)
+                      .then(r => r.json())
+                      .then(rows => setLinesById(prev => ({ ...prev, [inv.id]: Array.isArray(rows) ? rows : [] })))
+                      .catch(() => setLinesById(prev => ({ ...prev, [inv.id]: [] })));
+                  }
+                }} style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flexWrap: 'wrap' }}>
+                  <span style={{ color: 'var(--brand-primary,#0D1B3E)', fontSize: 13, fontWeight: 700, flexShrink: 0, width: 14 }}>{isOpen ? '▼' : '▶'}</span>
                   <span style={{ fontSize: 13, color: '#888', minWidth: 100 }}>{fmtDate(inv.invoice_date || inv.created_at)}</span>
-                  <span style={{ fontWeight: 700, fontSize: 14, color: '#0D1B3E', flex: 1, minWidth: 120 }}>{inv.supplier_name || '—'}</span>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--brand-primary,#0D1B3E)', flex: 1, minWidth: 120 }}>{inv.supplier_name || '—'}</span>
                   {inv.invoice_number && <span style={{ fontSize: 12, color: '#aaa', fontFamily: 'monospace', minWidth: 90 }}>#{inv.invoice_number}</span>}
                   <span style={{ background: sc.bg, color: sc.color, fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 20 }}>{sc.label}</span>
-                  <span style={{ fontWeight: 800, fontSize: 16, color: '#0D1B3E', marginLeft: 'auto', minWidth: 80, textAlign: 'right' }}>{fmtCurrency(inv.total_amount)}</span>
+                  <span style={{ fontWeight: 800, fontSize: 16, color: 'var(--brand-primary,#0D1B3E)', marginLeft: 'auto', minWidth: 80, textAlign: 'right' }}>{fmtCurrency(inv.total_amount)}</span>
                 </div>
                 {isOpen && (
                   <div style={{ borderTop: '1px solid #f0f0f0', background: '#f8f9fb', padding: '16px 20px' }}>
@@ -139,13 +151,32 @@ function InvoiceHistory() {
                       {[{ label: 'Supplier', value: inv.supplier_name || '—' }, { label: 'Invoice Date', value: fmtDate(inv.invoice_date) }, { label: 'Invoice Number', value: `#${inv.invoice_number || '—'}`, mono: true }, { label: 'Recorded', value: fmtDate(inv.created_at) }].map(f => (
                         <div key={f.label}><div style={hDetLbl}>{f.label}</div><div style={{ ...hDetVal, fontFamily: f.mono ? 'monospace' : 'inherit' }}>{f.value}</div></div>
                       ))}
-                      <div><div style={hDetLbl}>Total Amount</div><div style={{ ...hDetVal, fontSize: 20, fontWeight: 800, color: '#0D1B3E' }}>{fmtCurrency(inv.total_amount)}</div></div>
+                      <div><div style={hDetLbl}>Total Amount</div><div style={{ ...hDetVal, fontSize: 20, fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)' }}>{fmtCurrency(inv.total_amount)}</div></div>
                       <div><div style={hDetLbl}>Status</div><span style={{ background: sc.bg, color: sc.color, fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 20 }}>{sc.label}</span></div>
                     </div>
-                    <div style={{ background: 'white', borderRadius: 8, padding: '10px 14px', border: '1px dashed #e0e0e0', display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 18 }}>📋</span>
-                      <div><div style={{ fontSize: 13, color: '#555', fontWeight: 600 }}>Line items not stored</div><div style={{ fontSize: 12, color: '#aaa' }}>Re-scan the original invoice to see the full breakdown</div></div>
-                    </div>
+                    {/* SEPOS-046 — itemised breakdown from the delivery stock movements. */}
+                    {linesById[inv.id] === undefined ? (
+                      <div style={{ fontSize: 13, color: '#aaa', padding: '8px 4px' }}>Loading line items…</div>
+                    ) : linesById[inv.id].length > 0 ? (
+                      <div style={{ background: 'white', borderRadius: 8, border: '1px solid #eee', overflow: 'hidden' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 8, padding: '8px 14px', background: '#f4f6f9', fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          <span>Item</span><span style={{ textAlign: 'right' }}>Qty</span><span style={{ textAlign: 'right' }}>Unit Cost</span><span style={{ textAlign: 'right' }}>Line Total</span>
+                        </div>
+                        {linesById[inv.id].map((l, i) => (
+                          <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 8, padding: '8px 14px', fontSize: 13, borderTop: '1px solid #f5f5f5' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--brand-primary,#0D1B3E)' }}>{l.name_en || '—'}{String(l.note || '').includes('auto-created') && <span style={{ marginLeft: 6, fontSize: 10, background: '#dcfce7', color: '#15803d', padding: '1px 6px', borderRadius: 10, fontWeight: 700 }}>NEW</span>}</span>
+                            <span style={{ textAlign: 'right', color: '#555', fontVariantNumeric: 'tabular-nums' }}>{Number(l.quantity)} {l.unit || ''}</span>
+                            <span style={{ textAlign: 'right', color: '#555', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency(l.cost_at_time)}</span>
+                            <span style={{ textAlign: 'right', fontWeight: 700, color: 'var(--brand-primary,#0D1B3E)', fontVariantNumeric: 'tabular-nums' }}>{fmtCurrency((parseFloat(l.quantity) || 0) * (parseFloat(l.cost_at_time) || 0))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ background: 'white', borderRadius: 8, padding: '10px 14px', border: '1px dashed #e0e0e0', display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 18 }}>📋</span>
+                        <div><div style={{ fontSize: 13, color: '#555', fontWeight: 600 }}>No line items recorded for this invoice</div><div style={{ fontSize: 12, color: '#aaa' }}>Invoices recorded before June 2026 saved the header only</div></div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -225,7 +256,7 @@ export default function InvoiceScannerTab() {
       if (mode === 'invoice') {
         const inv = data.invoice;
         setInvoiceData({ supplier_name: inv.supplier_name || '', invoice_date: inv.invoice_date || '', invoice_number: inv.invoice_number || '', total_amount: inv.total_amount || 0 });
-        setLineItems((inv.line_items || []).map(item => ({ name_extracted: item.name || '', quantity: item.quantity || 0, unit: (item.unit && item.unit !== 'each') ? item.unit : detectUnit(item.name), unit_price: item.unit_price || 0, line_total: item.line_total || (item.quantity * item.unit_price) || 0, matched_ingredient_id: fuzzyMatch(item.name) })));
+        setLineItems((inv.line_items || []).map(item => ({ name_extracted: item.name || '', quantity: item.quantity || 0, unit: (item.unit && item.unit !== 'each') ? item.unit : detectUnit(item.name), unit_price: item.unit_price || 0, line_total: item.line_total || (item.quantity * item.unit_price) || 0, matched_ingredient_id: fuzzyMatch(item.name), pack_size: item.pack_size || null, pack_unit: item.pack_unit || null })));
       } else {
         const exp = data.expense;
         setExpenseData({ vendor: exp.vendor || '', date: exp.date || today, description: exp.description || '', category: exp.category || 'overhead', total_amount: exp.total_amount || 0 });
@@ -275,12 +306,12 @@ export default function InvoiceScannerTab() {
         {mode === 'invoice' ? '💡 Photo your supplier delivery note or invoice. AI reads every line item — items not in your system are auto-created as ingredients.' : '💡 Photo any receipt, bill or expense document. AI extracts the cost and auto-categorises it.'}
       </div>
       {error && <div style={{ background: '#fee2e2', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: '#991b1b', fontSize: 14 }}>⚠️ {error}</div>}
-      <div onClick={() => fileInputRef.current?.click()} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }} style={{ border: `2px dashed ${file ? '#22c55e' : '#1a1a2e'}`, borderRadius: 16, padding: '44px 24px', textAlign: 'center', cursor: 'pointer', marginBottom: 20, background: file ? '#f0fdf4' : 'white' }}>
+      <div onClick={() => fileInputRef.current?.click()} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }} style={{ border: `2px dashed ${file ? '#22c55e' : 'var(--brand-primary, #1a1a2e)'}`, borderRadius: 16, padding: '44px 24px', textAlign: 'center', cursor: 'pointer', marginBottom: 20, background: file ? '#f0fdf4' : 'white' }}>
         <input ref={fileInputRef} type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={e => handleFile(e.target.files[0])} />
         {file ? (<div>{file.type.startsWith('image/') && fileData && <img src={fileData} alt="preview" style={{ maxHeight: 140, maxWidth: '100%', borderRadius: 8, marginBottom: 12, objectFit: 'contain' }} />}<div style={{ fontWeight: 700, color: '#15803d', fontSize: 15 }}>✅ {file.name}</div><div style={{ color: '#888', fontSize: 13, marginTop: 4 }}>{(file.size / 1024 / 1024).toFixed(1)} MB · Click to change</div></div>
         ) : (<div><div style={{ fontSize: 44, marginBottom: 12 }}>🧾</div><div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Drop {mode === 'invoice' ? 'invoice' : 'receipt'} photo here or click</div><div style={{ color: '#888', fontSize: 13 }}>JPG, PNG or PDF · Phone photo is fine</div></div>)}
       </div>
-      <button onClick={runScan} disabled={!file} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: file ? '#1a1a2e' : '#ddd', color: file ? 'white' : '#aaa', fontWeight: 700, fontSize: 16, cursor: file ? 'pointer' : 'not-allowed' }}>🤖 Scan with AI</button>
+      <button onClick={runScan} disabled={!file} style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', background: file ? 'var(--brand-primary, #1a1a2e)' : '#ddd', color: file ? 'white' : '#aaa', fontWeight: 700, fontSize: 16, cursor: file ? 'pointer' : 'not-allowed' }}>🤖 Scan with AI</button>
     </div>
   );
 
@@ -289,7 +320,7 @@ export default function InvoiceScannerTab() {
       {/* Main tab selector */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: '2px solid #f0f0f0', paddingBottom: 16 }}>
         {[{ id: 'scan', label: '📷 Scan Invoice' }, { id: 'history', label: '📋 Invoice History' }].map(t => (
-          <button key={t.id} onClick={() => setMainTab(t.id)} style={{ padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14, background: mainTab === t.id ? '#1a1a2e' : '#f0f0f0', color: mainTab === t.id ? 'white' : '#555' }}>{t.label}</button>
+          <button key={t.id} onClick={() => setMainTab(t.id)} style={{ padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14, background: mainTab === t.id ? 'var(--brand-primary, #1a1a2e)' : '#f0f0f0', color: mainTab === t.id ? 'white' : '#555' }}>{t.label}</button>
         ))}
       </div>
 
@@ -298,7 +329,7 @@ export default function InvoiceScannerTab() {
       {mainTab === 'scan' && <div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
           {[{ id: 'invoice', label: '📦 Supplier Invoice', desc: 'Records stock + delivery' }, { id: 'expense', label: '🏢 Expense / Receipt', desc: 'Records overhead cost' }].map(m => (
-            <button key={m.id} onClick={() => { setMode(m.id); resetAll(); }} style={{ flex: 1, padding: '12px 16px', borderRadius: 12, border: 'none', cursor: 'pointer', textAlign: 'left', background: mode === m.id ? '#1a1a2e' : 'white', color: mode === m.id ? 'white' : '#555', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            <button key={m.id} onClick={() => { setMode(m.id); resetAll(); }} style={{ flex: 1, padding: '12px 16px', borderRadius: 12, border: 'none', cursor: 'pointer', textAlign: 'left', background: mode === m.id ? 'var(--brand-primary, #1a1a2e)' : 'white', color: mode === m.id ? 'white' : '#555', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
               <div style={{ fontWeight: 700, fontSize: 14 }}>{m.label}</div><div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>{m.desc}</div>
             </button>
           ))}
@@ -308,7 +339,7 @@ export default function InvoiceScannerTab() {
 
         {stage === 'scanning' && (
           <div style={{ textAlign: 'center', padding: '60px 0' }}>
-            <div style={{ width: 56, height: 56, border: '5px solid #f0f0f0', borderTop: '5px solid #1a1a2e', borderRadius: '50%', margin: '0 auto 24px', animation: 'spin 0.8s linear infinite' }} />
+            <div style={{ width: 56, height: 56, border: '5px solid #f0f0f0', borderTop: '5px solid var(--brand-primary, #1a1a2e)', borderRadius: '50%', margin: '0 auto 24px', animation: 'spin 0.8s linear infinite' }} />
             <div style={{ fontWeight: 700, fontSize: 16 }}>Scanning with AI…</div>
             <div style={{ color: '#888', marginTop: 8, fontSize: 14 }}>Reading {mode === 'invoice' ? 'line items' : 'expense details'}…</div>
           </div>
@@ -317,7 +348,7 @@ export default function InvoiceScannerTab() {
         {stage === 'review' && mode === 'invoice' && (
           <div>
             <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 14 }}>📋 Invoice Details — confirm or correct before recording</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 14 }}>📋 Invoice Details — confirm or correct before recording</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))', gap: 12 }}>
                 <div><label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Supplier</label><input value={invoiceData.supplier_name} onChange={e => setInvoiceData(p => ({ ...p, supplier_name: e.target.value }))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
                 <div><label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Invoice Date</label><input type="date" value={invoiceData.invoice_date} onChange={e => setInvoiceData(p => ({ ...p, invoice_date: e.target.value }))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
@@ -353,7 +384,7 @@ export default function InvoiceScannerTab() {
                       </div>
                     ) : (
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 70px 80px 80px 1fr 80px', padding: '10px 16px', fontSize: 13, alignItems: 'center' }}>
-                        <span style={{ fontWeight: 600, color: '#1a1a2e' }}>{item.name_extracted || <span style={{ color: '#aaa' }}>—</span>}</span>
+                        <span style={{ fontWeight: 600, color: 'var(--brand-primary, #1a1a2e)' }}>{item.name_extracted || <span style={{ color: '#aaa' }}>—</span>}</span>
                         <span style={{ textAlign: 'right', color: '#555' }}>{item.quantity}</span>
                         <span style={{ textAlign: 'center', color: '#555' }}>{item.unit}</span>
                         <span style={{ textAlign: 'right', color: '#555' }}>£{Number(item.unit_price).toFixed(2)}</span>
@@ -377,9 +408,9 @@ export default function InvoiceScannerTab() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <div style={{ flex: 1, fontSize: 13, color: '#555' }}><span style={{ color: '#1a1a2e', fontWeight: 700 }}>📦 {lineItems.length} item{lineItems.length !== 1 ? 's' : ''} to record</span><span style={{ color: '#888', marginLeft: 8, fontSize: 12 }}>— new ingredients will be auto-created</span></div>
+              <div style={{ flex: 1, fontSize: 13, color: '#555' }}><span style={{ color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700 }}>📦 {lineItems.length} item{lineItems.length !== 1 ? 's' : ''} to record</span><span style={{ color: '#888', marginLeft: 8, fontSize: 12 }}>— new ingredients will be auto-created</span></div>
               <button onClick={resetAll} style={{ padding: '10px 18px', borderRadius: 10, border: '1px solid #ddd', background: 'white', cursor: 'pointer', fontWeight: 600, color: '#555' }}>↩ Re-scan</button>
-              <button onClick={confirmInvoice} disabled={confirming || lineItems.length === 0} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 15, cursor: confirming || lineItems.length === 0 ? 'default' : 'pointer', background: confirming || lineItems.length === 0 ? '#ddd' : '#1a1a2e', color: 'white' }}>{confirming ? 'Recording...' : `✓ Confirm & Record ${lineItems.length} Item${lineItems.length !== 1 ? 's' : ''}`}</button>
+              <button onClick={confirmInvoice} disabled={confirming || lineItems.length === 0} style={{ padding: '12px 28px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 15, cursor: confirming || lineItems.length === 0 ? 'default' : 'pointer', background: confirming || lineItems.length === 0 ? '#ddd' : 'var(--brand-primary, #1a1a2e)', color: 'white' }}>{confirming ? 'Recording...' : `✓ Confirm & Record ${lineItems.length} Item${lineItems.length !== 1 ? 's' : ''}`}</button>
             </div>
           </div>
         )}
@@ -387,7 +418,7 @@ export default function InvoiceScannerTab() {
         {stage === 'review' && mode === 'expense' && (
           <div>
             <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 14 }}>🧾 Expense Details — confirm or correct</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 14 }}>🧾 Expense Details — confirm or correct</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))', gap: 12 }}>
                 <div><label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Vendor / Source</label><input value={expenseData.vendor} onChange={e => setExpenseData(p => ({ ...p, vendor: e.target.value }))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
                 <div><label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4, textTransform: 'uppercase' }}>Date</label><input type="date" value={expenseData.date} onChange={e => setExpenseData(p => ({ ...p, date: e.target.value }))} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
@@ -412,12 +443,26 @@ export default function InvoiceScannerTab() {
               <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', textAlign: 'left' }}>
                 {confirmResult.created?.length > 0 && (<div style={{ marginBottom: 12 }}><div style={{ fontWeight: 700, fontSize: 13, color: '#22c55e', marginBottom: 6 }}>🆕 {confirmResult.created.length} new ingredient{confirmResult.created.length > 1 ? 's' : ''} created:</div>{confirmResult.created.map(n => <div key={n} style={{ fontSize: 13, color: '#555', padding: '2px 0', paddingLeft: 12 }}>• {n}</div>)}</div>)}
                 {confirmResult.updated?.length > 0 && (<div><div style={{ fontWeight: 700, fontSize: 13, color: '#3b82f6', marginBottom: 6 }}>🔄 {confirmResult.updated.length} ingredient{confirmResult.updated.length > 1 ? 's' : ''} cost updated:</div>{confirmResult.updated.map(n => <div key={n} style={{ fontSize: 13, color: '#555', padding: '2px 0', paddingLeft: 12 }}>• {n}</div>)}</div>)}
+                {/* SEPOS-INV-UNITS-001 — lines the confirm REFUSED because the
+                    invoice unit couldn't be reconciled with the ingredient's
+                    unit. Refusing loudly beats silently corrupting costs. */}
+                {confirmResult.skipped_unit_mismatch?.length > 0 && (
+                  <div style={{ marginTop: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px' }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#dc2626', marginBottom: 6 }}>⚠️ {confirmResult.skipped_unit_mismatch.length} line{confirmResult.skipped_unit_mismatch.length > 1 ? 's' : ''} NOT applied — unit mismatch:</div>
+                    {confirmResult.skipped_unit_mismatch.map((l, i) => (
+                      <div key={i} style={{ fontSize: 12.5, color: '#7f1d1d', padding: '3px 0', paddingLeft: 12 }}>
+                        • <b>{l.name}</b> — invoice says <b>{l.invoice_unit}</b>, ingredient counts in <b>{l.ingredient_unit}</b>.<br />
+                        <span style={{ color: '#b45309', paddingLeft: 12 }}>{l.hint}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div style={{ marginTop: 12, fontSize: 12, color: '#888', borderTop: '1px solid #f0f0f0', paddingTop: 10 }}>📦 All quantities recorded in Stock Log · Go to <strong>📋 Recipes & Costs</strong> to build recipes using these ingredients</div>
               </div>
             )}
             {confirmResult?.expense && <div style={{ fontSize: 14, color: '#888', marginBottom: 20 }}>£{Number(expenseData.total_amount).toFixed(2)} added to Cost vs Sales</div>}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 8 }}>
-              <button onClick={resetAll} style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: '#1a1a2e', color: 'white', fontWeight: 700, cursor: 'pointer' }}>📷 Scan Another</button>
+              <button onClick={resetAll} style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontWeight: 700, cursor: 'pointer' }}>📷 Scan Another</button>
             </div>
           </div>
         )}

@@ -21,7 +21,7 @@
  *  'both'  — print AND KDS
  */
 
-import { serverPrintKitchen, serverPrintKitchenFull, serverPrintBar, serverPrintFireNotice, getSettings, getKitchenTicketBuffer } from '../api';
+import { serverPrintKitchen, serverPrintKitchenFull, serverPrintBar, serverPrintFireNotice, getSettings, getKitchenTicketBuffer, getPrinters, getMenu } from '../api';
 import { isNativeApp, sendRawToPrinter } from '../native/printer';
 import { sunmiAvailable, sunmiPrintOps, printTarget } from '../native/sunmiPrinter';
 import { buildKitchenOps, opsForSunmi, renderOpsToBytes } from '../native/escpos';
@@ -49,6 +49,55 @@ async function getCachedSettings() {
   return _settingsCache;
 }
 
+// ── SEPOS-STATION-001 — resolve each item to its printer station ──────────────
+// A category can be routed to an extra printer station (categories.printer_id).
+// We map menu_item_id → category.printer_id via the cached menu, and look up the
+// station (ip/port/copies) from getPrinters(). Both cached ~10s. Returns
+// { def: [items with no station], stations: [{ printer, items }] }.
+// If there are NO active stations OR NO item is assigned, everything lands in
+// `def` and the caller behaves exactly as today (migration-safe).
+let _stationCache = null, _stationAt = 0;
+let _menuPrinterMap = null, _menuMapAt = 0;
+async function getStationRouting() {
+  const now = Number(new Date());
+  if (!_stationCache || now - _stationAt > 10000) {
+    try { const p = await getPrinters(); if (Array.isArray(p)) { _stationCache = p; _stationAt = now; } }
+    catch {}
+  }
+  if (!_menuPrinterMap || now - _menuMapAt > 10000) {
+    try {
+      const menu = await getMenu();
+      if (Array.isArray(menu)) {
+        const m = new Map();
+        for (const cat of menu) {
+          const pid = cat && cat.printer_id != null ? Number(cat.printer_id) : null;
+          // SEPOS-STATION-003 — a dish-level printer_id overrides the category
+          // route (same inherit pattern as default_course).
+          for (const it of (cat.items || [])) if (it && it.id != null) {
+            m.set(it.id, it.printer_id != null ? Number(it.printer_id) : pid);
+          }
+        }
+        _menuPrinterMap = m; _menuMapAt = now;
+      }
+    } catch {}
+  }
+  return { stations: _stationCache || [], menuMap: _menuPrinterMap || new Map() };
+}
+async function splitByStation(items) {
+  const { stations, menuMap } = await getStationRouting();
+  const byId = new Map(stations.filter(s => s && s.ip).map(s => [Number(s.id), s]));
+  const def = [], groups = new Map();
+  for (const it of items) {
+    const pid = menuMap.get(it.menu_item_id);
+    const station = pid != null ? byId.get(Number(pid)) : null;
+    if (station) {
+      if (!groups.has(station.id)) groups.set(station.id, { printer: station, items: [] });
+      groups.get(station.id).items.push(it);
+    } else def.push(it);
+  }
+  return { def, stations: [...groups.values()] };
+}
+
 // ── HTML escape ───────────────────────────────────────────────────────────────
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
@@ -70,6 +119,10 @@ function isBilingual(settings) {
 // Accepts an optional pre-opened window (opened before async work to keep
 // the browser's user-gesture context, preventing popup blocking).
 function openPrintPopup(html, preWin = null) {
+  // Native app (Sunmi/Android) never opens system Chrome — it prints via the
+  // built-in/network path (dispatchPrint step 0). This is a hard backstop so a
+  // fallthrough can't pop a browser window on the till.
+  if (isNativeApp()) { try { closeWin(preWin); } catch {} return; }
   const win = preWin || window.open('', '_blank', 'width=400,height=600,scrollbars=yes');
   if (!win) return;
   win.document.write(html);
@@ -100,8 +153,13 @@ async function nativeKitchenPrint({ native, copies = 1, ip, port, target = 'auto
   else if ((target === 'network' || target === 'auto') && ip) dest = 'network';
   if (!dest) { console.warn('[kitchen-ticket] native: no printer for target', target); return; }
 
+  // SEPOS-PRINT-FONT-001 — per-role font scale: bar tickets use bar_font_scale,
+  // everything else (kitchen + fire notice) uses kitchen_font_scale (default 'large' = today).
+  const fontScale = (native && native.kind === 'bar')
+    ? (settings.bar_font_scale || 'large')
+    : (settings.kitchen_font_scale || 'large');
   let ops = null;
-  try { ops = buildKitchenOps(native); } catch (e) { console.warn('[kitchen-ticket] build error:', e?.message); }
+  try { ops = buildKitchenOps({ ...native, fontScale }); } catch (e) { console.warn('[kitchen-ticket] build error:', e?.message); }
   if (!ops) return;
 
   const copyN = Math.max(1, copies);
@@ -194,14 +252,38 @@ export async function printFullOrderTicket({ order, items, popupWin = null }) {
   const copies   = resolveKitchenCopies(settings);
   const bilingual = isBilingual(settings);
 
-  await dispatchPrint({
-    settings,
-    serverFn: (pn, cp) => serverPrintKitchenFull(order.id, active, pn, cp),
-    html:     buildFullOrderTicketHTML({ order, items: active, copies, bilingual }),
-    copies,
-    popupWin,
-    native:   { order, items: active, kind: 'full' },
-  });
+  // SEPOS-STATION-001 — station routing runs ONLY on a native till, which can
+  // TCP straight to each station's IP. Browser/desktop tills reach a network
+  // printer only via the server (no per-station dine-in endpoint yet), so they
+  // keep today's single-kitchen behaviour. No stations assigned ⇒ native also
+  // behaves exactly as today (split.stations is empty → the unchanged path).
+  let split = { def: active, stations: [] };
+  if (isNativeApp()) { try { split = await splitByStation(active); } catch { split = { def: active, stations: [] }; } }
+
+  if (split.stations.length === 0) {
+    await dispatchPrint({
+      settings,
+      serverFn: (pn, cp) => serverPrintKitchenFull(order.id, active, pn, cp),
+      html:     buildFullOrderTicketHTML({ order, items: active, copies, bilingual, fontScale: kitchenFs(settings) }),
+      copies,
+      popupWin,
+      native:   { order, items: active, kind: 'full', bilingual },
+    });
+    return;
+  }
+
+  // Native + stations: one ticket per printer, sent straight to each IP.
+  closeWin(popupWin);
+  if (!shouldPrint(settings)) return;
+  const kIp   = settings.printer_kitchen_ip || settings.printer_receipt_ip;
+  const kPort = settings.printer_kitchen_port || settings.printer_receipt_port || 9100;
+  if (split.def.length) {
+    await nativeKitchenPrint({ native: { order, items: split.def, kind: 'full', bilingual }, ip: kIp, port: kPort, copies, target: printTarget(settings, 'kitchen'), settings });
+  }
+  for (const g of split.stations) {
+    const cp = Math.max(1, Math.min(5, parseInt(g.printer.copies, 10) || copies));
+    await nativeKitchenPrint({ native: { order, items: g.items, kind: 'full', bilingual }, ip: g.printer.ip, port: g.printer.port || 9100, copies: cp, target: 'network', settings });
+  }
 }
 
 // ── Public: print a single course (called when a course is fired) ─────────────
@@ -217,10 +299,10 @@ export async function printKitchenTicket({ order, items, course, popupWin = null
   await dispatchPrint({
     settings,
     serverFn: (pn, cp) => serverPrintKitchen(order.id, active, course, pn, cp),
-    html:     buildKitchenTicketHTML({ order, items: active, course, copies, bilingual }),
+    html:     buildKitchenTicketHTML({ order, items: active, course, copies, bilingual, fontScale: kitchenFs(settings) }),
     copies,
     popupWin,
-    native:   { order, items: active, course, kind: 'course' },
+    native:   { order, items: active, course, kind: 'course', bilingual },
   });
 }
 
@@ -290,7 +372,7 @@ export async function printBarOrderTicket({ order, items, popupWin = null }) {
     if (!shouldPrint(settings)) return;
     const ip   = settings?.printer_bar_ip   || settings?.printer_kitchen_ip   || settings?.printer_receipt_ip;
     const port = settings?.printer_bar_port || settings?.printer_kitchen_port || settings?.printer_receipt_port || 9100;
-    await nativeKitchenPrint({ native: { order, items: barItems, kind: 'bar' }, ip, port, target: printTarget(settings, 'bar'), settings });
+    await nativeKitchenPrint({ native: { order, items: barItems, kind: 'bar', bilingual }, ip, port, target: printTarget(settings, 'bar'), settings });
     return;
   }
 
@@ -311,7 +393,7 @@ export async function printBarOrderTicket({ order, items, popupWin = null }) {
 
   // 2. Electron silent print to bar printer device (fallback)
   const autoOn     = typeof localStorage === 'undefined' || localStorage.getItem('kitchen_auto_print') !== '0';
-  const html       = buildKitchenTicketHTML({ order, items: barItems, course: 4, copies: 1, bilingual });
+  const html       = buildKitchenTicketHTML({ order, items: barItems, course: 4, copies: 1, bilingual, fontScale: kitchenFs(settings, 'bar') });
 
   if (deviceName && autoOn && window.siamepos?.isElectron && window.siamepos.printHtml) {
     closeWin(popupWin);
@@ -328,26 +410,30 @@ export async function printBarOrderTicket({ order, items, popupWin = null }) {
 
 // ── HTML builders ─────────────────────────────────────────────────────────────
 
-function ticketCSS() {
+// SEPOS-PRINT-FONT-001 — fs is the kitchen font multiplier (1 = today, no
+// regression). Applied to the ticket content sizes so the HTML/Electron kitchen
+// print matches the picker. Default caller passes 1 for 'large' (= today's px).
+function ticketCSS(fs = 1) {
+  const px = (n) => `${Math.round(n * fs)}px`;
   return `
     *    { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:Arial,Helvetica,sans-serif; color:#000; background:#fff; width:80mm; padding:4mm 3mm; }
     @media print { @page { margin:0; size:80mm auto; } body { padding:3mm 2mm; } }
     .page       { }
     .break      { page-break-after:always; }
-    .head   { text-align:center; font-size:24px; font-weight:900; letter-spacing:1px; }
+    .head   { text-align:center; font-size:${px(24)}; font-weight:900; letter-spacing:1px; }
     .sub    { text-align:center; font-size:13px; margin-top:2px; }
-    .course-en  { text-align:center; font-size:16px; font-weight:700; margin-top:6px; }
-    .course-th  { text-align:center; font-size:14px; font-weight:600; margin-top:1px; color:#333; }
+    .course-en  { text-align:center; font-size:${px(16)}; font-weight:700; margin-top:6px; }
+    .course-th  { text-align:center; font-size:${px(14)}; font-weight:600; margin-top:1px; color:#333; }
     .rule   { border-top:2px dashed #000; margin:8px 0; }
     .rule-solid { border-top:2px solid #000; margin:8px 0; }
     .item   { display:flex; gap:8px; align-items:baseline; margin:7px 0; }
-    .qty    { font-size:22px; font-weight:900; min-width:42px; }
-    .name   { font-size:20px; font-weight:800; line-height:1.2; }
+    .qty    { font-size:${px(22)}; font-weight:900; min-width:42px; }
+    .name   { font-size:${px(20)}; font-weight:900; line-height:1.2; -webkit-text-stroke:0.35px currentColor; }
     /* Modifier line + second-language line print at the same size as
        the primary item name (Korakot 2026-06-07). */
-    .note     { font-size:20px; font-weight:800; margin:-2px 0 6px 50px; line-height:1.2; }
-    .note-alt { font-size:20px; font-weight:800; margin:-4px 0 4px 50px; line-height:1.2; color:#333; }
+    .note     { font-size:${px(20)}; font-weight:800; margin:-2px 0 6px 50px; line-height:1.2; }
+    .note-alt { font-size:${px(20)}; font-weight:800; margin:-4px 0 4px 50px; line-height:1.2; color:#333; }
     .delivery { margin:6px 0; padding:6px 4px; border-top:1px dashed #000; border-bottom:1px dashed #000; }
     .delivery-label { font-size:14px; font-weight:800; text-align:center; margin-bottom:4px; letter-spacing:1px; }
     .delivery div   { font-size:16px; font-weight:800; line-height:1.3; }
@@ -442,16 +528,16 @@ function buildFullOrderBody({ order, items, bilingual = true }) {
   `;
 }
 
-function buildKitchenTicketHTML({ order, items, course, copies = 1, bilingual = true }) {
+function buildKitchenTicketHTML({ order, items, course, copies = 1, bilingual = true, fontScale = 1 }) {
   const body  = buildSingleCourseBody({ order, items, course, bilingual });
   const pages = multiPage(body, copies);
-  return wrapHTML(pages);
+  return wrapHTML(pages, fontScale);
 }
 
-function buildFullOrderTicketHTML({ order, items, copies = 1, bilingual = true }) {
+function buildFullOrderTicketHTML({ order, items, copies = 1, bilingual = true, fontScale = 1 }) {
   const body  = buildFullOrderBody({ order, items, bilingual });
   const pages = multiPage(body, copies);
-  return wrapHTML(pages);
+  return wrapHTML(pages, fontScale);
 }
 
 function buildFireNoticeHTML({ order, course, bilingual = true }) {
@@ -491,9 +577,12 @@ function buildFireNoticeHTML({ order, course, bilingual = true }) {
 function orderHeading(order) {
   if (!order) return 'ORDER';
   if (order.order_type === 'takeaway') {
+    // SEPOS-TAKEAWAY-TABLE — walk-in takeaway sits on a takeaway table, so
+    // print its table number; website orders are tableless → use the id.
+    const ref = order.table_number != null ? order.table_number : `#${order.id}`;
     return order.order_subtype === 'delivery'
       ? `DELIVERY #${order.id}`
-      : `TAKEAWAY #${order.id}`;
+      : `TAKEAWAY ${ref}`;
   }
   return `TABLE ${order.table_number != null ? order.table_number : '—'}`;
 }
@@ -507,12 +596,18 @@ function multiPage(body, copies) {
   `).join('');
 }
 
-function wrapHTML(pages) {
+// SEPOS-PRINT-FONT-001 — HTML/Electron kitchen multiplier. Centred so the role's
+// DEFAULT = today's px (kitchen default 'large' = ×1.0), no regression.
+const HTML_FS_KITCHEN = { normal: 0.85, large: 1.0, xlarge: 1.2 };
+const kitchenFs = (settings, role = 'kitchen') =>
+  HTML_FS_KITCHEN[(settings && settings[`${role}_font_scale`]) || 'large'] ?? 1;
+
+function wrapHTML(pages, fs = 1) {
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <style>${ticketCSS()}</style>
+  <style>${ticketCSS(fs)}</style>
 </head>
 <body>${pages}</body>
 </html>`;

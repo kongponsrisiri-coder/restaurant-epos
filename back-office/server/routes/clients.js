@@ -169,6 +169,25 @@ function renderTemplate(filePath, vars) {
   });
 }
 
+// ── SEC-2026-07 — redact tenant secrets from the metadata bag before it
+// leaves the server. The bag legitimately holds provisioning credentials
+// (sync_secret, tenant DB URL, PINs, API keys, setup/jwt secrets) that the
+// UI displays MASKED on the Setup tab — but they were being shipped in full
+// to every authenticated ops user (incl. read-only support/viewer roles) and
+// for EVERY client in the list. We strip them from the list unconditionally
+// and from the detail view for non-admins. Pattern-based so new secret-ish
+// keys are caught automatically; benign fields (slugs, urls, account_ref,
+// stripe_account_id, pk_live, addresses, onboarding flags) are preserved.
+const SECRET_META_RE = /secret|password|(^|_)pin$|(^|_)sk_|sk_live|sk_test|api[_-]?key|database_url|(^|_)token$|jwt|webhook|admin_login/i;
+function redactMetadata(meta) {
+  if (!meta || typeof meta !== 'object') return meta;
+  const out = {};
+  for (const k of Object.keys(meta)) {
+    out[k] = SECRET_META_RE.test(k) ? '••••••••' : meta[k];
+  }
+  return out;
+}
+
 // List all clients with their LATEST health-check row joined in. One round
 // trip — DISTINCT ON gives us the most recent row per client_id.
 router.get('/', async (req, res) => {
@@ -189,7 +208,8 @@ router.get('/', async (req, res) => {
       ) h ON TRUE
       ORDER BY c.created_at DESC
     `);
-    res.json(r.rows);
+    // SEC-2026-07 — never ship tenant secrets in the all-clients list.
+    res.json(r.rows.map(row => (row && row.metadata) ? { ...row, metadata: redactMetadata(row.metadata) } : row));
   } catch (err) {
     console.error('[ops-clients] list error', err);
     res.status(500).json({ error: err.message });
@@ -232,8 +252,15 @@ router.get('/:id', async (req, res) => {
       pool.query('SELECT device_id, app_version, platform, last_seen FROM client_tills WHERE client_id = $1 ORDER BY last_seen DESC', [id]),
     ]);
     if (clientRes.rows.length === 0) return res.status(404).json({ error: 'Client not found' });
+    // SEC-2026-07 — only admins see the raw provisioning secrets on the Setup
+    // tab; support/viewer roles get them masked. Admins (e.g. Korakot) keep the
+    // full setup/credentials workflow unchanged.
+    const clientRow = clientRes.rows[0];
+    if (!(req.user && req.user.role === 'admin') && clientRow.metadata) {
+      clientRow.metadata = redactMetadata(clientRow.metadata);
+    }
     res.json({
-      client: clientRes.rows[0],
+      client: clientRow,
       health: healthRes.rows,
       notes:  notesRes.rows,
       tills:  tillsRes.rows,
@@ -249,12 +276,19 @@ router.put('/:id', async (req, res) => {
     const id = parseInt(req.params.id, 10);
     // Whitelisted updatable fields — keeps the endpoint safe from
     // arbitrary column injection via the request body.
-    const allowed = [
+    // SEC-2026-07 — non-admins (support/viewer) may edit basic contact fields
+    // only; billing, go-live status, and the credentials `metadata` bag are
+    // admin-only (prevents a non-admin overwriting tenant secrets or flipping
+    // a client live/churned). Admins keep the full field set unchanged.
+    const isAdmin = req.user && req.user.role === 'admin';
+    const allowed = isAdmin ? [
       'restaurant_name', 'owner_name', 'email', 'phone', 'railway_url',
       'plan', 'status', 'monthly_fee', 'trial_start', 'sub_start', 'next_billing',
       'metadata',  // SEPOS-WEB-002 — flexible setup / credentials bag.
       'product',   // BO-SPA-001 — 'restaurant' | 'spa'
       'slug',      // BO-SLUG-001 — subdomain slug
+    ] : [
+      'restaurant_name', 'owner_name', 'email', 'phone', 'railway_url', 'product', 'slug',
     ];
     const sets = [];
     const params = [];
@@ -274,7 +308,10 @@ router.put('/:id', async (req, res) => {
       params
     );
     if (r.rows.length === 0) return res.status(404).json({ error: 'Client not found' });
-    res.json(r.rows[0]);
+    // SEC-2026-07 — never echo the secrets bag back to a non-admin.
+    const updated = r.rows[0];
+    if (!isAdmin && updated.metadata) updated.metadata = redactMetadata(updated.metadata);
+    res.json(updated);
   } catch (err) {
     console.error('[ops-clients] update error', err);
     res.status(500).json({ error: err.message });
@@ -337,6 +374,144 @@ router.post('/:id/cancel-subscription', adminOnly, async (req, res) => {
   }
 });
 
+// BO-BILLING-001 — create a Stripe Checkout link for a client's subscription.
+// Covers both flows: send the URL to a remote client, OR open it on your iPad
+// on-site and enter their card there. On payment, the webhook
+// (checkout.session.completed) writes the Stripe ids back to this client row
+// and flips them to 'active'. Skippable — nothing is charged until they pay.
+// Legacy env-var → price mapping. Still honoured for existing plan keys, but
+// plans are now primarily discovered LIVE from Stripe (see GET /billing/plans
+// and resolvePriceId) so adding a product in Stripe needs no code/env change.
+const BILLING_PLAN_PRICE = {
+  pro:           process.env.STRIPE_PRICE_PRO,
+  founder:       process.env.STRIPE_PRICE_FOUNDER,
+  lite_booking:  process.env.STRIPE_PRICE_LITE_BOOKING,
+  lite_ordering: process.env.STRIPE_PRICE_LITE_ORDERING,
+  lite_bundle:   process.env.STRIPE_PRICE_LITE_BUNDLE,
+  spa:           process.env.STRIPE_PRICE_SPA,
+  test:          process.env.STRIPE_PRICE_TEST,
+};
+
+// Resolve a plan value to a Stripe price id, most specific first:
+//   1. it already IS a price id ("price_…")   2. a Stripe lookup_key
+//   3. a legacy env-mapped key                 → else null (caller 400s)
+async function resolvePriceId(plan) {
+  if (!plan) return null;
+  const v = String(plan);
+  if (v.startsWith('price_')) return v;
+  try {
+    const r = await stripe().prices.list({ lookup_keys: [v], active: true, limit: 1 });
+    if (r.data[0]) return r.data[0].id;
+  } catch (e) { console.warn('[billing] lookup_key resolve failed:', e.message); }
+  return BILLING_PLAN_PRICE[v] || null;
+}
+
+// GET /api/clients/billing/plans — live list of billable plans straight from
+// Stripe. Adding a recurring product/price in Stripe makes it appear here (and
+// in the ops dropdowns) automatically. Two-segment path can't collide with the
+// one-segment /:id routes.
+router.get('/billing/plans', async (req, res) => {
+  try {
+    const r = await stripe().prices.list({ active: true, type: 'recurring', limit: 100, expand: ['data.product'] });
+    const plans = r.data
+      .filter(p => p.product && p.product.active !== false && p.unit_amount != null)
+      .map(p => ({
+        value:    p.lookup_key || p.id,      // stored on the client + sent to checkout-link
+        price_id: p.id,
+        name:     (p.product && p.product.name) || p.nickname || p.id,
+        amount:   p.unit_amount,             // pence
+        currency: p.currency,
+        interval: p.recurring && p.recurring.interval,
+      }))
+      .sort((a, b) => (a.amount || 0) - (b.amount || 0));
+    res.json({ plans });
+  } catch (err) {
+    console.error('[ops-clients] billing/plans error', err.message);
+    res.status(500).json({ error: err.message || 'Could not load plans from Stripe' });
+  }
+});
+
+router.post('/:id/billing/checkout-link', adminOnly, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { rows } = await pool.query(
+      'SELECT id, restaurant_name, owner_name, email, plan FROM clients WHERE id = $1',
+      [id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Client not found' });
+    const client = rows[0];
+
+    const plan = (req.body && req.body.plan) || client.plan;
+    const priceId = await resolvePriceId(plan);
+    if (!priceId) {
+      return res.status(400).json({
+        error: `No Stripe price found for plan "${plan}". Create a recurring product in Stripe (optionally give it lookup_key "${plan}") — it'll appear in the plan list automatically.`,
+      });
+    }
+
+    const base = process.env.OPS_PUBLIC_URL || 'https://ops.siamepos.co.uk';
+    const session = await stripe().checkout.sessions.create({
+      mode: 'subscription',
+      line_items: [{ price: priceId, quantity: 1 }],
+      customer_email: client.email || undefined,
+      client_reference_id: String(id),
+      metadata: { client_id: String(id), plan },
+      subscription_data: { metadata: { client_id: String(id), plan } },
+      success_url: `${base}/clients/${id}?paid=1`,
+      cancel_url:  `${base}/clients/${id}?paid=0`,
+    });
+
+    res.json({ url: session.url, plan });
+  } catch (err) {
+    console.error('[ops-clients] checkout-link error', err.message);
+    res.status(500).json({ error: err.message || 'Could not create payment link' });
+  }
+});
+
+// BO-BILLING-001 — link an EXISTING Stripe subscription (created outside ops,
+// e.g. by hand in the dashboard) to this client, matched by the client's email.
+// Fixes clients billed before the payment-link flow — their row had no Stripe
+// ids so ops showed "no subscription". Writes the ids (+ next billing) only;
+// leaves the client's status untouched so the go-live label isn't disturbed.
+router.post('/:id/billing/link-subscription', adminOnly, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { rows } = await pool.query('SELECT id, email FROM clients WHERE id = $1', [id]);
+    if (!rows.length) return res.status(404).json({ error: 'Client not found' });
+    const email = rows[0].email;
+    if (!email) return res.status(400).json({ error: 'Client has no email to match against Stripe.' });
+
+    const s = stripe();
+    const customers = await s.customers.list({ email, limit: 20 });
+    let found = null, customerId = null;
+    for (const c of customers.data) {
+      const subs = await s.subscriptions.list({ customer: c.id, status: 'all', limit: 20 });
+      const live = subs.data.find(su => ['active', 'trialing', 'past_due'].includes(su.status));
+      if (live) { found = live; customerId = c.id; break; }
+    }
+    if (!found) {
+      return res.status(404).json({ error: `No active Stripe subscription found for ${email}. Check the customer's email in Stripe matches this client.` });
+    }
+
+    // current_period_end lives on the sub (older APIs) or its first item (newer).
+    const periodEnd = found.current_period_end
+      || (found.items && found.items.data && found.items.data[0] && found.items.data[0].current_period_end);
+    const nextBilling = periodEnd ? new Date(periodEnd * 1000).toISOString().slice(0, 10) : null;
+
+    const upd = await pool.query(
+      `UPDATE clients SET stripe_customer_id = $2, stripe_subscription_id = $3,
+         next_billing = COALESCE($4, next_billing),
+         sub_start = COALESCE(sub_start, CURRENT_DATE)
+       WHERE id = $1 RETURNING id, restaurant_name`,
+      [id, customerId, found.id, nextBilling]
+    );
+    res.json({ linked: true, client: upd.rows[0], subscription_id: found.id, customer_id: customerId });
+  } catch (err) {
+    console.error('[ops-clients] link-subscription error', err.message);
+    res.status(500).json({ error: err.message || 'Could not link subscription' });
+  }
+});
+
 // ── SEPOS-029 — onboarding wizard endpoints ────────────────────────
 
 /**
@@ -349,7 +524,7 @@ router.post('/:id/cancel-subscription', adminOnly, async (req, res) => {
  * Wizard-only fields land in clients.metadata as a flat bag so we don't
  * have to ALTER TABLE for every new question we ever want to ask.
  */
-router.post('/onboard', async (req, res) => {
+router.post('/onboard', adminOnly, async (req, res) => {
   try {
     const b = req.body || {};
     if (!b.restaurant_name?.trim()) {
@@ -523,7 +698,7 @@ router.put('/:id/checklist', async (req, res) => {
 // the URL stored in clients.metadata.tenant_database_url and runs
 // the same staff + settings SQL the /seed.sql download produces.
 // On success it ticks staff_seeded + settings_seeded automatically.
-router.post('/:id/provision/seed-db', async (req, res) => {
+router.post('/:id/provision/seed-db', adminOnly, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const cur = await pool.query('SELECT * FROM clients WHERE id = $1', [id]);
@@ -640,7 +815,7 @@ router.get('/:id/provision/railway-template', async (req, res) => {
 // attaches the {slug}.siamepos.co.uk subdomain, and ticks
 // netlify_provisioned + dns_pointed on success. SSL is requested
 // best-effort and stamped on the response.
-router.post('/:id/provision/netlify', async (req, res) => {
+router.post('/:id/provision/netlify', adminOnly, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const cur = await pool.query('SELECT * FROM clients WHERE id = $1', [id]);
@@ -695,7 +870,7 @@ router.post('/:id/provision/netlify', async (req, res) => {
 // Pre-req: tenant_railway_url must be set, and the tenant must have a real
 // JWT_SECRET/SETUP_SECRET on Railway — otherwise set-credentials uses a random
 // per-boot secret and (correctly) rejects every call with 403.
-router.post('/:id/provision/owner-login', async (req, res) => {
+router.post('/:id/provision/owner-login', adminOnly, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const cur = await pool.query('SELECT * FROM clients WHERE id = $1', [id]);
@@ -794,7 +969,7 @@ router.get('/:id/security', async (req, res) => {
 
 // Run the live AUTH_SECRET probe against the tenant + persist the result.
 // This is the one check that cannot be hand-ticked — it must be proven.
-router.post('/:id/security/verify', async (req, res) => {
+router.post('/:id/security/verify', adminOnly, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const cur = await pool.query('SELECT * FROM clients WHERE id = $1', [id]);
@@ -837,7 +1012,7 @@ router.post('/:id/security/verify', async (req, res) => {
 
 // Toggle a MANUAL attestation (admin_pin, tokens_revoked). Auto checks are
 // rejected here — they can only be proven via /security/verify.
-router.put('/:id/security', async (req, res) => {
+router.put('/:id/security', adminOnly, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const { key, value } = req.body || {};

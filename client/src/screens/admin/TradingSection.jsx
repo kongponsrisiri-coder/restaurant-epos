@@ -15,28 +15,36 @@ export default function TradingSection() {
     getSummaryReport(from, to).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
   }, [period, customFrom, customTo]);
 
-  const avgPerHead  = data?.total_covers > 0 ? data.total_sales / data.total_covers : 0;
-  const avgPerCover = data?.order_count  > 0 ? data.total_sales / data.order_count  : 0;
+  // SEPOS-REPREC-001 — the headline + averages track MONEY TAKEN (total_paid) so
+  // Trading reconciles exactly with the Bills page and its own Payment Methods
+  // breakdown below. total_sales is the order-value figure (kept for the Reports
+  // breakdown); it can differ from money taken by tips / overpayments.
+  const takings     = Number(data?.total_paid ?? data?.total_sales ?? 0);
+  const avgPerHead  = data?.total_covers > 0 ? takings / data.total_covers : 0;
+  const avgPerCover = data?.order_count  > 0 ? takings / data.order_count  : 0;
 
   return (
     <div style={{ padding: 'clamp(14px, 4vw, 24px)' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e', marginBottom: 16 }}>Trading Summary</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 16 }}>Trading Summary</h1>
       {/* Period chips — horizontal-scroll strip on narrow screens so
           Today / Weekly / Monthly / Custom always sit on one line and
           the user can swipe instead of stacking vertically. */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, alignItems: 'center', flexWrap: 'wrap', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {['today', 'weekly', 'monthly', 'custom'].map(p => (
-          <button key={p} onClick={() => setPeriod(p)} style={{ padding: '8px 18px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, textTransform: 'capitalize', whiteSpace: 'nowrap', flexShrink: 0, background: period === p ? '#1a1a2e' : '#e0e0e0', color: period === p ? 'white' : '#555' }}>{p}</button>
+          <button key={p} onClick={() => setPeriod(p)} style={{ padding: '8px 18px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, textTransform: 'capitalize', whiteSpace: 'nowrap', flexShrink: 0, background: period === p ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0', color: period === p ? 'white' : '#555' }}>{p}</button>
         ))}
-        {period === 'custom' && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 6, flexShrink: 0 }}>
-            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
-            <span style={{ color: '#666', fontSize: 13 }}>→</span>
-            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
-          </div>
-        )}
+        {/* Date-range picker — always visible so any specific day is one tap away.
+            Picking a date jumps straight to the custom range (no need to hit
+            "Custom" first). A single day = set both boxes to the same date. */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 6, flexShrink: 0 }}>
+          <input type="date" value={customFrom} max={customTo || today}
+            onChange={e => { setCustomFrom(e.target.value); setPeriod('custom'); }}
+            style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
+          <span style={{ color: '#666', fontSize: 13 }}>→</span>
+          <input type="date" value={customTo} min={customFrom} max={today}
+            onChange={e => { setCustomTo(e.target.value); setPeriod('custom'); }}
+            style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
+        </div>
       </div>
       {loading ? <div style={{ color: '#888' }}>Loading...</div> : (
         <>
@@ -44,7 +52,7 @@ export default function TradingSection() {
               (≥320px viewport) and grows to 3+ on desktop. */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
             {[
-              { label: 'Total Sales',   value: `£${Number(data?.total_sales || 0).toFixed(2)}`, color: '#e94560' },
+              { label: 'Total Sales',   value: `£${takings.toFixed(2)}`, color: '#e94560' },
               { label: 'Orders',        value: data?.order_count || 0,                    color: '#3b82f6' },
               { label: 'Covers',        value: data?.total_covers || 0,                   color: '#22c55e' },
               { label: 'Avg per Cover', value: `£${avgPerHead.toFixed(2)}`,               color: '#eab308' },
@@ -58,7 +66,7 @@ export default function TradingSection() {
           </div>
           {data?.by_method && Object.keys(data.by_method).length > 0 && (
             <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontWeight: 700, marginBottom: 12, color: '#1a1a2e' }}>Payment Methods</div>
+              <div style={{ fontWeight: 700, marginBottom: 12, color: 'var(--brand-primary, #1a1a2e)' }}>Payment Methods</div>
               {Object.entries(data.by_method).map(([method, amount]) => (
                 <div key={method} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
                   <span style={{ color: '#555' }}>{method}</span>
@@ -81,13 +89,13 @@ export default function TradingSection() {
                 {Number(data.vouchers_sold?.till_total || 0) > 0 && (
                   <div style={{ background: 'white', borderRadius: 8, padding: '10px 14px' }}>
                     <div style={{ fontSize: 11, color: '#888' }}>↳ Via till (cash/card)</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>£{Number(data.vouchers_sold.till_total).toFixed(2)}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>£{Number(data.vouchers_sold.till_total).toFixed(2)}</div>
                   </div>
                 )}
                 {Number(data.vouchers_sold?.stripe_total || 0) > 0 && (
                   <div style={{ background: 'white', borderRadius: 8, padding: '10px 14px' }}>
                     <div style={{ fontSize: 11, color: '#888' }}>↳ Online (Stripe)</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>£{Number(data.vouchers_sold.stripe_total).toFixed(2)}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>£{Number(data.vouchers_sold.stripe_total).toFixed(2)}</div>
                   </div>
                 )}
                 <div style={{ background: 'white', borderRadius: 8, padding: '10px 14px' }}>
@@ -99,14 +107,14 @@ export default function TradingSection() {
           )}
           {data?.orders?.length > 0 && (
             <div style={{ background: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontWeight: 700, marginBottom: 12, color: '#1a1a2e' }}>Recent Orders</div>
+              <div style={{ fontWeight: 700, marginBottom: 12, color: 'var(--brand-primary, #1a1a2e)' }}>Recent Orders</div>
               {data.orders.slice(0, 10).map(order => (
                 // Korakot 2026-06-02: dropped the · #{order.id} segment so
                 // the Trading summary's Recent Orders list matches Bills /
                 // Reports — operators reference by Table + time, not bill #.
                 <div key={order.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0', fontSize: 14 }}>
                   <span style={{ color: '#555' }}>Table {order.table_number} · {order.method}</span>
-                  <span style={{ fontWeight: 700, color: '#1a1a2e' }}>£{Number(order.paid_amount ?? order.total ?? 0).toFixed(2)}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>£{Number(order.paid_amount ?? order.total ?? 0).toFixed(2)}</span>
                 </div>
               ))}
             </div>

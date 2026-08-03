@@ -1,11 +1,24 @@
 import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { getSettings, updateSettings, getDiscountReasons, addDiscountReason, deleteDiscountReason, getCategories, updateCategoryBar, updateCategoryDefaultCourse, getNetworkInfo, getArchiveStatus, openArchiveFolder, runArchive, getMigrationStatus, getStorageStats, getTunnelStatus, getKitchenTemplates, createKitchenTemplate, updateKitchenTemplate, deleteKitchenTemplate, assertOk, SERVER_URL, isHostMode } from '../../api';
+import { applyBrandTheme, BRAND_PRESETS, DEFAULT_PRIMARY, DEFAULT_ACCENT } from '../../theme'; // SEPOS-BRAND-001
 import DiningDurationSettings from './DiningDurationSettings';
 import { confirm } from '../../utils/confirm';
 import { getTenantUrl, clearRole } from '../../native/tenant';
 import { isNativeApp } from '../../native/printer';
 import { getHostStatus, startHost, stopHost, requestIgnoreBatteryOptimizations, saveHostConfig, getHostConfig, syncNow, getLanIp, reloadHostConfig } from '../../native/nodeHost';
+
+// QR codes render to a <canvas>, so the qrcode lib needs a REAL hex colour —
+// it can't parse a CSS `var(--brand-primary,…)` string (throws → blank QR).
+// Resolve the live brand colour to hex, falling back to navy so the QR always
+// draws even before the theme vars are set.
+function brandQrDark() {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim();
+    if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) return v;
+  } catch { /* SSR / no DOM */ }
+  return DEFAULT_PRIMARY || '#0D1B3E';
+}
 
 // SEPOS-028 — "any device as a till" (cloud model). Shows this till's cloud
 // address + a QR; a new device opens the SiamEPOS app → Scan QR → joins. Unlike
@@ -32,8 +45,8 @@ function AddTillCard({ cardStyle }) {
   useEffect(() => {
     let cancelled = false;
     if (!tenant) return;
-    QRCode.toDataURL(tenant, { width: 220, margin: 1, errorCorrectionLevel: 'M', color: { dark: '#0D1B3E', light: '#FFFFFF' } })
-      .then(d => { if (!cancelled) setQr(d); }).catch(() => {});
+    QRCode.toDataURL(tenant, { width: 220, margin: 1, errorCorrectionLevel: 'M', color: { dark: brandQrDark(), light: '#FFFFFF' } })
+      .then(d => { if (!cancelled) setQr(d); }).catch((err) => console.warn('[add-till] QR failed:', err));
     return () => { cancelled = true; };
   }, [tenant]);
   const test = async () => {
@@ -127,8 +140,8 @@ function KitchenTemplatesCard({ cardStyle }) {
   return (
     <div style={cardStyle}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>📢 Kitchen Message Templates</h2>
-        <button onClick={startNew} style={{ padding:'8px 14px', borderRadius:8, border:'1px solid #0D1B3E', background:'#0D1B3E', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>+ New</button>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', margin:0 }}>📢 Kitchen Message Templates</h2>
+        <button onClick={startNew} style={{ padding:'8px 14px', borderRadius:8, border:'1px solid var(--brand-primary,#0D1B3E)', background:'var(--brand-primary,#0D1B3E)', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>+ New</button>
       </div>
       <p style={{ fontSize:13, color:'#888', marginBottom:14, lineHeight:1.5 }}>
         One-tap pills for waiters to send common messages to the kitchen — allergies, holds, VIP, birthdays.
@@ -143,7 +156,7 @@ function KitchenTemplatesCard({ cardStyle }) {
           <div key={t.id} style={{ padding:'10px 14px', borderBottom:'1px solid #f0f0f0', display:'flex', alignItems:'center', gap:12 }}>
             <span style={{ fontSize:20, width:28, textAlign:'center' }}>{t.icon || '·'}</span>
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:14, fontWeight:700, color:'#1a1a2e' }}>{t.label}</div>
+              <div style={{ fontSize:14, fontWeight:700, color:'var(--brand-primary, #1a1a2e)' }}>{t.label}</div>
               <div style={{ fontSize:12, color:'#666', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.message}</div>
             </div>
             <button onClick={() => setEditing({ ...t })} style={{ padding:'6px 10px', borderRadius:6, border:'1px solid #ddd', background:'white', fontSize:12, fontWeight:600, cursor:'pointer' }}>Edit</button>
@@ -155,7 +168,7 @@ function KitchenTemplatesCard({ cardStyle }) {
       {editing && (
         <div style={{ position:'fixed', top: 0, right: 0, bottom: 0, left: 0, background:'rgba(0,0,0,0.6)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
           <div style={{ background:'white', borderRadius:14, maxWidth:480, width:'100%', padding:'20px 22px' }}>
-            <h3 style={{ fontSize:17, fontWeight:800, margin:'0 0 14px', color:'#1a1a2e' }}>{editing.id ? 'Edit template' : 'New template'}</h3>
+            <h3 style={{ fontSize:17, fontWeight:800, margin:'0 0 14px', color:'var(--brand-primary, #1a1a2e)' }}>{editing.id ? 'Edit template' : 'New template'}</h3>
             <div style={{ display:'grid', gap:12 }}>
               <label style={{ fontSize:12, fontWeight:700, color:'#555' }}>
                 Label (waiter sees this)
@@ -188,7 +201,7 @@ function KitchenTemplatesCard({ cardStyle }) {
               <button onClick={() => setEditing(null)}
                 style={{ flex:1, padding:12, borderRadius:8, border:'none', background:'#f0f0f0', fontWeight:700, fontSize:14, cursor:'pointer' }}>Cancel</button>
               <button onClick={save}
-                style={{ flex:2, padding:12, borderRadius:8, border:'none', background:'#0D1B3E', color:'white', fontWeight:800, fontSize:14, cursor:'pointer' }}>
+                style={{ flex:2, padding:12, borderRadius:8, border:'none', background:'var(--brand-primary,#0D1B3E)', color:'white', fontWeight:800, fontSize:14, cursor:'pointer' }}>
                 Save
               </button>
             </div>
@@ -265,7 +278,7 @@ function DataStorageCard({ cardStyle }) {
   if (!stats) {
     return (
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:8 }}>📊 Data Storage</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:8 }}>📊 Data Storage</h2>
         <p style={{ fontSize:13, color:'#888' }}>Loading…</p>
       </div>
     );
@@ -278,14 +291,14 @@ function DataStorageCard({ cardStyle }) {
   const row = (label, l, c) => (
     <div key={label} style={{ display:'grid', gridTemplateColumns:'1.2fr 1fr 1fr', alignItems:'center', padding:'8px 12px', borderBottom:'1px solid #f0f0f0', fontSize:13 }}>
       <span style={{ color:'#555' }}>{label}</span>
-      <span style={{ color:'#1a1a2e', fontFamily:'Menlo,Consolas,monospace', textAlign:'right' }}>{l ?? '—'}</span>
+      <span style={{ color:'var(--brand-primary, #1a1a2e)', fontFamily:'Menlo,Consolas,monospace', textAlign:'right' }}>{l ?? '—'}</span>
       <span style={{ color:'#888',     fontFamily:'Menlo,Consolas,monospace', textAlign:'right' }}>{c ?? '—'}</span>
     </div>
   );
   return (
     <div style={cardStyle}>
       <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>📊 Data Storage</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', margin:0 }}>📊 Data Storage</h2>
         <span style={{ fontSize:11, fontWeight:700, color:modeColor, background:modeColor === '#15803d' ? '#dcfce7' : '#fef3c7', padding:'3px 9px', borderRadius:12 }}>
           {modeLabel}
         </span>
@@ -375,7 +388,7 @@ function AppUpdatesCard({ cardStyle }) {
   return (
     <div style={cardStyle}>
       <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8, flexWrap:'wrap' }}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>⬆️ App &amp; Updates</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', margin:0 }}>⬆️ App &amp; Updates</h2>
         <span style={{ fontSize:11, fontWeight:700, color:badge.fg, background:badge.bg, padding:'3px 9px', borderRadius:12 }}>
           {badge.text}
         </span>
@@ -390,7 +403,7 @@ function AppUpdatesCard({ cardStyle }) {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap' }}>
           <div>
             <div style={{ fontSize:12, color:'#888' }}>Installed version</div>
-            <div style={{ fontSize:18, fontWeight:800, color:'#1a1a2e' }}>v{version || '—'}</div>
+            <div style={{ fontSize:18, fontWeight:800, color:'var(--brand-primary, #1a1a2e)' }}>v{version || '—'}</div>
             {lastChecked && (
               <div style={{ fontSize:11, color:'#aaa', marginTop:2 }}>
                 Last checked {lastChecked.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}
@@ -405,7 +418,7 @@ function AppUpdatesCard({ cardStyle }) {
             </button>
           ) : (
             <button onClick={check} disabled={busy}
-              style={{ padding:'10px 18px', borderRadius:8, border:'1px solid #1a1a2e', background:'white', color:'#1a1a2e', fontWeight:700, fontSize:13, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1 }}>
+              style={{ padding:'10px 18px', borderRadius:8, border:'1px solid var(--brand-primary, #1a1a2e)', background:'white', color:'var(--brand-primary, #1a1a2e)', fontWeight:700, fontSize:13, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1 }}>
               {status === 'checking' ? 'Checking…' : '🔄 Check for updates'}
             </button>
           )}
@@ -453,7 +466,7 @@ function RemoteAccessCard({ cardStyle }) {
   return (
     <div style={cardStyle}>
       <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>🌐 Remote Access</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', margin:0 }}>🌐 Remote Access</h2>
         <span style={{ fontSize:11, fontWeight:700, color: running ? '#15803d' : '#888', background: running ? '#dcfce7' : '#f0f0f0', padding:'3px 9px', borderRadius:12 }}>
           {running ? '🟢 Tunnel active' : enabled ? '🟡 Starting…' : '⚫ Disabled'}
         </span>
@@ -469,10 +482,10 @@ function RemoteAccessCard({ cardStyle }) {
       {enabled && (
         <div style={{ background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:10, padding:14 }}>
           <div style={{ fontSize:12, color:'#888', marginBottom:4 }}>Your remote URL</div>
-          <div style={{ fontSize:14, fontFamily:'Menlo,Consolas,monospace', color:'#1a1a2e', wordBreak:'break-all' }}>{url || '—'}</div>
+          <div style={{ fontSize:14, fontFamily:'Menlo,Consolas,monospace', color:'var(--brand-primary, #1a1a2e)', wordBreak:'break-all' }}>{url || '—'}</div>
           {url && (
             <button onClick={() => navigator.clipboard?.writeText(url)}
-              style={{ marginTop:10, padding:'8px 14px', borderRadius:8, border:'1px solid #1a1a2e', background:'white', color:'#1a1a2e', fontWeight:700, fontSize:12, cursor:'pointer' }}>
+              style={{ marginTop:10, padding:'8px 14px', borderRadius:8, border:'1px solid var(--brand-primary, #1a1a2e)', background:'white', color:'var(--brand-primary, #1a1a2e)', fontWeight:700, fontSize:12, cursor:'pointer' }}>
               🔗 Copy link
             </button>
           )}
@@ -492,6 +505,9 @@ function LocalArchiveCard({ cardStyle }) {
   const [status, setStatus] = useState(null);
   const [busy, setBusy]     = useState(false);
   const [toast, setToast]   = useState('');
+  // SEPOS-Z-REPLACE — rebuild the saved file for ANY past day (after amending
+  // an old bill + re-running its Z, that day's archive file needs a rebuild).
+  const [reDate, setReDate] = useState('');
 
   const refresh = async () => {
     try { setStatus(await getArchiveStatus()); } catch { setStatus({ error: true }); }
@@ -501,7 +517,7 @@ function LocalArchiveCard({ cardStyle }) {
   if (!status) {
     return (
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:8 }}>🗄️ Local Archive</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:8 }}>🗄️ Local Archive</h2>
         <p style={{ fontSize:13, color:'#888' }}>Checking…</p>
       </div>
     );
@@ -527,7 +543,7 @@ function LocalArchiveCard({ cardStyle }) {
   return (
     <div style={cardStyle}>
       <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', margin:0 }}>🗄️ Local Archive</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', margin:0 }}>🗄️ Local Archive</h2>
         <span style={{ fontSize:11, fontWeight:700, color:'#15803d', background:'#dcfce7', padding:'3px 9px', borderRadius:12 }}>
           {isLocal ? 'Auto-archive: ON' : 'Cloud install'}
         </span>
@@ -546,7 +562,7 @@ function LocalArchiveCard({ cardStyle }) {
           <div style={{ background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:10, padding:14, marginBottom:14 }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
               <span style={{ fontSize:12, color:'#888' }}>Last archived</span>
-              <span style={{ fontSize:13, fontWeight:600, color:'#1a1a2e' }}>{lastStr}</span>
+              <span style={{ fontSize:13, fontWeight:600, color:'var(--brand-primary, #1a1a2e)' }}>{lastStr}</span>
             </div>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
               <span style={{ fontSize:12, color:'#888' }}>Folder</span>
@@ -556,17 +572,42 @@ function LocalArchiveCard({ cardStyle }) {
 
           <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:12 }}>
             <button onClick={async () => { try { await openArchiveFolder(); } catch {} }}
-              style={{ padding:'9px 16px', borderRadius:8, border:'1px solid #1a1a2e', background:'#1a1a2e', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              style={{ padding:'9px 16px', borderRadius:8, border:'1px solid var(--brand-primary, #1a1a2e)', background:'var(--brand-primary, #1a1a2e)', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>
               📂 Open Folder
             </button>
             <button onClick={() => doRun('Today', 0)} disabled={busy}
-              style={{ padding:'9px 16px', borderRadius:8, border:'1px solid #C9A84C', background:'white', color:'#5b4a2a', fontWeight:700, fontSize:13, cursor:'pointer', opacity: busy ? 0.5 : 1 }}>
+              style={{ padding:'9px 16px', borderRadius:8, border:'1px solid var(--brand-accent,#C9A84C)', background:'white', color:'#5b4a2a', fontWeight:700, fontSize:13, cursor:'pointer', opacity: busy ? 0.5 : 1 }}>
               🗄️ Re-archive Today
             </button>
             <button onClick={() => doRun('Yesterday', 1)} disabled={busy}
               style={{ padding:'9px 16px', borderRadius:8, border:'1px solid #ddd', background:'white', color:'#555', fontWeight:700, fontSize:13, cursor:'pointer', opacity: busy ? 0.5 : 1 }}>
               ↺ Re-archive Yesterday
             </button>
+          </div>
+
+          {/* SEPOS-Z-REPLACE — any past day: after correcting an old bill and
+              re-running that day's Z, rebuild that day's saved file here. */}
+          <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginBottom:12 }}>
+            <input type="date" value={reDate} onChange={e => setReDate(e.target.value)}
+              max={new Date().toISOString().slice(0, 10)}
+              style={{ padding:'8px 10px', borderRadius:8, border:'1px solid #ddd', fontSize:13 }} />
+            <button
+              onClick={async () => {
+                if (!reDate) return;
+                setBusy(true); setToast('');
+                try {
+                  const r = await runArchive(reDate, true);
+                  if (r?.ok) setToast(`✓ ${reDate.split('-').reverse().join('/')} archived — file rebuilt with current figures`);
+                  else       setToast(`⚠ ${reDate.split('-').reverse().join('/')} skipped — ${r?.reason || 'unknown'}`);
+                  await refresh();
+                } catch (e) { setToast(`✗ Re-archive failed — ${e.message}`); }
+                finally { setBusy(false); setTimeout(() => setToast(''), 6000); }
+              }}
+              disabled={busy || !reDate}
+              style={{ padding:'9px 16px', borderRadius:8, border:'1px solid #ddd', background:'white', color:'#555', fontWeight:700, fontSize:13, cursor: (busy || !reDate) ? 'not-allowed' : 'pointer', opacity: (busy || !reDate) ? 0.5 : 1 }}>
+              📅 Re-archive that date
+            </button>
+            <span style={{ fontSize:11, color:'#aaa' }}>Fixed an old bill? Rebuild that day's saved file.</span>
           </div>
 
           {toast && (
@@ -583,7 +624,7 @@ function LocalArchiveCard({ cardStyle }) {
               <div style={{ background:'white', border:'1px solid #f0f0f0', borderRadius:8 }}>
                 {status.recent.slice(0, 6).map((f, i) => (
                   <div key={f.path} style={{ padding:'9px 12px', borderBottom: i < Math.min(status.recent.length, 6) - 1 ? '1px solid #f0f0f0' : 'none', fontSize:13, display:'flex', justifyContent:'space-between' }}>
-                    <span style={{ color:'#1a1a2e', fontFamily:'Menlo,Consolas,monospace' }}>{f.file}</span>
+                    <span style={{ color:'var(--brand-primary, #1a1a2e)', fontFamily:'Menlo,Consolas,monospace' }}>{f.file}</span>
                     <span style={{ color:'#888', fontSize:11 }}>{new Date(f.mtime).toLocaleDateString('en-GB', { day:'numeric', month:'short' })}</span>
                   </div>
                 ))}
@@ -614,7 +655,7 @@ function NetworkSetupCard({ cardStyle }) {
         try {
           const dataUrl = await QRCode.toDataURL(n.url, {
             width: 220, margin: 1, errorCorrectionLevel: 'M',
-            color: { dark: '#0D1B3E', light: '#FFFFFF' },
+            color: { dark: brandQrDark(), light: '#FFFFFF' },
           });
           if (!cancelled) setQr(dataUrl);
         } catch (err) { console.warn('[network-setup] QR failed:', err); }
@@ -624,6 +665,14 @@ function NetworkSetupCard({ cardStyle }) {
   }, []);
 
   if (!info) return null;
+  // The cloud (Railway) server reports its datacenter container IP (e.g.
+  // 10.x:8080) — a real address, but useless as a LAN host. In the cloud web
+  // app there's nothing to point tablets at over the LAN (they just open the
+  // same cloud URL), so show the cloud "any device" QR instead of a bogus LAN
+  // address. Desktop / Sunmi-host installs report local:true and keep the LAN
+  // card. (Old desktop servers send no `local` field → undefined → LAN card,
+  // which is correct for them.)
+  if (info.local === false) return <AddTillCard cardStyle={cardStyle} />;
 
   const copy = async () => {
     try {
@@ -657,19 +706,19 @@ function NetworkSetupCard({ cardStyle }) {
   const testBg    = testState === 'ok'   ? '#22c55e'
                   : testState === 'fail' ? '#ef4444'
                   : 'rgba(255,255,255,0)';
-  const testColor = testState === 'ok' || testState === 'fail' ? 'white' : '#0D1B3E';
-  const testBorder = testState === 'ok' || testState === 'fail' ? 'none' : '1px solid #0D1B3E';
+  const testColor = testState === 'ok' || testState === 'fail' ? 'white' : 'var(--brand-primary,#0D1B3E)';
+  const testBorder = testState === 'ok' || testState === 'fail' ? 'none' : '1px solid var(--brand-primary,#0D1B3E)';
 
   return (
     <div style={cardStyle}>
-      <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:6 }}>📱 Network Setup</h2>
+      <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:6 }}>📱 Network Setup</h2>
       <p style={{ fontSize:13, color:'#888', marginBottom:16 }}>
         Connect kitchen and bar tablets on the same Wi-Fi.
       </p>
       <div style={{ display:'flex', gap:20, alignItems:'flex-start', flexWrap:'wrap' }}>
         <div style={{ flex:1, minWidth:240 }}>
           <div style={{
-            background:'#0D1B3E', color:'#C9A84C', padding:'14px 18px',
+            background:'var(--brand-primary,#0D1B3E)', color:'var(--brand-accent,#C9A84C)', padding:'14px 18px',
             borderRadius:10, fontFamily:'Menlo, Consolas, monospace',
             fontSize:16, fontWeight:800, textAlign:'center',
             marginBottom:12, userSelect:'text', wordBreak:'break-all'
@@ -679,8 +728,8 @@ function NetworkSetupCard({ cardStyle }) {
           <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
             <button onClick={copy} style={{
               padding:'10px 20px', borderRadius:8, border:'none',
-              background: copied ? '#22c55e' : '#C9A84C',
-              color: copied ? 'white' : '#0D1B3E',
+              background: copied ? '#22c55e' : 'var(--brand-accent,#C9A84C)',
+              color: copied ? 'white' : 'var(--brand-primary,#0D1B3E)',
               fontWeight:700, cursor:'pointer', fontSize:13
             }}>
               {copied ? '✓ Copied' : 'Copy URL'}
@@ -735,7 +784,7 @@ function BarCategoryManager() {
       {categories.map(cat => (
         <div key={cat.id} style={{ background:'#f8f8f8', borderRadius:10, padding:'12px 16px' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:cat.is_bar?0:10 }}>
-            <span style={{ fontSize:14, fontWeight:700, color:'#1a1a2e' }}>{cat.name}</span>
+            <span style={{ fontSize:14, fontWeight:700, color:'var(--brand-primary, #1a1a2e)' }}>{cat.name}</span>
             <button onClick={() => toggleBar(cat)} style={{ padding:'6px 16px', borderRadius:8, border:'none', cursor:'pointer', fontWeight:600, fontSize:12, background:cat.is_bar?'#dbeafe':'#f0f0f0', color:cat.is_bar?'#1e40af':'#555' }}>{cat.is_bar?'🍹 Bar ✓':'Not bar'}</button>
           </div>
           {!cat.is_bar && (
@@ -1232,8 +1281,14 @@ export default function SettingsSection() {
     receipt_footer:          'Thank you for dining with us!',
     service_charge_rate:     '12.5',
     service_charge_enabled:  '1',
+    till_send_lock:          '1',   // SEPOS-TILL-LOCK-001 — back to sign-in after sending an order
+    till_idle_minutes:       '2',   // SEPOS-TILL-LOCK-001 — auto sign-out after idle ('0' = off)
     kitchen_print_mode:      'print',   // 'print' | 'kds' | 'both'
     kitchen_language:        'en_th',  // 'en_th' | 'en'
+    brand_logo:              '',   // SEPOS-BRAND-001 — on-screen logo (separate from receipt logo)
+    brand_logo_size:         'large', // SEPOS-BRAND-001 — login/header logo size: 'small'|'medium'|'large'|'xl'
+    brand_primary:           '',   // theme primary colour (blank = default navy)
+    brand_accent:            '',   // theme accent colour (blank = default gold)
   });
   const [reasons, setReasons]     = useState([]);
   const [newReason, setNewReason] = useState('');
@@ -1316,6 +1371,7 @@ export default function SettingsSection() {
   // desktop). Surface an alert only if the request fails outright.
   const handleSave = () => {
     setSaved(true);
+    applyBrandTheme(settings); // SEPOS-BRAND-001 — repaint the app immediately on save
     setTimeout(() => setSaved(false), 2500);
     updateSettings(settings).then(assertOk).catch(err => {
       setSaved(false);
@@ -1514,16 +1570,108 @@ export default function SettingsSection() {
   };
 
   const inputStyle = { width:'100%', padding:'10px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14, boxSizing:'border-box' };
+  // SEPOS-BRAND-001 — on-screen brand logo (base64 data URL, no thermal
+  // conversion — this one's for the app, not the receipt).
+  const handleBrandLogoUpload = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (file.size > 400 * 1024) alert('That logo is a bit large — a PNG/SVG under ~400KB works best.');
+    const reader = new FileReader();
+    reader.onload = () => setSettings(prev => ({ ...prev, brand_logo: reader.result }));
+    reader.readAsDataURL(file);
+  };
+
   const labelStyle = { fontSize:13, fontWeight:600, color:'#555', display:'block', marginBottom:6 };
   const cardStyle  = { background:'white', borderRadius:12, padding:24, marginBottom:20, boxShadow:'0 1px 4px rgba(0,0,0,0.08)' };
 
   return (
     <div style={{ padding:24, maxWidth:640 }}>
-      <h1 style={{ fontSize:22, fontWeight:700, color:'#1a1a2e', marginBottom:24 }}>Settings</h1>
+      <h1 style={{ fontSize:22, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:24 }}>Settings</h1>
+
+      {/* ── Branding (app appearance) ── SEPOS-BRAND-001 ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:6 }}>🎨 Branding</h2>
+        <div style={{ fontSize:12.5, color:'#888', marginBottom:16 }}>Your logo + colours across the app. This is the <strong>on-screen</strong> logo — separate from the receipt logo further down, so a light or colourful logo here still prints cleanly on bills.</div>
+
+        {/* Brand logo */}
+        <label style={labelStyle}>App logo (login &amp; headers)</label>
+        <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:20 }}>
+          <div style={{ width:80, height:80, borderRadius:12, background: settings.brand_primary || DEFAULT_PRIMARY, display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', flexShrink:0 }}>
+            {settings.brand_logo
+              ? <img src={settings.brand_logo} alt="" style={{ maxWidth:'86%', maxHeight:'86%', objectFit:'contain' }} />
+              : <span style={{ color:'#fff', opacity:0.5, fontSize:11 }}>no logo</span>}
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            <label style={{ padding:'8px 16px', borderRadius:8, background:'var(--brand-primary, #1a1a2e)', color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer' }}>
+              📁 Choose logo
+              <input type="file" accept="image/*" onChange={handleBrandLogoUpload} style={{ display:'none' }} />
+            </label>
+            {settings.brand_logo && (
+              <button onClick={() => setSettings(prev => ({ ...prev, brand_logo:'' }))} style={{ padding:'6px 14px', borderRadius:8, border:'none', background:'#fee2e2', color:'#ef4444', fontSize:12, fontWeight:700, cursor:'pointer' }}>🗑 Remove</button>
+            )}
+          </div>
+        </div>
+
+        {/* SEPOS-BRAND-001 — on-screen logo size (login + headers). Per-client,
+            like the receipt logo size below. */}
+        <label style={labelStyle}>App logo size</label>
+        <div style={{ display:'flex', gap:8, marginBottom:20, flexWrap:'wrap' }}>
+          {[['small','Small'],['medium','Medium'],['large','Large'],['xl','Extra Large']].map(([val, lbl]) => (
+            <button key={val} onClick={() => setSettings(s => ({ ...s, brand_logo_size: val }))}
+              style={{ padding:'7px 15px', borderRadius:8, border:'2px solid', fontSize:13, fontWeight:700, cursor:'pointer',
+                borderColor: (settings.brand_logo_size || 'large') === val ? 'var(--brand-primary, #1a1a2e)' : '#ddd',
+                background:  (settings.brand_logo_size || 'large') === val ? 'var(--brand-primary, #1a1a2e)' : 'white',
+                color:       (settings.brand_logo_size || 'large') === val ? 'white' : '#555' }}>
+              {lbl}
+            </button>
+          ))}
+        </div>
+
+        {/* Colour presets */}
+        <label style={labelStyle}>Colour theme</label>
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:14 }}>
+          {BRAND_PRESETS.map(p => {
+            const active = (settings.brand_primary || DEFAULT_PRIMARY).toLowerCase() === p.primary.toLowerCase()
+              && (settings.brand_accent || DEFAULT_ACCENT).toLowerCase() === p.accent.toLowerCase();
+            return (
+              <button key={p.name} title={p.name} onClick={() => setSettings(prev => ({ ...prev, brand_primary:p.primary, brand_accent:p.accent }))}
+                style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 9px', borderRadius:8, border:`2px solid ${active ? 'var(--brand-primary, #1a1a2e)' : '#e5e5e5'}`, background:'#fff', cursor:'pointer' }}>
+                <span style={{ width:15, height:15, borderRadius:4, background:p.primary }} />
+                <span style={{ width:15, height:15, borderRadius:4, background:p.accent }} />
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Custom colours */}
+        <div style={{ display:'flex', gap:20, alignItems:'flex-end', flexWrap:'wrap' }}>
+          <div>
+            <label style={labelStyle}>Primary</label>
+            <input type="color" value={settings.brand_primary || DEFAULT_PRIMARY} onChange={e => setSettings(prev => ({ ...prev, brand_primary:e.target.value }))} style={{ width:52, height:40, border:'1px solid #ddd', borderRadius:8, cursor:'pointer', background:'none' }} />
+          </div>
+          <div>
+            <label style={labelStyle}>Accent</label>
+            <input type="color" value={settings.brand_accent || DEFAULT_ACCENT} onChange={e => setSettings(prev => ({ ...prev, brand_accent:e.target.value }))} style={{ width:52, height:40, border:'1px solid #ddd', borderRadius:8, cursor:'pointer', background:'none' }} />
+          </div>
+          <button onClick={() => setSettings(prev => ({ ...prev, brand_primary:'', brand_accent:'' }))} style={{ padding:'8px 14px', borderRadius:8, border:'1px solid #ddd', background:'#fff', fontSize:12, fontWeight:600, cursor:'pointer' }}>Reset to default</button>
+        </div>
+
+        {/* Live preview */}
+        <div style={{ marginTop:16, borderRadius:12, overflow:'hidden', border:'1px solid #eee' }}>
+          <div style={{ background: settings.brand_primary || DEFAULT_PRIMARY, padding:'18px 20px', display:'flex', alignItems:'center', gap:12 }}>
+            {settings.brand_logo
+              ? <img src={settings.brand_logo} alt="" style={{ height:32, maxWidth:80, objectFit:'contain' }} />
+              : <span style={{ width:28, height:28, borderRadius:'50%', background: settings.brand_accent || DEFAULT_ACCENT, display:'inline-block' }} />}
+            <span style={{ color:'#fff', fontWeight:800, fontFamily:'Georgia, serif' }}>{settings.company_name || 'Your Restaurant'}</span>
+            <span style={{ marginLeft:'auto', background: settings.brand_accent || DEFAULT_ACCENT, color: settings.brand_primary || DEFAULT_PRIMARY, fontWeight:800, fontSize:12, padding:'5px 12px', borderRadius:999 }}>Preview</span>
+          </div>
+        </div>
+        <div style={{ fontSize:11.5, color:'#999', marginTop:8 }}>Hit <strong>Save</strong> (bottom of Settings) to apply. Leave colours unset for the default SiamEPOS look.</div>
+      </div>
 
       {/* ── Business Details ── */}
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>🏢 Business Details</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🏢 Business Details</h2>
         <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
           {/* Logo upload */}
@@ -1546,7 +1694,7 @@ export default function SettingsSection() {
                   style={{ display:'none' }}
                   id="logo-upload"
                 />
-                <label htmlFor="logo-upload" style={{ display:'inline-block', padding:'10px 16px', borderRadius:8, border:'2px solid #1a1a2e', background:'white', color:'#1a1a2e', fontSize:13, fontWeight:700, cursor:'pointer', textAlign:'center' }}>
+                <label htmlFor="logo-upload" style={{ display:'inline-block', padding:'10px 16px', borderRadius:8, border:'2px solid var(--brand-primary, #1a1a2e)', background:'white', color:'var(--brand-primary, #1a1a2e)', fontSize:13, fontWeight:700, cursor:'pointer', textAlign:'center' }}>
                   📁 Choose Logo File
                 </label>
                 {logoPreview && (
@@ -1575,23 +1723,30 @@ export default function SettingsSection() {
                       {[['small','S'],['medium','M'],['large','L'],['full','Full']].map(([val, label]) => (
                         <button key={val} onClick={async () => {
                           setSettings(s => ({ ...s, receipt_logo_size: val }));
-                          if (!settings.company_logo) return;
+                          // Persist the preset even with no logo image uploaded.
+                          if (!settings.company_logo) { updateSettings({ receipt_logo_size: val }).catch(() => {}); return; }
                           try {
                             const bmp = await imageToThermalBitmap(settings.company_logo, sizeToWidth(val));
-                            setSettings(s => ({
-                              ...s,
+                            const patch = {
                               receipt_logo_size: val,
                               company_logo_bitmap:        bmp.b64,
                               company_logo_bitmap_width:  String(bmp.widthBytes),
                               company_logo_bitmap_height: String(bmp.height),
-                            }));
+                              company_logo_bitmap_rev:    '2',
+                            };
+                            setSettings(s => ({ ...s, ...patch }));
+                            // BUGFIX — persist the regenerated bitmap immediately (like the
+                            // upload + auto-rebuild paths do). Previously this only updated
+                            // React state, so the resized bitmap never reached the DB and the
+                            // printed receipt kept the old logo size regardless of the setting.
+                            await updateSettings(patch);
                             setBitmapPreview(bmp.previewDataUrl);
                             setBitmapInkPct(bmp.inkPct);
                           } catch (err) { console.warn('size change conversion failed:', err); }
                         }}
                           style={{ padding:'6px 12px', borderRadius:7, border:'2px solid', cursor:'pointer', fontWeight:700, fontSize:12,
-                            borderColor: settings.receipt_logo_size === val ? '#1a1a2e' : '#ddd',
-                            background:  settings.receipt_logo_size === val ? '#1a1a2e' : 'white',
+                            borderColor: settings.receipt_logo_size === val ? 'var(--brand-primary, #1a1a2e)' : '#ddd',
+                            background:  settings.receipt_logo_size === val ? 'var(--brand-primary, #1a1a2e)' : 'white',
                             color:       settings.receipt_logo_size === val ? 'white'   : '#555',
                           }}>{label}</button>
                       ))}
@@ -1627,7 +1782,7 @@ export default function SettingsSection() {
       {/* ── Receipt Preview ── */}
       {(settings.company_name || logoPreview) && (
         <div style={cardStyle}>
-          <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>🖨️ Receipt Preview</h2>
+          <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🖨️ Receipt Preview</h2>
           <div style={{ background:'white', border:'1px solid #e5e7eb', borderRadius:8, padding:'16px 20px', maxWidth:300, margin:'0 auto', fontFamily:'Courier New, monospace', fontSize:12 }}>
             {logoPreview && (
               <div style={{ textAlign:'center', marginBottom:8 }}>
@@ -1656,9 +1811,35 @@ export default function SettingsSection() {
         </div>
       )}
 
+      {/* ── SEPOS-TILL-LOCK-001 — Till security ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🔒 Till Security</h2>
+        <div style={{ display:'flex', alignItems:'center', gap:16, marginBottom:14 }}>
+          <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:14 }}>
+            <input type="checkbox" checked={settings.till_send_lock!=='0'} onChange={e => setSettings({...settings, till_send_lock:e.target.checked?'1':'0'})} />
+            Return to the sign-in screen after sending an order
+          </label>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:8 }}>
+          <label style={{ fontSize:14, fontWeight:600, color:'#555' }}>Auto sign-out when idle</label>
+          <select value={settings.till_idle_minutes||'2'} onChange={e => setSettings({...settings, till_idle_minutes:e.target.value})}
+            style={{ padding:'8px 10px', border:'1px solid #ddd', borderRadius:8, fontSize:14 }}>
+            <option value="0">Off</option>
+            <option value="1">After 1 minute</option>
+            <option value="2">After 2 minutes</option>
+            <option value="5">After 5 minutes</option>
+            <option value="10">After 10 minutes</option>
+          </select>
+        </div>
+        <div style={{ fontSize:12, color:'#888', lineHeight:1.5 }}>
+          Staff sign back in with their PIN in seconds. Unsent basket items are kept on the table.
+          Kitchen and Bar displays are never signed out automatically.
+        </div>
+      </div>
+
       {/* ── Service Charge ── */}
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>💳 Service Charge</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>💳 Service Charge</h2>
         <div style={{ display:'flex', alignItems:'center', gap:16, marginBottom:16 }}>
           <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:14 }}>
             <input type="checkbox" checked={settings.service_charge_enabled==='1'} onChange={e => setSettings({...settings, service_charge_enabled:e.target.checked?'1':'0'})} />
@@ -1672,9 +1853,34 @@ export default function SettingsSection() {
         <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Standard UK rate is 12.5%. This is optional and always shown separately on the bill.</div>
       </div>
 
+      {/* ── VAT treatment (SEPOS-VATMODE-001) ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🧾 VAT</h2>
+        <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+          <label style={{ fontSize:14, fontWeight:600, color:'#555' }}>How your menu prices are set</label>
+          <select value={settings.vat_mode || 'inclusive'} onChange={e => setSettings({...settings, vat_mode:e.target.value})} style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}>
+            <option value="inclusive">Prices include VAT (net = price ÷ 1.2)</option>
+            <option value="exclusive">Prices exclude VAT — add 20% on top (VAT = price × 20%)</option>
+          </select>
+        </div>
+        <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Affects the VAT breakdown on bills, receipts, the VAT report and the Z report. Service charge is never VATed. Per-item VAT rate is set on each menu item.</div>
+      </div>
+
+      {/* ── Booking deposits (SEPOS-DEPOSIT-001) ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🧾 Booking Deposits</h2>
+        <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:14 }}>
+          <input type="checkbox" checked={settings.deposits_enabled==='1'} onChange={e => setSettings({...settings, deposits_enabled:e.target.checked?'1':'0'})} />
+          Enable booking deposits
+        </label>
+        <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Take a deposit against a booking (Admin → Vouchers → Take deposit) and redeem it on the day as a <b>prepaid tender</b> in Mixed Payment — the full bill still records for sales + VAT; the deposit only reduces what's owed. Deposits are reported separately from gift vouchers and never count as till cash. When off, none of the deposit UI shows.</div>
+      </div>
+
+      {/* Print text size moved to Admin → Printers (SEPOS-PRINT-FONT-001) — it's a printer setting. */}
+
       {/* ── Delivery (SEPOS-DELIVERY-002) ── */}
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>🚗 Online Delivery</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🚗 Online Delivery</h2>
         <div style={{ fontSize:12, color:'#888', marginBottom:16 }}>
           Set both fields to offer delivery on the takeaway widget. The widget checks each customer's postcode against this radius — anyone outside is offered collection instead. Leave blank to keep takeaway collection-only.
         </div>
@@ -1704,9 +1910,30 @@ export default function SettingsSection() {
         </div>
       </div>
 
+      {/* ── Online Order Discount (SEPOS-TAKEAWAY-DISCOUNT) ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🎉 Online Order Discount</h2>
+        <div style={{ fontSize:12, color:'#888', marginBottom:16 }}>
+          Give customers a percentage off when they order through your own online takeaway widget — a direct reward for skipping the commission apps. Shows as a banner on the ordering page and as a discount line at checkout, on the kitchen ticket and in reports. Set 0 to switch it off.
+        </div>
+        <div>
+          <label style={{ fontSize:14, fontWeight:600, color:'#555', display:'block', marginBottom:6 }}>Discount on online orders (%)</label>
+          <input
+            value={settings.takeaway_discount_percent || ''}
+            onChange={e => setSettings({ ...settings, takeaway_discount_percent: e.target.value })}
+            type="number" step="1" min="0" max="50"
+            placeholder="e.g. 10"
+            style={{ width:120, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}
+          />
+        </div>
+        <div style={{ fontSize:12, color:'#aaa', marginTop:10 }}>
+          Applies to online takeaway &amp; delivery orders only — never to dine-in bills. Capped at 50%.
+        </div>
+      </div>
+
       {/* ── Courier Dispatch (SEPOS-DELIVERY-001) ── */}
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>🛵 Courier Dispatch</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🛵 Courier Dispatch</h2>
         <div style={{ fontSize:12, color:'#888', marginBottom:16 }}>
           When the kitchen marks a delivery order ready, SiamEPOS can automatically book a courier to collect and deliver it — the customer gets a live tracking link. Set up Online Delivery (above) first.
         </div>
@@ -1757,13 +1984,13 @@ export default function SettingsSection() {
       </div>
 
       {/* ── Save ── */}
-      <button onClick={handleSave} style={{ width:'100%', padding:'14px', borderRadius:10, border:'none', background:saved?'#22c55e':'#1a1a2e', color:'white', cursor:'pointer', fontWeight:700, fontSize:16, marginBottom:20, transition:'background 0.3s' }}>
+      <button onClick={handleSave} style={{ width:'100%', padding:'14px', borderRadius:10, border:'none', background:saved?'#22c55e':'var(--brand-primary, #1a1a2e)', color:'white', cursor:'pointer', fontWeight:700, fontSize:16, marginBottom:20, transition:'background 0.3s' }}>
         {saved ? '✓ Saved!' : 'Save All Settings'}
       </button>
 
       {/* ── Discount Reasons ── */}
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:16 }}>🏷️ Discount Reasons</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:16 }}>🏷️ Discount Reasons</h2>
         <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:16 }}>
           {reasons.map(r => (
             <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', background:'#f8f8f8', borderRadius:8 }}>
@@ -1784,7 +2011,7 @@ export default function SettingsSection() {
 
       {/* ── Bar Categories ── */}
       <div style={cardStyle}>
-        <h2 style={{ fontSize:16, fontWeight:700, color:'#1a1a2e', marginBottom:8 }}>🍹 Bar Categories</h2>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:8 }}>🍹 Bar Categories</h2>
         <p style={{ fontSize:13, color:'#888', marginBottom:16 }}>Select which categories show on the Bar screen</p>
         <BarCategoryManager />
       </div>

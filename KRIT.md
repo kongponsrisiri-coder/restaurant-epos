@@ -246,6 +246,50 @@ Events: new_order_items, course_fired, item_status_changed, item_voided, order_c
 
 ---
 
+## OPERATIONAL KNOWLEDGE — hard-won (updated 2026-07-05)
+
+*The stuff that isn't obvious from the code and has bitten us in production. Live paying clients now run on the system — treat every ship accordingly.*
+
+### 1. Multi-tenant: each restaurant is its OWN backend
+- Each client = its own **Railway service + Postgres + `<slug>.siamepos.co.uk`** backend. `RESTAURANT_ID` env identifies the tenant. Do NOT set `MULTI_TENANT` on a dedicated service. `<slug>.siamepos.co.uk` is the **API** — hitting it in a browser shows `Cannot GET /` (that's normal; the POS is the Netlify site, not the API).
+- **Per-tenant browser POS** = the same `client/` built with `export VITE_API_URL=https://<slug>.siamepos.co.uk` → a **separate Netlify site**. Inline `VITE_API_URL=x npm run build` does NOT work — must `export` it.
+- **`git push` does NOT deploy tenant POS sites** (nor siamepos.co.uk / siamepos.net). Only `app.siamepos.co.uk` + Railway auto-deploy on push. Tenant sites are **manual**: build → snapshot to `/tmp/dist-<slug>` → **verify (slug host present, `app.siamepos` absent = no tenant leak)** → `netlify deploy --prod --dir=/tmp/dist-<slug> --site=<id>`. Concurrent sessions clobber `dist/`, hence the snapshot. Site IDs: thannthai `40bc73f9-…`, baan-siam-344 `61e43156-…`.
+
+### 2. FOUR ship targets — a fix reaches each differently
+- **Backend** (`src/`) → `git push origin main` → Railway auto-deploys **every tenant backend**. Reaches Sunmi + desktop + browser **via the cloud, no reinstall**.
+- **`app.siamepos.co.uk`** (main web) → auto on push (Netlify).
+- **Tenant browser POS** → **manual** netlify deploy per site (above).
+- **Sunmi APK** → branch `android-app`: merge main, bump `versionCode`+`versionName` in `client/android/app/build.gradle`, `cd client && npm run build && npx cap sync android && cd android && JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew assembleRelease`. APK → `~/Documents/SiamEPOS-Android/`. Capacitor project lives at `client/android/`.
+- **Desktop (Mac/PC)** → bump `electron/package.json` version, `git tag vX.Y.Z && git push origin vX.Y.Z` → GitHub Actions builds signed DMG+EXE + auto-update files. **Mac target MUST include `zip`** or OTA auto-update silently breaks (the v1.6.100 lesson). `gh` CLI is NOT installed — use the GitHub REST API via curl to check runs.
+- **Rule:** client-side (`client/`) changes need the specific build(s); backend changes ride the cloud everywhere.
+
+### 3. THREE print paths — a print fix in one does NOT reach the others
+- **Sunmi native** → `client/src/native/escpos.js` (built-in printer, ops → `SunmiPrinter.printOps`).
+- **Network printer** → `src/services/printService.js` (`buildReceipt`/`buildKitchenTicket`, raw ESC/POS).
+- **Browser popup / Electron silent print** → `client/src/screens/ReceiptPrinter.jsx` + `KitchenTicket.js` (HTML).
+- **Mac/PC + browser tills = printService/HTML. Sunmi = escpos.** Always fix the right path(s). See memory `project_desktop_print_path_gaps`.
+
+### 4. Native app quirks (the Sunmi)
+- The Sunmi's screen is ≥768px → it runs the **desktop layout** (`isMobile = window.innerWidth < 768`), NOT mobile. Bugs that only affect the desktop branch (e.g. a modal rendered inside the `isMobile ? (...)` branch) hit the Sunmi too. **Render shared modals at the component top level, outside the isMobile ternary.**
+- On native, **raw `fetch()` to the cloud silently fails** — `api.js` routes through CapacitorHttp for a reason. Any `fetch(SERVER_URL + ...)` in a screen (MenuSection had several) won't persist on the Sunmi. Always use the `api.js` helpers.
+- Native prints must never `window.open()` (launches system Chrome off the till). Guard every print `window.open` with `!isNativeApp()`, including the pre-opened popup windows in `OrderScreen.sendOrder`.
+
+### 5. Data-type gotchas that crash / miscount
+- **PG returns `DECIMAL`/`NUMERIC` as strings** (`"5.00"`) and `TIMESTAMP` via the process TZ. Always `Number()`/`parseFloat()` before `.toFixed()` or math — a raw string hit `.toFixed()` = "ct.toFixed is not a function" (the discount crash). `src/db/database.js` `types.setTypeParser(1114, …→UTC)` fixes tz-naive timestamps; do NOT set `TZ=Europe/London` on tenant Railways (reads timers 1h off in BST).
+- **`api.js` helpers do NOT throw** — they resolve `{error}` on 4xx/5xx. Check `res.error` / wrap in `assertOk`, or a failed call silently looks like success (closed the kitchen-message modal on failure).
+- **`DECIMAL` receipt totals**: receipt totals come from `paymentDetails`, not recomputed from the item list — so display-only item merging can't change money.
+
+### 6. Ship discipline (Korakot's rule — live clients)
+- **Commit first (hold the push) → test on our end → ship (push/deploy/tag) only when verified good.** Every version can affect a live restaurant mid-service.
+- After a push: **verify** — curl the live endpoint, confirm the migration ran (`ALTER … ADD COLUMN IF NOT EXISTS`), check the tenant bundle has the change. Don't stop at "build passes".
+- **Give APK builds by explicit version** (`SiamEPOS-v1.4.28.apk`), never just "latest". Say whether an APK is even needed (client change = yes; backend-only = no). Bump `client/src/version.js` `APP_VERSION` with the APK `versionName` each release. Verify the version bump landed BEFORE pushing a git tag (never chain the edit + tag in one command).
+- New tenant onboarding leaves `restaurants.name = null` → login falls back to `settings.company_name`. Ready per-tenant configs live in `scripts/.secrets-<slug>*`.
+
+### 7. Where to look first
+- Order screen: `client/src/screens/OrderScreen.jsx` (has desktop + mobile branches). Bill/pay: `BillScreen.jsx`. Receipts: the three print paths above. Floor status/occupancy: `/api/tables/status` in `src/server.js`. Reports vs Bills discrepancy: Reports use `LEFT JOIN payments` (show no-payment closed orders), Bills require a payment — a "closed with items, no payment" phantom order inflates Reports.
+
+---
+
 ## HOW TO START A KRIT SESSION IN COWORK
 
 ```
@@ -255,3 +299,13 @@ Always give complete files, never partial snippets.
 Explain every step clearly — Korakot is learning.
 Reference CLAUDE.md for additional technical detail.
 ```
+
+**📌 STANDING RULE (Korakot, 2026-07-20): update `TEAM-STATUS.md` IN REAL TIME** — the moment you ship, decide, or hit a blocker, put the row on the board THEN AND THERE, not in a batch at session end. Concurrent sessions read the board live; a stale board causes double work and missed handoffs. (End-of-session tidy-up still applies on top.)
+
+**📜 KORAKOT'S PRODUCT & ENGINEERING RULES (taught in-session, overnight 20–21 Jul 2026 — the rolling master copy lives in TEAM-STATUS.md "KORAKOT'S RULES" section; append new ones BOTH places):**
+1. Right lane, right stack — build a client's features on their product's stack (spa client → siamepos-spa, not the restaurant cloud "because it's handy").
+2. AI reads real data, never invents — availability/prices/rota via live server-side tools; if the bot can't look it up, give it a tool.
+3. Owner-facing surfaces live in Admin, mobile-first — no secret-link pages; owners use phones, in-and-out must be practical.
+4. Escalation keeps the customer in the conversation — collect details, "a person will reply right here shortly"; never bounce to a phone number unless asked.
+5. Payment is always a link (Stripe), never in-chat; deposit-due + no-Stripe must refuse to silently confirm (Sam's W3).
+6. Tokens: no short default expiries for CI/service tokens; secrets stay Korakot-side — agents generate + verify, Korakot pastes.

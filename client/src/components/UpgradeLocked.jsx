@@ -6,7 +6,7 @@ export default function UpgradeLocked({ feature }) {
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', textAlign: 'center',
-      padding: '48px 24px', minHeight: 320, color: '#1a1a2e',
+      padding: '48px 24px', minHeight: 320, color: 'var(--brand-primary, #1a1a2e)',
     }}>
       <div style={{ fontSize: 56, marginBottom: 12 }}>🔒</div>
       <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 8px' }}>
@@ -17,7 +17,7 @@ export default function UpgradeLocked({ feature }) {
         Upgrade to unlock it — along with the rest of the full SiamEPOS system.
       </p>
       <div style={{
-        background: '#0D1B3E', color: '#C9A84C',
+        background: 'var(--brand-primary,#0D1B3E)', color: 'var(--brand-accent,#C9A84C)',
         padding: '12px 22px', borderRadius: 10, fontWeight: 700, fontSize: 14,
       }}>
         Contact us at info@siamepos.co.uk to upgrade

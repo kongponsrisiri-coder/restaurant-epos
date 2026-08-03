@@ -64,12 +64,12 @@ export default function StaffSection() {
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>👥 Staff</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>👥 Staff</h1>
         <button onClick={() => { setEditStaff(null); setForm({ name: '', pin: '', role: 'waiter', start_date: '', notes: '', employment_status: 'active' }); setShowForm(true); }} style={{ background: '#e94560', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }}>+ Add Staff</button>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {[{ key: 'active', label: `Active (${staff.filter(s => s.is_active).length})` }, { key: 'inactive', label: `Inactive (${staff.filter(s => !s.is_active).length})` }, { key: 'all', label: `All (${staff.length})` }].map(f => (
-          <button key={f.key} onClick={() => setFilterStatus(f.key)} style={{ padding: '8px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, background: filterStatus === f.key ? '#1a1a2e' : '#f0f0f0', color: filterStatus === f.key ? 'white' : '#555' }}>{f.label}</button>
+          <button key={f.key} onClick={() => setFilterStatus(f.key)} style={{ padding: '8px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, background: filterStatus === f.key ? 'var(--brand-primary, #1a1a2e)' : '#f0f0f0', color: filterStatus === f.key ? 'white' : '#555' }}>{f.label}</button>
         ))}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -77,7 +77,7 @@ export default function StaffSection() {
           <div key={s.id}>
             <div onClick={() => setSelectedStaff(selectedStaff?.id === s.id ? null : s)} style={{ background: 'white', borderRadius: 12, padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', opacity: s.is_active ? 1 : 0.6, cursor: 'pointer', border: selectedStaff?.id === s.id ? '2px solid #e94560' : '2px solid transparent' }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>{s.name}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>{s.name}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
                   <span style={{ background: roleColors[s.role] || '#888', color: 'white', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 20 }}>{s.role}</span>
                   {!s.is_active && <span style={{ background: '#fee2e2', color: '#ef4444', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 20 }}>Inactive</span>}
@@ -97,7 +97,7 @@ export default function StaffSection() {
                   {[{ label: 'Start Date', value: s.start_date || '—' }, { label: 'Status', value: s.employment_status || 'Active' }, { label: 'Member Since', value: s.created_at ? new Date(s.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—' }, { label: 'Role', value: s.role }].map(item => (
                     <div key={item.label} style={{ background: 'white', borderRadius: 8, padding: '12px 16px' }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', marginBottom: 4 }}>{item.label}</div>
-                      <div style={{ fontSize: 15, fontWeight: 600, color: '#1a1a2e' }}>{item.value}</div>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--brand-primary, #1a1a2e)' }}>{item.value}</div>
                     </div>
                   ))}
                 </div>
@@ -113,7 +113,7 @@ export default function StaffSection() {
       {showForm && (
         <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: 16, padding: 32, width: 420, maxHeight: '90vh', overflowY: 'auto' }}>
-            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24, color: '#1a1a2e' }}>{editStaff ? '✏️ Edit Staff' : '+ Add Staff'}</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24, color: 'var(--brand-primary, #1a1a2e)' }}>{editStaff ? '✏️ Edit Staff' : '+ Add Staff'}</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Full Name *</label><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>{editStaff ? 'New PIN (leave blank to keep)' : 'PIN (4 digits) *'}</label><input value={form.pin} onChange={e => setForm({ ...form, pin: e.target.value })} type="password" maxLength={4} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>

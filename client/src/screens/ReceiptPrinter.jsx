@@ -104,6 +104,10 @@ function _clientPrint({ order, items, settings, paymentDetails }) {
 }
 
 function openPrintPopup(html) {
+  // Never open an external browser window on the native app (Sunmi/Android):
+  // window.open launches system Chrome, which can't reach the thermal head and
+  // just confuses the operator. Native printing goes via built-in/network only.
+  if (isNativeApp()) { console.warn('[receipt] no printer available on native — skipping browser popup'); return; }
   const win = window.open('', '_blank', 'width=400,height=700,scrollbars=yes');
   if (!win) { alert('Pop-up blocked. Please allow pop-ups for this site to print receipts.'); return; }
   win.document.write(html);
@@ -120,6 +124,9 @@ function openPrintPopup(html) {
 function fmt(n) { return '£' + parseFloat(n || 0).toFixed(2); }
 
 function buildReceiptHTML({ order, items, settings, paymentDetails }) {
+  // SEPOS-PRINT-FONT-001 — receipt font multiplier (normal = today, no regression).
+  const rfs = ({ normal: 1.0, large: 1.2, xlarge: 1.4 })[settings?.receipt_font_scale || 'normal'] ?? 1;
+  const rpx = (n) => `${+(n * rfs).toFixed(1)}px`;
   const restaurantName  = settings?.company_name        || settings?.restaurant_name || 'SiamEPOS';
   const restaurantAddr  = settings?.company_address     || settings?.address         || '';
   const restaurantPhone = settings?.company_phone       || settings?.phone           || '';
@@ -148,7 +155,16 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
   const activeItems = (items || []).filter(i => !i.voided);
   const courseNames = { 1:'STARTERS', 2:'MAINS', 3:'DESSERTS', 4:'EXTRAS' };
   const byCourse = {};
-  activeItems.forEach(item => { const c = item.course||1; if(!byCourse[c]) byCourse[c]=[]; byCourse[c].push(item); });
+  activeItems.forEach(item => {
+    const c = item.course||1; if(!byCourse[c]) byCourse[c]=[];
+    // Merge identical items (same dish + options + price, undiscounted) into one
+    // "N x" line — separate sends of the same dish shouldn't be multiple 1x rows.
+    if (Number(item.discount_value) > 0) { byCourse[c].push({ ...item, quantity: Number(item.quantity)||0 }); return; }
+    const key = [item.menu_item_id, item.name||item.item_name, item.notes||'', item.unit_price].join('|');
+    const existing = byCourse[c].find(x => x._key === key);
+    if (existing) existing.quantity += Number(item.quantity)||0;
+    else byCourse[c].push({ ...item, quantity: Number(item.quantity)||0, _key: key });
+  });
 
   const itemRows = Object.keys(byCourse).sort().map(course => {
     const rows = byCourse[course].map(item => {
@@ -175,30 +191,28 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
   const scRow        = serviceCharge  > 0 ? `<tr><td>Service charge (${scRate}%)</td><td style="text-align:right;">${fmt(serviceCharge)}</td></tr>` : '';
   const tipRow       = tip            > 0 ? `<tr><td>Gratuity</td><td style="text-align:right;">${fmt(tip)}</td></tr>` : '';
 
-  // SEPOS-021 — VAT breakdown. Prices VAT-inclusive: net = gross × 100/(100+rate).
+  // SEPOS-021 / SEPOS-VATMODE-001 — VAT breakdown. vat_mode='inclusive' backs
+  // VAT out of the price; 'exclusive' adds rate% on top of the net sale.
+  const vatMode = settings.vat_mode === 'exclusive' ? 'exclusive' : 'inclusive';
   const vatBuckets = {};
   for (const i of activeItems) {
     const rate = Number(i.vat_rate ?? 20);
     let g = (i.quantity || 0) * (i.unit_price || 0);
     if (i.discount_type === 'percent') g *= 1 - ((i.discount_value || 0) / 100);
     if (i.discount_type === 'fixed')   g = Math.max(0, g - (i.discount_value || 0));
-    const net = rate > 0 ? g * (100 / (100 + rate)) : g;
-    const vat = g - net;
+    let net, vat;
+    if (rate <= 0)                    { net = g; vat = 0; }
+    else if (vatMode === 'exclusive') { net = g; vat = g * (rate / 100); }
+    else                              { net = g * (100 / (100 + rate)); vat = g - net; }
     if (!vatBuckets[rate]) vatBuckets[rate] = { rate, net: 0, vat: 0 };
     vatBuckets[rate].net += net;
     vatBuckets[rate].vat += vat;
   }
   const vatRows = Object.values(vatBuckets).sort((a, b) => a.rate - b.rate);
   const vatTotal = vatRows.reduce((s, b) => s + b.vat, 0);
-  const vatBlock = vatTotal > 0 ? `
-    <hr class="divider"/>
-    <table>
-      <tr><td colspan="2" style="font-size:10px;color:#666;padding-top:2px;text-transform:uppercase;letter-spacing:1px;">VAT Breakdown</td></tr>
-      ${vatRows.map(b => `
-        <tr><td style="font-size:10px;color:#444;">VAT ${b.rate}% on ${fmt(b.net)} net</td><td style="text-align:right;font-size:10px;">${fmt(b.vat)}</td></tr>
-      `).join('')}
-      <tr><td style="font-size:11px;font-weight:700;">Total VAT</td><td style="text-align:right;font-size:11px;font-weight:700;">${fmt(vatTotal)}</td></tr>
-    </table>` : '';
+  // VAT is the owner/accountant's domain — no VAT breakdown on the customer
+  // receipt (the admin VAT Report is kept separately for the accountant).
+  const vatBlock = '';
   const paymentRows  = method ? `
     <tr><td>Payment</td><td style="text-align:right;">${method}</td></tr>
     ${method==='Cash'&&amountPaid>0?`
@@ -223,10 +237,10 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Receipt - ${order.order_type === 'takeaway' ? `Online Order #${order.id}` : `Table ${order.table_number}`}</title>
+  <title>Receipt - ${order.order_type === 'takeaway' ? (order.table_number != null ? `Takeaway ${order.table_number}` : `Online Order #${order.id}`) : `Table ${order.table_number}`}</title>
   <style>
     *    { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family:'Courier New',Courier,monospace; font-size:12px; color:#000; background:white; width:80mm; margin:0 auto; padding:4mm 2mm; }
+    body { font-family:'Courier New',Courier,monospace; font-size:${rpx(12)}; color:#000; background:white; width:80mm; margin:0 auto; padding:4mm 2mm; }
     @media print {
       body { width:80mm; margin:0; padding:2mm 1mm; }
       @page { margin:0; size:80mm auto; }
@@ -234,7 +248,7 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
     table { width:100%; border-collapse:collapse; }
     .divider       { border:none; border-top:1px dashed #999; margin:6px 0; }
     .divider-solid { border:none; border-top:1px solid #000;  margin:6px 0; }
-    .total-row td  { padding:4px 0; border-top:2px solid #000; font-size:15px; font-weight:900; }
+    .total-row td  { padding:4px 0; border-top:2px solid #000; font-size:${rpx(15)}; font-weight:900; }
     .center        { text-align:center; }
     .small         { font-size:10px; color:#555; }
   </style>
@@ -250,13 +264,15 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
 
   <hr class="divider"/>
 
+  ${order.order_type !== 'takeaway' && order.table_number != null
+    ? `<div style="text-align:center;font-size:24px;font-weight:900;margin:2px 0 10px;">TABLE ${order.table_number}</div>` : ''}
+
   <table>
     ${order.order_type === 'takeaway'
-      ? `<tr><td>Type</td><td style="text-align:right;font-weight:700;">🥡 Online Order</td></tr>
+      ? `<tr><td>Type</td><td style="text-align:right;font-weight:700;">${order.table_number != null ? `🥡 Takeaway ${order.table_number}` : '🥡 Online Order'}</td></tr>
          ${order.customer_name ? `<tr><td>Customer</td><td style="text-align:right;">${order.customer_name}</td></tr>` : ''}
          ${order.pickup_time   ? `<tr><td>Pickup</td><td style="text-align:right;">${new Date(order.pickup_time).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/London'})}</td></tr>` : ''}`
-      : `<tr><td>Table</td>  <td style="text-align:right;font-weight:700;">${order.table_number||'—'}</td></tr>
-         <tr><td>Covers</td> <td style="text-align:right;">${order.covers||'—'}</td></tr>`}
+      : `<tr><td>Covers</td> <td style="text-align:right;">${order.covers||'—'}</td></tr>`}
     <tr><td>Date</td>    <td style="text-align:right;">${date}</td></tr>
     <tr><td>Time</td>    <td style="text-align:right;">${time}</td></tr>
     <tr><td>Order #</td> <td style="text-align:right;">${order.id}</td></tr>

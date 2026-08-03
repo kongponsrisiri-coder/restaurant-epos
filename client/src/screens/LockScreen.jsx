@@ -32,7 +32,7 @@ export default function LockScreen({ state, onUnlocked }) {
   return (
     <div style={{
       position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, zIndex: 100000,
-      background: 'linear-gradient(160deg, #1a1a2e 0%, #2d1b3d 100%)',
+      background: 'linear-gradient(160deg, var(--brand-primary, #1a1a2e) 0%, #2d1b3d 100%)',
       color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: 24, textAlign: 'center',
     }}>
@@ -56,7 +56,7 @@ export default function LockScreen({ state, onUnlocked }) {
           disabled={checking}
           style={{
             padding: '16px 28px', borderRadius: 12, border: 'none',
-            background: checking ? '#6b5b7a' : '#C9A84C', color: '#1a1a2e',
+            background: checking ? '#6b5b7a' : 'var(--brand-accent,#C9A84C)', color: 'var(--brand-primary, #1a1a2e)',
             fontSize: 17, fontWeight: 800, cursor: checking ? 'default' : 'pointer',
             minWidth: 240,
           }}

@@ -5,6 +5,9 @@
 2. Add yourself to the "Active Work" table if starting a ticket
 3. Then proceed with whatever Korakot asks
 
+
+**📌 STANDING RULE (Korakot, 2026-07-20): update `TEAM-STATUS.md` IN REAL TIME** — the moment you ship, decide, or hit a blocker, put the row on the board THEN AND THERE, not in a batch at session end. Concurrent sessions read the board live; a stale board causes double work and missed handoffs. (End-of-session tidy-up still applies on top.)
+
 ## ⚠️ END OF EVERY SESSION — DO THIS BEFORE FINISHING
 1. Move your row to "Recently Completed" in `TEAM-STATUS.md`
 2. Add any handoff notes for Sam, Pose, or Nook
@@ -214,8 +217,7 @@ client/src/screens/admin/inventory/InventorySection.jsx
 client/src/screens/admin/inventory/IngredientsTab.jsx
 client/src/screens/admin/inventory/RecipesTab.jsx
 client/src/screens/admin/inventory/StockTab.jsx
-client/src/screens/admin/inventory/InvoiceScannerTab.jsx
-client/src/screens/admin/inventory/InvoiceHistoryTab.jsx
+client/src/screens/admin/inventory/InvoiceScannerTab.jsx   # incl. invoice history (InvoiceHistoryTab.jsx deleted 2026-07-14 — was an empty dead file)
 client/src/screens/admin/inventory/CostSalesTab.jsx
 
 ## Tickets
@@ -305,13 +307,14 @@ client/src/screens/admin/inventory/CostSalesTab.jsx
   release.yml` handles publishing via `softprops/action-gh-release@v2`.
 
 ### Known limitations / future tickets
-- **SEPOS-046** — 🐛 BUG FIX (raised by Nook 2026-05-15): `POST /api/supplier-invoices`
-  ignores `line_items` entirely — stock and costs never update when an invoice
-  is confirmed. Fix: read `line_items` from req.body; for matched ingredients
-  UPDATE `current_stock += quantity` and `cost_per_unit = unit_price`, insert
-  `stock_movements` delivery row, detect price changes; for unmatched items
-  auto-create new ingredient; return `{created, updated, price_changes}` arrays.
-  Blocks Nook QA. Full spec: NOOK-INVENTORY-TEST-PLAN.md
+- ~~SEPOS-046~~ — ✅ DONE (core fix + transaction shipped 2026-06-20; completed
+  2026-07-14): invoice confirm updates stock/costs, writes delivery movements,
+  auto-creates unmatched ingredients, returns `{created, updated, price_changes,
+  recipes_recalculated}`. 2026-07-14 additions: recipe costs recalculated when a
+  supplier price changes (Nook's POTENTIAL BUG #2), price-change alert on the
+  done screen (FEATURE GAP #1), itemised invoice history via
+  `GET /api/supplier-invoices/:id/lines` (reads the delivery stock_movements —
+  no new table). Nook's test plan is unblocked: NOOK-INVENTORY-TEST-PLAN.md
 - SEPOS-021 HMRC submission — needs HMRC OAuth sandbox creds
 - SEPOS-025 — Receipt printer hardware (ESC/POS direct) — needs Epson/Star device
 - SEPOS-026 — Kitchen printer — same device dependency
@@ -319,11 +322,10 @@ client/src/screens/admin/inventory/CostSalesTab.jsx
 - SEPOS-029 — Client onboarding package — Railway template + email service
 - **SEPOS-033 birthday** — wired but no-op until customer_birthday is
   captured (separate ticket: add field to booking widget + reservations schema)
-- **SEPOS-040** — Real Stripe payment on takeaway widget. Per-restaurant
-  pk_live/sk_live in their own Railway env (SiamEPOS never holds funds).
-  Schema already prepared: payment_status flips mock → pending → paid,
-  payment_intent_id stores Stripe ref. Widget's mock-pay step is the
-  only UI piece that needs replacement.
+- ~~SEPOS-040~~ — ✅ DONE (confirmed by Korakot 2026-07-14): real Stripe on the
+  takeaway widget shipped. Per-restaurant pk_live/sk_live in their own Railway
+  env (SiamEPOS never holds funds); payment_status mock → pending → paid;
+  hardened verify (currency + server-priced amount) per SEPOS-047b.
 - **Orders ↔ reservations linkage** — orders don't carry reservation_id, so
   Customer total_spend is heuristic (table_id + date join). Add
   orders.reservation_id when accurate per-customer revenue matters.
@@ -341,8 +343,11 @@ client/src/screens/admin/inventory/CostSalesTab.jsx
   Restaurants typically run one primary terminal so this is rare in
   practice; locking would be the proper fix if it becomes a problem.
 
-- **SEPOS-043 — role-based access hierarchy** (next update)
-  Currently every staff PIN that reaches Admin can do everything,
+- ~~SEPOS-043~~ — ✅ DONE (confirmed by Korakot 2026-07-14): role-based access
+  hierarchy shipped — admin/manager full access; supervisor blocked from
+  deleting closed bills; waiter/kitchen/bar cannot reach Admin. Original spec
+  kept below for reference.
+  Previously: every staff PIN that reaches Admin can do everything,
   and the manager-PIN gate on order delete (SEPOS-042) only
   validates the role is one of `admin` / `manager` / `supervisor`.
   Desired hierarchy:

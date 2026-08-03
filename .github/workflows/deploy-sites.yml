@@ -1,0 +1,99 @@
+# SEPOS-HOSTING-001 — build the web POS / ops sites on GitHub's FREE runners and
+# push the finished files to Netlify (deploy only, no Netlify build minutes).
+#
+# Why: Netlify was rebuilding 3 sites in their paid cloud on every push — a
+# 1-second vite build billed dozens of times on a productive day. This replaces
+# those AND the two manual-deploy tenant sites (Thann Thai + Baan Siam POS),
+# which previously needed a hand-run `netlify deploy` after client changes
+# (see project_siamepos_net_manual_netlify_deploy — those two are now automatic).
+#
+# Marketing sites (siamepos.co.uk / .net / akinthai) stay manual-deploy: their
+# content isn't in this repo's build. Spa sites build from the siamepos-spa repo.
+#
+# Tenant safety: each site bakes ITS OWN VITE_API_URL below (the tenant-leak
+# guard class, SEPOS-TENANT-GUARD-001). app.siamepos deliberately has none —
+# it is the allowlisted main-cloud host in api.js.
+
+name: Deploy sites
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'client/**'
+      - 'back-office/client/**'
+      - '.github/workflows/deploy-sites.yml'
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-sites-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pos-sites:
+    name: ${{ matrix.label }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: app.siamepos (main POS)
+            site_id: ef8b1033-b771-455a-94a5-426c3e9ed2fa
+            api_url: ''                                        # allowlisted main host
+          - label: Baan Siam POS (custom domain)
+            site_id: 3a78df73-c7f8-4b97-8b5e-26b7d466e2de
+            api_url: https://baan-siam.siamepos.co.uk
+          - label: Baan Siam POS (344)
+            site_id: 61e43156-cfba-4376-9402-ef009c9b1e7b
+            api_url: https://baan-siam.siamepos.co.uk
+          - label: Thann Thai POS
+            site_id: 40bc73f9-8fbf-4b5d-8d8b-47f276d2ecfa
+            api_url: https://thannthai.siamepos.co.uk
+          - label: Chart Thai POS
+            site_id: 36096015-d948-45d5-a350-0722591591ef
+            api_url: https://chart-thai.siamepos.co.uk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Build
+        working-directory: client
+        env:
+          VITE_API_URL: ${{ matrix.api_url }}
+        run: |
+          npm ci
+          npm run build
+      - name: Guard — correct tenant baked
+        working-directory: client
+        run: |
+          if [ -n "${{ matrix.api_url }}" ]; then
+            grep -rq "${{ matrix.api_url }}" dist/assets/*.js || { echo "tenant URL not baked!"; exit 1; }
+          fi
+      - name: Deploy to Netlify (no build minutes)
+        working-directory: client
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: npx --yes netlify-cli@26 deploy --prod --no-build --dir=dist --site ${{ matrix.site_id }}
+
+  ops-site:
+    name: Ops back-office
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Build
+        working-directory: back-office/client
+        env:
+          VITE_OPS_API: https://restaurant-epos-back-office-production.up.railway.app
+        run: |
+          npm ci || npm install
+          npm run build
+      - name: Deploy to Netlify (no build minutes)
+        working-directory: back-office/client
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: npx --yes netlify-cli@26 deploy --prod --no-build --dir=dist --site 89bb8ca5-2adf-4557-825c-b739b5764f49

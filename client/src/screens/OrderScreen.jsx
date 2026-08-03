@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, assertOk, getSettings, SERVER_URL } from '../api';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote } from '../api';
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
+import { isNativeApp } from '../native/printer';
 // SEPOS — DeleteOrderModal removed from OrderScreen 2026-06-01 (Korakot's
 // call). Order screen / kitchen screen no longer expose a delete button;
 // closed-bill delete still lives in Admin → Bills for managers.
@@ -19,20 +20,37 @@ const COURSE_COLORS = { 1: '#3b82f6', 2: '#e94560', 3: '#8b5cf6', 4: '#22c55e' }
 let tempSeq = 0;
 const nextTempId = () => { tempSeq += 1; return -(Date.now() + tempSeq); };
 
-export default function OrderScreen({ orderId, tableId, staff, onClose }) {
+export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }) {
   const [menu, setMenu] = useState([]);
+  // SEPOS-TILL-LOCK-001 — full-screen "✓ sent" flash before returning to the
+  // PIN screen. Only ever used when App passes onSent (Till Security setting on).
+  const [sentFlash, setSentFlash] = useState(false);
   // SEPOS allergens — dish_allergens overrides keyed by menu_item_id.
   // Loaded once on mount; merged with menu_items.allergens at render time.
   const [allergenOverrides, setAllergenOverrides] = useState({});
   const [order, setOrder] = useState(null);
-  const [cart, setCart] = useState([]);
+  // Cart persists per-order in localStorage so un-sent items aren't lost when
+  // the waiter leaves the table without sending — they're restored on return.
+  const cartKey = orderId ? `sepos_cart_${orderId}` : null;
+  const [cart, setCart] = useState(() => {
+    try { const raw = cartKey && localStorage.getItem(cartKey); return raw ? JSON.parse(raw) : []; }
+    catch { return []; }
+  });
   const [activeCategory, setActiveCategory] = useState(null);
   const [activeSubcat, setActiveSubcat] = useState(null);
+  const [search, setSearch] = useState('');   // menu search box (whole-menu filter)
+  // SEPOS-ORDER-ARRANGE — on-screen menu reorder (manager-gated, drag & drop)
+  const [arrangeMode, setArrangeMode]   = useState(false);
+  const [arrangeItems, setArrangeItems] = useState([]);
+  const [arrangeDrag, setArrangeDrag]   = useState(null);
+  const [arrangePin, setArrangePin]     = useState(null); // null=closed, {pin,err,busy}=open
+  const [arrangeSaving, setArrangeSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [modifierPopup, setModifierPopup] = useState(null);
   const [showKitchenMsg, setShowKitchenMsg] = useState(false); // SEPOS-KITCHEN-MSG-001
   const [selectedModifiers, setSelectedModifiers] = useState({});
   const [notePopup, setNotePopup] = useState(null);
+  const [miscPopup, setMiscPopup] = useState(null); // SEPOS-MISC-001 — off-menu / special open item
   const [voidPopup, setVoidPopup] = useState(null);
   const [resendPopup, setResendPopup] = useState(null);
   const [showBill, setShowBill] = useState(false);
@@ -58,10 +76,40 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   // flight at once; only the latest response may win, or an older snapshot
   // would overwrite newer optimistic state.
   const fetchSeqRef = useRef(0);
+
+  // Persist the un-sent cart per order so it survives leaving the table and
+  // coming back (was lost on unmount). Cleared automatically once the cart
+  // empties — i.e. after a successful Send.
+  useEffect(() => {
+    if (!cartKey) return;
+    try {
+      if (cart.length) localStorage.setItem(cartKey, JSON.stringify(cart));
+      else localStorage.removeItem(cartKey);
+    } catch {}
+  }, [cart, cartKey]);
   const fetchOrder = async () => {
     const seq = ++fetchSeqRef.current;
     const orderData = await getOrder(orderId);
     if (seq === fetchSeqRef.current) setOrder(orderData);
+  };
+
+  // SEPOS — toggle + PERSIST the per-order service-charge removal. Optimistic:
+  // flip local state immediately, then write the flag so the Bill / receipt /
+  // splits honour it (previously this was local-only and the Bill re-added SC).
+  // If there's no order id yet (brand-new unsent order), we skip the write —
+  // the item send creates the order, and the persisted flag then rides the
+  // useEffect hydrate on the next fetchOrder / snapshot.
+  const toggleServiceCharge = () => {
+    const next = !serviceChargeRemoved;
+    setServiceChargeRemoved(next);                              // optimistic
+    setOrder(prev => prev ? { ...prev, no_service_charge: next ? 1 : 0 } : prev);
+    if (!orderId) return;                                       // no id yet — persisted once it exists
+    setOrderServiceCharge(orderId, next).catch(() => {
+      // Roll back the toggle if the write failed so the Order screen doesn't
+      // lie about what the Bill will charge.
+      setServiceChargeRemoved(!next);
+      setOrder(prev => prev ? { ...prev, no_service_charge: !next ? 1 : 0 } : prev);
+    });
   };
 
   // Load settings once for the configured service-charge rate (the running
@@ -90,8 +138,16 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         });
         setAllergenOverrides(map);
         if (menuData.length > 0) {
-          setActiveCategory(menuData[0].id);
-          setActiveCourse(menuData[0].default_course || 1);
+          const first = menuData[0];
+          setActiveCategory(first.id);
+          setActiveCourse(first.default_course || 1);
+          // Auto-select the first sub-cat tab (or "General" for un-filed items)
+          // so the initial category shows dishes immediately, matching taps.
+          const subs = first.subcategories || [];
+          if (subs.length) {
+            const hasNone = (first.items || []).some(i => i.subcategory_id == null);
+            setActiveSubcat(hasNone ? '__none__' : subs[0].id);
+          }
         }
       } catch (err) {
         console.error(err);
@@ -101,6 +157,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     };
     fetchData();
   }, [orderId]);
+
+  // SEPOS — hydrate the "Remove service charge" toggle from the persisted
+  // per-order flag whenever the order (re)loads. Keeps the Order screen in
+  // step with what the Bill / receipt will actually charge.
+  useEffect(() => {
+    if (order) setServiceChargeRemoved(order.no_service_charge === 1 || order.no_service_charge === true);
+  }, [order?.id, order?.no_service_charge]);
 
   // SEPOS — menu-button allergen chips render ONLY from confirmed
   // entries in dish_allergens (the Allergen Matrix). AI-scanner output
@@ -134,15 +197,27 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   };
 
   const handleItemClick = async (item) => {
-    const modifiers = await getItemModifiers(item.id);
+    const allMods = await getItemModifiers(item.id);
     const isBar = getItemIsBar(item);
-    const cat = menu.find(c => c.id === item.category_id);
-    const course = isBar ? 0 : (cat?.default_course || activeCourse);
-    if (modifiers && modifiers.length > 0) {
+    // Course priority: a per-item override (menu_items.default_course) wins so a
+    // mixed category like "Lunch" files each dish correctly (its mains print as
+    // MAINS). Otherwise fall back to the operator's current course-bar selection,
+    // which already defaults to the category's default_course on tab tap.
+    const course = isBar ? 0
+      : (item.default_course != null && item.default_course !== '')
+        ? Number(item.default_course)
+        : activeCourse;
+    // SEPOS-ALLERGEN-OPT-001 (UX option A) — GLOBAL groups (the dietary/allergen
+    // group) apply to every item; don't let them force the modifier popup open on
+    // every tap. Only the item's OWN (non-global) groups trigger the picker; the
+    // dietary group is offered as chips in the note popup (which shows anyway).
+    const ownGroups    = (allMods || []).filter(g => !g.is_global);
+    const dietaryGroups = (allMods || []).filter(g => g.is_global);
+    if (ownGroups.length > 0) {
       setSelectedModifiers({});
-      setModifierPopup({ item, modifiers, course, isBar });
+      setModifierPopup({ item, modifiers: ownGroups, course, isBar, dietaryGroups });
     } else {
-      setNotePopup({ item, modifiers: [], course, isBar, note: '' });
+      setNotePopup({ item, modifiers: [], course, isBar, note: '', dietaryGroups, dietary: [] });
     }
   };
 
@@ -159,7 +234,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
   };
 
   const confirmModifiers = () => {
-    const { item, modifiers, course, isBar } = modifierPopup;
+    const { item, modifiers, course, isBar, dietaryGroups } = modifierPopup;
     for (const group of modifiers) {
       if (group.required) {
         const selected = selectedModifiers[group.id];
@@ -171,19 +246,40 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     }
     const chosen = Object.values(selectedModifiers).flat();
     setModifierPopup(null);
-    setNotePopup({ item, modifiers: chosen, course, isBar, note: '' });
+    setNotePopup({ item, modifiers: chosen, course, isBar, note: '', dietaryGroups: dietaryGroups || [], dietary: [] });
   };
 
+  // SEPOS-ALLERGEN-OPT-001 — toggle a dietary/allergen chip in the note popup.
+  const toggleDietary = (opt) => setNotePopup(p => {
+    const cur = p.dietary || [];
+    const on = cur.some(d => d.id === opt.id);
+    return { ...p, dietary: on ? cur.filter(d => d.id !== opt.id) : [...cur, opt] };
+  });
+
   const confirmNote = () => {
-    const { item, modifiers, course, isBar, note } = notePopup;
-    addToCart(item, modifiers, course, isBar, note);
+    const { item, modifiers, course, isBar, note, dietary } = notePopup;
+    // Dietary/allergen selections are a STRUCTURED option (stamped is_allergen so
+    // they print with ⚠️ emphasis) and always free.
+    const dietaryMods = (dietary || []).map(m => ({ ...m, is_allergen: true, extra_price: 0 }));
+    addToCart(item, [...modifiers, ...dietaryMods], course, isBar, note);
     setNotePopup(null);
   };
 
   const addToCart = (item, chosenModifiers, course, isBar, note) => {
     // Prices can arrive as strings — coerce so we ADD, not string-concat (£NaN).
     const extraPrice = chosenModifiers.reduce((sum, m) => sum + (Number(m.extra_price) || 0), 0);
-    const modifierNames = chosenModifiers.map(m => m.name).join(', ');
+    // SEPOS-ALLERGEN-OPT-001 — allergen/dietary selections are wrapped
+    // "** ALLERGEN: … **" in the printed notes so they stand out on ALL three
+    // print paths (network / Sunmi / HTML all render this notes string, and the
+    // ** ** convention already prints bold+big). Kept ASCII — ESC/POS thermal
+    // printers can't render an emoji. The structured is_allergen flag also stays
+    // on each modifier for any structured consumer.
+    const plainMods    = chosenModifiers.filter(m => !m.is_allergen).map(m => m.name);
+    const allergenMods = chosenModifiers.filter(m =>  m.is_allergen).map(m => m.name);
+    const modifierNames = [
+      ...plainMods,
+      ...(allergenMods.length ? [`** ALLERGEN: ${allergenMods.join(', ')} **`] : []),
+    ].join(', ');
     const cartKey = item.id + '_' + modifierNames + '_' + course;
     setCart(prev => {
       const existing = prev.find(c => c.cartKey === cartKey && c.item_note === note);
@@ -199,6 +295,40 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         modifiers: chosenModifiers
       }];
     });
+  };
+
+  // SEPOS-MISC-001 — off-menu / special "open item". Staff type a free name +
+  // price + qty and pick a destination CATEGORY, which drives kitchen-vs-bar and
+  // which printer/station the ticket routes to (same as a normal item's
+  // category). The line has no menu_item_id — a first-class custom row.
+  const openMiscPopup = () => {
+    // One Misc button — the destination category (chosen in the popup) decides
+    // food/drink → kitchen/bar routing. Default to the category being viewed.
+    const preset = menu.find(c => c.id === activeCategory) || menu[0];
+    setMiscPopup({ name: '', price: '', quantity: 1, category_id: preset ? preset.id : null });
+  };
+
+  const addMiscToCart = () => {
+    const p = miscPopup;
+    if (!p) return;
+    const name = (p.name || '').trim();
+    const price = Number(p.price) || 0;
+    const qty = Math.max(1, Math.floor(Number(p.quantity) || 1));
+    if (!name || price <= 0) return;
+    const cat = menu.find(c => c.id === p.category_id);
+    const isBar = cat ? !!cat.is_bar : false;
+    const course = isBar ? 0 : (cat && cat.default_course != null ? Number(cat.default_course) : 1);
+    setCart(prev => [...prev, {
+      cartKey: 'MISC_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '_' + name,   // unique so misc lines never merge with each other
+      menu_item_id: null, name, name_alt: '',
+      unit_price: price, quantity: qty,
+      notes: '', item_note: '',
+      course,
+      is_bar: isBar ? 1 : 0,
+      category_id: cat ? cat.id : null,
+      modifiers: [],
+    }]);
+    setMiscPopup(null);
   };
 
   const removeFromCart = (cartKey, item_note) => {
@@ -313,7 +443,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     // (popup blocker requires user-gesture context, lost across awaits) — but
     // ONLY when we'd need the browser fallback. With a network kitchen printer
     // (or the desktop app) the resend prints silently, so skip the empty popup.
-    const popupWin = (!settings?.printer_kitchen_ip && !window.siamepos?.isElectron)
+    const popupWin = (!settings?.printer_kitchen_ip && !window.siamepos?.isElectron && !isNativeApp())
       ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
     // SEPOS-046z — optimistic: the row flips back to 🔥 cooking instantly.
     setOrder(prev => prev ? { ...prev, items: (prev.items || []).map(i =>
@@ -347,12 +477,29 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     }
   };
 
+  // SEPOS-KITCHEN-MSG-002 — attach a kitchen note to THIS order. It prints at
+  // the bottom of the order's kitchen ticket on the next send/fire (the server
+  // reads customer_note from the order), and shows as a chip here so the waiter
+  // can edit or clear it. Optimistic local update so the chip appears at once.
+  const handleSaveKitchenNote = async (text) => {
+    const note = String(text || '').trim();
+    setOrder(prev => prev ? { ...prev, customer_note: note } : prev);
+    assertOk(await saveOrderNote(orderId, note));
+  };
+
   const sendOrder = async () => {
     if (cart.length === 0) return alert('No items to send!');
 
     // Snapshot cart before clearing.  Detect bar/kitchen split now (before any await)
     // so we can pre-open popup windows while the user-gesture context is still live.
     const cartAsItems   = cart.map(c => ({
+      // SEPOS-STATION-004 — menu_item_id MUST ride along: the server's
+      // per-station split (and Sunmi's client-side split) look the dish up by
+      // it. This projection predates stations and silently dropped the id, so
+      // every ticket printed from the UI lost its routing identity and fell
+      // back to the role default — while direct API tests (which carried the
+      // id) routed perfectly. Found via the live print trace on the Fern rig.
+      menu_item_id: c.menu_item_id ?? null,
       name: c.name, name_alt: c.name_alt || '', quantity: c.quantity, course: c.course || 1, notes: c.notes || '', item_note: c.item_note || '', is_bar: !!c.is_bar,
     }));
     // Print ONLY what was just added — not the entire order. When a
@@ -372,7 +519,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     // If bar also uses server/Electron print the window is closed immediately.
     // Only when we'd need the browser fallback — a network bar printer (or the
     // desktop app) prints silently, so don't flash an empty popup.
-    const barWin = (hasBar && !settings?.printer_bar_ip && !window.siamepos?.isElectron)
+    const barWin = (hasBar && !settings?.printer_bar_ip && !window.siamepos?.isElectron && !isNativeApp())
       ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
 
     // SEPOS-046z — optimistic send: the cart lines appear in the order
@@ -393,6 +540,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
         unit_price: c.unit_price, quantity: c.quantity,
         notes: c.notes || '', item_note: c.item_note || '',
         course: c.is_bar ? 0 : (c.course || 1), is_bar: c.is_bar ? 1 : 0,
+        category_id: c.category_id ?? null,
         is_fired: c.is_bar ? 1 : 0, status: c.is_bar ? 'cooking' : 'pending', voided: 0,
       };
     });
@@ -418,6 +566,15 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
 
       // No success popup — the items are already in the Order Summary and the
       // 🔥 Fire buttons are right there; a blocking confirm on every send is noise.
+
+      // SEPOS-TILL-LOCK-001 — when Till Security's send-lock is on, close the
+      // loop visibly: a 1.4s "✓ Order sent" flash, then back to the PIN screen.
+      // The print chain above is fire-and-forget (module-level services), so
+      // unmounting this screen does not interrupt kitchen/bar tickets.
+      if (onSent) {
+        setSentFlash(true);
+        setTimeout(() => onSent(), 1400);
+      }
     } catch (err) {
       // Clean up pre-opened window on error
       try { if (barWin && !barWin.closed) barWin.close(); } catch {}
@@ -437,7 +594,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
     // i.e. NO network kitchen printer and not the desktop app. With a printer set
     // the fire notice prints silently server-side, so this blank window was just
     // flashing an empty popup on every fire (the operator complaint).
-    const coursePopupWin = (!settings?.printer_kitchen_ip && !window.siamepos?.isElectron)
+    const coursePopupWin = (!settings?.printer_kitchen_ip && !window.siamepos?.isElectron && !isNativeApp())
       ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
     // SEPOS-046z — optimistic: mirror the server's UPDATE (non-bar, unfired,
     // unvoided items of this course flip to fired/cooking). The pulsing
@@ -527,20 +684,87 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
       return sum + p - d;
     }, 0);
   const subtotal = existingItemsTotal + cartTotal;
-  const discountAmount = order?.discount_value > 0
-    ? order.discount_type === 'percent' ? subtotal * (order.discount_value / 100) : order.discount_value
+  // order.discount_value comes back from the server as a STRING (PG DECIMAL),
+  // so coerce — otherwise the fixed-discount branch returned a string and
+  // discountAmount.toFixed() crashed the screen ("ct.toFixed is not a function").
+  const discountAmount = Number(order?.discount_value) > 0
+    ? order.discount_type === 'percent' ? subtotal * (Number(order.discount_value) / 100) : (parseFloat(order.discount_value) || 0)
     : 0;
   const afterDiscount = Math.max(0, subtotal - discountAmount);
   // Mirror BillScreen's logic exactly (single source of truth for the rate).
   const scRate = parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5) / 100;
   const scEnabled = settings.service_charge_enabled !== '0' && settings.service_charge_enabled !== 'false';
-  const serviceChargeAmount = (serviceChargeRemoved || !scEnabled) ? 0 : afterDiscount * scRate;
+  // SEPOS-TAKEAWAY-TABLE — service charge is dine-in only. Takeaway (walk-in
+  // table or online) and counter orders never carry it.
+  const isNonDineIn = !!(order && order.order_type && order.order_type !== 'dine_in');
+  const serviceChargeAmount = (serviceChargeRemoved || !scEnabled || isNonDineIn) ? 0 : afterDiscount * scRate;
   const orderTotal = afterDiscount + serviceChargeAmount;
 
   const activeItems = menu.find(c => c.id === activeCategory)?.items || [];
   const activeSubs = menu.find(c => c.id === activeCategory)?.subcategories || [];
   const activeCatIsBar = !!menu.find(c => c.id === activeCategory)?.is_bar;
   const existingItems = order?.items || [];
+
+  // ── Menu navigation (redesign): category buttons → sub-category tabs ──────────
+  // Categories are big wrapping buttons; a category with sub-cats shows a tab
+  // strip (no big "All" list) and the first tab auto-selects. Items filed under
+  // no sub-cat surface under a leading "General" tab so nothing is ever hidden.
+  const NONE_SUBCAT = '__none__';
+  const activeHasUnfiled = activeItems.some(i => i.subcategory_id == null);
+  const subTabs = activeSubs.length
+    ? [...(activeHasUnfiled ? [{ id: NONE_SUBCAT, name: 'General' }] : []), ...activeSubs]
+    : [];
+  // Search the whole menu — when the box has text, ignore category/sub-cat and
+  // show every matching dish across all categories (name or 2nd-language name).
+  const searchQ = (search || '').trim().toLowerCase();
+  const dishesToShow = searchQ
+    ? menu.flatMap(c => c.items || []).filter(it =>
+        (it.name || '').toLowerCase().includes(searchQ) || (it.name_alt || '').toLowerCase().includes(searchQ))
+    : activeItems.filter(item =>
+        activeSubcat == null ? true
+          : activeSubcat === NONE_SUBCAT ? item.subcategory_id == null
+          : item.subcategory_id === activeSubcat
+      );
+  const selectCategory = (cat) => {
+    setActiveCategory(cat.id);
+    setActiveCourse(cat.default_course || 1);
+    const subs = cat.subcategories || [];
+    if (!subs.length) { setActiveSubcat(null); return; }
+    // Auto-select the first tab so dishes show immediately (no dead-end).
+    const hasNone = (cat.items || []).some(i => i.subcategory_id == null);
+    setActiveSubcat(hasNone ? NONE_SUBCAT : subs[0].id);
+  };
+
+  // SEPOS-ORDER-ARRANGE — reorder the current category's items right on the
+  // order screen (manager-gated). Reorders the WHOLE active category (flat),
+  // saves 1-based sort_order (matches the reorder-reset fix), refetches menu.
+  const MANAGER_ARR = ['admin', 'manager', 'supervisor'];
+  const enterArrange = () => { setArrangeItems([...activeItems]); setArrangeMode(true); setSearch(''); };
+  const openArrange = () => { if (MANAGER_ARR.includes(staff?.role)) enterArrange(); else setArrangePin({ pin: '', err: '', busy: false }); };
+  const verifyArrangePin = async () => {
+    if (arrangePin?.busy) return;
+    setArrangePin(p => ({ ...p, busy: true, err: '' }));
+    try {
+      const mgr = await loginStaff(arrangePin.pin);
+      if (mgr?.id && MANAGER_ARR.includes(mgr.role)) { setArrangePin(null); enterArrange(); }
+      else setArrangePin(p => ({ ...p, busy: false, err: 'Not a manager PIN.' }));
+    } catch { setArrangePin(p => ({ ...p, busy: false, err: 'PIN check failed.' })); }
+  };
+  const onArrangeDrop = (dropIdx) => {
+    if (arrangeDrag == null || arrangeDrag === dropIdx) { setArrangeDrag(null); return; }
+    setArrangeItems(prev => { const a = [...prev]; const [m] = a.splice(arrangeDrag, 1); a.splice(dropIdx, 0, m); return a; });
+    setArrangeDrag(null);
+  };
+  const saveArrange = async () => {
+    if (arrangeSaving) return;
+    setArrangeSaving(true);
+    try {
+      await updateMenuItemsSortOrder(arrangeItems.map((it, i) => ({ id: it.id, sort_order: i + 1 })));
+      const fresh = await getMenu(); if (Array.isArray(fresh)) setMenu(fresh);
+    } catch (e) { alert('Could not save the new order: ' + (e?.message || 'unknown')); }
+    finally { setArrangeSaving(false); setArrangeMode(false); setArrangeDrag(null); }
+  };
+  const cancelArrange = () => { setArrangeMode(false); setArrangeDrag(null); };
 
   const existingByCourse = {};
   existingItems.filter(item => !item.is_bar).forEach(item => {
@@ -583,6 +807,21 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
 
   return (
     <>
+      {/* SEPOS-TILL-LOCK-001 — sent confirmation flash (shown just before the
+          screen returns to sign-in, so staff SEE the loop close) */}
+      {sentFlash && (
+        <div style={{
+          position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, zIndex: 100003,
+          background: 'rgba(22,163,74,0.96)', color: 'white', display: 'flex',
+          flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 84, lineHeight: 1 }}>✓</div>
+          <div style={{ fontSize: 26, fontWeight: 800, marginTop: 12 }}>Order sent to kitchen</div>
+          {order?.table_number != null && (
+            <div style={{ fontSize: 17, marginTop: 6, opacity: 0.9 }}>Table {order.table_number}</div>
+          )}
+        </div>
+      )}
       <style>{`
         @keyframes pendingPulse {
           0%, 100% { border-color: #f59e0b; box-shadow: 0 0 0 0 rgba(245,158,11,0); }
@@ -631,7 +870,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             }}>
               ← Back
             </button>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', flex: 1 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', flex: 1 }}>
               Table {order?.table_number} — Order #{orderId}
               {order?.covers && (
                 <span style={{ fontSize: 14, fontWeight: 400, color: '#888', marginLeft: 8 }}>
@@ -641,7 +880,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             </h2>
             {/* SEPOS-KITCHEN-MSG-001 — one-tap kitchen message */}
             <button onClick={() => setShowKitchenMsg(true)} style={{
-              background: 'white', color: '#0D1B3E', border: '1px solid #0D1B3E',
+              background: 'white', color: 'var(--brand-primary,#0D1B3E)', border: '1px solid var(--brand-primary,#0D1B3E)',
               borderRadius: 10, padding: '10px 14px', cursor: 'pointer',
               fontWeight: 700, fontSize: 14
             }}>
@@ -649,7 +888,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             </button>
             {cart.length > 0 && (
               <button onClick={sendOrder} style={{
-                background: '#1a1a2e', color: 'white', border: 'none',
+                background: 'var(--brand-primary, #1a1a2e)', color: 'white', border: 'none',
                 borderRadius: 10, padding: '10px 18px', cursor: 'pointer',
                 fontWeight: 700, fontSize: 14
               }}>
@@ -658,15 +897,16 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             )}
           </div>
 
-          {showKitchenMsg && (
-            <KitchenMessageModal
-              orderId={orderId}
-              tableNumber={order?.table_number}
-              customerName={order?.customer_name}
-              waiterName={order?.staff_name || ''}
-              onClose={() => setShowKitchenMsg(false)}
-              onSent={() => {}}
-            />
+          {/* SEPOS-KITCHEN-MSG-002 — the attached kitchen note, shown so the
+              waiter can see it's on and edit/remove it. Prints at the bottom
+              of the kitchen ticket. */}
+          {order?.customer_note && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: 10, padding: '8px 12px', margin: '0 0 10px' }}>
+              <span style={{ fontSize: 15 }}>📢</span>
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: '#92400E', wordBreak: 'break-word' }}>Kitchen note: {order.customer_note}</span>
+              <button onClick={() => setShowKitchenMsg(true)} style={{ border: 'none', background: 'transparent', color: '#92400E', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Edit</button>
+              <button onClick={() => handleSaveKitchenNote('')} title="Remove note" style={{ border: 'none', background: 'transparent', color: '#92400E', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
           )}
 
           {/* Course selector */}
@@ -704,12 +944,16 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               }} style={{
                 padding: '10px 20px', borderRadius: 20, border: 'none', cursor: 'pointer',
                 fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap',
-                background: activeCategory === cat.id ? (cat.is_bar ? '#1e40af' : '#1a1a2e') : '#f0f0f0',
+                background: activeCategory === cat.id ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary, #1a1a2e)') : '#f0f0f0',
                 color: activeCategory === cat.id ? 'white' : '#555',
               }}>
                 {cat.name} {cat.is_bar ? '🍹' : ''}
               </button>
             ))}
+            {/* SEPOS-MISC-001 — off-menu / special open item, at the right end */}
+            <button onClick={() => openMiscPopup()} style={{
+              padding: '10px 16px', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap',
+              border: '1.5px dashed #C9A84C', background: '#FBF7EC', color: '#9A7B1F' }}>🍽 Misc item</button>
           </div>
 
           {/* Sub-category tabs */}
@@ -721,7 +965,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               <button onClick={() => setActiveSubcat(null)} style={{
                 padding: '7px 16px', borderRadius: 16, border: 'none', cursor: 'pointer',
                 fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap',
-                background: !activeSubcat ? '#1a1a2e' : '#e0e0e0',
+                background: !activeSubcat ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0',
                 color: !activeSubcat ? 'white' : '#555'
               }}>All</button>
               {activeSubs.map(sub => (
@@ -765,7 +1009,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'}
                       onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                     >
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 4 }}>
                         {item.name}
                       </div>
                       {item.description && (
@@ -786,14 +1030,14 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                             onClick={(e) => e.stopPropagation()}
                             style={{
                               display: 'flex', alignItems: 'center',
-                              background: '#0D1B3E', color: '#C9A84C',
+                              background: 'var(--brand-primary,#0D1B3E)', color: 'var(--brand-accent,#C9A84C)',
                               borderRadius: 16, height: 28, overflow: 'hidden',
                               boxShadow: '0 1px 4px rgba(13,27,62,0.25)',
                             }}>
                             <button
                               onClick={(e) => { e.stopPropagation(); decrementInCart(item); }}
                               style={{
-                                background: 'transparent', border: 'none', color: '#C9A84C',
+                                background: 'transparent', border: 'none', color: 'var(--brand-accent,#C9A84C)',
                                 cursor: 'pointer', width: 28, height: 28,
                                 fontWeight: 800, fontSize: 18, lineHeight: 1,
                               }}
@@ -806,7 +1050,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                             <button
                               onClick={(e) => { e.stopPropagation(); incrementInCart(item); }}
                               style={{
-                                background: 'transparent', border: 'none', color: '#C9A84C',
+                                background: 'transparent', border: 'none', color: 'var(--brand-accent,#C9A84C)',
                                 cursor: 'pointer', width: 28, height: 28,
                                 fontWeight: 800, fontSize: 18, lineHeight: 1,
                               }}
@@ -833,72 +1077,100 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   if (allVoided || isEmpty) await payOrder(orderId, 0, 'cancelled');
                 }
                 onClose();
-              }} style={{ background: '#F4F1EA', border: '1px solid #E7E2D6', borderRadius: 10, padding: '10px 16px', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: '#1a1a2e' }}>← Back</button>
-              <div style={{ flex: 1, fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 22, fontWeight: 700, color: '#1a1a2e' }}>
+              }} style={{ background: '#F4F1EA', border: '1px solid #E7E2D6', borderRadius: 10, padding: '10px 16px', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: 'var(--brand-primary, #1a1a2e)' }}>‹ Tables</button>
+              <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', whiteSpace: 'nowrap' }}>
                 Table {order?.table_number}
-                {order?.covers ? <span style={{ fontFamily: "'Archivo', sans-serif", fontSize: 13, color: '#9A9488', marginLeft: 10, fontWeight: 600 }}>{order.covers} covers</span> : null}
+                {(order?.covers || staff?.name) ? <span style={{ fontFamily: "'Archivo', sans-serif", fontSize: 13, color: '#9A9488', marginLeft: 10, fontWeight: 600 }}>{order?.covers ? `${order.covers} covers` : ''}{order?.covers && staff?.name ? ' · ' : ''}{staff?.name || ''}</span> : null}
               </div>
-              <button onClick={() => setShowKitchenMsg(true)} style={{ background: '#fff', color: '#0D1B3E', border: '1px solid #0D1B3E', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>📢 Message</button>
-              {cart.length > 0 && (
-                <button onClick={sendOrder} disabled={sendBusy} style={{ background: '#e94560', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', cursor: sendBusy ? 'wait' : 'pointer', fontWeight: 700, fontSize: 14, boxShadow: '0 6px 14px rgba(233,69,96,.28)' }}>
-                  {sendBusy ? 'Sending…' : 'Send to kitchen'}
-                </button>
-              )}
+              {/* SEPOS-ORDER-REDESIGN — whole-menu search box */}
+              <div style={{ flex: 1, position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9A9488', fontSize: 15 }}>🔍</span>
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search the whole menu…"
+                  style={{ width: '100%', height: 42, padding: '0 12px 0 34px', borderRadius: 10, border: '1px solid #E7E2D6', background: '#fff', fontSize: 15, boxSizing: 'border-box', fontFamily: "'Archivo', sans-serif" }} />
+                {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#9A9488', fontSize: 16, fontWeight: 700 }}>✕</button>}
+              </div>
+              <button onClick={() => setShowKitchenMsg(true)} style={{ background: '#fff', color: 'var(--brand-primary,#0D1B3E)', border: '1px solid var(--brand-primary,#0D1B3E)', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap' }}>Message kitchen</button>
+              <button onClick={() => openMiscPopup()} style={{ background: '#FBF7EC', color: '#9A7B1F', border: '1.5px dashed #C9A84C', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap' }}>＋ Misc item</button>
             </div>
-            {/* rail + grid */}
-            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-              {/* category rail */}
-              <div style={{ width: 172, flexShrink: 0, background: '#fff', borderRight: '1px solid #E7E2D6', overflowY: 'auto', padding: '14px 12px' }}>
-                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.5px', color: '#9A9488', textTransform: 'uppercase', padding: '0 4px 10px' }}>Menu</div>
-                {menu.map(cat => {
-                  const subs = cat.subcategories || [];
-                  const catActive = activeCategory === cat.id;
-                  const railBtn = (active) => ({ display: 'block', width: '100%', textAlign: 'left', minHeight: 46, padding: '0 14px', marginBottom: 6, borderRadius: 10, cursor: 'pointer', fontWeight: 600, fontSize: 13.5,
-                    border: active ? 'none' : '1px solid #E7E2D6', background: active ? '#0D1B3E' : '#fff', color: active ? '#fff' : '#1a1a2e' });
-                  return (
-                    <div key={cat.id} style={{ marginBottom: 14 }}>
-                      <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.5px', color: '#9A9488', textTransform: 'uppercase', padding: '0 4px 6px' }}>{cat.name}{cat.is_bar ? ' 🍹' : ''}</div>
-                      <button onClick={() => { setActiveCategory(cat.id); setActiveCourse(cat.default_course || 1); setActiveSubcat(null); }} style={railBtn(catActive && !activeSubcat)}>All {cat.name}</button>
-                      {subs.map(sub => (
-                        <button key={sub.id} onClick={() => { setActiveCategory(cat.id); setActiveCourse(cat.default_course || 1); setActiveSubcat(sub.id); }} style={railBtn(catActive && activeSubcat === sub.id)}>{sub.name}</button>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-              {/* menu grid */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: '22px 24px' }}>
-                <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 24, fontWeight: 700, color: '#1a1a2e', marginBottom: 14 }}>Tap a dish to add</div>
-                {/* Course bar — staff pick the target course (override the dish's
-                    admin default, e.g. serve a starter as a main). */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#9A9488' }}>Course:</span>
-                  {[1, 2, 3, 4].map(c => (
-                    <button key={c} onClick={() => setActiveCourse(c)} style={{ padding: '8px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13,
-                      background: activeCourse === c ? COURSE_COLORS[c] : '#ECE7DA', color: activeCourse === c ? '#fff' : '#7C766A' }}>
-                      {COURSE_LABELS[c]}
-                    </button>
-                  ))}
+            {/* menu — full width; category buttons on top, sub-cat tabs below */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px' }}>
+                {/* Category buttons — wrap to multiple rows so every category is visible */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: subTabs.length ? 12 : 18 }}>
+                  {menu.map(cat => {
+                    const active = activeCategory === cat.id;
+                    return (
+                      <button key={cat.id} onClick={() => selectCategory(cat)} style={{
+                        padding: '12px 26px', borderRadius: 14, cursor: 'pointer', fontWeight: 800, fontSize: 17, whiteSpace: 'nowrap',
+                        border: active ? 'none' : '1.5px solid #E7E2D6',
+                        background: active ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary,#0D1B3E)') : '#fff',
+                        color: active ? '#fff' : 'var(--brand-primary, #1a1a2e)' }}>
+                        {cat.name}{cat.is_bar ? ' 🍹' : ''}
+                      </button>
+                    );
+                  })}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-                  {activeItems.filter(item => !activeSubcat || item.subcategory_id === activeSubcat).map(item => {
+                {/* Sub-category tabs — shown only when the category has sub-cats
+                    (no big "All" list). "General" holds any un-filed items so
+                    nothing is ever hidden. The first tab auto-selects on tap. */}
+                {/* Sub-category — plain pills (course selector moved to the order panel). */}
+                {!searchQ && subTabs.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
+                    {subTabs.map(sub => {
+                      const active = activeSubcat === sub.id;
+                      return (
+                        <button key={sub.id} onClick={() => setActiveSubcat(sub.id)} style={{
+                          padding: '9px 18px', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: 14,
+                          border: active ? 'none' : '1px solid #E7E2D6',
+                          background: active ? 'var(--brand-accent,#C9A84C)' : '#fff',
+                          color: active ? '#fff' : '#7C766A' }}>
+                          {sub.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {searchQ && <div style={{ fontSize: 13, color: '#9A9488', marginBottom: 14 }}>{dishesToShow.length} result{dishesToShow.length === 1 ? '' : 's'} for “{search.trim()}”</div>}
+                {/* SEPOS-ORDER-ARRANGE — reorder the menu right here (manager-gated). */}
+                {!searchQ && (arrangeMode ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '10px 14px', background: '#FBF7EC', border: '1.5px solid #C9A84C', borderRadius: 12 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#9A7B1F' }}>⇅ Drag dishes to reorder {menu.find(c => c.id === activeCategory)?.name}</span>
+                    <div style={{ flex: 1 }} />
+                    <button onClick={cancelArrange} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #ddd', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>Cancel</button>
+                    <button onClick={saveArrange} disabled={arrangeSaving} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--brand-primary,#0D1B3E)', color: '#fff', cursor: arrangeSaving ? 'wait' : 'pointer', fontWeight: 800, fontSize: 13 }}>{arrangeSaving ? 'Saving…' : '✓ Done'}</button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                    <button onClick={openArrange} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #E7E2D6', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13, color: '#7C766A' }}>⇅ Arrange menu</button>
+                  </div>
+                ))}
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: 14 }}>
+                  {(arrangeMode ? arrangeItems : dishesToShow).map((item, gridIdx) => {
                     const inCart = cart.filter(c => c.menu_item_id === item.id);
                     const totalQty = inCart.reduce((s, c) => s + c.quantity, 0);
                     return (
-                      <div key={item.id} onClick={() => handleItemClick(item)} style={{ background: '#fff', borderRadius: 14, border: `1px solid ${totalQty > 0 ? '#0D1B3E' : '#E7E2D6'}`, padding: 14, cursor: 'pointer', minHeight: 104, display: 'flex', flexDirection: 'column', boxShadow: '0 1px 2px rgba(13,27,62,.05)' }}>
-                        <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1a2e', lineHeight: 1.25 }}>{item.name}</div>
+                      <div key={item.id}
+                        draggable={arrangeMode}
+                        onClick={arrangeMode ? undefined : () => handleItemClick(item)}
+                        onDragStart={arrangeMode ? () => setArrangeDrag(gridIdx) : undefined}
+                        onDragOver={arrangeMode ? (e) => e.preventDefault() : undefined}
+                        onDrop={arrangeMode ? (e) => { e.preventDefault(); onArrangeDrop(gridIdx); } : undefined}
+                        style={{ background: '#fff', borderRadius: 14, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : '#E7E2D6'}`, padding: 14, cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 104, display: 'flex', flexDirection: 'column', boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
+                        <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
                         <AllergenChips list={allergensByItemId[item.id]} />
                         <div style={{ flex: 1 }} />
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                           <span style={{ fontSize: 17, fontWeight: 800, color: '#9A7B1F', fontVariantNumeric: 'tabular-nums' }}>£{Number(item.price || 0).toFixed(2)}</span>
-                          {totalQty > 0 ? (
-                            <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', background: '#0D1B3E', color: '#C9A84C', borderRadius: 10, height: 32 }}>
-                              <button onClick={e => { e.stopPropagation(); decrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: '#C9A84C', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>−</button>
+                          {arrangeMode ? (
+                            <span style={{ color: '#C9A84C', fontSize: 20, fontWeight: 800, cursor: 'grab' }} title="Drag to reorder">⣿</span>
+                          ) : totalQty > 0 ? (
+                            <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', background: 'var(--brand-primary,#0D1B3E)', color: 'var(--brand-accent,#C9A84C)', borderRadius: 10, height: 32 }}>
+                              <button onClick={e => { e.stopPropagation(); decrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: 'var(--brand-accent,#C9A84C)', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>−</button>
                               <span style={{ fontWeight: 800, fontSize: 14, minWidth: 18, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{totalQty}</span>
-                              <button onClick={e => { e.stopPropagation(); incrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: '#C9A84C', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>+</button>
+                              <button onClick={e => { e.stopPropagation(); incrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: 'var(--brand-accent,#C9A84C)', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>+</button>
                             </div>
                           ) : (
-                            <div style={{ width: 32, height: 32, borderRadius: 9, background: '#0D1B3E', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700 }}>+</div>
+                            <div style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--brand-primary,#0D1B3E)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700 }}>+</div>
                           )}
                         </div>
                       </div>
@@ -935,7 +1207,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             {isMobile ? (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
                     Table {order?.table_number}
                   </div>
                   <div style={{ fontSize: 12, color: '#888', marginTop: 1 }}>
@@ -944,7 +1216,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 </div>
                 {cart.length > 0 && (
                   <button onClick={sendOrder} style={{
-                    background: '#0D1B3E', color: 'white', border: 'none',
+                    background: 'var(--brand-primary,#0D1B3E)', color: 'white', border: 'none',
                     borderRadius: 10, padding: '10px 18px', cursor: 'pointer',
                     fontWeight: 700, fontSize: 14
                   }}>
@@ -953,7 +1225,20 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 )}
               </div>
             ) : (
-              <h3 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>Order Summary</h3>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Order · Table {order?.table_number}</span>
+                  <span style={{ fontSize: 13, color: '#9A9488', fontWeight: 600 }}>{existingItems.filter(i => !i.voided).reduce((s, i) => s + (i.quantity || 0), 0) + cart.reduce((s, c) => s + (c.quantity || 0), 0)} items</span>
+                </div>
+                {/* Course selector — moved here from the left menu (mockup). */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 12, color: '#9A9488', fontWeight: 600 }}>Send to kitchen as:</span>
+                  {[1, 2, 3, 4].map(c => (
+                    <button key={c} onClick={() => setActiveCourse(c)} style={{ padding: '7px 14px', borderRadius: 16, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                      background: activeCourse === c ? COURSE_COLORS[c] : '#ECE7DA', color: activeCourse === c ? '#fff' : '#7C766A' }}>{COURSE_LABELS[c]}</button>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 
@@ -982,7 +1267,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       display: 'flex', justifyContent: 'space-between',
                       alignItems: 'center', fontSize: 13
                     }}>
-                      <span style={{ flex: 1, color: '#1a1a2e', fontWeight: 600 }}>
+                      <span style={{ flex: 1, color: 'var(--brand-primary, #1a1a2e)', fontWeight: 600 }}>
                         {item.quantity}× {item.name}
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1069,7 +1354,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       display: 'flex', justifyContent: 'space-between',
                       alignItems: 'center', fontSize: 13
                     }}>
-                      <span style={{ flex: 1, color: '#1a1a2e', fontWeight: 600 }}>
+                      <span style={{ flex: 1, color: 'var(--brand-primary, #1a1a2e)', fontWeight: 600 }}>
                         {item.quantity}× {item.name}
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1239,8 +1524,15 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             )}
           </div>
 
-          {/* Bottom totals */}
-          <div style={{ padding: '14px 16px', borderTop: '1px solid #eee', flexShrink: 0 }}>
+          {/* Bottom totals. On mobile this footer is pinned to the panel bottom,
+              which sits UNDER the fixed 58px tab bar — so add the same tab-bar
+              clearance the scroll area uses, or the "View bill & pay" button
+              (the last row) hides behind the Menu/Order tabs. */}
+          <div style={{
+            padding: '14px 16px',
+            paddingBottom: isMobile ? 'calc(58px + env(safe-area-inset-bottom, 0px) + 14px)' : '14px',
+            borderTop: '1px solid #eee', flexShrink: 0
+          }}>
             <div style={{ marginBottom: 10 }}>
               {order?.discount_value > 0 ? (
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -1317,13 +1609,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               <span>Subtotal</span><span>£{afterDiscount.toFixed(2)}</span>
             </div>
 
-            {scEnabled && <div style={{
+            {scEnabled && !isNonDineIn && <div style={{
               display: 'flex', justifyContent: 'space-between',
               alignItems: 'center', marginBottom: 10
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 13, color: '#555' }}>Service ({parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5)}%)</span>
-                <button onClick={() => setServiceChargeRemoved(!serviceChargeRemoved)} style={{
+                <button onClick={toggleServiceCharge} style={{
                   background: serviceChargeRemoved ? '#fee2e2' : '#dcfce7',
                   border: 'none', borderRadius: 6, padding: '3px 10px',
                   cursor: 'pointer', fontSize: 11, fontWeight: 700,
@@ -1344,6 +1636,20 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 £{orderTotal.toFixed(2)}
               </span>
             </div>
+
+            {/* Send Order — full-width, right above View Bill & Pay (moved out of
+                the small header button per operator feedback). Desktop only;
+                mobile keeps its own compact Send in the summary header. */}
+            {!isMobile && cart.length > 0 && (
+              <button onClick={sendOrder} disabled={sendBusy} style={{
+                width: '100%', padding: '14px', borderRadius: 12, border: 'none',
+                background: sendBusy ? '#9aa0b0' : 'var(--brand-primary, #0D1B3E)', color: 'white',
+                fontSize: 16, fontWeight: 800, cursor: sendBusy ? 'wait' : 'pointer',
+                marginBottom: 10, boxShadow: '0 6px 14px rgba(13,27,62,.24)'
+              }}>
+                {sendBusy ? 'Sending…' : `Send to kitchen — ${cart.reduce((s, c) => s + c.quantity, 0)} item${cart.reduce((s, c) => s + c.quantity, 0) > 1 ? 's' : ''}`}
+              </button>
+            )}
 
             {/* SEPOS-CLOSE-ZERO 2026-06-02 — if there's at least one item on
                 the order and the live bill total is £0 (everything voided OR
@@ -1371,6 +1677,15 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   // SEPOS-046z — the bill must not open while a send is in
                   // flight, or it could be paid before those items land.
                   if (sendBusy) return;
+                  // SEPOS-AUDIT-001 — unsent cart items are NOT on the server
+                  // bill: this button's total includes them but BillScreen's
+                  // doesn't, so paying now undercharged by the whole cart (and
+                  // the items were appended after payment, never fired to the
+                  // kitchen). Make staff send first.
+                  if (cart.length > 0) {
+                    alert(`⚠️ ${cart.reduce((s, c) => s + c.quantity, 0)} item(s) in the cart haven't been sent to the kitchen.\n\nTap "Send to kitchen" first, then take payment — otherwise they'd be missing from the bill.`);
+                    return;
+                  }
                   setShowBill(true);
                 }}
                 style={{
@@ -1378,7 +1693,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   background: sendBusy ? '#f3a5b3' : '#e94560', color: 'white', fontSize: 16,
                   fontWeight: 800, cursor: sendBusy ? 'wait' : 'pointer'
                 }}>
-                {sendBusy ? 'Sending order…' : `View Bill & Pay — £${orderTotal.toFixed(2)}`}
+                {sendBusy ? 'Sending order…' : `View bill & pay — £${orderTotal.toFixed(2)}`}
               </button>
             )}
           </div>
@@ -1417,8 +1732,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               style={{
                 flex: 1,
                 border: 'none',
-                borderTop: mobileTab === 'menu' ? '3px solid #C9A84C' : '3px solid transparent',
-                background: mobileTab === 'menu' ? '#0D1B3E' : '#f8f8f8',
+                borderTop: mobileTab === 'menu' ? '3px solid var(--brand-accent,#C9A84C)' : '3px solid transparent',
+                background: mobileTab === 'menu' ? 'var(--brand-primary,#0D1B3E)' : '#f8f8f8',
                 color: mobileTab === 'menu' ? 'white' : '#888',
                 fontWeight: 700,
                 fontSize: 15,
@@ -1440,8 +1755,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 flex: 1,
                 border: 'none',
                 borderLeft: '1px solid #e0e0e0',
-                borderTop: mobileTab === 'order' ? '3px solid #C9A84C' : '3px solid transparent',
-                background: mobileTab === 'order' ? '#0D1B3E' : '#f8f8f8',
+                borderTop: mobileTab === 'order' ? '3px solid var(--brand-accent,#C9A84C)' : '3px solid transparent',
+                background: mobileTab === 'order' ? 'var(--brand-primary,#0D1B3E)' : '#f8f8f8',
                 color: mobileTab === 'order' ? 'white' : '#888',
                 fontWeight: 700,
                 fontSize: 15,
@@ -1475,6 +1790,99 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
           </div>
         )}
 
+        {/* Kitchen message modal — shared so it works on BOTH desktop and mobile
+            tills (was inside the mobile-only branch, so the desktop 📢 Message
+            button did nothing). */}
+        {showKitchenMsg && (
+          <KitchenMessageModal
+            orderId={orderId}
+            tableNumber={order?.table_number}
+            customerName={order?.customer_name}
+            waiterName={order?.staff_name || ''}
+            initialMessage={order?.customer_note || ''}
+            onSaveNote={handleSaveKitchenNote}
+            onClose={() => setShowKitchenMsg(false)}
+          />
+        )}
+
+        {/* SEPOS-MISC-001 — MISC ITEM POPUP (off-menu / special open item) */}
+        {/* SEPOS-ORDER-ARRANGE — manager PIN to unlock reorder */}
+        {arrangePin && (
+          <div onClick={() => setArrangePin(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 28, width: 340, maxWidth: '92vw' }}>
+              <h2 style={{ fontSize: 18, fontWeight: 800, color: 'var(--brand-primary,#0D1B3E)', marginBottom: 6 }}>⇅ Arrange menu</h2>
+              <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>Rearranging changes the menu order on <b>every till</b>. Enter a manager PIN to continue.</p>
+              <input type="password" inputMode="numeric" autoFocus value={arrangePin.pin}
+                onChange={e => setArrangePin(p => ({ ...p, pin: e.target.value, err: '' }))}
+                onKeyDown={e => { if (e.key === 'Enter') verifyArrangePin(); }}
+                placeholder="Manager PIN" style={{ width: '100%', height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 18, boxSizing: 'border-box', letterSpacing: '4px', textAlign: 'center' }} />
+              {arrangePin.err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 8 }}>{arrangePin.err}</div>}
+              <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+                <button onClick={() => setArrangePin(null)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700 }}>Cancel</button>
+                <button onClick={verifyArrangePin} disabled={arrangePin.busy || !arrangePin.pin} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: (arrangePin.busy || !arrangePin.pin) ? '#ccc' : 'var(--brand-primary,#0D1B3E)', color: '#fff', cursor: 'pointer', fontWeight: 800 }}>{arrangePin.busy ? 'Checking…' : 'Unlock'}</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {miscPopup && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          }}>
+            <div style={{ background: 'white', borderRadius: 16, padding: 28, width: 420, maxWidth: '92vw', maxHeight: '85vh', overflowY: 'auto' }}>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 4 }}>
+                🍽 Misc item
+              </h2>
+              <p style={{ color: '#888', fontSize: 13, marginBottom: 18 }}>Off-menu or special request — type the name and price.</p>
+
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>Name</label>
+              <input autoFocus value={miscPopup.name} onChange={e => setMiscPopup(p => ({ ...p, name: e.target.value }))}
+                placeholder="e.g. Chef's special soup" style={{ width: '100%', height: 48, padding: '0 14px', borderRadius: 10, border: '1.5px solid #ddd', fontSize: 16, boxSizing: 'border-box', marginBottom: 16 }} />
+
+              <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>Price</label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
+                    <input type="number" step="0.01" min="0" value={miscPopup.price} onChange={e => setMiscPopup(p => ({ ...p, price: e.target.value }))}
+                      placeholder="0.00" style={{ width: '100%', height: 48, padding: '0 12px 0 24px', borderRadius: 10, border: '1.5px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                  </div>
+                </div>
+                <div style={{ width: 130 }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>Qty</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button onClick={() => setMiscPopup(p => ({ ...p, quantity: Math.max(1, (Number(p.quantity) || 1) - 1) }))} style={{ width: 40, height: 48, borderRadius: 10, border: '1.5px solid #ddd', background: '#f7f7f7', cursor: 'pointer', fontSize: 20, fontWeight: 700 }}>−</button>
+                    <input type="number" min="1" value={miscPopup.quantity} onChange={e => setMiscPopup(p => ({ ...p, quantity: e.target.value }))}
+                      style={{ width: 44, height: 48, textAlign: 'center', borderRadius: 10, border: '1.5px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                    <button onClick={() => setMiscPopup(p => ({ ...p, quantity: (Number(p.quantity) || 1) + 1 }))} style={{ width: 40, height: 48, borderRadius: 10, border: '1.5px solid #ddd', background: '#f7f7f7', cursor: 'pointer', fontSize: 20, fontWeight: 700 }}>+</button>
+                  </div>
+                </div>
+              </div>
+
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>Send to (prints with this section's kitchen/bar printer)</label>
+              <select value={miscPopup.category_id ?? ''} onChange={e => setMiscPopup(p => ({ ...p, category_id: Number(e.target.value) }))}
+                style={{ width: '100%', height: 48, padding: '0 12px', borderRadius: 10, border: '1.5px solid #ddd', fontSize: 16, boxSizing: 'border-box', marginBottom: 22, background: '#fff' }}>
+                {menu.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}{cat.is_bar ? ' 🍹' : ''}</option>
+                ))}
+              </select>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setMiscPopup(null)} style={{ flex: 1, padding: '14px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>Cancel</button>
+                {(() => {
+                  const ok = (miscPopup.name || '').trim() && (Number(miscPopup.price) || 0) > 0;
+                  return (
+                    <button onClick={addMiscToCart} disabled={!ok} style={{ flex: 2, padding: '14px', borderRadius: 10, border: 'none', background: ok ? '#e94560' : '#f3c3cc', color: 'white', cursor: ok ? 'pointer' : 'not-allowed', fontWeight: 700, fontSize: 15 }}>
+                      Add to order{(Number(miscPopup.price) || 0) > 0 ? ` · £${((Number(miscPopup.price) || 0) * Math.max(1, Math.floor(Number(miscPopup.quantity) || 1))).toFixed(2)}` : ''}
+                    </button>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* MODIFIER POPUP */}
         {modifierPopup && (
           <div style={{
@@ -1490,7 +1898,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 display: 'flex', justifyContent: 'space-between',
                 alignItems: 'center', marginBottom: 8
               }}>
-                <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>
+                <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
                   {modifierPopup.item.name}
                 </h2>
                 {modifierPopup.isBar ? (
@@ -1512,7 +1920,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               </p>
               {modifierPopup.modifiers.map(group => (
                 <div key={group.id} style={{ marginBottom: 20 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15, color: '#1a1a2e', marginBottom: 8 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 8 }}>
                     {group.name}
                     <span style={{ fontWeight: 400, fontSize: 12, color: '#e94560', marginLeft: 8 }}>
                       {group.required ? 'Required' : 'Optional'} · {group.multi_select ? 'Choose multiple' : 'Choose one'}
@@ -1525,12 +1933,12 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                         onClick={() => handleModifierSelect(group.id, opt, group.multi_select)}
                         style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          padding: '12px 16px', borderRadius: 10, marginBottom: 6, cursor: 'pointer',
+                          padding: '16px 18px', minHeight: 30, borderRadius: 12, marginBottom: 8, cursor: 'pointer',
                           border: `2px solid ${selected ? '#e94560' : '#eee'}`,
                           background: selected ? '#fff0f3' : 'white',
                         }}>
-                        <span style={{ fontSize: 15, fontWeight: selected ? 700 : 400 }}>{opt.name}</span>
-                        <span style={{ fontSize: 14, color: opt.extra_price > 0 ? '#e94560' : '#aaa' }}>
+                        <span style={{ fontSize: 17, fontWeight: selected ? 700 : 500 }}>{opt.name}</span>
+                        <span style={{ fontSize: 15, color: opt.extra_price > 0 ? '#e94560' : '#aaa' }}>
                           {opt.extra_price > 0 ? `+£${Number(opt.extra_price).toFixed(2)}` : 'included'}
                         </span>
                       </div>
@@ -1568,7 +1976,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                 display: 'flex', justifyContent: 'space-between',
                 alignItems: 'center', marginBottom: 12
               }}>
-                <h2 style={{ fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>
+                <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
                   {notePopup.item.name}
                 </h2>
                 {notePopup.isBar ? (
@@ -1615,6 +2023,27 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                   </div>
                 </div>
               )}
+              {/* SEPOS-ALLERGEN-OPT-001 — structured dietary/allergen chips (global
+                  group). Tap instead of typing into the note — prints with ⚠️. */}
+              {Array.isArray(notePopup.dietaryGroups) && notePopup.dietaryGroups.some(g => (g.modifiers || []).length) && (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: 13, fontWeight: 700, color: '#92400e', display: 'block', marginBottom: 8 }}>
+                    ⚠️ Dietary / allergen: <span style={{ fontWeight: 400, color: '#aaa' }}>(tap any that apply)</span>
+                  </label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {notePopup.dietaryGroups.flatMap(g => g.modifiers || []).map(opt => {
+                      const on = (notePopup.dietary || []).some(d => d.id === opt.id);
+                      return (
+                        <button key={opt.id} onClick={() => toggleDietary(opt)} style={{
+                          padding: '11px 14px', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700,
+                          border: on ? '2px solid #b45309' : '1.5px solid #fde68a',
+                          background: on ? '#b45309' : '#fffbeb', color: on ? 'white' : '#92400e',
+                        }}>{on ? '⚠️ ' : ''}{opt.name}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <label style={{
                 fontSize: 13, fontWeight: 700, color: '#555',
                 display: 'block', marginBottom: 8
@@ -1624,7 +2053,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               <textarea
                 value={notePopup.note}
                 onChange={e => setNotePopup({ ...notePopup, note: e.target.value })}
-                placeholder="e.g. No onions, extra spicy, allergy — no nuts..."
+                placeholder="e.g. No onions, extra spicy... (use the ⚠️ chips above for allergies)"
                 rows={3}
                 style={{
                   width: '100%', padding: '12px', borderRadius: 8,
@@ -1655,7 +2084,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             alignItems:'center', justifyContent:'center', zIndex:1000
           }}>
             <div style={{ background:'white', borderRadius:16, padding:24, width:400, maxWidth:'92vw' }}>
-              <h2 style={{ fontSize:18, fontWeight:700, color:'#1a1a2e', marginBottom:6 }}>
+              <h2 style={{ fontSize:18, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:6 }}>
                 Resend to kitchen
               </h2>
               <div style={{ fontSize:14, color:'#555', marginBottom:18 }}>
@@ -1692,7 +2121,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               background: 'white', borderRadius: 16, padding: 24,
               width: 380, maxWidth: '92vw'
             }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 6 }}>
                 {discountPopup.scope === 'item' ? 'Item discount' : 'Bill discount'}
               </h2>
               {discountPopup.scope === 'item' && (
@@ -1710,8 +2139,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                       onClick={() => setDiscountPopup({ ...discountPopup, type: t })}
                       style={{
                         padding: '10px 12px', borderRadius: 8,
-                        border: '2px solid ' + (discountPopup.type === t ? '#1a1a2e' : '#e0e0e0'),
-                        background: discountPopup.type === t ? '#1a1a2e' : 'white',
+                        border: '2px solid ' + (discountPopup.type === t ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0'),
+                        background: discountPopup.type === t ? 'var(--brand-primary, #1a1a2e)' : 'white',
                         color: discountPopup.type === t ? 'white' : '#555',
                         cursor: 'pointer', fontWeight: 700, fontSize: 13,
                       }}>{label}</button>
@@ -1778,7 +2207,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
               background: 'white', borderRadius: 16, padding: 24,
               width: 380, maxWidth: '92vw'
             }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e', marginBottom: 6 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 6 }}>
                 Void item
               </h2>
               <div style={{ fontSize: 14, color: '#555', marginBottom: 16 }}>
@@ -1800,8 +2229,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
                         onClick={() => setVoidPopup({ ...voidPopup, type: t, authError: '' })}
                         style={{
                           padding: '10px 12px', borderRadius: 8,
-                          border: '2px solid ' + (sel ? (isComp ? '#8b5cf6' : '#1a1a2e') : '#e0e0e0'),
-                          background: sel ? (isComp ? '#ede9fe' : '#1a1a2e') : 'white',
+                          border: '2px solid ' + (sel ? (isComp ? '#8b5cf6' : 'var(--brand-primary, #1a1a2e)') : '#e0e0e0'),
+                          background: sel ? (isComp ? '#ede9fe' : 'var(--brand-primary, #1a1a2e)') : 'white',
                           color: sel ? (isComp ? '#5b21b6' : 'white') : '#555',
                           cursor: 'pointer', fontWeight: 700, fontSize: 13,
                         }}>
@@ -1920,8 +2349,22 @@ export default function OrderScreen({ orderId, tableId, staff, onClose }) {
             // bill while nothing was recorded. On failure: surface the
             // real error and KEEP the bill open so staff can retry.
             try {
-              if (cart.length > 0) assertOk(await addOrderItems(orderId, cart));
-              assertOk(await payOrder(orderId, total, method, tenders));
+              // SEPOS-AUDIT-001 — never silently append unsent cart items at
+              // pay time: the payment amount was fixed from the server bill
+              // WITHOUT them, so appending here undercharged by the cart value
+              // and the items never fired to the kitchen. The View-bill button
+              // now blocks on a non-empty cart; this is the belt-and-braces.
+              if (cart.length > 0) {
+                alert('⚠️ Payment NOT taken — items in the cart were never sent to the kitchen.\n\nClose the bill, tap "Send to kitchen", then pay.');
+                return;
+              }
+              const payRes = await payOrder(orderId, total, method, tenders);
+              // SEPOS-DBLPAY-001 — the server rejects a second payment on an
+              // already-closed bill (409 alreadyPaid). That means the payment
+              // is ALREADY recorded (a double-tap or another device beat us),
+              // so don't error and don't re-charge — just close the bill.
+              if (payRes && payRes.alreadyPaid) { onClose(); return; }
+              assertOk(payRes);
             } catch (e) {
               alert(`⚠️ Payment NOT completed — the bill is still open.\n\n${e.message || 'Please try again.'}`);
               return;

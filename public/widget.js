@@ -12,8 +12,16 @@
 (function () {
   'use strict';
 
-  const API = 'https://restaurant-epos-production.up.railway.app';
   const script = document.currentScript;
+  // Serve-origin API: talk to whichever tenant cloud served this file, so a
+  // client site embedding THEIR cloud's /widget.js books onto THAT tenant.
+  // Fallback = the original main-cloud hardcode (for any old copied embeds).
+  const API = (function () {
+    try {
+      if (script && script.src) return new URL(script.src).origin;
+    } catch (e) {}
+    return 'https://restaurant-epos-production.up.railway.app';
+  })();
 
   // ── Config from data attributes ──────────────────────────────
   const RESTAURANT_ID  = script?.getAttribute('data-restaurant') || 'siamepos';

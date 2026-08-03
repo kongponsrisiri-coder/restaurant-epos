@@ -6,7 +6,7 @@
 // of automated vs still-manual steps, and a link straight to the new
 // client's detail page where the operator works through the rest.
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { C, card, btn, input, label } from '../theme.js';
@@ -281,6 +281,9 @@ function Step0({ f, set }) {
 function Step1({ f, set, errors }) {
   const isSpa = f.product === 'spa';
   const nameLbl = isSpa ? 'Spa name *' : 'Restaurant name *';
+  // BO-BILLING-001 — plans live from Stripe so new products appear automatically.
+  const [plans, setPlans] = useState([]);
+  useEffect(() => { api.getBillingPlans().then(r => setPlans(r?.plans || [])).catch(() => {}); }, []);
   return (
     <Stepped
       title={`Step 1 · ${isSpa ? 'Spa' : 'Restaurant'} details`}
@@ -306,11 +309,12 @@ function Step1({ f, set, errors }) {
             {isSpa
               ? <option value="spa">Spa £49/mo</option>
               : <>
-                  <option value="trial">Trial</option>
-                  <option value="starter">Starter</option>
-                  <option value="cloud">Cloud</option>
-                  <option value="pro">Pro</option>
-                  <option value="founder">Founder's Pack £59/mo</option>
+                  {/* Live from Stripe — new recurring products appear here
+                      automatically, no code change. 'trial' is free/unbilled. */}
+                  <option value="trial">Trial (no charge)</option>
+                  {plans.map(p => (
+                    <option key={p.value} value={p.value}>{p.name} — £{((p.amount || 0) / 100).toFixed(2)}/{p.interval || 'mo'}</option>
+                  ))}
                 </>
             }
           </select>
@@ -480,6 +484,21 @@ function SuccessCard({ result, onBack }) {
     try { await navigator.clipboard.writeText(result.sync_secret); setCopied(true); setTimeout(() => setCopied(false), 1500); }
     catch {}
   };
+  // BO-BILLING-001 — optional payment setup right after onboarding. Skippable:
+  // just don't create a link; collect later from the client's page.
+  const [payLink, setPayLink] = useState('');
+  const [linking, setLinking] = useState(false);
+  const [copiedPay, setCopiedPay] = useState(false);
+  const makePayLink = async () => {
+    setLinking(true); setCopiedPay(false);
+    try {
+      const r = await api.createCheckoutLink(result.client.id);
+      if (r?.url) setPayLink(r.url); else alert(r?.error || 'Could not create payment link');
+    } catch (e) { alert(e.message); } finally { setLinking(false); }
+  };
+  const copyPay = async () => {
+    try { await navigator.clipboard.writeText(payLink); setCopiedPay(true); setTimeout(() => setCopiedPay(false), 2000); } catch {}
+  };
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
       <div style={{ ...card, padding: 36, marginTop: 30 }}>
@@ -507,6 +526,29 @@ function SuccessCard({ result, onBack }) {
             background: '#C9A84C', color: '#0D1B3E', border: 'none', padding: '8px 14px',
             borderRadius: 6, marginTop: 12, fontWeight: 800, fontSize: 13, cursor: 'pointer',
           }}>{copied ? '✓ Copied' : '📋 Copy to clipboard'}</button>
+        </div>
+
+        {/* BO-BILLING-001 — optional payment (skippable) */}
+        <div style={{ marginTop: 20, padding: 18, border: `1px solid ${C.border}`, borderRadius: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>
+            💳 Payment (optional — set up now or later)
+          </div>
+          <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 12 }}>
+            Create a payment link to <strong>send the client</strong> or <strong>open on your iPad on-site</strong>. Skip it and collect later from the client's page — nothing is charged until they pay.
+          </div>
+          {!payLink ? (
+            <button onClick={makePayLink} disabled={linking} style={{ ...btn.gold, fontSize: 13, opacity: linking ? 0.6 : 1, cursor: linking ? 'wait' : 'pointer' }}>
+              {linking ? 'Creating…' : '💳 Create payment link'}
+            </button>
+          ) : (
+            <div style={{ background: C.surfaceAlt || '#f6f7fb', padding: 12, borderRadius: 8, border: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', wordBreak: 'break-all', marginBottom: 10 }}>{payLink}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={copyPay} style={{ ...btn.ghost, fontSize: 12 }}>{copiedPay ? '✓ Copied!' : '📋 Copy link'}</button>
+                <a href={payLink} target="_blank" rel="noopener noreferrer" style={{ ...btn.gold, fontSize: 12, textDecoration: 'none' }}>Open to pay now ↗</a>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Checklist preview */}

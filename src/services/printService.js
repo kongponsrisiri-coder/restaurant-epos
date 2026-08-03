@@ -155,6 +155,22 @@ function flatten(parts) {
   );
 }
 
+// ── Native ESC/POS QR (GS ( k, model 2). Used for the Google-review QR on the
+// receipt, which previously only rendered on the browser/HTML receipt — so
+// network thermal tills (POS80) never printed it. Supported by POS80-class and
+// Epson/Star ESC/POS printers. ec: 48=L 49=M 50=Q 51=H.
+function qrCode(data, { size = 6, ec = 49 } = {}) {
+  const bytes = Buffer.from(String(data || ''), 'latin1');
+  const store = bytes.length + 3;
+  return Buffer.concat([
+    Buffer.from([0x1d, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00]),                 // model 2
+    Buffer.from([0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, size & 0xff]),                // module size
+    Buffer.from([0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, ec & 0xff]),                  // error correction
+    Buffer.from([0x1d, 0x28, 0x6b, store & 0xff, (store >> 8) & 0xff, 0x31, 0x50, 0x30]), bytes, // store data
+    Buffer.from([0x1d, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30]),                       // print
+  ]);
+}
+
 // ── Receipt formatter ─────────────────────────────────────────────────────────
 
 function buildReceipt({ order, items, settings, paymentDetails = {} }) {
@@ -374,6 +390,16 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
     CMD.ALIGN_CENTER,
     txt(footer),                       lf(),
     txt('ขอบคุณที่มาใช้บริการ'), lf(3),
+
+    // SEPOS-REVIEW-QR — Google-review QR on the thermal receipt (was browser-
+    // receipt-only, so POS80 network tills never printed it). Prints only when
+    // a review link is set in Settings.
+    settings.google_review_url ? [
+      CMD.ALIGN_CENTER,
+      qrCode(settings.google_review_url),
+      lf(),
+      txt('Scan to leave us a review'), lf(3),
+    ] : [],
 
     CMD.CUT,
   ];

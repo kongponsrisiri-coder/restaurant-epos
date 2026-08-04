@@ -9317,6 +9317,15 @@ app.post('/api/webhooks/run-now', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-REMINDER-001 — manual trigger for the day-before reminder check
+// (testing/support). Reports candidates found vs actually sent.
+app.post('/api/webhooks/run-reminders', async (req, res) => {
+  try {
+    const result = await require('./services/reminderService').runReminderCheck();
+    res.json({ success: true, ...result });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── SEPOS-025/026 Network Printing ──────────────────────────────────────────
 // Helper: load all settings as a plain object
 async function loadSettings() {
@@ -10616,6 +10625,8 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   // every cloud event lands on the Mac in real time. No-op in cloud mode.
   cloudRelay.start(io, syncService);
   makeWebhooks.start();
+  // SEPOS-REMINDER-001 — day-before booking reminder emails (cloud-only inside).
+  require('./services/reminderService').start();
   // SEPOS-LOCAL-001 Phase 1 — morning catchup. If yesterday's archive
   // wasn't run (Mac was off after service, Z-report not closed cleanly,
   // first launch after install, etc.) generate it silently now.

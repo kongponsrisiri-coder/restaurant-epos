@@ -1294,6 +1294,21 @@ export default function SettingsSection() {
   const [newReason, setNewReason] = useState('');
   const [saved, setSaved]         = useState(false);
   const [logoPreview, setLogoPreview] = useState('');
+  // SEPOS-REVIEW-QR — render the ACTUAL review QR in the Receipt Preview (was
+  // a placeholder line; the operator couldn't tell what would print). Debounced
+  // so it redraws as the link is typed.
+  const [reviewQr, setReviewQr] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    const url = (settings.google_review_url || '').trim();
+    if (!url) { setReviewQr(''); return; }
+    const id = setTimeout(() => {
+      QRCode.toDataURL(url, { width: 120, margin: 0, color: { dark: '#000000', light: '#FFFFFF' } })
+        .then(d => { if (!cancelled) setReviewQr(d); })
+        .catch(() => { if (!cancelled) setReviewQr(''); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(id); };
+  }, [settings.google_review_url]);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -1806,7 +1821,12 @@ export default function SettingsSection() {
             <div style={{ display:'flex', justifyContent:'space-between', fontWeight:900, fontSize:13, marginTop:4 }}><span>TOTAL</span><span>£{(25.50*(1+(parseFloat(settings.service_charge_enabled==='1'?settings.service_charge_rate||12.5:0)/100))).toFixed(2)}</span></div>
             <div style={{ borderTop:'1px solid #000', margin:'6px 0' }} />
             <div style={{ textAlign:'center', fontSize:10, color:'#555', marginTop:6 }}>{settings.receipt_footer||'Thank you for dining with us!'}</div>
-            {settings.google_review_url && <div style={{ textAlign:'center', fontSize:9, color:'#aaa', marginTop:4 }}>📱 Scan QR code to leave a review</div>}
+            {settings.google_review_url && (
+              <div style={{ textAlign:'center', marginTop:6 }}>
+                {reviewQr && <img src={reviewQr} alt="Review QR" style={{ width:64, height:64, imageRendering:'pixelated' }} />}
+                <div style={{ fontSize:9, color:'#666', marginTop:3 }}>Scan to leave us a review</div>
+              </div>
+            )}
           </div>
         </div>
       )}

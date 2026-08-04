@@ -16,28 +16,45 @@ const emailService = require('./emailService');
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // hourly, same cadence as makeWebhooks
 let timer = null;
 
-// Europe/London "tomorrow" — Railway containers run UTC, and a naive
+// Europe/London date/hour helpers — Railway containers run UTC, and a naive
 // toISOString() rolls the date over at 00:00 UTC = 01:00 BST (the same gotcha
 // reports.today() guards against).
-function londonTomorrow() {
+function londonDate(offsetDays = 0) {
   const fmt = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit',
   });
-  return fmt.format(new Date(Date.now() + 24 * 60 * 60 * 1000)); // YYYY-MM-DD
+  return fmt.format(new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000)); // YYYY-MM-DD
+}
+function londonHour() {
+  return Number(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London', hour: '2-digit', hour12: false,
+  }).format(new Date()));
 }
 
-async function runReminderCheck() {
-  const tomorrow = londonTomorrow();
+// The send WINDOW (Korakot 2026-08-04): a reminder arriving right behind the
+// confirmation email is noise. Reminders go out in the MORNING of the day
+// before (09:00–11:59 London), and only for bookings made at least a day
+// ahead — same-day-booked customers just received their confirmation.
+const WINDOW_START = 9;
+const WINDOW_END = 12; // exclusive
+
+async function runReminderCheck({ force = false } = {}) {
+  const hour = londonHour();
+  if (!force && (hour < WINDOW_START || hour >= WINDOW_END)) {
+    return { date: londonDate(1), skipped: 'outside 09:00–12:00 morning window', candidates: 0, sent: 0 };
+  }
+  const tomorrow = londonDate(1);
   const due = await pool.query(
     `SELECT r.* FROM reservations r
      WHERE r.reservation_date::date = $1::date
        AND r.status IN ('pending', 'confirmed')
        AND r.customer_email IS NOT NULL AND r.customer_email <> ''
+       AND r.created_at::date < $2::date
        AND NOT EXISTS (
          SELECT 1 FROM reservation_reminders rr
          WHERE rr.reservation_id = r.id AND rr.type = 'day_before'
        )`,
-    [tomorrow],
+    [tomorrow, londonDate(0)],
   );
   let sent = 0;
   for (const r of due.rows) {

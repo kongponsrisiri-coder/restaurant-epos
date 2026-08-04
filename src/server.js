@@ -9318,10 +9318,13 @@ app.post('/api/webhooks/run-now', async (req, res) => {
 });
 
 // SEPOS-REMINDER-001 — manual trigger for the day-before reminder check
-// (testing/support). Reports candidates found vs actually sent.
+// (testing/support). Reports candidates found vs actually sent. Pass
+// {force:true} to bypass the 09:00–12:00 morning send-window (the created-a-day-
+// ahead rule still applies — a same-day booking is never remindable).
 app.post('/api/webhooks/run-reminders', async (req, res) => {
   try {
-    const result = await require('./services/reminderService').runReminderCheck();
+    const force = req.body?.force === true || req.query.force === '1';
+    const result = await require('./services/reminderService').runReminderCheck({ force });
     res.json({ success: true, ...result });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

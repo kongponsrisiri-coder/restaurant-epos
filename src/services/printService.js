@@ -71,20 +71,26 @@ const CMD = {
 
 const LINE_WIDTH = 42;  // characters at normal size on 80mm paper
 
-// SEPOS-PRINT-FONT-001 — per-role configurable print font size. A scale string
-// ('normal' | 'large' | 'xlarge') maps to a discrete ESC/POS size + a width
-// divisor (a 2×-wide char = half the characters per line). Defaults chosen so
-// today's output is unchanged: kitchen/bar were SIZE_BIG (= 'large'), the
-// receipt body was SIZE_NORMAL (= 'normal').
+// SEPOS-PRINT-FONT-001 / SEPOS-PRINT-FONT-002 — per-role configurable print
+// font size. ESC/POS `GS ! n` scales character WIDTH and HEIGHT independently
+// (1–8× each; n = (w-1)<<4 | (h-1)), so a scale can be any "WxH" token like
+// '1x2' (tall, full line width) or '2x1' (wide). Legacy word tokens map to
+// their historical combos so existing settings keep printing identically:
+//   normal=1x1 · medium/tall=1x2 · large=2x2 (kitchen/bar default) · xlarge=3x3
+// Width divisor = W (a 2×-wide char halves the characters per line).
+function parseScale(scale) {
+  const m = /^([1-4])x([1-4])$/.exec(String(scale || ''));
+  if (m) return { w: Number(m[1]), h: Number(m[2]) };
+  const LEGACY = { normal: [1, 1], medium: [1, 2], tall: [1, 2], wide: [2, 1], large: [2, 2], xlarge: [3, 3] };
+  const [w, h] = LEGACY[scale] || [2, 2]; // unknown/default = 'large' behaviour
+  return { w, h };
+}
 function scaleCmd(scale) {
-  return scale === 'xlarge' ? CMD.SIZE_XL
-       : scale === 'normal' ? CMD.SIZE_NORMAL
-       : scale === 'medium' ? CMD.SIZE_TALL   // double-HEIGHT only — taller + fills the paper, but same char width so names don't truncate
-       : CMD.SIZE_BIG; // 'large' / default
+  const { w, h } = parseScale(scale);
+  return Buffer.from([GS, 0x21, ((w - 1) << 4) | (h - 1)]);
 }
 function scaleWidthDivisor(scale) {
-  // 'medium' is single-width → keep the FULL line width (no truncation), just taller.
-  return scale === 'xlarge' ? 3 : scale === 'normal' ? 1 : scale === 'medium' ? 1 : 2; // 'large'/default = 2
+  return parseScale(scale).w;
 }
 
 // ── Bilingual course labels ───────────────────────────────────────────────────

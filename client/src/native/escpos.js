@@ -26,10 +26,20 @@ const KITCHEN_TOKEN = { normal: 't', large: 'b', xlarge: 'h' };
 const KITCHEN_WIDTH = { normal: 30, large: 26, xlarge: 19 };
 const BILL_TOKEN    = { normal: 'r', large: 'n', xlarge: 't' };
 const BILL_WIDTH    = { normal: 36, large: 27, xlarge: 22 };
-const kToken = (s) => KITCHEN_TOKEN[s] || 'b';
-const kWidth = (s) => KITCHEN_WIDTH[s] || 26;
-const bToken = (s) => BILL_TOKEN[s] || 'r';
-const bWidth = (s) => BILL_WIDTH[s] || 36;
+// SEPOS-PRINT-FONT-002 — scales can now be "WxH" tokens (see printService).
+// The Sunmi printText API takes point sizes, not independent w×h, so map a
+// WxH to the nearest point-size step by its dominant multiplier. Legacy words
+// (medium/tall/wide) collapse through the same table.
+const WH_LEGACY = { normal: [1, 1], medium: [1, 2], tall: [1, 2], wide: [2, 1], large: [2, 2], xlarge: [3, 3] };
+const scaleMax = (s) => {
+  const m = /^([1-4])x([1-4])$/.exec(String(s || ''));
+  const wh = m ? [Number(m[1]), Number(m[2])] : WH_LEGACY[s];
+  return wh ? Math.max(wh[0], wh[1]) : null;
+};
+const kToken = (s) => { const x = scaleMax(s); return x == null ? (KITCHEN_TOKEN[s] || 'b') : (x <= 1 ? 't' : x === 2 ? 'b' : 'h'); };
+const kWidth = (s) => { const x = scaleMax(s); return x == null ? (KITCHEN_WIDTH[s] || 26) : (x <= 1 ? 30 : x === 2 ? 26 : 19); };
+const bToken = (s) => { const x = scaleMax(s); return x == null ? (BILL_TOKEN[s] || 'r') : (x <= 1 ? 'r' : x === 2 ? 'n' : 't'); };
+const bWidth = (s) => { const x = scaleMax(s); return x == null ? (BILL_WIDTH[s] || 36) : (x <= 1 ? 36 : x === 2 ? 27 : 22); };
 
 function money(n) { return '£' + (parseFloat(n || 0)).toFixed(2); }
 function rule() { return '-'.repeat(WIDTH); }

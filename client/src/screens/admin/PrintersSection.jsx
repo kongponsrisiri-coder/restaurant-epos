@@ -858,11 +858,17 @@ export default function PrintersSection() {
             ['Bar ticket text','bar_font_scale','large']].map(([label,key,def]) => (
             <div key={key} style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
               <label style={{ fontSize:14, fontWeight:600, color:'#555', minWidth:150 }}>{label}</label>
+              {/* SEPOS-PRINT-FONT-002 — the printer scales width and height
+                  INDEPENDENTLY, so offer the full useful matrix (legacy word
+                  values keep working; ~chars/line shown for 80mm paper). */}
               <select value={settings[key] || def} onChange={e => setSettings({...settings, [key]:e.target.value})} style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}>
-                <option value="normal">Normal</option>
-                <option value="medium">Medium (taller — fills the paper, no cut-off)</option>
-                <option value="large">Large</option>
-                <option value="xlarge">Extra-large</option>
+                <option value="normal">Normal — small &amp; tidy (42 chars/line)</option>
+                <option value="medium">Tall — normal width, double height (42 chars/line)</option>
+                <option value="1x3">Extra tall — normal width, triple height (42 chars/line)</option>
+                <option value="2x1">Wide — double width, normal height (21 chars/line)</option>
+                <option value="large">Large — double width &amp; height (21 chars/line)</option>
+                <option value="2x3">Large + extra tall (21 chars/line)</option>
+                <option value="xlarge">Extra-large — triple both (14 chars/line)</option>
               </select>
             </div>
           ))}

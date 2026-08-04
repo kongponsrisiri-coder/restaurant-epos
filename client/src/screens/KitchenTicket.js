@@ -598,9 +598,15 @@ function multiPage(body, copies) {
 
 // SEPOS-PRINT-FONT-001 — HTML/Electron kitchen multiplier. Centred so the role's
 // DEFAULT = today's px (kitchen default 'large' = ×1.0), no regression.
-const HTML_FS_KITCHEN = { normal: 0.85, large: 1.0, xlarge: 1.2 };
-const kitchenFs = (settings, role = 'kitchen') =>
-  HTML_FS_KITCHEN[(settings && settings[`${role}_font_scale`]) || 'large'] ?? 1;
+const HTML_FS_KITCHEN = { normal: 0.85, medium: 0.95, tall: 0.95, wide: 1.0, large: 1.0, xlarge: 1.2 };
+// SEPOS-PRINT-FONT-002 — "WxH" tokens map to an approximate css scale by their
+// dominant multiplier (browser print can't do independent char width/height).
+const kitchenFs = (settings, role = 'kitchen') => {
+  const scale = (settings && settings[`${role}_font_scale`]) || 'large';
+  const m = /^([1-4])x([1-4])$/.exec(String(scale));
+  if (m) { const x = Math.max(Number(m[1]), Number(m[2])); return x <= 1 ? 0.85 : x === 2 ? 1.0 : 1.2; }
+  return HTML_FS_KITCHEN[scale] ?? 1;
+};
 
 function wrapHTML(pages, fs = 1) {
   return `<!DOCTYPE html>

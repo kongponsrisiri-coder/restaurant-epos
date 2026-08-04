@@ -10,7 +10,7 @@
 // Cloud-only: bookings sync to the cloud and BREVO_API_KEY lives there; running
 // on local tills too would race the dedupe across machines for no benefit.
 
-const { pool } = require('../db/dbAdapter');
+const pool = require('../db/dbAdapter'); // exports the pool itself (see makeWebhooks)
 const emailService = require('./emailService');
 
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // hourly, same cadence as makeWebhooks

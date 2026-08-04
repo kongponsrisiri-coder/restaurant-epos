@@ -55,6 +55,12 @@ SiamEPOS is an **ERP for Thai *businesses* in the UK — NOT just restaurants.**
 
 **📸 DEFAULT TO PHOTO-LED POSTS (Korakot, 2026-08-03 — "can't you create nice photo anymore?"):** lead with a genuinely NICE photo as the hero — a real gpt-image-2 image (realistic, de-slopped with grain + realism cues), full-bleed — with only MINIMAL branding (small dark-mode logo + a short headline band + site) and the detail/tips in the CAPTION. Don't default to text-heavy cards on an abstract background — those are for positioning/announcements, not everyday posts. Reference build: `marketing/cards/spa-photo-post.html`.
 
+**🖥️ SHOW REAL UI BEAUTIFULLY — feed the screenshot to gpt-image-2 EDITS (Korakot, 2026-08-04):** a flat perspective-paste of a screenshot onto a device looks fake/ugly. Instead, POST the screenshot to `/v1/images/edits` (`model=gpt-image-2`, `image=@shot.png`, portrait size) with a prompt like *"render THIS point-of-sale interface, faithful and legible, on a tablet in a warm Thai restaurant, natural screen glow + reflection + perspective, photorealistic"* — it integrates the real UI into a scene naturally (glow/reflection/DOF), far better than compositing. **⚠️ Blur staff names / any PII in the screenshot BEFORE sending** (no real names to AI — [[feedback_no_customer_data_to_ai]]). Reference: `marketing/cards/till-ai.png` (the full-platform ad).
+
+**🇬🇧 THAI SETTINGS MUST LOOK UK, NOT A PALACE (Korakot, repeated 2026-08-04):** our audience is Thai businesses **in the UK** — so restaurant/spa/shop scenes must look like a **real, modest UK high-street venue** (plain wooden tables, simple pendant/spot lighting, understated modern decor, maybe a £-priced menu poster). gpt-image-2 defaults to an ornate luxury Thailand *palace/resort* (gold mandalas, crystal chandeliers, heavy carved panels, brass everywhere) — **explicitly prompt AGAINST that** ("real everyday UK Thai restaurant, NOT a luxury palace, no gold mandalas/chandeliers"). Reference: `marketing/cards/till-ai-uk.png`.
+
+**📷 IF KORAKOT SENDS A REAL PHOTO, USE IT (Korakot, 2026-08-04):** when he provides a real photo (his actual restaurant/setting/scene), **render FROM his photo** — don't invent a fake AI scene instead. Feed his photo to gpt-image-2 edits to enhance/relight/composite (e.g. place a UI on the device in his shot), or use it directly in the brand frame. His real photo is the preferred source; only generate a scene when he hasn't given one.
+
 ---
 
 ## CLIENTS

@@ -7409,7 +7409,12 @@ app.get('/api/qr/sheet', async (req, res) => {
       return res.status(403).type('text/html').send('<h3 style="font-family:sans-serif">QR ordering is switched off — enable it in Settings first (qr_ordering_enabled).</h3>');
     }
     const QRCode = require('qrcode');
-    const base = (process.env.PUBLIC_API_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+    // The QR must carry a CUSTOMER-reachable address. On a desktop till the
+    // request host is localhost:3001 — meaningless on a customer's phone —
+    // so prefer the install's cloud URL (tokens verify identically there:
+    // same SYNC_SECRET, same table ids). Cloud deployments fall through to
+    // their own host as before.
+    const base = (process.env.PUBLIC_API_URL || process.env.CLOUD_API_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
     const nameRes = await pool.query(`SELECT value FROM settings WHERE key IN ('restaurant_name','company_name') ORDER BY key = 'restaurant_name' DESC LIMIT 1`);
     const rName = nameRes.rows[0]?.value || 'SiamEPOS';
     const tRes = await pool.query(`SELECT id, table_number, name FROM tables WHERE COALESCE(is_takeaway,0) = 0 ORDER BY table_number`);

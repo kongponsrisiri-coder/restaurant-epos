@@ -434,12 +434,27 @@ async function forwardWriteToCloud(req, res, label, afterPull, opts = {}) {
     res.status(r.status).type('application/json').send(body);
     return true;
   } catch (err) {
-    // strict: the local fallback would be a DOOMED write — the table is
-    // cloud-wins on every pull, so a local-only change survives seconds and
+    // strict: an UNQUEUED local fallback would be a DOOMED write — the table
+    // is cloud-wins on every pull, so a local-only change survives seconds and
     // then "pops back" (Korakot, Baan Siam floor plan, 2026-08-03→05: edits
-    // made while the cloud was mid-redeploy silently reverted). Fail loud so
-    // the UI can tell the operator to retry, instead of lying "saved".
+    // made while the cloud was mid-redeploy silently reverted).
+    //
+    // SEPOS-CONFIG-QUEUE ("the till is the boss", Korakot 2026-08-05): for
+    // UPDATE/DELETE we now queue a config_write replay and fall through to the
+    // local handler — the operator's edit applies instantly, survives offline,
+    // and pushes to the cloud when it returns; pullFromCloud skips rows with a
+    // pending config_write so the edit can't be reverted meanwhile. CREATEs
+    // still require the cloud (a new row needs its cloud id) and fail loud.
     if (opts.strict) {
+      if (req.method === 'PUT' || req.method === 'DELETE') {
+        const qid = await offlineQueue.enqueue('config_write', {
+          method: req.method, path: req.originalUrl, body: req.body || {},
+        });
+        if (qid) {
+          console.warn(`[${label}] cloud unreachable for ${req.method} ${req.originalUrl}: ${err.message} — queued config_write #${qid}, applying locally (till is the boss)`);
+          return false;   // local handler applies the edit; queue replays it later
+        }
+      }
       console.warn(`[${label}] cloud unreachable for ${req.method} ${req.originalUrl}: ${err.message} — rejecting (strict write-through)`);
       res.status(503).json({ error: 'Cloud unreachable — change not saved. Check the internet connection and try again in a minute.' });
       return true;

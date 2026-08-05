@@ -41,6 +41,26 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [viewMode, setViewMode] = useState(window.innerWidth < 768 ? 'grid' : 'plan');
 
+  // SEPOS-FLOOR-FIT — the plan view auto-zooms the floor plan to fill the
+  // screen. Editor coordinates are absolute pixels laid out on a small canvas,
+  // so on a big monitor the plan huddled in the top-left corner with most of
+  // the screen empty (Korakot, 2026-08-05). Measure the viewport, measure the
+  // plan's bounding box, scale + centre. Clamped so tiny plans don't balloon
+  // (max 2.2×) and huge plans stay tappable (min 0.5× — beyond that the
+  // container still scrolls).
+  const planViewRef = useRef(null);
+  const [planViewSize, setPlanViewSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    if (viewMode !== 'plan') return;
+    const el = planViewRef.current;
+    if (!el) return;
+    const measure = () => setPlanViewSize({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [viewMode, loading]);
+
   // Move/Merge state — unchanged
   const [tableActionPopup, setTableActionPopup] = useState(null);
   const [moveMode, setMoveMode] = useState(false);
@@ -378,22 +398,44 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
               💡 Scroll to see all tables · Tap ⊞ Grid for an easier view on this screen
             </div>
           )}
-          <div style={{
+          <div ref={planViewRef} style={{
             flex: 1, overflow: 'auto',
             background: '#f0ede8', position: 'relative',
             backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)',
             backgroundSize: '30px 30px'
           }}>
-            {tables.map(table => {
+            {(() => {
+              // SEPOS-FLOOR-FIT — bounding box of the plan, then scale + centre.
+              // Same relative spacing as the editor, zoomed to fill the screen.
+              const PAD = 28;
+              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+              for (const t of tables) {
+                const tx = t.pos_x ?? 40, ty = t.pos_y ?? 40;
+                minX = Math.min(minX, tx); minY = Math.min(minY, ty);
+                maxX = Math.max(maxX, tx + (t.width || 80));
+                maxY = Math.max(maxY, ty + (t.height || 80));
+              }
+              // Reservation badges float ~14px above the top row — reserve room.
+              minY -= 16;
+              const bboxW = Math.max(1, maxX - minX), bboxH = Math.max(1, maxY - minY);
+              const availW = Math.max(0, planViewSize.w - PAD * 2);
+              const availH = Math.max(0, planViewSize.h - PAD * 2);
+              const scale = (availW > 0 && availH > 0 && tables.length > 0)
+                ? Math.min(2.2, Math.max(0.5, Math.min(availW / bboxW, availH / bboxH)))
+                : 1;
+              const offX = PAD + Math.max(0, (availW - bboxW * scale) / 2);
+              const offY = PAD + Math.max(0, (availH - bboxH * scale) / 2);
+
+              return tables.map(table => {
               const colours = getTableColour(table);
-              const w = table.width || 80;
-              const h = table.height || 80;
+              const w = Math.round((table.width || 80) * scale);
+              const h = Math.round((table.height || 80) * scale);
               // ?? not || — a table dragged flush to the top/left edge is saved
               // at pos 0, and `0 || 40` silently bumped it 40px on the FLOOR
               // while the editor drew it at 0 → "I saved but the layout still
               // differs" (Korakot, 2026-08-03: only T1/T2 at y=0 were off).
-              const x = table.pos_x ?? 40;
-              const y = table.pos_y ?? 40;
+              const x = Math.round(((table.pos_x ?? 40) - minX) * scale + offX);
+              const y = Math.round(((table.pos_y ?? 40) - minY) * scale + offY);
               const time = getTableTime(table.id);
               const timeColor = getTimeColor(table.id);
               const isSelected = tableActionPopup?.table.id === table.id;
@@ -414,12 +456,12 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                   onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.06)'; }}
                   onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
                 >
-                  <div style={{ fontSize: w > 90 ? 16 : 13, fontWeight: 800, color: colours.text, textAlign: 'center', padding: '0 4px' }}>
+                  <div style={{ fontSize: Math.max(12, Math.min(22, Math.round(w * 0.17))), fontWeight: 800, color: colours.text, textAlign: 'center', padding: '0 4px' }}>
                     {table.is_takeaway ? '🥡 ' : ''}{tableLabel(table)}
                   </div>
                   {time && (
                     <div style={{
-                      fontSize: 13, fontWeight: 800,
+                      fontSize: Math.max(11, Math.min(17, Math.round(w * 0.13))), fontWeight: 800,
                       color: '#000000',
                       marginTop: 3,
                       background: 'rgba(255,255,255,0.85)',
@@ -444,7 +486,8 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                   )}
                 </div>
               );
-            })}
+              });
+            })()}
           </div>
         </>
       )}

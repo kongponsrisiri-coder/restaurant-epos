@@ -660,9 +660,51 @@ async function applyToCloud(actionType, payload) {
       if (!r.ok) throw new Error(`session_close ${r.status}`);
       return r.json();
     }
+    // SEPOS-CONFIG-QUEUE — replay a config write (floor plan UPDATE/DELETE)
+    // that was made while the cloud was unreachable. "The till is the boss":
+    // the host's edit applied locally the moment it was made; this pushes it
+    // up verbatim once internet returns. PUT/DELETE are idempotent so queue
+    // retries are safe. x-sync-secret rides along for gated endpoints.
+    case 'config_write': {
+      const headers = { 'Content-Type': 'application/json' };
+      if (process.env.SYNC_SECRET) headers['x-sync-secret'] = process.env.SYNC_SECRET;
+      const init = { method: payload.method, headers };
+      if (payload.method !== 'DELETE' && payload.body && Object.keys(payload.body).length) {
+        init.body = JSON.stringify(payload.body);
+      }
+      const r = await fetch(url(payload.path), init);
+      if (!r.ok) throw new Error(`config_write ${payload.method} ${payload.path} ${r.status}`);
+      return r.json().catch(() => ({ success: true }));
+    }
     default:
       throw new Error('unknown sync action: ' + actionType);
   }
+}
+
+// SEPOS-CONFIG-QUEUE — local row ids (per flat table) that have an unfinished
+// config_write in the queue. The pull must not upsert (revert) or orphan-delete
+// these rows until the host's edit has landed on the cloud.
+const CONFIG_WRITE_PATHS = {
+  tables:              /^\/api\/tables\/(\d+)(?:\/plan)?$/,
+  table_walls:         /^\/api\/table-walls\/(\d+)$/,
+  table_combinations:  /^\/api\/table-combinations\/(\d+)$/,
+};
+async function pendingConfigWriteIds(table) {
+  const re = CONFIG_WRITE_PATHS[table];
+  if (!re) return new Set();
+  try {
+    const r = await pool.query(
+      `SELECT payload FROM sync_queue WHERE synced = 0 AND action_type = 'config_write'`);
+    const ids = new Set();
+    for (const row of r.rows) {
+      try {
+        const p = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+        const m = re.exec(p?.path || '');
+        if (m) ids.add(Number(m[1]));
+      } catch { /* malformed payload — ignore */ }
+    }
+    return ids;
+  } catch { return new Set(); }
 }
 
 async function getLocalColumns(table) {
@@ -905,6 +947,14 @@ async function pullFromCloud() {
         }
         list = filtered;
       }
+      // SEPOS-CONFIG-QUEUE — rows the host edited while offline (unfinished
+      // config_write in the queue) are host-authoritative: don't let the
+      // cloud's stale copy revert them, and don't orphan-delete them either.
+      const pendingIds = await pendingConfigWriteIds(ep.table);
+      if (pendingIds.size > 0) {
+        list = list.filter((row) => !pendingIds.has(Number(row?.id)));
+        console.log(`[sync] pull ${ep.table}: skipping ${pendingIds.size} row(s) with pending config_write`);
+      }
       const n = await upsertRows(ep.table, ep.pk, list);
       if (n > 0) console.log(`[sync] pull ${ep.table}: ${n} rows`);
       // SEPOS-059 fix — cloud-wins DELETE for flagged flat tables (the modifier
@@ -913,7 +963,8 @@ async function pullFromCloud() {
       // above) so a transient failure never wipes local; an empty 200 list
       // legitimately means "cloud has none" → remove all local.
       if (ep.orphan && ep.pk === 'id') {
-        const removed = await deleteOrphans(ep.table, list.map((row) => row.id));
+        const keep = list.map((row) => row.id).concat([...pendingIds]);
+        const removed = await deleteOrphans(ep.table, keep);
         if (removed > 0) console.log(`[sync] orphan-delete ${ep.table}: ${removed} rows`);
       }
     } catch (err) {

@@ -61,6 +61,21 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
     return () => ro.disconnect();
   }, [viewMode, loading]);
 
+  // Manual zoom on top of the auto-fit — a per-device multiplier the operator
+  // controls with −/Fit/+ buttons (Korakot: "where's the zoom button, and it's
+  // too big"). 1 = auto-fit; persisted so each till remembers its preference.
+  const [userZoom, setUserZoom] = useState(() => {
+    const v = parseFloat(localStorage.getItem('siamepos_floor_zoom'));
+    return Number.isFinite(v) && v > 0 ? v : 1;
+  });
+  const changeZoom = (factor) => {
+    setUserZoom((z) => {
+      const next = factor === 0 ? 1 : Math.min(2, Math.max(0.5, +(z * factor).toFixed(3)));
+      try { localStorage.setItem('siamepos_floor_zoom', String(next)); } catch { /* private mode */ }
+      return next;
+    });
+  };
+
   // Move/Merge state — unchanged
   const [tableActionPopup, setTableActionPopup] = useState(null);
   const [moveMode, setMoveMode] = useState(false);
@@ -398,9 +413,10 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
               💡 Scroll to see all tables · Tap ⊞ Grid for an easier view on this screen
             </div>
           )}
+          <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
           <div ref={planViewRef} style={{
-            flex: 1, overflow: 'auto',
-            background: '#f0ede8', position: 'relative',
+            position: 'absolute', inset: 0, overflow: 'auto',
+            background: '#f0ede8',
             backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)',
             backgroundSize: '30px 30px'
           }}>
@@ -420,9 +436,12 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
               const bboxW = Math.max(1, maxX - minX), bboxH = Math.max(1, maxY - minY);
               const availW = Math.max(0, planViewSize.w - PAD * 2);
               const availH = Math.max(0, planViewSize.h - PAD * 2);
-              const scale = (availW > 0 && availH > 0 && tables.length > 0)
-                ? Math.min(2.2, Math.max(0.5, Math.min(availW / bboxW, availH / bboxH)))
+              // Auto-fit capped at 1.5× (2.2 read as "too big" on a monitor);
+              // the operator's −/Fit/+ multiplier rides on top, final 0.35–3×.
+              const fitScale = (availW > 0 && availH > 0 && tables.length > 0)
+                ? Math.min(1.5, Math.max(0.5, Math.min(availW / bboxW, availH / bboxH)))
                 : 1;
+              const scale = Math.min(3, Math.max(0.35, fitScale * userZoom));
               const offX = PAD + Math.max(0, (availW - bboxW * scale) / 2);
               const offY = PAD + Math.max(0, (availH - bboxH * scale) / 2);
 
@@ -488,6 +507,34 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
               );
               });
             })()}
+          </div>
+          {/* SEPOS-FLOOR-FIT — manual zoom on top of auto-fit. Per-device,
+              remembered. Fit (⊡) returns to automatic. */}
+          <div style={{
+            position: 'absolute', right: 14, bottom: 14,
+            display: 'flex', flexDirection: 'column', gap: 6, zIndex: 5,
+          }}>
+            {[
+              { label: '+', title: 'Zoom in',            act: () => changeZoom(1.15) },
+              { label: '⊡', title: 'Fit to screen',      act: () => changeZoom(0) },
+              { label: '−', title: 'Zoom out',           act: () => changeZoom(1 / 1.15) },
+            ].map(b => (
+              <button key={b.label} title={b.title} onClick={b.act} style={{
+                width: 44, height: 44, borderRadius: 10,
+                border: '1px solid #d6d3cb', background: 'rgba(255,255,255,0.95)',
+                color: 'var(--brand-primary, #1a1a2e)', fontSize: b.label === '⊡' ? 20 : 24,
+                fontWeight: 700, cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>{b.label}</button>
+            ))}
+            {userZoom !== 1 && (
+              <div style={{
+                textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#7C766A',
+                background: 'rgba(255,255,255,0.9)', borderRadius: 6, padding: '2px 4px',
+              }}>{Math.round(userZoom * 100)}%</div>
+            )}
+          </div>
           </div>
         </>
       )}

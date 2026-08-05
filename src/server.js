@@ -7387,6 +7387,18 @@ async function qrEnabled() {
     return String(r.rows[0]?.value || '0') === '1';
   } catch { return false; }
 }
+// Real card payment is only offered when keys exist AND the demo override is
+// off — the SAME rule /api/takeaway/stripe-config applies, or the page would
+// try to mount Stripe with a null publishable key on the demo tenant
+// (found live on Baan Siam: takeaway_mock_pay=1 but secret key present).
+async function qrStripeReady() {
+  try {
+    const s = await loadSettings();
+    if (String(s.takeaway_mock_pay || s.qr_mock_pay || '') === '1') return false;
+  } catch { /* settings unreadable → fall through to key check */ }
+  if (siampayCfg()) return true;
+  return !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PUBLISHABLE_KEY);
+}
 
 // The printable sticker sheet — one card per (non-takeaway) table. Server-
 // rendered HTML with inline SVG QRs (qrcode package), opened from the Table
@@ -7445,8 +7457,7 @@ app.get('/api/qr/session/:token', widgetCors, async (req, res) => {
     if (!t) return res.status(404).json({ error: 'This code is no longer active — please ask a member of staff.' });
     const sRes = await pool.query(`SELECT key, value FROM settings WHERE key IN ('restaurant_name','company_name','currency_symbol','brand_primary')`);
     const cfg = {}; for (const r of sRes.rows) cfg[r.key] = r.value;
-    const sp = siampayCfg();
-    const stripeReady = !!(sp || process.env.STRIPE_SECRET_KEY);
+    const stripeReady = await qrStripeReady();
     // Open order on this table (any dine-in — the customer may be topping up
     // an order a waiter started, that's fine; the bill is the table's bill).
     const oRes = await pool.query(
@@ -7509,7 +7520,7 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
 
     // Pay-first verification (identical hardening to the takeaway widget).
     const sp = siampayCfg();
-    const stripeReady = !!(sp || process.env.STRIPE_SECRET_KEY);
+    const stripeReady = await qrStripeReady();
     let paymentStatus = 'mock';
     let paidPence = null;
     if (stripeReady) {
@@ -7592,8 +7603,8 @@ app.post('/api/qr/payment-intent/:token', widgetCors, async (req, res) => {
     if (!await qrEnabled()) return res.status(403).json({ error: 'QR ordering is not enabled' });
     const tableId = qrVerifyToken(req.params.token);
     if (!tableId) return res.status(404).json({ error: 'Invalid code' });
+    if (!await qrStripeReady()) return res.status(503).json({ error: 'Card payments not configured' });
     const sp = siampayCfg();
-    if (!sp && !process.env.STRIPE_SECRET_KEY) return res.status(503).json({ error: 'Card payments not configured' });
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     if (!items.length || items.length > 40) return res.status(400).json({ error: 'Invalid cart' });
     let totalPence = 0;

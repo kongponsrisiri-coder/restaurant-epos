@@ -27,13 +27,18 @@ const subscribers = new Set();
 // /api/menu/all is handled separately because it returns a nested tree
 // (categories → subcategories + items) — see pullMenuTree().
 const PULL_TABLES = [
-  { path: '/api/tables',                 table: 'tables',                 pk: 'id' },
+  // orphan: true — a table/wall deleted on the cloud must ALSO delete locally,
+  // or it lingers as a ghost on the till's floor forever (pull was upsert-only;
+  // found live on Baan Siam 2026-08-05: cloud-deleted test table never left the
+  // local plan). Safe now that plan writes are strict write-through — a row
+  // can't exist locally without the cloud knowing about it.
+  { path: '/api/tables',                 table: 'tables',                 pk: 'id', orphan: true },
   // SEPOS-047k — staff is pulled separately via the SYNC_SECRET-gated
   // /api/sync/staff feed (pullStaff), because the public /api/staff omits
   // pin and local staff.pin is NOT NULL. See pullStaff() below.
   { path: '/api/settings',               table: 'settings',               pk: 'key' },
-  { path: '/api/table-walls',            table: 'table_walls',            pk: 'id' },
-  { path: '/api/table-combinations',     table: 'table_combinations',     pk: 'id' },
+  { path: '/api/table-walls',            table: 'table_walls',            pk: 'id', orphan: true },
+  { path: '/api/table-combinations',     table: 'table_combinations',     pk: 'id', orphan: true },
   { path: '/api/dining-duration-tiers',  table: 'dining_duration_tiers',  pk: 'id' },
   { path: '/api/reservations',           table: 'reservations',           pk: 'id' },
   // SEPOS-049 — reservation/takeaway hours, party limits, wait-time tiers

@@ -327,6 +327,10 @@ app.get('/api/table-walls', async (req, res) => {
 });
 
 app.post('/api/table-walls', async (req, res) => {
+  // SEPOS-TABLEPLAN-POPBACK — walls are cloud-wins pulled every tick but their
+  // writes never forwarded, so on a desktop till EVERY wall edit reverted
+  // within seconds. Forward like tables.
+  if (await maybeForwardTableWriteToCloud(req, res)) return;
   try {
     const { pos_x, pos_y, width, height } = req.body;
     const result = await pool.query(
@@ -338,6 +342,7 @@ app.post('/api/table-walls', async (req, res) => {
 });
 
 app.put('/api/table-walls/:id', async (req, res) => {
+  if (await maybeForwardTableWriteToCloud(req, res)) return;
   try {
     const { pos_x, pos_y, width, height } = req.body;
     const int = (v, fb) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n) : fb; };
@@ -350,6 +355,7 @@ app.put('/api/table-walls/:id', async (req, res) => {
 });
 
 app.delete('/api/table-walls/:id', async (req, res) => {
+  if (await maybeForwardTableWriteToCloud(req, res)) return;
   try {
     await pool.query('DELETE FROM table_walls WHERE id = $1', [req.params.id]);
     res.json({ success: true });
@@ -402,7 +408,7 @@ app.get('/api/categories', async (req, res) => {
 // pull the affected table back into local SQLite before replying so the
 // client's refetch sees the cloud-acknowledged state immediately. `label`
 // is for logs; `afterPull` is the targeted snapshot pull (menu / staff).
-async function forwardWriteToCloud(req, res, label, afterPull) {
+async function forwardWriteToCloud(req, res, label, afterPull, opts = {}) {
   try {
     const archiveService = require('./services/archiveService');
     if (!archiveService.isLocalInstall() || !process.env.CLOUD_API_URL) return false;
@@ -428,6 +434,16 @@ async function forwardWriteToCloud(req, res, label, afterPull) {
     res.status(r.status).type('application/json').send(body);
     return true;
   } catch (err) {
+    // strict: the local fallback would be a DOOMED write — the table is
+    // cloud-wins on every pull, so a local-only change survives seconds and
+    // then "pops back" (Korakot, Baan Siam floor plan, 2026-08-03→05: edits
+    // made while the cloud was mid-redeploy silently reverted). Fail loud so
+    // the UI can tell the operator to retry, instead of lying "saved".
+    if (opts.strict) {
+      console.warn(`[${label}] cloud unreachable for ${req.method} ${req.originalUrl}: ${err.message} — rejecting (strict write-through)`);
+      res.status(503).json({ error: 'Cloud unreachable — change not saved. Check the internet connection and try again in a minute.' });
+      return true;
+    }
     console.warn(`[${label}] cloud unreachable for ${req.method} ${req.originalUrl}: ${err.message} — falling back to local (change will be lost on next pull)`);
     return false;
   }
@@ -499,7 +515,7 @@ function maybeForwardModifierWriteToCloud(req, res) {
 // cloud (which online booking uses for table-aware availability) stays in sync
 // with the till, which is the only place the floor plan is edited.
 function maybeForwardTableWriteToCloud(req, res) {
-  return forwardWriteToCloud(req, res, 'table-write', () => syncService.pullTablesSnapshot());
+  return forwardWriteToCloud(req, res, 'table-write', () => syncService.pullTablesSnapshot(), { strict: true });
 }
 
 // SEPOS-047g — same write-through for staff/PIN edits. Before this, staff

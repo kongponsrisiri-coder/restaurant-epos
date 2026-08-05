@@ -182,19 +182,23 @@ export default function TablePlanSection() {
     if (d.type === 'table') {
       const t = tablesRef.current.find(t => t.id === d.id);
       if (t) {
-        await updateTablePlan(t.id, {
+        const r = await updateTablePlan(t.id, {
           pos_x: t.pos_x, pos_y: t.pos_y,
           shape: t.shape, width: t.width, height: t.height,
           name: t.name, capacity: t.capacity,
           table_number: t.table_number,   // ← was missing before
         });
+        // Loud failure or the position silently reverts on the next pull
+        // (desktop till mid cloud-redeploy = every drag lost, "pop back").
+        if (r && r.error) showToast(`⚠ Not saved — ${r.error}`, 'error');
       }
     } else {
       const w = wallsRef.current.find(w => w.id === d.id);
       if (w) {
-        await apiPut(`/api/table-walls/${w.id}`, {
+        const r = await apiPut(`/api/table-walls/${w.id}`, {
           pos_x: w.pos_x, pos_y: w.pos_y, width: w.width, height: w.height,
         });
+        if (r && r.error) showToast(`⚠ Wall not saved — ${r.error}`, 'error');
       }
     }
   };
@@ -207,20 +211,28 @@ export default function TablePlanSection() {
     if (saving) return;
     setSaving(true);
     try {
+      // api.js resolves {error} instead of throwing, so the old try/catch never
+      // fired on a failed save — the toast said "✓ saved" while half the plan
+      // was doomed to revert. Count failures per row and be honest.
+      let failed = 0;
+      let firstError = '';
       for (const t of tablesRef.current) {
-        await updateTablePlan(t.id, {
+        const r = await updateTablePlan(t.id, {
           pos_x: t.pos_x, pos_y: t.pos_y,
           shape: t.shape, width: t.width, height: t.height,
           name: t.name, capacity: t.capacity, table_number: t.table_number,
         });
+        if (r && r.error) { failed++; firstError = firstError || r.error; }
       }
       for (const w of wallsRef.current) {
-        await apiPut(`/api/table-walls/${w.id}`, {
+        const r = await apiPut(`/api/table-walls/${w.id}`, {
           pos_x: w.pos_x, pos_y: w.pos_y, width: w.width, height: w.height,
         });
+        if (r && r.error) { failed++; firstError = firstError || r.error; }
       }
       await fetchAll();
-      showToast('✓ Layout saved — floor updated');
+      if (failed > 0) showToast(`⚠ ${failed} item${failed > 1 ? 's' : ''} NOT saved — ${firstError}`, 'error');
+      else showToast('✓ Layout saved — floor updated');
     } catch (e) {
       showToast('Save failed — please try again', 'error');
     } finally {
@@ -236,6 +248,8 @@ export default function TablePlanSection() {
     const result = await addTable(newTable);
     if (result?.id) {
       setTables(prev => [...prev, { ...newTable, id: result.id, status: 'available' }]);
+    } else if (result?.error) {
+      showToast(`⚠ Table not added — ${result.error}`, 'error');
     }
   };
 
@@ -249,15 +263,18 @@ export default function TablePlanSection() {
     const result = await addTable(newTable);
     if (result?.id) {
       setTables(prev => [...prev, { ...newTable, id: result.id, status: 'available' }]);
+      showToast('🥡 Takeaway table added');
+    } else {
+      showToast(`⚠ Not added — ${result?.error || 'no response'}`, 'error');
     }
-    showToast('🥡 Takeaway table added');
   };
 
   const handleDeleteTable = async (id) => {
     if (!await confirm('Delete this table?')) return;
     const related = combos.filter(c => c.table_id_a === id || c.table_id_b === id);
     await Promise.all(related.map(c => apiDel(`/api/table-combinations/${c.id}`)));
-    await deleteTable(id);
+    const r = await deleteTable(id);
+    if (r && r.error) { showToast(`⚠ Not deleted — ${r.error}`, 'error'); return; }
     setTables(prev => prev.filter(t => t.id !== id));
     setCombos(prev => prev.filter(c => c.table_id_a !== id && c.table_id_b !== id));
     setSelected(null);
@@ -298,8 +315,10 @@ export default function TablePlanSection() {
     const result = await apiPost('/api/table-walls', { pos_x: 120, pos_y: 80, ...dims });
     if (result?.id) {
       setWalls(prev => [...prev, { id: result.id, pos_x: 120, pos_y: 80, ...dims }]);
+      showToast(direction === 'horizontal' ? '— Horizontal wall added' : '| Vertical wall added');
+    } else {
+      showToast(`⚠ Wall not added — ${result?.error || 'no response'}`, 'error');
     }
-    showToast(direction === 'horizontal' ? '— Horizontal wall added' : '| Vertical wall added');
   };
 
   const handleUpdateWall = async (id, changes) => {
@@ -309,11 +328,13 @@ export default function TablePlanSection() {
     // Same blur-vs-Save race guard as updateSelectedTable — keep the ref fresh.
     wallsRef.current = wallsRef.current.map(wl => wl.id === id ? u : wl);
     setWalls(prev => prev.map(wl => wl.id === id ? u : wl));
-    await apiPut(`/api/table-walls/${id}`, { pos_x: u.pos_x, pos_y: u.pos_y, width: u.width, height: u.height });
+    const r = await apiPut(`/api/table-walls/${id}`, { pos_x: u.pos_x, pos_y: u.pos_y, width: u.width, height: u.height });
+    if (r && r.error) showToast(`⚠ Wall not saved — ${r.error}`, 'error');
   };
 
   const handleDeleteWall = async (id) => {
-    await apiDel(`/api/table-walls/${id}`);
+    const r = await apiDel(`/api/table-walls/${id}`);
+    if (r && r.error) { showToast(`⚠ Not deleted — ${r.error}`, 'error'); return; }
     setWalls(prev => prev.filter(w => w.id !== id));
     setSelected(null);
   };
@@ -328,8 +349,10 @@ export default function TablePlanSection() {
     const result = await apiPost('/api/table-combinations', { table_id_a: idA, table_id_b: idB });
     if (result?.id) {
       setCombos(prev => [...prev, { id: result.id, table_id_a: idA, table_id_b: idB, is_active: true }]);
+      showToast('Tables linked ✓');
+    } else {
+      showToast(`⚠ Not linked — ${result?.error || 'no response'}`, 'error');
     }
-    showToast('Tables linked ✓');
   };
 
   const handleRemoveCombo = async (comboId) => {

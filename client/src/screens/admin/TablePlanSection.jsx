@@ -494,6 +494,12 @@ export default function TablePlanSection() {
 
           <div style={{ width: 1, height: 24, background: '#e0e0e0' }} />
 
+          {/* SEPOS-QR-ORDER-001 — printable per-table QR sticker sheet */}
+          <button onClick={() => window.open(`${SERVER_URL}/api/qr/sheet`, '_blank')}
+            style={{ padding: '8px 14px', borderRadius: 8, border: '1.5px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}
+            title="Print QR ordering codes — one sticker per table">
+            ⎙ QR codes</button>
+
           <button onClick={handleSaveLayout} disabled={saving}
             style={{ padding: '8px 20px', borderRadius: 8, border: 'none',
               background: saving ? '#86efac' : '#16a34a', color: 'white',

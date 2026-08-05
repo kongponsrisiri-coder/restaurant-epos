@@ -36,6 +36,9 @@ export function orderShortLabel(order) {
       ? `🚗 Online Delivery #${id}`
       : `🥡 Online Order #${id}`;
   }
+  // SEPOS-QR-ORDER-001 — customer placed it themselves from the table QR;
+  // the 📱 tells staff nobody keyed it (and that it's already PAID).
+  if (order.source === 'qr') return `📱 Table ${order.table_number ?? '—'}`;
   return `Table ${order.table_number ?? '—'}`;
 }
 

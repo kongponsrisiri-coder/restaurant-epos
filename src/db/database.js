@@ -128,6 +128,14 @@ async function initDB() {
     `);
 
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS allergens TEXT DEFAULT NULL`);
+    // SEPOS-QR-ORDER-001 — customer-facing menu card: dish photo (URL — points
+    // at hosted images, e.g. the client's existing site/CDN; no file storage
+    // on Railway) + dietary tags (JSON array like allergens: Vegan/Veg/GF…).
+    await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT NULL`);
+    await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS dietary TEXT DEFAULT NULL`);
+    // SEPOS-QR-ORDER-001 — who authored the order: NULL (staff) | 'qr' | future
+    // sources. Drives the 📱 badge + the auto-close-when-served-and-paid rule.
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS source VARCHAR(20)`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS is_online INTEGER DEFAULT 1`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS name_alt VARCHAR(255)`);

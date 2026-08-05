@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getTables, createOrder, getOrders, getTableStatus, moveTable, mergeTables, getReservations, assertOk } from '../api';
 import { tableLabel } from '../utils/orderLabel'; // SEPOS-TABLE-NAME
+import { roomSize } from '../utils/floorRoom';    // SEPOS-FLOOR-FIT shared room
 import TakeawayStrip    from '../components/TakeawayStrip';
 import BillPeek         from '../components/BillPeek';
 import SyncHealthBanner from '../components/SyncHealthBanner';
@@ -421,29 +422,23 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
             backgroundSize: '30px 30px'
           }}>
             {(() => {
-              // SEPOS-FLOOR-FIT — bounding box of the plan, then scale + centre.
-              // Same relative spacing as the editor, zoomed to fill the screen.
-              const PAD = 28;
-              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-              for (const t of tables) {
-                const tx = t.pos_x ?? 40, ty = t.pos_y ?? 40;
-                minX = Math.min(minX, tx); minY = Math.min(minY, ty);
-                maxX = Math.max(maxX, tx + (t.width || 80));
-                maxY = Math.max(maxY, ty + (t.height || 80));
-              }
-              // Reservation badges float ~14px above the top row — reserve room.
-              minY -= 16;
-              const bboxW = Math.max(1, maxX - minX), bboxH = Math.max(1, maxY - minY);
+              // SEPOS-FLOOR-FIT v2 — render the ROOM, not the table cluster.
+              // The editor's canvas rectangle IS the room; scaling that whole
+              // rectangle to the viewport keeps every table at the same
+              // relative spot on both screens (a bar at the left wall stays
+              // left — centring just the cluster made it jump to the middle).
+              const PAD = 16;
+              const room = roomSize(tables);
               const availW = Math.max(0, planViewSize.w - PAD * 2);
               const availH = Math.max(0, planViewSize.h - PAD * 2);
-              // Auto-fit capped at 1.5× (2.2 read as "too big" on a monitor);
-              // the operator's −/Fit/+ multiplier rides on top, final 0.35–3×.
-              const fitScale = (availW > 0 && availH > 0 && tables.length > 0)
-                ? Math.min(1.5, Math.max(0.5, Math.min(availW / bboxW, availH / bboxH)))
+              const fitScale = (availW > 0 && availH > 0)
+                ? Math.min(1.5, availW / room.w, availH / room.h)
                 : 1;
               const scale = Math.min(3, Math.max(0.35, fitScale * userZoom));
-              const offX = PAD + Math.max(0, (availW - bboxW * scale) / 2);
-              const offY = PAD + Math.max(0, (availH - bboxH * scale) / 2);
+              // Letterbox-centre the room itself (like a blueprint on a desk);
+              // geometry inside the room is untouched.
+              const offX = PAD + Math.max(0, (availW - room.w * scale) / 2);
+              const offY = PAD + Math.max(0, (availH - room.h * scale) / 2);
 
               return tables.map(table => {
               const colours = getTableColour(table);
@@ -453,8 +448,8 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
               // at pos 0, and `0 || 40` silently bumped it 40px on the FLOOR
               // while the editor drew it at 0 → "I saved but the layout still
               // differs" (Korakot, 2026-08-03: only T1/T2 at y=0 were off).
-              const x = Math.round(((table.pos_x ?? 40) - minX) * scale + offX);
-              const y = Math.round(((table.pos_y ?? 40) - minY) * scale + offY);
+              const x = Math.round((table.pos_x ?? 40) * scale + offX);
+              const y = Math.round((table.pos_y ?? 40) * scale + offY);
               const time = getTableTime(table.id);
               const timeColor = getTimeColor(table.id);
               const isSelected = tableActionPopup?.table.id === table.id;

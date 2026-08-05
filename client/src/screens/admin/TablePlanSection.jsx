@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SERVER_URL, getTables, updateTablePlan, addTable, deleteTable } from '../../api';
+import { roomSize } from '../../utils/floorRoom';   // SEPOS-FLOOR-FIT shared room
 import { tableLabel } from '../../utils/orderLabel'; // SEPOS-TABLE-NAME
 import { confirm } from '../../utils/confirm';
 
@@ -75,6 +76,29 @@ export default function TablePlanSection() {
   const [toast, setToast] = useState(null);
   const canvasRef = useRef(null);
 
+  // SEPOS-FLOOR-FIT — editor zoom. The room can outgrow the visible canvas
+  // (bigger restaurants); −/Fit/+ scales the view, drag math divides by it.
+  // Per-device, remembered.
+  const [editorZoom, setEditorZoom] = useState(() => {
+    const v = parseFloat(localStorage.getItem('siamepos_editor_zoom'));
+    return Number.isFinite(v) && v > 0 ? v : 1;
+  });
+  const changeEditorZoom = (factor) => {
+    setEditorZoom((z) => {
+      let next;
+      if (factor === 0) {
+        // Fit: shrink (or grow, capped 1×) so the whole room is visible.
+        const el = canvasRef.current;
+        const room = roomSize(tablesRef.current, wallsRef.current);
+        next = el ? Math.min(1, +(Math.min(el.clientWidth / room.w, el.clientHeight / room.h)).toFixed(3)) : 1;
+      } else {
+        next = Math.min(2, Math.max(0.4, +(z * factor).toFixed(3)));
+      }
+      try { localStorage.setItem('siamepos_editor_zoom', String(next)); } catch { /* private mode */ }
+      return next;
+    });
+  };
+
   // ── Refs so handleMouseUp always reads the LATEST positions ───
   // (avoids stale closure — React state in event handlers can be stale)
   const tablesRef  = useRef([]);
@@ -123,7 +147,8 @@ export default function TablePlanSection() {
   }
 
   const handleCanvasMouseDown = (e) => {
-    if (e.target !== canvasRef.current) return;
+    // Background = the scroll container itself OR the scaled room layers.
+    if (e.target !== canvasRef.current && !e.target.getAttribute?.('data-canvas-bg')) return;
     setSelected(null);
     if (mode !== 'link') setLinkFrom(null);
   };
@@ -148,10 +173,11 @@ export default function TablePlanSection() {
       ? tablesRef.current.find(t => t.id === id)
       : wallsRef.current.find(w => w.id === id);
     if (item) {
-      // +scrollLeft/Top so coords are in the (scrollable) canvas content space.
+      // +scrollLeft/Top → screen-space within the scroll content; ÷zoom →
+      // the room's logical coordinate space (positions are stored logical).
       setOffset({
-        x: e.clientX - rect.left + canvasRef.current.scrollLeft - (item.pos_x || 0),
-        y: e.clientY - rect.top  + canvasRef.current.scrollTop  - (item.pos_y || 0),
+        x: (e.clientX - rect.left + canvasRef.current.scrollLeft) / editorZoom - (item.pos_x || 0),
+        y: (e.clientY - rect.top  + canvasRef.current.scrollTop)  / editorZoom - (item.pos_y || 0),
       });
     }
   };
@@ -164,8 +190,8 @@ export default function TablePlanSection() {
     // position 500'd EVERY save of that table ("invalid input syntax for type
     // integer: 42.121…") — including later name/capacity edits, which send the
     // whole row. One drag poisoned the table until reload.
-    const x = Math.max(0, Math.round(e.clientX - rect.left + canvasRef.current.scrollLeft - offset.x));
-    const y = Math.max(0, Math.round(e.clientY - rect.top  + canvasRef.current.scrollTop  - offset.y));
+    const x = Math.max(0, Math.round((e.clientX - rect.left + canvasRef.current.scrollLeft) / editorZoom - offset.x));
+    const y = Math.max(0, Math.round((e.clientY - rect.top  + canvasRef.current.scrollTop)  / editorZoom - offset.y));
     if (draggingRef.current.type === 'table') {
       setTables(prev => prev.map(t => t.id === draggingRef.current.id ? { ...t, pos_x: x, pos_y: y } : t));
     } else {
@@ -383,8 +409,11 @@ export default function TablePlanSection() {
   // Canvas content size — the floor can be wider/taller than the visible box,
   // so size an inner area to the furthest table/wall and let the canvas scroll
   // (otherwise tables on the right/bottom get cut off).
-  const contentW = Math.max(1100, ...[...tables, ...walls].map(e => (e.pos_x || 0) + (e.width || 80)), 0) + 80;
-  const contentH = Math.max(560,  ...[...tables, ...walls].map(e => (e.pos_y || 0) + (e.height || 80)), 0) + 80;
+  // SEPOS-FLOOR-FIT — the canvas draws the shared ROOM rectangle (same one
+  // the Floor map scales to fit), so both screens show the same picture.
+  const room = roomSize(tables, walls);
+  const contentW = room.w;
+  const contentH = room.h;
 
   function groupCap(ids) {
     return ids.reduce((s, id) => s + (tables.find(t => t.id === id)?.capacity || 0), 0);
@@ -488,7 +517,7 @@ export default function TablePlanSection() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 16 }}>
+      <div style={{ display: 'flex', gap: 16, position: 'relative' }}>
 
         {/* Canvas */}
         <div
@@ -502,13 +531,22 @@ export default function TablePlanSection() {
             background: '#f0ede8', borderRadius: 16, position: 'relative',
             border: `2px solid ${mode === 'link' ? 'var(--brand-accent,#C9A84C)' : '#ddd'}`,
             cursor: mode === 'link' ? 'crosshair' : dragging ? 'grabbing' : 'default',
-            backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)',
-            backgroundSize: '30px 30px', overflow: 'auto',
+            overflow: 'auto',
             // Pointer events + touch-action:none so tables drag by FINGER on a
             // touch till, not just by mouse (editor was mouse-only before).
             touchAction: 'none',
           }}
         >
+          {/* Spacer defines the scroll extent at the CURRENT zoom; the inner
+              layer is the room at logical size, CSS-scaled. Grid dots live on
+              the scaled layer so they track the room's logical grid. */}
+          <div data-canvas-bg="1" style={{ width: contentW * editorZoom, height: contentH * editorZoom, position: 'relative' }}>
+          <div data-canvas-bg="1" style={{
+            position: 'absolute', top: 0, left: 0, width: contentW, height: contentH,
+            transform: `scale(${editorZoom})`, transformOrigin: '0 0',
+            backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)',
+            backgroundSize: '30px 30px',
+          }}>
           {/* SVG sized to the full floor so link lines + the scroll area cover
               every table (a sized absolute child extends the scrollable width). */}
           <svg style={{ position: 'absolute', top: 0, left: 0, width: contentW, height: contentH, pointerEvents: 'none', zIndex: 1 }}>
@@ -594,6 +632,36 @@ export default function TablePlanSection() {
             <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb', fontSize: 15 }}>
               Click "+ Table" to start building your floor plan
             </div>
+          )}
+          </div>{/* /scaled room layer */}
+          </div>{/* /zoom spacer */}
+        </div>
+
+        {/* Editor zoom — same −/Fit/+ control as the Floor map so a big room
+            can be designed without running off the visible canvas. */}
+        <div style={{
+          position: 'absolute', right: 274, bottom: 12,
+          display: 'flex', flexDirection: 'column', gap: 6, zIndex: 5,
+        }}>
+          {[
+            { label: '+', title: 'Zoom in',       act: () => changeEditorZoom(1.15) },
+            { label: '⊡', title: 'Fit whole room', act: () => changeEditorZoom(0) },
+            { label: '−', title: 'Zoom out',      act: () => changeEditorZoom(1 / 1.15) },
+          ].map(b => (
+            <button key={b.label} title={b.title} onClick={b.act} style={{
+              width: 40, height: 40, borderRadius: 10,
+              border: '1px solid #d6d3cb', background: 'rgba(255,255,255,0.95)',
+              color: 'var(--brand-primary, #1a1a2e)', fontSize: b.label === '⊡' ? 18 : 22,
+              fontWeight: 700, cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>{b.label}</button>
+          ))}
+          {editorZoom !== 1 && (
+            <div style={{
+              textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#7C766A',
+              background: 'rgba(255,255,255,0.9)', borderRadius: 6, padding: '2px 4px',
+            }}>{Math.round(editorZoom * 100)}%</div>
           )}
         </div>
 

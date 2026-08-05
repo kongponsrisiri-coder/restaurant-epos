@@ -1451,10 +1451,35 @@ app.put('/api/order-items/:id/status', async (req, res) => {
     // already disappeared by the time everything is served.
     if (status === 'served' && item.order_id) {
       const orderRes = await pool.query(
-        'SELECT id, order_type, order_subtype, status, takeaway_status FROM orders WHERE id = $1',
+        'SELECT id, order_type, order_subtype, status, takeaway_status, source, payment_status, table_id FROM orders WHERE id = $1',
         [item.order_id]
       );
       const order = orderRes.rows[0];
+      // SEPOS-QR-ORDER-001 — a QR order was PAID before it fired, so once the
+      // food runner ticks the last item served there is nothing left to do:
+      // close the bill right here (payments were recorded at order time) and
+      // free the table if it holds no other open order.
+      if (order && order.source === 'qr' && order.status === 'open'
+          && (order.payment_status === 'paid' || order.payment_status === 'mock')) {
+        const remainingQr = await pool.query(
+          `SELECT COUNT(*) AS n FROM order_items
+            WHERE order_id = $1 AND voided = 0 AND status <> 'served'`,
+          [item.order_id]);
+        if (Number(remainingQr.rows[0]?.n || 0) === 0) {
+          await pool.query(
+            `UPDATE orders SET status='closed', closed_at=NOW(), service_charge=0, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1 AND status='open'`,
+            [item.order_id]);
+          if (order.table_id) {
+            const others = await pool.query(
+              `SELECT COUNT(*) AS n FROM orders WHERE table_id=$1 AND status='open'`, [order.table_id]);
+            if (Number(others.rows[0]?.n || 0) === 0) {
+              await pool.query(`UPDATE tables SET status='available' WHERE id=$1`, [order.table_id]);
+            }
+          }
+          io.emit('order_closed', { order_id: Number(item.order_id) });
+          console.log(`[qr] order ${item.order_id} fully served + prepaid → auto-closed`);
+        }
+      }
       // Collection takeaway orders flip to 'ready' once every item is
       // served — staff close the bill manually from the TakeawayStrip
       // to keep takeaway in the same close-and-pay flow as dine-in.
@@ -7330,6 +7355,274 @@ app.get('/.well-known/apple-developer-merchantid-domain-association', (req, res)
     return res.status(404).type('text/plain').send('Apple Pay not configured for this domain');
   }
   res.type('text/plain').send(content);
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SEPOS-QR-ORDER-001 — QR self-ordering at the table.
+// Customer scans the table's QR → mobile menu (photos/allergens/dietary/notes)
+// → pays FIRST (SiamPay/Stripe when configured, mock otherwise — same rule as
+// the takeaway widget) → order fires the kitchen on the customer's table →
+// KDS ticks items served → when everything is served the order closes itself
+// (it was already paid). The token encodes the table's permanent id, signed —
+// renames/moves/renumbers never invalidate a printed sticker.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const qrSecret = () =>
+  process.env.QR_SECRET || process.env.SYNC_SECRET || process.env.UNSUB_SECRET || 'siamepos-qr-dev';
+const qrSign = (tableId) =>
+  crypto.createHmac('sha256', qrSecret()).update(`qr-table:${tableId}`).digest('base64url').slice(0, 20);
+const qrToken = (tableId) => `${tableId}.${qrSign(tableId)}`;
+function qrVerifyToken(token) {
+  const m = /^(\d+)\.([A-Za-z0-9_-]{20})$/.exec(String(token || ''));
+  if (!m) return null;
+  // timingSafeEqual over the HMAC — not strictly needed for table ids, but free.
+  const expect = Buffer.from(qrSign(m[1]));
+  const got = Buffer.from(m[2]);
+  if (expect.length !== got.length || !crypto.timingSafeEqual(expect, got)) return null;
+  return Number(m[1]);
+}
+async function qrEnabled() {
+  try {
+    const r = await pool.query(`SELECT value FROM settings WHERE key = 'qr_ordering_enabled'`);
+    return String(r.rows[0]?.value || '0') === '1';
+  } catch { return false; }
+}
+
+// The printable sticker sheet — one card per (non-takeaway) table. Server-
+// rendered HTML with inline SVG QRs (qrcode package), opened from the Table
+// Plan editor and printed straight from the browser.
+app.get('/api/qr/sheet', async (req, res) => {
+  try {
+    if (!await qrEnabled()) {
+      return res.status(403).type('text/html').send('<h3 style="font-family:sans-serif">QR ordering is switched off — enable it in Settings first (qr_ordering_enabled).</h3>');
+    }
+    const QRCode = require('qrcode');
+    const base = (process.env.PUBLIC_API_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+    const nameRes = await pool.query(`SELECT value FROM settings WHERE key IN ('restaurant_name','company_name') ORDER BY key = 'restaurant_name' DESC LIMIT 1`);
+    const rName = nameRes.rows[0]?.value || 'SiamEPOS';
+    const tRes = await pool.query(`SELECT id, table_number, name FROM tables WHERE COALESCE(is_takeaway,0) = 0 ORDER BY table_number`);
+    const cards = [];
+    for (const t of tRes.rows) {
+      const label = (t.name && String(t.name).trim()) ? t.name : `Table ${t.table_number}`;
+      const url = `${base}/qr/t/${qrToken(t.id)}`;
+      const svg = await QRCode.toString(url, { type: 'svg', margin: 1, width: 240 });
+      cards.push(`<div class="card"><div class="qr">${svg}</div><div class="tname">${String(label).replace(/</g, '&lt;')}</div><div class="hint">Scan to view the menu &amp; order</div></div>`);
+    }
+    res.type('text/html').send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${String(rName).replace(/</g, '&lt;')} — table QR codes</title><style>
+      body{font-family:-apple-system,system-ui,sans-serif;margin:24px}
+      h1{font-size:18px} .muted{color:#777;font-size:13px;margin-bottom:18px}
+      .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+      .card{border:2px solid #1a1a2e;border-radius:14px;padding:16px;text-align:center;page-break-inside:avoid}
+      .qr svg{width:100%;max-width:220px;height:auto}
+      .tname{font-size:22px;font-weight:800;margin-top:8px}
+      .hint{font-size:12px;color:#555;margin-top:2px}
+      @media print{.noprint{display:none}}
+    </style></head><body>
+      <div class="noprint"><h1>${String(rName).replace(/</g, '&lt;')} — table QR codes</h1>
+      <div class="muted">Print, laminate, one per table. Codes are permanent — renaming or moving a table never breaks its sticker. Reprint this page after adding tables.</div>
+      <button onclick="window.print()" style="padding:10px 18px;font-size:15px;font-weight:700;border-radius:10px;border:none;background:#1a1a2e;color:#fff;cursor:pointer;margin-bottom:18px">🖨 Print</button></div>
+      <div class="grid">${cards.join('')}</div></body></html>`);
+  } catch (err) {
+    console.error('[qr] sheet', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// The customer's landing page (static shell; JS drives everything).
+app.get('/qr/t/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'qr-order.html'));
+});
+
+// Session bootstrap for the order page: table identity + restaurant + payment
+// availability + the table's open QR/dine-in order (running bill + statuses).
+app.get('/api/qr/session/:token', widgetCors, async (req, res) => {
+  try {
+    if (!await qrEnabled()) return res.status(403).json({ error: 'QR ordering is not enabled' });
+    const tableId = qrVerifyToken(req.params.token);
+    if (!tableId) return res.status(404).json({ error: 'This code is no longer active — please ask a member of staff.' });
+    const tRes = await pool.query(`SELECT id, table_number, name FROM tables WHERE id = $1`, [tableId]);
+    const t = tRes.rows[0];
+    if (!t) return res.status(404).json({ error: 'This code is no longer active — please ask a member of staff.' });
+    const sRes = await pool.query(`SELECT key, value FROM settings WHERE key IN ('restaurant_name','company_name','currency_symbol','brand_primary')`);
+    const cfg = {}; for (const r of sRes.rows) cfg[r.key] = r.value;
+    const sp = siampayCfg();
+    const stripeReady = !!(sp || process.env.STRIPE_SECRET_KEY);
+    // Open order on this table (any dine-in — the customer may be topping up
+    // an order a waiter started, that's fine; the bill is the table's bill).
+    const oRes = await pool.query(
+      `SELECT id, total, payment_status, source FROM orders
+        WHERE table_id = $1 AND status = 'open'
+          AND (order_type IS NULL OR order_type = 'dine_in')
+        ORDER BY id DESC LIMIT 1`, [tableId]);
+    let order = null;
+    if (oRes.rows[0]) {
+      const items = await pool.query(
+        `SELECT oi.id, oi.quantity, oi.unit_price, oi.status, oi.item_note, oi.voided,
+                COALESCE(mi.name, oi.item_name) AS name
+           FROM order_items oi LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
+          WHERE oi.order_id = $1 AND oi.voided = 0 ORDER BY oi.id`, [oRes.rows[0].id]);
+      order = { ...oRes.rows[0], items: items.rows };
+    }
+    res.json({
+      restaurant_name: cfg.restaurant_name || cfg.company_name || 'Restaurant',
+      currency: cfg.currency_symbol || '£',
+      brand: cfg.brand_primary || '#1E4038',
+      table: { id: t.id, label: (t.name && String(t.name).trim()) ? t.name : `Table ${t.table_number}` },
+      stripe_ready: stripeReady,
+      order,
+    });
+  } catch (err) {
+    console.error('[qr] session', err);
+    res.status(500).json({ error: 'server error' });
+  }
+});
+
+// Place a round: server-prices every line, verifies the payment against that
+// total (when Stripe is live), then creates/appends the table's order with
+// everything fired to the kitchen at once. Mock mode (no keys) skips the
+// payment but marks the order payment_status='mock' so the demo flow is
+// end-to-end identical.
+app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, requireValidLicense, async (req, res) => {
+  try {
+    if (!await qrEnabled()) return res.status(403).json({ error: 'QR ordering is not enabled' });
+    const tableId = qrVerifyToken(req.params.token);
+    if (!tableId) return res.status(404).json({ error: 'This code is no longer active — please ask a member of staff.' });
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (items.length === 0) return res.status(400).json({ error: 'Cart is empty' });
+    if (items.length > 40) return res.status(400).json({ error: 'Too many items in one order' });
+
+    // Server-side pricing — the client's numbers are display only.
+    const priced = [];
+    let totalPence = 0;
+    for (const it of items) {
+      const qty = Math.max(1, Math.min(20, Number(it.quantity) || 1));
+      const row = (await pool.query(`SELECT id, name, price, is_available, COALESCE(is_online,1) AS is_online FROM menu_items WHERE id = $1`, [it.menu_item_id])).rows[0];
+      if (!row) return res.status(400).json({ error: 'An item in your cart is no longer on the menu — please refresh.' });
+      if (!Number(row.is_available) || !Number(row.is_online)) {
+        return res.status(409).json({ error: `Sorry — "${row.name}" has just sold out. Please remove it and try again.` });
+      }
+      const unit = Number(row.price) || 0;
+      totalPence += Math.round(unit * 100) * qty;
+      priced.push({ menu_item_id: row.id, quantity: qty, unit_price: unit, item_note: String(it.item_note || '').slice(0, 200) });
+    }
+    if (totalPence <= 0) return res.status(400).json({ error: 'Order total is zero — please ask staff to order these items.' });
+
+    // Pay-first verification (identical hardening to the takeaway widget).
+    const sp = siampayCfg();
+    const stripeReady = !!(sp || process.env.STRIPE_SECRET_KEY);
+    let paymentStatus = 'mock';
+    let paidPence = null;
+    if (stripeReady) {
+      const piId = req.body?.payment_intent_id;
+      if (!piId) return res.status(402).json({ error: 'Payment required' });
+      try {
+        const pi = sp
+          ? await require('stripe')(sp.key).paymentIntents.retrieve(piId, {}, { stripeAccount: sp.account })
+          : await require('stripe')(process.env.STRIPE_SECRET_KEY).paymentIntents.retrieve(piId);
+        if (pi.status !== 'succeeded') return res.status(402).json({ error: `Payment not completed (${pi.status})` });
+        if (pi.currency !== 'gbp') return res.status(402).json({ error: 'Payment currency mismatch' });
+        if (pi.amount !== totalPence) return res.status(402).json({ error: 'Payment amount mismatch — please refresh and try again.' });
+        if (pi.metadata?.product !== 'siamepos_qr_order') return res.status(402).json({ error: 'Payment reference mismatch' });
+        paymentStatus = 'paid';
+        paidPence = pi.amount;
+      } catch (e) {
+        console.error('[qr] stripe verify', e.message);
+        return res.status(402).json({ error: 'Could not verify payment — please try again.' });
+      }
+    }
+
+    // Create-or-append under the same per-table lock the waiter flow uses.
+    const out = await runExclusive(`order-create:table:${tableId}`, async () => {
+      const existing = await pool.query(
+        `SELECT o.id FROM orders o
+          WHERE o.table_id = $1 AND o.status = 'open'
+            AND (o.order_type IS NULL OR o.order_type = 'dine_in')
+          ORDER BY o.id DESC LIMIT 1`, [tableId]);
+      let orderId;
+      if (existing.rows[0]) {
+        orderId = existing.rows[0].id;
+      } else {
+        const ins = await pool.query(
+          `INSERT INTO orders (table_id, status, covers, order_type, opened_at, source, payment_status, no_service_charge)
+           VALUES ($1, 'open', 1, 'dine_in', NOW(), 'qr', $2, 1) RETURNING id`,
+          [tableId, paymentStatus]);
+        orderId = ins.rows[0].id;
+        await offlineQueue.enqueue('create_order', { localOrderId: orderId, table_id: tableId, covers: 1, staff_id: null, order_type: 'dine_in' });
+      }
+      await pool.query(`UPDATE tables SET status = 'occupied' WHERE id = $1`, [tableId]);
+      // Every QR line fires immediately — the customer pressing "Send" IS the
+      // fire. Stock depletes now, kitchen sees it now.
+      const now = new Date().toISOString();
+      const firedIds = [];
+      for (const p of priced) {
+        const ins = await pool.query(
+          `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, status, cooking_started_at)
+           VALUES ($1,$2,$3,$4,'',1,$5,1,$6,'cooking',$7) RETURNING id`,
+          [orderId, p.menu_item_id, p.quantity, p.unit_price, p.item_note, now, now]);
+        firedIds.push(ins.rows[0].id);
+      }
+      const totalRes = await pool.query(`SELECT ${ORDER_TOTAL_EXPR} as total FROM order_items WHERE order_id = $1 AND voided = 0`, [orderId]);
+      await pool.query(`UPDATE orders SET total = $1, source = COALESCE(source,'qr'), payment_status = $2 WHERE id = $3`,
+        [totalRes.rows[0].total || 0, paymentStatus, orderId]);
+      // Record this round's tender NOW (pay-first) — the auto-close on
+      // full service finds the bill already settled.
+      await pool.query(`INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3)`,
+        [orderId, (paidPence != null ? paidPence / 100 : totalPence / 100), paymentStatus === 'paid' ? 'QR Online' : 'QR Online (mock)']);
+      await offlineQueue.enqueue('add_items', { localOrderId: Number(orderId), items: priced.map(p => ({ ...p, is_bar: 0 })) });
+      await depleteStockForItems(firedIds, 'sale');
+      return { orderId, firedIds };
+    });
+
+    const orderRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [out.orderId]);
+    const newItemsRes = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.id = ANY($1::int[])`, [out.firedIds]);
+    io.emit('new_order_items', { order: orderRes.rows[0], items: newItemsRes.rows });
+    res.json({ success: true, order_id: out.orderId, payment_status: paymentStatus });
+  } catch (err) {
+    console.error('[qr] place order', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Payment intent for the QR page — amount is computed SERVER-side from the
+// cart (not taken from the client like the takeaway widget's endpoint), so a
+// tampered page can't underpay: the same pricing pass runs here and at order
+// time, and the order endpoint additionally requires pi.amount === total.
+app.post('/api/qr/payment-intent/:token', widgetCors, async (req, res) => {
+  try {
+    if (!await qrEnabled()) return res.status(403).json({ error: 'QR ordering is not enabled' });
+    const tableId = qrVerifyToken(req.params.token);
+    if (!tableId) return res.status(404).json({ error: 'Invalid code' });
+    const sp = siampayCfg();
+    if (!sp && !process.env.STRIPE_SECRET_KEY) return res.status(503).json({ error: 'Card payments not configured' });
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!items.length || items.length > 40) return res.status(400).json({ error: 'Invalid cart' });
+    let totalPence = 0;
+    for (const it of items) {
+      const qty = Math.max(1, Math.min(20, Number(it.quantity) || 1));
+      const row = (await pool.query(`SELECT price, is_available FROM menu_items WHERE id = $1`, [it.menu_item_id])).rows[0];
+      if (!row || !Number(row.is_available)) return res.status(409).json({ error: 'An item just sold out — please refresh your cart.' });
+      totalPence += Math.round((Number(row.price) || 0) * 100) * qty;
+    }
+    if (totalPence < 50) return res.status(400).json({ error: 'Minimum card payment is 50p' });
+    if (totalPence > 100000) return res.status(400).json({ error: 'Order too large — please ask staff' });
+    const params = {
+      amount: totalPence, currency: 'gbp',
+      description: `QR order — table ${tableId}`,
+      automatic_payment_methods: { enabled: true },
+      metadata: { product: 'siamepos_qr_order', restaurant_id: resolveRestaurantId(req), table_id: String(tableId) },
+    };
+    let pi;
+    if (sp) {
+      params.application_fee_amount = sp.feePence;
+      pi = await require('stripe')(sp.key).paymentIntents.create(params, { stripeAccount: sp.account });
+    } else {
+      pi = await require('stripe')(process.env.STRIPE_SECRET_KEY).paymentIntents.create(params);
+    }
+    res.json({ client_secret: pi.client_secret, payment_intent_id: pi.id, amount_pence: totalPence });
+  } catch (err) {
+    console.error('[qr] payment-intent', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── SIAMPAY-QR-001 — dine-in QR pay-by-link (Nick's addendum, 21 Jul) ─────

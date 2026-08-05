@@ -709,6 +709,11 @@ function runMigrations() {
   // SEPOS-021: VAT rate per menu item
   addColumnIfMissing('menu_items', 'vat_rate', 'REAL DEFAULT 20.0');
   addColumnIfMissing('menu_items', 'is_online', 'INTEGER DEFAULT 1');
+  // SEPOS-QR-ORDER-001 — dish photo URL + dietary tags (customer menu card)
+  // + order source ('qr' = customer-placed, drives 📱 badge & auto-close).
+  addColumnIfMissing('menu_items', 'image_url', 'TEXT');
+  addColumnIfMissing('menu_items', 'dietary', 'TEXT');
+  addColumnIfMissing('orders', 'source', 'TEXT');
   // SEPOS-033: marketing consent + unsubscribe (GDPR)
   addColumnIfMissing('reservations', 'marketing_consent', 'INTEGER DEFAULT 0');
   addColumnIfMissing('reservations', 'unsubscribed_at', 'TIMESTAMP');

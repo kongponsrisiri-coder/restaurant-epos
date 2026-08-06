@@ -587,7 +587,7 @@ export const sendKitchenMessage   = (body) => post('/api/print/kitchen-message',
 export const saveOrderNote        = (orderId, note) => put(`/api/orders/${orderId}/note`, { note });
 // SEPOS-ANDROID-001 — kitchen-message buffer for the native app to print on-device
 export const getKitchenMessageBuffer = (body) => post('/api/print/buffers/kitchen-message', body);
-export const serverPrintReceipt   = (order_id, payment_details, printer_name) => post('/api/print/receipt', { order_id, payment_details, printer_name });
+export const serverPrintReceipt   = (order_id, payment_details, printer_name, printer_id) => post('/api/print/receipt', { order_id, payment_details, printer_name, printer_id });
 // SEPOS-REPORTS-001 — ESC/POS print for admin reports (Sales / Items /
 // Z / VAT / Bills). Takes a line DSL — see printService.buildReportText.
 export const serverPrintReportText = (lines) => post('/api/print/report-text', { lines });

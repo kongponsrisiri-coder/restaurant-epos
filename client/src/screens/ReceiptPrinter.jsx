@@ -34,8 +34,13 @@ export function printReceipt({ order, items, settings, paymentDetails = {} }) {
   // a target. The desktop's chosen device lives in localStorage.receipt_printer_name.
   const deviceName = (typeof localStorage !== 'undefined' && localStorage.getItem('receipt_printer_name')) || '';
   const usbName = (!settings.printer_receipt_ip && deviceName && window.siamepos?.isElectron) ? deviceName : null;
-  if (settings.printer_receipt_ip || usbName) {
-    serverPrintReceipt(order.id, paymentDetails, usbName || undefined)
+  // SEPOS-BILL-STATIONS-001 — per-device bill station: this device's chosen
+  // printers-table row (Admin → Printers → "Bills from this device"). When
+  // set, bills from THIS till/tablet print at that station; server falls back
+  // to the shared default if the row disappeared.
+  const stationId = (typeof localStorage !== 'undefined' && localStorage.getItem('siamepos_device_bill_printer')) || '';
+  if (settings.printer_receipt_ip || usbName || stationId) {
+    serverPrintReceipt(order.id, paymentDetails, usbName || undefined, stationId ? Number(stationId) : undefined)
       .then(r => {
         if (!r || !r.success) {
           console.warn('[receipt] server print failed, falling back:', r?.error || r?.reason);

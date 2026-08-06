@@ -597,7 +597,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     const INK = 'var(--brand-primary, #1a1a2e)', MUTED = '#7C766A', FAINT = '#9A9488', BORDER = '#E7E2D6';
     const GREENB = '#5FD39B', GOLD_L = '#9A7B1F';
     const SERIF = "Georgia, 'Times New Roman', serif";
-    const tkPaid = isTakeaway(order) && (order.payment_status === 'paid' || order.payment_status === 'mock');
+    // SEPOS-QR-ORDER-001 — QR dine-in orders are prepaid like online takeaway:
+    // same "already paid online" close path, never the card machine again.
+    const tkPaid = (isTakeaway(order) || order.source === 'qr') && (order.payment_status === 'paid' || order.payment_status === 'mock');
     const courseNames = { 1: 'Starters', 2: 'Mains', 3: 'Sides', 4: 'Drinks', 5: 'Desserts' };
     const byCourse = {};
     billItems.forEach(it => { const c = it.course || 1; (byCourse[c] = byCourse[c] || []).push(it); });
@@ -620,6 +622,11 @@ export default function BillScreen({ orderId, onClose, onPay }) {
             {isTakeaway(order) ? (orderSubLabel(order) || '') : `${order.covers || 1} covers`} · {dateStr} {timeStr}
           </div>
 
+          {order.source === 'qr' && tkPaid && (
+            <div style={{ background: '#dcfce7', border: '2px solid #16a34a', borderRadius: 12, padding: '12px 16px', marginBottom: 16, fontSize: 13.5, color: '#14532d', fontWeight: 800 }}>
+              📱💳 PAID ONLINE{order.payment_status === 'mock' ? ' (demo)' : ''} — the customer paid when ordering. Do not charge again.
+            </div>
+          )}
           {hasVoucherDiscount && (
             <div style={{ background: '#FBF4DF', border: `1px solid ${GOLD}`, borderRadius: 12, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
               <div style={{ fontSize: 13.5, color: GOLD_L, fontWeight: 700 }}>🎁 {order.discount_reason}</div>

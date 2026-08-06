@@ -7387,6 +7387,18 @@ async function qrEnabled() {
     return String(r.rows[0]?.value || '0') === '1';
   } catch { return false; }
 }
+// Real card payment is only offered when keys exist AND the demo override is
+// off — the SAME rule /api/takeaway/stripe-config applies, or the page would
+// try to mount Stripe with a null publishable key on the demo tenant
+// (found live on Baan Siam: takeaway_mock_pay=1 but secret key present).
+async function qrStripeReady() {
+  try {
+    const s = await loadSettings();
+    if (String(s.takeaway_mock_pay || s.qr_mock_pay || '') === '1') return false;
+  } catch { /* settings unreadable → fall through to key check */ }
+  if (siampayCfg()) return true;
+  return !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PUBLISHABLE_KEY);
+}
 
 // The printable sticker sheet — one card per (non-takeaway) table. Server-
 // rendered HTML with inline SVG QRs (qrcode package), opened from the Table
@@ -7397,7 +7409,12 @@ app.get('/api/qr/sheet', async (req, res) => {
       return res.status(403).type('text/html').send('<h3 style="font-family:sans-serif">QR ordering is switched off — enable it in Settings first (qr_ordering_enabled).</h3>');
     }
     const QRCode = require('qrcode');
-    const base = (process.env.PUBLIC_API_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+    // The QR must carry a CUSTOMER-reachable address. On a desktop till the
+    // request host is localhost:3001 — meaningless on a customer's phone —
+    // so prefer the install's cloud URL (tokens verify identically there:
+    // same SYNC_SECRET, same table ids). Cloud deployments fall through to
+    // their own host as before.
+    const base = (process.env.PUBLIC_API_URL || process.env.CLOUD_API_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
     const nameRes = await pool.query(`SELECT value FROM settings WHERE key IN ('restaurant_name','company_name') ORDER BY key = 'restaurant_name' DESC LIMIT 1`);
     const rName = nameRes.rows[0]?.value || 'SiamEPOS';
     const tRes = await pool.query(`SELECT id, table_number, name FROM tables WHERE COALESCE(is_takeaway,0) = 0 ORDER BY table_number`);
@@ -7445,8 +7462,7 @@ app.get('/api/qr/session/:token', widgetCors, async (req, res) => {
     if (!t) return res.status(404).json({ error: 'This code is no longer active — please ask a member of staff.' });
     const sRes = await pool.query(`SELECT key, value FROM settings WHERE key IN ('restaurant_name','company_name','currency_symbol','brand_primary')`);
     const cfg = {}; for (const r of sRes.rows) cfg[r.key] = r.value;
-    const sp = siampayCfg();
-    const stripeReady = !!(sp || process.env.STRIPE_SECRET_KEY);
+    const stripeReady = await qrStripeReady();
     // Open order on this table (any dine-in — the customer may be topping up
     // an order a waiter started, that's fine; the bill is the table's bill).
     const oRes = await pool.query(
@@ -7457,7 +7473,7 @@ app.get('/api/qr/session/:token', widgetCors, async (req, res) => {
     let order = null;
     if (oRes.rows[0]) {
       const items = await pool.query(
-        `SELECT oi.id, oi.quantity, oi.unit_price, oi.status, oi.item_note, oi.voided,
+        `SELECT oi.id, oi.quantity, oi.unit_price, oi.status, oi.item_note, oi.notes, oi.voided,
                 COALESCE(mi.name, oi.item_name) AS name
            FROM order_items oi LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
           WHERE oi.order_id = $1 AND oi.voided = 0 ORDER BY oi.id`, [oRes.rows[0].id]);
@@ -7491,7 +7507,10 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
     if (items.length === 0) return res.status(400).json({ error: 'Cart is empty' });
     if (items.length > 40) return res.status(400).json({ error: 'Too many items in one order' });
 
-    // Server-side pricing — the client's numbers are display only.
+    // Server-side pricing — the client's numbers are display only. Chosen
+    // modifiers are re-looked-up by id: name + surcharge come from OUR rows
+    // (anti-tamper), then ride the same `notes` text convention the waiter
+    // flow uses so kitchen tickets print them identically.
     const priced = [];
     let totalPence = 0;
     for (const it of items) {
@@ -7501,15 +7520,25 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
       if (!Number(row.is_available) || !Number(row.is_online)) {
         return res.status(409).json({ error: `Sorry — "${row.name}" has just sold out. Please remove it and try again.` });
       }
-      const unit = Number(row.price) || 0;
+      let unit = Number(row.price) || 0;
+      const modNames = [];
+      const modIds = Array.isArray(it.modifiers) ? it.modifiers.slice(0, 12) : [];
+      for (const mid of modIds) {
+        const mr = (await pool.query(`SELECT name, extra_price FROM modifiers WHERE id = $1 AND is_available = 1`, [Number(mid)])).rows[0];
+        if (!mr) return res.status(409).json({ error: 'An option in your cart is no longer available — please re-add the dish.' });
+        unit += Number(mr.extra_price) || 0;
+        modNames.push(mr.name);
+      }
       totalPence += Math.round(unit * 100) * qty;
-      priced.push({ menu_item_id: row.id, quantity: qty, unit_price: unit, item_note: String(it.item_note || '').slice(0, 200) });
+      priced.push({ menu_item_id: row.id, quantity: qty, unit_price: unit,
+        notes: modNames.join(', ').slice(0, 300),
+        item_note: String(it.item_note || '').slice(0, 200) });
     }
     if (totalPence <= 0) return res.status(400).json({ error: 'Order total is zero — please ask staff to order these items.' });
 
     // Pay-first verification (identical hardening to the takeaway widget).
     const sp = siampayCfg();
-    const stripeReady = !!(sp || process.env.STRIPE_SECRET_KEY);
+    const stripeReady = await qrStripeReady();
     let paymentStatus = 'mock';
     let paidPence = null;
     if (stripeReady) {
@@ -7557,8 +7586,8 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
       for (const p of priced) {
         const ins = await pool.query(
           `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, status, cooking_started_at)
-           VALUES ($1,$2,$3,$4,'',1,$5,1,$6,'cooking',$7) RETURNING id`,
-          [orderId, p.menu_item_id, p.quantity, p.unit_price, p.item_note, now, now]);
+           VALUES ($1,$2,$3,$4,$5,1,$6,1,$7,'cooking',$8) RETURNING id`,
+          [orderId, p.menu_item_id, p.quantity, p.unit_price, p.notes || '', p.item_note, now, now]);
         firedIds.push(ins.rows[0].id);
       }
       const totalRes = await pool.query(`SELECT ${ORDER_TOTAL_EXPR} as total FROM order_items WHERE order_id = $1 AND voided = 0`, [orderId]);
@@ -7592,8 +7621,8 @@ app.post('/api/qr/payment-intent/:token', widgetCors, async (req, res) => {
     if (!await qrEnabled()) return res.status(403).json({ error: 'QR ordering is not enabled' });
     const tableId = qrVerifyToken(req.params.token);
     if (!tableId) return res.status(404).json({ error: 'Invalid code' });
+    if (!await qrStripeReady()) return res.status(503).json({ error: 'Card payments not configured' });
     const sp = siampayCfg();
-    if (!sp && !process.env.STRIPE_SECRET_KEY) return res.status(503).json({ error: 'Card payments not configured' });
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     if (!items.length || items.length > 40) return res.status(400).json({ error: 'Invalid cart' });
     let totalPence = 0;
@@ -7601,7 +7630,13 @@ app.post('/api/qr/payment-intent/:token', widgetCors, async (req, res) => {
       const qty = Math.max(1, Math.min(20, Number(it.quantity) || 1));
       const row = (await pool.query(`SELECT price, is_available FROM menu_items WHERE id = $1`, [it.menu_item_id])).rows[0];
       if (!row || !Number(row.is_available)) return res.status(409).json({ error: 'An item just sold out — please refresh your cart.' });
-      totalPence += Math.round((Number(row.price) || 0) * 100) * qty;
+      let unit = Number(row.price) || 0;
+      for (const mid of (Array.isArray(it.modifiers) ? it.modifiers.slice(0, 12) : [])) {
+        const mr = (await pool.query(`SELECT extra_price FROM modifiers WHERE id = $1 AND is_available = 1`, [Number(mid)])).rows[0];
+        if (!mr) return res.status(409).json({ error: 'An option just became unavailable — please re-add the dish.' });
+        unit += Number(mr.extra_price) || 0;
+      }
+      totalPence += Math.round(unit * 100) * qty;
     }
     if (totalPence < 50) return res.status(400).json({ error: 'Minimum card payment is 50p' });
     if (totalPence > 100000) return res.status(400).json({ error: 'Order too large — please ask staff' });

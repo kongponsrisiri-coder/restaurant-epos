@@ -27,6 +27,7 @@
   .rowb { display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
   .pr { font-weight:800; font-size:14.5px; }
   .add { background:var(--brand); color:#fff; border:none; border-radius:10px; font-weight:800; font-size:14px; padding:8px 16px; }
+  .qty-pill { background:var(--brand); color:#fff; border-radius:999px; font-weight:800; font-size:12px; padding:3px 9px; }
   .step { display:flex; align-items:center; gap:10px; }
   .step button { width:32px; height:32px; border-radius:9px; border:1.5px solid var(--brand); background:#fff; color:var(--brand); font-size:18px; font-weight:800; }
   .step span { font-weight:800; min-width:16px; text-align:center; }
@@ -34,8 +35,16 @@
   .sheet { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:40; display:flex; align-items:flex-end; }
   .sheet .panel { background:#fff; width:100%; max-height:88vh; overflow:auto; border-radius:18px 18px 0 0; padding:18px 16px 28px; }
   .panel h2 { font-size:17px; margin-bottom:10px; }
+  .grp { margin:14px 0 4px; }
+  .grp .gname { font-weight:800; font-size:14px; }
+  .grp .greq { font-size:11px; color:#b02a2a; font-weight:700; margin-left:6px; }
+  .opt { display:flex; justify-content:space-between; align-items:center; padding:10px 2px; border-bottom:1px solid #f0eee8; font-size:14px; }
+  .opt label { display:flex; align-items:center; gap:10px; flex:1; }
+  .opt input { width:19px; height:19px; accent-color:var(--brand); }
+  .opt .xp { color:#777; font-size:13px; font-weight:700; }
   .cline { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; padding:10px 0; border-bottom:1px solid #eee; }
   .cline .nm { font-weight:700; font-size:14px; }
+  .cline .ops { font-size:12px; color:#666; margin-top:2px; }
   .cline .note-in { width:100%; margin-top:6px; padding:8px 10px; border:1.5px solid #ddd; border-radius:9px; font-size:13px; }
   .totrow { display:flex; justify-content:space-between; font-weight:800; font-size:16px; padding:14px 0 6px; }
   .paybtn { width:100%; background:var(--brand); color:#fff; border:none; border-radius:13px; font-weight:800; font-size:16px; padding:15px; margin-top:12px; }
@@ -45,8 +54,9 @@
   .bigok { text-align:center; font-size:46px; margin:26px 0 6px; }
   .bigmsg { text-align:center; font-weight:800; font-size:18px; }
   .bigsub { text-align:center; color:#777; font-size:13px; margin-top:4px; }
-  .sline { display:flex; justify-content:space-between; padding:11px 4px; border-bottom:1px solid #eee; font-size:14px; }
-  .st { font-weight:800; font-size:12px; }
+  .sline { display:flex; justify-content:space-between; padding:11px 4px; border-bottom:1px solid #eee; font-size:14px; gap:8px; }
+  .sline .ops { font-size:11.5px; color:#777; }
+  .st { font-weight:800; font-size:12px; white-space:nowrap; }
   .st.cooking { color:#c07f00; } .st.cooked { color:#1c74c9; } .st.served { color:#256b34; }
   .morebtn { width:100%; background:#fff; color:var(--brand); border:2px solid var(--brand); border-radius:13px; font-weight:800; font-size:15px; padding:13px; margin-top:16px; }
   .err { background:#fde8e8; color:#b02a2a; border-radius:10px; padding:12px; margin:12px; font-size:13.5px; font-weight:600; }
@@ -60,12 +70,16 @@
 (function () {
   const token = location.pathname.split('/').pop();
   const $ = (s) => document.querySelector(s);
-  let S = null, MENU = [], cart = [], view = 'menu', activeCat = null, stripePk = null, stripe = null, elements = null, payBusy = false;
+  let S = null, MENU = [], cart = [], view = 'menu', activeCat = null;
+  let optItem = null, optGroups = null, optSel = {};          // options sheet state
+  let stripePk = null, stripe = null, elements = null, payBusy = false, uidSeq = 1;
+  const modCache = {};
 
   const fmt = (n) => (S ? S.currency : '£') + Number(n || 0).toFixed(2);
   const esc = (s) => String(s == null ? '' : s).replace(/[<>&"]/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
   const cartCount = () => cart.reduce((a, c) => a + c.quantity, 0);
-  const cartTotal = () => cart.reduce((a, c) => a + c.quantity * Number(c.price || 0), 0);
+  const cartTotal = () => cart.reduce((a, c) => a + c.quantity * c.unit, 0);
+  const itemQty = (id) => cart.filter((c) => c.menu_item_id === id).reduce((a, c) => a + c.quantity, 0);
 
   async function boot() {
     try {
@@ -76,7 +90,6 @@
       const m = await fetch('/api/menu').then((r) => r.json());
       MENU = (Array.isArray(m) ? m : []).filter((c) => (c.items || []).some((i) => Number(i.is_online ?? 1)));
       activeCat = MENU[0] ? MENU[0].id : null;
-      // If this table already has a live QR order, land on the status view.
       if (s.order && s.order.items && s.order.items.length && (s.order.payment_status === 'paid' || s.order.payment_status === 'mock')) view = 'status';
       render();
       setInterval(refreshStatus, 10000);
@@ -92,7 +105,6 @@
   }
 
   function renderFatal(msg) { $('#app').innerHTML = '<div class="err">' + esc(msg) + '</div>'; }
-
   function parseTags(v) { try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
 
   function render() {
@@ -114,32 +126,96 @@
     }
     if (cartCount() > 0) h += '<div class="cartbar" id="cartbar"><span>🧺 ' + cartCount() + ' item' + (cartCount() > 1 ? 's' : '') + '</span><span>View order · ' + fmt(cartTotal()) + '</span></div>';
     if (view === 'cart') h += cartSheet();
+    if (optItem) h += optionsSheet();
     $('#app') && ($('#app').innerHTML = h);
     bind();
   }
 
   function itemCard(i) {
-    const inCart = cart.find((c) => c.menu_item_id === i.id);
+    const q = itemQty(i.id);
     const al = parseTags(i.allergens), dt = parseTags(i.dietary);
-    return '<div class="item" data-id="' + i.id + '">' +
+    return '<div class="item">' +
       (i.image_url ? '<img loading="lazy" src="' + esc(i.image_url) + '" alt="">' : '') +
-      '<div class="info"><div class="nm">' + esc(i.name) + '</div>' +
+      '<div class="info"><div class="nm">' + esc(i.name) + (q ? ' <span class="qty-pill">×' + q + '</span>' : '') + '</div>' +
       (i.description ? '<div class="ds">' + esc(i.description) + '</div>' : '') +
       ((al.length || dt.length) ? '<div class="chips">' + dt.map((t) => '<span class="chip diet">' + esc(t) + '</span>').join('') + al.map((t) => '<span class="chip">⚠ ' + esc(t) + '</span>').join('') + '</div>' : '') +
       '<div class="rowb"><span class="pr">' + fmt(i.price) + '</span>' +
-      (inCart
-        ? '<span class="step"><button data-dec="' + i.id + '">−</button><span>' + inCart.quantity + '</span><button data-inc="' + i.id + '">＋</button></span>'
-        : '<button class="add" data-add="' + i.id + '">Add</button>') +
+      '<button class="add" data-add="' + i.id + '">Add</button>' +
       '</div></div></div>';
   }
 
+  // ── Options (modifiers) sheet ─────────────────────────────────────────────
+  async function startAdd(id) {
+    const i = findItem(id); if (!i) return;
+    let groups = modCache[id];
+    if (groups === undefined) {
+      try { groups = await fetch('/api/menu/items/' + id + '/modifiers').then((r) => r.json()); } catch (e) { groups = []; }
+      if (!Array.isArray(groups)) groups = [];
+      groups = groups.filter((g) => Array.isArray(g.modifiers) && g.modifiers.length);
+      modCache[id] = groups;
+    }
+    if (!groups.length) { pushCart(i, [], []); render(); return; }
+    optItem = i; optGroups = groups; optSel = {};
+    render();
+  }
+
+  function optionsSheet() {
+    let h = '<div class="sheet" id="optsheet"><div class="panel"><h2>' + esc(optItem.name) + '</h2>';
+    for (const g of optGroups) {
+      const multi = Number(g.multi_select);
+      h += '<div class="grp"><div><span class="gname">' + esc(g.name) + '</span>' + (Number(g.required) ? '<span class="greq">required</span>' : '') + '</div>';
+      for (const m of g.modifiers) {
+        const checked = (optSel[g.id] || []).includes(m.id) ? ' checked' : '';
+        h += '<div class="opt"><label><input type="' + (multi ? 'checkbox' : 'radio') + '" name="g' + g.id + '" data-g="' + g.id + '" data-m="' + m.id + '"' + checked + '><span>' + (Number(g.is_allergen) ? '⚠ ' : '') + esc(m.name) + '</span></label>' +
+             (Number(m.extra_price) > 0 ? '<span class="xp">+' + fmt(m.extra_price) + '</span>' : '') + '</div>';
+      }
+      h += '</div>';
+    }
+    h += '<button class="paybtn" id="optadd">Add to order · ' + fmt(optPrice()) + '</button>';
+    h += '<button class="morebtn" id="optcancel">Cancel</button>';
+    h += '</div></div>';
+    return h;
+  }
+
+  function optPrice() {
+    let p = Number(optItem.price) || 0;
+    for (const g of optGroups) for (const m of g.modifiers) if ((optSel[g.id] || []).includes(m.id)) p += Number(m.extra_price) || 0;
+    return p;
+  }
+
+  function confirmOptions() {
+    for (const g of optGroups) {
+      if (Number(g.required) && !(optSel[g.id] || []).length) {
+        alert('Please choose: ' + g.name); return;
+      }
+    }
+    const chosen = [], names = [];
+    for (const g of optGroups) for (const m of g.modifiers) if ((optSel[g.id] || []).includes(m.id)) { chosen.push(m.id); names.push(m.name); }
+    pushCart(optItem, chosen, names);
+    optItem = null; optGroups = null; optSel = {};
+    render();
+  }
+
+  function pushCart(i, modIds, modNames) {
+    // Same dish + same options = one line; different options = separate lines.
+    const key = i.id + ':' + modIds.slice().sort().join(',');
+    const existing = cart.find((c) => c.key === key);
+    const unit = (Number(i.price) || 0) + modNames.reduce((a, n, idx) => a, 0) + modIds.reduce((a, id) => {
+      for (const g of (modCache[i.id] || [])) for (const m of g.modifiers) if (m.id === id) return a + (Number(m.extra_price) || 0);
+      return a;
+    }, 0);
+    if (existing) existing.quantity += 1;
+    else cart.push({ uid: uidSeq++, key, menu_item_id: i.id, name: i.name, unit, quantity: 1, modifiers: modIds, modNames, item_note: '' });
+  }
+
   function cartSheet() {
-    let h = '<div class="sheet" id="sheet"><div class="panel"><h2>Your order — ' + esc(S.table.label) + '</h2>';
+    let h = '<div class="sheet"><div class="panel"><h2>Your order — ' + esc(S.table.label) + '</h2>';
     for (const c of cart) {
       h += '<div class="cline"><div style="flex:1"><div class="nm">' + c.quantity + ' × ' + esc(c.name) + '</div>' +
-        '<input class="note-in" data-note="' + c.menu_item_id + '" placeholder="Any message for the kitchen? (allergy, spice level, no coriander…)" value="' + esc(c.item_note || '') + '"></div>' +
-        '<div style="text-align:right"><div class="pr">' + fmt(c.quantity * c.price) + '</div>' +
-        '<span class="step" style="margin-top:6px"><button data-dec="' + c.menu_item_id + '">−</button><span>' + c.quantity + '</span><button data-inc="' + c.menu_item_id + '">＋</button></span></div></div>';
+        (c.modNames.length ? '<div class="ops">' + esc(c.modNames.join(', ')) + '</div>' : '') +
+        '<input class="note-in" data-note="' + c.uid + '" placeholder="Any message for the kitchen? (allergy, spice level…)" value="' + esc(c.item_note || '') + '"></div>' +
+        '<div style="text-align:right"><div class="pr">' + fmt(c.quantity * c.unit) + '</div>' +
+        '<span class="step" style="margin-top:6px"><button data-dec="' + c.uid + '">−</button><span>' + c.quantity + '</span><button data-inc="' + c.uid + '">＋</button></span></div></div>';
     }
     h += '<div class="totrow"><span>Total</span><span>' + fmt(cartTotal()) + '</span></div>';
     h += '<div id="payel"></div>';
@@ -161,7 +237,9 @@
       for (const it of (o.items || [])) {
         const st = it.status === 'served' ? 'served' : (it.status === 'cooked' ? 'cooked' : 'cooking');
         const lb = st === 'served' ? '✓ served' : st === 'cooked' ? 'ready' : 'cooking…';
-        h += '<div class="sline"><span>' + it.quantity + ' × ' + esc(it.name) + '</span><span class="st ' + st + '">' + lb + '</span></div>';
+        h += '<div class="sline"><span>' + it.quantity + ' × ' + esc(it.name) +
+             (it.notes ? '<div class="ops">' + esc(it.notes) + '</div>' : '') +
+             '</span><span class="st ' + st + '">' + lb + '</span></div>';
       }
       h += '</div><button class="morebtn" id="ordermore">＋ Order more</button>';
     }
@@ -172,21 +250,33 @@
 
   function bind() {
     document.querySelectorAll('[data-cat]').forEach((b) => b.onclick = () => { activeCat = Number(b.dataset.cat); render(); });
-    document.querySelectorAll('[data-add]').forEach((b) => b.onclick = () => { addItem(Number(b.dataset.add)); });
+    document.querySelectorAll('[data-add]').forEach((b) => b.onclick = () => { startAdd(Number(b.dataset.add)); });
     document.querySelectorAll('[data-inc]').forEach((b) => b.onclick = () => { bump(Number(b.dataset.inc), 1); });
     document.querySelectorAll('[data-dec]').forEach((b) => b.onclick = () => { bump(Number(b.dataset.dec), -1); });
     document.querySelectorAll('[data-note]').forEach((inp) => inp.onchange = () => {
-      const c = cart.find((x) => x.menu_item_id === Number(inp.dataset.note)); if (c) c.item_note = inp.value.slice(0, 200);
+      const c = cart.find((x) => x.uid === Number(inp.dataset.note)); if (c) c.item_note = inp.value.slice(0, 200);
     });
-    const cb = $('#cartbar'); if (cb) cb.onclick = () => { view = 'cart'; render(); openPayment(); };
+    document.querySelectorAll('#optsheet input').forEach((inp) => inp.onchange = () => {
+      const g = Number(inp.dataset.g), m = Number(inp.dataset.m);
+      const grp = optGroups.find((x) => x.id === g);
+      if (Number(grp.multi_select)) {
+        optSel[g] = optSel[g] || [];
+        if (inp.checked) optSel[g].push(m); else optSel[g] = optSel[g].filter((x) => x !== m);
+      } else {
+        optSel[g] = [m];
+      }
+      const btn = $('#optadd'); if (btn) btn.textContent = 'Add to order · ' + fmt(optPrice());
+    });
+    const oa = $('#optadd'); if (oa) oa.onclick = confirmOptions;
+    const oc = $('#optcancel'); if (oc) oc.onclick = () => { optItem = null; optGroups = null; optSel = {}; render(); };
+    const cb = $('#cartbar'); if (cb) cb.onclick = () => { if (view !== 'cart') { view = 'cart'; render(); openPayment(); } };
     const cc = $('#closecart'); if (cc) cc.onclick = () => { view = 'menu'; render(); };
     const pb = $('#paybtn'); if (pb) pb.onclick = submit;
   }
 
   function findItem(id) { for (const c of MENU) { const i = (c.items || []).find((x) => x.id === id); if (i) return i; } return null; }
-  function addItem(id) { const i = findItem(id); if (!i) return; cart.push({ menu_item_id: id, name: i.name, price: Number(i.price) || 0, quantity: 1, item_note: '' }); render(); }
-  function bump(id, d) {
-    const c = cart.find((x) => x.menu_item_id === id); if (!c) return;
+  function bump(uid, d) {
+    const c = cart.find((x) => x.uid === uid); if (!c) return;
     c.quantity += d; if (c.quantity <= 0) cart = cart.filter((x) => x !== c);
     if (!cart.length && view === 'cart') view = 'menu';
     render(); if (view === 'cart') openPayment();
@@ -196,14 +286,15 @@
   async function openPayment() {
     if (!S.stripe_ready || !cart.length) return;
     try {
+      let acct = null;
       if (!stripePk) {
         const cfg = await fetch('/api/takeaway/stripe-config').then((r) => r.json());
         stripePk = cfg.publishable_key || cfg.publishableKey;
-        if (cfg.stripe_account) stripePk = stripePk; // pk already connected-scoped server-side
+        acct = cfg.stripe_account || null;
         if (!window.Stripe) await new Promise((ok, bad) => { const s = document.createElement('script'); s.src = 'https://js.stripe.com/v3/'; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
-        stripe = cfg.stripe_account ? window.Stripe(stripePk, { stripeAccount: cfg.stripe_account }) : window.Stripe(stripePk);
+        stripe = acct ? window.Stripe(stripePk, { stripeAccount: acct }) : window.Stripe(stripePk);
       }
-      const pi = await fetch('/api/qr/payment-intent/' + token, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: cart.map((c) => ({ menu_item_id: c.menu_item_id, quantity: c.quantity })) }) }).then((r) => r.json());
+      const pi = await fetch('/api/qr/payment-intent/' + token, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: cart.map((c) => ({ menu_item_id: c.menu_item_id, quantity: c.quantity, modifiers: c.modifiers })) }) }).then((r) => r.json());
       if (pi.error) { $('#payel').innerHTML = '<div class="err">' + esc(pi.error) + '</div>'; return; }
       window.__qr_pi = pi;
       elements = stripe.elements({ clientSecret: pi.client_secret });
@@ -221,7 +312,7 @@
         if (error) throw new Error(error.message || 'Payment failed');
         piId = window.__qr_pi.payment_intent_id;
       }
-      const r = await fetch('/api/qr/orders/' + token, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: cart.map((c) => ({ menu_item_id: c.menu_item_id, quantity: c.quantity, item_note: c.item_note })), payment_intent_id: piId }) }).then((x) => x.json());
+      const r = await fetch('/api/qr/orders/' + token, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: cart.map((c) => ({ menu_item_id: c.menu_item_id, quantity: c.quantity, modifiers: c.modifiers, item_note: c.item_note })), payment_intent_id: piId }) }).then((x) => x.json());
       if (r.error) throw new Error(r.error);
       cart = []; view = 'status';
       const s = await fetch('/api/qr/session/' + token).then((x) => x.json());

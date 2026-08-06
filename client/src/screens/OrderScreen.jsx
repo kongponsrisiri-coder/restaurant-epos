@@ -1533,6 +1533,17 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             paddingBottom: isMobile ? 'calc(58px + env(safe-area-inset-bottom, 0px) + 14px)' : '14px',
             borderTop: '1px solid #eee', flexShrink: 0
           }}>
+            {/* SEPOS-QR-ORDER-001 — customer PAID at order time; staff must not
+                charge again. The bill closes itself when everything is served. */}
+            {order?.source === 'qr' && (order?.payment_status === 'paid' || order?.payment_status === 'mock') && (
+              <div style={{
+                marginBottom: 10, padding: '10px 12px', borderRadius: 10,
+                background: '#dcfce7', border: '2px solid #16a34a',
+                color: '#14532d', fontSize: 13, fontWeight: 800, textAlign: 'center',
+              }}>
+                📱💳 PAID ONLINE{order.payment_status === 'mock' ? ' (demo)' : ''} — do not charge. Closes itself when all items are served.
+              </div>
+            )}
             <div style={{ marginBottom: 10 }}>
               {order?.discount_value > 0 ? (
                 <div style={{ display: 'flex', gap: 8 }}>

@@ -516,14 +516,16 @@ async function localOrderCloudId(orderId) {
 // the cloud-acknowledged shape into local SQLite. On failure, the request
 // falls back to the local handler so the operator's UI still updates.
 function maybeForwardMenuWriteToCloud(req, res) {
-  return forwardWriteToCloud(req, res, 'menu-write', () => syncService.pullMenuSnapshot());
+  // SEPOS-CONFIG-QUEUE phase 2 — strict: offline UPDATE/DELETE queue + apply
+  // locally (till is the boss); CREATE needs the cloud (new row = cloud id).
+  return forwardWriteToCloud(req, res, 'menu-write', () => syncService.pullMenuSnapshot(), { strict: true });
 }
 
 // SEPOS-059 — modifier-library writes pull the flat modifier tables back (not the
 // menu tree), so the till admin's refetch shows the new/removed option instantly
 // instead of only after the next 5s tick (the "had to close & reopen" bug).
 function maybeForwardModifierWriteToCloud(req, res) {
-  return forwardWriteToCloud(req, res, 'modifier-write', () => syncService.pullModifiersSnapshot());
+  return forwardWriteToCloud(req, res, 'modifier-write', () => syncService.pullModifiersSnapshot(), { strict: true });
 }
 
 // SEPOS-027 — floor-plan writes (tables + linked groups) forward to cloud so the
@@ -541,7 +543,7 @@ function maybeForwardTableWriteToCloud(req, res) {
 // Now a desktop staff write becomes the cloud truth and the instant staff
 // pull (with orphan-delete) reflects it locally + everywhere on next tick.
 function maybeForwardStaffWriteToCloud(req, res) {
-  return forwardWriteToCloud(req, res, 'staff-write', () => syncService.pullStaffSnapshot());
+  return forwardWriteToCloud(req, res, 'staff-write', () => syncService.pullStaffSnapshot(), { strict: true });
 }
 
 app.post('/api/categories', async (req, res) => {
@@ -925,15 +927,22 @@ app.put('/api/menu/items/sort-order', async (req, res) => {
 app.put('/api/menu/items/:id', async (req, res) => {
   if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
-    const { name, name_alt, description, price, is_available, is_online, subcategory_id, category_id, vat_rate, default_course, printer_id } = req.body;
+    const { name, name_alt, description, price, is_available, is_online, subcategory_id, category_id, vat_rate, default_course, printer_id, image_url, dietary } = req.body;
     // NULL / '' → inherit the category course; 1-4 → per-item override.
     const dc = (default_course == null || default_course === '') ? null : (Number(default_course) || null);
     // SEPOS-STATION-003 — per-dish station override. '' / null → inherit the
     // category's printer route; a printer id → this dish always prints there.
     const pid = (printer_id == null || printer_id === '') ? null : (Number(printer_id) || null);
+    // SEPOS-QR-ORDER-001 — customer-menu card fields. Omitted → unchanged
+    // (COALESCE); explicit '' clears. dietary accepts an array like allergens.
+    const img = image_url === undefined ? null : (image_url || '');
+    let diet = null;
+    if (dietary !== undefined) {
+      diet = Array.isArray(dietary) ? JSON.stringify(dietary) : (dietary ? JSON.stringify([dietary]) : '');
+    }
     await pool.query(
-      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, is_online=COALESCE($6, is_online), subcategory_id=$7, category_id=$8, vat_rate=COALESCE($9, vat_rate), default_course=$10, printer_id=$11 WHERE id=$12',
-      [name, name_alt || null, description, price, is_available, is_online ?? null, subcategory_id || null, category_id, vat_rate ?? null, dc, pid, req.params.id]
+      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, is_online=COALESCE($6, is_online), subcategory_id=$7, category_id=$8, vat_rate=COALESCE($9, vat_rate), default_course=$10, printer_id=$11, image_url=COALESCE($12, image_url), dietary=COALESCE($13, dietary) WHERE id=$14',
+      [name, name_alt || null, description, price, is_available, is_online ?? null, subcategory_id || null, category_id, vat_rate ?? null, dc, pid, img, diet, req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1193,7 +1202,7 @@ app.post('/api/device/heartbeat', async (req, res) => {
 
 app.get('/api/orders/bar', async (req, res) => {
   try {
-    const ordersRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status = 'open' ORDER BY orders.created_at DESC`);
+    const ordersRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status = 'open' ORDER BY orders.created_at DESC`);
     const orders = ordersRes.rows;
     if (!orders.length) return res.json([]);
     const orderIds = orders.map(o => o.id);
@@ -1207,7 +1216,7 @@ app.get('/api/orders/bar', async (req, res) => {
 
 app.get('/api/orders/:id', async (req, res) => {
   try {
-    const orderRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [req.params.id]);
+    const orderRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [req.params.id]);
     const order = orderRes.rows[0];
     if (!order) return res.status(404).json({ error: 'Order not found' });
     const itemsRes = await pool.query(
@@ -1430,7 +1439,7 @@ app.put('/api/orders/:id/fire-course/:course', async (req, res) => {
       [now, now, id, course]
     );
     await depleteStockForItems(firedIds, 'sale');
-    const orderRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [id]);
+    const orderRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [id]);
     const itemsRes = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id = $1 AND order_items.course = $2 AND order_items.is_fired = 1`, [id, course]);
     io.emit('course_fired', { order: orderRes.rows[0], course: Number(course), items: itemsRes.rows });
     await offlineQueue.enqueue('fire_course', { localOrderId: Number(id), course: Number(course) });
@@ -1853,7 +1862,7 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
 app.get('/api/orders/:id/bill', async (req, res) => {
   try {
     const [orderRes, itemsRes, settingsRes] = await Promise.all([
-      pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id=$1`, [req.params.id]),
+      pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id=$1`, [req.params.id]),
       pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt, menu_items.vat_rate FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id=$1 AND order_items.voided=0`, [req.params.id]),
       pool.query('SELECT * FROM settings')
     ]);
@@ -6655,7 +6664,7 @@ io.on('connection', (socket) => {
 // a QR code that kitchen / bar tablets can scan. Prefers RFC1918 private
 // ranges and skips VPN/tunnel interface names so a Tailscale or corp-VPN
 // address isn't advertised by mistake.
-app.get('/api/network-info', (req, res) => {
+app.get('/api/network-info', async (req, res) => {
   const os = require('os');
   const port = process.env.PORT || 3001;
   // Only a LOCAL install (desktop / Sunmi host) is a real LAN host worth
@@ -6680,7 +6689,21 @@ app.get('/api/network-info', (req, res) => {
   }
   // 192.168.x are ordinary home/shop routers — the address tablets share.
   candidates.sort((a, b) => (b.startsWith('192.168.') ? 1 : 0) - (a.startsWith('192.168.') ? 1 : 0));
-  const ip = candidates[0] || '127.0.0.1';
+  // SEPOS-BILL-STATIONS follow-up — the host can carry interface ALIASES
+  // (the travelling printer-kit bridge adds 192.168.8.50 / 192.168.1.50),
+  // and "first candidate" then advertises an address tablets can't reach
+  // ("cannot open the IP, it's not loading" — Korakot, 2026-08-06). Ask the
+  // OS routing table instead: a UDP connect (no packet is ever sent)
+  // resolves the outbound source IP — the address on the REAL LAN.
+  let routed = null;
+  try {
+    const dgram = require('dgram');
+    const sock = dgram.createSocket('udp4');
+    await new Promise((resolve, reject) => sock.connect(53, '8.8.8.8', (e) => (e ? reject(e) : resolve())));
+    routed = sock.address().address;
+    sock.close();
+  } catch { /* offline / no default route — fall back to candidates */ }
+  const ip = (routed && candidates.includes(routed)) ? routed : (candidates[0] || '127.0.0.1');
   res.json({ ip, port, url: `http://${ip}:${port}`, local });
 });
 
@@ -7622,7 +7645,7 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
       return { orderId, firedIds };
     });
 
-    const orderRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [out.orderId]);
+    const orderRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [out.orderId]);
     const newItemsRes = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.id = ANY($1::int[])`, [out.firedIds]);
     io.emit('new_order_items', { order: orderRes.rows[0], items: newItemsRes.rows });
     res.json({ success: true, order_id: out.orderId, payment_status: paymentStatus });

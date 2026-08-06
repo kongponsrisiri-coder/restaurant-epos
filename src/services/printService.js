@@ -326,7 +326,7 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
       order.pickup_time   ? [col2('Pickup', new Date(order.pickup_time).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/London' })), lf()] : [],
     ] : [
       // Table number BIG + bold + centred so it's obvious at a glance.
-      CMD.ALIGN_CENTER, CMD.BOLD_ON, CMD.SIZE_BIG, txt(`TABLE ${order.table_number || '—'}`), CMD.SIZE_NORMAL, CMD.BOLD_OFF, CMD.ALIGN_CENTER, lf(),
+      CMD.ALIGN_CENTER, CMD.BOLD_ON, CMD.SIZE_BIG, txt((order.table_label && String(order.table_label).trim()) ? String(order.table_label).trim().toUpperCase() : `TABLE ${order.table_number || '—'}`), CMD.SIZE_NORMAL, CMD.BOLD_OFF, CMD.ALIGN_CENTER, lf(),
       col2('Covers', String(order.covers       || '—')), lf(),
     ]),
     col2('Date',    date),  lf(),
@@ -416,10 +416,21 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
 // ── Course fire notice (TABLE X — FIRE MAINS — no item list) ─────────────────
 // Called when chef fires a specific course. Just a loud call card, no item detail.
 
+// SEPOS-QR-ORDER-001 — a table can carry a NAME ("Bar 3") whose internal
+// number is something else entirely (Bar 3 = table_number 9 → the kitchen
+// got "TABLE 9" and looked at the wrong side of the room). When the caller
+// passes order.table_label, the heading uses it verbatim; otherwise the
+// numeric fallback is byte-identical to the old behaviour.
+function tableHeading(order) {
+  const label = order && order.table_label && String(order.table_label).trim();
+  if (label) return label.toUpperCase();
+  return `TABLE ${order && order.table_number != null ? order.table_number : '?'}`;
+}
+
 function buildFireNotice({ order, course, bilingual = true }) {
   const heading  = order.order_type === 'takeaway'
     ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
-    : `TABLE ${order.table_number != null ? order.table_number : '?'}`;
+    : tableHeading(order);
   const courseEN = COURSES_EN[course] || 'ITEMS';
   // Korakot 2026-06-02: no Thai on the category — English label only.
   const now      = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
@@ -448,7 +459,7 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
   const itemSize = scaleCmd(fontScale); // SEPOS-PRINT-FONT-001 — per-role text size
   const heading = order.order_type === 'takeaway'
     ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
-    : `TABLE ${order.table_number != null ? order.table_number : '?'}`;
+    : tableHeading(order);
   const courseEN = COURSES_EN[course] || 'ITEMS';
   // Korakot 2026-06-02: don't print Thai on the category (course)
   // header — STARTERS/MAINS in English is enough. Thai stays only on
@@ -503,7 +514,7 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
   const itemSize = scaleCmd(fontScale); // SEPOS-PRINT-FONT-001 — per-role text size
   const heading = order.order_type === 'takeaway'
     ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
-    : `TABLE ${order.table_number != null ? order.table_number : '?'}`;
+    : tableHeading(order);
   const now = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
   const headSize = heading.length <= 10 ? CMD.SIZE_BIG : CMD.SIZE_TALL;
 

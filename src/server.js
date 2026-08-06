@@ -7631,7 +7631,7 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
       return { orderId, firedIds };
     });
 
-    const orderRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [out.orderId]);
+    const orderRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [out.orderId]);
     const newItemsRes = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.id = ANY($1::int[])`, [out.firedIds]);
     io.emit('new_order_items', { order: orderRes.rows[0], items: newItemsRes.rows });
     res.json({ success: true, order_id: out.orderId, payment_status: paymentStatus });

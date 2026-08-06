@@ -144,6 +144,7 @@ async function autoPrintIncomingTakeaway(payload, opts = {}) {
       delivery_address: null,
       notes: '📱 QR self-order (prepaid)',
       table_number: opts.tableNumber ?? null,
+      table_label: opts.tableLabel ?? null,
     } : {
       id: payload.id,
       order_type: 'takeaway',
@@ -280,6 +281,7 @@ function start(localIo, syncService) {
         autoPrintIncomingTakeaway(
           { id: payload.order.id },
           { qr: true, tableNumber: payload.order.table_number ?? null,
+            tableLabel: payload.order.table_label ?? null,
             onlyItemIds: (payload.items || []).map(i => i.id).filter(Boolean) });
       }
     });

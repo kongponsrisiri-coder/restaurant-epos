@@ -742,29 +742,46 @@ app.get('/api/printers/scan', async (req, res) => {
   }
   try {
     const os = require('os'), net = require('net');
-    // Find this machine's LAN IPv4 → derive the /24 to sweep.
-    let base = null;
+    // SEPOS-BILL-STATIONS-001 — sweep EVERY attached IPv4 /24, not just the
+    // first: the travel printer kit lives on its own subnet (192.168.8.x via
+    // a travel router or a temporary interface alias), which the old
+    // first-interface-only scan never saw ("the till scanner can't find them",
+    // Korakot 2026-08-06).
+    const bases = new Set();
     for (const ifaces of Object.values(os.networkInterfaces())) {
       for (const ni of ifaces || []) {
-        if (ni.family === 'IPv4' && !ni.internal) { base = ni.address.split('.').slice(0, 3).join('.'); break; }
+        if (ni.family === 'IPv4' && !ni.internal) bases.add(ni.address.split('.').slice(0, 3).join('.'));
       }
-      if (base) break;
     }
-    if (!base) return res.json({ local: true, printers: [], message: 'No LAN connection found on this device.' });
+    if (!bases.size) return res.json({ local: true, printers: [], message: 'No LAN connection found on this device.' });
     const port = 9100;
     const probe = (host) => new Promise((resolve) => {
       const s = new net.Socket();
       let done = false;
       const finish = (ok) => { if (done) return; done = true; try { s.destroy(); } catch {} resolve(ok ? host : null); };
-      s.setTimeout(500);
+      // 900ms not 500 — cold ARP resolution on a fresh subnet eats most of a
+      // 500ms budget and made first scans miss live printers.
+      s.setTimeout(900);
       s.once('connect', () => finish(true));
       s.once('timeout', () => finish(false));
       s.once('error', () => finish(false));
       s.connect(port, host);
     });
-    const hosts = Array.from({ length: 254 }, (_, i) => `${base}.${i + 1}`);
-    const found = (await Promise.all(hosts.map(probe))).filter(Boolean);
-    res.json({ local: true, subnet: `${base}.0/24`, printers: found.map(ip => ({ ip, port })) });
+    const hosts = [...bases].flatMap((b) => Array.from({ length: 254 }, (_, i) => `${b}.${i + 1}`));
+    // Two passes, union — budget POS80 boards drop the probe if they're busy
+    // with another connection, so any single sweep can miss a live printer
+    // (seen live: 3 printers, each scan found a different 2 of them).
+    const found = new Set();
+    for (let pass = 0; pass < 3; pass++) {
+      if (pass) await new Promise(r => setTimeout(r, 600));   // let busy boards recover
+      const remaining = hosts.filter(h => !found.has(h));
+      // Chunked, not all-at-once: 762 simultaneous SYNs storm the ARP table
+      // and drown the printers' replies (first scan after boot found 1 of 3).
+      for (let i = 0; i < remaining.length; i += 128) {
+        (await Promise.all(remaining.slice(i, i + 128).map(probe))).filter(Boolean).forEach(ip => found.add(ip));
+      }
+    }
+    res.json({ local: true, subnet: [...bases].map((b) => `${b}.0/24`).join(', '), printers: [...found].sort().map(ip => ({ ip, port })) });
   } catch (err) { res.status(500).json({ local: true, printers: [], error: err.message }); }
 });
 app.delete('/api/printers/:id', async (req, res) => {
@@ -10040,7 +10057,7 @@ app.post('/api/print/buffers/kitchen-message', async (req, res) => {
 });
 
 app.post('/api/print/receipt', async (req, res) => {
-  const { order_id, payment_details, printer_name } = req.body;
+  const { order_id, payment_details, printer_name, printer_id } = req.body;
   try {
     const settings = await loadSettings();
     // SEPOS-058 — a USB printer is addressed by NAME (no IP). When the client
@@ -10048,6 +10065,24 @@ app.post('/api/print/receipt', async (req, res) => {
     // the platform raw path (Windows spooler RAW / CUPS) instead of requiring
     // an IP. This gives crisp ESC/POS black + silent, vs the faint HTML/GDI path.
     await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
+    // SEPOS-BILL-STATIONS-001 — per-DEVICE bill station: the client passes the
+    // printers-table row id it wants THIS device's bills on (multi-section
+    // venues: each section's till prints bills at its own station). Falls back
+    // to the role_receipt default when the row is missing/inactive — a stale
+    // device preference must never mean "no bill".
+    if (printer_id) {
+      const pr = await pool.query(
+        `SELECT ip, port, name, lpr_queue FROM printers WHERE id = $1 AND is_active = 1`, [Number(printer_id)]);
+      if (pr.rows[0] && pr.rows[0].ip) {
+        settings.printer_receipt_ip = pr.rows[0].ip;
+        settings.printer_receipt_port = pr.rows[0].port || 9100;
+        settings.printer_receipt_lpr_queue = pr.rows[0].lpr_queue || settings.printer_receipt_lpr_queue;
+        settings.printer_receipt_name = '';
+        console.log(`[print/receipt] device override → station "${pr.rows[0].name}" (${pr.rows[0].ip})`);
+      } else {
+        console.warn(`[print/receipt] override printer_id=${printer_id} missing/inactive — using default station`);
+      }
+    }
     if (printer_name) { settings.printer_receipt_name = printer_name; settings.printer_receipt_ip = ''; }
     if (!settings.printer_receipt_ip && !settings.printer_receipt_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(

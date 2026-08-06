@@ -1202,7 +1202,7 @@ app.post('/api/device/heartbeat', async (req, res) => {
 
 app.get('/api/orders/bar', async (req, res) => {
   try {
-    const ordersRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status = 'open' ORDER BY orders.created_at DESC`);
+    const ordersRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status = 'open' ORDER BY orders.created_at DESC`);
     const orders = ordersRes.rows;
     if (!orders.length) return res.json([]);
     const orderIds = orders.map(o => o.id);
@@ -1216,7 +1216,7 @@ app.get('/api/orders/bar', async (req, res) => {
 
 app.get('/api/orders/:id', async (req, res) => {
   try {
-    const orderRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [req.params.id]);
+    const orderRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [req.params.id]);
     const order = orderRes.rows[0];
     if (!order) return res.status(404).json({ error: 'Order not found' });
     const itemsRes = await pool.query(
@@ -1439,7 +1439,7 @@ app.put('/api/orders/:id/fire-course/:course', async (req, res) => {
       [now, now, id, course]
     );
     await depleteStockForItems(firedIds, 'sale');
-    const orderRes = await pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [id]);
+    const orderRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [id]);
     const itemsRes = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id = $1 AND order_items.course = $2 AND order_items.is_fired = 1`, [id, course]);
     io.emit('course_fired', { order: orderRes.rows[0], course: Number(course), items: itemsRes.rows });
     await offlineQueue.enqueue('fire_course', { localOrderId: Number(id), course: Number(course) });
@@ -1862,7 +1862,7 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
 app.get('/api/orders/:id/bill', async (req, res) => {
   try {
     const [orderRes, itemsRes, settingsRes] = await Promise.all([
-      pool.query(`SELECT orders.*, tables.table_number FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id=$1`, [req.params.id]),
+      pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id=$1`, [req.params.id]),
       pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt, menu_items.vat_rate FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id=$1 AND order_items.voided=0`, [req.params.id]),
       pool.query('SELECT * FROM settings')
     ]);
@@ -6664,7 +6664,7 @@ io.on('connection', (socket) => {
 // a QR code that kitchen / bar tablets can scan. Prefers RFC1918 private
 // ranges and skips VPN/tunnel interface names so a Tailscale or corp-VPN
 // address isn't advertised by mistake.
-app.get('/api/network-info', (req, res) => {
+app.get('/api/network-info', async (req, res) => {
   const os = require('os');
   const port = process.env.PORT || 3001;
   // Only a LOCAL install (desktop / Sunmi host) is a real LAN host worth
@@ -6689,7 +6689,21 @@ app.get('/api/network-info', (req, res) => {
   }
   // 192.168.x are ordinary home/shop routers — the address tablets share.
   candidates.sort((a, b) => (b.startsWith('192.168.') ? 1 : 0) - (a.startsWith('192.168.') ? 1 : 0));
-  const ip = candidates[0] || '127.0.0.1';
+  // SEPOS-BILL-STATIONS follow-up — the host can carry interface ALIASES
+  // (the travelling printer-kit bridge adds 192.168.8.50 / 192.168.1.50),
+  // and "first candidate" then advertises an address tablets can't reach
+  // ("cannot open the IP, it's not loading" — Korakot, 2026-08-06). Ask the
+  // OS routing table instead: a UDP connect (no packet is ever sent)
+  // resolves the outbound source IP — the address on the REAL LAN.
+  let routed = null;
+  try {
+    const dgram = require('dgram');
+    const sock = dgram.createSocket('udp4');
+    await new Promise((resolve, reject) => sock.connect(53, '8.8.8.8', (e) => (e ? reject(e) : resolve())));
+    routed = sock.address().address;
+    sock.close();
+  } catch { /* offline / no default route — fall back to candidates */ }
+  const ip = (routed && candidates.includes(routed)) ? routed : (candidates[0] || '127.0.0.1');
   res.json({ ip, port, url: `http://${ip}:${port}`, local });
 });
 

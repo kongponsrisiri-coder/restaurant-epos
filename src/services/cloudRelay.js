@@ -28,7 +28,10 @@ const CLOUD_API_URL = process.env.CLOUD_API_URL;
 // CLOUD, the cloud's own auto-print can't reach the restaurant's LAN
 // printer (Railway → 192.168.x.x will never resolve). The desktop install
 // IS on the LAN, so the print belongs here on the cloud-relay path.
-async function autoPrintIncomingTakeaway(payload) {
+// opts (SEPOS-QR-ORDER-001): { qr: true, tableNumber, onlyItemIds } — a QR
+// self-order is dine-in on a table, arrives cloud-first exactly like takeaway
+// (customer's phone → cloud), and round 2+ must print ONLY the new items.
+async function autoPrintIncomingTakeaway(payload, opts = {}) {
   try {
     // Load local settings (KV) — same shape src/server.js loadSettings uses.
     const sRes = await pool.query('SELECT key, value FROM settings');
@@ -55,7 +58,13 @@ async function autoPrintIncomingTakeaway(payload) {
       return;
     }
     const orderData = await orderRes.json();
-    const items = orderData.items || [];
+    let items = orderData.items || [];
+    // Round 2+ of a QR order appends to the same bill — print only the items
+    // this event carried, or the kitchen gets round 1 again on every round.
+    if (opts.onlyItemIds && opts.onlyItemIds.length) {
+      const allowed = new Set(opts.onlyItemIds.map(Number));
+      items = items.filter(it => allowed.has(Number(it.id)));
+    }
     if (items.length === 0) return;
 
     // Look up is_bar AND the effective print station per menu_item via the
@@ -124,7 +133,18 @@ async function autoPrintIncomingTakeaway(payload) {
       }
     }
 
-    const printOrder = {
+    const printOrder = opts.qr ? {
+      // QR self-order — a dine-in ticket for the table, marked so the kitchen
+      // knows no waiter keyed it (and that it's prepaid).
+      id: payload.id,
+      order_type: 'dine_in',
+      source: 'qr',
+      customer_name: '',
+      customer_phone: '',
+      delivery_address: null,
+      notes: '📱 QR self-order (prepaid)',
+      table_number: opts.tableNumber ?? null,
+    } : {
       id: payload.id,
       order_type: 'takeaway',
       order_subtype: payload.order_subtype || 'collection',
@@ -139,18 +159,18 @@ async function autoPrintIncomingTakeaway(payload) {
     // WORST silent failure (no staff even saw an order screen): hold + banner.
     for (const [, grp] of stationGroups) {
       printService.printKitchenToPrinter(grp.printer, settings, printOrder, grp.items)
-        .then(() => console.log(`🖨️ [cloud-relay] station "${grp.printer.name}" auto-printed for takeaway #${payload.id}`))
+        .then(() => console.log(`🖨️ [cloud-relay] station "${grp.printer.name}" auto-printed for ${opts.qr ? 'QR order' : 'takeaway'} #${payload.id}`))
         .catch(err => printAlerts.recordFailure({ kind: 'station', printer: grp.printer, order: printOrder, items: grp.items, reason: err.message }));
     }
     if (mode !== 'kds' && kitchenItems.length &&
         (settings.printer_kitchen_ip || settings.printer_kitchen_name)) {
       printService.printFullKitchenTicket(settings, printOrder, kitchenItems)
-        .then(() => console.log(`🖨️ [cloud-relay] kitchen ticket auto-printed for takeaway #${payload.id}`))
+        .then(() => console.log(`🖨️ [cloud-relay] kitchen ticket auto-printed for ${opts.qr ? 'QR order' : 'takeaway'} #${payload.id}`))
         .catch(err => printAlerts.recordFailure({ kind: 'kitchen', printer: { name: 'Kitchen', ip: settings.printer_kitchen_ip }, order: printOrder, items: kitchenItems, reason: err.message }));
     }
     if (barItems.length && settings.printer_bar_ip) {
       printService.printBarTicket(settings, printOrder, barItems)
-        .then(() => console.log(`🍹 [cloud-relay] bar ticket auto-printed for takeaway #${payload.id}`))
+        .then(() => console.log(`🍹 [cloud-relay] bar ticket auto-printed for ${opts.qr ? 'QR order' : 'takeaway'} #${payload.id}`))
         .catch(err => printAlerts.recordFailure({ kind: 'bar', printer: { name: 'Bar', ip: settings.printer_bar_ip }, order: printOrder, items: barItems, reason: err.message }));
     }
   } catch (err) {
@@ -251,6 +271,16 @@ function start(localIo, syncService) {
       // own auto-print is a silent no-op in that case.
       if (event === 'new_takeaway_order' && payload && payload.id) {
         autoPrintIncomingTakeaway(payload);
+      }
+      // SEPOS-QR-ORDER-001 — QR self-orders are cloud-born like takeaway but
+      // announce as new_order_items. Gate on source==='qr' so waiter orders
+      // (which also round-trip through the cloud) never double-print.
+      if (event === 'new_order_items' && payload && payload.order &&
+          payload.order.source === 'qr' && payload.order.id) {
+        autoPrintIncomingTakeaway(
+          { id: payload.order.id },
+          { qr: true, tableNumber: payload.order.table_number ?? null,
+            onlyItemIds: (payload.items || []).map(i => i.id).filter(Boolean) });
       }
     });
   }

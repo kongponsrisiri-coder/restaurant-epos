@@ -516,14 +516,16 @@ async function localOrderCloudId(orderId) {
 // the cloud-acknowledged shape into local SQLite. On failure, the request
 // falls back to the local handler so the operator's UI still updates.
 function maybeForwardMenuWriteToCloud(req, res) {
-  return forwardWriteToCloud(req, res, 'menu-write', () => syncService.pullMenuSnapshot());
+  // SEPOS-CONFIG-QUEUE phase 2 — strict: offline UPDATE/DELETE queue + apply
+  // locally (till is the boss); CREATE needs the cloud (new row = cloud id).
+  return forwardWriteToCloud(req, res, 'menu-write', () => syncService.pullMenuSnapshot(), { strict: true });
 }
 
 // SEPOS-059 — modifier-library writes pull the flat modifier tables back (not the
 // menu tree), so the till admin's refetch shows the new/removed option instantly
 // instead of only after the next 5s tick (the "had to close & reopen" bug).
 function maybeForwardModifierWriteToCloud(req, res) {
-  return forwardWriteToCloud(req, res, 'modifier-write', () => syncService.pullModifiersSnapshot());
+  return forwardWriteToCloud(req, res, 'modifier-write', () => syncService.pullModifiersSnapshot(), { strict: true });
 }
 
 // SEPOS-027 — floor-plan writes (tables + linked groups) forward to cloud so the
@@ -541,7 +543,7 @@ function maybeForwardTableWriteToCloud(req, res) {
 // Now a desktop staff write becomes the cloud truth and the instant staff
 // pull (with orphan-delete) reflects it locally + everywhere on next tick.
 function maybeForwardStaffWriteToCloud(req, res) {
-  return forwardWriteToCloud(req, res, 'staff-write', () => syncService.pullStaffSnapshot());
+  return forwardWriteToCloud(req, res, 'staff-write', () => syncService.pullStaffSnapshot(), { strict: true });
 }
 
 app.post('/api/categories', async (req, res) => {

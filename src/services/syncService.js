@@ -688,6 +688,13 @@ const CONFIG_WRITE_PATHS = {
   tables:              /^\/api\/tables\/(\d+)(?:\/plan)?$/,
   table_walls:         /^\/api\/table-walls\/(\d+)$/,
   table_combinations:  /^\/api\/table-combinations\/(\d+)$/,
+  // SEPOS-CONFIG-QUEUE phase 2 — menu + staff ride the same rail.
+  categories:          /^\/api\/categories\/(\d+)$/,
+  subcategories:       /^\/api\/subcategories\/(\d+)$/,
+  menu_items:          /^\/api\/menu\/items\/(\d+)$/,
+  modifier_groups:     /^\/api\/(?:modifier-groups|menu\/items\/\d+\/modifiers)\/(\d+)$/,
+  modifiers:           /^\/api\/modifiers\/(\d+)$/,
+  staff:               /^\/api\/staff\/(\d+)$/,
 };
 async function pendingConfigWriteIds(table) {
   const re = CONFIG_WRITE_PATHS[table];
@@ -833,16 +840,29 @@ async function pullMenuTree() {
         // SEPOS-STATION-003 — per-dish station override; included from day
         // one so it can never hit the dropped-projection bug class above.
         printer_id: i.printer_id,
+        // SEPOS-QR-ORDER-001 — customer-card fields, included from day one
+        // (same dropped-projection bug class guard).
+        image_url: i.image_url, dietary: i.dietary,
       }))
     );
 
+    // SEPOS-CONFIG-QUEUE phase 2 — rows the till edited while offline (pending
+    // config_write in the queue) are host-authoritative: don't let the cloud's
+    // stale copy revert them before the push lands.
+    const pendCat  = await pendingConfigWriteIds('categories');
+    const pendSub  = await pendingConfigWriteIds('subcategories');
+    const pendItem = await pendingConfigWriteIds('menu_items');
+    const catList  = pendCat.size  ? flatCategories.filter(r => !pendCat.has(Number(r.id)))    : flatCategories;
+    const subList  = pendSub.size  ? flatSubcategories.filter(r => !pendSub.has(Number(r.id))) : flatSubcategories;
+    const itemList = pendItem.size ? flatItems.filter(r => !pendItem.has(Number(r.id)))        : flatItems;
+
     // printer_id opted into null-sync so removing a category→printer route in
     // the till actually clears on desktop (SEPOS-PRINT-002 flexible routing).
-    const nCat   = await upsertRows('categories', 'id', flatCategories, ['printer_id']);
-    const nSub   = await upsertRows('subcategories', 'id', flatSubcategories);
+    const nCat   = await upsertRows('categories', 'id', catList, ['printer_id']);
+    const nSub   = await upsertRows('subcategories', 'id', subList);
     // menu_items.printer_id (SEPOS-STATION-003 per-dish override) also
     // null-syncs, so switching a dish back to "Inherit" clears on desktop.
-    const nItems = await upsertRows('menu_items', 'id', flatItems, ['printer_id']);
+    const nItems = await upsertRows('menu_items', 'id', itemList, ['printer_id']);
 
     // SEPOS-046p — propagate cloud-side deletions. Pull was upsert-only
     // before, so deleting an item / subcategory / category on the web
@@ -851,9 +871,10 @@ async function pullMenuTree() {
     // Safe because we only reach this branch after a successful cloud
     // fetch with a non-empty top-level array — no risk of wiping
     // local data due to a transient network blip.
-    const nItemsDel = await deleteOrphans('menu_items',   flatItems.map(i => i.id));
-    const nSubDel   = await deleteOrphans('subcategories', flatSubcategories.map(s => s.id));
-    const nCatDel   = await deleteOrphans('categories',    flatCategories.map(c => c.id));
+    // Pending-write rows are also spared from orphan-delete until the push lands.
+    const nItemsDel = await deleteOrphans('menu_items',   flatItems.map(i => i.id).concat([...pendItem]));
+    const nSubDel   = await deleteOrphans('subcategories', flatSubcategories.map(s => s.id).concat([...pendSub]));
+    const nCatDel   = await deleteOrphans('categories',    flatCategories.map(c => c.id).concat([...pendCat]));
     console.log(`[sync] pull menu tree: ${nCat}/${nSub}/${nItems} upserts (cats/subs/items), ${nCatDel}/${nSubDel}/${nItemsDel} deletes`);
 
     return flatItems.map((i) => i.id);
@@ -1203,16 +1224,36 @@ async function reconcileCloudDeletions(orders, pendingOrderIds, pendingDeleteClo
         const pr = await fetch(`${CLOUD_API_URL}/api/orders/${cid}`, {
           signal: AbortSignal.timeout(PING_TIMEOUT_MS),
         });
+        let mirrored = null;
         if (pr.status === 404) {
+          mirrored = { status: 'cancelled', closed_at: null, why: 'deleted on the cloud' };
+        } else if (pr.ok) {
+          // SEPOS-GHOST-002 — an order CANCELLED or CLOSED on the cloud isn't
+          // deleted: it returns 200 with its terminal status, which this probe
+          // used to ignore — so the local copy stayed open forever (the ghost
+          // factory found during the 2026-08-05 Baan Siam cleanup: 11 local
+          // "open" orders whose cloud rows were long closed).
+          const cloudOrder = await pr.json().catch(() => null);
+          const st = cloudOrder && String(cloudOrder.status || '');
+          if (st === 'cancelled' || st === 'closed') {
+            mirrored = { status: st, closed_at: cloudOrder.closed_at || null, why: `${st} on the cloud` };
+          }
+        }
+        if (mirrored) {
           await pool.query(
-            `UPDATE orders SET status = 'cancelled', closed_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = 'open'`,
-            [row.id]
+            `UPDATE orders SET status = $1, closed_at = COALESCE($2, CURRENT_TIMESTAMP) WHERE id = $3 AND status = 'open'`,
+            [mirrored.status, mirrored.closed_at, row.id]
           );
           if (row.table_id) {
-            await pool.query(`UPDATE tables SET status = 'available' WHERE id = $1`, [row.table_id]);
+            // Free the table only if nothing else is open on it.
+            const others = await pool.query(
+              `SELECT COUNT(*) AS n FROM orders WHERE table_id = $1 AND status = 'open'`, [row.table_id]);
+            if (Number(others.rows[0]?.n || 0) === 0) {
+              await pool.query(`UPDATE tables SET status = 'available' WHERE id = $1`, [row.table_id]);
+            }
           }
           ghostsCancelled++;
-          console.log(`[sync] local order ${row.id} (cloud ${cid}) was deleted on the cloud — cancelled locally`);
+          console.log(`[sync] local order ${row.id} (cloud ${cid}) was ${mirrored.why} — mirrored locally`);
         }
       } catch { /* offline blip — retry next tick */ }
     }
@@ -1666,8 +1707,12 @@ async function pullStaff() {
     const rows = await r.json();
     const list = Array.isArray(rows) ? rows : (rows?.data || []);
     if (!Array.isArray(list) || list.length === 0) return;
-    const n = await upsertRows('staff', 'id', list);
-    await deleteOrphans('staff', list.map(s => s.id));
+    // SEPOS-CONFIG-QUEUE phase 2 — offline staff edits are host-authoritative
+    // until their queued push lands.
+    const pendStaff = await pendingConfigWriteIds('staff');
+    const staffList = pendStaff.size ? list.filter(s => !pendStaff.has(Number(s.id))) : list;
+    const n = await upsertRows('staff', 'id', staffList);
+    await deleteOrphans('staff', list.map(s => s.id).concat([...pendStaff]));
     if (n > 0) console.log(`[sync] pull staff: ${n} rows`);
   } catch (err) {
     console.warn('[sync] pullStaff failed:', err.message);

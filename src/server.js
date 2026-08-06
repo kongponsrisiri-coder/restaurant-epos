@@ -7415,7 +7415,10 @@ app.get('/api/qr/sheet', async (req, res) => {
     // same SYNC_SECRET, same table ids). Cloud deployments fall through to
     // their own host as before.
     const base = (process.env.PUBLIC_API_URL || process.env.CLOUD_API_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
-    const nameRes = await pool.query(`SELECT value FROM settings WHERE key IN ('restaurant_name','company_name') ORDER BY key = 'restaurant_name' DESC LIMIT 1`);
+    // SEPOS-BRAND-001 precedence — company_name is the OWNER-edited field and
+    // must win over the legacy restaurant_name (Korakot renamed in Settings,
+    // sheet kept showing the old demo name).
+    const nameRes = await pool.query(`SELECT value FROM settings WHERE key IN ('restaurant_name','company_name') AND COALESCE(value,'') <> '' ORDER BY key = 'company_name' DESC LIMIT 1`);
     const rName = nameRes.rows[0]?.value || 'SiamEPOS';
     const tRes = await pool.query(`SELECT id, table_number, name FROM tables WHERE COALESCE(is_takeaway,0) = 0 ORDER BY table_number`);
     const cards = [];
@@ -7480,7 +7483,7 @@ app.get('/api/qr/session/:token', widgetCors, async (req, res) => {
       order = { ...oRes.rows[0], items: items.rows };
     }
     res.json({
-      restaurant_name: cfg.restaurant_name || cfg.company_name || 'Restaurant',
+      restaurant_name: cfg.company_name || cfg.restaurant_name || 'Restaurant',
       currency: cfg.currency_symbol || '£',
       brand: cfg.brand_primary || '#1E4038',
       table: { id: t.id, label: (t.name && String(t.name).trim()) ? t.name : `Table ${t.table_number}` },

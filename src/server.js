@@ -7493,6 +7493,14 @@ app.get('/qr/t/:token', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'qr-order.html'));
 });
 
+// SEPOS-ORDER-PAGE-001 — standalone takeaway ordering page in the QR page's
+// style (photos, option sheets, kitchen messages). Client websites link a
+// button here instead of embedding the legacy takeaway widget; talks to the
+// existing hardened /api/takeaway/* endpoints (server pricing, Stripe/mock).
+app.get('/order', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'order.html'));
+});
+
 // Session bootstrap for the order page: table identity + restaurant + payment
 // availability + the table's open QR/dine-in order (running bill + statuses).
 app.get('/api/qr/session/:token', widgetCors, async (req, res) => {

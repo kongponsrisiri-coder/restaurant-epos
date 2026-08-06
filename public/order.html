@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Order online</title>
+<style>
+  :root { --brand:#1E4038; --ink:#1a1a2e; --bg:#f6f4ef; }
+  * { box-sizing:border-box; margin:0; -webkit-tap-highlight-color:transparent; }
+  body { font-family:-apple-system,system-ui,'Segoe UI',sans-serif; background:var(--bg); color:var(--ink); padding-bottom:110px; overflow-x:hidden; }
+  header { background:var(--brand); color:#fff; padding:14px 16px; position:sticky; top:0; z-index:20; }
+  header h1 { font-size:17px; font-weight:800; }
+  header .tbl { font-size:13px; opacity:.85; margin-top:2px; }
+  .cats { display:flex; gap:8px; overflow-x:auto; padding:10px 12px; position:sticky; top:52px; background:var(--bg); z-index:19; scrollbar-width:none; }
+  .cats::-webkit-scrollbar { display:none; }
+  .cat { flex:0 0 auto; padding:8px 14px; border-radius:999px; border:1.5px solid #d8d4ca; background:#fff; font-weight:700; font-size:13px; color:#555; }
+  .cat.on { background:var(--brand); border-color:var(--brand); color:#fff; }
+  .sec-title { font-size:15px; font-weight:800; padding:14px 16px 6px; }
+  .item { display:flex; gap:12px; background:#fff; margin:8px 12px; border-radius:14px; padding:12px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+  .item img { width:78px; height:78px; border-radius:10px; object-fit:cover; flex-shrink:0; background:#eee; }
+  .item .info { flex:1; min-width:0; }
+  .item .nm { font-weight:700; font-size:14.5px; }
+  .item .ds { font-size:12px; color:#777; margin-top:2px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; }
+  .chip { font-size:10px; font-weight:700; padding:2px 7px; border-radius:999px; background:#fde8e8; color:#b02a2a; }
+  .chip.diet { background:#e3f2e6; color:#256b34; }
+  .rowb { display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
+  .pr { font-weight:800; font-size:14.5px; }
+  .add { background:var(--brand); color:#fff; border:none; border-radius:10px; font-weight:800; font-size:14px; padding:8px 16px; }
+  .qty-pill { background:var(--brand); color:#fff; border-radius:999px; font-weight:800; font-size:12px; padding:3px 9px; }
+  .step { display:flex; align-items:center; gap:10px; }
+  .step button { width:32px; height:32px; border-radius:9px; border:1.5px solid var(--brand); background:#fff; color:var(--brand); font-size:18px; font-weight:800; }
+  .step span { font-weight:800; min-width:16px; text-align:center; }
+  .cartbar { position:fixed; left:12px; right:12px; bottom:14px; background:var(--brand); color:#fff; border-radius:16px; padding:14px 18px; display:flex; justify-content:space-between; align-items:center; font-weight:800; font-size:15px; box-shadow:0 6px 20px rgba(0,0,0,.25); z-index:30; }
+  .sheet { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:40; display:flex; align-items:flex-end; }
+  .sheet .panel { background:#fff; width:100%; max-height:88vh; overflow:auto; border-radius:18px 18px 0 0; padding:18px 16px 28px; }
+  .panel h2 { font-size:17px; margin-bottom:10px; }
+  .grp { margin:14px 0 4px; }
+  .grp .gname { font-weight:800; font-size:14px; }
+  .grp .greq { font-size:11px; color:#b02a2a; font-weight:700; margin-left:6px; }
+  .opt { display:flex; justify-content:space-between; align-items:center; padding:10px 2px; border-bottom:1px solid #f0eee8; font-size:14px; }
+  .opt label { display:flex; align-items:center; gap:10px; flex:1; }
+  .opt input { width:19px; height:19px; accent-color:var(--brand); }
+  .opt .xp { color:#777; font-size:13px; font-weight:700; }
+  .cline { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; padding:10px 0; border-bottom:1px solid #eee; }
+  .cline .nm { font-weight:700; font-size:14px; }
+  .cline .ops { font-size:12px; color:#666; margin-top:2px; }
+  .cline .note-in { width:100%; margin-top:6px; padding:8px 10px; border:1.5px solid #ddd; border-radius:9px; font-size:13px; }
+  .contact input { width:100%; margin-top:8px; padding:11px 12px; border:1.5px solid #ddd; border-radius:10px; font-size:14px; }
+  .totrow { display:flex; justify-content:space-between; font-weight:800; font-size:16px; padding:14px 0 6px; }
+  .pickup { background:#eef5ef; border-radius:10px; padding:10px 12px; font-size:13px; font-weight:700; color:#1E4038; margin-top:8px; }
+  .paybtn { width:100%; background:var(--brand); color:#fff; border:none; border-radius:13px; font-weight:800; font-size:16px; padding:15px; margin-top:12px; }
+  .paybtn:disabled { opacity:.5; }
+  .muted { color:#888; font-size:12px; text-align:center; margin-top:8px; }
+  .bigok { text-align:center; font-size:46px; margin:26px 0 6px; }
+  .bigmsg { text-align:center; font-weight:800; font-size:18px; }
+  .bigsub { text-align:center; color:#777; font-size:13.5px; margin-top:6px; line-height:1.6; }
+  .refbox { margin:18px auto 0; max-width:280px; background:#fff; border:2px dashed var(--brand); border-radius:14px; padding:14px; text-align:center; }
+  .refbox .ref { font-size:28px; font-weight:900; letter-spacing:2px; color:var(--brand); }
+  .morebtn { width:100%; background:#fff; color:var(--brand); border:2px solid var(--brand); border-radius:13px; font-weight:800; font-size:15px; padding:13px; margin-top:16px; }
+  .err { background:#fde8e8; color:#b02a2a; border-radius:10px; padding:12px; margin:12px 0; font-size:13.5px; font-weight:600; }
+  #payel { margin-top:12px; }
+  .spin { text-align:center; padding:60px 20px; color:#888; }
+</style>
+</head>
+<body>
+<div id="app"><div class="spin">Loading the menu…</div></div>
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  let S = { name: 'Restaurant', currency: '£', brand: '#1E4038' };
+  let MENU = [], cart = [], view = 'menu', activeCat = null, avail = null, stripeCfg = null;
+  let optItem = null, optGroups = null, optSel = {};
+  let stripe = null, elements = null, payBusy = false, uidSeq = 1, done = null;
+  const modCache = {};
+  const contact = { name: '', phone: '', email: '' };
+
+  const fmt = (n) => S.currency + Number(n || 0).toFixed(2);
+  const esc = (s) => String(s == null ? '' : s).replace(/[<>&"]/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+  const cartCount = () => cart.reduce((a, c) => a + c.quantity, 0);
+  const cartTotal = () => cart.reduce((a, c) => a + c.quantity * c.unit, 0);
+  const itemQty = (id) => cart.filter((c) => c.menu_item_id === id).reduce((a, c) => a + c.quantity, 0);
+  const ukTime = (iso) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
+
+  async function boot() {
+    try {
+      const [settings, m, av, sc] = await Promise.all([
+        fetch('/api/settings').then((r) => r.json()).catch(() => ({})),
+        fetch('/api/menu').then((r) => r.json()),
+        fetch('/api/takeaway/availability').then((r) => r.json()).catch(() => null),
+        fetch('/api/takeaway/stripe-config').then((r) => r.json()).catch(() => ({ configured: false })),
+      ]);
+      S.name = settings.company_name || settings.restaurant_name || 'Order online';
+      S.currency = settings.currency_symbol || '£';
+      S.brand = settings.brand_primary || '#1E4038';
+      document.documentElement.style.setProperty('--brand', S.brand);
+      document.title = S.name + ' — order online';
+      MENU = (Array.isArray(m) ? m : []).filter((c) => (c.items || []).some((i) => Number(i.is_online ?? 1)));
+      activeCat = MENU[0] ? MENU[0].id : null;
+      avail = av; stripeCfg = sc;
+      render();
+    } catch (e) { $('#app').innerHTML = '<div class="err" style="margin:12px">Could not load the menu — please check your connection and try again.</div>'; }
+  }
+
+  function parseTags(v) { try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+
+  function render() {
+    if (done) return renderDone();
+    const cat = MENU.find((c) => c.id === activeCat) || MENU[0];
+    let h = '<header><h1>' + esc(S.name) + '</h1><div class="tbl">🥡 Order for collection · 0% commission — direct to the kitchen</div></header>';
+    h += '<div class="cats">' + MENU.map((c) => '<button class="cat' + (cat && c.id === cat.id ? ' on' : '') + '" data-cat="' + c.id + '">' + esc(c.name) + '</button>').join('') + '</div>';
+    if (cat) {
+      const subs = (cat.subcategories || []);
+      const groups = subs.length ? subs.map((s) => ({ name: s.name, items: (cat.items || []).filter((i) => i.subcategory_id === s.id) })) : [{ name: null, items: cat.items || [] }];
+      const loose = subs.length ? (cat.items || []).filter((i) => !i.subcategory_id) : [];
+      if (loose.length) groups.push({ name: 'More', items: loose });
+      for (const g of groups) {
+        const items = g.items.filter((i) => Number(i.is_online ?? 1) && Number(i.is_available ?? 1));
+        if (!items.length) continue;
+        if (g.name) h += '<div class="sec-title">' + esc(g.name) + '</div>';
+        for (const i of items) h += itemCard(i);
+      }
+    }
+    if (cartCount() > 0) h += '<div class="cartbar" id="cartbar"><span>🧺 ' + cartCount() + ' item' + (cartCount() > 1 ? 's' : '') + '</span><span>Checkout · ' + fmt(cartTotal()) + '</span></div>';
+    if (view === 'cart') h += cartSheet();
+    if (optItem) h += optionsSheet();
+    $('#app').innerHTML = h;
+    bind();
+  }
+
+  function itemCard(i) {
+    const q = itemQty(i.id);
+    const al = parseTags(i.allergens), dt = parseTags(i.dietary);
+    return '<div class="item">' +
+      (i.image_url ? '<img loading="lazy" src="' + esc(i.image_url) + '" alt="">' : '') +
+      '<div class="info"><div class="nm">' + esc(i.name) + (q ? ' <span class="qty-pill">×' + q + '</span>' : '') + '</div>' +
+      (i.description ? '<div class="ds">' + esc(i.description) + '</div>' : '') +
+      ((al.length || dt.length) ? '<div class="chips">' + dt.map((t) => '<span class="chip diet">' + esc(t) + '</span>').join('') + al.map((t) => '<span class="chip">⚠ ' + esc(t) + '</span>').join('') + '</div>' : '') +
+      '<div class="rowb"><span class="pr">' + fmt(i.price) + '</span>' +
+      '<button class="add" data-add="' + i.id + '">Add</button>' +
+      '</div></div></div>';
+  }
+
+  async function startAdd(id) {
+    const i = findItem(id); if (!i) return;
+    let groups = modCache[id];
+    if (groups === undefined) {
+      try { groups = await fetch('/api/menu/items/' + id + '/modifiers').then((r) => r.json()); } catch (e) { groups = []; }
+      if (!Array.isArray(groups)) groups = [];
+      groups = groups.filter((g) => Array.isArray(g.modifiers) && g.modifiers.length);
+      modCache[id] = groups;
+    }
+    if (!groups.length) { pushCart(i, [], []); render(); return; }
+    optItem = i; optGroups = groups; optSel = {};
+    render();
+  }
+
+  function optionsSheet() {
+    let h = '<div class="sheet"><div class="panel"><h2>' + esc(optItem.name) + '</h2>';
+    for (const g of optGroups) {
+      const multi = Number(g.multi_select);
+      h += '<div class="grp"><div><span class="gname">' + esc(g.name) + '</span>' + (Number(g.required) ? '<span class="greq">required</span>' : '') + '</div>';
+      for (const m of g.modifiers) {
+        const checked = (optSel[g.id] || []).includes(m.id) ? ' checked' : '';
+        h += '<div class="opt"><label><input type="' + (multi ? 'checkbox' : 'radio') + '" name="g' + g.id + '" data-g="' + g.id + '" data-m="' + m.id + '"' + checked + '><span>' + (Number(g.is_allergen) ? '⚠ ' : '') + esc(m.name) + '</span></label>' +
+             (Number(m.extra_price) > 0 ? '<span class="xp">+' + fmt(m.extra_price) + '</span>' : '') + '</div>';
+      }
+      h += '</div>';
+    }
+    h += '<button class="paybtn" id="optadd">Add to order · ' + fmt(optPrice()) + '</button>';
+    h += '<button class="morebtn" id="optcancel">Cancel</button>';
+    h += '</div></div>';
+    return h;
+  }
+
+  function optPrice() {
+    let p = Number(optItem.price) || 0;
+    for (const g of optGroups) for (const m of g.modifiers) if ((optSel[g.id] || []).includes(m.id)) p += Number(m.extra_price) || 0;
+    return p;
+  }
+
+  function confirmOptions() {
+    for (const g of optGroups) {
+      if (Number(g.required) && !(optSel[g.id] || []).length) { alert('Please choose: ' + g.name); return; }
+    }
+    const chosen = [], names = [];
+    for (const g of optGroups) for (const m of g.modifiers) if ((optSel[g.id] || []).includes(m.id)) { chosen.push({ id: m.id, name: m.name }); names.push(m.name); }
+    pushCart(optItem, chosen, names);
+    optItem = null; optGroups = null; optSel = {};
+    render();
+  }
+
+  function pushCart(i, mods, modNames) {
+    const key = i.id + ':' + mods.map((m) => m.id).sort().join(',');
+    const existing = cart.find((c) => c.key === key);
+    const extra = mods.reduce((a, m) => {
+      for (const g of (modCache[i.id] || [])) for (const mm of g.modifiers) if (mm.id === m.id) return a + (Number(mm.extra_price) || 0);
+      return a;
+    }, 0);
+    if (existing) existing.quantity += 1;
+    else cart.push({ uid: uidSeq++, key, menu_item_id: i.id, name: i.name, unit: (Number(i.price) || 0) + extra, quantity: 1, modifiers: mods, modNames, item_note: '' });
+  }
+
+  function cartSheet() {
+    let h = '<div class="sheet"><div class="panel"><h2>Your order</h2>';
+    for (const c of cart) {
+      h += '<div class="cline"><div style="flex:1"><div class="nm">' + c.quantity + ' × ' + esc(c.name) + '</div>' +
+        (c.modNames.length ? '<div class="ops">' + esc(c.modNames.join(', ')) + '</div>' : '') +
+        '<input class="note-in" data-note="' + c.uid + '" placeholder="Any message for the kitchen?" value="' + esc(c.item_note || '') + '"></div>' +
+        '<div style="text-align:right"><div class="pr">' + fmt(c.quantity * c.unit) + '</div>' +
+        '<span class="step" style="margin-top:6px"><button data-dec="' + c.uid + '">−</button><span>' + c.quantity + '</span><button data-inc="' + c.uid + '">＋</button></span></div></div>';
+    }
+    h += '<div class="totrow"><span>Total</span><span>' + fmt(cartTotal()) + '</span></div>';
+    if (avail && avail.pickup_iso) h += '<div class="pickup">⏱ Ready for collection around <b>' + ukTime(avail.pickup_iso) + '</b>' + (avail.tier && avail.tier !== 'quiet' ? ' (kitchen is busy)' : '') + '</div>';
+    h += '<div class="contact">' +
+      '<input id="c-name" placeholder="Your name *" value="' + esc(contact.name) + '">' +
+      '<input id="c-phone" placeholder="Mobile number *" inputmode="tel" value="' + esc(contact.phone) + '">' +
+      '<input id="c-email" placeholder="Email (for confirmation — optional)" inputmode="email" value="' + esc(contact.email) + '"></div>';
+    h += '<div id="payel"></div>';
+    h += '<button class="paybtn" id="paybtn">' + (stripeCfg && stripeCfg.configured ? 'Pay ' + fmt(cartTotal()) + ' & place order' : 'Place order (demo — no payment)') + '</button>';
+    h += '<div class="muted">' + (stripeCfg && stripeCfg.configured ? 'Paid securely by card · Apple Pay · Google Pay' : 'Demo mode — payment is simulated') + '</div>';
+    h += '<button class="morebtn" id="closecart">← Back to menu</button>';
+    h += '</div></div>';
+    return h;
+  }
+
+  function renderDone() {
+    let h = '<header><h1>' + esc(S.name) + '</h1><div class="tbl">🥡 Order confirmed</div></header><div style="padding:18px 16px">';
+    h += '<div class="bigok">✅</div><div class="bigmsg">Thank you, ' + esc(done.name) + '!</div>';
+    h += '<div class="bigsub">Your order is with the kitchen.<br>Ready for collection around <b>' + (done.pickup_time ? ukTime(done.pickup_time) : 'soon') + '</b>.</div>';
+    h += '<div class="refbox"><div style="font-size:11.5px;color:#777;font-weight:700">QUOTE THIS WHEN COLLECTING</div><div class="ref">' + esc(done.order_number || '') + '</div></div>';
+    h += '<button class="morebtn" id="again">Start another order</button>';
+    h += '</div>';
+    $('#app').innerHTML = h;
+    const a = $('#again'); if (a) a.onclick = () => { done = null; cart = []; view = 'menu'; render(); };
+  }
+
+  function bind() {
+    document.querySelectorAll('[data-cat]').forEach((b) => b.onclick = () => { activeCat = Number(b.dataset.cat); render(); });
+    document.querySelectorAll('[data-add]').forEach((b) => b.onclick = () => { startAdd(Number(b.dataset.add)); });
+    document.querySelectorAll('[data-inc]').forEach((b) => b.onclick = () => { bump(Number(b.dataset.inc), 1); });
+    document.querySelectorAll('[data-dec]').forEach((b) => b.onclick = () => { bump(Number(b.dataset.dec), -1); });
+    document.querySelectorAll('[data-note]').forEach((inp) => inp.onchange = () => {
+      const c = cart.find((x) => x.uid === Number(inp.dataset.note)); if (c) c.item_note = inp.value.slice(0, 200);
+    });
+    ['name', 'phone', 'email'].forEach((f) => {
+      const el = $('#c-' + f); if (el) el.oninput = () => { contact[f] = el.value; };
+    });
+    document.querySelectorAll('.sheet input[data-g]').forEach((inp) => inp.onchange = () => {
+      const g = Number(inp.dataset.g), m = Number(inp.dataset.m);
+      const grp = optGroups.find((x) => x.id === g);
+      if (Number(grp.multi_select)) {
+        optSel[g] = optSel[g] || [];
+        if (inp.checked) optSel[g].push(m); else optSel[g] = optSel[g].filter((x) => x !== m);
+      } else optSel[g] = [m];
+      const btn = $('#optadd'); if (btn) btn.textContent = 'Add to order · ' + fmt(optPrice());
+    });
+    const oa = $('#optadd'); if (oa) oa.onclick = confirmOptions;
+    const oc = $('#optcancel'); if (oc) oc.onclick = () => { optItem = null; optGroups = null; optSel = {}; render(); };
+    const cb = $('#cartbar'); if (cb) cb.onclick = () => { if (view !== 'cart') { view = 'cart'; render(); openPayment(); } };
+    const cc = $('#closecart'); if (cc) cc.onclick = () => { view = 'menu'; render(); };
+    const pb = $('#paybtn'); if (pb) pb.onclick = submit;
+  }
+
+  function findItem(id) { for (const c of MENU) { const i = (c.items || []).find((x) => x.id === id); if (i) return i; } return null; }
+  function bump(uid, d) {
+    const c = cart.find((x) => x.uid === uid); if (!c) return;
+    c.quantity += d; if (c.quantity <= 0) cart = cart.filter((x) => x !== c);
+    if (!cart.length && view === 'cart') view = 'menu';
+    render(); if (view === 'cart') openPayment();
+  }
+
+  async function openPayment() {
+    if (!stripeCfg || !stripeCfg.configured || !cart.length) return;
+    try {
+      if (!window.Stripe) await new Promise((ok, bad) => { const s = document.createElement('script'); s.src = 'https://js.stripe.com/v3/'; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
+      stripe = stripeCfg.stripe_account ? window.Stripe(stripeCfg.publishable_key, { stripeAccount: stripeCfg.stripe_account }) : window.Stripe(stripeCfg.publishable_key);
+      const pi = await fetch('/api/takeaway/payment-intent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount_pence: Math.round(cartTotal() * 100), order_description: 'Online order — ' + S.name }) }).then((r) => r.json());
+      if (pi.error) { $('#payel').innerHTML = '<div class="err">' + esc(pi.error) + '</div>'; return; }
+      window.__ord_pi = pi;
+      elements = stripe.elements({ clientSecret: pi.client_secret });
+      elements.create('payment').mount('#payel');
+    } catch (e) { $('#payel').innerHTML = '<div class="err">Card form failed to load — please try again.</div>'; }
+  }
+
+  async function submit() {
+    if (payBusy || !cart.length) return;
+    if (!contact.name.trim()) { alert('Please add your name'); return; }
+    if (!contact.phone.trim()) { alert('Please add your mobile number'); return; }
+    payBusy = true; const pb = $('#paybtn'); pb.disabled = true; pb.textContent = 'Placing order…';
+    try {
+      let piId = null;
+      if (stripeCfg && stripeCfg.configured) {
+        const { error } = await stripe.confirmPayment({ elements, redirect: 'if_required' });
+        if (error) throw new Error(error.message || 'Payment failed');
+        piId = window.__ord_pi.payment_intent_id;
+      }
+      const r = await fetch('/api/takeaway/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        customer_name: contact.name.trim(), customer_phone: contact.phone.trim(), customer_email: contact.email.trim() || undefined,
+        items: cart.map((c) => ({ menu_item_id: c.menu_item_id, name: c.name, quantity: c.quantity, modifiers: c.modifiers, item_note: c.item_note })),
+        payment_intent_id: piId,
+      }) }).then((x) => x.json());
+      if (r.error) throw new Error(r.error);
+      done = { name: contact.name.trim(), order_number: r.order_number, pickup_time: r.pickup_time };
+      view = 'menu'; cart = [];
+      render();
+    } catch (e) {
+      payBusy = false;
+      const pb2 = $('#paybtn'); if (pb2) { pb2.disabled = false; pb2.textContent = 'Try again'; }
+      const pe = $('#payel'); if (pe) pe.insertAdjacentHTML('beforebegin', '<div class="err">' + esc(e.message) + '</div>');
+      return;
+    }
+    payBusy = false;
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

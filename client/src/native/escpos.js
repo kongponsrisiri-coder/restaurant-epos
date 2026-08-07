@@ -167,7 +167,11 @@ export function buildKitchenMessageOps({ table_number, customer_name, message, w
 // ── Customer bill / receipt layout → ops ──────────────────────────────────────
 export function buildReceiptOps({ order, items, settings, paymentDetails = {} }) {
   const s = settings || {};
-  const name = s.company_name || s.restaurant_name || 'SiamEPOS';
+  // company_name is authoritative once set — including blank (logo-only
+  // receipts); legacy restaurant_name only covers pre-company_name installs.
+  const name = (s.company_name !== undefined && s.company_name !== null)
+    ? String(s.company_name).trim()
+    : (String(s.restaurant_name || '').trim() || 'SiamEPOS');
   const addr = s.company_address || s.address || '';
   const phone = s.company_phone || s.phone || '';
   const vat = s.company_vat || '';
@@ -202,7 +206,9 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
     const w = LOGO_W[s.receipt_logo_size] || LOGO_W.medium;
     ops.push({ op: 'align', v: 1 }, { op: 'image', v: b64, w }, { op: 'feed', v: 1 });
   }
-  ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: name }, { op: 'size', v: 'r' }, { op: 'bold', v: false });
+  ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' });
+  if (name) ops.push({ op: 'text', v: name });
+  ops.push({ op: 'size', v: 'r' }, { op: 'bold', v: false });
   if (addr)  ops.push({ op: 'text', v: addr });
   if (phone) ops.push({ op: 'text', v: 'Tel: ' + phone });
   if (vat)   ops.push({ op: 'text', v: 'VAT No: ' + vat });

@@ -132,7 +132,12 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
   // SEPOS-PRINT-FONT-001 — receipt font multiplier (normal = today, no regression).
   const rfs = ({ normal: 1.0, large: 1.2, xlarge: 1.4 })[settings?.receipt_font_scale || 'normal'] ?? 1;
   const rpx = (n) => `${+(n * rfs).toFixed(1)}px`;
-  const restaurantName  = settings?.company_name        || settings?.restaurant_name || 'SiamEPOS';
+  // company_name is authoritative once the key exists — including blank
+  // (logo-only receipts). Legacy restaurant_name only covers old installs.
+  const restaurantName  = (settings?.company_name !== undefined && settings?.company_name !== null)
+    ? String(settings.company_name).trim()
+    : (String(settings?.restaurant_name || '').trim() || 'SiamEPOS');
+  const qrCaption       = String(settings?.receipt_qr_caption || 'Scan to leave us a review');
   const restaurantAddr  = settings?.company_address     || settings?.address         || '';
   const restaurantPhone = settings?.company_phone       || settings?.phone           || '';
   const restaurantVat   = settings?.company_vat         || '';
@@ -233,9 +238,8 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
 
   const qrHtml = googleReviewUrl ? `
     <div style="text-align:center;margin-top:10px;">
-      <div style="font-size:10px;color:#666;margin-bottom:4px;">Enjoyed your meal? Leave us a review!</div>
       <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(googleReviewUrl)}" width="80" height="80" alt="QR" style="border:1px solid #eee;" />
-      <div style="font-size:9px;color:#aaa;margin-top:2px;">Scan to review on Google</div>
+      <div style="font-size:10px;color:#666;margin-top:3px;">${qrCaption}</div>
     </div>` : '';
 
   return `<!DOCTYPE html>
@@ -262,7 +266,7 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
 
   ${logoHtml}
 
-  <div class="center" style="font-size:15px;font-weight:900;letter-spacing:1px;margin-bottom:2px;">${restaurantName}</div>
+  ${restaurantName ? `<div class="center" style="font-size:15px;font-weight:900;letter-spacing:1px;margin-bottom:2px;">${restaurantName}</div>` : ''}
   ${restaurantAddr  ? `<div class="center small">${restaurantAddr}</div>` : ''}
   ${restaurantPhone ? `<div class="center small">Tel: ${restaurantPhone}</div>` : ''}
   ${restaurantVat   ? `<div class="center small">VAT No: ${restaurantVat}</div>` : ''}

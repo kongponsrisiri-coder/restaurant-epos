@@ -4113,7 +4113,13 @@ app.get('/api/bills', async (req, res) => {
     // separate rows. The method filter is applied at the ORDER level (keep any
     // bill that has a matching tender) so a split bill still appears under its
     // Cash or Card filter. Single-payment bills keep their real method.
-    let query = `SELECT orders.id, orders.total, orders.covers, orders.closed_at, orders.discount_type, orders.discount_value, orders.discount_reason, orders.order_type, orders.no_service_charge, orders.service_charge, tables.table_number, tables.name AS table_label, payments.method, payments.amount as paid_amount, payments.id AS payment_id FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.total > 0 AND payments.method IS NOT NULL AND payments.method != 'cancelled' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%'`;
+    // NOTE (simulation, 2026-08-07): the '(mock)' exclusion added for F19
+    // belongs on REVENUE queries only. Bills is the LIST OF BILLS — a demo or
+    // QR-mock bill is still a real order staff need to find and reprint, it
+    // just isn't money. Excluding it here made every QR order on a demo tenant
+    // vanish from Admin -> Bills, which is exactly the symptom Korakot
+    // reported tonight (from a different cause).
+    let query = `SELECT orders.id, orders.total, orders.covers, orders.closed_at, orders.discount_type, orders.discount_value, orders.discount_reason, orders.order_type, orders.no_service_charge, orders.service_charge, tables.table_number, tables.name AS table_label, payments.method, payments.amount as paid_amount, payments.id AS payment_id FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.total > 0 AND payments.method IS NOT NULL AND payments.method != 'cancelled'`;
     const params = [];
     let n = 1;
     if (from) { query += ` AND orders.closed_at::date >= $${n}::date`; params.push(from); n++; }

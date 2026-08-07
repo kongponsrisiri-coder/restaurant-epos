@@ -91,6 +91,10 @@
   let S = null, MENU = [], cart = [], view = 'menu', activeCat = null;
   let optItem = null, optGroups = null, optSel = {};          // options sheet state
   let stripePk = null, stripe = null, elements = null, payBusy = false, uidSeq = 1;
+  // Tenders this phone has paid on this table (survives a refresh, dies with
+  // the tab — we never identify the customer, we just remember our own).
+  let myPayments = [];
+  try { myPayments = JSON.parse(sessionStorage.getItem('qr_pays_' + token) || '[]'); } catch (e) { myPayments = []; }
   const modCache = {};
 
   const fmt = (n) => (S ? S.currency : '£') + Number(n || 0).toFixed(2);
@@ -346,6 +350,14 @@
       }
       const r = await fetch('/api/qr/orders/' + token, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: cart.map((c) => ({ menu_item_id: c.menu_item_id, quantity: c.quantity, modifiers: c.modifiers, item_note: c.item_note })), payment_intent_id: piId }) }).then((x) => x.json());
       if (r.error) throw new Error(r.error);
+      // SEPOS-QR-RECEIPT-001 — Korakot: "they pay when they place the order, so
+      // the receipt should come with the payment." Keep the tender id THIS
+      // phone was given; the receipt is then for what this person paid, which
+      // is what makes it correct when four people share one table.
+      if (r.payment_id) {
+        myPayments.push(r.payment_id);
+        try { sessionStorage.setItem('qr_pays_' + token, JSON.stringify(myPayments)); } catch (e) {}
+      }
       cart = []; view = 'status';
       const s = await fetch('/api/qr/session/' + token).then((x) => x.json());
       if (!s.error) S.order = s.order;
@@ -366,7 +378,9 @@
     const box = $('#rcbox'); if (!box) return;
     box.innerHTML = '<div class="muted" style="margin-top:14px">Loading your receipt…</div>';
     try {
-      const q = (S.order && S.order.id) ? ('?order_id=' + S.order.id) : '';
+      const mine = myPayments.length ? myPayments[myPayments.length - 1] : null;
+      let q = (S.order && S.order.id) ? ('?order_id=' + S.order.id) : '';
+      if (mine) q += (q ? '&' : '?') + 'payment_id=' + mine;
       const r = await fetch('/api/qr/receipt/' + token + q).then((x) => x.json());
       if (r.error) { box.innerHTML = '<div class="err">' + esc(r.error) + '</div>'; return; }
       const cur = (r.restaurant && r.restaurant.currency) || '£';
@@ -374,7 +388,8 @@
       if (r.restaurant.address) h += '<div class="meta">' + esc(r.restaurant.address) + '</div>';
       if (r.restaurant.phone)   h += '<div class="meta">Tel: ' + esc(r.restaurant.phone) + '</div>';
       if (r.restaurant.vat)     h += '<div class="meta">VAT No: ' + esc(r.restaurant.vat) + '</div>';
-      h += '<div class="meta" style="margin-top:8px">Order #' + r.order_id + ' · ' + esc(r.table) + '</div>';
+      h += '<div class="meta" style="margin-top:8px">Order #' + r.order_id + ' · ' + esc(r.table) +
+           (r.scoped_to_payment ? ' · your order' : '') + '</div>';
       for (const i of (r.items || [])) {
         h += '<div class="line"><span>' + i.quantity + ' × ' + esc(i.name) +
              (i.notes ? '<div style="font-size:11.5px;color:#888">' + esc(i.notes) + '</div>' : '') +
@@ -396,7 +411,7 @@
         try {
           const res = await fetch('/api/qr/receipt/' + token + '/email', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, order_id: r.order_id }),
+            body: JSON.stringify({ email, order_id: r.order_id, payment_id: mine || undefined }),
           }).then((x) => x.json());
           if (res.error) { msg.textContent = res.error; sendBtn.disabled = false; sendBtn.textContent = 'Send'; return; }
           msg.textContent = '✓ Sent — check your inbox.';

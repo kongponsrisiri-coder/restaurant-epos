@@ -279,6 +279,12 @@ async function initDB() {
     // window on orders.created_at, so a void during the shift on a table seated
     // before it vanished from that shift's Z.
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS voided_at TIMESTAMP`);
+    // SEPOS-QR-RECEIPT-001 — which tender paid for this line. On a pay-FIRST QR
+    // order the receipt belongs to the PAYMENT, not the table: four friends on
+    // one table each pay for their own round, so a "table receipt" would state
+    // a total nobody paid. Stamping the tender on the items gives a correct
+    // per-round receipt without having to identify the customer at all.
+    await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS payment_id INTEGER`);
     // SEPOS-DELIVERY-002 — collection vs delivery for takeaway orders.
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_subtype VARCHAR(20) DEFAULT 'collection'`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT`);

@@ -7589,11 +7589,19 @@ app.get('/api/qr/receipt/:token', widgetCors, async (req, res) => {
       orderId ? [tableId, orderId] : [tableId]);
     const order = oRes.rows[0];
     if (!order) return res.status(404).json({ error: 'No order found for this table' });
+    // SEPOS-QR-RECEIPT-001 — a receipt for the PAYMENT, not the table. Pass
+    // ?payment_id= (the phone gets it back when it pays) and you get exactly
+    // what that person ordered and paid — correct on a shared table where four
+    // people each paid their own round. Without it, the whole order is shown,
+    // which is what staff want and what a single-payer table should see.
+    const payId = Number(req.query.payment_id) || null;
     const [items, pays, sRes] = await Promise.all([
       pool.query(`SELECT oi.quantity, oi.unit_price, oi.notes, COALESCE(mi.name, oi.item_name) AS name, COALESCE(mi.vat_rate, 20) AS vat_rate
                     FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
-                   WHERE oi.order_id = $1 AND oi.voided = 0 ORDER BY oi.id`, [order.id]),
-      pool.query(`SELECT amount, method, created_at FROM payments WHERE order_id = $1 ORDER BY id`, [order.id]),
+                   WHERE oi.order_id = $1 AND oi.voided = 0 ${payId ? 'AND oi.payment_id = $2' : ''} ORDER BY oi.id`,
+                 payId ? [order.id, payId] : [order.id]),
+      pool.query(`SELECT id, amount, method, created_at FROM payments WHERE order_id = $1 ${payId ? 'AND id = $2' : ''} ORDER BY id`,
+                 payId ? [order.id, payId] : [order.id]),
       pool.query(`SELECT key, value FROM settings WHERE key IN ('company_name','restaurant_name','company_address','company_phone','company_vat','currency_symbol','vat_mode','brand_primary')`),
     ]);
     const cfg = {}; for (const r of sRes.rows) cfg[r.key] = r.value;
@@ -7602,7 +7610,11 @@ app.get('/api/qr/receipt/:token', widgetCors, async (req, res) => {
       table: (order.table_label && String(order.table_label).trim()) || `Table ${order.table_number}`,
       opened_at: order.opened_at, closed_at: order.closed_at, status: order.status,
       items: items.rows, payments: pays.rows,
-      total: Number(order.total || 0),
+      scoped_to_payment: !!payId,
+      // Scoped receipt = what THIS person paid; unscoped = the table's total.
+      total: payId
+        ? Number(pays.rows.reduce((a, p) => a + Number(p.amount || 0), 0).toFixed(2))
+        : Number(order.total || 0),
       restaurant: {
         name: (cfg.company_name !== undefined && cfg.company_name !== null)
           ? String(cfg.company_name).trim() : (String(cfg.restaurant_name || '').trim() || 'Restaurant'),
@@ -7627,6 +7639,7 @@ app.post('/api/qr/receipt/:token/email', widgetCors, async (req, res) => {
     const to = String(req.body?.email || '').trim();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ error: 'Please enter a valid email address' });
     const orderId = Number(req.body?.order_id) || null;
+    const payId = Number(req.body?.payment_id) || null;
     const oRes = await pool.query(
       `SELECT o.*, t.name AS table_label, t.table_number FROM orders o LEFT JOIN tables t ON t.id = o.table_id
         WHERE o.table_id = $1 AND o.source = 'qr' ${orderId ? 'AND o.id = $2' : ''} ORDER BY o.id DESC LIMIT 1`,
@@ -7636,8 +7649,10 @@ app.post('/api/qr/receipt/:token/email', widgetCors, async (req, res) => {
     const [items, pays, sRes] = await Promise.all([
       pool.query(`SELECT oi.quantity, oi.unit_price, oi.notes, COALESCE(mi.name, oi.item_name) AS name
                     FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
-                   WHERE oi.order_id = $1 AND oi.voided = 0 ORDER BY oi.id`, [order.id]),
-      pool.query(`SELECT amount, method FROM payments WHERE order_id = $1 ORDER BY id`, [order.id]),
+                   WHERE oi.order_id = $1 AND oi.voided = 0 ${payId ? 'AND oi.payment_id = $2' : ''} ORDER BY oi.id`,
+                 payId ? [order.id, payId] : [order.id]),
+      pool.query(`SELECT amount, method FROM payments WHERE order_id = $1 ${payId ? 'AND id = $2' : ''} ORDER BY id`,
+                 payId ? [order.id, payId] : [order.id]),
       pool.query(`SELECT key, value FROM settings WHERE key IN ('company_name','restaurant_name','company_address','company_phone','company_vat','currency_symbol','brand_primary')`),
     ]);
     const cfg = {}; for (const r of sRes.rows) cfg[r.key] = r.value;
@@ -7659,7 +7674,7 @@ app.post('/api/qr/receipt/:token/email', widgetCors, async (req, res) => {
       <table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:14px">${rows}</table>
       <hr style="border:none;border-top:1px solid #eee;margin:12px 0">
       <table style="width:100%;border-collapse:collapse;font-size:15px;font-weight:700">
-        <tr><td style="padding:4px 0">Total</td><td style="padding:4px 0;text-align:right">${cur}${Number(order.total || 0).toFixed(2)}</td></tr>
+        <tr><td style="padding:4px 0">Total</td><td style="padding:4px 0;text-align:right">${cur}${(payId ? pays.rows.reduce((a, p) => a + Number(p.amount || 0), 0) : Number(order.total || 0)).toFixed(2)}</td></tr>
       </table>
       <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px">${paid}</table>
       <p style="font-size:12px;color:#999;margin-top:20px">Thank you — we hope to see you again.</p>
@@ -7797,6 +7812,7 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
     }
 
     // Create-or-append under the same per-table lock the waiter flow uses.
+    let roundPaymentId = null;
     const out = await runExclusive(`order-create:table:${tableId}`, async () => {
       const existing = await pool.query(
         `SELECT o.id FROM orders o
@@ -7831,17 +7847,27 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
         [totalRes.rows[0].total || 0, paymentStatus, orderId]);
       // Record this round's tender NOW (pay-first) — the auto-close on
       // full service finds the bill already settled.
-      await pool.query(`INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3)`,
+      // SEPOS-QR-RECEIPT-001 — pay-FIRST means this tender pays for exactly the
+      // items in THIS round, so link them. That is what makes a correct receipt
+      // possible on a shared table: four friends each paying their own round
+      // each get a receipt for what they actually paid, and none of them sees a
+      // total nobody paid.
+      const payIns = await pool.query(
+        `INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3) RETURNING id`,
         [orderId, (paidPence != null ? paidPence / 100 : totalPence / 100), paymentStatus === 'paid' ? 'QR Online' : 'QR Online (mock)']);
+      roundPaymentId = payIns.rows[0].id;
+      if (firedIds.length) {
+        await pool.query(`UPDATE order_items SET payment_id = $1 WHERE id = ANY($2::int[])`, [roundPaymentId, firedIds]);
+      }
       await offlineQueue.enqueue('add_items', { localOrderId: Number(orderId), items: priced.map(p => ({ ...p, is_bar: 0 })) });
       await depleteStockForItems(firedIds, 'sale');
-      return { orderId, firedIds };
+      return { orderId, firedIds, paymentId: roundPaymentId };
     });
 
     const orderRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [out.orderId]);
     const newItemsRes = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.id = ANY($1::int[])`, [out.firedIds]);
     io.emit('new_order_items', { order: orderRes.rows[0], items: newItemsRes.rows });
-    res.json({ success: true, order_id: out.orderId, payment_status: paymentStatus });
+    res.json({ success: true, order_id: out.orderId, payment_status: paymentStatus, payment_id: out.paymentId });
   } catch (err) {
     console.error('[qr] place order', err);
     res.status(500).json({ error: err.message });

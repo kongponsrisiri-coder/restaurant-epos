@@ -375,6 +375,12 @@ async function initDB() {
     // method) would silently merge two genuine identical tenders, so they are
     // keyed on the cloud id.
     await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS cloud_id INTEGER`);
+    // SEPOS-QR-PAY-REDO — the Stripe PaymentIntent that settled THIS tender. A
+    // QR table order is paid round by round, so one order legitimately carries
+    // several PIs and orders.payment_intent_id (SEPOS-047b: one PI per takeaway
+    // order) cannot dedupe them. The unique index is the race backstop behind
+    // the endpoint's own check: one succeeded PI settles exactly one round.
+    await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR(255)`);
 
     // SEPOS-042: audit log for manager-authorised order deletions.
     // The order itself disappears but this row is the paper trail —
@@ -717,6 +723,11 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
     await pool.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_payment_intent
       ON orders(payment_intent_id) WHERE payment_intent_id IS NOT NULL
+    `);
+
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_payment_intent
+      ON payments(payment_intent_id) WHERE payment_intent_id IS NOT NULL
     `);
 
     // Seed the 3 tiers — safe to re-run on every restart

@@ -7426,6 +7426,29 @@ function qrVerifyToken(token) {
   if (expect.length !== got.length || !crypto.timingSafeEqual(expect, got)) return null;
   return Number(m[1]);
 }
+// SEPOS-QR-PAY-REDO — pay-first safety net. Runs the order-creation critical
+// section; if it throws after the card succeeded, the PaymentIntent is refunded
+// before the error surfaces. A refund failure is logged loudly and the original
+// error still surfaces (never mask why the order failed).
+async function runExclusiveWithRefund(piId, sp, lockKey, fn) {
+  try {
+    return await runExclusive(lockKey, fn);
+  } catch (err) {
+    if (piId && !(err && err.qrReplay)) {
+      try {
+        const stripe = sp ? require('stripe')(sp.key) : require('stripe')(process.env.STRIPE_SECRET_KEY);
+        await stripe.refunds.create({ payment_intent: piId, reason: 'requested_by_customer' }, sp ? { stripeAccount: sp.account } : undefined);
+        console.warn(`[qr] order failed after payment — refunded ${piId}: ${err.message}`);
+        err.qrRefunded = true;
+      } catch (refundErr) {
+        console.error(`[qr] ⚠️ ORDER FAILED AND REFUND FAILED for ${piId} — refund by hand:`, refundErr.message);
+        err.qrRefundFailed = true;
+      }
+    }
+    throw err;
+  }
+}
+
 async function qrEnabled() {
   try {
     const r = await pool.query(`SELECT value FROM settings WHERE key = 'qr_ordering_enabled'`);
@@ -7792,6 +7815,7 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
     const stripeReady = await qrStripeReady();
     let paymentStatus = 'mock';
     let paidPence = null;
+    let verifiedPiId = null;
     if (stripeReady) {
       const piId = req.body?.payment_intent_id;
       if (!piId) return res.status(402).json({ error: 'Payment required' });
@@ -7803,22 +7827,56 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
         if (pi.currency !== 'gbp') return res.status(402).json({ error: 'Payment currency mismatch' });
         if (pi.amount !== totalPence) return res.status(402).json({ error: 'Payment amount mismatch — please refresh and try again.' });
         if (pi.metadata?.product !== 'siamepos_qr_order') return res.status(402).json({ error: 'Payment reference mismatch' });
+        // A PI is minted for ONE table (metadata.table_id, set at mint time).
+        // Without this check a token-holder could pay once at their own table
+        // and replay that payment to fire food at any other table.
+        if (String(pi.metadata?.table_id || '') !== String(tableId)) {
+          return res.status(402).json({ error: 'That payment was for a different table — please start again from your table\'s QR code.' });
+        }
         paymentStatus = 'paid';
         paidPence = pi.amount;
+        verifiedPiId = pi.id;
       } catch (e) {
         console.error('[qr] stripe verify', e.message);
         return res.status(402).json({ error: 'Could not verify payment — please try again.' });
+      }
+      // REPLAY GUARD — one succeeded PI settles exactly one round. Checked
+      // here (fast, friendly), again inside the per-table lock, and backstopped
+      // by a unique index. Without it a single £20 charge could be replayed to
+      // fire unlimited rounds of food.
+      const seen = await pool.query('SELECT order_id FROM payments WHERE payment_intent_id = $1 LIMIT 1', [verifiedPiId]);
+      if (seen.rows[0]) {
+        return res.status(409).json({ error: 'This payment has already been used for an order — you have not been charged again.' });
       }
     }
 
     // Create-or-append under the same per-table lock the waiter flow uses.
     let roundPaymentId = null;
-    const out = await runExclusive(`order-create:table:${tableId}`, async () => {
+    // Pay-FIRST means the card is confirmed on the customer's phone BEFORE any
+    // of this runs, so a failure past this point is money taken with no food
+    // ordered. Refund it rather than leaving the customer to notice and chase.
+    // A replay is excluded — that PI legitimately paid for an order already.
+    const out = await runExclusiveWithRefund(verifiedPiId, sp, `order-create:table:${tableId}`, async () => {
+      // SEPOS-QR-PAY-REDO — a QR round may ONLY join an order this flow created
+      // itself. Adopting a waiter's open bill was the root of the whole
+      // partial-payment mess: a customer paying £5 for a dessert stamped the
+      // waiter's £40 table as paid, and the serve-time auto-close then closed
+      // it and lost the £40. With `source='qr'` in the WHERE clause every QR
+      // order is fully paid by construction, so 'part_paid' never has to exist
+      // and the auto-close needs no reconciliation. A table can now hold a
+      // waiter's bill AND a QR bill at once — which is honest, because two
+      // separate payments really did happen.
       const existing = await pool.query(
         `SELECT o.id FROM orders o
-          WHERE o.table_id = $1 AND o.status = 'open'
+          WHERE o.table_id = $1 AND o.status = 'open' AND o.source = 'qr'
             AND (o.order_type IS NULL OR o.order_type = 'dine_in')
           ORDER BY o.id DESC LIMIT 1`, [tableId]);
+      // Re-check inside the lock: two concurrent replays of the same PI would
+      // both have passed the friendly pre-check above.
+      if (verifiedPiId) {
+        const dup = await pool.query('SELECT order_id FROM payments WHERE payment_intent_id = $1 LIMIT 1', [verifiedPiId]);
+        if (dup.rows[0]) { const e = new Error('payment_replayed'); e.qrReplay = true; throw e; }
+      }
       let orderId;
       if (existing.rows[0]) {
         orderId = existing.rows[0].id;
@@ -7853,8 +7911,9 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
       // each get a receipt for what they actually paid, and none of them sees a
       // total nobody paid.
       const payIns = await pool.query(
-        `INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3) RETURNING id`,
-        [orderId, (paidPence != null ? paidPence / 100 : totalPence / 100), paymentStatus === 'paid' ? 'QR Online' : 'QR Online (mock)']);
+        `INSERT INTO payments (order_id, amount, method, payment_intent_id) VALUES ($1,$2,$3,$4) RETURNING id`,
+        [orderId, (paidPence != null ? paidPence / 100 : totalPence / 100),
+         paymentStatus === 'paid' ? 'QR Online' : 'QR Online (mock)', verifiedPiId]);
       roundPaymentId = payIns.rows[0].id;
       if (firedIds.length) {
         await pool.query(`UPDATE order_items SET payment_id = $1 WHERE id = ANY($2::int[])`, [roundPaymentId, firedIds]);
@@ -7869,7 +7928,17 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
     io.emit('new_order_items', { order: orderRes.rows[0], items: newItemsRes.rows });
     res.json({ success: true, order_id: out.orderId, payment_status: paymentStatus, payment_id: out.paymentId });
   } catch (err) {
+    if (err && (err.qrReplay || /idx_payments_payment_intent|payments_payment_intent/i.test(err.message || ''))) {
+      console.warn('[qr] replayed payment_intent rejected');
+      return res.status(409).json({ error: 'This payment has already been used for an order — you have not been charged again.' });
+    }
     console.error('[qr] place order', err);
+    if (err && err.qrRefunded) {
+      return res.status(500).json({ error: 'Sorry — your order could not be sent to the kitchen, so your payment has been refunded. Please tell a member of staff.', refunded: true });
+    }
+    if (err && err.qrRefundFailed) {
+      return res.status(500).json({ error: 'Sorry — your order could not be sent to the kitchen. Please show this to a member of staff so they can refund you.', refund_failed: true });
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -7878,7 +7947,10 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
 // cart (not taken from the client like the takeaway widget's endpoint), so a
 // tampered page can't underpay: the same pricing pass runs here and at order
 // time, and the order endpoint additionally requires pi.amount === total.
-app.post('/api/qr/payment-intent/:token', widgetCors, async (req, res) => {
+// SEPOS-QR-PAY-REDO — the licence/subscription gates belong HERE too. This flow
+// is pay-FIRST, so gating only order creation let a lapsed tenant take the
+// customer's money and then refuse the order. Fail before the card is charged.
+app.post('/api/qr/payment-intent/:token', widgetCors, requireActiveSubscription, requireValidLicense, async (req, res) => {
   try {
     if (!await qrEnabled()) return res.status(403).json({ error: 'QR ordering is not enabled' });
     const tableId = qrVerifyToken(req.params.token);

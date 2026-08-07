@@ -54,8 +54,9 @@
 3. **Owner-facing surfaces live in Admin, mobile-first.** No "secret link" pages — owners check things on their phones between clients, so it must be in the app they already use, easy in and out. (The chat inbox started as a keyed URL — "not practical at all" — and became Admin → AI Chats.)
 4. **Escalation keeps the customer in the conversation.** When something is beyond the AI: collect the details and say a person will reply RIGHT HERE shortly. Never bounce a customer to a different phone number — only give the phone number if they explicitly ask for it.
 5. **Payment is always a LINK, never in-chat.** The bot sends a booking/payment link (Stripe); card details never pass through a conversation. Deposit safety stands (Sam's W3): deposit due + no Stripe configured = refuse to silently confirm a free booking — roll back + human handoff. (Demo spa tenant currently runs **No deposit** by Korakot's explicit choice, 20 Jul.)
-6. **Tokens: never accept short default expiries.**
-7. **Fix the CLASS, not the instance (Korakot, 2026-08-07).** When a bug is found, don't patch just the surface it appeared on — sweep the whole codebase for every other path that can produce the same symptom, fix them ALL in one pass, and say what the sweep covered. Taught after the table-name bug: v1.8.34 fixed "Bar 3 → TABLE 9" on the tickets we saw, but 16 other order queries + 10 client surfaces + 2 print formatters still leaked the raw number, and "Bar 2" printed as "TABLE 2" the very next day (worse: a DIFFERENT table was literally named "Table 2" — the ticket pointed at the wrong physical table). His words: "when you fix, check if anything will get the same problem — do not just fix thing one by one, check the whole lot." The Netlify PAT 7-day default nearly killed every site deploy. CI/service tokens get long or no expiry and live in encrypted stores (GitHub secrets / `.infra-keys`). And secrets stay Korakot-side: agents generate + verify, Korakot pastes — agents never type keys into fields.
+6. **Tokens: never accept short default expiries.** The Netlify PAT 7-day default nearly killed every site deploy. CI/service tokens get long or no expiry and live in encrypted stores (GitHub secrets / `.infra-keys`). And secrets stay Korakot-side: agents generate + verify, Korakot pastes — agents never type keys into fields.
+7. **Record every client-requested setting on the board (Korakot, 2026-08-07).** When a client asks for a config change (Chart Thai's 10% online discount, a VAT mode, a service-charge rate), it goes in the **CLIENT LIVE CONFIG REGISTER** at the top of this file — not only in the ticket row that shipped it. A setting buried in "Recently Completed" is invisible: it surfaces as a surprise in audits, and someone may "tidy it away" or ship a feature that ignores it (exactly what happened — the new `/order` page ignores Chart Thai's discount).
+8. **Fix the CLASS, not the instance (Korakot, 2026-08-07).** When a bug is found, don't patch just the surface it appeared on — sweep the whole codebase for every other path that can produce the same symptom, fix them ALL in one pass, and say what the sweep covered. Taught after the table-name bug: v1.8.34 fixed "Bar 3 → TABLE 9" on the tickets we saw, but 16 other order queries + 10 client surfaces + 2 print formatters still leaked the raw number, and "Bar 2" printed as "TABLE 2" the very next day (worse: a DIFFERENT table was literally named "Table 2" — the ticket pointed at the wrong physical table). His words: "when you fix, check if anything will get the same problem — do not just fix thing one by one, check the whole lot."
 
 ---
 
@@ -415,6 +416,20 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 **Notes:** M1 (unpaid voucher mint when Stripe unset) is demo-only per Korakot → downgraded to fail-closed hardening. R5 was REFUTED (NOT NULL constraint). Concierge core money-safety (server-priced deposit, phone-locked, webhook signature+idempotency, no hallucinated slots) + the double-booking fix + medical sync-feed-fails-closed all VERIFIED SOLID.
 
 ---
+
+## ⚙️ CLIENT LIVE CONFIG REGISTER (verified live 2026-08-07 — keep current)
+
+> **Why this exists (Korakot, 2026-08-07):** Chart Thai's 10% online discount is a **client request**, shipped 21 Jul — but it was only recorded inside a long "Recently Completed" row, so it surfaced as a *surprise* during AUDIT-002. Client-requested settings must be visible on the board, not archaeology: nobody should "tidy away" a setting a client asked for, and every audit/fix must account for them. **Append here whenever a client asks for a setting — and re-verify before quoting.**
+
+| Tenant | Client-requested / notable config | Notes |
+|---|---|---|
+| **Chart Thai** | **🎉 10% online-order discount** (`takeaway_discount_percent=10`) — **CLIENT REQUEST**, SEPOS-TAKEAWAY-DISCOUNT (21 Jul) · service charge 10% · VAT inclusive · Sunmi APK (sideload), cloud mode | **Do NOT remove.** ⚠️ Interacts with AUDIT-002 #4: the new `/order` page ignores this discount (legacy widget honours it) — Chart Thai must stay on the legacy widget until #4 is fixed, and any `/order` migration for them is blocked on it. |
+| **Thann Thai** | service charge 10% · VAT **inclusive** | ⚠️ **STILL OPEN from 2026-07-06:** Korakot was to flip `vat_mode` → **exclusive** (Settings → VAT → "Prices exclude VAT") to activate sale+20% VAT. Verified today: still `inclusive`. Report-only change, no customer price change. |
+| **Fern** | service charge 12.5% · timezone `Europe/London` set · mock pay (no live card yet) · own stack | Windows till still on **v1.8.15** — restart collects everything incl. v1.8.36. |
+| **Baan Siam (demo)** | QR ordering **ON** · mock pay · service charge 0% | Demo/pitch tenant. Table plan currently = Fern's real layout (copied to Fern 7 Aug). |
+| **Phakoon (prospect)** | QR ordering **ON** · mock pay · service charge 12.5% · SiamPay **TEST** keys on its Railway | At signing: swap TEST→LIVE keys + clear `takeaway_mock_pay`. ⚠️ **Blocked on AUDIT-002 wave 1** (QR pay hardening) before any real card. |
+
+**Others:** no tenant has `settings.timezone` set except Fern — harmless, `restaurantTz()` defaults to `Europe/London` (verified `src/server.js:4636`).
 
 ## 🟢 Active Work
 

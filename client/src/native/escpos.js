@@ -72,6 +72,20 @@ function headerOps(ops, order, title, kw = SUNMI_KITCHEN_WIDTH) {
   }
   ops.push({ op: 'size', v: 'h' }, { op: 'text', v: label }, { op: 'size', v: 'n' }, { op: 'bold', v: false }); // big table no.
   if (order && order.id != null) ops.push({ op: 'text', v: 'Order #' + order.id });
+  // SEPOS-AUDIT-002 F13 — the native ticket printed the heading and item lines
+  // ONLY, dropping everything the desktop/server builders include: who the
+  // order is for, how to reach them, where it's going and — worst — the
+  // order-level ALLERGY note. A Sunmi-only kitchen was cooking online orders
+  // blind to "no peanuts".
+  if (order) {
+    if (order.customer_name)    ops.push({ op: 'text', v: String(order.customer_name) });
+    if (order.customer_phone)   ops.push({ op: 'text', v: 'Tel: ' + String(order.customer_phone) });
+    if (order.delivery_address) ops.push({ op: 'text', v: String(order.delivery_address) });
+    const note = order.customer_note || order.notes;
+    if (note) ops.push({ op: 'bold', v: true }, { op: 'size', v: 'b' },
+                       { op: 'text', v: '** ' + String(note).toUpperCase() + ' **' },
+                       { op: 'size', v: 'n' }, { op: 'bold', v: false });
+  }
   // 'krule' = a rule sized per printer (kitchen font is big, so the Sunmi needs a
   // shorter dash run than the network 32 or it wraps). See renderers below.
   ops.push({ op: 'align', v: 0 }, { op: 'krule', w: Math.min(kw, SUNMI_KITCHEN_WIDTH) });

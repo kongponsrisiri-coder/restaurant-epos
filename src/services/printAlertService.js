@@ -96,6 +96,30 @@ async function loadSettingsKV() {
   const r = await pool.query('SELECT key, value FROM settings');
   const s = {};
   r.rows.forEach(row => { s[row.key] = row.value; });
+  // SEPOS-AUDIT-002 F11 — the raw KV only carries the LEGACY fixed
+  // printer_{role}_ip keys. On a till configured through the unified Network
+  // Printers list (normal since SEPOS-PRINT-UNIFY-001) those are empty, so
+  // retry()/redirect() threw 'no kitchen printer configured' for every held
+  // ticket and staff could never clear the banner. Same overlay the print
+  // routes use.
+  try {
+    const printers = (await pool.query('SELECT * FROM printers WHERE is_active = 1 ORDER BY sort_order, id')).rows;
+    if (printers && printers.length) {
+      const byId = new Map(printers.map(p => [String(p.id), p]));
+      for (const role of ['receipt', 'kitchen', 'bar']) {
+        const defId = s[`default_${role}_printer_id`];
+        const starred = defId ? byId.get(String(defId)) : null;
+        const p = (starred && Number(starred[`role_${role}`]) === 1 ? starred : null)
+          || printers.find(x => Number(x[`role_${role}`]) === 1);
+        if (!p || !(p.ip || p.name)) continue;
+        s[`printer_${role}_ip`]        = p.ip || '';
+        s[`printer_${role}_port`]      = p.port || 9100;
+        s[`printer_${role}_name`]      = p.name || '';
+        s[`printer_${role}_lpr_queue`] = p.lpr_queue || s[`printer_${role}_lpr_queue`] || 'lp';
+        if (role === 'kitchen' && p.copies) s.printer_kitchen_copies = String(p.copies);
+      }
+    }
+  } catch { /* no printers table — legacy keys stand */ }
   return s;
 }
 

@@ -772,8 +772,23 @@ async function deleteOrphans(table, cloudIds) {
     const localRes = await pool.query(`SELECT id FROM ${table}`);
     const cloudSet = new Set(cloudIds.map(Number));
     const localIds = localRes.rows.map(r => Number(r.id));
-    const orphanIds = localIds.filter(id => !cloudSet.has(id));
+    let orphanIds = localIds.filter(id => !cloudSet.has(id));
     if (orphanIds.length === 0) return 0;
+    // AUDIT-002 LOW — orphan-delete assumes "a local row the cloud doesn't know
+    // about was deleted on the cloud". That only holds for rows created AFTER
+    // strict write-through; an older local-only table would be deleted and its
+    // OPEN order detached (the floor loses a live bill). A genuinely
+    // cloud-deleted table has no open orders.
+    if (table === 'tables' && orphanIds.length) {
+      const keep = [], drop = [];
+      for (const id of orphanIds) {
+        const r = await pool.query(`SELECT COUNT(*) AS n FROM orders WHERE table_id = $1 AND status = 'open'`, [id]);
+        (Number(r.rows[0]?.n || 0) > 0 ? keep : drop).push(id);
+      }
+      if (keep.length) console.warn(`[sync] keeping ${keep.length} local-only table(s) with open orders: ${keep.join(', ')}`);
+      orphanIds = drop;
+      if (orphanIds.length === 0) return 0;
+    }
     for (const id of orphanIds) {
       try {
         await pool.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
@@ -1710,15 +1725,24 @@ async function pullTablesSnapshot() {
   const feeds = [
     { path: '/api/tables', table: 'tables' },
     { path: '/api/table-combinations', table: 'table_combinations' },
+    // AUDIT-002 LOW — walls use the same write-through and THIS is their
+    // instant pull-back, but the feed was missing, so every wall edit visibly
+    // reverted until the next tick caught up.
+    { path: '/api/table-walls', table: 'table_walls' },
   ];
   for (const f of feeds) {
     try {
       const r = await fetch(CLOUD_API_URL + f.path, { signal: AbortSignal.timeout(PING_TIMEOUT_MS) });
       if (!r.ok) continue;
       const rows = await r.json();
-      const list = Array.isArray(rows) ? rows : (rows?.data || []);
+      let list = Array.isArray(rows) ? rows : (rows?.data || []);
+      // SEPOS-AUDIT-002 F21 — honour pending offline edits, exactly as the main
+      // tick does; and keep those ids out of the orphan-delete list so a queued
+      // row isn't deleted while its push is still in flight.
+      const pending = await pendingConfigWriteIds(f.table);
+      if (pending.size > 0) list = list.filter((row) => !pending.has(Number(row?.id)));
       await upsertRows(f.table, 'id', list);
-      await deleteOrphans(f.table, list.map((row) => row.id));
+      await deleteOrphans(f.table, [...list.map((row) => row.id), ...pending]);
     } catch (err) {
       console.warn(`[sync] pullTablesSnapshot ${f.path} failed:`, err.message);
     }
@@ -1743,9 +1767,11 @@ async function pullModifiersSnapshot() {
       const r = await fetch(CLOUD_API_URL + f.path, { signal: AbortSignal.timeout(PING_TIMEOUT_MS) });
       if (!r.ok) continue;
       const rows = await r.json();
-      const list = Array.isArray(rows) ? rows : (rows?.data || []);
+      let list = Array.isArray(rows) ? rows : (rows?.data || []);
+      const pending = await pendingConfigWriteIds(f.table);   // F21
+      if (pending.size > 0) list = list.filter((row) => !pending.has(Number(row?.id)));
       await upsertRows(f.table, 'id', list);
-      await deleteOrphans(f.table, list.map((row) => row.id));
+      await deleteOrphans(f.table, [...list.map((row) => row.id), ...pending]);
     } catch (err) {
       console.warn(`[sync] pullModifiersSnapshot ${f.path} failed:`, err.message);
     }

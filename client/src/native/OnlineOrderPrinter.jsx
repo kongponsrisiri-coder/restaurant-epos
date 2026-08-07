@@ -16,7 +16,7 @@ import { useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { SERVER_URL, getOrder } from '../api';
 import { isNativeApp } from './printer';
-import { printFullOrderTicket } from '../screens/KitchenTicket';
+import { printFullOrderTicket, printBarOrderTicket } from '../screens/KitchenTicket';
 
 const FLAG    = 'print_online_orders';     // '1' on the one device that should print
 const PRINTED = 'printed_online_orders';   // recent ids, for dedup
@@ -41,7 +41,16 @@ export default function OnlineOrderPrinter() {
 
         const order = await getOrder(id);
         if (!order || order.error) return;
-        await printFullOrderTicket({ order, items: order.items || [] });
+        const allItems = order.items || [];
+        await printFullOrderTicket({ order, items: allItems });
+        // SEPOS-AUDIT-002 F24 — printFullOrderTicket drops is_bar lines (they
+        // belong on the bar ticket) and since SEPOS-ANDROID-005 nothing else
+        // printed them on the native path: drinks in an online order never
+        // reached the bar.
+        if (allItems.some(i => i && !i.voided && i.is_bar)) {
+          try { await printBarOrderTicket({ order, items: allItems }); }
+          catch (e) { console.warn('[online-order-print] bar ticket', e && e.message); }
+        }
       } catch (e) {
         console.warn('[online-order-print]', e && e.message);
       }

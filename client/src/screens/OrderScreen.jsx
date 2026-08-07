@@ -8,6 +8,7 @@ import { isNativeApp } from '../native/printer';
 // closed-bill delete still lives in Admin → Bills for managers.
 import KitchenMessageModal from '../components/KitchenMessageModal';
 import { confirm } from '../utils/confirm';
+import { dineTableLabel } from '../utils/orderLabel';
 import AllergenChips from '../components/AllergenChips';
 import { parseAllergens } from '../utils/allergens';
 
@@ -818,7 +819,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
           <div style={{ fontSize: 84, lineHeight: 1 }}>✓</div>
           <div style={{ fontSize: 26, fontWeight: 800, marginTop: 12 }}>Order sent to kitchen</div>
           {order?.table_number != null && (
-            <div style={{ fontSize: 17, marginTop: 6, opacity: 0.9 }}>Table {order.table_number}</div>
+            <div style={{ fontSize: 17, marginTop: 6, opacity: 0.9 }}>{dineTableLabel(order)}</div>
           )}
         </div>
       )}
@@ -871,7 +872,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               ← Back
             </button>
             <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', flex: 1 }}>
-              Table {order?.table_number} — Order #{orderId}
+              {dineTableLabel(order)} — Order #{orderId}
               {order?.covers && (
                 <span style={{ fontSize: 14, fontWeight: 400, color: '#888', marginLeft: 8 }}>
                   {order.covers} covers
@@ -1079,7 +1080,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                 onClose();
               }} style={{ background: '#F4F1EA', border: '1px solid #E7E2D6', borderRadius: 10, padding: '10px 16px', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: 'var(--brand-primary, #1a1a2e)' }}>‹ Tables</button>
               <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', whiteSpace: 'nowrap' }}>
-                Table {order?.table_number}
+                {dineTableLabel(order)}
                 {(order?.covers || staff?.name) ? <span style={{ fontFamily: "'Archivo', sans-serif", fontSize: 13, color: '#9A9488', marginLeft: 10, fontWeight: 600 }}>{order?.covers ? `${order.covers} covers` : ''}{order?.covers && staff?.name ? ' · ' : ''}{staff?.name || ''}</span> : null}
               </div>
               {/* SEPOS-ORDER-REDESIGN — whole-menu search box */}
@@ -1208,7 +1209,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
-                    Table {order?.table_number}
+                    {dineTableLabel(order)}
                   </div>
                   <div style={{ fontSize: 12, color: '#888', marginTop: 1 }}>
                     Order #{orderId}{order?.covers ? ` · ${order.covers} covers` : ''}
@@ -1227,7 +1228,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             ) : (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Order · Table {order?.table_number}</span>
+                  <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Order · {dineTableLabel(order)}</span>
                   <span style={{ fontSize: 13, color: '#9A9488', fontWeight: 600 }}>{existingItems.filter(i => !i.voided).reduce((s, i) => s + (i.quantity || 0), 0) + cart.reduce((s, c) => s + (c.quantity || 0), 0)} items</span>
                 </div>
                 {/* Course selector — moved here from the left menu (mockup). */}

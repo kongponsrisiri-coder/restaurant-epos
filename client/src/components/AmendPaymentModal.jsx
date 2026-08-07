@@ -9,6 +9,7 @@
 
 import { useState } from 'react';
 import { amendBillMethod } from '../api';
+import { dineTableLabel } from '../utils/orderLabel';
 
 const METHODS = [
   { value: 'Cash',   label: '💵 Cash' },
@@ -55,7 +56,7 @@ export default function AmendPaymentModal({ bill, onClose, onDone }) {
               "i dont need bill number, as we can check it on daily and
               table number as the reference". */}
           <div style={{ fontSize:12, color:'rgba(255,255,255,0.7)', marginTop:2 }}>
-            Table {bill.table_number || '—'} · {bill.closed_at ? new Date(bill.closed_at).toLocaleString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '—'} · £{Number(bill.paid_amount || bill.total || 0).toFixed(2)}
+            {dineTableLabel(bill)} · {bill.closed_at ? new Date(bill.closed_at).toLocaleString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '—'} · £{Number(bill.paid_amount || bill.total || 0).toFixed(2)}
           </div>
         </div>
 

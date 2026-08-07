@@ -584,6 +584,10 @@ function orderHeading(order) {
       ? `DELIVERY #${order.id}`
       : `TAKEAWAY ${ref}`;
   }
+  // Table NAME wins over the raw number ("Bar 2" is table_number 2) —
+  // same rule as printService.tableHeading and orderLabel.dineTableLabel.
+  const label = order.table_label && String(order.table_label).trim();
+  if (label) return label.toUpperCase();
   return `TABLE ${order.table_number != null ? order.table_number : '—'}`;
 }
 

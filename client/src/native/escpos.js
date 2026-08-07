@@ -65,7 +65,12 @@ function headerOps(ops, order, title, kw = SUNMI_KITCHEN_WIDTH) {
       : (order.order_subtype === 'delivery') ? 'DELIVERY'
       : (t === 'takeaway' && order.table_number != null && order.table_number !== '') ? `TAKEAWAY ${order.table_number}`
       : 'ONLINE ORDER';
-  } else label = 'TABLE ' + ((order && (order.table_number ?? order.table_id)) ?? '');
+  } else {
+    // Table NAME wins over the raw number (Bar 2 = table_number 2) — same
+    // rule as printService.tableHeading / KitchenTicket.orderHeading.
+    const tl = order && order.table_label && String(order.table_label).trim();
+    label = tl ? tl.toUpperCase() : 'TABLE ' + ((order && (order.table_number ?? order.table_id)) ?? '');
+  }
   ops.push({ op: 'size', v: 'h' }, { op: 'text', v: label }, { op: 'size', v: 'n' }, { op: 'bold', v: false }); // big table no.
   if (order && order.id != null) ops.push({ op: 'text', v: 'Order #' + order.id });
   // SEPOS-ANDROID-004 — online / takeaway / delivery header: the kitchen needs
@@ -216,7 +221,7 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
   } else {
     // Table number BIG + bold + centred so it's obvious at a glance.
     ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' },
-             { op: 'text', v: `TABLE ${(order && (order.table_number ?? order.table_id)) ?? '-'}` },
+             { op: 'text', v: (order && order.table_label && String(order.table_label).trim()) ? String(order.table_label).trim().toUpperCase() : `TABLE ${(order && (order.table_number ?? order.table_id)) ?? '-'}` },
              { op: 'size', v: 'r' }, { op: 'bold', v: false }, { op: 'align', v: 0 });
     ops.push({ op: 'row', l: 'Covers', r: String((order && order.covers) || '-') });
   }

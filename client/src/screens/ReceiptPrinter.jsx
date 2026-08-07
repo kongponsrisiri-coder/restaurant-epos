@@ -242,7 +242,7 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Receipt - ${order.order_type === 'takeaway' ? (order.table_number != null ? `Takeaway ${order.table_number}` : `Online Order #${order.id}`) : `Table ${order.table_number}`}</title>
+  <title>Receipt - ${order.order_type === 'takeaway' ? (order.table_number != null ? `Takeaway ${order.table_number}` : `Online Order #${order.id}`) : ((order.table_label && String(order.table_label).trim()) || `Table ${order.table_number}`)}</title>
   <style>
     *    { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:'Courier New',Courier,monospace; font-size:${rpx(12)}; color:#000; background:white; width:80mm; margin:0 auto; padding:4mm 2mm; }
@@ -269,8 +269,8 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
 
   <hr class="divider"/>
 
-  ${order.order_type !== 'takeaway' && order.table_number != null
-    ? `<div style="text-align:center;font-size:24px;font-weight:900;margin:2px 0 10px;">TABLE ${order.table_number}</div>` : ''}
+  ${order.order_type !== 'takeaway' && (order.table_number != null || (order.table_label && String(order.table_label).trim()))
+    ? `<div style="text-align:center;font-size:24px;font-weight:900;margin:2px 0 10px;">${(order.table_label && String(order.table_label).trim()) ? String(order.table_label).trim().toUpperCase() : `TABLE ${order.table_number}`}</div>` : ''}
 
   <table>
     ${order.order_type === 'takeaway'

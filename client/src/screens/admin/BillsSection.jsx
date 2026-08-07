@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getSettings } from '../../api';
+import { dineTableLabel } from '../../utils/orderLabel';
 import {
   thermalPrint, fullPagePrint, escPosPrint, pageHtml,
   fmt, fmtInt, dateLabel, restaurantName, nowStamp,
@@ -481,7 +482,7 @@ function EditPaymentModal({ bill, onClose, onDone }) {
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9500, padding:16 }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background:'white', borderRadius:16, padding:24, width:'100%', maxWidth:440, maxHeight:'90vh', overflowY:'auto' }}>
-        <div style={{ fontWeight:800, fontSize:17, color:'var(--brand-primary,#0D1B3E)', marginBottom:4 }}>✏️ Edit payment — Table {bill.table_number || '?'}</div>
+        <div style={{ fontWeight:800, fontSize:17, color:'var(--brand-primary,#0D1B3E)', marginBottom:4 }}>✏️ Edit payment — {dineTableLabel(bill)}</div>
         <div style={{ fontSize:12, color:'#888', marginBottom:14 }}>Bill £{subtotal.toFixed(2)}{service > 0 ? ` + service £${service.toFixed(2)}` : ''} = <b>£{expected.toFixed(2)}</b> expected</div>
 
         {rows.map((r, i) => (

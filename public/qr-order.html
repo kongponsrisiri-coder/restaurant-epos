@@ -219,7 +219,11 @@
     }
     h += '<div class="totrow"><span>Total</span><span>' + fmt(cartTotal()) + '</span></div>';
     h += '<div id="payel"></div>';
-    h += '<button class="paybtn" id="paybtn">' + (S.stripe_ready ? 'Pay ' + fmt(cartTotal()) + ' &amp; send to kitchen' : 'Send to kitchen (demo — no payment)') + '</button>';
+    // Real-card mode: the Stripe element mounts ASYNC (config → js.stripe.com →
+    // payment-intent → mount). Until its 'ready' fires the button stays disabled,
+    // or a fast first tap confirms an empty form ("card number is incomplete"
+    // with no card form on screen — found in the P2 E2E test).
+    h += '<button class="paybtn" id="paybtn"' + (S.stripe_ready ? ' disabled' : '') + '>' + (S.stripe_ready ? 'Loading secure payment…' : 'Send to kitchen (demo — no payment)') + '</button>';
     h += '<div class="muted">' + (S.stripe_ready ? 'Paid securely by card · Apple Pay · Google Pay' : 'Demo mode — payment is simulated') + '</div>';
     h += '<button class="morebtn" id="closecart">← Back to menu</button>';
     h += '</div></div>';
@@ -298,7 +302,12 @@
       if (pi.error) { $('#payel').innerHTML = '<div class="err">' + esc(pi.error) + '</div>'; return; }
       window.__qr_pi = pi;
       elements = stripe.elements({ clientSecret: pi.client_secret });
-      elements.create('payment').mount('#payel');
+      const payEl = elements.create('payment');
+      payEl.mount('#payel');
+      payEl.on('ready', () => {
+        const pb = $('#paybtn');
+        if (pb && !payBusy) { pb.disabled = false; pb.textContent = 'Pay ' + fmt(cartTotal()) + ' & send to kitchen'; }
+      });
     } catch (e) { $('#payel').innerHTML = '<div class="err">Card form failed to load — please try again.</div>'; }
   }
 
@@ -308,6 +317,7 @@
     try {
       let piId = null;
       if (S.stripe_ready) {
+        if (!elements) throw new Error('The card form is still loading — one moment.');
         const { error } = await stripe.confirmPayment({ elements, redirect: 'if_required' });
         if (error) throw new Error(error.message || 'Payment failed');
         piId = window.__qr_pi.payment_intent_id;
@@ -321,6 +331,8 @@
     } catch (e) {
       payBusy = false;
       const pb2 = $('#paybtn'); if (pb2) { pb2.disabled = false; pb2.textContent = 'Try again'; }
+      // One error banner at a time — repeat failures were stacking duplicates.
+      document.querySelectorAll('.panel > .err').forEach((n) => n.remove());
       const pe = $('#payel'); if (pe) pe.insertAdjacentHTML('beforebegin', '<div class="err">' + esc(e.message) + '</div>');
       return;
     }

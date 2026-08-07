@@ -204,15 +204,6 @@ async function dispatchPrint({ settings, serverFn, html, copies = 1, popupWin = 
     if ((settings && settings.printer_kitchen_ip) || usbName) {
       const r = await serverFn(usbName || undefined, copies);
       if (r && r.success) { closeWin(popupWin); return; }
-      // SEPOS-AUDIT-002 F12 — the server HELD this ticket (printer down): it is
-      // queued in the alert banner for staff to retry or redirect. Printing it
-      // here anyway made 'not printed anywhere yet' false and turned the later
-      // Retry into a duplicate. Stop the chain.
-      if (r && r.held) {
-        closeWin(popupWin);
-        console.warn('[kitchen-ticket] ticket HELD by the server — banner offers retry/redirect');
-        return;
-      }
       console.warn('[kitchen-ticket] server print failed, falling back:', r?.error || r?.reason);
     }
   } catch (e) {

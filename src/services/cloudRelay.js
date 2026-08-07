@@ -31,44 +31,12 @@ const CLOUD_API_URL = process.env.CLOUD_API_URL;
 // opts (SEPOS-QR-ORDER-001): { qr: true, tableNumber, onlyItemIds } — a QR
 // self-order is dine-in on a table, arrives cloud-first exactly like takeaway
 // (customer's phone → cloud), and round 2+ must print ONLY the new items.
-// F9 — item ids this process has already sent to a printer. Bounded so a long
-// running till can't grow it forever; oldest ids age out first.
-const alreadyPrintedItemIds = new Set();
-function rememberPrintedItem(id) {
-  alreadyPrintedItemIds.add(id);
-  if (alreadyPrintedItemIds.size > 5000) {
-    const it = alreadyPrintedItemIds.values();
-    for (let i = 0; i < 1000; i++) { const n = it.next(); if (n.done) break; alreadyPrintedItemIds.delete(n.value); }
-  }
-}
-
 async function autoPrintIncomingTakeaway(payload, opts = {}) {
   try {
     // Load local settings (KV) — same shape src/server.js loadSettings uses.
     const sRes = await pool.query('SELECT key, value FROM settings');
     const settings = {};
     sRes.rows.forEach(r => { settings[r.key] = r.value; });
-    // SEPOS-AUDIT-002 F23 — the relay never applied the unified-printers
-    // overlay, so on a station-only till the legacy printer_kitchen_* keys are
-    // empty and the kitchen fallback below was unreachable: an item whose
-    // station was deactivated printed NOWHERE and raised NO alert.
-    try {
-      const rp = (await pool.query('SELECT * FROM printers WHERE is_active = 1 ORDER BY sort_order, id')).rows;
-      if (rp && rp.length) {
-        const byId = new Map(rp.map(p => [String(p.id), p]));
-        for (const role of ['kitchen', 'bar']) {
-          const defId = settings[`default_${role}_printer_id`];
-          const starred = defId ? byId.get(String(defId)) : null;
-          const pick = (starred && Number(starred[`role_${role}`]) === 1 ? starred : null)
-            || rp.find(x => Number(x[`role_${role}`]) === 1);
-          if (!pick || !(pick.ip || pick.name)) continue;
-          settings[`printer_${role}_ip`]   = pick.ip || '';
-          settings[`printer_${role}_port`] = pick.port || 9100;
-          settings[`printer_${role}_name`] = pick.name || '';
-          if (role === 'kitchen' && pick.copies) settings.printer_kitchen_copies = String(pick.copies);
-        }
-      }
-    } catch {}
     const mode = settings.kitchen_print_mode || 'print';
     if (mode === 'kds') return;
     // SEPOS-STATION-005 — a station-only setup (printers table rows, no
@@ -195,14 +163,6 @@ async function autoPrintIncomingTakeaway(payload, opts = {}) {
         .then(() => console.log(`🖨️ [cloud-relay] station "${grp.printer.name}" auto-printed for ${opts.qr ? 'QR order' : 'takeaway'} #${payload.id}`))
         .catch(err => printAlerts.recordFailure({ kind: 'station', printer: grp.printer, order: printOrder, items: grp.items, reason: err.message }));
     }
-    // F23 — items with no live station AND no kitchen printer must not vanish.
-    if (mode !== 'kds' && kitchenItems.length &&
-        !settings.printer_kitchen_ip && !settings.printer_kitchen_name) {
-      printAlerts.recordFailure({
-        kind: 'kitchen', printer: { name: 'Kitchen', ip: null }, order: printOrder, items: kitchenItems,
-        reason: 'no kitchen printer configured (station missing or inactive for these items)',
-      });
-    }
     if (mode !== 'kds' && kitchenItems.length &&
         (settings.printer_kitchen_ip || settings.printer_kitchen_name)) {
       printService.printFullKitchenTicket(settings, printOrder, kitchenItems)
@@ -318,21 +278,11 @@ function start(localIo, syncService) {
       // (which also round-trip through the cloud) never double-print.
       if (event === 'new_order_items' && payload && payload.order &&
           payload.order.source === 'qr' && payload.order.id) {
-        // SEPOS-AUDIT-002 F9 — this event does NOT always mean "new items": the
-        // waiter add-items endpoint emits every item still cooking on the
-        // order, so the relay happily reprinted dishes already on the pass.
-        // Print each item id at most once per relay process.
-        const fresh = (payload.items || []).map(i => i.id).filter(Boolean).filter(id => !alreadyPrintedItemIds.has(id));
-        if (fresh.length) {
-          fresh.forEach(id => rememberPrintedItem(id));
-          autoPrintIncomingTakeaway(
-            { id: payload.order.id },
-            { qr: true, tableNumber: payload.order.table_number ?? null,
-              tableLabel: payload.order.table_label ?? null,
-              onlyItemIds: fresh });
-        } else {
-          console.log('[cloud-relay] QR event carried no unprinted items — skipping');
-        }
+        autoPrintIncomingTakeaway(
+          { id: payload.order.id },
+          { qr: true, tableNumber: payload.order.table_number ?? null,
+            tableLabel: payload.order.table_label ?? null,
+            onlyItemIds: (payload.items || []).map(i => i.id).filter(Boolean) });
       }
     });
   }

@@ -69,17 +69,6 @@
   .sp-sub { font-size:12px; color:#6b7280; white-space:nowrap; }
   .sp-sub b { color:#635bff; font-weight:700; }
   .spin { text-align:center; padding:60px 20px; color:#888; }
-  /* SEPOS-QR-RECEIPT-001 — a QR customer never touches the till, so there's no
-     paper unless they ask. VAT-registered venues must be able to give one and
-     people on expenses need it. */
-  .rc { background:#fff; border-radius:14px; padding:16px; margin-top:14px; }
-  .rc h3 { font-size:16px; margin-bottom:2px; }
-  .rc .meta { font-size:12px; color:#777; }
-  .rc .line { display:flex; justify-content:space-between; font-size:13.5px; padding:6px 0; border-bottom:1px solid #f1efe9; }
-  .rc .tot { display:flex; justify-content:space-between; font-weight:800; font-size:15.5px; padding-top:10px; }
-  .rc .em { display:flex; gap:8px; margin-top:14px; }
-  .rc .em input { flex:1; padding:11px 12px; border:1.5px solid #ddd; border-radius:10px; font-size:14px; min-width:0; }
-  .rc .em button { padding:11px 14px; border:none; border-radius:10px; background:var(--brand); color:#fff; font-weight:800; font-size:14px; }
 </style>
 </head>
 <body>
@@ -91,10 +80,6 @@
   let S = null, MENU = [], cart = [], view = 'menu', activeCat = null;
   let optItem = null, optGroups = null, optSel = {};          // options sheet state
   let stripePk = null, stripe = null, elements = null, payBusy = false, uidSeq = 1;
-  // Tenders this phone has paid on this table (survives a refresh, dies with
-  // the tab — we never identify the customer, we just remember our own).
-  let myPayments = [];
-  try { myPayments = JSON.parse(sessionStorage.getItem('qr_pays_' + token) || '[]'); } catch (e) { myPayments = []; }
   const modCache = {};
 
   const fmt = (n) => (S ? S.currency : '£') + Number(n || 0).toFixed(2);
@@ -269,13 +254,10 @@
              '</span><span class="st ' + st + '">' + lb + '</span></div>';
       }
       h += '</div><button class="morebtn" id="ordermore">＋ Order more</button>';
-      h += '<button class="morebtn" id="getreceipt">🧾 Get a receipt</button>';
-      h += '<div id="rcbox"></div>';
     }
     h += '</div>';
     $('#app').innerHTML = h;
     const om = $('#ordermore'); if (om) om.onclick = () => { view = 'menu'; cart = []; render(); };
-    const rb = $('#getreceipt'); if (rb) rb.onclick = showReceipt;
   }
 
   function bind() {
@@ -350,14 +332,6 @@
       }
       const r = await fetch('/api/qr/orders/' + token, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: cart.map((c) => ({ menu_item_id: c.menu_item_id, quantity: c.quantity, modifiers: c.modifiers, item_note: c.item_note })), payment_intent_id: piId }) }).then((x) => x.json());
       if (r.error) throw new Error(r.error);
-      // SEPOS-QR-RECEIPT-001 — Korakot: "they pay when they place the order, so
-      // the receipt should come with the payment." Keep the tender id THIS
-      // phone was given; the receipt is then for what this person paid, which
-      // is what makes it correct when four people share one table.
-      if (r.payment_id) {
-        myPayments.push(r.payment_id);
-        try { sessionStorage.setItem('qr_pays_' + token, JSON.stringify(myPayments)); } catch (e) {}
-      }
       cart = []; view = 'status';
       const s = await fetch('/api/qr/session/' + token).then((x) => x.json());
       if (!s.error) S.order = s.order;
@@ -371,57 +345,6 @@
       return;
     }
     payBusy = false;
-  }
-
-  // ── Receipt ────────────────────────────────────────────────────────────────
-  async function showReceipt() {
-    const box = $('#rcbox'); if (!box) return;
-    box.innerHTML = '<div class="muted" style="margin-top:14px">Loading your receipt…</div>';
-    try {
-      const mine = myPayments.length ? myPayments[myPayments.length - 1] : null;
-      let q = (S.order && S.order.id) ? ('?order_id=' + S.order.id) : '';
-      if (mine) q += (q ? '&' : '?') + 'payment_id=' + mine;
-      const r = await fetch('/api/qr/receipt/' + token + q).then((x) => x.json());
-      if (r.error) { box.innerHTML = '<div class="err">' + esc(r.error) + '</div>'; return; }
-      const cur = (r.restaurant && r.restaurant.currency) || '£';
-      let h = '<div class="rc"><h3>' + esc(r.restaurant.name) + '</h3>';
-      if (r.restaurant.address) h += '<div class="meta">' + esc(r.restaurant.address) + '</div>';
-      if (r.restaurant.phone)   h += '<div class="meta">Tel: ' + esc(r.restaurant.phone) + '</div>';
-      if (r.restaurant.vat)     h += '<div class="meta">VAT No: ' + esc(r.restaurant.vat) + '</div>';
-      h += '<div class="meta" style="margin-top:8px">Order #' + r.order_id + ' · ' + esc(r.table) +
-           (r.scoped_to_payment ? ' · your order' : '') + '</div>';
-      for (const i of (r.items || [])) {
-        h += '<div class="line"><span>' + i.quantity + ' × ' + esc(i.name) +
-             (i.notes ? '<div style="font-size:11.5px;color:#888">' + esc(i.notes) + '</div>' : '') +
-             '</span><span>' + cur + (Number(i.unit_price) * Number(i.quantity)).toFixed(2) + '</span></div>';
-      }
-      h += '<div class="tot"><span>Total</span><span>' + cur + Number(r.total || 0).toFixed(2) + '</span></div>';
-      for (const p of (r.payments || [])) {
-        h += '<div class="line" style="border:none;color:#666;font-size:12.5px"><span>' + esc(p.method) + '</span><span>' + cur + Number(p.amount).toFixed(2) + '</span></div>';
-      }
-      h += '<div class="em"><input id="rcmail" type="email" inputmode="email" placeholder="Email it to me (optional)"><button id="rcsend">Send</button></div>';
-      h += '<div id="rcmsg" class="muted" style="text-align:left"></div>';
-      h += '</div>';
-      box.innerHTML = h;
-      const sendBtn = $('#rcsend');
-      if (sendBtn) sendBtn.onclick = async () => {
-        const email = ($('#rcmail') || {}).value || '';
-        const msg = $('#rcmsg');
-        sendBtn.disabled = true; sendBtn.textContent = 'Sending…';
-        try {
-          const res = await fetch('/api/qr/receipt/' + token + '/email', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, order_id: r.order_id, payment_id: mine || undefined }),
-          }).then((x) => x.json());
-          if (res.error) { msg.textContent = res.error; sendBtn.disabled = false; sendBtn.textContent = 'Send'; return; }
-          msg.textContent = '✓ Sent — check your inbox.';
-          sendBtn.textContent = 'Sent';
-        } catch (e) {
-          msg.textContent = 'Could not send it — please ask a member of staff.';
-          sendBtn.disabled = false; sendBtn.textContent = 'Send';
-        }
-      };
-    } catch (e) { box.innerHTML = '<div class="err">Could not load your receipt.</div>'; }
   }
 
   boot();

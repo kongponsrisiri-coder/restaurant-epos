@@ -149,20 +149,6 @@ async function initDB() {
     // dish to its own station. Same inherit pattern as default_course above.
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS printer_id INTEGER`);
 
-    // SEPOS-MENU-PHOTO-001 — dish photos the OWNER uploads from their phone.
-    // Kept in their OWN table, never joined into /api/menu: the menu JSON that
-    // every customer's phone downloads must stay small (95 dishes × ~120 KB of
-    // base64 would be an 11 MB menu). menu_items.image_url instead points at
-    // /api/menu/items/:id/image, which serves the bytes once and is cached.
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS menu_item_images (
-        menu_item_id INTEGER PRIMARY KEY REFERENCES menu_items(id) ON DELETE CASCADE,
-        mime VARCHAR(40) NOT NULL DEFAULT 'image/jpeg',
-        data TEXT NOT NULL,
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS modifier_groups (
         id SERIAL PRIMARY KEY,
@@ -279,12 +265,6 @@ async function initDB() {
     // window on orders.created_at, so a void during the shift on a table seated
     // before it vanished from that shift's Z.
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS voided_at TIMESTAMP`);
-    // SEPOS-QR-RECEIPT-001 — which tender paid for this line. On a pay-FIRST QR
-    // order the receipt belongs to the PAYMENT, not the table: four friends on
-    // one table each pay for their own round, so a "table receipt" would state
-    // a total nobody paid. Stamping the tender on the items gives a correct
-    // per-round receipt without having to identify the customer at all.
-    await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS payment_id INTEGER`);
     // SEPOS-DELIVERY-002 — collection vs delivery for takeaway orders.
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_subtype VARCHAR(20) DEFAULT 'collection'`);
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT`);
@@ -368,19 +348,6 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
-
-    // SEPOS-SYNC-TENDERS-001 — the cloud id of a tender. A customer-paid order
-    // (QR round, online prepay) is created and PAID on the cloud, so the till
-    // has to mirror the payment rows down. Matching them on (order, amount,
-    // method) would silently merge two genuine identical tenders, so they are
-    // keyed on the cloud id.
-    await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS cloud_id INTEGER`);
-    // SEPOS-QR-PAY-REDO — the Stripe PaymentIntent that settled THIS tender. A
-    // QR table order is paid round by round, so one order legitimately carries
-    // several PIs and orders.payment_intent_id (SEPOS-047b: one PI per takeaway
-    // order) cannot dedupe them. The unique index is the race backstop behind
-    // the endpoint's own check: one succeeded PI settles exactly one round.
-    await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR(255)`);
 
     // SEPOS-042: audit log for manager-authorised order deletions.
     // The order itself disappears but this row is the paper trail —
@@ -723,11 +690,6 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
     await pool.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_payment_intent
       ON orders(payment_intent_id) WHERE payment_intent_id IS NOT NULL
-    `);
-
-    await pool.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_payment_intent
-      ON payments(payment_intent_id) WHERE payment_intent_id IS NOT NULL
     `);
 
     // Seed the 3 tiers — safe to re-run on every restart

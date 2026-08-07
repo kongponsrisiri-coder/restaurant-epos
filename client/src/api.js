@@ -169,10 +169,6 @@ export const getMenu = async () => {
 export const getAllMenu = () => get('/api/menu/all');
 export const addMenuItem = (item) => post('/api/menu/items', item);
 export const updateMenuItem = (id, item) => put(`/api/menu/items/${id}`, item);
-// SEPOS-MENU-PHOTO-001 — dish photos the owner uploads themselves.
-export const uploadMenuItemImage = (id, dataUrl) => post(`/api/menu/items/${id}/image`, { data: dataUrl });
-export const deleteMenuItemImage = (id) => del(`/api/menu/items/${id}/image`);
-
 // SEPOS-ANDROID-002 — "promote" a cloud order into the local store so a table
 // opened BEFORE the outage can still be edited offline. Keyed by its own
 // (stringified) cloud id and carries cloud_id, so the sync engine later pushes

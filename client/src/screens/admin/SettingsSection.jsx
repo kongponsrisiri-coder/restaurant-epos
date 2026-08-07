@@ -1297,9 +1297,14 @@ export default function SettingsSection() {
             <div style={{ fontSize:11, color:'#aaa', marginTop:4 }}>Appears at the bottom of every printed receipt</div>
           </div>
           <div>
-            <label style={labelStyle}>Google Review Link</label>
+            <label style={labelStyle}>Receipt QR Link</label>
             <input value={settings.google_review_url||''} onChange={e => setSettings({...settings, google_review_url:e.target.value})} placeholder="https://g.page/r/your-google-review-link" style={inputStyle} />
-            <div style={{ fontSize:11, color:'#aaa', marginTop:4 }}>If set, a QR code linking to this URL prints at the bottom of every receipt</div>
+            <div style={{ fontSize:11, color:'#aaa', marginTop:4 }}>If set, a QR code linking to this URL prints at the bottom of every receipt — your Google review page, a promotion page, your menu, anything</div>
+          </div>
+          <div>
+            <label style={labelStyle}>Receipt QR Caption</label>
+            <input value={settings.receipt_qr_caption||''} onChange={e => setSettings({...settings, receipt_qr_caption:e.target.value})} placeholder="Scan to leave us a review" style={inputStyle} />
+            <div style={{ fontSize:11, color:'#aaa', marginTop:4 }}>The line printed under the QR code — match it to where the link goes</div>
           </div>
         </div>
       </div>
@@ -1318,7 +1323,9 @@ export default function SettingsSection() {
                 }} />
               </div>
             )}
-            <div style={{ textAlign:'center', fontWeight:900, fontSize:14, marginBottom:2 }}>{settings.company_name||'Restaurant Name'}</div>
+            {(settings.company_name||'').trim()
+              ? <div style={{ textAlign:'center', fontWeight:900, fontSize:14, marginBottom:2 }}>{settings.company_name}</div>
+              : (!logoPreview && <div style={{ textAlign:'center', fontWeight:900, fontSize:14, marginBottom:2 }}>Restaurant Name</div>)}
             {settings.company_address && <div style={{ textAlign:'center', fontSize:10, color:'#555', marginBottom:2 }}>{settings.company_address}</div>}
             {settings.company_phone   && <div style={{ textAlign:'center', fontSize:10, color:'#555', marginBottom:2 }}>Tel: {settings.company_phone}</div>}
             {settings.company_vat     && <div style={{ textAlign:'center', fontSize:10, color:'#555', marginBottom:4 }}>VAT: {settings.company_vat}</div>}
@@ -1334,7 +1341,7 @@ export default function SettingsSection() {
             {settings.google_review_url && (
               <div style={{ textAlign:'center', marginTop:6 }}>
                 {reviewQr && <img src={reviewQr} alt="Review QR" style={{ width:64, height:64, imageRendering:'pixelated' }} />}
-                <div style={{ fontSize:9, color:'#666', marginTop:3 }}>Scan to leave us a review</div>
+                <div style={{ fontSize:9, color:'#666', marginTop:3 }}>{settings.receipt_qr_caption||'Scan to leave us a review'}</div>
               </div>
             )}
           </div>

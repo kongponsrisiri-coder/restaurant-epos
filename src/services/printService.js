@@ -180,7 +180,14 @@ function qrCode(data, { size = 6, ec = 49 } = {}) {
 // ── Receipt formatter ─────────────────────────────────────────────────────────
 
 function buildReceipt({ order, items, settings, paymentDetails = {} }) {
-  const name    = settings.company_name    || settings.restaurant_name || 'SiamEPOS';
+  // Receipt name — the owner-edited company_name is authoritative: once the
+  // key exists, what they typed is what prints, INCLUDING blank (logo-only
+  // receipts — Korakot 2026-08-07: blanking the name must not dig up the
+  // legacy hidden restaurant_name key, which held a stale brand). The
+  // restaurant_name fallback only serves installs that pre-date company_name.
+  const name    = (settings.company_name !== undefined && settings.company_name !== null)
+    ? String(settings.company_name).trim()
+    : (String(settings.restaurant_name || '').trim() || 'SiamEPOS');
   const addr    = settings.company_address || '';
   const phone   = settings.company_phone   || '';
   const vatNo   = settings.company_vat     || '';
@@ -304,7 +311,7 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
     CMD.INIT,
     ...logoBlock,
     CMD.ALIGN_CENTER,
-    CMD.BOLD_ON, ...nameSize, txt(name), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    name ? [CMD.BOLD_ON, ...nameSize, txt(name), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
     addr   ? [txt(addr),            lf()] : [],
     phone  ? [txt('Tel: ' + phone), lf()] : [],
     vatNo  ? [txt('VAT: ' + vatNo), lf()] : [],
@@ -404,7 +411,7 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
       CMD.ALIGN_CENTER,
       qrCode(settings.google_review_url),
       lf(),
-      txt('Scan to leave us a review'), lf(3),
+      txt(String(settings.receipt_qr_caption || 'Scan to leave us a review').slice(0, 42)), lf(3),
     ] : [],
 
     CMD.CUT,

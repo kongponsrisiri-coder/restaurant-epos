@@ -7519,8 +7519,27 @@ app.get('/api/qr/sheet', async (req, res) => {
     const nameRes = await pool.query(`SELECT value FROM settings WHERE key IN ('restaurant_name','company_name') AND COALESCE(value,'') <> '' ORDER BY key = 'company_name' DESC LIMIT 1`);
     const rName = nameRes.rows[0]?.value || 'SiamEPOS';
     const tRes = await pool.query(`SELECT id, table_number, name FROM tables WHERE COALESCE(is_takeaway,0) = 0 ORDER BY table_number`);
+    // SEPOS-QR-SHEET-ORDER — Korakot, 2026-08-07: sorting by the internal
+    // table_number interleaved the sheet ("Bar 1, Table 1, Bar 2, Table 2,
+    // Table 3…, Bar 3…"), because "Bar 2" IS table_number 2. You print this,
+    // cut it up and laminate it, so it has to come out grouped and counting
+    // up. Natural sort: group by the name's text prefix, then by its trailing
+    // number numerically (so Bar 10 follows Bar 9, not Bar 1). Unnamed tables
+    // fall back to their number.
+    const sortKey = (t) => {
+      const label = (t.name && String(t.name).trim()) ? String(t.name).trim() : `Table ${t.table_number}`;
+      const m = /^(.*?)(\d+)\s*$/.exec(label);
+      return {
+        prefix: (m ? m[1] : label).trim().toLowerCase(),
+        num: m ? Number(m[2]) : Number.MAX_SAFE_INTEGER,
+        label,
+      };
+    };
+    const sorted = tRes.rows.map(t => ({ t, k: sortKey(t) })).sort((a, b) =>
+      a.k.prefix.localeCompare(b.k.prefix) || a.k.num - b.k.num || a.k.label.localeCompare(b.k.label)
+    ).map(x => x.t);
     const cards = [];
-    for (const t of tRes.rows) {
+    for (const t of sorted) {
       const label = (t.name && String(t.name).trim()) ? t.name : `Table ${t.table_number}`;
       const url = `${base}/qr/t/${qrToken(t.id)}`;
       const svg = await QRCode.toString(url, { type: 'svg', margin: 1, width: 240 });

@@ -76,7 +76,7 @@ function snapshotOrder(order) {
   if (!order) return {};
   // Only what the ticket renderers actually use — small + stable.
   const o = {};
-  for (const k of ['id', 'table_number', 'order_type', 'order_subtype', 'customer_name',
+  for (const k of ['id', 'table_number', 'table_label', 'order_type', 'order_subtype', 'customer_name',
                    'customer_phone', 'delivery_address', 'notes', 'created_at']) {
     if (order[k] !== undefined) o[k] = order[k];
   }
@@ -86,6 +86,8 @@ function snapshotOrder(order) {
 function buildOrderLabel(order) {
   if (!order) return '';
   if (order.order_type === 'takeaway') return `Online #${order.id} · ${order.customer_name || ''}`.trim();
+  const label = order.table_label && String(order.table_label).trim();
+  if (label) return label; // table NAME wins over the raw number (Bar 2 ≠ Table 2)
   return order.table_number ? `Table ${order.table_number}` : `Order #${order.id}`;
 }
 

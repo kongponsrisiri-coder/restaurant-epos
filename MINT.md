@@ -3,6 +3,10 @@
 
 ---
 
+## 📌 RESUME A PRIOR CHAT
+Korakot may say "read the transcript and continue." Full saved chat + resume brief:
+`~/Documents/SiamEPOS-Docs/social/MINT-CHAT-TRANSCRIPT-2026-08-07.md` (brief at top, then full verbatim transcript). Short brief + PDF: `MINT-RESUME-BRIEF-2026-08-07.{md,pdf}`. Read the brief first, then continue.
+
 ## ⚠️ START OF EVERY SESSION — DO THIS FIRST
 1. Read `TEAM-STATUS.md` — see what the whole team is working on
 2. Add yourself to the "Active Work" table if starting client work

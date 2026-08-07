@@ -649,7 +649,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           }}>
             <div style={{ textAlign: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>
-                Table {tableActionPopup.table.table_number}
+                {(() => { const l = tableLabel(tableActionPopup.table); return typeof l === 'string' ? l : `Table ${l}`; })()}
               </div>
               <div style={{ color: '#888', fontSize: 14 }}>
                 {tableActionPopup.order.covers} covers · £{Number(tableActionPopup.order.total || 0).toFixed(2)}
@@ -741,7 +741,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           }}>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
-                Table {showCoversPopup.table_number}
+                {(() => { const l = tableLabel(showCoversPopup); return typeof l === 'string' ? l : `Table ${l}`; })()}
               </div>
               <div style={{ color: '#888', fontSize: 14 }}>How many covers?</div>
             </div>

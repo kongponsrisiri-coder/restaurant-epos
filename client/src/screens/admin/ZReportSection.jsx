@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getSettings } from '../../api';
+import { dineTableLabel } from '../../utils/orderLabel';
 import {
   thermalPrint, fullPagePrint, escPosPrint, pageHtml,
   fmt, fmtInt, restaurantName, nowStamp,
@@ -94,7 +95,7 @@ export default function ZReportSection() {
     if (openTables.length > 0 || openTakeaway.length > 0) {
       const msg = [
         openTables.length > 0
-          ? `⚠️ ${openTables.length} table${openTables.length>1?'s':''} still open:\n` + openTables.map(o => `Table ${o.table_number}`).join(', ')
+          ? `⚠️ ${openTables.length} table${openTables.length>1?'s':''} still open:\n` + openTables.map(o => dineTableLabel(o)).join(', ')
           : '',
         openTakeaway.length > 0
           ? `\n\n🥡 ${openTakeaway.length} takeaway order${openTakeaway.length>1?'s':''} not collected:\n` + openTakeaway.map(o => `#${o.id}${o.customer_name ? ' · '+o.customer_name : ''}`).join(', ')
@@ -361,7 +362,7 @@ export default function ZReportSection() {
                 {openTables.length > 0 && (
                   <>
                     <div style={{ fontWeight: 700, color: '#713f12', marginBottom: 4 }}>⚠️ {openTables.length} table{openTables.length>1?'s':''} still open!</div>
-                    <div style={{ fontSize: 13, color: '#92400e', marginBottom: openTakeaway.length > 0 ? 10 : 0 }}>{openTables.map(o => `Table ${o.table_number}`).join(' · ')}</div>
+                    <div style={{ fontSize: 13, color: '#92400e', marginBottom: openTakeaway.length > 0 ? 10 : 0 }}>{openTables.map(o => dineTableLabel(o)).join(' · ')}</div>
                   </>
                 )}
                 {openTakeaway.length > 0 && (

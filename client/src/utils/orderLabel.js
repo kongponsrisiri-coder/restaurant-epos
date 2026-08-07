@@ -35,6 +35,14 @@ function dineInLabel(order) {
   return label || `Table ${order.table_number ?? '—'}`;
 }
 
+// Exported for screens that show a table heading on an ORDER row (OrderScreen,
+// Bills, Reports, Z…). Every surface must use this instead of building
+// `Table ${order.table_number}` by hand — that's how "Bar 2" leaks as
+// "Table 2" (the 2026-08-07 sweep). For a TABLE object use tableLabel(t).
+export function dineTableLabel(order) {
+  return dineInLabel(order || {});
+}
+
 export function orderShortLabel(order) {
   if (!order) return '—';
   if (isTakeawayTable(order)) return `🥡 Takeaway ${order.table_number}`;

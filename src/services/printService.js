@@ -604,8 +604,12 @@ function wrapDeliveryAddress(address) {
 // Distinctive layout (📢 banner, large heading, big-text message body)
 // so the chef notices immediately. Different from a regular kitchen
 // ticket — no items, no course header, just the waiter's message.
-function buildKitchenMessage({ order_id, table_number, order_type, customer_name, message, waiter_name }) {
-  const heading = table_number ? `TABLE ${table_number}`
+function buildKitchenMessage({ order_id, table_number, table_label, order_type, customer_name, message, waiter_name }) {
+  // Table NAME wins over the raw number ("Bar 2" is table_number 2 — the
+  // chef knows the name, not the internal number). Same rule as tableHeading.
+  const label = table_label && String(table_label).trim();
+  const heading = label ? label.toUpperCase()
+                : table_number ? `TABLE ${table_number}`
                 : order_type === 'takeaway' ? `TAKEAWAY${order_id ? ' #' + order_id : ''}`
                 : 'KITCHEN MESSAGE';
   const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });

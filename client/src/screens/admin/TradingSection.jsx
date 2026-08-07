@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getSummaryReport } from '../../api';
 import { today, getDateRange } from './shared';
+import { dineTableLabel } from '../../utils/orderLabel';
 
 export default function TradingSection() {
   const [period, setPeriod] = useState('today');
@@ -113,7 +114,7 @@ export default function TradingSection() {
                 // the Trading summary's Recent Orders list matches Bills /
                 // Reports — operators reference by Table + time, not bill #.
                 <div key={order.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0', fontSize: 14 }}>
-                  <span style={{ color: '#555' }}>Table {order.table_number} · {order.method}</span>
+                  <span style={{ color: '#555' }}>{order.order_type === 'takeaway' ? `🥡 ${order.customer_name || 'Takeaway'}` : dineTableLabel(order)} · {order.method}</span>
                   <span style={{ fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>£{Number(order.paid_amount ?? order.total ?? 0).toFixed(2)}</span>
                 </div>
               ))}

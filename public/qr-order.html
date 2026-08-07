@@ -61,6 +61,13 @@
   .morebtn { width:100%; background:#fff; color:var(--brand); border:2px solid var(--brand); border-radius:13px; font-weight:800; font-size:15px; padding:13px; margin-top:16px; }
   .err { background:#fde8e8; color:#b02a2a; border-radius:10px; padding:12px; margin:12px; font-size:13.5px; font-weight:600; }
   #payel { margin-top:12px; }
+  /* SiamPay brand bar — the payment step names its payment solution, like any
+     hosted checkout's top bar. Copy rule: "powered by Stripe", nothing more. */
+  .sp-bar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:14px; padding:11px 14px; border:1px solid #e3e6ea; border-radius:12px; background:#fafbfc; }
+  .sp-name { font-weight:800; font-size:15.5px; color:#1a1a2e; letter-spacing:.2px; }
+  .sp-name b { color:#c9a227; }
+  .sp-sub { font-size:12px; color:#6b7280; white-space:nowrap; }
+  .sp-sub b { color:#635bff; font-weight:700; }
   .spin { text-align:center; padding:60px 20px; color:#888; }
 </style>
 </head>
@@ -218,6 +225,7 @@
         '<span class="step" style="margin-top:6px"><button data-dec="' + c.uid + '">−</button><span>' + c.quantity + '</span><button data-inc="' + c.uid + '">＋</button></span></div></div>';
     }
     h += '<div class="totrow"><span>Total</span><span>' + fmt(cartTotal()) + '</span></div>';
+    h += '<div class="sp-bar"><span class="sp-name">Siam<b>Pay</b></span><span class="sp-sub">🔒 Secure checkout · powered by <b>Stripe</b></span></div>';
     h += '<div id="payel"></div>';
     // Real-card mode: the Stripe element mounts ASYNC (config → js.stripe.com →
     // payment-intent → mount). Until its 'ready' fires the button stays disabled,

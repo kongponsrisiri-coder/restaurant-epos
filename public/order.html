@@ -60,6 +60,13 @@
   .morebtn { width:100%; background:#fff; color:var(--brand); border:2px solid var(--brand); border-radius:13px; font-weight:800; font-size:15px; padding:13px; margin-top:16px; }
   .err { background:#fde8e8; color:#b02a2a; border-radius:10px; padding:12px; margin:12px 0; font-size:13.5px; font-weight:600; }
   #payel { margin-top:12px; }
+  /* SiamPay brand bar — the payment step names its payment solution, like any
+     hosted checkout's top bar. Copy rule: "powered by Stripe", nothing more. */
+  .sp-bar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:14px; padding:11px 14px; border:1px solid #e3e6ea; border-radius:12px; background:#fafbfc; }
+  .sp-name { font-weight:800; font-size:15.5px; color:#1a1a2e; letter-spacing:.2px; }
+  .sp-name b { color:#c9a227; }
+  .sp-sub { font-size:12px; color:#6b7280; white-space:nowrap; }
+  .sp-sub b { color:#635bff; font-weight:700; }
   .spin { text-align:center; padding:60px 20px; color:#888; }
 </style>
 </head>
@@ -216,8 +223,12 @@
       '<input id="c-name" placeholder="Your name *" value="' + esc(contact.name) + '">' +
       '<input id="c-phone" placeholder="Mobile number *" inputmode="tel" value="' + esc(contact.phone) + '">' +
       '<input id="c-email" placeholder="Email (for confirmation — optional)" inputmode="email" value="' + esc(contact.email) + '"></div>';
+    h += '<div class="sp-bar"><span class="sp-name">Siam<b>Pay</b></span><span class="sp-sub">🔒 Secure checkout · powered by <b>Stripe</b></span></div>';
     h += '<div id="payel"></div>';
-    h += '<button class="paybtn" id="paybtn">' + (stripeCfg && stripeCfg.configured ? 'Pay ' + fmt(cartTotal()) + ' & place order' : 'Place order (demo — no payment)') + '</button>';
+    // Same fix as the QR page (a568bbb): the Stripe element mounts async, so
+    // the button holds until its 'ready' — else a fast first tap confirms an
+    // empty form.
+    h += '<button class="paybtn" id="paybtn"' + (stripeCfg && stripeCfg.configured ? ' disabled' : '') + '>' + (stripeCfg && stripeCfg.configured ? 'Loading secure payment…' : 'Place order (demo — no payment)') + '</button>';
     h += '<div class="muted">' + (stripeCfg && stripeCfg.configured ? 'Paid securely by card · Apple Pay · Google Pay' : 'Demo mode — payment is simulated') + '</div>';
     h += '<button class="morebtn" id="closecart">← Back to menu</button>';
     h += '</div></div>';
@@ -279,7 +290,12 @@
       if (pi.error) { $('#payel').innerHTML = '<div class="err">' + esc(pi.error) + '</div>'; return; }
       window.__ord_pi = pi;
       elements = stripe.elements({ clientSecret: pi.client_secret });
-      elements.create('payment').mount('#payel');
+      const payEl = elements.create('payment');
+      payEl.mount('#payel');
+      payEl.on('ready', () => {
+        const pb = $('#paybtn');
+        if (pb && !payBusy) { pb.disabled = false; pb.textContent = 'Pay ' + fmt(cartTotal()) + ' & place order'; }
+      });
     } catch (e) { $('#payel').innerHTML = '<div class="err">Card form failed to load — please try again.</div>'; }
   }
 
@@ -291,6 +307,7 @@
     try {
       let piId = null;
       if (stripeCfg && stripeCfg.configured) {
+        if (!elements) throw new Error('The card form is still loading — one moment.');
         const { error } = await stripe.confirmPayment({ elements, redirect: 'if_required' });
         if (error) throw new Error(error.message || 'Payment failed');
         piId = window.__ord_pi.payment_intent_id;
@@ -307,7 +324,10 @@
     } catch (e) {
       payBusy = false;
       const pb2 = $('#paybtn'); if (pb2) { pb2.disabled = false; pb2.textContent = 'Try again'; }
-      const pe = $('#payel'); if (pe) pe.insertAdjacentHTML('beforebegin', '<div class="err">' + esc(e.message) + '</div>');
+      // One error banner at a time (same fix as the QR page).
+      const pe = $('#payel');
+      if (pe && pe.parentElement) pe.parentElement.querySelectorAll(':scope > .err').forEach((n) => n.remove());
+      if (pe) pe.insertAdjacentHTML('beforebegin', '<div class="err">' + esc(e.message) + '</div>');
       return;
     }
     payBusy = false;

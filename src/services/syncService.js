@@ -1003,6 +1003,7 @@ async function pullFromCloud() {
 
   // Closed orders + items + payments — gated by SYNC_SECRET.
   await pullClosedOrders();
+  await repairMissingClosedPayments();
 
   // Active (open) orders + items + payments — also gated by SYNC_SECRET.
   // Enables bidirectional sync: orders Chrome creates now show up on the Mac.
@@ -1188,8 +1189,40 @@ async function pullActiveOrders() {
     }
   }
 
-  if (inserted || updated || itemsInserted || itemsUpdated || skippedPending || skippedDelete) {
-    console.log(`[sync] active-orders: ${inserted}+${updated} orders, ${itemsInserted}+${itemsUpdated} items${itemsSkipped ? ` (${itemsSkipped} item-skips, parent not yet pulled)` : ''}${skippedPending ? ` (${skippedPending} skipped — local pending)` : ''}${skippedDelete ? ` (${skippedDelete} skipped — pending delete push)` : ''}`);
+  // ── Payments (SEPOS-SYNC-TENDERS-001) ─────────────────────────────────
+  // The active-orders feed has ALWAYS carried payments — server.js sends them —
+  // but this puller destructured the array and dropped it. A QR round is paid
+  // on the customer's phone, i.e. on the CLOUD, so the till received the order
+  // with no tender behind it. Live proof (Korakot's till, 2026-08-07): closed
+  // orders #113/#114 arrived with £0 recorded against £51.70 and £37.90 taken —
+  // invisible in the till's Bills and missing from its Z.
+  let paysInserted = 0, paysSkipped = 0;
+  if (payments.length) {
+    const payColsRow = await pool.query('PRAGMA table_info(payments)');
+    const payCols = payColsRow.rows.map(r => r.name);
+    if (!payCols.includes('cloud_id')) {
+      console.warn('[sync] payments.cloud_id missing — skipping tender mirror until the migration runs');
+    } else {
+      for (const cloudPay of payments) {
+        const localOrder = await pool.query('SELECT id FROM orders WHERE cloud_id = $1', [cloudPay.order_id]);
+        const localOrderId = localOrder.rows[0]?.id;
+        if (!localOrderId) { paysSkipped++; continue; }                       // parent not pulled yet
+        if (pendingOrderIds.has(localOrderId)) { paysSkipped++; continue; }   // till is authoritative
+        const existing = await pool.query('SELECT id FROM payments WHERE cloud_id = $1', [cloudPay.id]);
+        if (existing.rows[0]) continue;
+        const fields = pickFields(cloudPay, payCols, { order_id: localOrderId, cloud_id: cloudPay.id });
+        const cols = Object.keys(fields);
+        try {
+          await pool.query(`INSERT INTO payments (${cols.join(',')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(',')})`,
+            cols.map(c => fields[c]));
+          paysInserted++;
+        } catch (err) { console.warn('[sync] active-order payment insert failed:', err.message); }
+      }
+    }
+  }
+
+  if (inserted || updated || itemsInserted || itemsUpdated || skippedPending || skippedDelete || paysInserted) {
+    console.log(`[sync] active-orders: ${inserted}+${updated} orders, ${itemsInserted}+${itemsUpdated} items${paysInserted ? `, ${paysInserted} payments` : ''}${itemsSkipped ? ` (${itemsSkipped} item-skips, parent not yet pulled)` : ''}${skippedPending ? ` (${skippedPending} skipped — local pending)` : ''}${skippedDelete ? ` (${skippedDelete} skipped — pending delete push)` : ''}`);
   }
 
 }
@@ -1290,6 +1323,21 @@ async function writeSyncState(key, value) {
 // are delete-and-replaced — a closed order is terminal so there are no
 // local edits to preserve, and a clean replace is naturally idempotent
 // (re-pulling the same closed order can't accumulate duplicate items).
+// Build an INSERT/UPDATE-safe field map: known columns only, drop the cloud
+// `id` and `order_id` (we map those ourselves), drop nulls so a cloud null
+// can't clobber a local default. Module-scoped: both the closed-order upsert
+// and the active-order payment mirror use it.
+function pickFields(row, cols, extra) {
+  const f = { ...extra };
+  for (const [k, v] of Object.entries(row)) {
+    if (k === 'id' || k === 'order_id') continue;
+    if (!cols.includes(k)) continue;
+    if (v === null || v === undefined) continue;
+    f[k] = v;
+  }
+  return f;
+}
+
 async function upsertClosedOrders(orders, order_items, payments) {
   const orderCols = (await pool.query('PRAGMA table_info(orders)')).rows.map(r => r.name);
   const itemCols  = (await pool.query('PRAGMA table_info(order_items)')).rows.map(r => r.name);
@@ -1300,20 +1348,6 @@ async function upsertClosedOrders(orders, order_items, payments) {
   for (const it of order_items) (itemsByCloudOrder[it.order_id] ||= []).push(it);
   const paysByCloudOrder = {};
   for (const p of payments) (paysByCloudOrder[p.order_id] ||= []).push(p);
-
-  // Build an INSERT/UPDATE-safe field map: known columns only, drop the
-  // cloud `id` and `order_id` (we map those ourselves), drop nulls so a
-  // cloud null can't clobber a local default.
-  const pickFields = (row, cols, extra) => {
-    const f = { ...extra };
-    for (const [k, v] of Object.entries(row)) {
-      if (k === 'id' || k === 'order_id') continue;
-      if (!cols.includes(k)) continue;
-      if (v === null || v === undefined) continue;
-      f[k] = v;
-    }
-    return f;
-  };
 
   let skipped = 0, closedApplied = 0;
   // SEPOS-047f — local orders with a pending push are authoritative; never
@@ -1340,7 +1374,21 @@ async function upsertClosedOrders(orders, order_items, payments) {
       // pending mutation for it.
       const stRes = await pool.query('SELECT status FROM orders WHERE id = $1', [localId]);
       const localStatus = stRes.rows[0]?.status;
-      if (localStatus === 'open' && !pendingOrderIds.has(Number(localId))) {
+      // SEPOS-SYNC-TENDERS-001 — the GHOST-002 reconciler mirrors a cloud-closed
+      // order to status='closed' locally the moment it sees it, which is BEFORE
+      // this pull reaches it. The 'open' test then skipped it forever and its
+      // payments never landed — the exact failure Korakot hit on 2026-08-07
+      // (local #113/#114 closed with zero tenders against £51.70/£37.90 taken).
+      // So also apply when the local row is closed but has NO tenders while the
+      // cloud copy does: that combination only happens when we mirrored a
+      // status without ever receiving the money behind it.
+      let moneyMissingLocally = false;
+      if (localStatus && localStatus !== 'open' && (paysByCloudOrder[cloudId] || []).length) {
+        const localPays = await pool.query('SELECT COUNT(*) AS n FROM payments WHERE order_id = $1', [localId]);
+        moneyMissingLocally = Number(localPays.rows[0]?.n || 0) === 0;
+        if (moneyMissingLocally) console.log(`[sync] closed order local#${localId} (cloud#${cloudId}) has no tenders — filling them in`);
+      }
+      if ((localStatus === 'open' || moneyMissingLocally) && !pendingOrderIds.has(Number(localId))) {
         const setCols = Object.keys(fields).filter(k => k !== 'cloud_id');
         if (setCols.length > 0) {
           const sets = setCols.map((c, i) => `${c} = $${i + 1}`).join(',');
@@ -1389,6 +1437,45 @@ async function upsertClosedOrders(orders, order_items, payments) {
     }
   }
   if (skipped > 0 || closedApplied > 0) console.log(`[sync] closed-orders: ${closedApplied} applied (cloud-closed), ${skipped} skipped (already local — Phase 2)`);
+}
+
+// SEPOS-SYNC-TENDERS-001 — repair pass for orders stranded BEFORE this fix
+// existed. The closed-orders cursor only moves forward, so an order that was
+// skipped once is never revisited: Korakot's #113/#114 would stay tender-less
+// forever. This looks for recent local closed orders with no tenders at all and
+// re-requests just those, by cloud id. Cheap (bounded, and only ever finds
+// something when there is a real gap).
+async function repairMissingClosedPayments() {
+  if (!offlineQueue.isLocal || !CLOUD_API_URL || !process.env.SYNC_SECRET) return;
+  try {
+    const colRes = await pool.query('PRAGMA table_info(payments)');
+    if (!colRes.rows.map(r => r.name).includes('cloud_id')) return;
+    const gaps = await pool.query(
+      `SELECT o.id, o.cloud_id FROM orders o
+        WHERE o.status = 'closed' AND o.cloud_id IS NOT NULL AND o.total > 0
+          AND o.closed_at > datetime('now', '-3 days')
+          AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id)
+        LIMIT 25`);
+    if (!gaps.rows.length) return;
+    console.log(`[sync] repairing ${gaps.rows.length} closed order(s) that have no tenders locally`);
+    const payCols = colRes.rows.map(r => r.name);
+    for (const row of gaps.rows) {
+      try {
+        const r = await fetch(`${CLOUD_API_URL}/api/sync/order-payments/${row.cloud_id}`, {
+          headers: { 'x-sync-secret': process.env.SYNC_SECRET }, signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+        });
+        if (!r.ok) continue;
+        const pays = await r.json();
+        for (const p of (Array.isArray(pays) ? pays : [])) {
+          const f = pickFields(p, payCols, { order_id: row.id, cloud_id: p.id });
+          const cols = Object.keys(f);
+          await pool.query(`INSERT INTO payments (${cols.join(',')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(',')})`,
+            cols.map(c => f[c])).catch(() => {});
+        }
+        console.log(`[sync] repaired local#${row.id} (cloud#${row.cloud_id}) — ${(pays || []).length} tender(s)`);
+      } catch { /* try again next tick */ }
+    }
+  } catch (err) { console.warn('[sync] repairMissingClosedPayments:', err.message); }
 }
 
 async function pullClosedOrders() {

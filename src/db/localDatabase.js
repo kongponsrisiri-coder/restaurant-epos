@@ -800,10 +800,13 @@ function runMigrations() {
   addColumnIfMissing('order_items', 'cloud_id', 'INTEGER');
   // SEPOS-QR-RECEIPT-001 — the tender that paid for this line (per-round receipts).
   addColumnIfMissing('order_items', 'payment_id', 'INTEGER');
+  // SEPOS-SYNC-TENDERS-001 — cloud id of a mirrored tender (see syncService).
+  addColumnIfMissing('payments', 'cloud_id', 'INTEGER');
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_cloud_id      ON orders(cloud_id)      WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] orders.cloud_id index:', err.message); }
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_order_items_cloud_id ON order_items(cloud_id) WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] order_items.cloud_id index:', err.message); }
   // SEPOS-047b — one Stripe PaymentIntent settles exactly one takeaway order.
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_payment_intent ON orders(payment_intent_id) WHERE payment_intent_id IS NOT NULL'); } catch (err) { console.warn('[db:local] orders.payment_intent index:', err.message); }
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_cloud_id ON payments(cloud_id) WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] payments.cloud_id index:', err.message); }
   // SEPOS-053 — the trading session an order closed under + its cloud binding.
   addColumnIfMissing('orders', 'session_id', 'INTEGER');
   addColumnIfMissing('till_sessions', 'cloud_id', 'INTEGER');

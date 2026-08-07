@@ -9872,6 +9872,21 @@ app.get('/api/sync/closed-orders', async (req, res) => {
 // closed_at yet; we just return the full set. Restaurants with more than
 // a few hundred concurrent open tabs would need pagination, which we'll
 // add when someone actually has that problem.
+// SEPOS-SYNC-TENDERS-001 — tenders for ONE order, by cloud id. Lets a till
+// repair an order whose payments never landed, without replaying whole pages of
+// closed-order history (the cursor only moves forward, so a skipped order is
+// otherwise stranded for good).
+app.get('/api/sync/order-payments/:id', async (req, res) => {
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected) return res.status(503).json({ error: 'SYNC_SECRET not set on this server' });
+  if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+  try {
+    const r = await pool.query('SELECT * FROM payments WHERE order_id = $1 ORDER BY id', [req.params.id]);
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/sync/active-orders', async (req, res) => {
   const provided = req.get('x-sync-secret') || '';
   const expected = process.env.SYNC_SECRET || '';

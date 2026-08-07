@@ -369,6 +369,13 @@ async function initDB() {
       )
     `);
 
+    // SEPOS-SYNC-TENDERS-001 — the cloud id of a tender. A customer-paid order
+    // (QR round, online prepay) is created and PAID on the cloud, so the till
+    // has to mirror the payment rows down. Matching them on (order, amount,
+    // method) would silently merge two genuine identical tenders, so they are
+    // keyed on the cloud id.
+    await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS cloud_id INTEGER`);
+
     // SEPOS-042: audit log for manager-authorised order deletions.
     // The order itself disappears but this row is the paper trail —
     // who deleted it, when, the total at deletion time, and why.

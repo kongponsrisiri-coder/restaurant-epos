@@ -247,7 +247,8 @@ Going with **domain bundling, NOT a Namecheap affiliate program.** SiamEPOS regi
   crash + packaged app has no engine log file (both slowed the Windows
   diagnosis); Google Wallet issuer setup guide for Korakot (Android passes).
 
-## 📨 FOR KRIT — small queue for the NEXT spa desktop build (v0.2.43, no rush) (Sam, 2026-07-18 eve)
+## ✅ CLOSED (verified 2026-08-07) — was: FOR KRIT, queue for spa build v0.2.43 (Sam, 2026-07-18)
+> **Done long ago — spa is on v0.2.47.** Kept below for history only; nothing here is outstanding.
 
 Nothing urgent — bundle these when you next cut: `2813550` fixes Treatwell
 settle on an offline till (removed from the offline gate — £0 taken, nothing
@@ -258,7 +259,8 @@ Browser tills + both clouds already have all of it. Highbury's client tests
 Treatwell settle at checkout tomorrow (Sun 07-19) on the WEB till, so the fix
 is live for them regardless.
 
-## 🎉 HIGHBURY IS LIVE + 📨 NEW TICKET FOR KRIT — first WINDOWS spa till build (Sam, 2026-07-19)
+## ✅ CLOSED (verified 2026-08-07) — was: FOR KRIT, first WINDOWS spa till build (Sam, 2026-07-19)
+> **Done.** The spa release pipeline has a `windows-latest` job and every recent tag ships `SiamEPOS-Spa-X-Setup.exe` (verified on the v0.2.45/46/47 GitHub releases). Highbury remains live.
 
 **Highbury Thai Massage went live today.** Final data migration demo→Highbury done
 (178 clients / 292 appts / 175 bills; their 5 website vouchers + online booking
@@ -286,7 +288,7 @@ Web till keeps them alive meanwhile — the desktop build is their offline cover
 - **📣 KORAKOT'S STANDING RULE (all lanes):** when you ship an update, deploy it to **every** deployment — all client clouds, all client frontends, till build — unless the change is client-specific. No more partial rollouts.
 - First live test hiccup resolved: tester had the loyalty toggle Off → all-quiet by design; retest under way.
 
-## ✅ SPA-LOYALTY-001 SHIPPED — all layers + 📨 HANDOFF FOR KRIT: cut spa desktop v0.2.42 (Sam, 2026-07-18)
+## ✅ SPA-LOYALTY-001 SHIPPED — handoff CLOSED (verified 2026-08-07: spa is on v0.2.47, well past the requested v0.2.42) (Sam, 2026-07-18)
 
 **Loyalty card is BUILT, TESTED and DEPLOYED** — spa repo `main` @ `c270f86` (+`e1ac5cc` version bump). All three layers in one go: auto visit-counting on bill close (**direct bookings only** — Treatwell/Fresha never stamp; ladder rewards config in Settings → Loyalty; min-spend; refund reversal; till⇄cloud sync via the offline queue), **Layer 1** post-visit Brevo progress email ("visit 7 — 3 more for your free massage"), **Layer 2** Apple Wallet loyalty pass **with the full pass-update web service + APNs push** (live "7 / 10" on the phone; voucher passes now live-update too — SEPOS-WALLET-001 P2 un-deferred, zero new env: reuses PASS_SIGNER_* certs), **Layer 3** checkout ⭐ banner with one-tap redeem + client-card progress + Settings ladder editor. Verified 41/41 (real PG schema) + 9/9 (encrypted SQLite till path).
 - **Deployed:** main Siam-Spa cloud (auto) ✅ + **Highbury `railway up` with `c270f86`** ✅ (this deploy also finally ships the Fresha ingest `6b77693` to Highbury — that TODO clears).
@@ -388,7 +390,8 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 > **⚠️ DEPLOY REALITY (this is why it's yours to ship, not just merge):** merge → main → **Railway redeploys the CLOUD spa API** (fixes the widget/concierge/reports/GDPR paths on the cloud). But **S1 + the local reschedule branch only reach the live Highbury TILL via a spa Electron release** (`siamepos-spa-releases` channel) — a Railway deploy alone does NOT update the till's local SQLite/code. So the full fix = **(1) merge + verify the Railway deploy, then (2) cut a spa app release for the till.** Given it's a live medical/GDPR client, ship on your judgement + Korakot's go. Krit's approval covers the code correctness only.
 > **Original Nook handoff note preserved below.**
 
-### 📨 (original) HANDOFF FOR KRIT — Spa Stability Audit results (Nook, 2026-07-14)
+### ✅ CLOSED (verified 2026-08-07) — was: HANDOFF FOR KRIT, Spa Stability Audit (Nook, 2026-07-14)
+> **Nook's 9 fixes (`035f638`) are already merged into spa `main` and shipped in tag `v0.2.40`** — this sat on the board as "please review + ship" for three weeks after it had shipped. The items Nook deliberately left to Krit (sync-push class Y1–Y7, R1 timezone port, R2 VAT snapshot, the Stripe money-lifecycle set W2/X3/M3, W4/W5/W6) are **still genuinely open** — see the list below.
 
 > **▶️ Nook, 2026-07-14 — 9 fixes on PR #29** (`nook/spa-audit-fixes`, commit `035f638`, pushed to origin). Review: `cd ~/Desktop/siamepos-spa && git diff main...nook/spa-audit-fixes`.
 > Merging to `main` + a Railway deploy ships the backend fixes to the **live Highbury till** — your call / confirm with Korakot. Pushing the branch itself did NOT deploy anything (release.yml is tags-only; Railway/Netlify deploy from main). All 9 verified (throwaway PG + sqlite3, server boots clean). Nothing urgent-broken; take it whenever. Reply on the board if you want changes.
@@ -432,6 +435,9 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 **Others:** no tenant has `settings.timezone` set except Fern — harmless, `restaurantTz()` defaults to `Europe/London` (verified `src/server.js:4636`).
 
 ## 🟢 Active Work
+
+### ✅ SHIPPED — Akin Thai site now tells customers TAKEAWAY is available (Maya, 2026-08-07)
+Korakot: "can you tell customers this restaurant does takeaway?" — akinthai.co.uk had **zero** takeaway mentions anywhere. Added, in their green/gold style, phone-order-for-collection framing (no online ordering wired on this site): **hero** line under the CTAs ("Takeaway available — call 01270 421261 to order for collection", tap-to-call), **cta-band** got a second ghost button "Takeaway · 01270 421261" beside Book a Table + copy mention, **all 3 menu pages** (à la carte / lunch / set) carry a gold takeaway note under the page title, **footer on all 10 pages** says "Dine in or take away — collection orders on 01270 421261", homepage **meta description** now ends "Dine in or take away." Verified desktop + 390px iframe + live curl (homepage & /menu). **Deployed to production** akinthai.co.uk (Netlify site sweet-boba-9a9e78, deploy 6a7624f9). Source updated in `~/Documents/SiamEPOS-Docs/client-sites/akinthai/`. Note: the find-us "Opening hours coming soon — call to check today's times" placeholder is still live — needs real hours from the client someday.
 
 ### 🛑 STOPPED, NOT SHIPPED — SEPOS-AUDIT-002 fixes pulled back off main (Krit, 2026-08-07 ~23:00)
 **Korakot approved a cloud push tonight on my assurance that the fixes were done and verification was a formality. That assurance was wrong, so I did not push.** Main is back at `ab4369d` (last pushed commit); all the work is preserved on branch **`audit-002-fixes`** (5 commits). No tenant was touched. The 22:50 push window was deliberately allowed to lapse.

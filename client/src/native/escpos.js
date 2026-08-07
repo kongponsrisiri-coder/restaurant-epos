@@ -88,6 +88,19 @@ function headerOps(ops, order, title, kw = SUNMI_KITCHEN_WIDTH) {
       }
     }
   }
+  // SEPOS-AUDIT-002 F13 — the order-level ALLERGY / kitchen note was missing
+  // from the native ticket entirely, on EVERY order type. A Sunmi-only kitchen
+  // was cooking "no peanuts" blind. Kept separate from the ANDROID-004 block
+  // above (which is takeaway/delivery-only and stays as it is) because a
+  // dine-in order carries allergy notes too.
+  if (order) {
+    const kitchenNote = order.customer_note || order.notes;
+    if (kitchenNote) {
+      ops.push({ op: 'bold', v: true }, { op: 'size', v: 'b' },
+               { op: 'text', v: '** ' + String(kitchenNote).toUpperCase() + ' **' },
+               { op: 'size', v: 'n' }, { op: 'bold', v: false });
+    }
+  }
   // 'krule' = a rule sized per printer (kitchen font is big, so the Sunmi needs a
   // shorter dash run than the network 32 or it wraps). See renderers below.
   ops.push({ op: 'align', v: 0 }, { op: 'krule', w: Math.min(kw, SUNMI_KITCHEN_WIDTH) });

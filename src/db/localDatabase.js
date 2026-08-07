@@ -193,6 +193,16 @@ function initSchema() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- SEPOS-MENU-PHOTO-001 — owner-uploaded dish photos (mirrors the cloud
+    -- schema). Deliberately NOT part of the menu tree pull: the till doesn't
+    -- need photo bytes, the customer-facing pages are cloud-served.
+    CREATE TABLE IF NOT EXISTS menu_item_images (
+      menu_item_id INTEGER PRIMARY KEY REFERENCES menu_items(id) ON DELETE CASCADE,
+      mime TEXT NOT NULL DEFAULT 'image/jpeg',
+      data TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS payments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,

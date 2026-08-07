@@ -7448,6 +7448,59 @@ async function qrStripeReady() {
 // The printable sticker sheet — one card per (non-takeaway) table. Server-
 // rendered HTML with inline SVG QRs (qrcode package), opened from the Table
 // Plan editor and printed straight from the browser.
+// ── SEPOS-MENU-PHOTO-001 — owner-uploaded dish photos ───────────────────────
+// Korakot 2026-08-07: "will client able to put the photo by them self?" — they
+// couldn't: image_url existed in the DB and the API, but the Admin menu editor
+// had no field, so photos were something WE loaded at onboarding. A restaurant
+// changes dishes and specials constantly, and the self-order/QR pages are
+// exactly where a photo earns its money, so the owner must own this.
+//
+// The bytes live in menu_item_images and are served from here, NOT inlined into
+// /api/menu — a 95-dish menu with embedded base64 would be an 11 MB download on
+// a customer's phone. The client resizes before upload (max ~900px JPEG), so a
+// dish photo is ~100-150 KB.
+app.post('/api/menu/items/:id/image', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
+  try {
+    const raw = String(req.body?.data || '');
+    const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(raw);
+    if (!m) return res.status(400).json({ error: 'Send a JPEG, PNG or WebP image' });
+    const bytes = Math.floor((m[2].length * 3) / 4);
+    if (bytes > 3 * 1024 * 1024) return res.status(413).json({ error: 'Photo is too large — please use a smaller one' });
+    const itemRes = await pool.query('SELECT id FROM menu_items WHERE id = $1', [req.params.id]);
+    if (!itemRes.rows[0]) return res.status(404).json({ error: 'Dish not found' });
+    await pool.query('DELETE FROM menu_item_images WHERE menu_item_id = $1', [req.params.id]);
+    await pool.query('INSERT INTO menu_item_images (menu_item_id, mime, data) VALUES ($1,$2,$3)',
+      [req.params.id, m[1], m[2]]);
+    // Cache-buster in the URL so a replaced photo shows up immediately on
+    // phones that already cached the old one.
+    const url = `/api/menu/items/${req.params.id}/image?v=${Date.now()}`;
+    await pool.query('UPDATE menu_items SET image_url = $1 WHERE id = $2', [url, req.params.id]);
+    res.json({ success: true, image_url: url });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/menu/items/:id/image', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
+  try {
+    await pool.query('DELETE FROM menu_item_images WHERE menu_item_id = $1', [req.params.id]);
+    await pool.query('UPDATE menu_items SET image_url = NULL WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Public — this is what a customer's phone actually loads. Immutable per ?v=,
+// so it is cached hard and costs nothing on repeat views.
+app.get('/api/menu/items/:id/image', widgetCors, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT mime, data FROM menu_item_images WHERE menu_item_id = $1', [req.params.id]);
+    const row = r.rows[0];
+    if (!row) return res.status(404).end();
+    const buf = Buffer.from(row.data, 'base64');
+    res.set('Content-Type', row.mime || 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    res.send(buf);
+  } catch (err) { res.status(500).end(); }
+});
+
 app.get('/api/qr/sheet', async (req, res) => {
   try {
     if (!await qrEnabled()) {
@@ -7490,6 +7543,114 @@ app.get('/api/qr/sheet', async (req, res) => {
   } catch (err) {
     console.error('[qr] sheet', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── SEPOS-QR-RECEIPT-001 — a receipt for the customer who wants one ─────────
+// Korakot 2026-08-07: "the self-order need a receipt for those who need it."
+// A QR customer pays on their own phone and never touches the till, so there
+// is no paper unless staff print one. This renders their own receipt from the
+// order the token owns — VAT-registered restaurants must be able to give one,
+// and people claiming expenses need it. Token-scoped: it can only ever show
+// the order sitting on THAT table, never anyone else's bill.
+app.get('/api/qr/receipt/:token', widgetCors, async (req, res) => {
+  try {
+    if (!await qrEnabled()) return res.status(403).json({ error: 'QR ordering is not enabled' });
+    const tableId = qrVerifyToken(req.params.token);
+    if (!tableId) return res.status(404).json({ error: 'This code is no longer active' });
+    const orderId = Number(req.query.order_id) || null;
+    // The order must belong to this table — a guessed id from another table
+    // must not render someone else's bill.
+    const oRes = await pool.query(
+      `SELECT o.*, t.name AS table_label, t.table_number
+         FROM orders o LEFT JOIN tables t ON t.id = o.table_id
+        WHERE o.table_id = $1 AND o.source = 'qr'
+          ${orderId ? 'AND o.id = $2' : ''}
+        ORDER BY o.id DESC LIMIT 1`,
+      orderId ? [tableId, orderId] : [tableId]);
+    const order = oRes.rows[0];
+    if (!order) return res.status(404).json({ error: 'No order found for this table' });
+    const [items, pays, sRes] = await Promise.all([
+      pool.query(`SELECT oi.quantity, oi.unit_price, oi.notes, COALESCE(mi.name, oi.item_name) AS name, COALESCE(mi.vat_rate, 20) AS vat_rate
+                    FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+                   WHERE oi.order_id = $1 AND oi.voided = 0 ORDER BY oi.id`, [order.id]),
+      pool.query(`SELECT amount, method, created_at FROM payments WHERE order_id = $1 ORDER BY id`, [order.id]),
+      pool.query(`SELECT key, value FROM settings WHERE key IN ('company_name','restaurant_name','company_address','company_phone','company_vat','currency_symbol','vat_mode','brand_primary')`),
+    ]);
+    const cfg = {}; for (const r of sRes.rows) cfg[r.key] = r.value;
+    res.json({
+      order_id: order.id,
+      table: (order.table_label && String(order.table_label).trim()) || `Table ${order.table_number}`,
+      opened_at: order.opened_at, closed_at: order.closed_at, status: order.status,
+      items: items.rows, payments: pays.rows,
+      total: Number(order.total || 0),
+      restaurant: {
+        name: (cfg.company_name !== undefined && cfg.company_name !== null)
+          ? String(cfg.company_name).trim() : (String(cfg.restaurant_name || '').trim() || 'Restaurant'),
+        address: cfg.company_address || '', phone: cfg.company_phone || '',
+        vat: cfg.company_vat || '', currency: cfg.currency_symbol || '£',
+        vat_mode: cfg.vat_mode || 'inclusive', brand: cfg.brand_primary || '#1E4038',
+      },
+    });
+  } catch (err) {
+    console.error('[qr] receipt', err);
+    res.status(500).json({ error: 'server error' });
+  }
+});
+
+// Email the same receipt. Customer-entered address only — nothing is stored
+// against them and no marketing consent is implied by asking for a receipt.
+app.post('/api/qr/receipt/:token/email', widgetCors, async (req, res) => {
+  try {
+    if (!await qrEnabled()) return res.status(403).json({ error: 'QR ordering is not enabled' });
+    const tableId = qrVerifyToken(req.params.token);
+    if (!tableId) return res.status(404).json({ error: 'This code is no longer active' });
+    const to = String(req.body?.email || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ error: 'Please enter a valid email address' });
+    const orderId = Number(req.body?.order_id) || null;
+    const oRes = await pool.query(
+      `SELECT o.*, t.name AS table_label, t.table_number FROM orders o LEFT JOIN tables t ON t.id = o.table_id
+        WHERE o.table_id = $1 AND o.source = 'qr' ${orderId ? 'AND o.id = $2' : ''} ORDER BY o.id DESC LIMIT 1`,
+      orderId ? [tableId, orderId] : [tableId]);
+    const order = oRes.rows[0];
+    if (!order) return res.status(404).json({ error: 'No order found for this table' });
+    const [items, pays, sRes] = await Promise.all([
+      pool.query(`SELECT oi.quantity, oi.unit_price, oi.notes, COALESCE(mi.name, oi.item_name) AS name
+                    FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+                   WHERE oi.order_id = $1 AND oi.voided = 0 ORDER BY oi.id`, [order.id]),
+      pool.query(`SELECT amount, method FROM payments WHERE order_id = $1 ORDER BY id`, [order.id]),
+      pool.query(`SELECT key, value FROM settings WHERE key IN ('company_name','restaurant_name','company_address','company_phone','company_vat','currency_symbol','brand_primary')`),
+    ]);
+    const cfg = {}; for (const r of sRes.rows) cfg[r.key] = r.value;
+    const cur = cfg.currency_symbol || '£';
+    const name = (cfg.company_name !== undefined && cfg.company_name !== null)
+      ? String(cfg.company_name).trim() : (String(cfg.restaurant_name || '').trim() || 'Restaurant');
+    const esc = (v) => String(v == null ? '' : v).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+    const rows = items.rows.map(i =>
+      `<tr><td style="padding:6px 0">${i.quantity} × ${esc(i.name)}${i.notes ? `<div style="font-size:12px;color:#777">${esc(i.notes)}</div>` : ''}</td>` +
+      `<td style="padding:6px 0;text-align:right">${cur}${(Number(i.unit_price) * Number(i.quantity)).toFixed(2)}</td></tr>`).join('');
+    const paid = pays.rows.map(p => `<tr><td style="padding:3px 0;color:#555">${esc(p.method)}</td><td style="padding:3px 0;text-align:right">${cur}${Number(p.amount).toFixed(2)}</td></tr>`).join('');
+    const html = `<div style="font-family:-apple-system,system-ui,sans-serif;max-width:520px;margin:0 auto;padding:22px">
+      <h2 style="margin:0 0 2px;color:${esc(cfg.brand_primary || '#1E4038')}">${esc(name)}</h2>
+      ${cfg.company_address ? `<div style="font-size:13px;color:#666">${esc(cfg.company_address)}</div>` : ''}
+      ${cfg.company_phone ? `<div style="font-size:13px;color:#666">Tel: ${esc(cfg.company_phone)}</div>` : ''}
+      ${cfg.company_vat ? `<div style="font-size:13px;color:#666">VAT No: ${esc(cfg.company_vat)}</div>` : ''}
+      <hr style="border:none;border-top:1px solid #eee;margin:14px 0">
+      <div style="font-size:13px;color:#666">Order #${order.id} · ${esc((order.table_label && String(order.table_label).trim()) || 'Table ' + order.table_number)}</div>
+      <table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:14px">${rows}</table>
+      <hr style="border:none;border-top:1px solid #eee;margin:12px 0">
+      <table style="width:100%;border-collapse:collapse;font-size:15px;font-weight:700">
+        <tr><td style="padding:4px 0">Total</td><td style="padding:4px 0;text-align:right">${cur}${Number(order.total || 0).toFixed(2)}</td></tr>
+      </table>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px">${paid}</table>
+      <p style="font-size:12px;color:#999;margin-top:20px">Thank you — we hope to see you again.</p>
+    </div>`;
+    const { sendBrevoEmail } = require('./services/emailService');
+    await sendBrevoEmail(to, `Your receipt from ${name} — order #${order.id}`, html);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[qr] receipt email', err.message);
+    res.status(500).json({ error: 'Could not send the receipt — please ask a member of staff.' });
   }
 });
 

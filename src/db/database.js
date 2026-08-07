@@ -149,6 +149,20 @@ async function initDB() {
     // dish to its own station. Same inherit pattern as default_course above.
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS printer_id INTEGER`);
 
+    // SEPOS-MENU-PHOTO-001 — dish photos the OWNER uploads from their phone.
+    // Kept in their OWN table, never joined into /api/menu: the menu JSON that
+    // every customer's phone downloads must stay small (95 dishes × ~120 KB of
+    // base64 would be an 11 MB menu). menu_items.image_url instead points at
+    // /api/menu/items/:id/image, which serves the bytes once and is cached.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS menu_item_images (
+        menu_item_id INTEGER PRIMARY KEY REFERENCES menu_items(id) ON DELETE CASCADE,
+        mime VARCHAR(40) NOT NULL DEFAULT 'image/jpeg',
+        data TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS modifier_groups (
         id SERIAL PRIMARY KEY,

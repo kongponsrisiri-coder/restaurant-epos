@@ -170,7 +170,7 @@ export default function BillsSection() {
         ? (b.discount_type === 'percent' ? `-${b.discount_value}%` : `-£${b.discount_value}`)
         : '';
       rows.push([
-        b.id, b.table_number || '', b.covers || '',
+        b.id, (b.table_number ? dineTableLabel(b) : (b.customer_name || '')), b.covers || '',
         b.closed_at ? new Date(b.closed_at).toISOString() : '',
         b.method || '', discountStr, b.discount_reason || '',
         Number(b.total || 0).toFixed(2),
@@ -259,7 +259,7 @@ export default function BillsSection() {
                 {/* the number the CUSTOMER sees is the cloud order id; on a Pro
                     till the local id differs, so show the one they'll quote. */}
                 <span style={{ fontWeight: 700, color: '#777', fontVariantNumeric: 'tabular-nums' }}>#{bill.cloud_id || bill.id}</span>
-                <span style={{ fontWeight: 700, color:'var(--brand-primary, #1a1a2e)' }}>T{bill.table_number}</span>
+                <span style={{ fontWeight: 700, color:'var(--brand-primary, #1a1a2e)' }}>{dineTableLabel(bill)}</span>
                 <span style={{ color: '#555' }}>{bill.covers || '—'}</span>
                 <span style={{ color: '#555' }}>{formatDateTime(bill.closed_at)}</span>
                 <span><span style={{ background: bill.method === 'Cash' ? '#dcfce7' : bill.method === 'Card' ? '#dbeafe' : bill.method === 'Split' ? '#fef3c7' : '#f3f4f6', color: bill.method === 'Cash' ? '#14532d' : bill.method === 'Card' ? '#1e40af' : bill.method === 'Split' ? '#92400e' : '#374151', padding: '2px 8px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{bill.method === 'Cash' ? '💵' : bill.method === 'Card' ? '💳' : bill.method === 'Split' ? '🔀' : '🔄'} {bill.method}{bill.method === 'Split' && Array.isArray(bill.tenders) ? ` (${bill.tenders.length})` : ''}</span></span>
@@ -406,7 +406,7 @@ export default function BillsSection() {
           bill={amendTarget}
           onClose={() => setAmendTarget(null)}
           onDone={(r) => {
-            setAmendToast(`✓ Table ${amendTarget.table_number || '?'} changed from ${r.from} → ${r.to}${r.by ? ' by ' + r.by : ''}`);
+            setAmendToast(`✓ ${dineTableLabel(amendTarget)} changed from ${r.from} → ${r.to}${r.by ? ' by ' + r.by : ''}`);
             setTimeout(() => setAmendToast(''), 5000);
             setAmendTarget(null);
             fetchBills();
@@ -418,7 +418,7 @@ export default function BillsSection() {
           bill={editTarget}
           onClose={() => setEditTarget(null)}
           onDone={(r) => {
-            setAmendToast(`✓ Table ${editTarget.table_number || '?'} payment corrected${r.by ? ' by ' + r.by : ''}`);
+            setAmendToast(`✓ ${dineTableLabel(editTarget)} payment corrected${r.by ? ' by ' + r.by : ''}`);
             setTimeout(() => setAmendToast(''), 5000);
             setEditTarget(null);
             setSelectedBill(null);
@@ -620,7 +620,7 @@ function buildBillsBody(bills, from, to, method, totals, settings, thermal) {
        <table>
          ${bills.map(b => {
            const t = b.closed_at ? new Date(b.closed_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
-           const lbl = b.table_number ? `T${b.table_number}` : (b.customer_name || '🥡');
+           const lbl = b.table_number ? dineTableLabel(b) : (b.customer_name || '🥡');
            return `<tr><td>${lbl} · ${b.method || '-'} · ${t}</td><td class="right">${fmt(b.paid_amount || b.total)}</td></tr>`;
          }).join('')}
        </table>`
@@ -630,7 +630,7 @@ function buildBillsBody(bills, from, to, method, totals, settings, thermal) {
          <tbody>
            ${bills.map(b => {
              const t = b.closed_at ? new Date(b.closed_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-             const lbl = b.table_number ? `Table ${b.table_number}` : (b.customer_name || '🥡 Online');
+             const lbl = b.table_number ? dineTableLabel(b) : (b.customer_name || '🥡 Online');
              return `<tr>
                <td>${t}</td>
                <td>${lbl}</td>
@@ -661,7 +661,7 @@ function buildBillsLines(bills, from, to, method, totals, settings) {
   lines.push({ kind: 'div' });
   for (const b of bills) {
     const t = b.closed_at ? new Date(b.closed_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
-    const label = b.table_number ? `T${b.table_number}` : (b.customer_name || 'TA');
+    const label = b.table_number ? dineTableLabel(b) : (b.customer_name || 'TA');
     lines.push({ kind: 'row', left: `${label}  ${b.method || '-'}  ${t}`, right: fmt(b.paid_amount || b.total) });
   }
   lines.push({ kind: 'total', left: `TOTAL (${bills.length})`, right: fmt(totals.totalSales) });

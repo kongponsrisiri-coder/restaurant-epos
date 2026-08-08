@@ -39,7 +39,8 @@ function initSchema() {
       pos_y INTEGER DEFAULT 0,
       shape TEXT DEFAULT 'square',
       width INTEGER DEFAULT 80,
-      height INTEGER DEFAULT 80
+      height INTEGER DEFAULT 80,
+      is_takeaway INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS categories (
@@ -47,7 +48,25 @@ function initSchema() {
       name TEXT NOT NULL,
       sort_order INTEGER DEFAULT 0,
       is_bar INTEGER DEFAULT 0,
-      default_course INTEGER DEFAULT 1
+      default_course INTEGER DEFAULT 1,
+      printer_id INTEGER
+    );
+    -- SEPOS-STATION-001 — flexible multi-printer routing (category -> printer).
+    CREATE TABLE IF NOT EXISTS printers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      ip TEXT,
+      port INTEGER DEFAULT 9100,
+      mac TEXT,
+      kind TEXT DEFAULT 'kitchen',
+      copies INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      restaurant_id TEXT DEFAULT 'siamepos',
+      role_receipt INTEGER DEFAULT 0,
+      role_kitchen INTEGER DEFAULT 0,
+      role_bar INTEGER DEFAULT 0,
+      lpr_queue TEXT
     );
 
     CREATE TABLE IF NOT EXISTS subcategories (
@@ -69,7 +88,8 @@ function initSchema() {
       is_online INTEGER DEFAULT 1,
       allergens TEXT DEFAULT NULL,
       sort_order INTEGER DEFAULT 0,
-      vat_rate REAL DEFAULT 20.0
+      vat_rate REAL DEFAULT 20.0,
+      default_course INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS modifier_groups (
@@ -77,7 +97,9 @@ function initSchema() {
       menu_item_id INTEGER REFERENCES menu_items(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       required INTEGER DEFAULT 0,
-      multi_select INTEGER DEFAULT 0
+      multi_select INTEGER DEFAULT 0,
+      is_global INTEGER DEFAULT 0,
+      is_allergen INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS modifiers (
@@ -107,6 +129,8 @@ function initSchema() {
       discount_type TEXT,
       discount_value REAL,
       discount_reason TEXT,
+      no_service_charge INTEGER DEFAULT 0,
+      service_charge REAL,
       bill_printed INTEGER DEFAULT 0,
       opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       closed_at TIMESTAMP,
@@ -139,11 +163,13 @@ function initSchema() {
       cooking_started_at TIMESTAMP,
       served_at TIMESTAMP,
       voided INTEGER DEFAULT 0,
+      voided_at TIMESTAMP,
       void_reason TEXT,
       void_type TEXT,
       discount_type TEXT,
       discount_value REAL,
       resend_reason TEXT,
+      dest_category_id INTEGER,
       cloud_id INTEGER
     );
 
@@ -165,6 +191,16 @@ function initSchema() {
       notes TEXT,
       employment_status TEXT DEFAULT 'active',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- SEPOS-MENU-PHOTO-001 — owner-uploaded dish photos (mirrors the cloud
+    -- schema). Deliberately NOT part of the menu tree pull: the till doesn't
+    -- need photo bytes, the customer-facing pages are cloud-served.
+    CREATE TABLE IF NOT EXISTS menu_item_images (
+      menu_item_id INTEGER PRIMARY KEY REFERENCES menu_items(id) ON DELETE CASCADE,
+      mime TEXT NOT NULL DEFAULT 'image/jpeg',
+      data TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS payments (
@@ -254,7 +290,10 @@ function initSchema() {
       petty_cash_reason TEXT,
       actual_cash REAL,
       cash_difference REAL,
+      actual_card REAL,
+      card_difference REAL,
       report_data TEXT,
+      superseded_at TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -401,14 +440,34 @@ function initSchema() {
       last_seen     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- SEPOS-PRINT-ALERT-001 — held tickets from failed kitchen/bar/station
+    -- prints (this is the till-side authority; see printAlertService).
+    CREATE TABLE IF NOT EXISTS print_failures (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT,
+      printer_id INTEGER,
+      printer_name TEXT,
+      printer_ip TEXT,
+      order_id INTEGER,
+      order_label TEXT,
+      items TEXT,
+      reason TEXT,
+      status TEXT DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      resolved_at TIMESTAMP
+    );
+
     -- Offline action queue (Phase 3 consumer)
     CREATE TABLE IF NOT EXISTS sync_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       action_type TEXT,
       payload TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      synced INTEGER DEFAULT 0,
-      synced_at TIMESTAMP
+      synced INTEGER DEFAULT 0,          -- 0 = pending, 1 = done, 2 = failed/quarantined
+      synced_at TIMESTAMP,
+      attempts INTEGER DEFAULT 0,        -- push attempts so a poison item can't retry forever
+      last_error TEXT,                   -- last push error (for the sync-queue inspector)
+      failed_at TIMESTAMP                -- when it was quarantined
     );
 
     -- SEPOS-VOUCHER-001 — gift vouchers
@@ -430,7 +489,10 @@ function initSchema() {
       voided_by TEXT,
       voided_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      restaurant_id TEXT DEFAULT 'siamepos'
+      restaurant_id TEXT DEFAULT 'siamepos',
+      type TEXT DEFAULT 'gift',
+      reservation_id INTEGER,
+      take_date TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_vouchers_code        ON vouchers (code);
     CREATE INDEX IF NOT EXISTS idx_vouchers_restaurant  ON vouchers (restaurant_id);
@@ -535,6 +597,31 @@ function initSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses (date DESC);
 
+    CREATE TABLE IF NOT EXISTS concierge_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      profile TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_concierge_session ON concierge_messages (profile, session_id, id);
+
+    CREATE TABLE IF NOT EXISTS concierge_bookings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      profile TEXT NOT NULL,
+      session_id TEXT,
+      customer_name TEXT NOT NULL,
+      customer_phone TEXT,
+      treatment TEXT NOT NULL,
+      minutes INTEGER NOT NULL,
+      start_at TEXT NOT NULL,
+      deposit_gbp REAL DEFAULT 0,
+      status TEXT DEFAULT 'paid_demo',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_concierge_bookings ON concierge_bookings (profile, start_at);
+
     CREATE TABLE IF NOT EXISTS batch_recipes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -597,8 +684,23 @@ function addColumnIfMissing(table, column, definition) {
 }
 
 function runMigrations() {
+  // SEPOS-SYNC-HEAL-001: self-healing sync queue — a poison action must not
+  // block the whole queue. attempts caps retries; last_error/failed_at back
+  // the quarantine surfaced in the sync-queue inspector.
+  addColumnIfMissing('sync_queue', 'attempts',   'INTEGER DEFAULT 0');
+  addColumnIfMissing('sync_queue', 'last_error', 'TEXT');
+  addColumnIfMissing('sync_queue', 'failed_at',  'TIMESTAMP');
   // SEPOS-024: resend reason on order_items
   addColumnIfMissing('order_items', 'resend_reason', 'TEXT');
+  // Card reconciliation on the Z report (actual card-machine takings + variance)
+  addColumnIfMissing('z_reports', 'actual_card',     'REAL');
+  addColumnIfMissing('z_reports', 'card_difference', 'REAL');
+  addColumnIfMissing('z_reports', 'superseded_at',   'TEXT'); // SEPOS-Z-REPLACE
+  // Per-item course override (NULL = inherit the category default_course)
+  addColumnIfMissing('menu_items', 'default_course', 'INTEGER');
+  // SEPOS-STATION-003: per-dish printer-station override (NULL = inherit
+  // the category's printer_id; dish wins over category when set)
+  addColumnIfMissing('menu_items', 'printer_id', 'INTEGER');
   // SEPOS-PAY-AMEND-001: audit columns on the payments row
   addColumnIfMissing('payments', 'amended_at',     'TIMESTAMP');
   addColumnIfMissing('payments', 'amended_by',     'INTEGER');
@@ -608,11 +710,20 @@ function runMigrations() {
   addColumnIfMissing('order_items', 'void_type', 'TEXT');
   // SEPOS-030: staff attribution on orders
   addColumnIfMissing('orders', 'staff_id', 'INTEGER');
+  // SEPOS-AUDIT-001 — close-time service-charge snapshot + real void instant
+  // (see database.js for why). Mirrored here so both backends carry them.
+  addColumnIfMissing('orders', 'service_charge', 'REAL');
+  addColumnIfMissing('order_items', 'voided_at', 'TIMESTAMP');
   // SEPOS-PRO-008: link a bill to its booking for accurate per-customer spend
   addColumnIfMissing('orders', 'reservation_id', 'INTEGER');
   // SEPOS-021: VAT rate per menu item
   addColumnIfMissing('menu_items', 'vat_rate', 'REAL DEFAULT 20.0');
   addColumnIfMissing('menu_items', 'is_online', 'INTEGER DEFAULT 1');
+  // SEPOS-QR-ORDER-001 — dish photo URL + dietary tags (customer menu card)
+  // + order source ('qr' = customer-placed, drives 📱 badge & auto-close).
+  addColumnIfMissing('menu_items', 'image_url', 'TEXT');
+  addColumnIfMissing('menu_items', 'dietary', 'TEXT');
+  addColumnIfMissing('orders', 'source', 'TEXT');
   // SEPOS-033: marketing consent + unsubscribe (GDPR)
   addColumnIfMissing('reservations', 'marketing_consent', 'INTEGER DEFAULT 0');
   addColumnIfMissing('reservations', 'unsubscribed_at', 'TIMESTAMP');
@@ -620,7 +731,9 @@ function runMigrations() {
   // SEPOS-050: per-restaurant online-booking party-size cap + contact phone
   addColumnIfMissing('restaurant_settings', 'max_party_size', 'INTEGER DEFAULT 8');
   addColumnIfMissing('restaurant_settings', 'restaurant_phone', 'TEXT');
+  addColumnIfMissing('tables', 'is_takeaway', 'INTEGER DEFAULT 0'); // SEPOS-TAKEAWAY-TABLE
   addColumnIfMissing('restaurant_settings', 'timezone',                     "TEXT DEFAULT 'Europe/London'");
+  addColumnIfMissing('restaurant_settings', 'closed_days', 'TEXT');  // SEPOS-051
   addColumnIfMissing('restaurant_settings', 'takeaway_busy_threshold',      'INTEGER DEFAULT 5');
   addColumnIfMissing('restaurant_settings', 'takeaway_very_busy_threshold', 'INTEGER DEFAULT 10');
   addColumnIfMissing('restaurant_settings', 'takeaway_wait_quiet',          'INTEGER DEFAULT 20');
@@ -632,6 +745,9 @@ function runMigrations() {
   // the inventory CREATE TABLE block. Safe no-ops on fresh installs.
   addColumnIfMissing('ingredients', 'is_batch',        'INTEGER DEFAULT 0');
   addColumnIfMissing('ingredients', 'batch_recipe_id', 'INTEGER');
+  // SEPOS-INV-UNITS-001: purchase↔usage unit bridge (see database.js)
+  addColumnIfMissing('ingredients', 'purchase_unit',     'TEXT');
+  addColumnIfMissing('ingredients', 'purchase_to_usage', 'REAL');
   addColumnIfMissing('stock_movements', 'order_item_id', 'INTEGER');
   // SEPOS-034: takeaway / delivery online ordering
   addColumnIfMissing('orders', 'order_type', "TEXT DEFAULT 'dine_in'");
@@ -655,6 +771,20 @@ function runMigrations() {
   addColumnIfMissing('orders', 'delivery_status', 'TEXT');
   addColumnIfMissing('orders', 'tracking_url', 'TEXT');
   addColumnIfMissing('orders', 'delivery_eta', 'TIMESTAMP');
+  // SEPOS — per-order service-charge removal (persists the Order screen toggle).
+  addColumnIfMissing('orders', 'no_service_charge', 'INTEGER DEFAULT 0');
+
+  // SEPOS-DEPOSIT-001 — booking deposits as typed vouchers (default 'gift' = unchanged).
+  addColumnIfMissing('vouchers', 'type', "TEXT DEFAULT 'gift'");
+  addColumnIfMissing('vouchers', 'reservation_id', 'INTEGER');
+  addColumnIfMissing('vouchers', 'take_date', 'TEXT');
+
+  // SEPOS-ALLERGEN-OPT-001 — global (applies to every item) + allergen (⚠️ + free) modifier groups.
+  addColumnIfMissing('modifier_groups', 'is_global', 'INTEGER DEFAULT 0');
+  addColumnIfMissing('modifier_groups', 'is_allergen', 'INTEGER DEFAULT 0');
+
+  // SEPOS-STATION-001 — category -> printer routing (NULL = today's is_bar rule).
+  addColumnIfMissing('categories', 'printer_id', 'INTEGER');
 
   // SEPOS-PRO-002: bidirectional active-order sync.
   // cloud_id maps a local row to its mirror on the cloud Postgres backend.
@@ -662,11 +792,23 @@ function runMigrations() {
   //   - Chrome creates an order → cloud INSERT, sync pull → INSERT local with cloud_id set
   // Lookups go cloud_id ↔ local id so the in-memory map can finally be retired.
   addColumnIfMissing('orders',      'cloud_id', 'INTEGER');
+  addColumnIfMissing('order_items', 'dest_category_id', 'INTEGER');  // SEPOS-MISC-001 — Misc line destination category
+  addColumnIfMissing('printers', 'role_receipt', 'INTEGER DEFAULT 0'); // SEPOS-PRINT-UNIFY-001
+  addColumnIfMissing('printers', 'role_kitchen', 'INTEGER DEFAULT 0');
+  addColumnIfMissing('printers', 'role_bar', 'INTEGER DEFAULT 0');
+  addColumnIfMissing('printers', 'lpr_queue', 'TEXT');
   addColumnIfMissing('order_items', 'cloud_id', 'INTEGER');
+  // SEPOS-QR-RECEIPT-001 — the tender that paid for this line (per-round receipts).
+  addColumnIfMissing('order_items', 'payment_id', 'INTEGER');
+  // SEPOS-SYNC-TENDERS-001 — cloud id of a mirrored tender (see syncService).
+  addColumnIfMissing('payments', 'cloud_id', 'INTEGER');
+  addColumnIfMissing('payments', 'payment_intent_id', 'TEXT');   // SEPOS-QR-PAY-REDO
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_cloud_id      ON orders(cloud_id)      WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] orders.cloud_id index:', err.message); }
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_order_items_cloud_id ON order_items(cloud_id) WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] order_items.cloud_id index:', err.message); }
   // SEPOS-047b — one Stripe PaymentIntent settles exactly one takeaway order.
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_payment_intent ON orders(payment_intent_id) WHERE payment_intent_id IS NOT NULL'); } catch (err) { console.warn('[db:local] orders.payment_intent index:', err.message); }
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_cloud_id ON payments(cloud_id) WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] payments.cloud_id index:', err.message); }
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_payment_intent ON payments(payment_intent_id) WHERE payment_intent_id IS NOT NULL'); } catch (err) { console.warn('[db:local] payments.payment_intent index:', err.message); }
   // SEPOS-053 — the trading session an order closed under + its cloud binding.
   addColumnIfMissing('orders', 'session_id', 'INTEGER');
   addColumnIfMissing('till_sessions', 'cloud_id', 'INTEGER');
@@ -705,6 +847,17 @@ function seedDefaults() {
   db.prepare(`
     INSERT INTO settings (key, value) VALUES (?, ?)
     ON CONFLICT (key) DO NOTHING
+  `).run('vat_mode', 'inclusive');
+  db.prepare(`
+    INSERT INTO settings (key, value) VALUES (?, ?)
+    ON CONFLICT (key) DO NOTHING
+  `).run('deposits_enabled', '0');
+  for (const [k, v] of [['kitchen_font_scale', 'large'], ['receipt_font_scale', 'normal'], ['bar_font_scale', 'large']]) {
+    db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING`).run(k, v);
+  }
+  db.prepare(`
+    INSERT INTO settings (key, value) VALUES (?, ?)
+    ON CONFLICT (key) DO NOTHING
   `).run('restaurant_name', 'SiamEPOS');
 
   db.prepare(`
@@ -727,13 +880,19 @@ function seedDefaults() {
 
   // Minimum staff so the operator can log in before the first cloud→local pull (Phase 4).
   // Once sync runs this will be overwritten / supplemented with the real cloud staff list.
-  const staffCount = db.prepare('SELECT COUNT(*) AS n FROM staff').get().n;
-  if (staffCount === 0) {
+  // SEPOS-LOGIN-SEED — guard on ACTIVE ADMINS (parity with the PG path + spa),
+  // not just an empty table: self-heals if a till ever loses every admin, and
+  // picks a free PIN if 1234 is taken. No-op once an active admin exists.
+  const adminCount = db.prepare("SELECT COUNT(*) AS n FROM staff WHERE is_active = 1 AND role IN ('admin','manager')").get().n;
+  if (adminCount === 0) {
+    const taken = new Set(db.prepare('SELECT pin FROM staff').all().map((r) => String(r.pin)));
+    let pin = '1234';
+    if (taken.has(pin)) { for (let p = 1000; p <= 9999; p++) { if (!taken.has(String(p))) { pin = String(p); break; } } }
     db.prepare(`
       INSERT INTO staff (name, pin, role, is_active, employment_status)
       VALUES (?, ?, ?, ?, ?)
-    `).run('Admin', '1234', 'admin', 1, 'active');
-    console.log('[db:local] seeded default admin staff (pin 1234) — change after first sync');
+    `).run('Admin', pin, 'admin', 1, 'active');
+    console.log(`[db:local] no active admin — seeded default admin 'Admin' (pin ${pin}) — change it`);
   }
 }
 
@@ -754,6 +913,21 @@ function preTranslate(sql) {
   out = out.replace(/\s+FOR\s+UPDATE(?=\s*$|\s|;)/gi, '');
   // `expr::date` → `date(expr)` (works for column refs and $N placeholders)
   out = out.replace(/([\w.]+|\$\d+)\s*::\s*date\b/gi, 'date($1)');
+  // SEPOS-AUDIT-001 — canonicalise BOTH sides of a timestamp comparison.
+  // Local rows store naive UTC ('2026-07-08 22:15:00') but rows seeded from
+  // the cloud (upsertClosedOrders / pullActiveOrders) carry pg's ISO form
+  // ('2026-07-08T13:00:00.000Z'). As raw strings 'T' sorts after ' ', so
+  // `closed_at <= datetime(?)` silently dropped every cloud-seeded bill from
+  // the till's Z / VAT / report windows. Wrapping the COLUMN side too makes
+  // both operands canonical ('YYYY-MM-DD HH:MM:SS') regardless of stored
+  // format. Must run BEFORE the generic ::timestamp rule below.
+  // Inequality operators ONLY — a bare `=` could be an UPDATE … SET
+  // assignment, which must not become `datetime(col) = …`. Every real
+  // window comparison in server.js uses >=, <=, or >.
+  out = out.replace(
+    /([\w.]+)\s*(>=|<=|<>|!=|>|<)\s*(\$\d+)\s*::\s*timestamp\b/gi,
+    'datetime($1) $2 datetime($3)'
+  );
   // `expr::timestamp` → `datetime(expr)`
   out = out.replace(/([\w.]+|\$\d+)\s*::\s*timestamp\b/gi, 'datetime($1)');
   // SEPOS-047e — `expr::int` → `CAST(expr AS INTEGER)`. SQLite has no `::`
@@ -870,13 +1044,22 @@ async function query(text, params = []) {
   }
   const pre = preTranslate(text);
   const { sql, params: flat } = translateParams(pre, params || []);
+  // SEPOS-AUDIT-001 — coerce JS booleans to 1/0 at the choke point.
+  // Cloud PG BOOLEAN columns (table_combinations.is_active,
+  // restaurant_settings.is_active, …) arrive through res.json as JS
+  // true/false; better-sqlite3 refuses to bind booleans ("can only bind
+  // numbers, strings, bigints, buffers, and null"), so every sync upsert
+  // carrying one silently failed each 5s tick — linked-table groups and
+  // reservation settings never reached the till. One map fixes every
+  // current and future feed.
+  const bound = flat.map((v) => (v === true ? 1 : v === false ? 0 : v));
 
   try {
     if (shouldReturnRows(sql)) {
-      const rows = normaliseTimestamps(db.prepare(sql).all(...flat));
+      const rows = normaliseTimestamps(db.prepare(sql).all(...bound));
       return { rows, rowCount: rows.length };
     }
-    const info = db.prepare(sql).run(...flat);
+    const info = db.prepare(sql).run(...bound);
     return { rows: [], rowCount: info.changes, lastInsertRowid: info.lastInsertRowid };
   } catch (err) {
     err.message = `[db:local] ${err.message}\n  sql: ${sql}\n  params: ${JSON.stringify(flat)}`;

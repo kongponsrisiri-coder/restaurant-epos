@@ -37,9 +37,6 @@ function deviceId() {
 
 async function beat() {
   if (!ID_PATH || !CLOUD_API_URL) return; // not a desktop till, or no cloud target
-  // SEPOS-ANDROID Phase 1 (host spike) — PULL-ONLY latch: don't POST telemetry
-  // to the LIVE cloud while we're only proving the menu/staff/settings pull.
-  if (/^(1|true|yes)$/i.test(process.env.SYNC_PULL_ONLY || '')) return;
   const id = deviceId();
   if (!id) return;
   try {

@@ -21,7 +21,11 @@
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
-const PDFDocument = require('pdfkit');
+// pdfkit is required LAZILY inside the PDF builder (below), NOT at module load.
+// Merely require()-ing this service (e.g. the settings-save endpoint calls
+// isLocalInstall()) must not drag in the whole PDF stack — on the tablet-host
+// build a missing pdfkit sub-dep (@swc/helpers) then crashed core actions like
+// "Save settings". PDF generation is optional; only the archive feature needs it.
 
 // ── Paths ──────────────────────────────────────────────────────────
 function getRootDir() {
@@ -184,6 +188,14 @@ async function generateZReportPdf(dateStr, reportData, settings) {
   const outPath = zReportPdfPath(dateStr);
 
   return new Promise((resolve, reject) => {
+    let PDFDocument;
+    try {
+      PDFDocument = require('pdfkit');
+    } catch (e) {
+      // A missing/broken pdfkit (e.g. incomplete node_modules on the tablet-host
+      // bundle) disables the PDF archive only — it must never crash the caller.
+      return reject(new Error('PDF archive unavailable — pdfkit failed to load: ' + e.message));
+    }
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     const stream = fs.createWriteStream(outPath);
     stream.on('finish', () => resolve({ path: outPath }));

@@ -391,6 +391,16 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
     // Payment
     method ? [
       receiptSize, col2('Payment', method, receiptWidth), CMD.SIZE_NORMAL, lf(),
+      // SEPOS-QR-RECEIPT-002 — split bills list each round so the receipt shows
+      // the payment breakdown, not just "Split". A QR self-order table pays in
+      // rounds at different times; each round is one tender.
+      Array.isArray(paymentDetails.tenders) && paymentDetails.tenders.length > 1
+        ? paymentDetails.tenders.map((t, i) => [
+            receiptSize,
+            col2(`  ${i + 1}. ${t.method || ''}`.slice(0, 30), '£' + Number(t.amount || 0).toFixed(2), receiptWidth),
+            CMD.SIZE_NORMAL, lf(),
+          ])
+        : [],
       method === 'Cash' && amountPaid > 0 ? [
         receiptSize, col2('Cash tendered', '£' + amountPaid.toFixed(2), receiptWidth), CMD.SIZE_NORMAL, lf(),
         CMD.BOLD_ON, receiptSize, col2('Change', '£' + change.toFixed(2), receiptWidth), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),

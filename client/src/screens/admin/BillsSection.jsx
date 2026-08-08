@@ -143,6 +143,9 @@ export default function BillsSection() {
         change: 0,
         method: bill.method || '',
         tip: 0,
+        // SEPOS-QR-RECEIPT-002 — pass the round breakdown so a split receipt
+        // prints each round, not just "Payment: Split".
+        tenders: Array.isArray(bill.tenders) ? bill.tenders : [],
       },
     });
   };

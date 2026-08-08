@@ -30,9 +30,16 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   // Loaded once on mount; merged with menu_items.allergens at render time.
   const [allergenOverrides, setAllergenOverrides] = useState({});
   const [order, setOrder] = useState(null);
-  // Cart persists per-order in localStorage so un-sent items aren't lost when
-  // the waiter leaves the table without sending — they're restored on return.
-  const cartKey = orderId ? `sepos_cart_${orderId}` : null;
+  // Cart persists in localStorage so un-sent items aren't lost when the waiter
+  // leaves the table without sending — they're restored on return. Keyed by
+  // order id when one exists; for a BRAND-NEW table (no order created until the
+  // first Send) there is no order id yet, so we key by TABLE id — otherwise the
+  // items a waiter tapped on a fresh table vanished the moment they navigated
+  // away (Korakot 2026-08-08: "sometimes you have to go to another page… the
+  // order the staff took will be gone"). Cleared on a successful Send.
+  const cartKey = orderId
+    ? `sepos_cart_${orderId}`
+    : (tableId ? `sepos_cart_table_${tableId}` : null);
   const [cart, setCart] = useState(() => {
     try { const raw = cartKey && localStorage.getItem(cartKey); return raw ? JSON.parse(raw) : []; }
     catch { return []; }

@@ -147,6 +147,40 @@ export default function BillsSection() {
     });
   };
 
+  // SEPOS-QR-RECEIPT-002 — print ONE round of a split bill. A QR self-order
+  // table lands as several rounds that paid at different times; each round's
+  // items are linked to its own payment (order_items.payment_id), so a customer
+  // who paid for their own round can get a receipt for exactly what they paid.
+  // Only applies to item-linked rounds (QR / pay-first) — a money-only split
+  // (staff dividing the total at pay time) has no per-item link, so we say so.
+  const doReprintRound = (bill, tender) => {
+    if (!bill || !tender) return;
+    if (!billItems.length) { alert('Items not loaded yet — try again in a moment.'); return; }
+    const roundItems = billItems.filter(it => String(it.payment_id) === String(tender.id));
+    if (!roundItems.length) {
+      alert('This payment isn’t linked to specific items (a money-only split) — use “Re-print receipt” for the whole bill.');
+      return;
+    }
+    const subtotal      = roundItems.reduce((s, it) => s + Number(it.unit_price || 0) * Number(it.quantity || 1), 0);
+    const paid          = Number(tender.amount || 0);
+    const serviceCharge = Math.max(0, paid - subtotal);
+    printReceipt({
+      order: bill,
+      items: roundItems,
+      settings,
+      paymentDetails: {
+        subtotal,
+        discountAmount: 0,
+        serviceCharge,
+        billTotal: paid,
+        amountPaid: paid,
+        change: 0,
+        method: tender.method || bill.method || '',
+        tip: 0,
+      },
+    });
+  };
+
   const doPrintBills = async (mode) => {
     if (!bills.length) return;
     const isThermal = (mode === 'thermal');
@@ -353,13 +387,22 @@ export default function BillsSection() {
                               {/* SEPOS-SPLITBILL-001 — tender breakdown (Cash/Card split). */}
                               {tenders.length > 1 && (
                                 <div style={{ padding: '6px 0', borderBottom: '1px solid #e0edff' }}>
-                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', marginBottom: 4 }}>🔀 Split payment</div>
-                                  {tenders.map((t, i) => (
-                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '2px 0' }}>
-                                      <span style={{ color: '#555' }}>{t.method === 'Cash' ? '💵' : t.method === 'Card' ? '💳' : '🔄'} {t.method}</span>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', marginBottom: 4 }}>🔀 Split payment — {tenders.length} rounds</div>
+                                  {tenders.map((t, i) => {
+                                    const roundItems = billItems.filter(it => String(it.payment_id) === String(t.id));
+                                    return (
+                                    <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, padding: '3px 0', gap: 8 }}>
+                                      <span style={{ color: '#555', flex: 1 }}>{t.method === 'Cash' ? '💵' : t.method === 'Card' ? '💳' : '🔄'} Round {i + 1} · {t.method}{roundItems.length ? ` · ${roundItems.reduce((n, it) => n + Number(it.quantity || 1), 0)} item${roundItems.reduce((n, it) => n + Number(it.quantity || 1), 0) > 1 ? 's' : ''}` : ''}</span>
                                       <span style={{ fontWeight: 600 }}>£{Number(t.amount || 0).toFixed(2)}</span>
+                                      {roundItems.length > 0 && (
+                                        <button onClick={() => doReprintRound(bill, t)} title={`Print a receipt for round ${i + 1} only`} style={{
+                                          padding: '3px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                                          background: 'white', color: 'var(--brand-primary,#0D1B3E)',
+                                          border: '1px solid var(--brand-primary,#0D1B3E)', borderRadius: 6,
+                                        }}>🖨 Print</button>
+                                      )}
                                     </div>
-                                  ))}
+                                  );})}
                                 </div>
                               )}
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 800, paddingTop: 8, borderTop: '2px solid #3b82f6', marginTop: 4 }}>

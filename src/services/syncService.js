@@ -1226,6 +1226,8 @@ async function pullActiveOrders() {
         const existing = await pool.query('SELECT id FROM payments WHERE cloud_id = $1', [cloudPay.id]);
         if (existing.rows[0]) continue;
         const fields = pickFields(cloudPay, payCols, { order_id: localOrderId, cloud_id: cloudPay.id });
+        // order_items.payment_id is a LOCAL id space — never carry the cloud's.
+        delete fields.payment_id;
         const cols = Object.keys(fields);
         try {
           await pool.query(`INSERT INTO payments (${cols.join(',')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(',')})`,
@@ -1443,7 +1445,7 @@ async function upsertClosedOrders(orders, order_items, payments) {
 
     await pool.query('DELETE FROM payments WHERE order_id = $1', [localId]);
     for (const p of (paysByCloudOrder[cloudId] || [])) {
-      const f = pickFields(p, payCols, { order_id: localId });
+      const f = pickFields(p, payCols, { order_id: localId }); delete f.payment_id; /* local id space (verify pass) */
       const cols = Object.keys(f);
       const ph = cols.map((_, i) => `$${i + 1}`).join(',');
       try {
@@ -1460,21 +1462,30 @@ async function upsertClosedOrders(orders, order_items, payments) {
 // forever. This looks for recent local closed orders with no tenders at all and
 // re-requests just those, by cloud id. Cheap (bounded, and only ever finds
 // something when there is a real gap).
+// cloud_id -> attempts. Bounded; an order we couldn't repair in 3 goes is not
+// going to repair on the 400th.
+const _repairAttempts = new Map();
 async function repairMissingClosedPayments() {
   if (!offlineQueue.isLocal || !CLOUD_API_URL || !process.env.SYNC_SECRET) return;
   try {
     const colRes = await pool.query('PRAGMA table_info(payments)');
     if (!colRes.rows.map(r => r.name).includes('cloud_id')) return;
-    const gaps = await pool.query(
+    // Verify pass (HIGH): without a memo this re-requested the same orders on
+    // EVERY 5s tick forever — an order the cloud genuinely has no tenders for
+    // (a £0 comp, a cancelled bill) is a permanent gap, and 25 HTTP calls every
+    // 5 seconds is a self-inflicted denial of service on the tenant. Try each
+    // order a few times, then leave it alone.
+    const gaps = (await pool.query(
       `SELECT o.id, o.cloud_id FROM orders o
         WHERE o.status = 'closed' AND o.cloud_id IS NOT NULL AND o.total > 0
           AND o.closed_at > datetime('now', '-3 days')
           AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id)
-        LIMIT 25`);
-    if (!gaps.rows.length) return;
-    console.log(`[sync] repairing ${gaps.rows.length} closed order(s) that have no tenders locally`);
+        LIMIT 25`)).rows.filter((row) => (_repairAttempts.get(row.cloud_id) || 0) < 3);
+    if (!gaps.length) return;
+    console.log(`[sync] repairing ${gaps.length} closed order(s) that have no tenders locally`);
     const payCols = colRes.rows.map(r => r.name);
-    for (const row of gaps.rows) {
+    for (const row of gaps) {
+      _repairAttempts.set(row.cloud_id, (_repairAttempts.get(row.cloud_id) || 0) + 1);
       try {
         const r = await fetch(`${CLOUD_API_URL}/api/sync/order-payments/${row.cloud_id}`, {
           headers: { 'x-sync-secret': process.env.SYNC_SECRET }, signal: AbortSignal.timeout(PING_TIMEOUT_MS),
@@ -1482,7 +1493,10 @@ async function repairMissingClosedPayments() {
         if (!r.ok) continue;
         const pays = await r.json();
         for (const p of (Array.isArray(pays) ? pays : [])) {
+          // order_items.payment_id points at LOCAL payment ids; a cloud id
+          // mirrored verbatim would point at a different tender entirely.
           const f = pickFields(p, payCols, { order_id: row.id, cloud_id: p.id });
+          delete f.payment_id;
           const cols = Object.keys(f);
           await pool.query(`INSERT INTO payments (${cols.join(',')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(',')})`,
             cols.map(c => f[c])).catch(() => {});

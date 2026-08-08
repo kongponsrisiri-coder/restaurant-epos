@@ -48,8 +48,13 @@ function notify() {
 }
 
 // ── Failure queue ────────────────────────────────────────────────────
+// Returns TRUE only when a ticket was really queued for staff to retry.
+// The callers use that to decide whether to tell the client "held" — a cloud
+// install has no queue at all (it can never reach a restaurant's LAN printer),
+// so claiming "held" there makes the client stop its fallback chain and the
+// ticket prints NOWHERE, with no alert anywhere. Verify pass, CRITICAL.
 async function recordFailure({ kind, printer, order, items, reason }) {
-  if (!isLocal || !pool) return;
+  if (!isLocal || !pool) return false;
   try {
     await pool.query(
       `INSERT INTO print_failures
@@ -67,9 +72,11 @@ async function recordFailure({ kind, printer, order, items, reason }) {
       ]);
     console.error(`[print-alert] HELD ticket for order #${order && order.id} — ${kind} "${printer && printer.name}" (${reason})`);
     notify();
+    return true;
   } catch (err) {
     console.error('[print-alert] recordFailure failed:', err.message);
   }
+  return false;
 }
 
 function snapshotOrder(order) {
@@ -112,9 +119,13 @@ async function loadSettingsKV() {
         const p = (starred && Number(starred[`role_${role}`]) === 1 ? starred : null)
           || printers.find(x => Number(x[`role_${role}`]) === 1);
         if (!p || !(p.ip || p.name)) continue;
-        s[`printer_${role}_ip`]        = p.ip || '';
-        s[`printer_${role}_port`]      = p.port || 9100;
-        s[`printer_${role}_name`]      = p.name || '';
+        // Verify pass (HIGH) — never BLANK an existing value with '': a
+        // name-only (USB/CUPS) printer has no IP, and blanking it here left the
+        // bar-retry branch (which required an IP) unable to reprint a held
+        // ticket forever.
+        if (p.ip) s[`printer_${role}_ip`] = p.ip;
+        if (p.port) s[`printer_${role}_port`] = p.port;
+        if (p.name) s[`printer_${role}_name`] = p.name;
         s[`printer_${role}_lpr_queue`] = p.lpr_queue || s[`printer_${role}_lpr_queue`] || 'lp';
         if (role === 'kitchen' && p.copies) s.printer_kitchen_copies = String(p.copies);
       }
@@ -153,7 +164,7 @@ async function retry(ids) {
         if (!p.rows.length) throw new Error('station no longer configured');
         await printService.printKitchenToPrinter(p.rows[0], settings, payload.order, payload.items);
       } else if (row.kind === 'bar') {
-        if (!settings.printer_bar_ip) throw new Error('no bar printer configured');
+        if (!settings.printer_bar_ip && !settings.printer_bar_name) throw new Error('no bar printer configured');
         await printService.printBarTicket(settings, payload.order, payload.items);
       } else {
         if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) throw new Error('no kitchen printer configured');

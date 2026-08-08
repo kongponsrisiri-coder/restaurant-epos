@@ -804,6 +804,16 @@ export default function SettingsSection() {
   const [newReason, setNewReason] = useState('');
   const [saved, setSaved]         = useState(false);
   const [logoPreview, setLogoPreview] = useState('');
+  // SEPOS-OSK-002 — per-device on-screen-keyboard mode (localStorage, not the
+  // tenant settings, because it depends on THIS device's hardware).
+  const [oskMode, setOskMode] = useState(() => {
+    try {
+      const m = localStorage.getItem('onscreen_keyboard_mode');
+      if (m === 'off' || m === 'on' || m === 'auto') return m;
+      if (localStorage.getItem('onscreen_keyboard') === '0') return 'off';
+    } catch {}
+    return 'auto';
+  });
   // SEPOS-REVIEW-QR — render the ACTUAL review QR in the Receipt Preview (was
   // a placeholder line; the operator couldn't tell what would print). Debounced
   // so it redraws as the link is typed.
@@ -1347,6 +1357,29 @@ export default function SettingsSection() {
           </div>
         </div>
       )}
+
+      {/* ── SEPOS-OSK-002 — on-screen keyboard (per-device) ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:6 }}>⌨️ On-screen keyboard</h2>
+        <p style={{ fontSize:13, color:'#777', marginBottom:14 }}>
+          Shows a keyboard on screen for typing names, notes and searches when this
+          device has no physical keyboard. This setting is for <strong>this device only</strong>.
+        </p>
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          {[['auto','Auto (touch screens)'], ['on','Always on'], ['off','Off']].map(([val, lbl]) => (
+            <button key={val} onClick={() => { try { localStorage.setItem('onscreen_keyboard_mode', val); } catch {} setOskMode(val); }}
+              style={{ padding:'10px 16px', borderRadius:10, fontSize:14, fontWeight:700, cursor:'pointer',
+                border: oskMode===val ? '2px solid var(--brand-primary,#0D1B3E)' : '1px solid #ddd',
+                background: oskMode===val ? 'var(--brand-primary,#0D1B3E)' : '#fff',
+                color: oskMode===val ? '#fff' : '#333' }}>
+              {lbl}
+            </button>
+          ))}
+        </div>
+        <p style={{ fontSize:12, color:'#aaa', marginTop:10 }}>
+          Tap a text box to try it. It never covers the number pad or PIN entry — those keep their own keypad.
+        </p>
+      </div>
 
       {/* ── SEPOS-TILL-LOCK-001 — Till security ── */}
       <div style={cardStyle}>

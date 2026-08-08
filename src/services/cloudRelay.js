@@ -43,6 +43,7 @@ function rememberPrintedItem(id) {
 }
 
 async function autoPrintIncomingTakeaway(payload, opts = {}) {
+  let didPrint = false;
   try {
     // Load local settings (KV) — same shape src/server.js loadSettings uses.
     const sRes = await pool.query('SELECT key, value FROM settings');
@@ -62,7 +63,10 @@ async function autoPrintIncomingTakeaway(payload, opts = {}) {
           const pick = (starred && Number(starred[`role_${role}`]) === 1 ? starred : null)
             || rp.find(x => Number(x[`role_${role}`]) === 1);
           if (!pick || !(pick.ip || pick.name)) continue;
-          settings[`printer_${role}_ip`]   = pick.ip || '';
+          // Verify pass (LOW) — never BLANK an existing legacy value with '': a
+          // name-only (USB/CUPS) bar printer has no IP, and the bar branch
+          // below requires one, so drinks vanished with no alert.
+          if (pick.ip) settings[`printer_${role}_ip`] = pick.ip;
           settings[`printer_${role}_port`] = pick.port || 9100;
           settings[`printer_${role}_name`] = pick.name || '';
           if (role === 'kitchen' && pick.copies) settings.printer_kitchen_copies = String(pick.copies);
@@ -70,7 +74,7 @@ async function autoPrintIncomingTakeaway(payload, opts = {}) {
       }
     } catch {}
     const mode = settings.kitchen_print_mode || 'print';
-    if (mode === 'kds') return;
+    if (mode === 'kds') return false;
     // SEPOS-STATION-005 — a station-only setup (printers table rows, no
     // legacy kitchen/bar IP settings) must still print: check both.
     let hasStations = false;
@@ -79,7 +83,7 @@ async function autoPrintIncomingTakeaway(payload, opts = {}) {
       hasStations = (c.rows[0]?.n || 0) > 0;
     } catch {}
     if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name &&
-        !settings.printer_bar_ip && !hasStations) return;
+        !settings.printer_bar_ip && !hasStations) return false;
 
     // Fetch full order + items from cloud. We can't trust the local DB
     // yet — the SQLite pull is racing this print and may not have items
@@ -209,13 +213,24 @@ async function autoPrintIncomingTakeaway(payload, opts = {}) {
         .then(() => console.log(`🖨️ [cloud-relay] kitchen ticket auto-printed for ${opts.qr ? 'QR order' : 'takeaway'} #${payload.id}`))
         .catch(err => printAlerts.recordFailure({ kind: 'kitchen', printer: { name: 'Kitchen', ip: settings.printer_kitchen_ip }, order: printOrder, items: kitchenItems, reason: err.message }));
     }
-    if (barItems.length && settings.printer_bar_ip) {
+    // Verify pass (round 5, HIGH) — accept a name-only (USB/CUPS) bar printer,
+    // not just an IP. The gate required printer_bar_ip, so on a name-only setup
+    // drinks silently dropped (and, for QR orders, got memoised as printed and
+    // never retried). If neither ip nor name is set, HOLD it loudly instead of
+    // vanishing.
+    if (barItems.length && !settings.printer_bar_ip && !settings.printer_bar_name) {
+      printAlerts.recordFailure({ kind: 'bar', printer: { name: 'Bar', ip: null }, order: printOrder, items: barItems, reason: 'no bar printer configured' });
+    }
+    if (barItems.length && (settings.printer_bar_ip || settings.printer_bar_name)) {
       printService.printBarTicket(settings, printOrder, barItems)
         .then(() => console.log(`🍹 [cloud-relay] bar ticket auto-printed for ${opts.qr ? 'QR order' : 'takeaway'} #${payload.id}`))
         .catch(err => printAlerts.recordFailure({ kind: 'bar', printer: { name: 'Bar', ip: settings.printer_bar_ip }, order: printOrder, items: barItems, reason: err.message }));
     }
+    didPrint = true;
+    return didPrint;
   } catch (err) {
     console.error('[cloud-relay] auto-print error:', err.message);
+    return false;
   }
 }
 
@@ -324,12 +339,17 @@ function start(localIo, syncService) {
         // Print each item id at most once per relay process.
         const fresh = (payload.items || []).map(i => i.id).filter(Boolean).filter(id => !alreadyPrintedItemIds.has(id));
         if (fresh.length) {
-          fresh.forEach(id => rememberPrintedItem(id));
+          // Verify pass (HIGH) — mark them printed only AFTER the print
+          // actually ran. Marking first meant any early return inside
+          // autoPrintIncomingTakeaway (KDS mode, no printer configured, order
+          // fetch failed) suppressed those items forever, silently.
           autoPrintIncomingTakeaway(
             { id: payload.order.id },
             { qr: true, tableNumber: payload.order.table_number ?? null,
               tableLabel: payload.order.table_label ?? null,
-              onlyItemIds: fresh });
+              onlyItemIds: fresh })
+            .then((printed) => { if (printed) fresh.forEach(id => rememberPrintedItem(id)); })
+            .catch(() => { /* leave unmarked so the next event can retry */ });
         } else {
           console.log('[cloud-relay] QR event carried no unprinted items — skipping');
         }

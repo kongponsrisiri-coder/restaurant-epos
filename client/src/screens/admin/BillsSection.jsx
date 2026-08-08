@@ -256,7 +256,9 @@ export default function BillsSection() {
                 {/* SEPOS-QR-RECEIPT-001 (Korakot 2026-08-07) — the order number a
                     customer's receipt shows. Without it staff had no way to find
                     the bill someone is asking about, or to reprint it. */}
-                <span style={{ fontWeight: 700, color: '#777', fontVariantNumeric: 'tabular-nums' }}>#{bill.id}</span>
+                {/* the number the CUSTOMER sees is the cloud order id; on a Pro
+                    till the local id differs, so show the one they'll quote. */}
+                <span style={{ fontWeight: 700, color: '#777', fontVariantNumeric: 'tabular-nums' }}>#{bill.cloud_id || bill.id}</span>
                 <span style={{ fontWeight: 700, color:'var(--brand-primary, #1a1a2e)' }}>T{bill.table_number}</span>
                 <span style={{ color: '#555' }}>{bill.covers || '—'}</span>
                 <span style={{ color: '#555' }}>{formatDateTime(bill.closed_at)}</span>

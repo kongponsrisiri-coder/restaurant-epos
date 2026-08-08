@@ -94,6 +94,7 @@
   // Tenders this phone has paid on this table (survives a refresh, dies with
   // the tab — we never identify the customer, we just remember our own).
   let myPayments = [];
+  let lastOrderId = null;
   try { myPayments = JSON.parse(sessionStorage.getItem('qr_pays_' + token) || '[]'); } catch (e) { myPayments = []; }
   const modCache = {};
 
@@ -120,9 +121,12 @@
 
   async function refreshStatus() {
     if (view !== 'status') return;
+    // Verify pass (MEDIUM) — don't re-render over an open receipt: the poll
+    // used to wipe it, along with any half-typed email address.
+    if (document.querySelector('#rcbox .rc')) return;
     try {
       const s = await fetch('/api/qr/session/' + token).then((r) => r.json());
-      if (!s.error) { S.order = s.order; render(); }
+      if (!s.error) { S.order = s.order; if (s.order) lastOrderId = s.order.id; render(); }
     } catch (e) {}
   }
 
@@ -259,6 +263,7 @@
     if (!o) {
       h += '<div class="bigok">✅</div><div class="bigmsg">Order complete — thank you!</div><div class="bigsub">Everything has been served and paid. See you next time 🙏</div>';
       h += '<button class="morebtn" id="ordermore">Start a new order</button>';
+      if (myPayments.length || lastOrderId) h += '<button class="morebtn" id="getreceipt">🧾 Get a receipt</button><div id="rcbox"></div>';
     } else {
       h += '<div class="bigok">👨‍🍳</div><div class="bigmsg">Your order is with the kitchen</div><div class="bigsub">Paid ✓ · this page updates itself</div><div style="margin-top:14px">';
       for (const it of (o.items || [])) {
@@ -275,7 +280,7 @@
     h += '</div>';
     $('#app').innerHTML = h;
     const om = $('#ordermore'); if (om) om.onclick = () => { view = 'menu'; cart = []; render(); };
-    const rb = $('#getreceipt'); if (rb) rb.onclick = showReceipt;
+    const rb = $('#getreceipt'); if (rb) rb.onclick = () => showReceipt();
   }
 
   function bind() {
@@ -374,12 +379,16 @@
   }
 
   // ── Receipt ────────────────────────────────────────────────────────────────
-  async function showReceipt() {
+  async function showReceipt(pickPayment) {
     const box = $('#rcbox'); if (!box) return;
     box.innerHTML = '<div class="muted" style="margin-top:14px">Loading your receipt…</div>';
     try {
-      const mine = myPayments.length ? myPayments[myPayments.length - 1] : null;
-      let q = (S.order && S.order.id) ? ('?order_id=' + S.order.id) : '';
+      // Verify pass (MEDIUM) — a phone that paid several rounds could only ever
+      // see the last one. Offer each round it paid for.
+      const mine = pickPayment || (myPayments.length ? myPayments[myPayments.length - 1] : null);
+      const allMine = myPayments.slice();
+      const oid = (S.order && S.order.id) || lastOrderId;
+      let q = oid ? ('?order_id=' + oid) : '';
       if (mine) q += (q ? '&' : '?') + 'payment_id=' + mine;
       const r = await fetch('/api/qr/receipt/' + token + q).then((x) => x.json());
       if (r.error) { box.innerHTML = '<div class="err">' + esc(r.error) + '</div>'; return; }
@@ -399,10 +408,22 @@
       for (const p of (r.payments || [])) {
         h += '<div class="line" style="border:none;color:#666;font-size:12.5px"><span>' + esc(p.method) + '</span><span>' + cur + Number(p.amount).toFixed(2) + '</span></div>';
       }
+      if (allMine.length > 1) {
+        h += '<div class="meta" style="margin-top:10px">You paid ' + allMine.length + ' times at this table:';
+        allMine.forEach(function (pid, i) {
+          h += ' <a href="#" data-rcpay="' + pid + '" style="color:var(--brand);font-weight:700">round ' + (i + 1) + (pid === mine ? ' (shown)' : '') + '</a>';
+        });
+        h += '</div>';
+      }
       h += '<div class="em"><input id="rcmail" type="email" inputmode="email" placeholder="Email it to me (optional)"><button id="rcsend">Send</button></div>';
+      h += '<button class="morebtn" id="rcclose" style="margin-top:10px">Close receipt</button>';
       h += '<div id="rcmsg" class="muted" style="text-align:left"></div>';
       h += '</div>';
       box.innerHTML = h;
+      document.querySelectorAll('[data-rcpay]').forEach(function (a) {
+        a.onclick = function (e) { e.preventDefault(); showReceipt(Number(a.dataset.rcpay)); };
+      });
+      const cb = $('#rcclose'); if (cb) cb.onclick = () => { box.innerHTML = ''; };
       const sendBtn = $('#rcsend');
       if (sendBtn) sendBtn.onclick = async () => {
         const email = ($('#rcmail') || {}).value || '';

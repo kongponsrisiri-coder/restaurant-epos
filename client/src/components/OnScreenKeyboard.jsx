@@ -42,11 +42,31 @@ function setNativeValue(el, value) {
   el.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-function enabled() {
+// SEPOS-OSK-002 (Korakot, 2026-08-08) — the keyboard existed but had NO control
+// surface, and auto-detection is touch-only, so on a keyboard-less till that
+// doesn't report touch (many Windows POS terminals, or a laptop under test) it
+// never appeared. Per-device 3-way mode in localStorage, set from Admin →
+// Settings:
+//   'off'  — never show (a till WITH a real keyboard)
+//   'on'   — always show for text fields (a till with NO keyboard)
+//   'auto' — show on touch devices only (default; the old behaviour)
+// Exported so the mode logic can be unit-tested without a DOM.
+export function oskMode() {
   try {
-    if (localStorage.getItem('onscreen_keyboard') === '0') return false;
-    return (navigator.maxTouchPoints || 0) > 0;
-  } catch { return false; }
+    const m = localStorage.getItem('onscreen_keyboard_mode');
+    if (m === 'off' || m === 'on' || m === 'auto') return m;
+    // migrate the old boolean key: '0' meant off, anything else meant auto.
+    if (localStorage.getItem('onscreen_keyboard') === '0') return 'off';
+    return 'auto';
+  } catch { return 'auto'; }
+}
+export function oskEnabled(mode, touchPoints) {
+  if (mode === 'off') return false;
+  if (mode === 'on') return true;
+  return (touchPoints || 0) > 0;   // 'auto'
+}
+function enabled() {
+  try { return oskEnabled(oskMode(), navigator.maxTouchPoints); } catch { return false; }
 }
 
 export default function OnScreenKeyboard() {

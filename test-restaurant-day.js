@@ -85,6 +85,7 @@ async function seed() {
   for (const [id, n, name, cap] of tables) {
     await pool.query(`INSERT INTO tables (id,table_number,name,capacity,status) VALUES ($1,$2,$3,$4,'available')`, [id, n, name, cap]);
   }
+  await pool.query(`INSERT INTO tables (id,table_number,name,capacity,status) VALUES (7,7,'Table 7',4,'available')`);
   await pool.query(`INSERT INTO tables (id,table_number,name,capacity,status,is_takeaway) VALUES (9,9,'Takeaway',1,'available',1)`);
   await pool.query(`INSERT INTO categories (id,name,sort_order,is_bar) VALUES (1,'Starters',1,0)`);
   await pool.query(`INSERT INTO categories (id,name,sort_order,is_bar) VALUES (2,'Mains',2,0)`);
@@ -404,6 +405,220 @@ async function scenarioReportsReconcile(pool) {
     `report ${money(reported)} vs real ${money(realMoney)} (mock ${money(mockMoney)} must NOT be counted)`);
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REGRESSION TESTS — written BEFORE the fix, for the two criticals that the
+// adversarial verification found in the batch I shipped on 2026-08-07. Both
+// existed because this suite only drove the direction I had already thought
+// of. They must FAIL against the shipped code and PASS after the fix.
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function scenarioWaiterOntoQrOrder(pool) {
+  console.log('\n🔴 SCENARIO 12 — REGRESSION: waiter adds items to a PREPAID QR order');
+  console.log('     (the reverse of scenario 4 — the direction I never tested)');
+  // customer scans and pays for their own round
+  const qr = await POST(`/api/qr/orders/${qrToken(6)}`, { items: [{ menu_item_id: 3, quantity: 1 }] });
+  check('customer QR round placed', qr.ok && qr.data.success, JSON.stringify(qr.data));
+  const qrOrderId = qr.data.order_id;
+  const paidByCustomer = 11.50;
+
+  // A) the floor must not hand a waiter the customer's prepaid order
+  const opened = await POST('/api/orders', { table_id: 6, covers: 2 });
+  check('opening the table does NOT reuse the prepaid QR order',
+    opened.data.id !== qrOrderId,
+    `table 6 handed back QR order #${qrOrderId}`);
+
+  // B) even if items DO reach it, the bill must not close while money is owed
+  const add = await POST(`/api/orders/${qrOrderId}/items`, {
+    items: [{ menu_item_id: 5, quantity: 2, unit_price: 14.00 }],   // £28 of waiter food
+  });
+  // The money-loss path is now closed BY CONSTRUCTION: staff cannot add to a
+  // customer's prepaid QR order at all, so un-tendered items can never reach it.
+  check('adding waiter items to a prepaid QR order is refused', !add.ok || add.status === 409,
+    `status ${add.status}`);
+  const ord = (await GET(`/api/orders/${qrOrderId}`)).data;
+  const tendered = (await pool.query(
+    `SELECT COALESCE(SUM(amount),0) s FROM payments WHERE order_id=$1 AND COALESCE(method,'') <> 'cancelled'`,
+    [qrOrderId])).rows[0].s;
+  check('QR order total unchanged (no waiter items landed)', Math.abs(Number(ord.total) - paidByCustomer) < 0.005,
+    `${money(ord.total)} vs ${money(paidByCustomer)}`);
+  check('customer charged exactly their own round', Math.abs(Number(tendered) - paidByCustomer) < 0.005, money(tendered));
+}
+
+async function scenarioHeldOnlyWhenActuallyHeld(pool) {
+  console.log('\n🔴 SCENARIO 13 — REGRESSION: "held" must mean a ticket really was held');
+  // point the kitchen at an unroutable address so the print genuinely fails
+  await PUT('/api/settings', { printer_kitchen_ip: '192.0.2.1', printer_kitchen_port: '9100' });
+  const o = await POST('/api/orders', { table_id: 3, covers: 2 });
+  await POST(`/api/orders/${o.data.id}/items`, { items: [{ menu_item_id: 3, quantity: 1, unit_price: 11.50 }] });
+  const printed = await POST(`/api/print/kitchen`, { order_id: o.data.id, course: 1 });
+  const pending = (await pool.query(`SELECT COUNT(*) n FROM print_failures WHERE status='pending'`)).rows[0].n;
+  // The contract: the response may only claim 'held' when a ticket is actually
+  // sitting in the queue for staff to retry. Claiming it otherwise makes the
+  // client stop its fallback chain and the ticket prints NOWHERE.
+  const claimsHeld = printed.data && printed.data.held === true;
+  check('"held" is only claimed when a ticket is actually queued',
+    !claimsHeld || Number(pending) > 0,
+    `held=${claimsHeld} but ${pending} ticket(s) queued`);
+  // NOTE: this route currently holds nothing on a plain (station-less) kitchen
+  // print failure — a separate pre-existing gap in SEPOS-PRINT-ALERT-001, logged
+  // rather than asserted here so this suite stays about tonight's regressions.
+  // Verify pass — this used to only log. Now assert the contract that broke in
+  // production: the response's 'held' must reflect whether a ticket was really
+  // queued, never claim held when nothing was kept.
+  check('response held-flag matches the queue state',
+    claimsHeld === (Number(pending) > 0),
+    `held=${claimsHeld} but ${pending} queued`);
+  await PUT('/api/settings', { printer_kitchen_ip: '', printer_kitchen_port: '' });
+  await POST(`/api/orders/${o.data.id}/pay`, { amount: 11.50 * 1.125, method: 'Cash' });
+}
+
+async function scenarioCloudNeverClaimsHeld() {
+  console.log('\n🔴 SCENARIO 14 — REGRESSION: a CLOUD install has no held-ticket queue at all');
+  // printAlertService is local-only by design (a cloud server can't reach a
+  // restaurant's LAN printer). Require it with DB_MODE=cloud and prove
+  // recordFailure is a no-op — so nothing may report a ticket as "held".
+  const { execFileSync } = require('child_process');
+  const probe = `
+    process.env.DB_MODE='cloud';
+    const pa = require('${path.join(__dirname, 'src/services/printAlertService.js')}');
+    pa.init({ pool: { query: async () => ({ rows: [] }) }, io: null, printService: {} });
+    Promise.resolve(pa.recordFailure({ kind:'kitchen', printer:{name:'K'}, order:{id:1}, items:[], reason:'x' }))
+      .then(v => { console.log(JSON.stringify({ recorded: v === true })); });
+  `;
+  let recorded = null;
+  try {
+    const out = execFileSync('node', ['-e', probe], { encoding: 'utf8', timeout: 20000 });
+    recorded = JSON.parse(out.trim().split('\n').pop()).recorded;
+  } catch (e) { recorded = `probe failed: ${e.message.slice(0, 60)}`; }
+  check('recordFailure reports NOT-recorded on a cloud install', recorded === false,
+    `returned ${JSON.stringify(recorded)} — the route must not claim held from this`);
+
+  // THE ACTUAL DEFECT: the print routes set err.ticketHeld = true unconditionally,
+  // right next to recordFailure — which is a no-op on cloud. So a cloud till
+  // answers "held" for a ticket nobody kept, the client stops its fallback chain,
+  // and the ticket prints NOWHERE. The route must derive 'held' FROM the
+  // recording, never assert it independently.
+  const src = fs.readFileSync(path.join(__dirname, 'src/server.js'), 'utf8');
+  const unconditional = (src.match(/err\.ticketHeld\s*=\s*true/g) || []).length;
+  const derived = (src.match(/ticketHeld\s*=\s*(await\s+)?printAlerts\.recordFailure/g) || []).length;
+  check('print routes derive "held" from the recording, not assert it',
+    unconditional === 0 && derived > 0,
+    `${unconditional} unconditional assignment(s), ${derived} derived`);
+}
+
+
+async function scenarioConfirmCollectionNoDoubleTender(pool) {
+  console.log('\n🔴 SCENARIO 15 — REGRESSION: "Confirm collection" must not tender a prepaid bill twice');
+  const tok = qrToken(7);   // its own table — this scenario counts tenders exactly
+  const r1 = await POST(`/api/qr/orders/${tok}`, { items: [{ menu_item_id: 4, quantity: 1 }] });
+  const r2 = await POST(`/api/qr/orders/${tok}`, { items: [{ menu_item_id: 6, quantity: 1 }] });
+  const orderId = r1.data.order_id;
+  const ord = (await GET(`/api/orders/${orderId}`)).data;
+  const beforePays = (await pool.query(`SELECT COUNT(*) n, COALESCE(SUM(amount),0) s FROM payments WHERE order_id=$1`, [orderId])).rows[0];
+  check('two prepaid rounds recorded', Number(beforePays.n) === 2, `${beforePays.n} tender(s)`);
+
+  // this is exactly what the till's "✓ Confirm collection · £X" button posts
+  await POST(`/api/orders/${orderId}/pay`, { amount: Number(ord.total), method: 'Online (Stripe)' });
+
+  const afterPays = (await pool.query(`SELECT COUNT(*) n, COALESCE(SUM(amount),0) s FROM payments WHERE order_id=$1`, [orderId])).rows[0];
+  const after = (await GET(`/api/orders/${orderId}`)).data;
+  check('closing a PREPAID bill adds no second tender',
+    Number(afterPays.n) === Number(beforePays.n),
+    `${beforePays.n} → ${afterPays.n} tenders, ${money(beforePays.s)} → ${money(afterPays.s)} on a ${money(ord.total)} bill`);
+  check('tenders still equal the bill (not double)',
+    Math.abs(Number(afterPays.s) - Number(ord.total)) < 0.005,
+    `${money(afterPays.s)} vs ${money(ord.total)}`);
+  check('the bill did close', after.status === 'closed', after.status);
+  void r2;
+}
+
+async function scenarioQrFailureIsAtomic(pool) {
+  console.log('\n🔴 SCENARIO 16 — REGRESSION: a QR round is all-or-nothing');
+  // an item that exists but is 86'd mid-cart: the round must not half-land
+  await PUT('/api/menu/items/2', { name: 'Tom Yum Soup', price: 7.50, category_id: 1, is_available: 0 });
+  const before = (await pool.query(`SELECT COUNT(*) n FROM order_items`)).rows[0].n;
+  const r = await POST(`/api/qr/orders/${qrToken(4)}`, {
+    items: [{ menu_item_id: 3, quantity: 1 }, { menu_item_id: 2, quantity: 1 }],
+  });
+  const after = (await pool.query(`SELECT COUNT(*) n FROM order_items`)).rows[0].n;
+  check('a rejected round fires NOTHING to the kitchen', Number(after) === Number(before),
+    `${before} → ${after} item rows for a ${r.status} response`);
+  const orphan = (await pool.query(
+    `SELECT COUNT(*) n FROM orders o WHERE o.source='qr' AND o.status='open'
+       AND NOT EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id=o.id)`)).rows[0].n;
+  check('no empty QR order left behind', Number(orphan) === 0, `${orphan} empty`);
+  await PUT('/api/menu/items/2', { name: 'Tom Yum Soup', price: 7.50, category_id: 1, is_available: 1 });
+}
+
+
+async function scenarioQrOrderIsStaffReadOnly(pool) {
+  console.log('\n🔴 SCENARIO 17 — REGRESSION: staff cannot pollute a customer\'s prepaid QR order');
+  const tok = qrToken(5);
+  const qr = await POST(`/api/qr/orders/${tok}`, { items: [{ menu_item_id: 4, quantity: 1 }] });
+  const qrId = qr.data.order_id;
+  const before = (await pool.query(`SELECT total FROM orders WHERE id=$1`, [qrId])).rows[0].total;
+
+  // A) a waiter must not be able to add staff items onto the prepaid QR order
+  const add = await POST(`/api/orders/${qrId}/items`, { items: [{ menu_item_id: 5, quantity: 2, unit_price: 14.00 }] });
+  const afterAdd = (await pool.query(`SELECT total FROM orders WHERE id=$1`, [qrId])).rows[0].total;
+  check('adding staff items to a QR order is refused', !add.ok || add.status === 409,
+    `status ${add.status}`);
+  check('QR order total unchanged by the attempt', Math.abs(Number(afterAdd) - Number(before)) < 0.005,
+    `${money(before)} → ${money(afterAdd)}`);
+
+  // B) a customer's prepaid QR order must not be merge-able into a staff bill
+  //    (the real contract is PUT :targetId/merge with { merge_order_id }).
+  const w = await POST('/api/orders', { table_id: 4, covers: 2 });
+  await POST(`/api/orders/${w.data.id}/items`, { items: [{ menu_item_id: 3, quantity: 1, unit_price: 11.50 }] });
+  const wPaysBefore = (await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM payments WHERE order_id=$1`, [w.data.id])).rows[0].s;
+  const mg = await PUT(`/api/orders/${w.data.id}/merge`, { merge_order_id: qrId });
+  check('merging a prepaid QR order into a staff bill is refused', !mg.ok || mg.status === 409,
+    `status ${mg.status}`);
+  // whatever the outcome, the guest's £12 must never be billed a second time:
+  const qrItems = (await pool.query(`SELECT COUNT(*) n FROM order_items WHERE order_id=$1`, [qrId])).rows[0].n;
+  const qrPaid = (await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM payments WHERE order_id=$1`, [qrId])).rows[0].s;
+  check('the prepaid QR order is intact (items + its own tender)',
+    Number(qrItems) > 0 && Number(qrPaid) + 0.005 >= Number(before),
+    `${qrItems} items, ${money(qrPaid)} tendered vs ${money(before)}`);
+  // clean up whatever remained open
+  for (const id of [qrId, w.data.id]) {
+    const o = (await GET(`/api/orders/${id}`)).data;
+    if (o && o.status === 'open') {
+      const paid = (await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM payments WHERE order_id=$1`,[id])).rows[0].s;
+      if (Number(paid) + 0.005 >= Number(o.total)) { for (const it of (o.items||[])) await PUT(`/api/order-items/${it.id}/status`,{status:'served'}); }
+      else await POST(`/api/orders/${id}/pay`, { amount: Number(o.total)*1.125, method:'Cash' });
+    }
+  }
+}
+
+
+async function scenarioQrOrderFullyReadOnly(pool) {
+  console.log('\n🔴 SCENARIO 18 — REGRESSION: EVERY staff money-mutation on a QR order is refused');
+  const tok = qrToken(6);
+  const r = await POST(`/api/qr/orders/${tok}`, { items: [{ menu_item_id: 4, quantity: 2 }] });
+  const orderId = r.data.order_id;
+  const ord = (await GET(`/api/orders/${orderId}`)).data;
+  const before = Number(ord.total);
+  const itemId = ord.items[0].id;
+
+  const attempts = [
+    ['order discount',   () => PUT(`/api/orders/${orderId}/discount`, { discount_type: 'percent', discount_value: 50, reason: 'x' })],
+    ['service charge',   () => PUT(`/api/orders/${orderId}/service-charge`, { no_service_charge: 1 })],
+    ['item void',        () => PUT(`/api/order-items/${itemId}/void`, { reason: 'Wastage', void_type: 'wastage' })],
+    ['item discount',    () => PUT(`/api/order-items/${itemId}/discount`, { discount_type: 'percent', discount_value: 50 })],
+  ];
+  for (const [name, fn] of attempts) {
+    const res = await fn().catch(() => ({ ok: false, status: 0 }));
+    check(`${name} on a prepaid QR order is refused`, !res.ok || res.status === 409, `status ${res.status}`);
+  }
+  const after = (await GET(`/api/orders/${orderId}`)).data;
+  const paid = (await pool.query(`SELECT COALESCE(SUM(amount),0) s FROM payments WHERE order_id=$1`, [orderId])).rows[0].s;
+  check('QR order total unchanged by all attempts', Math.abs(Number(after.total) - before) < 0.005,
+    `${money(before)} → ${money(after.total)}`);
+  check('tenders still exactly cover it', Math.abs(Number(paid) - before) < 0.005, `${money(paid)} vs ${money(before)}`);
+}
+
 // ── run ─────────────────────────────────────────────────────────────────────
 (async () => {
   await boot();
@@ -419,6 +634,13 @@ async function scenarioReportsReconcile(pool) {
     await scenarioSplitPayment(pool);   await invariants(pool, 'split payment');
     await scenarioDoubleTap(pool);      await invariants(pool, 'double-tap');
     await scenarioStress(pool);         await invariants(pool, 'stress');
+    await scenarioWaiterOntoQrOrder(pool);   await invariants(pool, 'waiter onto QR order');
+    await scenarioHeldOnlyWhenActuallyHeld(pool); await invariants(pool, 'held-ticket honesty');
+    await scenarioCloudNeverClaimsHeld();
+    await scenarioConfirmCollectionNoDoubleTender(pool); await invariants(pool, 'confirm collection');
+    await scenarioQrFailureIsAtomic(pool);               await invariants(pool, 'atomic QR round');
+    await scenarioQrOrderIsStaffReadOnly(pool);          await invariants(pool, 'QR order staff-safe');
+    await scenarioQrOrderFullyReadOnly(pool);            await invariants(pool, 'QR fully read-only');
     await scenarioReportsReconcile(pool); await invariants(pool, 'end of day');
   } catch (err) {
     console.error('\n💥 simulation crashed:', err.stack || err.message);

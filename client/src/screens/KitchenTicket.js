@@ -340,6 +340,10 @@ export async function printFireNoticeTicket({ order, course, popupWin = null }) 
     if ((settings && settings.printer_kitchen_ip) || usbName) {
       const r = await serverPrintFireNotice(order.id, course, usbName || undefined);
       if (r && r.success) { closeWin(popupWin); return; }
+      // Verify pass (HIGH) — same rule as the kitchen path: a ticket the server
+      // HELD is queued for staff to retry, so printing it here would duplicate
+      // it and make the banner's "not printed anywhere" a lie.
+      if (r && r.held) { closeWin(popupWin); console.warn('[ticket] HELD by the server — banner offers retry/redirect'); return; }
       console.warn('[fire-notice] server print failed, falling back:', r?.error || r?.reason);
     }
   } catch (e) {
@@ -394,6 +398,10 @@ export async function printBarOrderTicket({ order, items, popupWin = null }) {
     if ((settings && settings.printer_bar_ip) || usbName) {
       const r = await serverPrintBar(order.id, barItems, usbName || undefined);
       if (r && r.success) { closeWin(popupWin); return; }
+      // Verify pass (HIGH) — same rule as the kitchen path: a ticket the server
+      // HELD is queued for staff to retry, so printing it here would duplicate
+      // it and make the banner's "not printed anywhere" a lie.
+      if (r && r.held) { closeWin(popupWin); console.warn('[ticket] HELD by the server — banner offers retry/redirect'); return; }
       console.warn('[bar-ticket] server print failed, falling back:', r?.error || r?.reason);
     }
   } catch (e) {

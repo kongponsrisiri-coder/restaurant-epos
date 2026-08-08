@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { SERVER_URL, authHeaders } from '../../api';
 import {
   getAllMenu as getMenu, addMenuItem, updateMenuItem, deleteMenuItem,
+  uploadMenuItemImage, deleteMenuItemImage,
   getItemModifiers, addModifierGroup, addModifierOption,
   deleteModifierGroup, deleteModifier,
   getModifierLibrary, createLibraryGroup, attachGroupToItem, detachGroupFromItem,
@@ -212,8 +213,61 @@ export default function MenuSection() {
     if (cat?.id) setActiveCategory(cat.id);
   };
 
-  const openAddForm  = () => { setForm({ name: '', description: '', price: '', category_id: activeCategory, subcategory_id: null, vat_rate: 20, default_course: '', printer_id: '' }); setEditItem(null); setShowForm(true); };
-  const openEditForm = (item) => { setForm({ name: item.name, name_alt: item.name_alt || '', description: item.description || '', price: item.price, category_id: item.category_id, subcategory_id: item.subcategory_id || null, vat_rate: item.vat_rate ?? 20, default_course: item.default_course ?? '', printer_id: item.printer_id ?? '' }); setEditItem(item); setShowForm(true); };
+  // SEPOS-MENU-PHOTO-001 — the owner photographs a dish on their phone and it
+  // appears on the online/QR menu. Resize HERE, on the device: a modern phone
+  // camera produces 4-8 MB, which is pointless for a 78px menu thumbnail and
+  // slow to upload over restaurant wifi. ~900px JPEG lands at ~100-150 KB.
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const resizeImage = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('That file is not an image'));
+      img.onload = () => {
+        const MAX = 900;
+        let { width: w, height: h } = img;
+        if (w > MAX || h > MAX) { const r = Math.min(MAX / w, MAX / h); w = Math.round(w * r); h = Math.round(h * r); }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);   // flatten PNG alpha
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', 0.82));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  const handlePhotoPick = async (file) => {
+    if (!file || !editItem) return;
+    setPhotoBusy(true);
+    try {
+      const dataUrl = await resizeImage(file);
+      const r = await uploadMenuItemImage(editItem.id, dataUrl);
+      assertOk(r);
+      setForm(f => ({ ...f, image_url: r.image_url }));
+      setMenu(prev => prev.map(cat => ({ ...cat, items: (cat.items || []).map(it => it.id === editItem.id ? { ...it, image_url: r.image_url } : it) })));
+    } catch (err) {
+      alert('Could not upload the photo: ' + (err?.message || 'unknown'));
+    }
+    setPhotoBusy(false);
+  };
+
+  const handlePhotoRemove = async () => {
+    if (!editItem) return;
+    setPhotoBusy(true);
+    try {
+      assertOk(await deleteMenuItemImage(editItem.id));
+      setForm(f => ({ ...f, image_url: '' }));
+      setMenu(prev => prev.map(cat => ({ ...cat, items: (cat.items || []).map(it => it.id === editItem.id ? { ...it, image_url: null } : it) })));
+    } catch (err) { alert('Could not remove the photo: ' + (err?.message || 'unknown')); }
+    setPhotoBusy(false);
+  };
+
+  const openAddForm  = () => { setForm({ name: '', description: '', price: '', category_id: activeCategory, subcategory_id: null, vat_rate: 20, default_course: '', printer_id: '', image_url: '' }); setEditItem(null); setShowForm(true); };
+  const openEditForm = (item) => { setForm({ name: item.name, name_alt: item.name_alt || '', description: item.description || '', price: item.price, category_id: item.category_id, subcategory_id: item.subcategory_id || null, vat_rate: item.vat_rate ?? 20, default_course: item.default_course ?? '', printer_id: item.printer_id ?? '', image_url: item.image_url || '' }); setEditItem(item); setShowForm(true); };
 
   // SEPOS-046v — optimistic item save. Reflects the change in local menu
   // state immediately (including moving the item between categories when
@@ -673,6 +727,41 @@ export default function MenuSection() {
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Item name (English) *</label><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Second language name <span style={{ fontWeight: 400, color: '#aaa' }}>(optional)</span></label><input value={form.name_alt || ''} onChange={e => setForm({ ...form, name_alt: e.target.value })} placeholder="e.g. ไก่ผัดเม็ดมะม่วง" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--brand-accent,#C9A84C)', fontSize: 14, boxSizing: 'border-box' }} /></div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Description</label><input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
+              {/* SEPOS-MENU-PHOTO-001 — dish photo. Only on an existing dish:
+                  the upload needs an item id, so a brand-new dish is saved
+                  first and the photo added on the next open (the hint says so). */}
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>
+                  Photo <span style={{ fontWeight: 400, color: '#aaa' }}>(shows on your online menu &amp; table QR ordering)</span>
+                </label>
+                {editItem ? (
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ width: 84, height: 84, borderRadius: 10, border: '1px solid #ddd', background: '#faf9f6', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {form.image_url
+                        ? <img src={form.image_url.startsWith('http') ? form.image_url : `${SERVER_URL}${form.image_url}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : <span style={{ fontSize: 24, opacity: .35 }}>🍽️</span>}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <label style={{ padding: '9px 14px', borderRadius: 8, border: 'none', background: 'var(--brand-primary,#0D1B3E)', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: photoBusy ? 'wait' : 'pointer', opacity: photoBusy ? .6 : 1 }}>
+                        {photoBusy ? 'Uploading…' : (form.image_url ? '📷 Replace photo' : '📷 Add photo')}
+                        <input type="file" accept="image/*" disabled={photoBusy} style={{ display: 'none' }}
+                               onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; handlePhotoPick(f); }} />
+                      </label>
+                      {form.image_url && !photoBusy && (
+                        <button type="button" onClick={handlePhotoRemove}
+                                style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e0b4b4', background: '#fff', color: '#b02a2a', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>
+                          Remove photo
+                        </button>
+                      )}
+                      <div style={{ fontSize: 11, color: '#aaa' }}>Take a photo or pick one — we shrink it for you.</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12.5, color: '#999', padding: '10px 12px', background: '#faf9f6', borderRadius: 8, border: '1px dashed #ddd' }}>
+                    Save the dish first, then reopen it to add a photo.
+                  </div>
+                )}
+              </div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Price (£) *</label><input value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} type="number" step="0.01" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>VAT rate</label><select value={form.vat_rate ?? 20} onChange={e => setForm({ ...form, vat_rate: Number(e.target.value) })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}><option value={20}>20% (standard)</option><option value={5}>5% (reduced)</option><option value={0}>0% (zero rated)</option></select><div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>Prices are VAT-inclusive — this affects the VAT breakdown on bills + reports.</div></div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Kitchen course</label><select value={form.default_course ?? ''} onChange={e => setForm({ ...form, default_course: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}><option value="">Inherit from category</option><option value={1}>Starter</option><option value={2}>Main</option><option value={3}>Dessert</option><option value={4}>Extra</option></select><div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>Set this for a mixed category (e.g. a Lunch menu) so this dish always prints on the right course — otherwise it follows the category.</div></div>

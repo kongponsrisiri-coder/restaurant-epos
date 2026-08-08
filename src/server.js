@@ -21,6 +21,10 @@ const uberDirectService = require('./services/uberDirectService');
 const deliverooService = require('./services/deliverooService');
 
 const app = express();
+// SEPOS-AUDIT-002 F16 — behind Railway/Cloudflare every request arrives from the
+// edge proxy, so an untrusted req.ip is the SAME string for the whole planet:
+// 8 wrong PINs locked out every staff member at every restaurant.
+app.set('trust proxy', 1);
 const httpServer = http.createServer(app);
 
 const io = new Server(httpServer, {
@@ -56,6 +60,36 @@ app.use(express.static(path.join(__dirname, '../public')));
 // discounted total to the raw undiscounted sum, corrupting the bill and
 // the Z-report subtotal/discount figures. GREATEST → max() and the
 // arithmetic both translate cleanly to SQLite (verified in translateSql).
+// SEPOS-QR-PAY-REDO (verify pass, round 5) — a table can now hold more than one
+// open order (a waiter bill + a customer's prepaid QR bill). Freeing it must
+// therefore be conditional EVERYWHERE, not just on the /pay success path. This
+// is the single implementation every close/cancel/void/merge/delete path calls,
+// so the guard can never again be added to some sites and forgotten on others.
+// SEPOS-QR-PAY-REDO (verify pass, round 6) — a QR order is the customer's
+// prepaid, staff-READ-ONLY bill. Staff mutating it (void, discount, service
+// charge…) strands the customer's money or fabricates uncollected revenue,
+// because the tender was fixed at order time. One guard for every such
+// endpoint, so the rule can't be enforced on some and forgotten on others
+// (it already was: /items and /merge had it, void/discount/service-charge
+// didn't). Refunds/changes to a prepaid order go through the payment provider,
+// not the till. Returns true (and answers 409) when the order is a QR order.
+async function refuseQrMutation(orderId, res) {
+  const r = await pool.query('SELECT source FROM orders WHERE id = $1', [orderId]);
+  if (r.rows[0] && r.rows[0].source === 'qr') {
+    res.status(409).json({ error: 'This is a customer prepaid QR order — it can\'t be changed on the till. Refund or adjust it through the payment provider.', qrReadOnly: true });
+    return true;
+  }
+  return false;
+}
+
+async function freeTableIfEmpty(tableId) {
+  if (tableId == null) return;
+  const r = await pool.query("SELECT COUNT(*) AS n FROM orders WHERE table_id=$1 AND status='open'", [tableId]);
+  if (Number(r.rows[0]?.n || 0) === 0) {
+    await pool.query("UPDATE tables SET status='available' WHERE id=$1", [tableId]);
+  }
+}
+
 const ORDER_TOTAL_EXPR = `SUM(CASE
   WHEN discount_type = 'percent' THEN quantity * unit_price * (1 - COALESCE(discount_value,0)/100)
   WHEN discount_type = 'fixed'   THEN GREATEST(0, quantity * unit_price - COALESCE(discount_value,0))
@@ -1298,6 +1332,14 @@ app.post('/api/orders', requireActiveSubscription, requireValidLicense, async (r
     const out = await runExclusive(lockKey, async () => {
       if (dedupe) {
         // Prefer an existing open order that already has items, then the newest.
+        // SEPOS-QR-PAY-REDO (verify pass, CRITICAL) — never hand the waiter a
+        // customer's PREPAID QR order. The QR side already refuses to adopt a
+        // waiter's bill; without the mirror rule the floor map handed the
+        // waiter the newest open order on the table — often the QR one — they
+        // rang £28 of food onto it, and the serve-time auto-close closed it as
+        // "paid" because it was a QR order. £39.50 recorded, £11.50 taken.
+        // A QR bill belongs to the customer who paid it; staff opening the
+        // table get their own bill alongside it.
         // NB: order by a CASE/EXISTS expression, NOT a SELECT-list alias —
         // Postgres rejects an output alias used inside an ORDER BY expression
         // (SQLite tolerates it), so an aliased `(item_count > 0)` would 500 every
@@ -1307,6 +1349,7 @@ app.post('/api/orders', requireActiveSubscription, requireValidLicense, async (r
              FROM orders o
             WHERE o.table_id = $1 AND o.status = 'open'
               AND (o.order_type IS NULL OR o.order_type = 'dine_in')
+              AND COALESCE(o.source,'') <> 'qr'
             ORDER BY CASE WHEN EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id) THEN 1 ELSE 0 END DESC,
                      o.id DESC
             LIMIT 1`,
@@ -1346,10 +1389,21 @@ app.post('/api/orders/:id/items', requireValidLicense, async (req, res) => {
     // BUG-001 — adding items to a non-existent order used to throw a
     // raw FK violation → 500. Check the order exists first and return
     // a clean 404.
-    const orderCheck = await client.query('SELECT id, status FROM orders WHERE id = $1', [orderId]);
+    const orderCheck = await client.query('SELECT id, status, source, payment_status FROM orders WHERE id = $1', [orderId]);
     if (orderCheck.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Order not found' });
+    }
+    // SEPOS-QR-PAY-REDO (verify pass, CRITICAL) — a QR order is the CUSTOMER's
+    // prepaid bill; staff must never add to it (the floor map can route a
+    // waiter onto it, and adding £40 of food to a £12 prepaid order then had
+    // the auto-close either lose the £40 or double-tender it). Staff who want
+    // to add to that table open their own bill. The QR flow itself does not use
+    // this endpoint — it inserts items inside its own locked transaction — so
+    // this only blocks the staff/floor path.
+    if (orderCheck.rows[0].source === 'qr') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'This is a customer prepaid QR order — start a separate bill to add items to this table.', qrReadOnly: true });
     }
     // Never add items to an already-closed/cancelled order — that created the
     // "closed order with items but no payment" phantom (inflates the sales
@@ -1491,7 +1545,24 @@ app.put('/api/order-items/:id/status', async (req, res) => {
           `SELECT COUNT(*) AS n FROM order_items
             WHERE order_id = $1 AND voided = 0 AND status <> 'served'`,
           [item.order_id]);
-        if (Number(remainingQr.rows[0]?.n || 0) === 0) {
+        // "Everything served" is NOT "everything paid for". The adoption rule
+        // above should mean a QR order only ever holds prepaid rounds, but this
+        // is the money check — if anything ever reaches the bill by another
+        // route, it must NOT be closed away silently. Leave it open, tell the
+        // log, and let staff take the balance.
+        const cover = await pool.query(
+          `SELECT COALESCE((SELECT SUM(amount) FROM payments
+                             WHERE order_id = $1 AND COALESCE(method,'') <> 'cancelled'), 0) AS paid,
+                  COALESCE((SELECT ${ORDER_TOTAL_EXPR} FROM order_items
+                             WHERE order_id = $1 AND voided = 0), 0) AS total`,
+          [item.order_id]);
+        const paidAmt = Number(cover.rows[0]?.paid || 0);
+        const dueAmt = Number(cover.rows[0]?.total || 0);
+        const covered = paidAmt + 0.005 >= dueAmt;
+        if (!covered) {
+          console.warn(`[qr] order ${item.order_id} fully served but NOT settled (${paidAmt.toFixed(2)} of ${dueAmt.toFixed(2)}) — left open for staff to take the balance`);
+        }
+        if (covered && Number(remainingQr.rows[0]?.n || 0) === 0) {
           await pool.query(
             `UPDATE orders SET status='closed', closed_at=NOW(), service_charge=0, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1 AND status='open'`,
             [item.order_id]);
@@ -1541,6 +1612,7 @@ app.put('/api/order-items/:id/void', async (req, res) => {
     const origRes = await pool.query('SELECT * FROM order_items WHERE id = $1', [req.params.id]);
     const orig = origRes.rows[0];
     if (!orig) return res.status(404).json({ error: 'Item not found' });
+    if (await refuseQrMutation(orig.order_id, res)) return;   // round 6 — QR read-only
 
     const qtyToVoid = Number.isFinite(Number(voidQty)) ? Number(voidQty) : orig.quantity;
     let ghostItemId = null;
@@ -1592,7 +1664,7 @@ app.put('/api/order-items/:id/void', async (req, res) => {
         await pool.query(`UPDATE orders SET status='closed', closed_at=NOW(), service_charge=0, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [item.order_id]);
         await pool.query(`INSERT INTO payments (order_id, amount, method) VALUES ($1, 0, 'zero')`, [item.order_id]);
         const orderRes = await pool.query('SELECT table_id FROM orders WHERE id=$1', [item.order_id]);
-        if (orderRes.rows[0]) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [orderRes.rows[0].table_id]);
+        if (orderRes.rows[0]) await freeTableIfEmpty(orderRes.rows[0].table_id);   // round 5
       }
     }
     // SEPOS-047c — return the ghost id so a desktop sync push can bind its
@@ -1603,6 +1675,7 @@ app.put('/api/order-items/:id/void', async (req, res) => {
 
 app.put('/api/orders/:id/discount', async (req, res) => {
   try {
+    if (await refuseQrMutation(req.params.id, res)) return;
     const { discount_type, discount_value, discount_reason } = req.body;
     await pool.query('UPDATE orders SET discount_type=$1, discount_value=$2, discount_reason=$3 WHERE id=$4', [discount_type, discount_value, discount_reason, req.params.id]);
     // SEPOS-AUDIT-001 — push to cloud on local installs (no-op on cloud);
@@ -1619,6 +1692,7 @@ app.put('/api/orders/:id/discount', async (req, res) => {
 // charge from the global setting. Body: { no_service_charge: 0 | 1 }.
 app.put('/api/orders/:id/service-charge', async (req, res) => {
   try {
+    if (await refuseQrMutation(req.params.id, res)) return;
     const flag = req.body.no_service_charge ? 1 : 0;
     await pool.query('UPDATE orders SET no_service_charge = $1 WHERE id = $2', [flag, req.params.id]);
     // SEPOS-AUDIT-001 — CRITICAL on local tills: cloud defaults this flag to 0,
@@ -1759,12 +1833,37 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
       }
       await client.query(`UPDATE orders SET status='cancelled', closed_at=NOW(), session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId]);
       await client.query('COMMIT');
-      if (order.table_id) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [order.table_id]);
+      await freeTableIfEmpty(order.table_id);   // round 5 — don't free a two-bill table
       // SEPOS-AUDIT-001 — this early-return path skipped the pay enqueue below,
       // so the cloud copy stayed 'open' and the pull reopened the cancelled
       // order on the till. Push the cancel too (no-op on cloud installs).
       await offlineQueue.enqueue('cancel_order', { localOrderId: Number(orderId) });
       return res.json({ success: true, cancelled: true });
+    }
+
+    // SEPOS-AUDIT-002 (verify pass, HIGH) — PREPAID bills. A QR round records
+    // its tender at order time (pay-first), unlike online takeaway which
+    // records nothing until the till closes it. The till's "✓ Confirm
+    // collection · £X" button was built for takeaway and posts a full-value
+    // payment here, so closing a prepaid QR bill recorded the money a SECOND
+    // time (£78.50 of food showing £157.00 of tenders in the simulation).
+    //
+    // Deliberately NOT a separate close path: an earlier attempt forked one and
+    // silently skipped the service-charge snapshot and the post-commit
+    // bookkeeping. Here we only skip the duplicate INSERT and let the single
+    // close path run exactly as it always has. The cloud runs this same code,
+    // so the queued pay_order replay is suppressed there too — no duplicate on
+    // either side.
+    let suppressTender = false;
+    if (!isCancel && order.status === 'open') {
+      const already = await client.query(
+        `SELECT COALESCE(SUM(amount),0) AS paid FROM payments
+          WHERE order_id = $1 AND COALESCE(method,'') <> 'cancelled'`, [orderId]);
+      const alreadyPaid = Number(already.rows[0]?.paid || 0);
+      if (alreadyPaid > 0 && alreadyPaid + 0.005 >= Number(order.total || 0)) {
+        suppressTender = true;
+        console.log(`[pay] order ${orderId} already settled (£${alreadyPaid.toFixed(2)}) — closing without a duplicate tender`);
+      }
     }
 
     // Double-charge guard — only an OPEN bill can be paid.
@@ -1773,8 +1872,10 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
       return res.status(409).json({ error: 'This bill has already been paid.', alreadyPaid: true });
     }
 
-    for (const p of paymentRows) {
-      await client.query('INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3)', [orderId, p.amount, p.method]);
+    if (!suppressTender) {
+      for (const p of paymentRows) {
+        await client.query('INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3)', [orderId, p.amount, p.method]);
+      }
     }
     // SEPOS-AUDIT-001 — snapshot the service charge AT CLOSE with the rate in
     // force right now. Reports/Z used to re-derive historical bills from
@@ -1795,7 +1896,16 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
     // ---- post-commit side effects (the order is now closed) ----
     const tableId = order.table_id;
     if (tableId) {
-      await pool.query("UPDATE tables SET status='available' WHERE id=$1", [tableId]);
+      // Verify pass (SPLIT) — a table can now hold more than one open order (a
+      // waiter bill alongside a customer's QR bill). Free it only when nothing
+      // else is still open on it, same rule the QR auto-close uses. Without
+      // this, paying one bill wrongly marked the table available while the
+      // other party was still eating.
+      const stillOpen = await pool.query(
+        "SELECT COUNT(*) AS n FROM orders WHERE table_id=$1 AND status='open'", [tableId]);
+      if (Number(stillOpen.rows[0]?.n || 0) === 0) {
+        await pool.query("UPDATE tables SET status='available' WHERE id=$1", [tableId]);
+      }
       // SEPOS-044 — free linked partner tables ONLY if the order actually
       // spanned the group (covers > primary table capacity). Small parties
       // at a single linked table don't drag the rest of the group, so we
@@ -1814,9 +1924,9 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
             [tableId]
           );
           for (const row of linkedRes.rows) {
-            if (row.id && row.id !== tableId) {
-              await pool.query("UPDATE tables SET status='available' WHERE id=$1", [row.id]);
-            }
+            // round 6 — a linked partner table can independently hold its own
+            // open order; free it only if it doesn't (same rule as everywhere).
+            if (row.id && row.id !== tableId) await freeTableIfEmpty(row.id);
           }
         }
       } catch {}
@@ -1884,6 +1994,10 @@ app.get('/api/orders/:id/bill', async (req, res) => {
 // know their PIN are unaffected). Email login stays as the escape hatch.
 const _loginFails = new Map();
 const _FAIL_MAX = 8, _FAIL_WIN = 15 * 60 * 1000;
+// Hard stop. 8 wrong PINs starts slowing you down; 60 in the window is not
+// a restaurant having a bad night, it's enumeration — and a venue that hits
+// it can still sign in with email.
+const _FAIL_HARD = 60;
 function _loginLockedOut(ip) {
   const now = Date.now();
   const arr = (_loginFails.get(ip) || []).filter((t) => now - t < _FAIL_WIN);
@@ -1892,6 +2006,14 @@ function _loginLockedOut(ip) {
   return arr.length >= _FAIL_MAX;
 }
 function _recordLoginFail(ip) { const a = _loginFails.get(ip) || []; a.push(Date.now()); _loginFails.set(ip, a); }
+// F16 — live failures in the window, driving the escalating delay above.
+function _loginFailCount(ip) {
+  const now = Date.now();
+  const arr = (_loginFails.get(ip) || []).filter((t) => now - t < _FAIL_WIN);
+  _loginFails.set(ip, arr);
+  if (_loginFails.size > 5000) _loginFails.clear();
+  return arr.length;
+}
 const _WEAK_PINS = new Set(['1234', '0000', '1111', '2222', '3333', '4444', '5555', '6666',
   '7777', '8888', '9999', '4321', '1212', '2580', '0123', '123456', '000000', '111111']);
 function _isWeakPin(p) { return _WEAK_PINS.has(String(p || '')); }
@@ -1899,14 +2021,29 @@ function _isWeakPin(p) { return _WEAK_PINS.has(String(p || '')); }
 app.post('/api/staff/login', async (req, res) => {
   try {
     const { pin } = req.body;
-    const ip = 'ip:' + (req.ip || req.get('x-forwarded-for') || '');
-    if (_loginLockedOut(ip)) {
-      return res.status(429).json({ error: 'Too many wrong PINs — locked for a few minutes. Try again shortly, or use “Sign in with email”.' });
+    // F16 — with trust proxy set this is the venue's real address, but every
+    // till in a restaurant shares it, so a HARD lockout would still take the
+    // whole floor down when one member of staff fat-fingers their PIN. Use an
+    // escalating DELAY instead: brute force slows to a crawl, while staff who
+    // eventually type the right PIN always get in. A correct PIN clears it.
+    // Verify pass (MEDIUM) — the delay alone was not a rate limit: an attacker
+    // can run guesses in parallel, so a per-request sleep costs them nothing.
+    // Keep the delay (it protects real staff from being locked out for a typo)
+    // but restore a hard ceiling far above any plausible fat-finger rate.
+    // req.ip is only trustworthy because `trust proxy` is set to ONE hop, so a
+    // client-supplied X-Forwarded-For cannot displace the real edge address.
+    const ip = 'ip:' + (req.ip || '');
+    const fails = _loginFailCount(ip);
+    if (fails >= _FAIL_HARD) {
+      return res.status(429).json({ error: 'Too many failed attempts from this connection. Wait a few minutes, or use “Sign in with email”.' });
+    }
+    if (fails >= _FAIL_MAX) {
+      await new Promise(r => setTimeout(r, Math.min(4000, 250 * (fails - _FAIL_MAX + 1))));
     }
     const result = await pool.query('SELECT * FROM staff WHERE pin=$1 AND is_active=1', [pin]);
     const staff = result.rows[0];
     if (!staff) { _recordLoginFail(ip); return res.status(401).json({ error: 'Invalid PIN' }); }
-    _loginFails.delete(ip); // good login — reset brute-force counter for this IP
+    _loginFails.delete(ip); // correct PIN — clear the counter for this venue
     // SEPOS-047a — PIN login now issues the same HMAC session token as
     // email login (signToken below), so staff-gated endpoints can verify
     // the caller. Old clients ignore the extra fields harmlessly.
@@ -2885,7 +3022,7 @@ app.get('/api/reports/daily', async (req, res) => {
     // agree to the penny.
     // SEPOS-AUDIT-001 — mirror SEPOS-REPREC-001's cancelled exclusion here too:
     // written-off bills were still counted in daily totals/order_count.
-    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled') ORDER BY orders.closed_at DESC`, [dayStart.toISOString(), dayEnd.toISOString()]);
+    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [dayStart.toISOString(), dayEnd.toISOString()]);
     const total = result.rows.reduce((sum, r) => sum + Number(r.paid_amount ?? r.total ?? 0), 0);
     // Dedupe order_count by orders.id — LEFT JOIN payments multiplies rows
     // on split-pay orders.
@@ -2905,7 +3042,17 @@ app.get('/api/reports/daily', async (req, res) => {
 app.get('/api/reports/menu-performance', async (req, res) => {
   try {
     const { from, to } = req.query;
-    if (!from || !to) return res.status(400).json({ error: 'from and to required (YYYY-MM-DD)' });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(from || '')) || !/^\d{4}-\d{2}-\d{2}$/.test(String(to || ''))) {
+      return res.status(400).json({ error: 'from and to required (YYYY-MM-DD)' });
+    }
+    // Verify pass — bucket by the restaurant's day like every other report, and
+    // exclude cancelled/mock tenders so demo money and voided bills don't
+    // inflate the item ranking.
+    const mpTz = await restaurantTz();
+    const mpFrom = zonedMidnightUtc(from, mpTz);
+    const mpNext = new Date(Date.parse(`${to}T12:00:00Z`) + 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const mpTo = zonedMidnightUtc(mpNext, mpTz);
+    if (!mpFrom || !mpTo) return res.status(400).json({ error: 'Invalid date range' });
     const r = await pool.query(`
       SELECT
         COALESCE(mi.id, 0)                              AS menu_item_id,
@@ -2927,10 +3074,12 @@ app.get('/api/reports/menu-performance', async (req, res) => {
       LEFT JOIN categories c  ON c.id  = mi.category_id
       LEFT JOIN recipes rec   ON rec.menu_item_id = mi.id
       WHERE o.status = 'closed' AND oi.voided = 0
-        AND o.closed_at::date >= $1::date AND o.closed_at::date <= $2::date
+        AND o.closed_at >= $1::timestamp AND o.closed_at < $2::timestamp
+        AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR COALESCE(p.method,'') LIKE '%(mock)%')))
+             OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))
       GROUP BY COALESCE(mi.id, 0), COALESCE(mi.name, oi.item_name, 'Unknown item'), COALESCE(c.name, 'Other')
       ORDER BY revenue DESC
-    `, [from, to]);
+    `, [mpFrom.toISOString(), mpTo.toISOString()]);
     res.json({ from, to, items: r.rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2938,6 +3087,19 @@ app.get('/api/reports/menu-performance', async (req, res) => {
 app.get('/api/reports/summary', async (req, res) => {
   try {
     const { from, to } = req.query;
+    // Verify pass (MEDIUM) — bucket by the RESTAURANT's day like /reports/daily
+    // and /reports/items. Leaving this on the UTC calendar day meant the Sales
+    // tab and the Items tab of the same Reports screen disagreed after every
+    // late service — worse than the original bug, because both look right.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(from || '')) || !/^\d{4}-\d{2}-\d{2}$/.test(String(to || ''))) {
+      return res.status(400).json({ error: 'from and to are required as YYYY-MM-DD' });
+    }
+    const sumTz = await restaurantTz();
+    const sumFrom = zonedMidnightUtc(from, sumTz);
+    const sumNext = new Date(Date.parse(`${to}T12:00:00Z`) + 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const sumTo = zonedMidnightUtc(sumNext, sumTz);
+    if (!sumFrom || !sumTo) return res.status(400).json({ error: 'Invalid date range' });
+    const sumFromIso = sumFrom.toISOString(), sumToIso = sumTo.toISOString();
     const [result, foodDrinkRes, voucherSoldRes, voucherRedeemedRes, settingsRes] = await Promise.all([
       // Korakot 2026-06-02: pull payments.amount as paid_amount so the
       // Reports tab can show what was actually collected (incl. service
@@ -2945,7 +3107,7 @@ app.get('/api/reports/summary', async (req, res) => {
       // (verify pass: orders.service_charge added — without it in the SELECT,
       // serviceChargeForOrder saw undefined and silently fell back to deriving
       // from today's rate, defeating the snapshot.)
-      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.no_service_charge, orders.service_charge, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled') ORDER BY orders.closed_at DESC`, [from, to]),
+      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.no_service_charge, orders.service_charge, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [sumFromIso, sumToIso]),
       // SEPOS-REPREC-001 — a cancelled/void bill closes with a payment row
       // method='cancelled', £0. It collected nothing, so it must NOT count as a
       // sale or an order here — otherwise Trading's "Total Sales" (orders.total)
@@ -2968,9 +3130,9 @@ app.get('/api/reports/summary', async (req, res) => {
         LEFT JOIN categories  c  ON c.id  = mi.category_id
         LEFT JOIN orders      o  ON o.id  = oi.order_id
         WHERE o.status='closed' AND oi.voided=0
-          AND o.closed_at::date >= $1::date AND o.closed_at::date <= $2::date
-          AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.method = 'cancelled')) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled'))
-      `, [from, to]),
+          AND o.closed_at >= $1::timestamp AND o.closed_at < $2::timestamp
+          AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))
+      `, [sumFromIso, sumToIso]),
       // SEPOS-VOUCHER-001 — vouchers sold in the date range, split by method
       pool.query(`SELECT payment_method, COUNT(*)::int AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at::date >= $1::date AND created_at::date <= $2::date GROUP BY payment_method`, [from, to]).catch(() => ({ rows: [] })),
       pool.query(`SELECT COUNT(*)::int AS count, COALESCE(SUM(amount_used), 0) AS total FROM voucher_redemptions WHERE used_at::date >= $1::date AND used_at::date <= $2::date`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
@@ -3050,7 +3212,19 @@ app.get('/api/reports/items', async (req, res) => {
     const { from, to } = req.query;
     // SEPOS-AUDIT-001 — exclude written-off bills (all payments 'cancelled')
     // so Item Sales stops counting items the sales totals exclude.
-    const result = await pool.query(`SELECT menu_items.name, menu_items.price, SUM(order_items.quantity) as qty_sold, SUM(order_items.quantity * order_items.unit_price) as total_revenue FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN orders ON order_items.order_id = orders.id WHERE orders.status='closed' AND order_items.voided=0 AND orders.closed_at::date >= $1::date AND orders.closed_at::date <= $2::date AND ((orders.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = orders.id AND p.method = 'cancelled')) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = orders.id AND COALESCE(p.method,'') <> 'cancelled')) GROUP BY menu_items.id, menu_items.name, menu_items.price ORDER BY qty_sold DESC`, [from, to]);
+    // SEPOS-AUDIT-002 F30 — bucket by the RESTAURANT's day (SEPOS-048 helpers),
+    // not the UTC calendar day: in BST a 00:30 order landed on the previous day
+    // here while /api/reports/daily put it on the right one, so the two reports
+    // disagreed after every late service.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(from || '')) || !/^\d{4}-\d{2}-\d{2}$/.test(String(to || ''))) {
+      return res.status(400).json({ error: 'from and to are required as YYYY-MM-DD' });
+    }
+    const mpTz = await restaurantTz();
+    const mpFrom = zonedMidnightUtc(from, mpTz);
+    const mpToNext = new Date(Date.parse(`${to}T12:00:00Z`) + 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const mpTo = zonedMidnightUtc(mpToNext, mpTz);
+    if (!mpFrom || !mpTo) return res.status(400).json({ error: 'Invalid date range' });
+    const result = await pool.query(`SELECT menu_items.name, menu_items.price, SUM(order_items.quantity) as qty_sold, SUM(order_items.quantity * order_items.unit_price) as total_revenue FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN orders ON order_items.order_id = orders.id WHERE orders.status='closed' AND order_items.voided=0 AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND ((orders.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = orders.id AND (p.method = 'cancelled' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = orders.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') NOT LIKE '%(mock)%')) GROUP BY menu_items.id, menu_items.name, menu_items.price ORDER BY qty_sold DESC`, [mpFrom.toISOString(), mpTo.toISOString()]);
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -3136,7 +3310,7 @@ app.put('/api/orders/:id/move', async (req, res) => {
     if (!order) return res.status(404).json({ error: 'Order not found' });
     const oldTableId = order.table_id;
     await pool.query('UPDATE orders SET table_id=$1 WHERE id=$2', [new_table_id, orderId]);
-    await pool.query("UPDATE tables SET status='available' WHERE id=$1", [oldTableId]);
+    await freeTableIfEmpty(oldTableId);   // round 5 — old table may still hold another order
     await pool.query("UPDATE tables SET status='occupied' WHERE id=$1", [new_table_id]);
     // SEPOS-AUDIT-001 — push the move (table ids are shared cloud/local since
     // the tables pull keeps cloud pks); without it the pull snapped the party
@@ -3151,6 +3325,17 @@ app.put('/api/orders/:id/merge', async (req, res) => {
   try {
     const { merge_order_id } = req.body;
     const targetOrderId = req.params.id;
+    // SEPOS-QR-PAY-REDO (verify pass, round 5) — a QR order is the customer's
+    // prepaid, staff-read-only bill; it must not be merged (into or out of).
+    // Moving the tender rows kept the ledger balanced but the Bill screen still
+    // re-billed the full merged total with no netting of the prepaid round, so
+    // the guest paid it twice. Refusing the merge is consistent with the
+    // read-only rule and removes the double-charge at the root.
+    const srcTgt = await pool.query(
+      "SELECT id, source FROM orders WHERE id = ANY($1::int[])", [[Number(merge_order_id), Number(targetOrderId)]]);
+    if (srcTgt.rows.some(o => o.source === 'qr')) {
+      return res.status(409).json({ error: 'A customer QR order cannot be merged — settle it on its own.', qrReadOnly: true });
+    }
     // SEPOS-AUDIT-001 (verify pass) — capture the moving item ids BEFORE the
     // UPDATE: they go into the merge push payload so itemsWithPendingPush
     // protects them from the pull while the push is in flight (without this a
@@ -3159,8 +3344,16 @@ app.put('/api/orders/:id/merge', async (req, res) => {
     const movedItemsRes = await pool.query('SELECT id FROM order_items WHERE order_id=$1', [merge_order_id]);
     const movedItemIds = movedItemsRes.rows.map(r => Number(r.id));
     await pool.query('UPDATE order_items SET order_id=$1 WHERE order_id=$2', [targetOrderId, merge_order_id]);
+    // (QR merges are refused above, so this only ever moves a non-QR order's
+    // tenders — usually none on an open bill; harmless.) Move the TENDERS too. The
+    // source can now be a prepaid QR order (it carries 'QR Online' payment
+    // rows); moving only the items and closing the shell at total=0 stranded
+    // that money, so staff took the full merged total again and the guest paid
+    // that round twice. Relocate payments and order_items.payment_id with the
+    // items so the target bill already shows what was prepaid.
+    await pool.query('UPDATE payments SET order_id=$1 WHERE order_id=$2', [targetOrderId, merge_order_id]);
     const mergeRes = await pool.query('SELECT table_id, covers FROM orders WHERE id=$1', [merge_order_id]);
-    if (mergeRes.rows[0]) await pool.query("UPDATE tables SET status='available' WHERE id=$1", [mergeRes.rows[0].table_id]);
+    if (mergeRes.rows[0]) await freeTableIfEmpty(mergeRes.rows[0].table_id);   // round 5
     // SEPOS-AUDIT-001 — the party physically merged: move the source's covers
     // onto the target and zero the shell's, so cover counts stay right on
     // every report (the shell used to keep its covers, inflating the Z's
@@ -3265,7 +3458,7 @@ app.delete('/api/orders/:id', async (req, res) => {
     // If the table was occupied by this order, free it.
     if (order.table_id) {
       try {
-        await pool.query("UPDATE tables SET status='available' WHERE id = $1", [order.table_id]);
+        await freeTableIfEmpty(order.table_id);   // round 5
       } catch {}
     }
 
@@ -3543,7 +3736,7 @@ app.post('/api/sync/delete-order', async (req, res) => {
     };
 
     if (order.table_id) {
-      try { await pool.query("UPDATE tables SET status='available' WHERE id = $1", [order.table_id]); } catch {}
+      try { await freeTableIfEmpty(order.table_id); } catch {}   // round 5
     }
 
     console.log(`[sync-delete-order] order #${orderId} deleted via sync from ${staffName} — reason: "${reason}"`);
@@ -3671,7 +3864,7 @@ app.get('/api/z-report/preview', async (req, res) => {
       // SEPOS-REPREC-001 — exclude cancelled/void bills (payment method='cancelled', £0)
       // from the Z so its Total Sales + order count reconcile with Trading and Bills.
       // A closed order with no payment row (method NULL) is still kept.
-      pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp AND (payments.method IS NULL OR payments.method != 'cancelled') ORDER BY orders.closed_at DESC`, [from, to]),
+      pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [from, to]),
       pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='open'`),
       // SEPOS-AUDIT-001 — window on WHEN the void happened (voided_at, stamped
       // by the void endpoint since this fix), not on orders.created_at: a void
@@ -3685,7 +3878,7 @@ app.get('/api/z-report/preview', async (req, res) => {
       // SEPOS-AUDIT-001 — exclude bills whose payments were all written off
       // (method='cancelled' via the Bills editor): their items counted in the
       // VAT/food/drink breakdowns while total_sales excluded them.
-      pool.query(`SELECT COALESCE(mi.vat_rate, 20) AS vat_rate, oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value, o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id LEFT JOIN orders o ON o.id = oi.order_id WHERE o.status='closed' AND oi.voided=0 AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.method = 'cancelled')) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled'))`, [from, to]),
+      pool.query(`SELECT COALESCE(mi.vat_rate, 20) AS vat_rate, oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value, o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id LEFT JOIN orders o ON o.id = oi.order_id WHERE o.status='closed' AND oi.voided=0 AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))`, [from, to]),
       // Korakot 2026-06-02: food vs drink split via categories.is_bar.
       // SEPOS-AUDIT-001 — per-order rows (aggregated in JS with the bill-level
       // discount factor, like VAT): the flat SUM ignored bill discounts, so a
@@ -3701,7 +3894,7 @@ app.get('/api/z-report/preview', async (req, res) => {
         LEFT JOIN orders      o  ON o.id  = oi.order_id
         WHERE o.status='closed' AND oi.voided=0
           AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
-          AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.method = 'cancelled')) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled'))
+          AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))
       `, [from, to]),
       // SEPOS-VOUCHER-001: vouchers sold in the range (Stripe — off till)
       // SEPOS-DEPOSIT-001: GIFT vouchers only (deposits excluded — reported separately below).
@@ -4083,7 +4276,14 @@ app.get('/api/bills', async (req, res) => {
     // separate rows. The method filter is applied at the ORDER level (keep any
     // bill that has a matching tender) so a split bill still appears under its
     // Cash or Card filter. Single-payment bills keep their real method.
-    let query = `SELECT orders.id, orders.total, orders.covers, orders.closed_at, orders.discount_type, orders.discount_value, orders.discount_reason, orders.order_type, orders.no_service_charge, orders.service_charge, tables.table_number, tables.name AS table_label, payments.method, payments.amount as paid_amount, payments.id AS payment_id FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.total > 0 AND payments.method IS NOT NULL AND payments.method != 'cancelled'`;
+    // NOTE (simulation, 2026-08-07): the '(mock)' exclusion added for F19
+    // belongs on REVENUE queries only. Bills is the LIST OF BILLS — a demo or
+    // QR-mock bill is still a real order staff need to find and reprint, it
+    // just isn't money. Excluding it here made every QR order on a demo tenant
+    // vanish from Admin -> Bills, which is exactly the symptom Korakot
+    // reported tonight (from a different cause).
+    const _localBills = require('./services/archiveService').isLocalInstall();
+    let query = `SELECT orders.id, ${_localBills ? 'orders.cloud_id,' : ''} orders.total, orders.covers, orders.closed_at, orders.discount_type, orders.discount_value, orders.discount_reason, orders.order_type, orders.no_service_charge, orders.service_charge, tables.table_number, tables.name AS table_label, payments.method, payments.amount as paid_amount, payments.id AS payment_id FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.total > 0 AND payments.method IS NOT NULL AND payments.method != 'cancelled'`;
     const params = [];
     let n = 1;
     if (from) { query += ` AND orders.closed_at::date >= $${n}::date`; params.push(from); n++; }
@@ -4104,6 +4304,13 @@ app.get('/api/bills', async (req, res) => {
         b = { id: r.id, total: r.total, covers: r.covers, closed_at: r.closed_at,
               discount_type: r.discount_type, discount_value: r.discount_value,
               discount_reason: r.discount_reason, table_number: r.table_number,
+              table_label: r.table_label,   // F25 — the SELECT had it; the aggregation dropped it
+              // Verify pass — staff search by the number on the CUSTOMER's
+              // receipt = the cloud order id. On a Pro till that's r.cloud_id
+              // (SQLite-only column); on a cloud tenant the order's own id IS
+              // that number. Referencing r.cloud_id in SQL on PG 500'd the
+              // whole page (round 4, my own regression).
+              cloud_id: _localBills ? r.cloud_id : r.id,
               order_type: r.order_type, no_service_charge: r.no_service_charge,
               service_charge_rate: scRate,
               service_charge: serviceChargeForOrder(r, scEnabled, scRate),
@@ -4401,6 +4608,9 @@ app.post('/api/orders/:id/resend', async (req, res) => {
 
 app.put('/api/order-items/:id/discount', async (req, res) => {
   try {
+    const oiRes = await pool.query('SELECT order_id FROM order_items WHERE id = $1', [req.params.id]);
+    if (!oiRes.rows[0]) return res.status(404).json({ error: 'Item not found' });
+    if (await refuseQrMutation(oiRes.rows[0].order_id, res)) return;   // round 6 — QR read-only
     const { discount_type, discount_value } = req.body;
     await pool.query('UPDATE order_items SET discount_type=$1, discount_value=$2 WHERE id=$3', [discount_type, discount_value, req.params.id]);
     // SEPOS-AUDIT-001 — push the per-item discount so the pull can't revert it.
@@ -5711,7 +5921,7 @@ app.post('/api/concierge/:profile/book', async (req, res) => {
     if (!name || String(name).trim().length < 2) return res.status(400).json({ error: 'Please give a name for the booking.' });
     if (!phone || String(phone).replace(/\D/g, '').length < 10) return res.status(400).json({ error: 'Please give a contact number so May can reach you.' });
     if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(when))) return res.status(400).json({ error: 'Invalid time.' });
-    const start = new Date(when + ':00+01:00'); // demo: UK summer offset
+    const start = ukLocalToUtc(when); // demo: UK summer offset
     const end = new Date(start.getTime() + minutes * 60000);
     if (isNaN(start) || start < new Date()) return res.status(400).json({ error: 'That time is in the past — please pick a new one in the chat.' });
     const sh = parseInt(when.slice(11, 13), 10), sm = parseInt(when.slice(14, 16), 10);
@@ -5750,7 +5960,7 @@ app.get('/concierge-book/:profile', (req, res) => {
   const tr = profile.treatments[t];
   const ok = tr && tr.prices[d] && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(when);
   const price = ok ? tr.prices[d] : 0; const dep = profile.deposit_gbp || 0;
-  const whenNice = ok ? new Date(when + ':00+01:00').toLocaleString('en-GB', { timeZone: LONDON, weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '';
+  const whenNice = ok ? ukLocalToUtc(when).toLocaleString('en-GB', { timeZone: LONDON, weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '';
   const e = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   res.type('html').send(`<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex">
@@ -7412,8 +7622,14 @@ app.get('/.well-known/apple-developer-merchantid-domain-association', (req, res)
 // renames/moves/renumbers never invalidate a printed sticker.
 // ═════════════════════════════════════════════════════════════════════════════
 
+// SEPOS-AUDIT-002 F22 — the literal fallback made every table token forgeable
+// on a tenant that set none of these (guessable secret = guessable token =
+// anyone can send orders to any table). Kept for local dev only; in production
+// a missing secret disables QR ordering rather than pretending to sign.
+const QR_DEV_SECRET = 'siamepos-qr-dev';
 const qrSecret = () =>
-  process.env.QR_SECRET || process.env.SYNC_SECRET || process.env.UNSUB_SECRET || 'siamepos-qr-dev';
+  process.env.QR_SECRET || process.env.SYNC_SECRET || process.env.UNSUB_SECRET || QR_DEV_SECRET;
+const qrSecretIsInsecure = () => qrSecret() === QR_DEV_SECRET && process.env.NODE_ENV === 'production';
 const qrSign = (tableId) =>
   crypto.createHmac('sha256', qrSecret()).update(`qr-table:${tableId}`).digest('base64url').slice(0, 20);
 const qrToken = (tableId) => `${tableId}.${qrSign(tableId)}`;
@@ -7426,8 +7642,51 @@ function qrVerifyToken(token) {
   if (expect.length !== got.length || !crypto.timingSafeEqual(expect, got)) return null;
   return Number(m[1]);
 }
+// SEPOS-QR-PAY-REDO — pay-first safety net. Runs the order-creation critical
+// section; if it throws after the card succeeded, the PaymentIntent is refunded
+// before the error surfaces. A refund failure is logged loudly and the original
+// error still surfaces (never mask why the order failed).
+async function runExclusiveWithRefund(piId, sp, lockKey, fn) {
+  try {
+    return await runExclusive(lockKey, fn);
+  } catch (err) {
+    if (piId && !(err && err.qrReplay)) {
+      try {
+        const stripe = sp ? require('stripe')(sp.key) : require('stripe')(process.env.STRIPE_SECRET_KEY);
+        await stripe.refunds.create({ payment_intent: piId, reason: 'requested_by_customer' }, sp ? { stripeAccount: sp.account } : undefined);
+        console.warn(`[qr] order failed after payment — refunded ${piId}: ${err.message}`);
+        err.qrRefunded = true;
+      } catch (refundErr) {
+        console.error(`[qr] ⚠️ ORDER FAILED AND REFUND FAILED for ${piId} — refund by hand:`, refundErr.message);
+        err.qrRefundFailed = true;
+      }
+    }
+    throw err;
+  }
+}
+
+// AUDIT-002 LOW — the concierge parsed a customer's wall-clock time with a
+// hardcoded +01:00 (BST), so every booking taken between late October and late
+// March was stored an hour early. Resolve the real UK offset for that date.
+function ukLocalToUtc(when) {
+  const naive = String(when || '').trim().replace(' ', 'T');
+  let t = Date.parse(naive + ':00Z');
+  if (Number.isNaN(t)) return new Date(NaN);
+  for (let i = 0; i < 2; i++) {
+    const asUk = new Date(t).toLocaleString('sv-SE', { timeZone: 'Europe/London' }).replace(' ', 'T');
+    const drift = Date.parse(asUk + 'Z') - Date.parse(naive + ':00Z');
+    if (!drift) break;
+    t -= drift;
+  }
+  return new Date(t);
+}
+
 async function qrEnabled() {
   try {
+    if (qrSecretIsInsecure()) {
+      console.error('[qr] REFUSING to serve QR ordering: no QR_SECRET/SYNC_SECRET/UNSUB_SECRET set, so table tokens would be forgeable');
+      return false;
+    }
     const r = await pool.query(`SELECT value FROM settings WHERE key = 'qr_ordering_enabled'`);
     return String(r.rows[0]?.value || '0') === '1';
   } catch { return false; }
@@ -7439,7 +7698,9 @@ async function qrEnabled() {
 async function qrStripeReady() {
   try {
     const s = await loadSettings();
-    if (String(s.takeaway_mock_pay || s.qr_mock_pay || '') === '1') return false;
+    // AUDIT-002 LOW — '0' is a TRUTHY string, so `a || b` short-circuited on a
+    // stored takeaway_mock_pay='0' and qr_mock_pay was never read.
+    if (String(s.takeaway_mock_pay ?? '') === '1' || String(s.qr_mock_pay ?? '') === '1') return false;
   } catch { /* settings unreadable → fall through to key check */ }
   if (siampayCfg()) return true;
   return !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PUBLISHABLE_KEY);
@@ -7448,6 +7709,66 @@ async function qrStripeReady() {
 // The printable sticker sheet — one card per (non-takeaway) table. Server-
 // rendered HTML with inline SVG QRs (qrcode package), opened from the Table
 // Plan editor and printed straight from the browser.
+// ── SEPOS-MENU-PHOTO-001 — owner-uploaded dish photos ───────────────────────
+// Korakot 2026-08-07: "will client able to put the photo by them self?" — they
+// couldn't: image_url existed in the DB and the API, but the Admin menu editor
+// had no field, so photos were something WE loaded at onboarding. A restaurant
+// changes dishes and specials constantly, and the self-order/QR pages are
+// exactly where a photo earns its money, so the owner must own this.
+//
+// The bytes live in menu_item_images and are served from here, NOT inlined into
+// /api/menu — a 95-dish menu with embedded base64 would be an 11 MB download on
+// a customer's phone. The client resizes before upload (max ~900px JPEG), so a
+// dish photo is ~100-150 KB.
+app.post('/api/menu/items/:id/image', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
+  // Verify pass (HIGH) — a photo uploaded on a Pro (local) till used to stay in
+  // that till's SQLite. The customer-facing menu is served by the CLOUD, so the
+  // photo never reached a single customer, and the till then pushed an
+  // image_url pointing at a route the cloud had no bytes for — a 404 on every
+  // dish card. Forward the upload like every other config write.
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  try {
+    const raw = String(req.body?.data || '');
+    const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(raw);
+    if (!m) return res.status(400).json({ error: 'Send a JPEG, PNG or WebP image' });
+    const bytes = Math.floor((m[2].length * 3) / 4);
+    if (bytes > 3 * 1024 * 1024) return res.status(413).json({ error: 'Photo is too large — please use a smaller one' });
+    const itemRes = await pool.query('SELECT id FROM menu_items WHERE id = $1', [req.params.id]);
+    if (!itemRes.rows[0]) return res.status(404).json({ error: 'Dish not found' });
+    await pool.query('DELETE FROM menu_item_images WHERE menu_item_id = $1', [req.params.id]);
+    await pool.query('INSERT INTO menu_item_images (menu_item_id, mime, data) VALUES ($1,$2,$3)',
+      [req.params.id, m[1], m[2]]);
+    // Cache-buster in the URL so a replaced photo shows up immediately on
+    // phones that already cached the old one.
+    const url = `/api/menu/items/${req.params.id}/image?v=${Date.now()}`;
+    await pool.query('UPDATE menu_items SET image_url = $1 WHERE id = $2', [url, req.params.id]);
+    res.json({ success: true, image_url: url });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/menu/items/:id/image', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  try {
+    await pool.query('DELETE FROM menu_item_images WHERE menu_item_id = $1', [req.params.id]);
+    await pool.query('UPDATE menu_items SET image_url = NULL WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Public — this is what a customer's phone actually loads. Immutable per ?v=,
+// so it is cached hard and costs nothing on repeat views.
+app.get('/api/menu/items/:id/image', widgetCors, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT mime, data FROM menu_item_images WHERE menu_item_id = $1', [req.params.id]);
+    const row = r.rows[0];
+    if (!row) return res.status(404).end();
+    const buf = Buffer.from(row.data, 'base64');
+    res.set('Content-Type', row.mime || 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    res.send(buf);
+  } catch (err) { res.status(500).end(); }
+});
+
 app.get('/api/qr/sheet', async (req, res) => {
   try {
     if (!await qrEnabled()) {
@@ -7466,8 +7787,27 @@ app.get('/api/qr/sheet', async (req, res) => {
     const nameRes = await pool.query(`SELECT value FROM settings WHERE key IN ('restaurant_name','company_name') AND COALESCE(value,'') <> '' ORDER BY key = 'company_name' DESC LIMIT 1`);
     const rName = nameRes.rows[0]?.value || 'SiamEPOS';
     const tRes = await pool.query(`SELECT id, table_number, name FROM tables WHERE COALESCE(is_takeaway,0) = 0 ORDER BY table_number`);
+    // SEPOS-QR-SHEET-ORDER — Korakot, 2026-08-07: sorting by the internal
+    // table_number interleaved the sheet ("Bar 1, Table 1, Bar 2, Table 2,
+    // Table 3…, Bar 3…"), because "Bar 2" IS table_number 2. You print this,
+    // cut it up and laminate it, so it has to come out grouped and counting
+    // up. Natural sort: group by the name's text prefix, then by its trailing
+    // number numerically (so Bar 10 follows Bar 9, not Bar 1). Unnamed tables
+    // fall back to their number.
+    const sortKey = (t) => {
+      const label = (t.name && String(t.name).trim()) ? String(t.name).trim() : `Table ${t.table_number}`;
+      const m = /^(.*?)(\d+)\s*$/.exec(label);
+      return {
+        prefix: (m ? m[1] : label).trim().toLowerCase(),
+        num: m ? Number(m[2]) : Number.MAX_SAFE_INTEGER,
+        label,
+      };
+    };
+    const sorted = tRes.rows.map(t => ({ t, k: sortKey(t) })).sort((a, b) =>
+      a.k.prefix.localeCompare(b.k.prefix) || a.k.num - b.k.num || a.k.label.localeCompare(b.k.label)
+    ).map(x => x.t);
     const cards = [];
-    for (const t of tRes.rows) {
+    for (const t of sorted) {
       const label = (t.name && String(t.name).trim()) ? t.name : `Table ${t.table_number}`;
       const url = `${base}/qr/t/${qrToken(t.id)}`;
       const svg = await QRCode.toString(url, { type: 'svg', margin: 1, width: 240 });
@@ -7490,6 +7830,142 @@ app.get('/api/qr/sheet', async (req, res) => {
   } catch (err) {
     console.error('[qr] sheet', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── SEPOS-QR-RECEIPT-001 — a receipt for the customer who wants one ─────────
+// Korakot 2026-08-07: "the self-order need a receipt for those who need it."
+// A QR customer pays on their own phone and never touches the till, so there
+// is no paper unless staff print one. This renders their own receipt from the
+// order the token owns — VAT-registered restaurants must be able to give one,
+// and people claiming expenses need it. Token-scoped: it can only ever show
+// the order sitting on THAT table, never anyone else's bill.
+app.get('/api/qr/receipt/:token', widgetCors, async (req, res) => {
+  try {
+    if (!await qrEnabled()) return res.status(403).json({ error: 'QR ordering is not enabled' });
+    const tableId = qrVerifyToken(req.params.token);
+    if (!tableId) return res.status(404).json({ error: 'This code is no longer active' });
+    const orderId = Number(req.query.order_id) || null;
+    const payId = Number(req.query.payment_id) || null;
+    // The order must belong to this table — a guessed id from another table
+    // must not render someone else's bill.
+    // Verify pass — three faults fixed here:
+    //  · the receipt used to vanish the moment the order closed, which is
+    //    exactly when a customer asks for one (no status filter now);
+    //  · it looked up the table's NEWEST order, so a later party's bill could
+    //    surface, or a £0 receipt when the newest wasn't the QR one;
+    //  · with a payment_id we can find the order that tender belongs to
+    //    directly, which is always the right one.
+    const oRes = await pool.query(
+      payId
+        ? `SELECT o.*, t.name AS table_label, t.table_number
+             FROM orders o LEFT JOIN tables t ON t.id = o.table_id
+            WHERE o.table_id = $1 AND o.source = 'qr'
+              AND EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.id = $2)
+            LIMIT 1`
+        : `SELECT o.*, t.name AS table_label, t.table_number
+             FROM orders o LEFT JOIN tables t ON t.id = o.table_id
+            WHERE o.table_id = $1 AND o.source = 'qr'
+              ${orderId ? 'AND o.id = $2' : ''}
+            ORDER BY o.id DESC LIMIT 1`,
+      payId ? [tableId, payId] : (orderId ? [tableId, orderId] : [tableId]));
+    const order = oRes.rows[0];
+    if (!order) return res.status(404).json({ error: 'No order found for this table' });
+    // SEPOS-QR-RECEIPT-001 — a receipt for the PAYMENT, not the table. Pass
+    // ?payment_id= (the phone gets it back when it pays) and you get exactly
+    // what that person ordered and paid — correct on a shared table where four
+    // people each paid their own round. Without it, the whole order is shown,
+    // which is what staff want and what a single-payer table should see.
+    const [items, pays, sRes] = await Promise.all([
+      pool.query(`SELECT oi.quantity, oi.unit_price, oi.notes, COALESCE(mi.name, oi.item_name) AS name, COALESCE(mi.vat_rate, 20) AS vat_rate
+                    FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+                   WHERE oi.order_id = $1 AND oi.voided = 0 ${payId ? 'AND oi.payment_id = $2' : ''} ORDER BY oi.id`,
+                 payId ? [order.id, payId] : [order.id]),
+      pool.query(`SELECT id, amount, method, created_at FROM payments WHERE order_id = $1 ${payId ? 'AND id = $2' : ''} ORDER BY id`,
+                 payId ? [order.id, payId] : [order.id]),
+      pool.query(`SELECT key, value FROM settings WHERE key IN ('company_name','restaurant_name','company_address','company_phone','company_vat','currency_symbol','vat_mode','brand_primary')`),
+    ]);
+    const cfg = {}; for (const r of sRes.rows) cfg[r.key] = r.value;
+    res.json({
+      order_id: order.id,
+      table: (order.table_label && String(order.table_label).trim()) || `Table ${order.table_number}`,
+      opened_at: order.opened_at, closed_at: order.closed_at, status: order.status,
+      items: items.rows, payments: pays.rows,
+      scoped_to_payment: !!payId,
+      // Scoped receipt = what THIS person paid; unscoped = the table's total.
+      total: payId
+        ? Number(pays.rows.reduce((a, p) => a + Number(p.amount || 0), 0).toFixed(2))
+        : Number(order.total || 0),
+      restaurant: {
+        name: (cfg.company_name !== undefined && cfg.company_name !== null)
+          ? String(cfg.company_name).trim() : (String(cfg.restaurant_name || '').trim() || 'Restaurant'),
+        address: cfg.company_address || '', phone: cfg.company_phone || '',
+        vat: cfg.company_vat || '', currency: cfg.currency_symbol || '£',
+        vat_mode: cfg.vat_mode || 'inclusive', brand: cfg.brand_primary || '#1E4038',
+      },
+    });
+  } catch (err) {
+    console.error('[qr] receipt', err);
+    res.status(500).json({ error: 'server error' });
+  }
+});
+
+// Email the same receipt. Customer-entered address only — nothing is stored
+// against them and no marketing consent is implied by asking for a receipt.
+app.post('/api/qr/receipt/:token/email', widgetCors, async (req, res) => {
+  try {
+    if (!await qrEnabled()) return res.status(403).json({ error: 'QR ordering is not enabled' });
+    const tableId = qrVerifyToken(req.params.token);
+    if (!tableId) return res.status(404).json({ error: 'This code is no longer active' });
+    const to = String(req.body?.email || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ error: 'Please enter a valid email address' });
+    const orderId = Number(req.body?.order_id) || null;
+    const payId = Number(req.body?.payment_id) || null;
+    const oRes = await pool.query(
+      `SELECT o.*, t.name AS table_label, t.table_number FROM orders o LEFT JOIN tables t ON t.id = o.table_id
+        WHERE o.table_id = $1 AND o.source = 'qr' ${orderId ? 'AND o.id = $2' : ''} ORDER BY o.id DESC LIMIT 1`,
+      orderId ? [tableId, orderId] : [tableId]);
+    const order = oRes.rows[0];
+    if (!order) return res.status(404).json({ error: 'No order found for this table' });
+    const [items, pays, sRes] = await Promise.all([
+      pool.query(`SELECT oi.quantity, oi.unit_price, oi.notes, COALESCE(mi.name, oi.item_name) AS name
+                    FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+                   WHERE oi.order_id = $1 AND oi.voided = 0 ${payId ? 'AND oi.payment_id = $2' : ''} ORDER BY oi.id`,
+                 payId ? [order.id, payId] : [order.id]),
+      pool.query(`SELECT amount, method FROM payments WHERE order_id = $1 ${payId ? 'AND id = $2' : ''} ORDER BY id`,
+                 payId ? [order.id, payId] : [order.id]),
+      pool.query(`SELECT key, value FROM settings WHERE key IN ('company_name','restaurant_name','company_address','company_phone','company_vat','currency_symbol','brand_primary')`),
+    ]);
+    const cfg = {}; for (const r of sRes.rows) cfg[r.key] = r.value;
+    const cur = cfg.currency_symbol || '£';
+    const name = (cfg.company_name !== undefined && cfg.company_name !== null)
+      ? String(cfg.company_name).trim() : (String(cfg.restaurant_name || '').trim() || 'Restaurant');
+    const esc = (v) => String(v == null ? '' : v).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+    const rows = items.rows.map(i =>
+      `<tr><td style="padding:6px 0">${i.quantity} × ${esc(i.name)}${i.notes ? `<div style="font-size:12px;color:#777">${esc(i.notes)}</div>` : ''}</td>` +
+      `<td style="padding:6px 0;text-align:right">${cur}${(Number(i.unit_price) * Number(i.quantity)).toFixed(2)}</td></tr>`).join('');
+    const paid = pays.rows.map(p => `<tr><td style="padding:3px 0;color:#555">${esc(p.method)}</td><td style="padding:3px 0;text-align:right">${cur}${Number(p.amount).toFixed(2)}</td></tr>`).join('');
+    const html = `<div style="font-family:-apple-system,system-ui,sans-serif;max-width:520px;margin:0 auto;padding:22px">
+      <h2 style="margin:0 0 2px;color:${esc(cfg.brand_primary || '#1E4038')}">${esc(name)}</h2>
+      ${cfg.company_address ? `<div style="font-size:13px;color:#666">${esc(cfg.company_address)}</div>` : ''}
+      ${cfg.company_phone ? `<div style="font-size:13px;color:#666">Tel: ${esc(cfg.company_phone)}</div>` : ''}
+      ${cfg.company_vat ? `<div style="font-size:13px;color:#666">VAT No: ${esc(cfg.company_vat)}</div>` : ''}
+      <hr style="border:none;border-top:1px solid #eee;margin:14px 0">
+      <div style="font-size:13px;color:#666">Order #${order.id} · ${esc((order.table_label && String(order.table_label).trim()) || 'Table ' + order.table_number)}</div>
+      <table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:14px">${rows}</table>
+      <hr style="border:none;border-top:1px solid #eee;margin:12px 0">
+      <table style="width:100%;border-collapse:collapse;font-size:15px;font-weight:700">
+        <tr><td style="padding:4px 0">Total</td><td style="padding:4px 0;text-align:right">${cur}${(payId ? pays.rows.reduce((a, p) => a + Number(p.amount || 0), 0) : Number(order.total || 0)).toFixed(2)}</td></tr>
+      </table>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px">${paid}</table>
+      <p style="font-size:12px;color:#999;margin-top:20px">Thank you — we hope to see you again.</p>
+    </div>`;
+    const { sendBrevoEmail } = require('./services/emailService');
+    await sendBrevoEmail(to, `Your receipt from ${name} — order #${order.id}`, html);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[qr] receipt email', err.message);
+    res.status(500).json({ error: 'Could not send the receipt — please ask a member of staff.' });
   }
 });
 
@@ -7521,10 +7997,13 @@ app.get('/api/qr/session/:token', widgetCors, async (req, res) => {
     const stripeReady = await qrStripeReady();
     // Open order on this table (any dine-in — the customer may be topping up
     // an order a waiter started, that's fine; the bill is the table's bill).
+    // Verify pass (HIGH) — the customer's phone must see THEIR QR order, not
+    // whatever dine-in bill is newest on the table. Without source='qr' a
+    // waiter's separate bill surfaced here and the guest's own order + receipt
+    // vanished.
     const oRes = await pool.query(
       `SELECT id, total, payment_status, source FROM orders
-        WHERE table_id = $1 AND status = 'open'
-          AND (order_type IS NULL OR order_type = 'dine_in')
+        WHERE table_id = $1 AND status = 'open' AND source = 'qr'
         ORDER BY id DESC LIMIT 1`, [tableId]);
     let order = null;
     if (oRes.rows[0]) {
@@ -7597,6 +8076,7 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
     const stripeReady = await qrStripeReady();
     let paymentStatus = 'mock';
     let paidPence = null;
+    let verifiedPiId = null;
     if (stripeReady) {
       const piId = req.body?.payment_intent_id;
       if (!piId) return res.status(402).json({ error: 'Payment required' });
@@ -7608,21 +8088,56 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
         if (pi.currency !== 'gbp') return res.status(402).json({ error: 'Payment currency mismatch' });
         if (pi.amount !== totalPence) return res.status(402).json({ error: 'Payment amount mismatch — please refresh and try again.' });
         if (pi.metadata?.product !== 'siamepos_qr_order') return res.status(402).json({ error: 'Payment reference mismatch' });
+        // A PI is minted for ONE table (metadata.table_id, set at mint time).
+        // Without this check a token-holder could pay once at their own table
+        // and replay that payment to fire food at any other table.
+        if (String(pi.metadata?.table_id || '') !== String(tableId)) {
+          return res.status(402).json({ error: 'That payment was for a different table — please start again from your table\'s QR code.' });
+        }
         paymentStatus = 'paid';
         paidPence = pi.amount;
+        verifiedPiId = pi.id;
       } catch (e) {
         console.error('[qr] stripe verify', e.message);
         return res.status(402).json({ error: 'Could not verify payment — please try again.' });
       }
+      // REPLAY GUARD — one succeeded PI settles exactly one round. Checked
+      // here (fast, friendly), again inside the per-table lock, and backstopped
+      // by a unique index. Without it a single £20 charge could be replayed to
+      // fire unlimited rounds of food.
+      const seen = await pool.query('SELECT order_id FROM payments WHERE payment_intent_id = $1 LIMIT 1', [verifiedPiId]);
+      if (seen.rows[0]) {
+        return res.status(409).json({ error: 'This payment has already been used for an order — you have not been charged again.' });
+      }
     }
 
     // Create-or-append under the same per-table lock the waiter flow uses.
-    const out = await runExclusive(`order-create:table:${tableId}`, async () => {
+    let roundPaymentId = null;
+    // Pay-FIRST means the card is confirmed on the customer's phone BEFORE any
+    // of this runs, so a failure past this point is money taken with no food
+    // ordered. Refund it rather than leaving the customer to notice and chase.
+    // A replay is excluded — that PI legitimately paid for an order already.
+    const out = await runExclusiveWithRefund(verifiedPiId, sp, `order-create:table:${tableId}`, async () => {
+      // SEPOS-QR-PAY-REDO — a QR round may ONLY join an order this flow created
+      // itself. Adopting a waiter's open bill was the root of the whole
+      // partial-payment mess: a customer paying £5 for a dessert stamped the
+      // waiter's £40 table as paid, and the serve-time auto-close then closed
+      // it and lost the £40. With `source='qr'` in the WHERE clause every QR
+      // order is fully paid by construction, so 'part_paid' never has to exist
+      // and the auto-close needs no reconciliation. A table can now hold a
+      // waiter's bill AND a QR bill at once — which is honest, because two
+      // separate payments really did happen.
       const existing = await pool.query(
         `SELECT o.id FROM orders o
-          WHERE o.table_id = $1 AND o.status = 'open'
+          WHERE o.table_id = $1 AND o.status = 'open' AND o.source = 'qr'
             AND (o.order_type IS NULL OR o.order_type = 'dine_in')
           ORDER BY o.id DESC LIMIT 1`, [tableId]);
+      // Re-check inside the lock: two concurrent replays of the same PI would
+      // both have passed the friendly pre-check above.
+      if (verifiedPiId) {
+        const dup = await pool.query('SELECT order_id FROM payments WHERE payment_intent_id = $1 LIMIT 1', [verifiedPiId]);
+        if (dup.rows[0]) { const e = new Error('payment_replayed'); e.qrReplay = true; throw e; }
+      }
       let orderId;
       if (existing.rows[0]) {
         orderId = existing.rows[0].id;
@@ -7651,19 +8166,40 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
         [totalRes.rows[0].total || 0, paymentStatus, orderId]);
       // Record this round's tender NOW (pay-first) — the auto-close on
       // full service finds the bill already settled.
-      await pool.query(`INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3)`,
-        [orderId, (paidPence != null ? paidPence / 100 : totalPence / 100), paymentStatus === 'paid' ? 'QR Online' : 'QR Online (mock)']);
+      // SEPOS-QR-RECEIPT-001 — pay-FIRST means this tender pays for exactly the
+      // items in THIS round, so link them. That is what makes a correct receipt
+      // possible on a shared table: four friends each paying their own round
+      // each get a receipt for what they actually paid, and none of them sees a
+      // total nobody paid.
+      const payIns = await pool.query(
+        `INSERT INTO payments (order_id, amount, method, payment_intent_id) VALUES ($1,$2,$3,$4) RETURNING id`,
+        [orderId, (paidPence != null ? paidPence / 100 : totalPence / 100),
+         paymentStatus === 'paid' ? 'QR Online' : 'QR Online (mock)', verifiedPiId]);
+      roundPaymentId = payIns.rows[0].id;
+      if (firedIds.length) {
+        await pool.query(`UPDATE order_items SET payment_id = $1 WHERE id = ANY($2::int[])`, [roundPaymentId, firedIds]);
+      }
       await offlineQueue.enqueue('add_items', { localOrderId: Number(orderId), items: priced.map(p => ({ ...p, is_bar: 0 })) });
       await depleteStockForItems(firedIds, 'sale');
-      return { orderId, firedIds };
+      return { orderId, firedIds, paymentId: roundPaymentId };
     });
 
     const orderRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [out.orderId]);
     const newItemsRes = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.id = ANY($1::int[])`, [out.firedIds]);
     io.emit('new_order_items', { order: orderRes.rows[0], items: newItemsRes.rows });
-    res.json({ success: true, order_id: out.orderId, payment_status: paymentStatus });
+    res.json({ success: true, order_id: out.orderId, payment_status: paymentStatus, payment_id: out.paymentId });
   } catch (err) {
+    if (err && (err.qrReplay || /idx_payments_payment_intent|payments_payment_intent/i.test(err.message || ''))) {
+      console.warn('[qr] replayed payment_intent rejected');
+      return res.status(409).json({ error: 'This payment has already been used for an order — you have not been charged again.' });
+    }
     console.error('[qr] place order', err);
+    if (err && err.qrRefunded) {
+      return res.status(500).json({ error: 'Sorry — your order could not be sent to the kitchen, so your payment has been refunded. Please tell a member of staff.', refunded: true });
+    }
+    if (err && err.qrRefundFailed) {
+      return res.status(500).json({ error: 'Sorry — your order could not be sent to the kitchen. Please show this to a member of staff so they can refund you.', refund_failed: true });
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -7672,7 +8208,10 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
 // cart (not taken from the client like the takeaway widget's endpoint), so a
 // tampered page can't underpay: the same pricing pass runs here and at order
 // time, and the order endpoint additionally requires pi.amount === total.
-app.post('/api/qr/payment-intent/:token', widgetCors, async (req, res) => {
+// SEPOS-QR-PAY-REDO — the licence/subscription gates belong HERE too. This flow
+// is pay-FIRST, so gating only order creation let a lapsed tenant take the
+// customer's money and then refuse the order. Fail before the card is charged.
+app.post('/api/qr/payment-intent/:token', widgetCors, requireActiveSubscription, requireValidLicense, async (req, res) => {
   try {
     if (!await qrEnabled()) return res.status(403).json({ error: 'QR ordering is not enabled' });
     const tableId = qrVerifyToken(req.params.token);
@@ -7735,7 +8274,7 @@ function qrPayRail() {
   return null;
 }
 
-app.post('/api/orders/:id/qr-pay', requireValidLicense, async (req, res) => {
+app.post('/api/orders/:id/qr-pay', requireActiveSubscription, requireValidLicense, async (req, res) => {  // F31
   const rail = qrPayRail();
   if (!rail) return res.status(503).json({ error: 'No card rail configured — set up SiamPay (or Stripe keys) to use QR pay' });
   const amountPence = Math.round(Number(req.body?.amount) * 100);
@@ -9332,7 +9871,7 @@ app.get('/api/reports/vat', async (req, res) => {
       LEFT JOIN orders      o  ON o.id  = oi.order_id
       WHERE o.status='closed' AND oi.voided=0
         AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
-        AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.method = 'cancelled')) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled'))
+        AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))
     `, [fromTs, toTs]),
       pool.query(`SELECT value FROM settings WHERE key='vat_mode'`),
     ]);
@@ -9666,6 +10205,21 @@ app.get('/api/sync/closed-orders', async (req, res) => {
 // closed_at yet; we just return the full set. Restaurants with more than
 // a few hundred concurrent open tabs would need pagination, which we'll
 // add when someone actually has that problem.
+// SEPOS-SYNC-TENDERS-001 — tenders for ONE order, by cloud id. Lets a till
+// repair an order whose payments never landed, without replaying whole pages of
+// closed-order history (the cursor only moves forward, so a skipped order is
+// otherwise stranded for good).
+app.get('/api/sync/order-payments/:id', async (req, res) => {
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected) return res.status(503).json({ error: 'SYNC_SECRET not set on this server' });
+  if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+  try {
+    const r = await pool.query('SELECT * FROM payments WHERE order_id = $1 ORDER BY id', [req.params.id]);
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/sync/active-orders', async (req, res) => {
   const provided = req.get('x-sync-secret') || '';
   const expected = process.env.SYNC_SECRET || '';
@@ -9736,7 +10290,11 @@ app.post('/api/webhooks/run-now', async (req, res) => {
 // (testing/support). Reports candidates found vs actually sent. Pass
 // {force:true} to bypass the 09:00–12:00 morning send-window (the created-a-day-
 // ahead rule still applies — a same-day booking is never remindable).
-app.post('/api/webhooks/run-reminders', async (req, res) => {
+// SEPOS-AUDIT-002 F29 — was unauthenticated: anyone could fire tomorrow's
+// reminders at 3am and, because each send is recorded, permanently burn them so
+// the real 09:00 run sent nothing. The internal cron calls runReminderCheck
+// directly and is unaffected.
+app.post('/api/webhooks/run-reminders', requireStaffAuthOrSyncSecret(['admin', 'manager']), async (req, res) => {
   try {
     const force = req.body?.force === true || req.query.force === '1';
     const result = await require('./services/reminderService').runReminderCheck({ force });
@@ -9780,7 +10338,10 @@ app.post('/api/print/thai-test', async (req, res) => {
     res.json({ success: true, codepage: customCp || 'sweep' });
   } catch (err) {
     console.error('[print/thai-test]', err.message);
-    res.json({ success: false, error: err.message });
+    // F12 — a HELD ticket is not a plain failure: the client must not fall
+    // through and print it again (that made the banner a lie and turned a later
+    // Retry into a duplicate ticket).
+    res.json({ success: false, held: !!err.ticketHeld, error: err.message });
   }
 });
 
@@ -9827,7 +10388,10 @@ app.post('/api/print/test', async (req, res) => {
     await printService.printReceipt(testSettings, mockOrder, mockItems, mockPayment);
     res.json({ success: true });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    // F12 — a HELD ticket is not a plain failure: the client must not fall
+    // through and print it again (that made the banner a lie and turned a later
+    // Retry into a duplicate ticket).
+    res.json({ success: false, held: !!err.ticketHeld, error: err.message });
   }
 });
 
@@ -9956,7 +10520,10 @@ app.post('/api/print/report-text', async (req, res) => {
     await printService.printReportText(settings, lines);
     res.json({ success: true });
   } catch (err) {
-    res.json({ success: false, error: err.message });
+    // F12 — a HELD ticket is not a plain failure: the client must not fall
+    // through and print it again (that made the banner a lie and turned a later
+    // Retry into a duplicate ticket).
+    res.json({ success: false, held: !!err.ticketHeld, error: err.message });
   }
 });
 
@@ -10139,7 +10706,10 @@ app.post('/api/print/receipt', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[print/receipt]', err.message);
-    res.json({ success: false, error: err.message });
+    // F12 — a HELD ticket is not a plain failure: the client must not fall
+    // through and print it again (that made the banner a lie and turned a later
+    // Retry into a duplicate ticket).
+    res.json({ success: false, held: !!err.ticketHeld, error: err.message });
   }
 });
 
@@ -10166,7 +10736,10 @@ app.post('/api/print/drawer', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[print/drawer]', err.message);
-    res.json({ success: false, error: err.message });
+    // F12 — a HELD ticket is not a plain failure: the client must not fall
+    // through and print it again (that made the banner a lie and turned a later
+    // Retry into a duplicate ticket).
+    res.json({ success: false, held: !!err.ticketHeld, error: err.message });
   }
 });
 
@@ -10223,9 +10796,16 @@ async function printStationGroups(stations, settings, order) {
         // SEPOS-PRINT-ALERT-001 — on a till, a dead station must be LOUD,
         // never a silent hand-off: hold the ticket + banner the staff, who
         // choose retry or an explicit redirect to the main kitchen.
-        await printAlerts.recordFailure({
+        const held = await printAlerts.recordFailure({
           kind: 'station', printer: g.printer, order, items: g.items, reason: err.message,
         });
+        // Verify pass (MEDIUM) — if the hold itself failed to record (DB error),
+        // the food would otherwise be lost silently: fall back to the rescue so
+        // it at least prints on the main kitchen.
+        if (!held) {
+          console.error(`[print/stations] station "${g.printer.name}" hold FAILED to record — rescuing items to main kitchen`);
+          rescued.push(...g.items);
+        }
       } else {
         // Cloud path keeps the legacy silent rescue (no staff UI to alert).
         console.error(`[print/stations] station "${g.printer.name}" failed (${err.message}) — rescuing items to main kitchen`);
@@ -10260,7 +10840,7 @@ app.post('/api/print/kitchen', async (req, res) => {
         await printService.printKitchenTicket(settings, order, defItems, course || 1);
       } catch (err) {
         // SEPOS-PRINT-ALERT-001 — hold + banner on tills; rethrow keeps the API contract.
-        await printAlerts.recordFailure({ kind: 'kitchen', printer: { name: 'Kitchen', ip: settings.printer_kitchen_ip }, order, items: defItems, reason: err.message });
+        err.ticketHeld = await printAlerts.recordFailure({ kind: 'kitchen', printer: { name: 'Kitchen', ip: settings.printer_kitchen_ip }, order, items: defItems, reason: err.message });
         throw err;
       }
     } else if (!split.stations.length) {
@@ -10271,7 +10851,10 @@ app.post('/api/print/kitchen', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[print/kitchen]', err.message);
-    res.json({ success: false, error: err.message });
+    // F12 — a HELD ticket is not a plain failure: the client must not fall
+    // through and print it again (that made the banner a lie and turned a later
+    // Retry into a duplicate ticket).
+    res.json({ success: false, held: !!err.ticketHeld, error: err.message });
   }
 });
 
@@ -10298,14 +10881,17 @@ app.post('/api/print/bar', async (req, res) => {
       try {
         await printService.printBarTicket(settings, order, defItems);
       } catch (err) {
-        await printAlerts.recordFailure({ kind: 'bar', printer: { name: 'Bar', ip: settings.printer_bar_ip }, order, items: defItems, reason: err.message });
+        err.ticketHeld = await printAlerts.recordFailure({ kind: 'bar', printer: { name: 'Bar', ip: settings.printer_bar_ip }, order, items: defItems, reason: err.message });
         throw err;
       }
     }
     res.json({ success: true });
   } catch (err) {
     console.error('[print/bar]', err.message);
-    res.json({ success: false, error: err.message });
+    // F12 — a HELD ticket is not a plain failure: the client must not fall
+    // through and print it again (that made the banner a lie and turned a later
+    // Retry into a duplicate ticket).
+    res.json({ success: false, held: !!err.ticketHeld, error: err.message });
   }
 });
 
@@ -10326,7 +10912,10 @@ app.post('/api/print/kitchen-fire', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[print/kitchen-fire]', err.message);
-    res.json({ success: false, error: err.message });
+    // F12 — a HELD ticket is not a plain failure: the client must not fall
+    // through and print it again (that made the banner a lie and turned a later
+    // Retry into a duplicate ticket).
+    res.json({ success: false, held: !!err.ticketHeld, error: err.message });
   }
 });
 
@@ -10354,14 +10943,17 @@ app.post('/api/print/kitchen-full', async (req, res) => {
       try {
         await printService.printFullKitchenTicket(settings, order, defItems);
       } catch (err) {
-        await printAlerts.recordFailure({ kind: 'kitchen', printer: { name: 'Kitchen', ip: settings.printer_kitchen_ip }, order, items: defItems, reason: err.message });
+        err.ticketHeld = await printAlerts.recordFailure({ kind: 'kitchen', printer: { name: 'Kitchen', ip: settings.printer_kitchen_ip }, order, items: defItems, reason: err.message });
         throw err;
       }
     }
     res.json({ success: true });
   } catch (err) {
     console.error('[print/kitchen-full]', err.message);
-    res.json({ success: false, error: err.message });
+    // F12 — a HELD ticket is not a plain failure: the client must not fall
+    // through and print it again (that made the banner a lie and turned a later
+    // Retry into a duplicate ticket).
+    res.json({ success: false, held: !!err.ticketHeld, error: err.message });
   }
 });
 

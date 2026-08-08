@@ -1,7 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getTables, createOrder, getOrders, getTableStatus, moveTable, mergeTables, getReservations, assertOk } from '../api';
-import { tableLabel } from '../utils/orderLabel'; // SEPOS-TABLE-NAME
+import { tableLabel } from '../utils/orderLabel';
+// Round 6 — a table can hold a waiter bill AND a customer's prepaid QR bill.
+// The QR order is read-only (staff can't touch it) and auto-closes when served,
+// so on the floor we prefer the STAFF order: the waiter's bill must never be
+// hidden behind the customer's. Falls back to the QR order when it's the only
+// one (shown read-only via the existing PAID banner on the order screen).
+const orderForTable = (orders, tid) =>
+  orders.find(o => o.table_id === tid && o.source !== 'qr') || orders.find(o => o.table_id === tid);
+ // SEPOS-TABLE-NAME
 import { roomSize } from '../utils/floorRoom';    // SEPOS-FLOOR-FIT shared room
 import TakeawayStrip    from '../components/TakeawayStrip';
 import BillPeek         from '../components/BillPeek';
@@ -155,7 +163,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
   };
 
   const getTableTime = (tableId) => {
-    const order = openOrders.find(o => o.table_id === tableId);
+    const order = orderForTable(openOrders, tableId);
     if (!order) return null;
     const rawDate = order.opened_at || order.created_at;
     const opened = new Date(rawDate);
@@ -169,7 +177,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
   };
 
   const getTimeColor = (tableId) => {
-    const order = openOrders.find(o => o.table_id === tableId);
+    const order = orderForTable(openOrders, tableId);
     if (!order) return 'white';
     const rawDate = order.opened_at || order.created_at;
     const opened = new Date(rawDate);
@@ -182,7 +190,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
 
   // ── Table click handler — unchanged ───────────────────
   const handleTableClick = async (table) => {
-    const existingOrder = openOrders.find(o => o.table_id === table.id);
+    const existingOrder = orderForTable(openOrders, table.id);
 
     if (moveMode && tableActionPopup) {
       if (existingOrder) {
@@ -555,7 +563,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
               .sort((a, b) => String(a.table_number).localeCompare(String(b.table_number), undefined, { numeric: true }))
               .map(table => {
                 const colours = getTableColour(table);
-                const order = openOrders.find(o => o.table_id === table.id);
+                const order = orderForTable(openOrders, table.id);
                 const time = getTableTime(table.id);
                 const isSelected = tableActionPopup?.table.id === table.id;
                 const upcoming = getUpcomingReservation(table.id);

@@ -147,6 +147,40 @@ export default function BillsSection() {
     });
   };
 
+  // SEPOS-QR-RECEIPT-002 — print ONE round of a split bill. A QR self-order
+  // table lands as several rounds that paid at different times; each round's
+  // items are linked to its own payment (order_items.payment_id), so a customer
+  // who paid for their own round can get a receipt for exactly what they paid.
+  // Only applies to item-linked rounds (QR / pay-first) — a money-only split
+  // (staff dividing the total at pay time) has no per-item link, so we say so.
+  const doReprintRound = (bill, tender) => {
+    if (!bill || !tender) return;
+    if (!billItems.length) { alert('Items not loaded yet — try again in a moment.'); return; }
+    const roundItems = billItems.filter(it => String(it.payment_id) === String(tender.id));
+    if (!roundItems.length) {
+      alert('This payment isn’t linked to specific items (a money-only split) — use “Re-print receipt” for the whole bill.');
+      return;
+    }
+    const subtotal      = roundItems.reduce((s, it) => s + Number(it.unit_price || 0) * Number(it.quantity || 1), 0);
+    const paid          = Number(tender.amount || 0);
+    const serviceCharge = Math.max(0, paid - subtotal);
+    printReceipt({
+      order: bill,
+      items: roundItems,
+      settings,
+      paymentDetails: {
+        subtotal,
+        discountAmount: 0,
+        serviceCharge,
+        billTotal: paid,
+        amountPaid: paid,
+        change: 0,
+        method: tender.method || bill.method || '',
+        tip: 0,
+      },
+    });
+  };
+
   const doPrintBills = async (mode) => {
     if (!bills.length) return;
     const isThermal = (mode === 'thermal');
@@ -170,7 +204,7 @@ export default function BillsSection() {
         ? (b.discount_type === 'percent' ? `-${b.discount_value}%` : `-£${b.discount_value}`)
         : '';
       rows.push([
-        b.id, b.table_number || '', b.covers || '',
+        b.id, (b.table_number ? dineTableLabel(b) : (b.customer_name || '')), b.covers || '',
         b.closed_at ? new Date(b.closed_at).toISOString() : '',
         b.method || '', discountStr, b.discount_reason || '',
         Number(b.total || 0).toFixed(2),
@@ -259,7 +293,7 @@ export default function BillsSection() {
                 {/* the number the CUSTOMER sees is the cloud order id; on a Pro
                     till the local id differs, so show the one they'll quote. */}
                 <span style={{ fontWeight: 700, color: '#777', fontVariantNumeric: 'tabular-nums' }}>#{bill.cloud_id || bill.id}</span>
-                <span style={{ fontWeight: 700, color:'var(--brand-primary, #1a1a2e)' }}>T{bill.table_number}</span>
+                <span style={{ fontWeight: 700, color:'var(--brand-primary, #1a1a2e)' }}>{dineTableLabel(bill)}</span>
                 <span style={{ color: '#555' }}>{bill.covers || '—'}</span>
                 <span style={{ color: '#555' }}>{formatDateTime(bill.closed_at)}</span>
                 <span><span style={{ background: bill.method === 'Cash' ? '#dcfce7' : bill.method === 'Card' ? '#dbeafe' : bill.method === 'Split' ? '#fef3c7' : '#f3f4f6', color: bill.method === 'Cash' ? '#14532d' : bill.method === 'Card' ? '#1e40af' : bill.method === 'Split' ? '#92400e' : '#374151', padding: '2px 8px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{bill.method === 'Cash' ? '💵' : bill.method === 'Card' ? '💳' : bill.method === 'Split' ? '🔀' : '🔄'} {bill.method}{bill.method === 'Split' && Array.isArray(bill.tenders) ? ` (${bill.tenders.length})` : ''}</span></span>
@@ -353,13 +387,22 @@ export default function BillsSection() {
                               {/* SEPOS-SPLITBILL-001 — tender breakdown (Cash/Card split). */}
                               {tenders.length > 1 && (
                                 <div style={{ padding: '6px 0', borderBottom: '1px solid #e0edff' }}>
-                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', marginBottom: 4 }}>🔀 Split payment</div>
-                                  {tenders.map((t, i) => (
-                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '2px 0' }}>
-                                      <span style={{ color: '#555' }}>{t.method === 'Cash' ? '💵' : t.method === 'Card' ? '💳' : '🔄'} {t.method}</span>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', marginBottom: 4 }}>🔀 Split payment — {tenders.length} rounds</div>
+                                  {tenders.map((t, i) => {
+                                    const roundItems = billItems.filter(it => String(it.payment_id) === String(t.id));
+                                    return (
+                                    <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, padding: '3px 0', gap: 8 }}>
+                                      <span style={{ color: '#555', flex: 1 }}>{t.method === 'Cash' ? '💵' : t.method === 'Card' ? '💳' : '🔄'} Round {i + 1} · {t.method}{roundItems.length ? ` · ${roundItems.reduce((n, it) => n + Number(it.quantity || 1), 0)} item${roundItems.reduce((n, it) => n + Number(it.quantity || 1), 0) > 1 ? 's' : ''}` : ''}</span>
                                       <span style={{ fontWeight: 600 }}>£{Number(t.amount || 0).toFixed(2)}</span>
+                                      {roundItems.length > 0 && (
+                                        <button onClick={() => doReprintRound(bill, t)} title={`Print a receipt for round ${i + 1} only`} style={{
+                                          padding: '3px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                                          background: 'white', color: 'var(--brand-primary,#0D1B3E)',
+                                          border: '1px solid var(--brand-primary,#0D1B3E)', borderRadius: 6,
+                                        }}>🖨 Print</button>
+                                      )}
                                     </div>
-                                  ))}
+                                  );})}
                                 </div>
                               )}
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 800, paddingTop: 8, borderTop: '2px solid #3b82f6', marginTop: 4 }}>
@@ -406,7 +449,7 @@ export default function BillsSection() {
           bill={amendTarget}
           onClose={() => setAmendTarget(null)}
           onDone={(r) => {
-            setAmendToast(`✓ Table ${amendTarget.table_number || '?'} changed from ${r.from} → ${r.to}${r.by ? ' by ' + r.by : ''}`);
+            setAmendToast(`✓ ${dineTableLabel(amendTarget)} changed from ${r.from} → ${r.to}${r.by ? ' by ' + r.by : ''}`);
             setTimeout(() => setAmendToast(''), 5000);
             setAmendTarget(null);
             fetchBills();
@@ -416,9 +459,10 @@ export default function BillsSection() {
       {editTarget && (
         <EditPaymentModal
           bill={editTarget}
+          items={billItems}
           onClose={() => setEditTarget(null)}
           onDone={(r) => {
-            setAmendToast(`✓ Table ${editTarget.table_number || '?'} payment corrected${r.by ? ' by ' + r.by : ''}`);
+            setAmendToast(`✓ ${dineTableLabel(editTarget)} payment corrected${r.by ? ' by ' + r.by : ''}`);
             setTimeout(() => setAmendToast(''), 5000);
             setEditTarget(null);
             setSelectedBill(null);
@@ -449,11 +493,22 @@ export default function BillsSection() {
 // SEPOS-BILLEDIT-001 — correct a wrong/duplicate PAID amount on a closed bill.
 // Manager/admin PIN taken here; the server re-validates the role. Editing the
 // record does NOT refund a card double-charge — that's done on the terminal.
-function EditPaymentModal({ bill, onClose, onDone }) {
-  const initial = (Array.isArray(bill.tenders) && bill.tenders.length
+function EditPaymentModal({ bill, items = [], onClose, onDone }) {
+  const tenderList = (Array.isArray(bill.tenders) && bill.tenders.length
     ? bill.tenders
-    : [{ id: null, method: bill.method || 'Card', amount: Number(bill.paid_amount || bill.total || 0) }]
-  ).map(t => ({ id: t.id, method: t.method, amount: String(Number(t.amount || 0).toFixed(2)), remove: false }));
+    : [{ id: null, method: bill.method || 'Card', amount: Number(bill.paid_amount || bill.total || 0) }]);
+  const multiRound = tenderList.length > 1;
+  // SEPOS-QR-RECEIPT-002 — label each round with its number + item so a manager
+  // refunding ONE person of a split self-order table picks the right one. Items
+  // link to their round via order_items.payment_id.
+  const initial = tenderList.map((t, i) => {
+    const roundItems = Array.isArray(items) ? items.filter(it => String(it.payment_id) === String(t.id)) : [];
+    const itemLabel = roundItems.length
+      ? roundItems.map(it => `${it.quantity > 1 ? it.quantity + '× ' : ''}${it.name}`).join(', ')
+      : '';
+    return { id: t.id, method: t.method, amount: String(Number(t.amount || 0).toFixed(2)), remove: false,
+             roundNo: i + 1, itemLabel };
+  });
   const [rows, setRows] = useState(initial);
   const [reason, setReason] = useState('');
   const [pin, setPin] = useState('');
@@ -492,7 +547,13 @@ function EditPaymentModal({ bill, onClose, onDone }) {
         <div style={{ fontSize:12, color:'#888', marginBottom:14 }}>Bill £{subtotal.toFixed(2)}{service > 0 ? ` + service £${service.toFixed(2)}` : ''} = <b>£{expected.toFixed(2)}</b> expected</div>
 
         {rows.map((r, i) => (
-          <div key={i} style={{ display:'flex', gap:8, alignItems:'center', marginBottom:10, opacity: r.remove ? 0.45 : 1 }}>
+          <div key={i} style={{ marginBottom:10, opacity: r.remove ? 0.45 : 1 }}>
+          {(multiRound || r.itemLabel) && r.id != null && (
+            <div style={{ fontSize:12, fontWeight:700, color:'var(--brand-primary,#0D1B3E)', marginBottom:4 }}>
+              {multiRound ? `Round ${r.roundNo}` : 'Payment'}{r.itemLabel ? <span style={{ fontWeight:400, color:'#666' }}> · {r.itemLabel}</span> : ''}
+            </div>
+          )}
+          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
             <select value={r.method} disabled={r.remove || r.id == null} onChange={e => setRow(i, { method:e.target.value })} style={{ ...box, width:110 }}>
               {['Cash','Card','Other','Stripe'].map(m => <option key={m} value={m}>{m}</option>)}
             </select>
@@ -506,6 +567,7 @@ function EditPaymentModal({ bill, onClose, onDone }) {
                 {r.remove ? 'Undo' : '✕ Remove'}
               </button>
             )}
+          </div>
           </div>
         ))}
 
@@ -620,7 +682,7 @@ function buildBillsBody(bills, from, to, method, totals, settings, thermal) {
        <table>
          ${bills.map(b => {
            const t = b.closed_at ? new Date(b.closed_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
-           const lbl = b.table_number ? `T${b.table_number}` : (b.customer_name || '🥡');
+           const lbl = b.table_number ? dineTableLabel(b) : (b.customer_name || '🥡');
            return `<tr><td>${lbl} · ${b.method || '-'} · ${t}</td><td class="right">${fmt(b.paid_amount || b.total)}</td></tr>`;
          }).join('')}
        </table>`
@@ -630,7 +692,7 @@ function buildBillsBody(bills, from, to, method, totals, settings, thermal) {
          <tbody>
            ${bills.map(b => {
              const t = b.closed_at ? new Date(b.closed_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-             const lbl = b.table_number ? `Table ${b.table_number}` : (b.customer_name || '🥡 Online');
+             const lbl = b.table_number ? dineTableLabel(b) : (b.customer_name || '🥡 Online');
              return `<tr>
                <td>${t}</td>
                <td>${lbl}</td>
@@ -661,7 +723,7 @@ function buildBillsLines(bills, from, to, method, totals, settings) {
   lines.push({ kind: 'div' });
   for (const b of bills) {
     const t = b.closed_at ? new Date(b.closed_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
-    const label = b.table_number ? `T${b.table_number}` : (b.customer_name || 'TA');
+    const label = b.table_number ? dineTableLabel(b) : (b.customer_name || 'TA');
     lines.push({ kind: 'row', left: `${label}  ${b.method || '-'}  ${t}`, right: fmt(b.paid_amount || b.total) });
   }
   lines.push({ kind: 'total', left: `TOTAL (${bills.length})`, right: fmt(totals.totalSales) });

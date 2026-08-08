@@ -11,6 +11,7 @@
 
 import { useState, useEffect } from 'react';
 import { getSettings, updateSettings, testNetworkPrinter, cupsQueueForIp, printerHealth, printerGetMac, printerDiscover, printerThaiTest, getPrintTestBuffer, getPrinters, createPrinter, updatePrinter, deletePrinter, testPrinter, setPrinterDefault, getCategories, setCategoryPrinter, scanPrinters } from '../../api';
+import StickySaveBar, { SAVE_BAR_CLEARANCE } from '../../components/StickySaveBar';
 import { isNativeApp, sendRawToPrinter } from '../../native/printer'; // SEPOS-ANDROID-001
 
 // ── Network Printers card (IP-based, RAW + LPR + CUPS fallback chain) ──
@@ -902,7 +903,7 @@ export default function PrintersSection() {
   }
 
   return (
-    <div style={{ padding:30, maxWidth:900 }}>
+    <div style={{ padding:30, paddingBottom:SAVE_BAR_CLEARANCE, maxWidth:900 }}>
       <h1 style={{ fontSize:24, fontWeight:800, color:'var(--brand-primary, #1a1a2e)', marginBottom:24 }}>🖨️ Printers</h1>
 
       <PrintRoutingCard cardStyle={cardStyle} settings={settings} setSettings={setSettings} />
@@ -956,13 +957,8 @@ export default function PrintersSection() {
 
       <DeviceKeyboardToggle cardStyle={cardStyle} />
 
-      <button onClick={handleSave} disabled={saving}
-        style={{ width:'100%', padding:'14px', borderRadius:10, border:'none',
-                 background: saved ? '#22c55e' : 'var(--brand-primary, #1a1a2e)', color:'white',
-                 cursor:'pointer', fontWeight:700, fontSize:16,
-                 transition:'background 0.3s' }}>
-        {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Printer Settings'}
-      </button>
+      <StickySaveBar onSave={handleSave} label="💾 Save Printer Settings"
+        saving={saving} saved={saved} savedLabel="✓ Saved" />
     </div>
   );
 }

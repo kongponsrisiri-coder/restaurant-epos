@@ -21,7 +21,11 @@
 const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
-const PDFDocument = require('pdfkit');
+// pdfkit is required LAZILY inside the PDF builder (below), NOT at module load.
+// Merely require()-ing this service (e.g. the settings-save endpoint calls
+// isLocalInstall()) must not drag in the whole PDF stack — on the tablet-host
+// build a missing pdfkit sub-dep (@swc/helpers) then crashed core actions like
+// "Save settings". PDF generation is optional; only the archive feature needs it.
 
 // ── Paths ──────────────────────────────────────────────────────────
 function getRootDir() {
@@ -136,8 +140,18 @@ async function generateBillsCsv(pool, dateStr) {
   ]);
   for (const r of rows) {
     const closed = r.closed_at instanceof Date ? r.closed_at : new Date(r.closed_at);
-    const date = formatDate(closed);
-    const time = `${pad(closed.getHours())}:${pad(closed.getMinutes())}`;
+    // SEPOS-048 — render the archive CSV in the restaurant's timezone: this
+    // runs on Railway (UTC), so getHours()/formatDate showed every bill 1h
+    // early in BST and bills closed 00:00–01:00 local on the wrong date.
+    const tz = process.env.RESTAURANT_TZ || 'Europe/London';
+    let date, time;
+    try {
+      date = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(closed);
+      time = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour12: false, hour: '2-digit', minute: '2-digit' }).format(closed);
+    } catch {
+      date = formatDate(closed);
+      time = `${pad(closed.getHours())}:${pad(closed.getMinutes())}`;
+    }
     const discount = r.discount_value
       ? (r.discount_type === 'percent'
           ? `${r.discount_value}%`
@@ -174,6 +188,14 @@ async function generateZReportPdf(dateStr, reportData, settings) {
   const outPath = zReportPdfPath(dateStr);
 
   return new Promise((resolve, reject) => {
+    let PDFDocument;
+    try {
+      PDFDocument = require('pdfkit');
+    } catch (e) {
+      // A missing/broken pdfkit (e.g. incomplete node_modules on the tablet-host
+      // bundle) disables the PDF archive only — it must never crash the caller.
+      return reject(new Error('PDF archive unavailable — pdfkit failed to load: ' + e.message));
+    }
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     const stream = fs.createWriteStream(outPath);
     stream.on('finish', () => resolve({ path: outPath }));
@@ -346,7 +368,7 @@ async function archiveForDate(pool, dateStr, opts = {}) {
   let reportData;
   const zRes = await pool.query(
     `SELECT report_data FROM z_reports
-     WHERE closed_at::date = $1::date
+     WHERE closed_at::date = $1::date AND superseded_at IS NULL
      ORDER BY closed_at DESC LIMIT 1`,
     [dateStr]
   ).catch(() => ({ rows: [] }));

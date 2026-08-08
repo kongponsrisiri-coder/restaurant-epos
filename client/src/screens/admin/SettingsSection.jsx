@@ -6,6 +6,7 @@ import DiningDurationSettings from './DiningDurationSettings';
 import { confirm } from '../../utils/confirm';
 import { getTenantUrl } from '../../native/tenant';
 import { isNativeApp } from '../../native/printer';
+import StickySaveBar, { SAVE_BAR_CLEARANCE } from '../../components/StickySaveBar';
 
 // QR codes render to a <canvas>, so the qrcode lib needs a REAL hex colour —
 // it can't parse a CSS `var(--brand-primary,…)` string (throws → blank QR).
@@ -1120,7 +1121,7 @@ export default function SettingsSection() {
   const cardStyle  = { background:'white', borderRadius:12, padding:24, marginBottom:20, boxShadow:'0 1px 4px rgba(0,0,0,0.08)' };
 
   return (
-    <div style={{ padding:24, maxWidth:640 }}>
+    <div style={{ padding:24, paddingBottom:SAVE_BAR_CLEARANCE, maxWidth:640 }}>
       <h1 style={{ fontSize:22, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:24 }}>Settings</h1>
 
       {/* ── Branding (app appearance) ── SEPOS-BRAND-001 ── */}
@@ -1553,10 +1554,8 @@ export default function SettingsSection() {
         )}
       </div>
 
-      {/* ── Save ── */}
-      <button onClick={handleSave} style={{ width:'100%', padding:'14px', borderRadius:10, border:'none', background:saved?'#22c55e':'var(--brand-primary, #1a1a2e)', color:'white', cursor:'pointer', fontWeight:700, fontSize:16, marginBottom:20, transition:'background 0.3s' }}>
-        {saved ? '✓ Saved!' : 'Save All Settings'}
-      </button>
+      {/* Save moved to a sticky bottom bar (StickySaveBar) — this page is long
+          and the button was stranded mid-scroll. Korakot 2026-08-08. */}
 
       {/* ── Discount Reasons ── */}
       <div style={cardStyle}>
@@ -1614,6 +1613,8 @@ export default function SettingsSection() {
 
       {/* SEPOS-PRINT-TAB-001 — printer config moved to its own admin tab.
           See client/src/screens/admin/PrintersSection.jsx */}
+
+      <StickySaveBar onSave={handleSave} label="💾 Save All Settings" saved={saved} />
     </div>
   );
 }

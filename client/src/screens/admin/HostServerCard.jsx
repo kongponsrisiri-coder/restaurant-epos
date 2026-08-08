@@ -8,6 +8,7 @@ import QRCode from 'qrcode';
 import { isHostMode } from '../../api';
 import { clearRole, getTenantUrl } from '../../native/tenant';
 import { isNativeApp } from '../../native/printer';
+import AddTillCard from './AddTillCard';
 import { getHostStatus, startHost, stopHost, requestIgnoreBatteryOptimizations, saveHostConfig, getHostConfig, syncNow, getLanIp, reloadHostConfig } from '../../native/nodeHost';
 
 export default function HostServerCard({ cardStyle }) {

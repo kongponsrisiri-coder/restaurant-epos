@@ -459,6 +459,7 @@ export default function BillsSection() {
       {editTarget && (
         <EditPaymentModal
           bill={editTarget}
+          items={billItems}
           onClose={() => setEditTarget(null)}
           onDone={(r) => {
             setAmendToast(`✓ ${dineTableLabel(editTarget)} payment corrected${r.by ? ' by ' + r.by : ''}`);
@@ -492,11 +493,22 @@ export default function BillsSection() {
 // SEPOS-BILLEDIT-001 — correct a wrong/duplicate PAID amount on a closed bill.
 // Manager/admin PIN taken here; the server re-validates the role. Editing the
 // record does NOT refund a card double-charge — that's done on the terminal.
-function EditPaymentModal({ bill, onClose, onDone }) {
-  const initial = (Array.isArray(bill.tenders) && bill.tenders.length
+function EditPaymentModal({ bill, items = [], onClose, onDone }) {
+  const tenderList = (Array.isArray(bill.tenders) && bill.tenders.length
     ? bill.tenders
-    : [{ id: null, method: bill.method || 'Card', amount: Number(bill.paid_amount || bill.total || 0) }]
-  ).map(t => ({ id: t.id, method: t.method, amount: String(Number(t.amount || 0).toFixed(2)), remove: false }));
+    : [{ id: null, method: bill.method || 'Card', amount: Number(bill.paid_amount || bill.total || 0) }]);
+  const multiRound = tenderList.length > 1;
+  // SEPOS-QR-RECEIPT-002 — label each round with its number + item so a manager
+  // refunding ONE person of a split self-order table picks the right one. Items
+  // link to their round via order_items.payment_id.
+  const initial = tenderList.map((t, i) => {
+    const roundItems = Array.isArray(items) ? items.filter(it => String(it.payment_id) === String(t.id)) : [];
+    const itemLabel = roundItems.length
+      ? roundItems.map(it => `${it.quantity > 1 ? it.quantity + '× ' : ''}${it.name}`).join(', ')
+      : '';
+    return { id: t.id, method: t.method, amount: String(Number(t.amount || 0).toFixed(2)), remove: false,
+             roundNo: i + 1, itemLabel };
+  });
   const [rows, setRows] = useState(initial);
   const [reason, setReason] = useState('');
   const [pin, setPin] = useState('');
@@ -535,7 +547,13 @@ function EditPaymentModal({ bill, onClose, onDone }) {
         <div style={{ fontSize:12, color:'#888', marginBottom:14 }}>Bill £{subtotal.toFixed(2)}{service > 0 ? ` + service £${service.toFixed(2)}` : ''} = <b>£{expected.toFixed(2)}</b> expected</div>
 
         {rows.map((r, i) => (
-          <div key={i} style={{ display:'flex', gap:8, alignItems:'center', marginBottom:10, opacity: r.remove ? 0.45 : 1 }}>
+          <div key={i} style={{ marginBottom:10, opacity: r.remove ? 0.45 : 1 }}>
+          {(multiRound || r.itemLabel) && r.id != null && (
+            <div style={{ fontSize:12, fontWeight:700, color:'var(--brand-primary,#0D1B3E)', marginBottom:4 }}>
+              {multiRound ? `Round ${r.roundNo}` : 'Payment'}{r.itemLabel ? <span style={{ fontWeight:400, color:'#666' }}> · {r.itemLabel}</span> : ''}
+            </div>
+          )}
+          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
             <select value={r.method} disabled={r.remove || r.id == null} onChange={e => setRow(i, { method:e.target.value })} style={{ ...box, width:110 }}>
               {['Cash','Card','Other','Stripe'].map(m => <option key={m} value={m}>{m}</option>)}
             </select>
@@ -549,6 +567,7 @@ function EditPaymentModal({ bill, onClose, onDone }) {
                 {r.remove ? 'Undo' : '✕ Remove'}
               </button>
             )}
+          </div>
           </div>
         ))}
 

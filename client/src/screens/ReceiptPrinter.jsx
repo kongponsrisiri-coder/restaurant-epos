@@ -223,8 +223,12 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
   // VAT is the owner/accountant's domain — no VAT breakdown on the customer
   // receipt (the admin VAT Report is kept separately for the accountant).
   const vatBlock = '';
+  const tenders = Array.isArray(paymentDetails.tenders) ? paymentDetails.tenders : [];
   const paymentRows  = method ? `
     <tr><td>Payment</td><td style="text-align:right;">${method}</td></tr>
+    ${tenders.length > 1 ? tenders.map((t, i) =>
+      `<tr><td style="padding-left:10px;color:#333;">${i + 1}. ${t.method || ''}</td><td style="text-align:right;">${fmt(Number(t.amount || 0))}</td></tr>`
+    ).join('') : ''}
     ${method==='Cash'&&amountPaid>0?`
       <tr><td>Cash tendered</td><td style="text-align:right;">${fmt(amountPaid)}</td></tr>
       <tr style="font-weight:700;"><td>Change</td><td style="text-align:right;">${fmt(change)}</td></tr>

@@ -7,6 +7,7 @@ import { confirm } from '../../utils/confirm';
 import { getTenantUrl } from '../../native/tenant';
 import { isNativeApp } from '../../native/printer';
 import StickySaveBar, { SAVE_BAR_CLEARANCE } from '../../components/StickySaveBar';
+import HostServerCard from './HostServerCard';   // SEPOS host spike — native-only
 
 // QR codes render to a <canvas>, so the qrcode lib needs a REAL hex colour —
 // it can't parse a CSS `var(--brand-primary,…)` string (throws → blank QR).
@@ -1598,6 +1599,7 @@ export default function SettingsSection() {
 
       {/* ── Network Setup (QR for iPads) ── */}
       {isNativeApp() ? <AddTillCard cardStyle={cardStyle} /> : <NetworkSetupCard cardStyle={cardStyle} />}
+      {isNativeApp() && <HostServerCard cardStyle={cardStyle} />}
 
       {/* SEPOS-LOCAL-001 P5 — Mac vs cloud record counts */}
       <DataStorageCard cardStyle={cardStyle} />

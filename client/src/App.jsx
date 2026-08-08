@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { startMonitoring, onStatusChange, getServerStatus } from './utils/serverDetect';
-import { getRestaurant, getLicenseState, syncLocalOrders, getSettings, TENANT_MISCONFIGURED, getCurrentSession } from './api';
+import { getRestaurant, getLicenseState, syncLocalOrders, getSettings, TENANT_MISCONFIGURED, getCurrentSession, isHostMode } from './api';
+import { startHost } from './native/nodeHost';        // SEPOS host spike — no-op unless host mode
 import { applyBrandTheme } from './theme'; // SEPOS-BRAND-001 — per-client theme
 import { backupSalesToDevice } from './native/salesBackup'; // SEPOS-ANDROID-003
 import { canAccessReservations, canAccessKitchen, canAccessFullEPOS } from './utils/plan';
@@ -114,6 +115,18 @@ export default function App() {
   // the first sale (otherwise orders close against a NULL session and never land
   // in a Z report).
   const [dayCheck, setDayCheck] = useState('idle');
+
+  // SEPOS host spike — when this device is the host till, auto-start its
+  // embedded Node server on launch so the client never has to tap Start. Deferred
+  // one tick so first paint isn't held by the bridge call; the native plugin
+  // no-ops if already running. Host-only + native-only — web, desktop, and
+  // cloud-mode Android never reach past the isHostMode() guard.
+  useEffect(() => {
+    if (!isHostMode()) return;
+    let alive = true;
+    const id = setTimeout(() => { if (alive) startHost().catch(() => {}); }, 0);
+    return () => { alive = false; clearTimeout(id); };
+  }, []);
 
   // SEPOS-BRAND-001 — apply the tenant's brand colours app-wide at load. Safe
   // if it fails / is unset (falls back to the default SiamEPOS navy+gold).

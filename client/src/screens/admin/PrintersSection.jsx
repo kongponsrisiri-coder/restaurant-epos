@@ -118,7 +118,7 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
       if (isNativeApp() && ip) {
         // SEPOS-ANDROID-001 — on the Android app the cloud can't reach a LAN
         // printer, so fetch the server's ESC/POS test page and send it ourselves.
-        const buf = await getPrintTestBuffer();
+        const buf = await getPrintTestBuffer(ip, name, port);   // identity echoed on the slip
         const r = await sendRawToPrinter(ip, port, buf.data);
         setTest(key, r && r.ok ? 'ok' : 'fail');
       } else {

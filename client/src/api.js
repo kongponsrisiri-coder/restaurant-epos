@@ -31,6 +31,21 @@ const MAIN_HOSTS = ['app.siamepos.co.uk'];
 // setup-error screen instead of loading another restaurant's data.
 let tenantMisconfigured = false;
 
+// SEPOS host spike — "host mode": this Android device runs the embedded Node
+// host server (NodeHost plugin) and the POS UI talks to it over loopback
+// instead of the cloud. The flag is persisted in localStorage by
+// SettingsSection's "Run this device as the host till" toggle. On web/desktop
+// and on a normal cloud Android till it is never set, so everything below is a
+// no-op — host mode only ever activates on a native device with the flag on.
+export const HOST_MODE_KEY = 'siamepos_host_mode';
+export const isHostMode = () => {
+  try {
+    return (typeof window !== 'undefined' && window.Capacitor &&
+      typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform() &&
+      localStorage.getItem(HOST_MODE_KEY) === '1');
+  } catch { return false; }
+};
+
 const getServerURL = () => {
   // Electron desktop: the bundled local server lives on :3001 regardless of
   // how the renderer was loaded (file:// in prod, http://localhost:5173 in dev).
@@ -44,6 +59,10 @@ const getServerURL = () => {
   // per-device tenant URL chosen on first launch (empty → SetupScreen gates the app).
   if (typeof window !== 'undefined' && window.Capacitor &&
       typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
+    // Host mode: talk to this device's own embedded host server over loopback
+    // (127.0.0.1 is the most reliable on-device; localhost can resolve oddly in
+    // the Android WebView). The host serves the same backend as the cloud.
+    if (isHostMode()) return 'http://127.0.0.1:3001';
     try { return (localStorage.getItem('siamepos_tenant_url') || '').replace(/\/+$/, ''); } catch { return ''; }
   }
 
@@ -146,8 +165,14 @@ export const updateTableStatus = (id, status) => put(`/api/tables/${id}`, { stat
 // SEPOS-ANDROID-002 — when online, warm EVERY item's modifiers into the cache
 // (once) so offline taps still show modifier choices. Background, best-effort.
 const isNative = () => {
-  try { return !!(typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); }
-  catch { return false; }
+  try {
+    if (!(typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) return false;
+    // In HOST MODE the embedded local server is the authoritative backend (own
+    // SQLite + cloud sync), so the WebView offline engine must NOT double up —
+    // return false so createOrder/payOrder/promote/localTarget talk straight to
+    // the host server. Cloud-mode Android keeps the offline engine.
+    return !isHostMode();
+  } catch { return false; }
 };
 let _modWarmed = false;
 async function warmModifiers(menu) {
@@ -552,7 +577,7 @@ export const serverPrintKitchenToStation = (order_id, items, printer_id, printer
 // SEPOS-025/026 — Network printing (server-side ESC/POS to TCP port 9100)
 export const testNetworkPrinter   = (ip, port, printer_name) => post('/api/print/test',    { ip, port, printer_name });
 // SEPOS-ANDROID-001 — ESC/POS buffers (base64) for the native app to send itself.
-export const getPrintTestBuffer   = () => get('/api/print/buffers/test');
+export const getPrintTestBuffer   = (ip, name, port) => get(`/api/print/buffers/test?ip=${encodeURIComponent(ip || '')}&name=${encodeURIComponent(name || '')}&port=${encodeURIComponent(port || '')}`);
 export const getReceiptBuffer     = (order_id, payment_details) => post('/api/print/buffers/receipt', { order_id, payment_details });
 export const getKitchenBuffer     = (order_id) => post('/api/print/buffers/kitchen', { order_id });
 // SEPOS-ANDROID-001 — dine-in kitchen/bar/fire-notice buffer (firing device pushes it to the LAN printer)

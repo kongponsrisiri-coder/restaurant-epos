@@ -838,7 +838,10 @@ app.post('/api/printers/:id/test', async (req, res) => {
     // testPrint's 3rd arg is a CUPS/named-printer fallback, NOT a MAC — passing
     // the MAC made the fallback try to print to a queue named after the MAC.
     // A station is IP-addressed, so leave the named-printer arg empty.
-    await printService.testPrint(p.ip, p.port || 9100, '');
+    // Identity block on the slip (name/ip/roles) so the operator can tell
+    // WHICH station printed — three identical printers, one shelf.
+    const roles = [p.role_receipt ? 'Bills' : null, p.role_kitchen ? 'Kitchen' : null, p.role_bar ? 'Bar' : null].filter(Boolean).join(' + ') || undefined;
+    await printService.testPrint(p.ip, p.port || 9100, '', { name: p.name, roles });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -10364,6 +10367,10 @@ app.post('/api/print/test', async (req, res) => {
       id: 'TEST',
       order_type: 'dine_in',
       table_number: 5,
+      // Identity on the slip: the big table-heading prints the TARGET the
+      // operator typed, so with several printers you can tell which one
+      // answered ("TEST 192.168.68.201").
+      table_label: `TEST ${ip || printer_name}`,
       covers: 2,
       discount_value: 0,
     };
@@ -10533,7 +10540,11 @@ app.post('/api/print/report-text', async (req, res) => {
 // desktop path → byte-identical formatting (Thai, £, logo, cut). Returns base64.
 app.get('/api/print/buffers/test', async (req, res) => {
   try {
-    const buf = printService.buildTestPage();
+    // Optional ?ip=&name=&port= — the native app knows which printer it is
+    // about to push this buffer to; echoing it on the slip identifies the
+    // printer (three identical POS80s, one shelf).
+    const { ip, name, port } = req.query || {};
+    const buf = printService.buildTestPage({ ip, name, port });
     res.json({ ok: true, data: Buffer.from(buf).toString('base64'), bytes: buf.length });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });

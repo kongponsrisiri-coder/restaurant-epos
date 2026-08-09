@@ -50,6 +50,9 @@ app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 // raw, unparsed body. Same constraint as Stripe — register before
 // express.json so the global JSON parser doesn't consume it first.
 app.use('/api/line/webhook', express.raw({ type: 'application/json' }));
+// SEPOS-SALESCHAT-002 — Messenger webhook needs the raw body for Meta's
+// X-Hub-Signature-256 HMAC, same pattern as stripe/line above.
+app.use('/api/messenger/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
 
@@ -4787,7 +4790,64 @@ app.post('/api/saleschat/admin/conversations/:sid/reply', salesAdminAuth, async 
   const msgs = _salesMsgs(r.messages);
   msgs.push({ role: 'assistant', content: text, operator: true, ts: new Date().toISOString() });
   await pool.query('UPDATE sales_chats SET messages=$2, handoff=TRUE, updated_at=NOW() WHERE session_id=$1', [req.params.sid, JSON.stringify(msgs)]);
+  // SEPOS-SALESCHAT-002 — web visitors poll for replies; Messenger users don't.
+  // A takeover reply on an fb- thread must be pushed out through the Graph API.
+  if (/^fb-\d+$/.test(req.params.sid)) {
+    messengerSales.sendText(req.params.sid.slice(3), text)
+      .catch(e => console.error('[saleschat] messenger push', e.message));
+  }
   res.json({ ok: true, handoff: true });
+});
+
+// ─── SEPOS-SALESCHAT-002 — Facebook Messenger doorway for Tara ───
+// DMs to the SiamEPOS page flow into the SAME sales_chats store as the
+// website chat: same persona, same Control Room list, same human takeover.
+// Inert unless the MESSENGER_* env vars are set (main cloud only).
+const messengerSales = require('./services/messengerSales');
+const MESSENGER_ADDENDUM = `
+CHANNEL NOTE — you are replying in Facebook Messenger on the SiamEPOS page:
+- Keep replies SHORT (1-3 sentences, max ~2 short paragraphs). No markdown, no headers, no bullet walls — plain chat text.
+- First reply to a new person: greet briefly, thank them for messaging the page, then answer.
+- If they want a demo or a call, ask for their restaurant/spa name and a phone number or email, and say the team (กต) will get back to them the same day.`;
+
+app.get('/api/messenger/webhook', (req, res) => {
+  const challenge = messengerSales.verifyWebhook(req.query || {});
+  if (challenge != null) return res.status(200).send(challenge);
+  res.sendStatus(403);
+});
+
+app.post('/api/messenger/webhook', async (req, res) => {
+  const raw = req.body; // Buffer (raw mount above)
+  if (!messengerSales.verifySignature(raw, req.headers['x-hub-signature-256'])) return res.sendStatus(403);
+  res.sendStatus(200); // ack fast — Meta retries on slow responses
+  let payload;
+  try { payload = JSON.parse(raw.toString('utf8')); } catch { return; }
+  if (payload.object !== 'page') return;
+  for (const m of messengerSales.extractMessages(payload)) {
+    const sid = `fb-${m.senderId}`;
+    try {
+      const cur = (await pool.query('SELECT messages, handoff FROM sales_chats WHERE session_id=$1', [sid])).rows[0];
+      const msgs = cur ? _salesMsgs(cur.messages) : [];
+      msgs.push({ role: 'user', content: m.text, ts: new Date().toISOString() });
+      let reply = null;
+      if (cur && cur.handoff) {
+        // human owns this thread — store the message; the operator replies from
+        // the Control Room (which pushes back through Messenger above)
+      } else if (!process.env.ANTHROPIC_API_KEY) {
+        reply = 'Thanks for messaging SiamEPOS! Our team will reply shortly. 🙏';
+        msgs.push({ role: 'assistant', content: reply, ts: new Date().toISOString() });
+      } else {
+        const aiMsgs = msgs.map(x => ({ role: x.role === 'user' ? 'user' : 'assistant', content: x.content }));
+        reply = (await anthropicChat(SALESCHAT_SYSTEM + MESSENGER_ADDENDUM, aiMsgs))
+          || 'Sorry — I had a hiccup. Please try again, or visit siamepos.co.uk. 🙏';
+        msgs.push({ role: 'assistant', content: reply, ts: new Date().toISOString() });
+      }
+      await pool.query(`INSERT INTO sales_chats (session_id, name, messages) VALUES ($1,$2,$3)
+        ON CONFLICT (session_id) DO UPDATE SET messages=$3, updated_at=NOW()`,
+        [sid, 'Facebook Messenger', JSON.stringify(msgs)]);
+      if (reply) await messengerSales.sendText(m.senderId, reply);
+    } catch (e) { console.error('[messenger-sales] handle', e.message); }
+  }
 });
 app.post('/api/saleschat/admin/conversations/:sid/handoff', salesAdminAuth, async (req, res) => {
   const on = !!req.body?.handoff;

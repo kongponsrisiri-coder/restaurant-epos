@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { setTenantUrl } from '../native/tenant';
+import { setTenantUrl, markSetupDone } from '../native/tenant';
+import { HOST_MODE_KEY } from '../api';
+import { saveHostConfig, startHost } from '../native/nodeHost';
+import { isNativeApp } from '../native/printer';
 import { CapacitorHttp } from '@capacitor/core';
 
 // SEPOS-ANDROID-001 — first-launch setup for the Android app. Point this device
@@ -14,6 +17,33 @@ export default function SetupScreen({ onConfigured }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [scanning, setScanning] = useState(false);
+  // SEPOS host spike — the "run this device as the host till" path (native only).
+  const [name, setName] = useState('');
+  const [showHost, setShowHost] = useState(false);
+  const nativeApp = isNativeApp();
+
+  // ── Host role: this device runs its own embedded server (no cloud tenant URL).
+  // Cloud sync (pull menu/data from a tenant like Baan Siam) is configured LATER
+  // in Admin → Settings → Host server. Here we just claim the host role, start
+  // the local server, and boot into the app. api.js reads HOST_MODE_KEY at module
+  // load, so the one-time reload boots straight into host mode (loopback backend).
+  async function startThisTill() {
+    const rn = name.trim();
+    if (!rn) { setError('Enter your restaurant name.'); return; }
+    setBusy(true); setError('');
+    try {
+      try { localStorage.setItem(HOST_MODE_KEY, '1'); } catch {}
+      setTenantUrl('');
+      try { await saveHostConfig({ cloud_sync_enabled: false, restaurant_name: rn }); } catch (_) {}
+      try { await startHost(); } catch (_) {}
+      markSetupDone();
+      // Give the foreground service a moment to bind, then boot into the app.
+      setTimeout(() => { onConfigured ? onConfigured({ restaurant_name: rn }) : window.location.reload(); }, 1400);
+    } catch (e) {
+      setError('Could not start this till. Please try again.');
+      setBusy(false);
+    }
+  }
 
   // SEPOS-028 — "any device as a till": scan the QR shown on a configured
   // device (Admin → Settings) to point this one at the same till. Camera scanner
@@ -82,7 +112,9 @@ export default function SetupScreen({ onConfigured }) {
         }
         if (!res || res.status !== 200) { setError(`Couldn't connect — status ${res ? res.status : '?'}`); return; }
         const data = (res.data && typeof res.data === 'object') ? res.data : {};
+        try { localStorage.removeItem(HOST_MODE_KEY); } catch {}  // satellite/cloud role → host mode OFF
         setTenantUrl(u);
+        markSetupDone();
         onConfigured ? onConfigured(data) : window.location.reload();
         return;
       }
@@ -96,7 +128,9 @@ export default function SetupScreen({ onConfigured }) {
         const res = await fetch(u + '/api/restaurant', { signal: ctrl.signal });
         if (!res.ok) throw new Error('status ' + res.status);
         const data = await res.json().catch(() => ({}));
+        try { localStorage.removeItem(HOST_MODE_KEY); } catch {}  // satellite/cloud role → host mode OFF
         setTenantUrl(u);
+        markSetupDone();
         onConfigured ? onConfigured(data) : window.location.reload();
       } finally { clearTimeout(timer); }
     } catch (e) {
@@ -166,6 +200,44 @@ export default function SetupScreen({ onConfigured }) {
                 background: 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
               Cancel
             </button>
+          </div>
+        )}
+
+        {/* SEPOS host spike — run THIS device as the host till (native only). Its
+            own embedded server; satellites connect by IP. No cloud URL needed. */}
+        {nativeApp && (
+          <div style={{ marginTop: 22, borderTop: '1px solid rgba(255,255,255,0.12)', paddingTop: 16 }}>
+            {!showHost ? (
+              <button onClick={() => { setShowHost(true); setError(''); }} disabled={busy}
+                style={{ width: '100%', background: 'transparent', border: 'none', color: 'rgba(201,168,76,0.85)',
+                  fontSize: 13.5, fontWeight: 700, cursor: 'pointer', padding: '6px 0' }}>
+                Set this device up as the host till? ▾
+              </button>
+            ) : (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <span style={{ color: '#cbd5e1', fontSize: 13, fontWeight: 700 }}>Run this device as the host till</span>
+                  <button onClick={() => { setShowHost(false); setError(''); }}
+                    style={{ background: 'transparent', border: 'none', color: 'rgba(201,168,76,0.85)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>▴ Hide</button>
+                </div>
+                <label style={{ color: '#cbd5e1', fontSize: 12.5, display: 'block', marginBottom: 6 }}>Restaurant name</label>
+                <input type="text" autoCapitalize="words" autoCorrect="off"
+                  value={name} onChange={(e) => { setName(e.target.value); setError(''); }}
+                  placeholder="e.g. Baan Siam"
+                  style={{ width: '100%', height: 48, borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)',
+                    background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: 15, padding: '0 16px', outline: 'none' }} />
+                <button onClick={startThisTill} disabled={busy || !name.trim()}
+                  style={{ width: '100%', height: 50, marginTop: 12, borderRadius: 12, border: 'none',
+                    background: (name.trim() && !busy) ? GOLD : 'rgba(255,255,255,0.08)',
+                    color: (name.trim() && !busy) ? NAVY : 'rgba(255,255,255,0.3)',
+                    fontWeight: 800, fontSize: 15, cursor: (name.trim() && !busy) ? 'pointer' : 'default' }}>
+                  {busy ? 'Starting…' : '▶ Start this till'}
+                </button>
+                <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11.5, marginTop: 10, textAlign: 'center', lineHeight: 1.5 }}>
+                  This till runs its own server — other devices connect to it by IP. Set up cloud sync later in Admin → Settings → Host server.
+                </div>
+              </div>
+            )}
           </div>
         )}
 

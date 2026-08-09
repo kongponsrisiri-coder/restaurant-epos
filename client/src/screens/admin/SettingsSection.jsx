@@ -7,6 +7,8 @@ import { confirm } from '../../utils/confirm';
 import { getTenantUrl } from '../../native/tenant';
 import { isNativeApp } from '../../native/printer';
 import StickySaveBar, { SAVE_BAR_CLEARANCE } from '../../components/StickySaveBar';
+import AddTillCard from './AddTillCard';
+import HostServerCard from './HostServerCard';   // SEPOS host spike — native-only
 
 // QR codes render to a <canvas>, so the qrcode lib needs a REAL hex colour —
 // it can't parse a CSS `var(--brand-primary,…)` string (throws → blank QR).
@@ -20,49 +22,10 @@ function brandQrDark() {
   return DEFAULT_PRIMARY || '#0D1B3E';
 }
 
-// SEPOS-028 — "any device as a till" (cloud model). Shows this till's cloud
-// address + a QR; a new device opens the SiamEPOS app → Scan QR → joins. Unlike
-// the desktop LAN card, the test hits the live cloud, so it actually responds.
-function AddTillCard({ cardStyle }) {
-  const tenant = (getTenantUrl() || SERVER_URL || '').replace(/\/+$/, '');
-  const [qr, setQr] = useState('');
-  const [testState, setTestState] = useState('idle'); // idle|testing|ok|fail
-  useEffect(() => {
-    let cancelled = false;
-    if (!tenant) return;
-    QRCode.toDataURL(tenant, { width: 220, margin: 1, errorCorrectionLevel: 'M', color: { dark: brandQrDark(), light: '#FFFFFF' } })
-      .then(d => { if (!cancelled) setQr(d); }).catch((err) => console.warn('[add-till] QR failed:', err));
-    return () => { cancelled = true; };
-  }, [tenant]);
-  const test = async () => {
-    setTestState('testing');
-    try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 6000);
-      const r = await fetch(tenant + '/api/restaurant', { cache: 'no-store', signal: ctrl.signal });
-      clearTimeout(t);
-      setTestState(r.ok ? 'ok' : 'fail');
-    } catch { setTestState('fail'); }
-    setTimeout(() => setTestState('idle'), 3000);
-  };
-  const label = testState === 'testing' ? 'Testing…' : testState === 'ok' ? '✓ Reachable' : testState === 'fail' ? '✗ No response' : 'Test connection';
-  return (
-    <div style={cardStyle}>
-      <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 6 }}>📱 Add a till (any device)</h2>
-      <p style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
-        Turn any phone or tablet into a till: open the SiamEPOS app on it → <strong>Scan QR code</strong> → it joins this restaurant.
-      </p>
-      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 240 }}>
-          <div style={{ background: 'var(--brand-primary,#0D1B3E)', color: 'var(--brand-accent,#C9A84C)', padding: '14px 18px', borderRadius: 10, fontFamily: 'Menlo, Consolas, monospace', fontSize: 15, fontWeight: 800, textAlign: 'center', marginBottom: 12, userSelect: 'text', wordBreak: 'break-all' }}>{tenant || '—'}</div>
-          <button onClick={test} disabled={testState === 'testing' || !tenant} style={{ padding: '10px 20px', borderRadius: 8, border: (testState === 'ok' || testState === 'fail') ? 'none' : '1px solid var(--brand-primary,#0D1B3E)', background: testState === 'ok' ? '#22c55e' : testState === 'fail' ? '#ef4444' : 'transparent', color: (testState === 'ok' || testState === 'fail') ? 'white' : 'var(--brand-primary,#0D1B3E)', fontWeight: 700, cursor: testState === 'testing' ? 'wait' : 'pointer', fontSize: 13 }}>{label}</button>
-          <div style={{ fontSize: 12, color: '#888', marginTop: 12, lineHeight: 1.5 }}>The new device must be online (any internet — not necessarily the same Wi-Fi).</div>
-        </div>
-        {qr && <div style={{ background: 'white', padding: 10, borderRadius: 10, border: '1px solid #eee', flexShrink: 0 }}><img src={qr} alt="Till QR" style={{ width: 200, height: 200, display: 'block' }} /></div>}
-      </div>
-    </div>
-  );
-}
+// SEPOS-028 — "any device as a till". Extracted to its own file (AddTillCard.jsx,
+// host-aware: QRs the LAN address in host mode) so HostServerCard can render it
+// too — as a private in-file component the extracted card crashed with
+// "AddTillCard is not defined".
 
 // ── SEPOS-KITCHEN-MSG-001 — pre-canned kitchen message templates ────
 // Waiter taps a pill in the order screen → one-tap send. Admin manages
@@ -1598,6 +1561,7 @@ export default function SettingsSection() {
 
       {/* ── Network Setup (QR for iPads) ── */}
       {isNativeApp() ? <AddTillCard cardStyle={cardStyle} /> : <NetworkSetupCard cardStyle={cardStyle} />}
+      {isNativeApp() && <HostServerCard cardStyle={cardStyle} />}
 
       {/* SEPOS-LOCAL-001 P5 — Mac vs cloud record counts */}
       <DataStorageCard cardStyle={cardStyle} />

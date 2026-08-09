@@ -577,7 +577,7 @@ export const serverPrintKitchenToStation = (order_id, items, printer_id, printer
 // SEPOS-025/026 — Network printing (server-side ESC/POS to TCP port 9100)
 export const testNetworkPrinter   = (ip, port, printer_name) => post('/api/print/test',    { ip, port, printer_name });
 // SEPOS-ANDROID-001 — ESC/POS buffers (base64) for the native app to send itself.
-export const getPrintTestBuffer   = () => get('/api/print/buffers/test');
+export const getPrintTestBuffer   = (ip, name, port) => get(`/api/print/buffers/test?ip=${encodeURIComponent(ip || '')}&name=${encodeURIComponent(name || '')}&port=${encodeURIComponent(port || '')}`);
 export const getReceiptBuffer     = (order_id, payment_details) => post('/api/print/buffers/receipt', { order_id, payment_details });
 export const getKitchenBuffer     = (order_id) => post('/api/print/buffers/kitchen', { order_id });
 // SEPOS-ANDROID-001 — dine-in kitchen/bar/fire-notice buffer (firing device pushes it to the LAN printer)

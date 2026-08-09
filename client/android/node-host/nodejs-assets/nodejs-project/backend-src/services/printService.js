@@ -675,14 +675,22 @@ async function printKitchenMessage(settings, payload) {
   await sendRaw(ip, port, buildKitchenMessage(payload), { printerName, lprQueue });
 }
 
-function buildTestPage() {
+// info (all optional): { name, ip, port, roles } — printed ON the slip so the
+// operator can tell WHICH printer/config produced it. With three identical
+// printers on a shelf, a test page that doesn't say who it is is half a test
+// (Korakot, 2026-08-09 — the day all three POS80s were re-IP'd).
+function buildTestPage(info = {}) {
   const now = new Date().toLocaleString('en-GB');
+  const target = info.ip ? `${info.ip}:${info.port || 9100}` : '';
   return flatten([
     CMD.INIT,
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, CMD.SIZE_BIG, txt('SiamEPOS'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     rule(), lf(),
     CMD.BOLD_ON, txt('Printer test OK'), CMD.BOLD_OFF, lf(),
+    info.name ? [CMD.BOLD_ON, CMD.SIZE_BIG, txt(String(info.name).slice(0, 24)), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
+    target ? [CMD.SIZE_BIG, txt(target), CMD.SIZE_NORMAL, lf()] : [],
+    info.roles ? [txt(`Prints: ${info.roles}`), lf()] : [],
     txt(now), lf(),
     rule(), lf(2),
     CMD.CUT,
@@ -1229,9 +1237,10 @@ async function printBarTicket(settings, order, items) {
 
 // testPrint accepts an optional printer_name so the admin Test button can
 // validate either path. Body shape: { ip, port, printer_name }.
-async function testPrint(ip, port = 9100, printerName = '') {
+async function testPrint(ip, port = 9100, printerName = '', info = {}) {
   if (!ip && !printerName) throw new Error('NO_IP');
-  await sendRaw(ip, parseInt(port, 10) || 9100, buildTestPage(), { printerName });
+  const p = parseInt(port, 10) || 9100;
+  await sendRaw(ip, p, buildTestPage({ ip, port: p, name: printerName, ...info }), { printerName });
 }
 
 // ── Thai codepage probe ─────────────────────────────────────────────

@@ -133,9 +133,6 @@ async function initDB() {
     // on Railway) + dietary tags (JSON array like allergens: Vegan/Veg/GF…).
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT NULL`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS dietary TEXT DEFAULT NULL`);
-    // SEPOS-QR-ORDER-001 — who authored the order: NULL (staff) | 'qr' | future
-    // sources. Drives the 📱 badge + the auto-close-when-served-and-paid rule.
-    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS source VARCHAR(20)`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS is_online INTEGER DEFAULT 1`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS name_alt VARCHAR(255)`);
@@ -256,6 +253,15 @@ async function initDB() {
     // COALESCE(menu_items.category_id, order_items.dest_category_id).
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS dest_category_id INTEGER`);
     await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS vat_rate DECIMAL(5,2) DEFAULT 20.0`); // SEPOS-021
+
+    // SEPOS-QR-ORDER-001 — who authored the order: NULL (staff) | 'qr' | future
+    // sources. Drives the 📱 badge + the auto-close-when-served-and-paid rule.
+    // ⚠️ This ALTER must sit BELOW the orders CREATE: IF NOT EXISTS guards the
+    // COLUMN, not the relation — placed above it, a FRESH tenant's initDB dies
+    // on 'relation "orders" does not exist' and the whole schema never builds
+    // (found provisioning Akin Thai, 2026-08-09; same class as the payments
+    // ALTER-above-CREATE fixed in AUDIT-002).
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS source VARCHAR(20)`);
 
     // SEPOS-034: takeaway / delivery online ordering
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_type VARCHAR(20) DEFAULT 'dine_in'`);

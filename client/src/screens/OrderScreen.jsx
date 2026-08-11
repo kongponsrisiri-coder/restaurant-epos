@@ -1218,7 +1218,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     <button onClick={openArrange} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #E7E2D6', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13, color: '#7C766A' }}>⇅ Arrange menu</button>
                   </div>
                 ))}
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: 10 }}>
                   {(arrangeMode ? arrangeItems : dishesToShow).map((item, gridIdx) => {
                     const inCart = cart.filter(c => c.menu_item_id === item.id);
                     const totalQty = inCart.reduce((s, c) => s + c.quantity, 0);
@@ -1229,12 +1229,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                         onDragStart={arrangeMode ? () => setArrangeDrag(gridIdx) : undefined}
                         onDragOver={arrangeMode ? (e) => e.preventDefault() : undefined}
                         onDrop={arrangeMode ? (e) => { e.preventDefault(); onArrangeDrop(gridIdx); } : undefined}
-                        style={{ background: '#fff', borderRadius: 14, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : '#E7E2D6'}`, padding: 14, cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 104, display: 'flex', flexDirection: 'column', boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
-                        <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
-                        <AllergenChips list={allergensByItemId[item.id]} />
-                        <div style={{ flex: 1 }} />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                          <span style={{ fontSize: 17, fontWeight: 800, color: '#9A7B1F', fontVariantNumeric: 'tabular-nums' }}>£{Number(item.price || 0).toFixed(2)}</span>
+                        style={{ background: '#fff', borderRadius: 12, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : '#E7E2D6'}`, padding: '10px 12px', cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 56, display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
+                        {/* SEPOS-MENU-COMPACT-001 — no price on the card, half-height row layout */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
+                          <AllergenChips list={allergensByItemId[item.id]} />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', flex: 'none' }}>
                           {arrangeMode ? (
                             <span style={{ color: '#C9A84C', fontSize: 20, fontWeight: 800, cursor: 'grab' }} title="Drag to reorder">⣿</span>
                           ) : totalQty > 0 ? (
@@ -1244,7 +1245,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                               <button onClick={e => { e.stopPropagation(); incrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: 'var(--brand-accent,#C9A84C)', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>+</button>
                             </div>
                           ) : (
-                            <div style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--brand-primary,#0D1B3E)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700 }}>+</div>
+                            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--brand-primary,#0D1B3E)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700 }}>+</div>
                           )}
                         </div>
                       </div>

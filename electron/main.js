@@ -652,6 +652,12 @@ function createWindow() {
     },
   });
 
+  // Paste was only wired to the first-run setup wizard (a7ce698), so the main
+  // till/admin had no right-click/long-press paste (critical on keyboard-less
+  // touchscreen tills) and no reliable Ctrl+V on Windows (autoHideMenuBar hides
+  // the default Edit menu). Give the main window the same clipboard shortcuts.
+  enableClipboardShortcuts(mainWindow);
+
   const forceDev = process.env.ELECTRON_DEV === '1';
   const indexFile = resolveClientIndex();
 

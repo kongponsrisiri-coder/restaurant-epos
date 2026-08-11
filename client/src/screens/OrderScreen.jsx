@@ -1668,8 +1668,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               )}
             </div>
 
-            {/* SEPOS-DEPOSIT-ORDER-001 — apply a booking deposit here, like the discount. */}
-            <div style={{ marginBottom: 10 }}>
+            {/* SEPOS-DEPOSIT-ORDER-001 — apply a booking deposit here, like the discount.
+                Gated behind deposits_enabled so venues that don't take deposits
+                (and tonight's live floors) never see or reach the new path. */}
+            {String(settings.deposits_enabled) === '1' && <div style={{ marginBottom: 10 }}>
               {depositApplied.amount > 0 ? (
                 <div style={{
                   padding: '10px 12px', borderRadius: 8, border: '2px solid #3b82f6',
@@ -1687,7 +1689,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                   + Add Deposit
                 </button>
               )}
-            </div>
+            </div>}
 
             {discountAmount > 0 && (
               <div style={{

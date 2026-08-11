@@ -1187,6 +1187,22 @@ async function printFullKitchenTicket(settings, order, items) {
   const printerName = settings.printer_kitchen_name || '';
   const lprQueue    = settings.printer_kitchen_lpr_queue || 'lp';
   const copies   = Math.max(1, Math.min(5, parseInt(settings.printer_kitchen_copies || 1, 10) || 1));
+  // SEPOS-TICKET-FONT-001 — opt-in rendered tickets (real typeface, printed
+  // as a bitmap). kitchen_ticket_style='rendered' switches this station's
+  // tickets to the smooth Noto Sans look; anything else = classic ESC/POS
+  // text, byte-for-byte unchanged. Falls back to classic on any render error
+  // so a font problem can never lose a ticket.
+  if (settings.kitchen_ticket_style === 'rendered') {
+    try {
+      const buf = await require('./ticketRender').kitchenTicketRaster(order, items);
+      for (let c = 0; c < copies; c++) {
+        await sendRaw(ip, port, buf, { printerName, lprQueue });
+      }
+      return;
+    } catch (e) {
+      console.warn('[print] rendered ticket failed — falling back to classic:', e.message);
+    }
+  }
   // Opt-in: bilingual Thai labels only print if the operator explicitly
   // sets kitchen_language='en_th' AND has a Thai-capable printer. Default
   // is English-only, since most UK thermal printers can't render Thai

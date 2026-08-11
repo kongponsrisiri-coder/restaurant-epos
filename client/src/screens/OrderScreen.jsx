@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote, getVoucher, redeemVoucher, getOrderDeposit, getOrderDepositApplied } from '../api';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote, getVoucher, redeemVoucher, getOrderDeposit, getOrderDepositApplied, createDeposit } from '../api';
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
 import { isNativeApp } from '../native/printer';
@@ -144,7 +144,17 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
       // Must be a real deposit voucher (a gift code is bounced).
       let v = null; try { v = await getVoucher(code); } catch { v = null; }
       if (!v || v.error || v.status !== 'active' || !(Number(v.balance) > 0)) {
-        alert('That deposit code isn\'t valid or has no balance left.'); setDepositBusy(false); return;
+        // SEPOS-DEPOSIT-EXT-001 — external bypass, same philosophy as the pay
+        // screen: a deposit taken outside SiamEPOS (old system, phone, paper)
+        // is still real money the customer paid. Record it as a deposit and
+        // apply it, instead of telling staff "invalid" in front of the guest.
+        const ok = await confirm(`"${code}" isn't in the system.\n\nRecord it as an external deposit of £${amt.toFixed(2)} and apply it to this bill?`);
+        if (!ok) { setDepositBusy(false); return; }
+        const created = await createDeposit({ amount: amt, payment_method: 'external', customer_name: `External · ${code}` });
+        if (!created || created.error || !created.code) { alert('Could not record the external deposit: ' + (created?.error || 'unknown')); setDepositBusy(false); return; }
+        const r2 = await redeemVoucher(created.code, amt, orderId, staff?.name || null);
+        if (r2 && r2.error) { alert('Recorded but could not apply: ' + r2.error); setDepositBusy(false); return; }
+        setDepositPopup(null); await fetchDepositApplied(); setDepositBusy(false); return;
       }
       if (v.type !== 'deposit') { alert('That\'s a gift voucher, not a booking deposit — take it as a Voucher on the pay screen.'); setDepositBusy(false); return; }
       const use = Math.min(Number(v.balance), amt);

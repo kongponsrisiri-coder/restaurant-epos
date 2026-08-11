@@ -1218,7 +1218,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     <button onClick={openArrange} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #E7E2D6', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13, color: '#7C766A' }}>⇅ Arrange menu</button>
                   </div>
                 ))}
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 10 }}>
                   {(arrangeMode ? arrangeItems : dishesToShow).map((item, gridIdx) => {
                     const inCart = cart.filter(c => c.menu_item_id === item.id);
                     const totalQty = inCart.reduce((s, c) => s + c.quantity, 0);

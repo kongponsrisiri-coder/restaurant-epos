@@ -236,12 +236,13 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
     `:''}
   ` : '';
 
-  const logoHtml = logoDataUrl ? `
+  // SEPOS-PAPER-SAVER-001 — settled receipt (has method) = record: no logo/QR.
+  const logoHtml = (logoDataUrl && !method) ? `
     <div style="text-align:center;margin-bottom:10px;">
       <img src="${logoDataUrl}" style="max-width:${logoSizePx};${logoSizePx==='100%'?'width:100%;':''}object-fit:contain;display:block;margin:0 auto;" alt="Logo" />
     </div>` : '';
 
-  const qrHtml = googleReviewUrl ? `
+  const qrHtml = (googleReviewUrl && !method) ? `
     <div style="text-align:center;margin-top:10px;">
       <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(googleReviewUrl)}" width="80" height="80" alt="QR" style="border:1px solid #eee;" />
       <div style="font-size:10px;color:#666;margin-top:3px;">${qrCaption}</div>

@@ -282,7 +282,11 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
   // the top of the receipt. If any of the three settings is missing
   // or sizes don't match, we skip silently — no error, no blank space.
   let logoBlock = [];
-  if (settings.company_logo_bitmap && settings.company_logo_bitmap_width && settings.company_logo_bitmap_height) {
+  // SEPOS-PAPER-SAVER-001 — the settled RECEIPT (has a payment method) is a
+  // record, not a flyer: skip logo + review QR to save paper. The customer
+  // BILL (no method yet) keeps both.
+  const isSettledReceipt = Boolean(method);
+  if (!isSettledReceipt && settings.company_logo_bitmap && settings.company_logo_bitmap_width && settings.company_logo_bitmap_height) {
     try {
       const data   = Buffer.from(String(settings.company_logo_bitmap), 'base64');
       const wBytes = parseInt(settings.company_logo_bitmap_width, 10);
@@ -426,7 +430,7 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
     // SEPOS-REVIEW-QR — Google-review QR on the thermal receipt (was browser-
     // receipt-only, so POS80 network tills never printed it). Prints only when
     // a review link is set in Settings.
-    settings.google_review_url ? [
+    (settings.google_review_url && !isSettledReceipt) ? [
       CMD.ALIGN_CENTER,
       qrCode(settings.google_review_url),
       lf(),

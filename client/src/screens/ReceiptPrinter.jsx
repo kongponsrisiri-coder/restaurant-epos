@@ -154,6 +154,7 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
   // ── Use pre-calculated values from BillScreen ─────────────────
   const subtotal       = parseFloat(paymentDetails.subtotal       ?? 0);
   const discountAmount = parseFloat(paymentDetails.discountAmount ?? 0);
+  const depositPaid    = parseFloat(paymentDetails.depositPaid    ?? 0);
   const serviceCharge  = parseFloat(paymentDetails.serviceCharge  ?? 0);
   const tip            = parseFloat(paymentDetails.tip            ?? 0);
   const billTotal      = parseFloat(paymentDetails.billTotal      ?? (subtotal - discountAmount + serviceCharge + tip));
@@ -303,6 +304,8 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
     ${scRow}
     ${tipRow}
     <tr class="total-row"><td>TOTAL</td><td style="text-align:right;">${fmt(billTotal)}</td></tr>
+    ${depositPaid > 0 ? `<tr><td>Deposit paid</td><td style="text-align:right;">-${fmt(depositPaid)}</td></tr>
+    <tr style="font-weight:800;"><td>Balance due</td><td style="text-align:right;">${fmt(Math.max(0, billTotal - depositPaid))}</td></tr>` : ''}
     ${paymentRows}
   </table>
 

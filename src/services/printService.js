@@ -205,6 +205,7 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
 
   const subtotal      = parseFloat(paymentDetails.subtotal       ?? 0);
   const discountAmt   = parseFloat(paymentDetails.discountAmount ?? 0);
+  const depositPaid   = parseFloat(paymentDetails.depositPaid    ?? 0);
   const serviceCharge = parseFloat(paymentDetails.serviceCharge  ?? 0);
   const billTotal     = parseFloat(paymentDetails.billTotal      ?? 0);
   const amountPaid    = parseFloat(paymentDetails.amountPaid     ?? billTotal);
@@ -387,6 +388,14 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
     CMD.BOLD_ON, CMD.SIZE_BIG, col2('TOTAL', '£' + billTotal.toFixed(2), LINE_WIDTH / 2),
     CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     rule('='), lf(),
+
+    // SEPOS-DEPOSIT-PRINT — booking deposit already paid shows as a deduction
+    // with the balance due, only when a deposit tender was applied.
+    depositPaid > 0 ? [
+      receiptSize, col2('Deposit paid', '-£' + depositPaid.toFixed(2), receiptWidth), CMD.SIZE_NORMAL, lf(),
+      CMD.BOLD_ON, col2('Balance due', '£' + Math.max(0, billTotal - depositPaid).toFixed(2), receiptWidth), CMD.BOLD_OFF, lf(),
+      rule('='), lf(),
+    ] : [],
 
     // Payment
     method ? [

@@ -251,7 +251,11 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const receiptTotals = { subtotal, discountAmount, serviceCharge, billTotal };
 
   const handlePrintBill = () => {
-    printReceipt({ order: { ...order }, items: billItems, settings: { ...settings }, paymentDetails: { ...receiptTotals } });
+    // SEPOS-DEPOSIT-PRINT — if a booking deposit has been applied, show it on
+    // the printed bill (Deposit paid −£X + Balance due) so the customer sees it.
+    const depositPaid = splitTenders.filter(t => t.method === 'Deposit')
+      .reduce((s, t) => s + Number(t.amount || 0), 0);
+    printReceipt({ order: { ...order }, items: billItems, settings: { ...settings }, paymentDetails: { ...receiptTotals, depositPaid } });
   };
 
   const handlePrintReceipt = () => {

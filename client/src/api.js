@@ -754,8 +754,12 @@ export const getBills = (from, to, method) => get(`/api/bills?from=${from}&to=${
 export const getBillItems = (orderId) => get(`/api/bills/${orderId}/items`);
 export const getKitchenCompleted = () => get('/api/kitchen/completed');
 export const getBarCompleted = () => get('/api/bar/completed');
-export const resendToKitchen = async (orderId, itemIds, reason) =>
-  (await localTarget(orderId)) ? { success: true } : post(`/api/orders/${orderId}/resend`, { item_ids: itemIds, reason });
+// Resend to the kitchen. Was a no-op on local/host tills (returned success
+// without doing anything) — but the local embedded server has the same
+// /api/orders/:id/resend route (server.js), so post() reaches it on a local
+// till just as it reaches the cloud on a browser till. Always POST.
+export const resendToKitchen = (orderId, itemIds, reason) =>
+  post(`/api/orders/${orderId}/resend`, { item_ids: itemIds, reason });
 export const applyItemDiscount = async (itemId, discount_type, discount_value) => {
   if (isNative()) {
     const ok = await localItemPatch(itemId, { discount_type, discount_value });

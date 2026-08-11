@@ -11075,11 +11075,12 @@ app.get('/api/print/alerts', async (req, res) => {
 //         'dismiss'
 app.post('/api/print/alerts/action', async (req, res) => {
   try {
-    const { action, ids } = req.body || {};
+    const { action, ids, printer_id } = req.body || {};
     if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids required' });
     let results;
     if (action === 'retry') results = await printAlerts.retry(ids);
     else if (action === 'redirect') results = await printAlerts.redirect(ids);
+    else if (action === 'reroute') results = await printAlerts.reroute(ids, printer_id); // SEPOS-PRINT-FALLBACK-001
     else if (action === 'dismiss') results = await printAlerts.dismiss(ids);
     else return res.status(400).json({ error: 'unknown action' });
     res.json({ results });

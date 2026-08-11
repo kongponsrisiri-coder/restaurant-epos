@@ -926,4 +926,4 @@ export const forfeitDeposit  = (code) => post(`/api/deposits/${encodeURIComponen
 
 // ── SEPOS-PRINT-ALERT-001 — held tickets + printer health (local tills) ──
 export const getPrintAlerts    = () => get('/api/print/alerts');
-export const printAlertAction  = (action, ids) => post('/api/print/alerts/action', { action, ids });
+export const printAlertAction  = (action, ids, printer_id) => post('/api/print/alerts/action', { action, ids, printer_id });

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getBill, markBillPrinted, getVoucher, redeemVoucher, applyDiscount, removeVoucherFromBill, getOrderDeposit, assertOk, serverOpenDrawer } from '../api';
+import { getBill, markBillPrinted, getVoucher, redeemVoucher, applyDiscount, removeVoucherFromBill, getOrderDeposit, getOrderDepositApplied, assertOk, serverOpenDrawer } from '../api';
 import { printReceipt } from './ReceiptPrinter';
 import QRPayModal from '../components/QRPayModal';
 import { orderShortLabelPlain, orderSubLabel, isTakeaway } from '../utils/orderLabel';
@@ -35,6 +35,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const [mixDepositCode, setMixDepositCode] = useState('');
   const [mixDepositAmt,  setMixDepositAmt]  = useState('');
   const [orderDeposit,   setOrderDeposit]   = useState(undefined); // undefined=not fetched, null=none, {..}=found
+  // SEPOS-DEPOSIT-ORDER-001 — deposit already redeemed on the Order screen
+  // (model A). It reduces the balance due and prints as "Deposit paid".
+  const [depositApplied, setDepositApplied] = useState({ amount: 0, code: null });
   const [splitItemCount, setSplitItemCount] = useState(2);
   const [itemAssignments, setItemAssignments] = useState({});
   const [splitItemPaid, setSplitItemPaid]   = useState([]);
@@ -57,6 +60,11 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     getBill(orderId)
       .then(data => { setBill(data); setLoading(false); markBillPrinted(orderId); })
       .catch(() => setLoading(false));   // never hang on a fetch failure (offline / cloud error)
+    // SEPOS-DEPOSIT-ORDER-001 — pick up any deposit already redeemed on the
+    // Order screen so the bill charges only the balance and prints the deposit.
+    getOrderDepositApplied(orderId)
+      .then(r => setDepositApplied({ amount: Number(r?.applied || 0), code: r?.code || null }))
+      .catch(() => {});
   }, [orderId]);
 
   useEffect(() => {
@@ -177,8 +185,14 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   // (walk-in table or online) and counter orders never do.
   const noServiceCharge = !!order.no_service_charge || (order.order_type && order.order_type !== 'dine_in');
   const serviceCharge = (serviceChargeEnabled && !noServiceCharge) ? afterDiscount * serviceChargePercent : 0;
-  const billTotalPence = Math.round(afterDiscount * 100) + Math.round(serviceCharge * 100);
-  const billTotal      = billTotalPence / 100;
+  const grossTotalPence = Math.round(afterDiscount * 100) + Math.round(serviceCharge * 100);
+  const grossTotal      = grossTotalPence / 100;
+  // SEPOS-DEPOSIT-ORDER-001 — a deposit redeemed on the Order screen is already
+  // paid, so the amount still to collect is the balance. billTotal is that
+  // balance-due everywhere below (payment maths, split, quick-tender buttons).
+  const depositPaid     = Math.min(depositApplied.amount || 0, grossTotal);
+  const billTotalPence  = grossTotalPence - Math.round(depositPaid * 100);
+  const billTotal       = Math.max(0, billTotalPence / 100);
 
   const amountPaid      = parseFloat(paymentInput) || 0;
   const amountPaidPence = Math.round(amountPaid * 100);
@@ -248,7 +262,10 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   };
 
   // ── The shared receipt payload — pre-calculated totals from BillScreen ──
-  const receiptTotals = { subtotal, discountAmount, serviceCharge, billTotal };
+  // SEPOS-DEPOSIT-ORDER-001 — the receipt shows the FULL total then the deposit
+  // deduction + balance, so billTotal on the receipt is the gross (not the
+  // already-reduced balance); depositPaid drives the "Deposit paid / Balance due".
+  const receiptTotals = { subtotal, discountAmount, serviceCharge, billTotal: grossTotal, depositPaid };
 
   const handlePrintBill = () => {
     // SEPOS-DEPOSIT-PRINT — if a booking deposit has been applied, show it on
@@ -884,7 +901,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 )}
                 {!settled && (() => {
                   const hasVoucher = splitTenders.some(t => t.method === 'Voucher');
-                  const hasDeposit = splitTenders.some(t => t.method === 'Deposit');
+                  // SEPOS-DEPOSIT-ORDER-001 — block a 2nd deposit tender when one
+                  // was already redeemed on the Order screen (no double-redeem).
+                  const hasDeposit = splitTenders.some(t => t.method === 'Deposit') || depositPaid > 0;
                   const methods = [
                     { m: 'Cash',    label: '💵 Cash' },
                     { m: 'Card',    label: '💳 Card' },

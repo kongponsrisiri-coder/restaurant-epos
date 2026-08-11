@@ -2058,7 +2058,10 @@ app.post('/api/staff/login', async (req, res) => {
     // SEPOS-SEC-LOGIN — an operator still on a weak/default PIN (the seeded 1234)
     // must set a real one before using the till; the public default can't persist.
     const must_change_pin = _isWeakPin(pin) && ['admin', 'manager', 'supervisor'].includes(staff.role);
-    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp, must_change_pin });
+    // SEPOS-STAFF-PERMS-001 — per-staff permissions travel with the session so
+    // the client can honour "can give discount / can redeem deposit" for a
+    // non-manager the owner has trusted.
+    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp, must_change_pin, can_discount: staff.can_discount ? 1 : 0, can_redeem_deposit: staff.can_redeem_deposit ? 1 : 0 });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2568,7 +2571,7 @@ app.post('/api/stripe/webhook', async (req, res) => {
 
 app.get('/api/staff', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, role, is_active, created_at, start_date, notes, employment_status FROM staff ORDER BY name');
+    const result = await pool.query('SELECT id, name, role, is_active, created_at, start_date, notes, employment_status, can_discount, can_redeem_deposit FROM staff ORDER BY name');
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2576,7 +2579,7 @@ app.get('/api/staff', async (req, res) => {
 app.post('/api/staff', async (req, res) => {
   if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
-    const { name, pin, role, start_date, notes, employment_status } = req.body;
+    const { name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit } = req.body;
     // SEPOS-047k — PINs are UNIQUE (staff_pin_key / staff.pin UNIQUE). A
     // collision used to surface as a raw 500 "duplicate key value violates
     // unique constraint" → the Staff screen just said "Save failed!" with
@@ -2585,7 +2588,7 @@ app.post('/api/staff', async (req, res) => {
     if (dup.rows[0]) {
       return res.status(409).json({ error: `PIN ${pin} is already used by ${dup.rows[0].name}. Please choose a different 4-digit PIN.` });
     }
-    const result = await pool.query('INSERT INTO staff (name, pin, role, start_date, notes, employment_status) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [name, pin, role, start_date || null, notes || null, employment_status || 'active']);
+    const result = await pool.query('INSERT INTO staff (name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id', [name, pin, role, start_date || null, notes || null, employment_status || 'active', can_discount ? 1 : 0, can_redeem_deposit ? 1 : 0]);
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) {
     if (/unique|duplicate/i.test(err.message || '')) {
@@ -2598,7 +2601,8 @@ app.post('/api/staff', async (req, res) => {
 app.put('/api/staff/:id', async (req, res) => {
   if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
-    const { name, pin, role, is_active, start_date, notes, employment_status } = req.body;
+    const { name, pin, role, is_active, start_date, notes, employment_status, can_discount, can_redeem_deposit } = req.body;
+    const cd = can_discount ? 1 : 0, crd = can_redeem_deposit ? 1 : 0;
     // Normalise: when the client doesn't send is_active (or sends an empty
     // string), keep whatever's already in the DB — DON'T null it. The old
     // version would clobber a manager's is_active flag to NULL on every
@@ -2624,9 +2628,11 @@ app.put('/api/staff/:id', async (req, res) => {
            is_active = COALESCE($4::int, is_active),
            start_date = $5,
            notes = $6,
-           employment_status = $7
-         WHERE id = $8`,
-        [name, pin, role, activeParam, start_date || null, notes || null, employment_status || 'active', req.params.id]
+           employment_status = $7,
+           can_discount = $8,
+           can_redeem_deposit = $9
+         WHERE id = $10`,
+        [name, pin, role, activeParam, start_date || null, notes || null, employment_status || 'active', cd, crd, req.params.id]
       );
     } else {
       await pool.query(
@@ -2636,9 +2642,11 @@ app.put('/api/staff/:id', async (req, res) => {
            is_active = COALESCE($3::int, is_active),
            start_date = $4,
            notes = $5,
-           employment_status = $6
-         WHERE id = $7`,
-        [name, role, activeParam, start_date || null, notes || null, employment_status || 'active', req.params.id]
+           employment_status = $6,
+           can_discount = $7,
+           can_redeem_deposit = $8
+         WHERE id = $9`,
+        [name, role, activeParam, start_date || null, notes || null, employment_status || 'active', cd, crd, req.params.id]
       );
     }
     res.json({ success: true });
@@ -9016,6 +9024,30 @@ app.get('/api/orders/:id/deposit', async (req, res) => {
     const dep = d.rows[0];
     res.json({ deposit: dep ? { ...dep, balance: Number(dep.balance), original_amount: Number(dep.original_amount) } : null });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-DEPOSIT-ORDER-001 — how much DEPOSIT has already been redeemed against
+// this order. Lets the Order screen show "Deposit paid / Balance due" and
+// survive navigation, and lets the Bill screen avoid double-redeeming the same
+// deposit. Sums voucher_redemptions of type='deposit' for the order (bill_id).
+app.get('/api/orders/:id/deposit-applied', async (req, res) => {
+  {
+    const cloudId = await localOrderCloudId(req.params.id);
+    if (cloudId && await forwardToCloudWith(req, res, 'deposit-applied', {
+      path: `/api/orders/${cloudId}/deposit-applied`,
+    })) return;
+  }
+  try {
+    const r = await pool.query(
+      `SELECT COALESCE(SUM(vr.amount_used),0) AS applied,
+              MAX(v.code) AS code
+         FROM voucher_redemptions vr
+         JOIN vouchers v ON v.id = vr.voucher_id
+        WHERE vr.bill_id = $1 AND v.type = 'deposit'`,
+      [req.params.id]);
+    const applied = Number(r.rows[0]?.applied || 0);
+    res.json({ applied, code: applied > 0 ? (r.rows[0].code || null) : null });
+  } catch (err) { res.json({ applied: 0, code: null }); }
 });
 
 // Manual forfeit — a no-show's deposit is kept as income (own report line).

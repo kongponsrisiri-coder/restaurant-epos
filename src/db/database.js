@@ -773,6 +773,10 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
     await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS email VARCHAR(255)`);
     await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS password_hash TEXT`);
     await pool.query(`ALTER TABLE staff ALTER COLUMN pin DROP NOT NULL`).catch(() => {});
+    // SEPOS-STAFF-PERMS-001 — per-staff permissions so a chosen non-manager can
+    // give discounts and/or redeem deposits without being made a manager.
+    await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS can_discount INTEGER DEFAULT 0`).catch(() => {});
+    await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS can_redeem_deposit INTEGER DEFAULT 0`).catch(() => {});
 
     // ── SEPOS-LITE-001 Phase 1 — multi-tenancy foundation ────────────
     // A `restaurants` registry plus a `restaurant_id` column on every

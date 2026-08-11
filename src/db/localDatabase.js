@@ -190,6 +190,8 @@ function initSchema() {
       start_date TEXT,
       notes TEXT,
       employment_status TEXT DEFAULT 'active',
+      can_discount INTEGER DEFAULT 0,
+      can_redeem_deposit INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 

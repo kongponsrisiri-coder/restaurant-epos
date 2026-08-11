@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote } from '../api';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote, getVoucher, redeemVoucher, getOrderDeposit, getOrderDepositApplied } from '../api';
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
 import { isNativeApp } from '../native/printer';
@@ -67,6 +67,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   // silently did nothing on desktop installs.
   // { scope: 'item'|'bill', item?, type: 'percent'|'fixed', value, reason? }
   const [discountPopup, setDiscountPopup] = useState(null);
+  // SEPOS-DEPOSIT-ORDER-001 — apply a booking deposit right on the order screen
+  // (redeem-on-tap, model A). depositApplied = { amount, code } already redeemed.
+  const [depositPopup, setDepositPopup]   = useState(null); // { code, amount } modal
+  const [depositApplied, setDepositApplied] = useState({ amount: 0, code: null });
+  const [depositBusy, setDepositBusy]     = useState(false);
   const [serviceChargeRemoved, setServiceChargeRemoved] = useState(false);
   const [settings, setSettings] = useState({}); // for the configured service-charge rate
   const [activeCourse, setActiveCourse] = useState(1);
@@ -99,6 +104,57 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
     const seq = ++fetchSeqRef.current;
     const orderData = await getOrder(orderId);
     if (seq === fetchSeqRef.current) setOrder(orderData);
+  };
+
+  // SEPOS-DEPOSIT-ORDER-001 — reload any deposit already redeemed against this
+  // order, so it persists across navigation and shows on the summary + bill.
+  const fetchDepositApplied = async () => {
+    if (!orderId) { setDepositApplied({ amount: 0, code: null }); return; }
+    try {
+      const r = await getOrderDepositApplied(orderId);
+      setDepositApplied({ amount: Number(r?.applied || 0), code: r?.code || null });
+    } catch { /* keep whatever we have */ }
+  };
+  useEffect(() => { fetchDepositApplied(); }, [orderId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // SEPOS-DEPOSIT-ORDER-001 — open the deposit modal (permission-gated).
+  const openDepositModal = async () => {
+    const allowedRoles = ['admin', 'manager', 'supervisor'];
+    if (!allowedRoles.includes(staff?.role) && !staff?.can_redeem_deposit) {
+      alert('⛔ You don\'t have permission to redeem deposits.\n\nA manager can enable it for you in Admin → Staff → "Can redeem deposit".');
+      return;
+    }
+    if (!orderId) { alert('Send the order first, then apply the deposit.'); return; }
+    // Auto-suggest a deposit linked to this table's booking, if any.
+    let suggested = { code: '', amount: '' };
+    try { const d = await getOrderDeposit(orderId); if (d?.deposit) suggested = { code: d.deposit.code, amount: String(d.deposit.balance) }; } catch { /* none */ }
+    setDepositPopup(suggested);
+  };
+
+  // SEPOS-DEPOSIT-ORDER-001 — redeem the deposit NOW (model A). Reuses the
+  // hardened voucher redeem path; the deposit reduces the balance due.
+  const confirmDeposit = async () => {
+    if (!depositPopup || depositBusy) return;
+    const code = (depositPopup.code || '').trim().toUpperCase();
+    const amt = parseFloat(depositPopup.amount);
+    if (!code) { alert('Enter or scan the deposit code.'); return; }
+    if (!(amt > 0)) { alert('Enter the deposit amount.'); return; }
+    setDepositBusy(true);
+    try {
+      // Must be a real deposit voucher (a gift code is bounced).
+      let v = null; try { v = await getVoucher(code); } catch { v = null; }
+      if (!v || v.error || v.status !== 'active' || !(Number(v.balance) > 0)) {
+        alert('That deposit code isn\'t valid or has no balance left.'); setDepositBusy(false); return;
+      }
+      if (v.type !== 'deposit') { alert('That\'s a gift voucher, not a booking deposit — take it as a Voucher on the pay screen.'); setDepositBusy(false); return; }
+      const use = Math.min(Number(v.balance), amt);
+      const r = await redeemVoucher(code, use, orderId, staff?.name || null);
+      if (r && r.error) { alert('Could not apply deposit: ' + r.error); setDepositBusy(false); return; }
+      setDepositPopup(null);
+      await fetchDepositApplied();
+    } catch (e) {
+      alert('Could not apply deposit: ' + (e?.message || 'unknown'));
+    } finally { setDepositBusy(false); }
   };
 
   // SEPOS — toggle + PERSIST the per-order service-charge removal. Optimistic:
@@ -634,8 +690,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   // DiscountModal. Apply/remove are optimistic with fetchOrder reconcile.
   const handleItemDiscount = async (item) => {
     const allowedRoles = ['admin', 'manager', 'supervisor'];
-    if (!allowedRoles.includes(staff?.role)) {
-      alert('⛔ Only Admin, Manager or Supervisor can apply discounts!');
+    if (!allowedRoles.includes(staff?.role) && !staff?.can_discount) {
+      alert('⛔ You don\'t have permission to give discounts.\n\nA manager can enable it for you in Admin → Staff → "Can give discount".');
       return;
     }
     if (item.id < 0) return alert('Still sending — try again in a second.');
@@ -1594,8 +1650,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               ) : (
                 <button onClick={() => {
                   const allowedRoles = ['admin', 'manager', 'supervisor'];
-                  if (!allowedRoles.includes(staff?.role)) {
-                    alert('⛔ Only Admin, Manager or Supervisor can apply discounts!\n\nPlease ask a manager to authorise.');
+                  if (!allowedRoles.includes(staff?.role) && !staff?.can_discount) {
+                    alert('⛔ You don\'t have permission to give discounts.\n\nA manager can enable it for you in Admin → Staff → "Can give discount".');
                     return;
                   }
                   // SEPOS-046z — DiscountModal replaces window.prompt()
@@ -1608,6 +1664,27 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                   color: '#e94560', cursor: 'pointer', fontWeight: 700, fontSize: 13
                 }}>
                   + Add Bill Discount
+                </button>
+              )}
+            </div>
+
+            {/* SEPOS-DEPOSIT-ORDER-001 — apply a booking deposit here, like the discount. */}
+            <div style={{ marginBottom: 10 }}>
+              {depositApplied.amount > 0 ? (
+                <div style={{
+                  padding: '10px 12px', borderRadius: 8, border: '2px solid #3b82f6',
+                  background: '#eff6ff', color: '#1e3a8a', fontSize: 13, fontWeight: 700,
+                  textAlign: 'center'
+                }}>
+                  🧾 Deposit applied −£{depositApplied.amount.toFixed(2)}{depositApplied.code ? ` · ${depositApplied.code}` : ''}
+                </div>
+              ) : (
+                <button onClick={openDepositModal} style={{
+                  width: '100%', padding: '10px', borderRadius: 8,
+                  border: '2px dashed #3b82f6', background: 'white',
+                  color: '#2563eb', cursor: 'pointer', fontWeight: 700, fontSize: 13
+                }}>
+                  + Add Deposit
                 </button>
               )}
             </div>
@@ -1647,7 +1724,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             </div>}
 
             <div style={{
-              display: 'flex', justifyContent: 'space-between', marginBottom: 14,
+              display: 'flex', justifyContent: 'space-between',
+              marginBottom: depositApplied.amount > 0 ? 6 : 14,
               borderTop: '2px solid #eee', paddingTop: 10
             }}>
               <span style={{ fontSize: 20, fontWeight: 800 }}>Total</span>
@@ -1656,15 +1734,28 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               </span>
             </div>
 
+            {/* SEPOS-DEPOSIT-ORDER-001 — deposit + balance due on the summary. */}
+            {depositApplied.amount > 0 && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#2563eb', marginBottom: 4 }}>
+                  <span>Deposit paid</span><span>-£{depositApplied.amount.toFixed(2)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, fontWeight: 800 }}>
+                  <span style={{ fontSize: 16 }}>Balance due</span>
+                  <span style={{ fontSize: 16, color: '#e94560' }}>£{Math.max(0, orderTotal - depositApplied.amount).toFixed(2)}</span>
+                </div>
+              </>
+            )}
+
             {/* Send Order — full-width, right above View Bill & Pay (moved out of
                 the small header button per operator feedback). Desktop only;
                 mobile keeps its own compact Send in the summary header. */}
             {!isMobile && cart.length > 0 && (
               <button onClick={sendOrder} disabled={sendBusy} style={{
-                width: '100%', padding: '14px', borderRadius: 12, border: 'none',
+                width: '100%', padding: '28px', borderRadius: 14, border: 'none',
                 background: sendBusy ? '#9aa0b0' : 'var(--brand-primary, #0D1B3E)', color: 'white',
-                fontSize: 16, fontWeight: 800, cursor: sendBusy ? 'wait' : 'pointer',
-                marginBottom: 10, boxShadow: '0 6px 14px rgba(13,27,62,.24)'
+                fontSize: 24, fontWeight: 800, cursor: sendBusy ? 'wait' : 'pointer',
+                marginBottom: 10, boxShadow: '0 8px 18px rgba(13,27,62,.28)'
               }}>
                 {sendBusy ? 'Sending…' : `Send to kitchen — ${cart.reduce((s, c) => s + c.quantity, 0)} item${cart.reduce((s, c) => s + c.quantity, 0) > 1 ? 's' : ''}`}
               </button>
@@ -2210,6 +2301,45 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                   background: '#22c55e', color: 'white', cursor: 'pointer',
                   fontWeight: 700, fontSize: 15
                 }}>Apply</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SEPOS-DEPOSIT-ORDER-001 — DEPOSIT POPUP */}
+        {depositPopup && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          }}>
+            <div style={{ background: 'white', borderRadius: 16, padding: 24, width: 380, maxWidth: '92vw' }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 6 }}>Apply deposit</h2>
+              <div style={{ fontSize: 13, color: '#555', marginBottom: 16 }}>Enter or scan the booking deposit code. It reduces the balance the customer pays.</div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>Deposit code</label>
+                <input type="text" autoFocus value={depositPopup.code}
+                  onChange={(e) => setDepositPopup({ ...depositPopup, code: e.target.value.toUpperCase() })}
+                  placeholder="e.g. DEP-XXXX"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, fontWeight: 700, textAlign: 'center', boxSizing: 'border-box', letterSpacing: '1px' }} />
+              </div>
+              <div style={{ marginBottom: 18 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>Amount £</label>
+                <input type="number" min="0" step="0.01" value={depositPopup.amount}
+                  onChange={(e) => setDepositPopup({ ...depositPopup, amount: e.target.value })}
+                  onKeyDown={(e) => { if (e.key === 'Enter') confirmDeposit(); }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, fontWeight: 700, textAlign: 'center', boxSizing: 'border-box' }} />
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setDepositPopup(null)} disabled={depositBusy} style={{
+                  flex: 1, padding: '12px', borderRadius: 10, border: 'none',
+                  background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15
+                }}>Cancel</button>
+                <button onClick={confirmDeposit} disabled={depositBusy} style={{
+                  flex: 1, padding: '12px', borderRadius: 10, border: 'none',
+                  background: depositBusy ? '#93c5fd' : '#2563eb', color: 'white',
+                  cursor: depositBusy ? 'wait' : 'pointer', fontWeight: 700, fontSize: 15
+                }}>{depositBusy ? 'Applying…' : 'Apply deposit'}</button>
               </div>
             </div>
           </div>

@@ -919,6 +919,8 @@ export const sellVoucher        = (body) => post('/api/vouchers/sell', body);
 // ── SEPOS-DEPOSIT-001 — booking deposits (typed vouchers, redeemed as a tender) ──
 export const createDeposit   = (body) => post('/api/deposits', body);
 export const getOrderDeposit = (orderId) => get(`/api/orders/${orderId}/deposit`);
+// SEPOS-DEPOSIT-ORDER-001 — deposit already redeemed against this order.
+export const getOrderDepositApplied = (orderId) => get(`/api/orders/${orderId}/deposit-applied`);
 // Manual forfeit of a no-show's deposit (kept as income).
 export const forfeitDeposit  = (code) => post(`/api/deposits/${encodeURIComponent(code)}/forfeit`, {});
 

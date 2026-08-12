@@ -10,7 +10,9 @@ const { sendBrevoEmail } = require('./emailService');
 
 // ── Config ────────────────────────────────────────────────────────
 // Mirrors the policy Korakot picked: £10 min, £500 cap, 24-month expiry.
-const VOUCHER_MIN_AMOUNT     = Number(process.env.VOUCHER_MIN_AMOUNT     || 10);
+// Korakot 12 Aug: no imposed floor — customers buy vouchers at any amount
+// (a venue that WANTS a floor can still set VOUCHER_MIN_AMOUNT env).
+const VOUCHER_MIN_AMOUNT     = Number(process.env.VOUCHER_MIN_AMOUNT     || 0.01);
 const VOUCHER_MAX_AMOUNT     = Number(process.env.VOUCHER_MAX_AMOUNT     || 500);
 const VOUCHER_EXPIRY_MONTHS  = Number(process.env.VOUCHER_EXPIRY_MONTHS  || 24);
 

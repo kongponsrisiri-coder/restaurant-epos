@@ -374,7 +374,7 @@ function SellVoucherModal({ onClose, onSold }) {
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>×</button>
         </div>
         <div style={{ padding: 22 }}>
-          <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, fontWeight: 700 }}>Amount (£10–£500)</div>
+          <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, fontWeight: 700 }}>Amount (up to £500)</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 8 }}>
             {PRESETS.map(p => (
               <button key={p} onClick={() => setAmount(p)}
@@ -383,7 +383,7 @@ function SellVoucherModal({ onClose, onSold }) {
               </button>
             ))}
           </div>
-          <input type="number" min="10" max="500" step="1" value={amount}
+          <input type="number" min="0.01" max="500" step="0.01" value={amount}
             onChange={(e) => setAmount(parseInt(e.target.value, 10) || 0)}
             placeholder="Custom amount"
             style={{ width: '100%', padding: '12px', border: '1px solid #ccc', borderRadius: 8, fontSize: 16, fontWeight: 700, marginBottom: 16, boxSizing: 'border-box' }}/>

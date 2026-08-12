@@ -607,6 +607,7 @@ app.put('/api/menu-color', async (req, res) => {
         const r = await fetch(cloudUrl.replace(/\/+$/, '') + '/api/menu-color', {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ type, id, color: c }),
+          signal: AbortSignal.timeout(8000), // F4: a wedged cloud must not hang the save
         });
         if (!r.ok && r.status !== 404) {
           const t = await r.text().catch(() => '');
@@ -8496,6 +8497,11 @@ app.get('/api/widget/voucher/config', widgetCors, (req, res) => {
 // purchases don't leave phantom vouchers in the DB.
 app.post('/api/widget/voucher/purchase', widgetCors, async (req, res) => {
   try {
+    // F8 — card charges under 30p are rejected by Stripe with a raw 500; with
+    // the £10 floor gone, guard here like qr-pay does.
+    if (Number(req.body?.amount) > 0 && Number(req.body.amount) < 0.30) {
+      return res.status(400).json({ error: 'Card payments need a minimum of £0.30' });
+    }
     const v = voucherSvc.validateAmount(req.body?.amount);
     if (!v.ok) return res.status(400).json({ error: v.error });
     // Demo tenants force mock pay via the same flag the takeaway widget
@@ -9027,14 +9033,14 @@ app.post('/api/deposits', async (req, res) => {
     // receipt / paper), so next week's lookup matches what's in their hand.
     // Rejected if the reference already exists as any voucher — a typed
     // reference can never hijack or shadow a real SiamEPOS code.
-    const requestedCode = String(req.body?.code || '').trim().toUpperCase().slice(0, 24);
+    const requestedCode = String(req.body?.code || '').trim().toUpperCase().slice(0, 20).trim(); // F3: vouchers.code is VARCHAR(20)
     if (requestedCode) {
       if (!/^[A-Z0-9][A-Z0-9 _\/-]*$/.test(requestedCode)) {
         return res.status(400).json({ error: 'Reference can use letters, numbers, spaces and - _ /' });
       }
       const clash = await pool.query('SELECT id FROM vouchers WHERE code = $1', [requestedCode]);
       if (clash.rows[0]) {
-        return res.status(409).json({ error: `${requestedCode} already exists in the system — look it up and use the real balance instead.` });
+        return res.status(409).json({ error: `${requestedCode} already exists in the system — if it's spent/expired, add a suffix (e.g. ${requestedCode}-2); otherwise look it up and use its real balance.` });
       }
     }
     let code = requestedCode || null;

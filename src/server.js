@@ -5410,6 +5410,20 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
       [restaurant_id, assignTableId, assignTableIds, customer_name.trim(), customer_phone.trim(), customer_email?.trim() || null, coversNum, reservation_date, reservation_time, insertStatus, notes?.trim() || null, source, marketing_consent ? 1 : 0]
     );
     const reservation = result.rows[0];
+    // SEPOS-BIRTHDAY-001 — the widget lets guests add day+month ('MM-DD', no
+    // year). Best-effort upsert into customer_profiles with the same key
+    // rules as the CRM view; a failure here never fails the booking.
+    const bday = String(req.body.customer_birthday || '').trim();
+    const bdayM = bday.match(/^(\d{2})-(\d{2})$/);
+    if (bdayM && Number(bdayM[1]) >= 1 && Number(bdayM[1]) <= 12 && Number(bdayM[2]) >= 1 && Number(bdayM[2]) <= 31) {
+      const bKey = customer_email?.trim() ? customer_email.trim().toLowerCase() : 'p:' + customer_phone.trim();
+      pool.query(
+        `INSERT INTO customer_profiles (contact_key, birthday, updated_at)
+         VALUES ($1, $2, CURRENT_TIMESTAMP)
+         ON CONFLICT (contact_key) DO UPDATE SET birthday = $2, updated_at = CURRENT_TIMESTAMP`,
+        [bKey, bday]
+      ).catch(e => console.warn('[birthday] profile upsert skipped:', e.message));
+    }
     io.emit('new_reservation', { ...reservation, reservation_date: String(reservation.reservation_date).split('T')[0], reservation_time: String(reservation.reservation_time).slice(0, 5) });
     if (customer_email) sendBookingConfirmation(reservation).catch(err => console.error('❌ Email error:', err.message));
     if (customer_phone) sendBookingSms(reservation).catch(() => {});

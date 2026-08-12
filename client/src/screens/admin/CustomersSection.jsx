@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getCustomers, setCustomerConsent, deleteCustomers, assertOk } from '../../api';
+import { getCustomers, setCustomerConsent, setCustomerBirthday, deleteCustomers, getSettings, updateSettings, assertOk } from '../../api';
 import { confirm } from '../../utils/confirm';
 
 // SEPOS-033 Phase 1 — Customer CRM.
@@ -24,11 +24,30 @@ function downloadCsv(filename, rows) {
   URL.revokeObjectURL(url);
 }
 
+// SEPOS-BIRTHDAY-001 — 'MM-DD' helpers (no year stored).
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const fmtBirthday = (mmdd) => {
+  const m = String(mmdd || '').match(/^(\d{2})-(\d{2})$/);
+  return m ? `${Number(m[2])} ${MONTHS[Number(m[1]) - 1]}` : '—';
+};
+const daysToBirthdayLocal = (mmdd) => {
+  const m = String(mmdd || '').match(/^(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let next = new Date(now.getFullYear(), Number(m[1]) - 1, Number(m[2]));
+  if (next < today) next = new Date(now.getFullYear() + 1, Number(m[1]) - 1, Number(m[2]));
+  return Math.round((next - today) / 86400000);
+};
+
 export default function CustomersSection() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  // SEPOS-BIRTHDAY-001 — reminder lead time (days) + the birthday editor modal
+  const [leadDays, setLeadDays] = useState(14);
+  const [bdayEdit, setBdayEdit] = useState(null); // { email, phone, name, month, day }
 
   async function load() {
     setLoading(true);
@@ -38,6 +57,35 @@ export default function CustomersSection() {
     } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    getSettings().then(s => {
+      const v = Number((s?.birthday_reminder_days ?? s?.settings?.birthday_reminder_days));
+      if ([7, 14, 30].includes(v)) setLeadDays(v);
+    }).catch(() => {});
+  }, []);
+
+  // Same optimistic pattern as consent: chip updates instantly, PUT in the
+  // background, reload only on error. Rows match by email, or phone when
+  // the customer is phone-only.
+  const sameCustomer = (x, c) => c.customer_email
+    ? x.customer_email === c.customer_email
+    : (!x.customer_email && x.customer_phone === c.customer_phone);
+  async function applyBirthday(c, mmdd) {
+    setBdayEdit(null);
+    setCustomers(prev => prev.map(x => sameCustomer(x, c)
+      ? { ...x, birthday: mmdd || null, days_to_birthday: mmdd ? daysToBirthdayLocal(mmdd) : null }
+      : x));
+    try {
+      assertOk(await setCustomerBirthday(c.customer_email || '', c.customer_phone || '', mmdd));
+    } catch (err) {
+      alert('Could not save birthday: ' + (err?.message || 'unknown'));
+      load();
+    }
+  }
+  async function applyLeadDays(v) {
+    setLeadDays(v);
+    try { await updateSettings({ birthday_reminder_days: String(v) }); } catch { /* keep local */ }
+  }
 
   // SEPOS-046y — optimistic consent toggle. Badge flips instantly; the PUT
   // runs in background. Mirrors the server: opt-in also clears unsubscribed.
@@ -96,12 +144,13 @@ export default function CustomersSection() {
   }, [customers]);
 
   function exportCsv() {
-    const rows = [['Name', 'Email', 'Phone', 'Status', 'Visits', 'First visit', 'Last visit', 'Total spend (est.)', 'Marketing consent', 'Unsubscribed']];
+    const rows = [['Name', 'Email', 'Phone', 'Birthday', 'Status', 'Visits', 'First visit', 'Last visit', 'Total spend (est.)', 'Marketing consent', 'Unsubscribed']];
     for (const c of filtered) {
       rows.push([
         c.customer_name || '',
         c.customer_email || '',
         c.customer_phone || '',
+        c.birthday ? fmtBirthday(c.birthday) : '',
         c.status,
         c.total_visits,
         c.first_visit || '',
@@ -156,6 +205,47 @@ export default function CustomersSection() {
         })}
       </div>
 
+      {/* SEPOS-BIRTHDAY-001 — upcoming birthdays within the reminder window.
+          Shown once any customer has a birthday recorded. */}
+      {customers.some(c => c.birthday) && (() => {
+        const upcoming = customers
+          .filter(c => c.days_to_birthday != null && c.days_to_birthday <= leadDays)
+          .sort((a, b) => a.days_to_birthday - b.days_to_birthday);
+        return (
+          <div style={{ ...cardStyle, background:'#fff8ee', border:'1px solid #f3d9a4' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom: upcoming.length ? 12 : 0 }}>
+              <div style={{ fontSize:15, fontWeight:800, color:'var(--brand-primary,#0D1B3E)' }}>🎂 Upcoming birthdays</div>
+              <div style={{ fontSize:12, color:'#888' }}>remind me</div>
+              <select value={leadDays} onChange={(e) => applyLeadDays(Number(e.target.value))} style={{ ...inputStyle, padding:'6px 10px', fontSize:12 }}>
+                <option value={7}>1 week ahead</option>
+                <option value={14}>2 weeks ahead</option>
+                <option value={30}>1 month ahead</option>
+              </select>
+              {upcoming.length === 0 && <div style={{ fontSize:12, color:'#888' }}>— none in the next {leadDays} days</div>}
+            </div>
+            {upcoming.length > 0 && (
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {upcoming.map((c, i) => (
+                  <div key={(c.customer_email || c.customer_phone || i) + '-bd'} style={{ display:'flex', alignItems:'center', gap:12, background:'white', borderRadius:8, padding:'8px 12px', flexWrap:'wrap' }}>
+                    <span style={{
+                      background: c.days_to_birthday === 0 ? '#dcfce7' : '#fef3c7',
+                      color: c.days_to_birthday === 0 ? '#166534' : '#92400e',
+                      padding:'3px 10px', borderRadius:12, fontSize:11, fontWeight:800, minWidth:74, textAlign:'center'
+                    }}>{c.days_to_birthday === 0 ? '🎉 TODAY' : `in ${c.days_to_birthday}d`}</span>
+                    <span style={{ fontWeight:700, color:'var(--brand-primary,#0D1B3E)' }}>{c.customer_name || c.customer_email || c.customer_phone}</span>
+                    <span style={{ fontSize:12, color:'#888' }}>{fmtBirthday(c.birthday)}</span>
+                    <span style={{ fontSize:12, color:'#555', marginLeft:'auto' }}>
+                      {c.customer_phone && <span style={{ marginRight:12 }}>📞 {c.customer_phone}</span>}
+                      {c.customer_email}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Filter bar */}
       <div style={{ ...cardStyle, display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
         <input
@@ -203,6 +293,7 @@ export default function CustomersSection() {
               <tr style={{ textAlign:'left', color:'#888', fontSize:11, textTransform:'uppercase' }}>
                 <th style={{ padding:'8px 6px' }}>Name</th>
                 <th style={{ padding:'8px 6px' }}>Contact</th>
+                <th style={{ padding:'8px 6px' }}>🎂</th>
                 <th style={{ padding:'8px 6px' }}>Status</th>
                 <th style={{ padding:'8px 6px', textAlign:'right' }}>Visits</th>
                 <th style={{ padding:'8px 6px' }}>First visit</th>
@@ -221,6 +312,23 @@ export default function CustomersSection() {
                     <td style={{ padding:'10px 6px', fontSize:12, color:'#555' }}>
                       <div>{c.customer_email}</div>
                       {c.customer_phone && <div style={{ color:'#888' }}>{c.customer_phone}</div>}
+                    </td>
+                    <td style={{ padding:'10px 6px' }}>
+                      <button
+                        onClick={() => {
+                          const m = String(c.birthday || '').match(/^(\d{2})-(\d{2})$/);
+                          setBdayEdit({
+                            email: c.customer_email || '', phone: c.customer_phone || '',
+                            name: c.customer_name || c.customer_email || c.customer_phone,
+                            month: m ? Number(m[1]) : 0, day: m ? Number(m[2]) : 0,
+                            existing: !!m,
+                          });
+                        }}
+                        title={c.birthday ? 'Edit birthday' : 'Add birthday'}
+                        style={c.birthday
+                          ? { background:'#fef3c7', color:'#92400e', padding:'3px 9px', borderRadius:6, fontSize:11, fontWeight:700, border:'none', cursor:'pointer', whiteSpace:'nowrap' }
+                          : { background:'#f1f5f9', color:'#94a3b8', padding:'3px 9px', borderRadius:6, fontSize:11, fontWeight:700, border:'1px dashed #cbd5e1', cursor:'pointer' }}
+                      >{c.birthday ? `🎂 ${fmtBirthday(c.birthday)}` : '+'}</button>
                     </td>
                     <td style={{ padding:'10px 6px' }}>
                       <span style={{
@@ -282,8 +390,52 @@ export default function CustomersSection() {
           <br/><br/>
           <strong>Marketing consent:</strong> only <span style={{ background:'#dcfce7', color:'#166534', padding:'1px 6px', borderRadius:4, fontWeight:700 }}>OPTED IN</span> customers receive campaigns.
           New widget bookings can tick consent themselves; for off-widget bookings (phone, walk-in) click <span style={{ background:'var(--brand-primary,#0D1B3E)', color:'var(--brand-accent,#C9A84C)', padding:'1px 6px', borderRadius:4, fontWeight:700 }}>+ Opt in</span> only when you have legitimate consent.
+          <br/><br/>
+          <strong>🎂 Birthdays:</strong> click the 🎂 cell to record a customer's birthday (day + month only — no year needed).
+          They appear in the reminder panel above ahead of the day, so you can invite them in or send an offer.
         </div>
       </div>
+
+      {/* SEPOS-BIRTHDAY-001 — birthday editor (React modal; window.prompt is
+          disabled under Electron). Day list follows the chosen month. */}
+      {bdayEdit && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
+          <div style={{ background:'white', borderRadius:16, padding:24, width:360, maxWidth:'92vw' }}>
+            <h2 style={{ fontSize:18, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:4 }}>🎂 Birthday</h2>
+            <div style={{ fontSize:13, color:'#555', marginBottom:16 }}>{bdayEdit.name}</div>
+            <div style={{ display:'flex', gap:8, marginBottom:18 }}>
+              <select value={bdayEdit.day} onChange={(e) => setBdayEdit({ ...bdayEdit, day: Number(e.target.value) })}
+                style={{ ...inputStyle, flex:1, fontSize:15 }}>
+                <option value={0}>Day…</option>
+                {Array.from({ length: [4,6,9,11].includes(bdayEdit.month) ? 30 : bdayEdit.month === 2 ? 29 : 31 }, (_, i) => i + 1)
+                  .map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <select value={bdayEdit.month} onChange={(e) => {
+                const month = Number(e.target.value);
+                const maxDay = [4,6,9,11].includes(month) ? 30 : month === 2 ? 29 : 31;
+                setBdayEdit({ ...bdayEdit, month, day: bdayEdit.day > maxDay ? 0 : bdayEdit.day });
+              }} style={{ ...inputStyle, flex:1.4, fontSize:15 }}>
+                <option value={0}>Month…</option>
+                {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+              </select>
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={() => setBdayEdit(null)} style={{ flex:1, padding:'12px', borderRadius:10, border:'none', background:'#f0f0f0', cursor:'pointer', fontWeight:700, fontSize:14 }}>Cancel</button>
+              {bdayEdit.existing && (
+                <button onClick={() => applyBirthday({ customer_email: bdayEdit.email || null, customer_phone: bdayEdit.phone || null }, '')}
+                  style={{ flex:1, padding:'12px', borderRadius:10, border:'none', background:'#fee2e2', color:'#991b1b', cursor:'pointer', fontWeight:700, fontSize:14 }}>Clear</button>
+              )}
+              <button
+                disabled={!bdayEdit.day || !bdayEdit.month}
+                onClick={() => applyBirthday(
+                  { customer_email: bdayEdit.email || null, customer_phone: bdayEdit.phone || null },
+                  `${String(bdayEdit.month).padStart(2, '0')}-${String(bdayEdit.day).padStart(2, '0')}`
+                )}
+                style={{ flex:1, padding:'12px', borderRadius:10, border:'none', background: (!bdayEdit.day || !bdayEdit.month) ? '#e5e7eb' : '#22c55e', color:'white', cursor:(!bdayEdit.day || !bdayEdit.month) ? 'not-allowed' : 'pointer', fontWeight:700, fontSize:14 }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

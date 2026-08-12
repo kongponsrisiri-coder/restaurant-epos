@@ -843,6 +843,9 @@ export const getMenuPerformance = (from, to) =>
 export const getCustomers = () => get('/api/customers');
 export const setCustomerConsent = (email, consent) =>
   put('/api/customers/marketing-consent', { email, consent });
+// SEPOS-BIRTHDAY-001 — birthday is 'MM-DD' (no year); '' clears it.
+export const setCustomerBirthday = (email, phone, birthday) =>
+  put('/api/customers/birthday', { email, phone, birthday });
 // SEPOS-056 — delete customers (one or many emails). The CRM is derived,
 // so the server removes their reservations and clears their PII from
 // takeaway orders.

@@ -9659,6 +9659,35 @@ app.put('/api/customers/marketing-consent', requireStaffAuth(['admin', 'manager'
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-BIRTHDAY-001 — set/clear a customer's birthday ('MM-DD', no year).
+// Body: { email?, phone?, birthday } — key derived exactly like the CRM view
+// (lower(email), else 'p:'+phone). birthday '' clears it.
+app.put('/api/customers/birthday', requireStaffAuth(['admin', 'manager', 'supervisor']), async (req, res) => {
+  try {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const phone = String(req.body.phone || '').trim();
+    const key = email || (phone ? 'p:' + phone : '');
+    if (!key) return res.status(400).json({ error: 'email or phone required' });
+    const birthday = String(req.body.birthday || '').trim();
+    if (birthday === '') {
+      await pool.query('DELETE FROM customer_profiles WHERE contact_key = $1', [key]);
+      return res.json({ success: true, cleared: true });
+    }
+    const m = birthday.match(/^(\d{2})-(\d{2})$/);
+    const mm = m ? Number(m[1]) : 0, dd = m ? Number(m[2]) : 0;
+    if (!m || mm < 1 || mm > 12 || dd < 1 || dd > 31) {
+      return res.status(400).json({ error: 'birthday must be MM-DD' });
+    }
+    await pool.query(
+      `INSERT INTO customer_profiles (contact_key, birthday, updated_at)
+       VALUES ($1, $2, CURRENT_TIMESTAMP)
+       ON CONFLICT (contact_key) DO UPDATE SET birthday = $2, updated_at = CURRENT_TIMESTAMP`,
+      [key, birthday]
+    );
+    res.json({ success: true, birthday });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─────────────────────────────────────────────────────────────────────
 // SEPOS-033 Phase 2 — email campaigns + unsubscribe
 // ─────────────────────────────────────────────────────────────────────
@@ -9930,6 +9959,20 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
       new Date(b.last_visit || 0) - new Date(a.last_visit || 0)
     );
 
+    // SEPOS-BIRTHDAY-001 — attach birthdays from the side-table + compute
+    // days until the NEXT occurrence (wraps the year end; 29 Feb rolls to
+    // 1 Mar in non-leap years via JS Date overflow).
+    const profRes = await pool.query('SELECT contact_key, birthday FROM customer_profiles').catch(() => ({ rows: [] }));
+    const birthdayByKey = new Map(profRes.rows.map(p => [p.contact_key, p.birthday]));
+    const daysToBirthday = (mmdd, today) => {
+      const m = String(mmdd || '').match(/^(\d{2})-(\d{2})$/);
+      if (!m) return null;
+      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      let next = new Date(today.getFullYear(), Number(m[1]) - 1, Number(m[2]));
+      if (next < startOfToday) next = new Date(today.getFullYear() + 1, Number(m[1]) - 1, Number(m[2]));
+      return Math.round((next - startOfToday) / 86400000);
+    };
+
     const today = new Date();
     const customers = merged.map(c => {
       const visits = Number(c.total_visits || 0);
@@ -9944,6 +9987,7 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
       else if (visits >= 2)                             status = 'Regular';
       else                                              status = 'New';
 
+      const birthday = birthdayByKey.get(c.contact_key) || null;
       return {
         customer_email: c.customer_email,
         customer_name:  c.customer_name,
@@ -9956,6 +10000,8 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
         marketing_consent: !!c.marketing_consent,
         unsubscribed:   !!c.unsubscribed,
         status,
+        birthday,
+        days_to_birthday: birthday ? daysToBirthday(birthday, today) : null,
       };
     });
 

@@ -134,11 +134,57 @@ async function runBookingCompletedCheck() {
 async function runBirthdayCheck() {
   const url = process.env.MAKE_BIRTHDAY_WEBHOOK;
   if (!url) return { skipped: true };
-  // DOB isn't collected anywhere yet (not on the booking widget). Once
-  // a reservations.customer_birthday TEXT column lands ('MM-DD' format),
-  // this fires once per customer per year for birthdays in the current
-  // month. For now, no-op so the cron stays harmless.
-  return { skipped: true, reason: 'no DOB capture yet' };
+  // SEPOS-BIRTHDAY-001 — birthdays now live in customer_profiles
+  // (contact_key = lower(email) or 'p:'+phone, birthday 'MM-DD', captured on
+  // the Customers tab). Fires once per customer per year for birthdays in
+  // the current month; Make decides what to send (offer email, task, etc.).
+  const profs = await pool.query(
+    `SELECT contact_key, birthday FROM customer_profiles
+      WHERE birthday IS NOT NULL AND birthday <> ''`
+  );
+  const thisMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+  const year = new Date().getFullYear();
+  let fired = 0;
+  for (const p of profs.rows) {
+    if (String(p.birthday).slice(0, 2) !== thisMonth) continue;
+    const fireKey = `${p.contact_key}:${year}`;
+    if (await alreadyFired('customer_birthday', fireKey)) continue;
+    // Resolve name/email/phone from the underlying CRM rows. Skip anyone who
+    // unsubscribed — a birthday greeting is still marketing.
+    const isPhoneKey = p.contact_key.startsWith('p:');
+    const resv = await pool.query(
+      isPhoneKey
+        ? `SELECT MIN(customer_name) AS name, MIN(customer_email) AS email, MIN(customer_phone) AS phone,
+                  MAX(CASE WHEN unsubscribed_at IS NOT NULL THEN 1 ELSE 0 END) AS unsub
+             FROM reservations WHERE TRIM(customer_phone) = $1`
+        : `SELECT MIN(customer_name) AS name, MIN(customer_email) AS email, MIN(customer_phone) AS phone,
+                  MAX(CASE WHEN unsubscribed_at IS NOT NULL THEN 1 ELSE 0 END) AS unsub
+             FROM reservations WHERE LOWER(TRIM(customer_email)) = $1`,
+      [isPhoneKey ? p.contact_key.slice(2) : p.contact_key]
+    );
+    let c = resv.rows[0];
+    if (!c || (!c.name && !c.email && !c.phone)) {
+      const ta = await pool.query(
+        isPhoneKey
+          ? `SELECT MIN(customer_name) AS name, MIN(customer_email) AS email, MIN(customer_phone) AS phone, 0 AS unsub
+               FROM orders WHERE order_type='takeaway' AND TRIM(customer_phone) = $1`
+          : `SELECT MIN(customer_name) AS name, MIN(customer_email) AS email, MIN(customer_phone) AS phone, 0 AS unsub
+               FROM orders WHERE order_type='takeaway' AND LOWER(TRIM(customer_email)) = $1`,
+        [isPhoneKey ? p.contact_key.slice(2) : p.contact_key]
+      );
+      c = ta.rows[0];
+    }
+    if (!c || (!c.name && !c.email && !c.phone)) continue;
+    if (Number(c.unsub)) continue;
+    const ok = await postWebhook(url, {
+      event: 'customer_birthday',
+      customer: { name: c.name, email: c.email, phone: c.phone, birthday: p.birthday },
+      restaurant_name: process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant',
+    });
+    if (ok) { await recordFire('customer_birthday', fireKey); fired++; }
+  }
+  if (fired > 0) console.log(`[webhook] customer_birthday: ${fired} fired`);
+  return { fired };
 }
 
 async function runAll() {

@@ -5,6 +5,22 @@ import QRPayModal from '../components/QRPayModal';
 import { orderShortLabelPlain, orderSubLabel, isTakeaway } from '../utils/orderLabel';
 import { confirm } from '../utils/confirm';
 
+// SEPOS-PAY-ONETAP-001 — 2-second "paid" toast. Plain DOM appended to <body>
+// so it survives the Bill screen unmounting when onPay closes the table.
+// Cash change is THE thing staff must see, so it leads, huge.
+function showPaidToast(pd, label) {
+  try {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;top:18%;left:50%;transform:translateX(-50%);z-index:99999;background:#14532d;color:#fff;border-radius:18px;padding:22px 34px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.35);font-family:inherit;min-width:280px';
+    const change = Number(pd?.change || 0);
+    el.innerHTML = change > 0.001
+      ? `<div style="font-size:15px;opacity:.85;margin-bottom:2px">💚 Change to give</div><div style="font-size:46px;font-weight:900;color:#4ade80">£${change.toFixed(2)}</div><div style="font-size:14px;margin-top:6px;opacity:.85">✓ ${label} paid</div>`
+      : `<div style="font-size:34px;margin-bottom:4px">✅</div><div style="font-size:18px;font-weight:800">${label} paid</div><div style="font-size:14px;opacity:.85">${pd?.method || ''}</div>`;
+    document.body.appendChild(el);
+    setTimeout(() => { el.style.transition = 'opacity .4s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 450); }, change > 0.001 ? 3200 : 2000);
+  } catch { /* a toast must never break a payment */ }
+}
+
 export default function BillScreen({ orderId, onClose, onPay }) {
 
   const [bill, setBill]                     = useState(null);
@@ -966,8 +982,13 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   </>
                   );
                 })()}
-                {settled && (
-                  <button onClick={() => {
+                {settled && (() => {
+                  // SEPOS-PAY-ONETAP-001 — one card, one tap. Confirm records the
+                  // payment, optionally prints, shows a 2s toast (big CHANGE for
+                  // cash) and returns to the floor — the old "Payment Confirmed!"
+                  // card is gone from this path.
+                  const doConfirm = async (printAfter) => {
+                    if (paying) return;
                     const paid = splitTenders.reduce((s, t) => s + t.amount, 0);
                     // SEPOS-CASHCHANGE-001 — cash change is handed BACK, so it must not be
                     // recorded as money taken. Reduce the cash tender(s) by the change so the
@@ -983,10 +1004,26 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                       return t;
                     }).filter(t => t.amount > 0.001);
                     const method = recTenders.length === 1 ? recTenders[0].method : 'Split';
-                    setPaymentDetails({ method, amountPaid: paid, tip: mixTip, change: mixChange, tenders: recTenders });
-                    setStage('receipt');
-                  }} style={{ width: '100%', height: 56, borderRadius: 12, border: 'none', background: '#22c55e', color: '#fff', fontWeight: 800, fontSize: 17, cursor: 'pointer', marginBottom: 12 }}>✓ Confirm &amp; Close — £{billTotal.toFixed(2)}{mixChange > 0 ? ` (£${mixChange.toFixed(2)} change)` : mixTip > 0 ? ` (£${mixTip.toFixed(2)} tip)` : ''}</button>
-                )}
+                    const pd = { method, amountPaid: paid, tip: mixTip, change: mixChange, tenders: recTenders };
+                    setPaymentDetails(pd);
+                    setPaying(true);
+                    try {
+                      await onPay(billTotal, pd.method, pd.amountPaid, pd.tip, pd.tenders);
+                      serverOpenDrawer().catch(() => {});
+                      if (printAfter) printReceipt({ order: { ...order }, items: billItems, settings: { ...settings }, paymentDetails: { ...receiptTotals, ...pd } });
+                      showPaidToast(pd, orderShortLabelPlain(order));
+                    } catch (e) {
+                      alert('Payment could not be recorded: ' + (e?.message || 'unknown') + '\nThe bill is still open — try again.');
+                    } finally { setPaying(false); }
+                  };
+                  const suffix = mixChange > 0 ? ` (£${mixChange.toFixed(2)} change)` : mixTip > 0 ? ` (£${mixTip.toFixed(2)} tip)` : '';
+                  return (
+                    <>
+                      <button onClick={() => doConfirm(false)} disabled={paying} style={{ width: '100%', height: 56, borderRadius: 12, border: 'none', background: paying ? '#9ca3af' : '#22c55e', color: '#fff', fontWeight: 800, fontSize: 17, cursor: paying ? 'wait' : 'pointer', marginBottom: 10 }}>{paying ? 'Recording…' : <>✓ Confirm — £{billTotal.toFixed(2)}{suffix}</>}</button>
+                      <button onClick={() => doConfirm(true)} disabled={paying} style={{ width: '100%', height: 50, borderRadius: 12, border: '2px solid #22c55e', background: '#fff', color: '#15803d', fontWeight: 800, fontSize: 15, cursor: paying ? 'wait' : 'pointer', marginBottom: 12 }}>🖨 Confirm &amp; Print receipt</button>
+                    </>
+                  );
+                })()}
                 <button onClick={cancelMix} style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>← Back to Bill</button>
               </div>
             </div>

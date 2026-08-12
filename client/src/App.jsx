@@ -314,22 +314,14 @@ export default function App() {
     lastActivity.current = Date.now();
     const bump = (ev) => {
       lastActivity.current = Date.now();
-      if (warnStart.current) {
+      // Ghost-tap fix, final form (canary finds #5/#8b): pointer presses do NOT
+      // dismiss the warning here — the full-screen overlay stays up, catches the
+      // COMPLETE tap itself (its own onClick), and dismisses then. With the
+      // overlay still covering the screen at click time, nothing underneath can
+      // ever receive the tap — no event-swallowing games needed. Keyboard/wheel
+      // activity (which never lands "through" anything) still dismisses here.
+      if (warnStart.current && ev && (ev.type === 'keydown' || ev.type === 'wheel')) {
         warnStart.current = 0; setIdleWarn(false);
-        // SEPOS-TILL-LOCK ghost-tap fix (tablet canary find #5): the PRESS that
-        // dismisses the warning unmounts the overlay before the finger lifts,
-        // so the browser's click landed on whatever sat underneath — adding a
-        // dish to the order. Swallow the follow-through of this one tap.
-        if (ev && (ev.type === 'pointerdown' || ev.type === 'touchstart')) {
-          const swallow = (e2) => { e2.stopPropagation(); e2.preventDefault(); };
-          ['click', 'pointerup', 'touchend'].forEach((t2) =>
-            window.addEventListener(t2, swallow, { capture: true, once: true }));
-          const disarm = () => ['click', 'pointerup', 'touchend'].forEach((t2) =>
-            window.removeEventListener(t2, swallow, { capture: true }));
-          // F6 — a NEW press means the ghost window is over; don't eat that tap.
-          window.addEventListener('pointerdown', disarm, { capture: true, once: true });
-          setTimeout(disarm, 600);
-        }
       }
     };
     const evs = ['pointerdown', 'keydown', 'touchstart', 'wheel'];
@@ -656,7 +648,7 @@ export default function App() {
           resets the timer and dismisses this), so no dedicated button needed —
           but we show one anyway to make the escape route obvious. */}
       {staff && idleWarn !== false && (
-        <div style={{
+        <div onClick={() => { warnStart.current = 0; lastActivity.current = Date.now(); setIdleWarn(false); }} style={{
           position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, zIndex: 100002,
           background: 'rgba(13,27,62,0.82)', display: 'flex', alignItems: 'center',
           justifyContent: 'center', padding: 24, textAlign: 'center',

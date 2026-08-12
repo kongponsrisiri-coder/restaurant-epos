@@ -9116,6 +9116,26 @@ app.get('/api/orders/:id/deposit-applied', async (req, res) => {
   } catch (err) { res.json({ applied: 0, code: null }); }
 });
 
+// SEPOS-DEPOSIT-REMOVE-001 (canary find #9) — un-apply a deposit from a bill:
+// restores each deposit-voucher's balance and deletes the redemption rows, so
+// a mistaken entry (wrong code, wrong amount) is fully reversible before pay.
+app.post('/api/orders/:id/deposit-unapply', async (req, res) => {
+  if (await forwardToCloudWith(req, res, 'deposit-unapply')) return;
+  try {
+    const rows = (await pool.query(
+      `SELECT vr.id, vr.voucher_id, vr.amount_used FROM voucher_redemptions vr
+        JOIN vouchers v ON v.id = vr.voucher_id
+       WHERE vr.bill_id = $1 AND v.type = 'deposit'`, [req.params.id])).rows;
+    let restored = 0;
+    for (const r of rows) {
+      await pool.query(`UPDATE vouchers SET balance = balance + $1, status = 'active' WHERE id = $2`, [r.amount_used, r.voucher_id]);
+      await pool.query('DELETE FROM voucher_redemptions WHERE id = $1', [r.id]);
+      restored += Number(r.amount_used);
+    }
+    res.json({ success: true, restored });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Manual forfeit — a no-show's deposit is kept as income (own report line).
 app.post('/api/deposits/:code/forfeit', async (req, res) => {
   const client = await pool.connect();

@@ -922,6 +922,7 @@ export const createDeposit   = (body) => post('/api/deposits', body);
 export const getOrderDeposit = (orderId) => get(`/api/orders/${orderId}/deposit`);
 // SEPOS-DEPOSIT-ORDER-001 — deposit already redeemed against this order.
 export const getOrderDepositApplied = (orderId) => get(`/api/orders/${orderId}/deposit-applied`);
+export const unapplyOrderDeposit = (orderId) => post(`/api/orders/${orderId}/deposit-unapply`, {}); // SEPOS-DEPOSIT-REMOVE-001
 // Manual forfeit of a no-show's deposit (kept as income).
 export const forfeitDeposit  = (code) => post(`/api/deposits/${encodeURIComponent(code)}/forfeit`, {});
 

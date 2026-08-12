@@ -210,6 +210,7 @@ async function initDB() {
         discount_type VARCHAR(50),
         discount_value DECIMAL(10,2),
         discount_reason TEXT,
+        discount_scope VARCHAR(10),
         no_service_charge INTEGER DEFAULT 0,
         bill_printed INTEGER DEFAULT 0,
         opened_at TIMESTAMP DEFAULT NOW(),
@@ -781,6 +782,9 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
     // give discounts and/or redeem deposits without being made a manager.
     await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS can_discount INTEGER DEFAULT 0`).catch(() => {});
     await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS can_redeem_deposit INTEGER DEFAULT 0`).catch(() => {});
+    // SEPOS-DISCOUNT-SCOPE-001 — bill discount limited to 'food' / 'drink'
+    // (NULL = whole bill). Drinks = items in categories with is_bar=1.
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_scope VARCHAR(10)`).catch(() => {});
 
     // ── SEPOS-LITE-001 Phase 1 — multi-tenancy foundation ────────────
     // A `restaurants` registry plus a `restaurant_id` column on every

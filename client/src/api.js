@@ -498,16 +498,20 @@ export const voidItem = async (itemId, reason, quantity, void_type) => {
   if (void_type) body.void_type = void_type;
   return put(`/api/order-items/${itemId}/void`, body);
 };
-export const applyDiscount = async (orderId, discount_type, discount_value, discount_reason) => {
+// SEPOS-DISCOUNT-SCOPE-001 — discount_scope 'food' | 'drink' limits the bill
+// discount to that side of the menu (categories.is_bar); null/undefined = all.
+export const applyDiscount = async (orderId, discount_type, discount_value, discount_reason, discount_scope = null) => {
+  const scope = ['food', 'drink'].includes(discount_scope) ? discount_scope : null;
   const lid = await localTarget(orderId);
   if (lid) {
     const doc = await localOrderGet(lid);
     if (!doc) return { error: 'Order not found' };
     doc.discount_type = discount_type; doc.discount_value = discount_value; doc.discount_reason = discount_reason;
+    doc.discount_scope = scope;
     await localOrderUpdate(lid, doc);
     return { success: true };
   }
-  return put(`/api/orders/${orderId}/discount`, { discount_type, discount_value, discount_reason });
+  return put(`/api/orders/${orderId}/discount`, { discount_type, discount_value, discount_reason, discount_scope: scope });
 };
 // SEPOS — persist per-order "Remove service charge" toggle so the Bill honours it.
 export const setOrderServiceCharge = async (orderId, removed) => {

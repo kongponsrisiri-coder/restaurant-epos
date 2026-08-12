@@ -511,6 +511,7 @@ async function applyToCloud(actionType, payload) {
           discount_type: payload.discount_type,
           discount_value: payload.discount_value,
           discount_reason: payload.discount_reason,
+          discount_scope: payload.discount_scope,
         }),
       });
       if (!r.ok) throw new Error(`apply_discount ${r.status}`);

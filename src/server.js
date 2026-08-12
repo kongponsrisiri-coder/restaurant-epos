@@ -105,27 +105,73 @@ const ORDER_TOTAL_EXPR = `SUM(CASE
 // (by item-gross) and returns order_id -> multiplicative factor in [0,1].
 // Rows must carry order_id, discount_type/discount_value (item) and
 // bill_discount_type/bill_discount_value (order).
+// SEPOS-DISCOUNT-SCOPE-001 — a bill discount may be limited to 'food' or
+// 'drink' (orders.discount_scope; NULL/'all' = whole bill). Drinks = items in
+// categories with is_bar=1, mirroring the kitchen/bar routing split.
+function rowInScope(scope, isBar) {
+  if (scope === 'drink') return Number(isBar) === 1;
+  if (scope === 'food')  return Number(isBar) !== 1;
+  return true;
+}
+
+// Scope-aware bill-discount £ for one order. `items` rows need quantity,
+// unit_price, discount_type/discount_value (item-level), voided, is_bar.
+function billDiscountAmountFor(order, items) {
+  const bdv = Number(order.discount_value || 0);
+  if (!(bdv > 0)) return 0;
+  const scope = order.discount_scope || 'all';
+  let base = 0;
+  for (const it of items) {
+    if (it.voided) continue;
+    if (!rowInScope(scope, it.is_bar)) continue;
+    let p = Number(it.unit_price || 0) * Number(it.quantity || 0);
+    if (it.discount_value > 0) {
+      if (it.discount_type === 'percent') p *= 1 - Number(it.discount_value) / 100;
+      else p = Math.max(0, p - Number(it.discount_value));
+    }
+    base += p;
+  }
+  return order.discount_type === 'percent' ? base * (bdv / 100) : Math.min(bdv, base);
+}
+
 function billDiscountFactors(rows) {
+  // Per order: full gross + in-scope gross (both after per-ITEM discounts).
   const grossByOrder = new Map();
   for (const row of rows) {
     let g = Number(row.quantity || 0) * Number(row.unit_price || 0);
     if (row.discount_type === 'percent') g *= 1 - (Number(row.discount_value || 0) / 100);
     else if (row.discount_type === 'fixed') g = Math.max(0, g - Number(row.discount_value || 0));
-    grossByOrder.set(row.order_id, (grossByOrder.get(row.order_id) || 0) + g);
-  }
-  const factor = new Map();
-  for (const row of rows) {
-    if (factor.has(row.order_id)) continue;
-    const og = grossByOrder.get(row.order_id) || 0;
-    const bdv = Number(row.bill_discount_value || 0);
-    let f = 1;
-    if (bdv > 0 && og > 0) {
-      if (row.bill_discount_type === 'percent') f = Math.max(0, 1 - bdv / 100);
-      else if (row.bill_discount_type === 'fixed') f = Math.max(0, (og - bdv) / og);
+    let e = grossByOrder.get(row.order_id);
+    if (!e) {
+      e = { full: 0, scoped: 0,
+            scope: row.bill_discount_scope || 'all',
+            type: row.bill_discount_type, value: Number(row.bill_discount_value || 0) };
+      grossByOrder.set(row.order_id, e);
     }
-    factor.set(row.order_id, f);
+    e.full += g;
+    if (rowInScope(e.scope, row.is_bar)) e.scoped += g;
+  }
+  // order_id -> { f: factor for IN-SCOPE rows, scope, amount: discount £ }.
+  // Out-of-scope rows always keep factor 1 — use rowBillFactor(), not .f.
+  const factor = new Map();
+  for (const [oid, e] of grossByOrder) {
+    const base = e.scope === 'all' ? e.full : e.scoped;
+    let f = 1, amount = 0;
+    if (e.value > 0 && base > 0) {
+      if (e.type === 'percent')    { amount = base * (e.value / 100); f = Math.max(0, 1 - e.value / 100); }
+      else if (e.type === 'fixed') { amount = Math.min(e.value, base); f = Math.max(0, (base - amount) / base); }
+    }
+    factor.set(oid, { f, scope: e.scope, amount });
   }
   return factor;
+}
+
+// The multiplicative bill-discount factor for ONE item row: the order's
+// factor when the row is in the discount's scope, 1 otherwise.
+function rowBillFactor(factors, row) {
+  const e = factors.get(row.order_id);
+  if (!e) return 1;
+  return rowInScope(e.scope, row.is_bar) ? e.f : 1;
 }
 
 // SEPOS-SVCFIX-001 — service charge must be computed PER BILL, not derived from
@@ -137,7 +183,7 @@ function orderIsDineIn(o) {
   const t = o.order_type || 'dine_in';
   return t !== 'takeaway' && t !== 'counter';
 }
-function serviceChargeForOrder(o, scEnabled, scRatePct) {
+function serviceChargeForOrder(o, scEnabled, scRatePct, billDiscountOverride = null) {
   // SEPOS-AUDIT-001 — prefer the close-time SNAPSHOT (orders.service_charge,
   // stamped by /pay since this fix). Deriving from today's settings rewrote
   // history whenever the rate changed. NULL = legacy row → derive as before.
@@ -149,8 +195,14 @@ function serviceChargeForOrder(o, scEnabled, scRatePct) {
   // matching what the till actually took (BillScreen applies service to
   // subtotal − bill discount). Using o.total (pre-bill-discount) overstated
   // service on discounted bills. Per-item discounts are already baked into total.
+  // SEPOS-DISCOUNT-SCOPE-001 — a food/drink-scoped discount needs the order's
+  // ITEMS to compute its £, so /pay passes it in (billDiscountOverride). This
+  // derive branch only otherwise runs for legacy rows (service_charge NULL),
+  // which predate scoped discounts — every scoped order carries a snapshot.
   let base = Number(o.total ?? 0);
-  if (o.discount_value > 0) {
+  if (billDiscountOverride != null) {
+    base = Math.max(0, base - Number(billDiscountOverride));
+  } else if (o.discount_value > 0) {
     base = o.discount_type === 'percent'
       ? base * (1 - Number(o.discount_value) / 100)
       : Math.max(0, base - Number(o.discount_value));
@@ -1720,11 +1772,14 @@ app.put('/api/orders/:id/discount', async (req, res) => {
   try {
     if (await refuseQrMutation(req.params.id, res)) return;
     const { discount_type, discount_value, discount_reason } = req.body;
-    await pool.query('UPDATE orders SET discount_type=$1, discount_value=$2, discount_reason=$3 WHERE id=$4', [discount_type, discount_value, discount_reason, req.params.id]);
+    // SEPOS-DISCOUNT-SCOPE-001 — 'food' / 'drink' limits the discount to that
+    // side of the bill (categories.is_bar). Anything else (incl. 'all') → NULL.
+    const discount_scope = ['food', 'drink'].includes(req.body.discount_scope) ? req.body.discount_scope : null;
+    await pool.query('UPDATE orders SET discount_type=$1, discount_value=$2, discount_reason=$3, discount_scope=$4 WHERE id=$5', [discount_type, discount_value, discount_reason, discount_scope, req.params.id]);
     // SEPOS-AUDIT-001 — push to cloud on local installs (no-op on cloud);
     // without this the 5s cloud-wins pull reverted the discount within a tick.
     await offlineQueue.enqueue('apply_discount', {
-      localOrderId: Number(req.params.id), discount_type, discount_value, discount_reason,
+      localOrderId: Number(req.params.id), discount_type, discount_value, discount_reason, discount_scope,
     });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1768,13 +1823,20 @@ app.post('/api/orders/:id/close-zero', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const ord = await client.query('SELECT id, status, discount_type, discount_value FROM orders WHERE id=$1 FOR UPDATE', [orderId]);
+    const ord = await client.query('SELECT id, status, discount_type, discount_value, discount_scope FROM orders WHERE id=$1 FOR UPDATE', [orderId]);
     const order = ord.rows[0];
     if (!order)                  { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Order not found' }); }
     if (order.status !== 'open') { await client.query('ROLLBACK'); return res.status(409).json({ error: `Order is ${order.status}` }); }
 
+    // SEPOS-DISCOUNT-SCOPE-001 — is_bar joined so a food/drink-scoped discount
+    // computes on the right base (a £ off drinks must not zero a food bill).
     const itemsRes = await client.query(
-      `SELECT unit_price, quantity, discount_type, discount_value, voided FROM order_items WHERE order_id=$1`,
+      `SELECT oi.unit_price, oi.quantity, oi.discount_type, oi.discount_value, oi.voided,
+              COALESCE(c.is_bar, 0) AS is_bar
+         FROM order_items oi
+         LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+         LEFT JOIN categories  c ON c.id  = COALESCE(mi.category_id, oi.dest_category_id)
+        WHERE oi.order_id=$1`,
       [orderId]
     );
     let subtotal = 0;
@@ -1787,11 +1849,7 @@ app.post('/api/orders/:id/close-zero', async (req, res) => {
       }
       subtotal += p;
     }
-    let total = subtotal;
-    if (order.discount_value > 0) {
-      if (order.discount_type === 'percent') total *= (1 - Number(order.discount_value) / 100);
-      else total = Math.max(0, total - Number(order.discount_value));
-    }
+    const total = Math.max(0, subtotal - billDiscountAmountFor(order, itemsRes.rows));
     if (total > 0.01) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: `Bill total is £${total.toFixed(2)}, not £0 — use the normal pay flow` });
@@ -1931,7 +1989,21 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
       const scCfg = {}; for (const r of scRes.rows) scCfg[r.key] = r.value;
       const scOn = String(scCfg.service_charge_enabled ?? 'true') !== '0' && String(scCfg.service_charge_enabled ?? 'true') !== 'false';
       const scPct = Number(scCfg.service_charge_rate ?? scCfg.service_charge_percent ?? 12.5) || 0;
-      closeServiceCharge = Number(serviceChargeForOrder({ ...order, service_charge: null }, scOn, scPct).toFixed(2));
+      // SEPOS-DISCOUNT-SCOPE-001 — a food/drink-scoped discount's £ depends on
+      // the items, not the whole total; compute it here so the service-charge
+      // snapshot is taken on the right base.
+      let discOverride = null;
+      if (Number(order.discount_value) > 0 && (order.discount_scope === 'food' || order.discount_scope === 'drink')) {
+        const scopedItems = await client.query(
+          `SELECT oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value, oi.voided,
+                  COALESCE(c.is_bar, 0) AS is_bar
+             FROM order_items oi
+             LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+             LEFT JOIN categories  c ON c.id  = COALESCE(mi.category_id, oi.dest_category_id)
+            WHERE oi.order_id = $1`, [orderId]);
+        discOverride = billDiscountAmountFor(order, scopedItems.rows);
+      }
+      closeServiceCharge = Number(serviceChargeForOrder({ ...order, service_charge: null }, scOn, scPct, discOverride).toFixed(2));
     } catch { closeServiceCharge = 0; }
     await client.query(`UPDATE orders SET status='closed', closed_at=NOW(), service_charge=$2, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId, closeServiceCharge]);
     await client.query('COMMIT');
@@ -3158,7 +3230,7 @@ app.get('/api/reports/summary', async (req, res) => {
       // (verify pass: orders.service_charge added — without it in the SELECT,
       // serviceChargeForOrder saw undefined and silently fell back to deriving
       // from today's rate, defeating the snapshot.)
-      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.no_service_charge, orders.service_charge, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [sumFromIso, sumToIso]),
+      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.discount_scope, orders.order_type, orders.no_service_charge, orders.service_charge, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [sumFromIso, sumToIso]),
       // SEPOS-REPREC-001 — a cancelled/void bill closes with a payment row
       // method='cancelled', £0. It collected nothing, so it must NOT count as a
       // sale or an order here — otherwise Trading's "Total Sales" (orders.total)
@@ -3175,10 +3247,11 @@ app.get('/api/reports/summary', async (req, res) => {
       pool.query(`
         SELECT oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value,
                COALESCE(c.is_bar, 0) AS is_bar,
-               o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value
+               o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value,
+               o.discount_scope AS bill_discount_scope
         FROM order_items oi
         LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
-        LEFT JOIN categories  c  ON c.id  = mi.category_id
+        LEFT JOIN categories  c  ON c.id  = COALESCE(mi.category_id, oi.dest_category_id)
         LEFT JOIN orders      o  ON o.id  = oi.order_id
         WHERE o.status='closed' AND oi.voided=0
           AND o.closed_at >= $1::timestamp AND o.closed_at < $2::timestamp
@@ -3202,7 +3275,18 @@ app.get('/api/reports/summary', async (req, res) => {
     for (const r of rows) if (!byOrder.has(r.id)) byOrder.set(r.id, r);
     const uniqueOrders = [...byOrder.values()];
     const total_subtotal = uniqueOrders.reduce((sum, r) => sum + Number(r.total ?? 0), 0);
-    const total_discounts = uniqueOrders.reduce((s, r) => { if (!r.discount_value) return s; return s + (r.discount_type === 'percent' ? (r.total || 0) * (r.discount_value / 100) : r.discount_value); }, 0);
+    // SEPOS-DISCOUNT-SCOPE-001 — factors computed here (not just for the
+    // food/drink split below) because a scoped discount's £ depends on the
+    // order's ITEMS, which only the per-item rows carry. Unscoped orders keep
+    // the exact total-based formula they always had.
+    const fdFactors = billDiscountFactors(foodDrinkRes.rows);
+    const total_discounts = uniqueOrders.reduce((s, r) => {
+      if (!r.discount_value) return s;
+      if (r.discount_scope === 'food' || r.discount_scope === 'drink') {
+        return s + (fdFactors.get(r.id)?.amount || 0);
+      }
+      return s + (r.discount_type === 'percent' ? (r.total || 0) * (r.discount_value / 100) : Number(r.discount_value));
+    }, 0);
     // SEPOS-SVCFIX-001 — service charge summed PER BILL (dine-in only × rate),
     // not money-taken − subtotal. total_sales foots to items − discounts + service.
     const total_service  = uniqueOrders.reduce((sum, r) => sum + serviceChargeForOrder(r, scEnabled, scRate), 0);
@@ -3228,14 +3312,14 @@ app.get('/api/reports/summary', async (req, res) => {
     const vRedeemed = voucherRedeemedRes.rows[0] || { count: 0, total: 0 };
 
     // SEPOS-AUDIT-001 — aggregate the per-item rows with the bill-level
-    // discount factor (see the query comment above).
-    const fdFactors = billDiscountFactors(foodDrinkRes.rows);
+    // discount factor (see the query comment above). SEPOS-DISCOUNT-SCOPE-001:
+    // the factor is per-ROW now — out-of-scope items keep factor 1.
     let total_food = 0, total_drink = 0;
     for (const r of foodDrinkRes.rows) {
       let net = Number(r.quantity || 0) * Number(r.unit_price || 0);
       if (r.discount_type === 'percent') net *= 1 - (Number(r.discount_value || 0) / 100);
       else if (r.discount_type === 'fixed') net = Math.max(0, net - Number(r.discount_value || 0));
-      net *= (fdFactors.get(r.order_id) ?? 1);
+      net *= rowBillFactor(fdFactors, r);
       if (Number(r.is_bar) === 1) total_drink += net;
       else                        total_food  += net;
     }
@@ -3929,7 +4013,7 @@ app.get('/api/z-report/preview', async (req, res) => {
       // SEPOS-AUDIT-001 — exclude bills whose payments were all written off
       // (method='cancelled' via the Bills editor): their items counted in the
       // VAT/food/drink breakdowns while total_sales excluded them.
-      pool.query(`SELECT COALESCE(mi.vat_rate, 20) AS vat_rate, oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value, o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id LEFT JOIN orders o ON o.id = oi.order_id WHERE o.status='closed' AND oi.voided=0 AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))`, [from, to]),
+      pool.query(`SELECT COALESCE(mi.vat_rate, 20) AS vat_rate, oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value, COALESCE(c.is_bar, 0) AS is_bar, o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value, o.discount_scope AS bill_discount_scope FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id LEFT JOIN categories c ON c.id = COALESCE(mi.category_id, oi.dest_category_id) LEFT JOIN orders o ON o.id = oi.order_id WHERE o.status='closed' AND oi.voided=0 AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))`, [from, to]),
       // Korakot 2026-06-02: food vs drink split via categories.is_bar.
       // SEPOS-AUDIT-001 — per-order rows (aggregated in JS with the bill-level
       // discount factor, like VAT): the flat SUM ignored bill discounts, so a
@@ -3938,10 +4022,11 @@ app.get('/api/z-report/preview', async (req, res) => {
       pool.query(`
         SELECT oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value,
                COALESCE(c.is_bar, 0) AS is_bar,
-               o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value
+               o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value,
+               o.discount_scope AS bill_discount_scope
         FROM order_items oi
         LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
-        LEFT JOIN categories  c  ON c.id  = mi.category_id
+        LEFT JOIN categories  c  ON c.id  = COALESCE(mi.category_id, oi.dest_category_id)
         LEFT JOIN orders      o  ON o.id  = oi.order_id
         WHERE o.status='closed' AND oi.voided=0
           AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
@@ -3991,7 +4076,7 @@ app.get('/api/z-report/preview', async (req, res) => {
       let gross = Number(row.quantity || 0) * Number(row.unit_price || 0);
       if (row.discount_type === 'percent') gross *= 1 - (Number(row.discount_value || 0) / 100);
       else if (row.discount_type === 'fixed') gross = Math.max(0, gross - Number(row.discount_value || 0));
-      gross *= (vatFactors.get(row.order_id) ?? 1); // distribute the order's bill-level discount
+      gross *= rowBillFactor(vatFactors, row); // distribute the order's bill-level discount (scope-aware)
       const { net, vat } = vatLine(gross, rate, vatMode);
       const b = vatBuckets.get(rate) || { rate, net: 0, vat: 0, gross: 0 };
       b.net += net; b.vat += vat; b.gross += (net + vat);
@@ -4014,7 +4099,16 @@ app.get('/api/z-report/preview', async (req, res) => {
     const uniqueOrders = [...byOrder.values()].filter(o => !isShellArtifact(o));
     const countableRows = orders.filter(o => !isShellArtifact(o));
     const totalSubtotal  = uniqueOrders.reduce((s, o) => s + Number(o.total ?? 0), 0);
-    const totalDiscounts = uniqueOrders.reduce((s, o) => { if (!o.discount_value) return s; return s + (o.discount_type === 'percent' ? (o.total || 0) * (o.discount_value / 100) : o.discount_value); }, 0);
+    // SEPOS-DISCOUNT-SCOPE-001 — scoped discounts take their £ from the
+    // per-item rows (fdFactors); unscoped keep the exact legacy formula.
+    const fdFactors = billDiscountFactors(foodDrinkRes.rows);
+    const totalDiscounts = uniqueOrders.reduce((s, o) => {
+      if (!o.discount_value) return s;
+      if (o.discount_scope === 'food' || o.discount_scope === 'drink') {
+        return s + (fdFactors.get(o.id)?.amount || 0);
+      }
+      return s + (o.discount_type === 'percent' ? (o.total || 0) * (o.discount_value / 100) : Number(o.discount_value));
+    }, 0);
     // SEPOS-SVCFIX-001 — service charge is the SUM of each dine-in bill's own
     // charge (subtotal × rate), NOT money-taken − subtotal. Immune to tips,
     // overpayments and double-charges leaking into the service line.
@@ -4033,13 +4127,12 @@ app.get('/api/z-report/preview', async (req, res) => {
     // SEPOS-AUDIT-001 — food/drink now aggregates per-item rows in JS with the
     // bill-level discount factor (same treatment as VAT), so a comped bill's
     // items scale down exactly like they do in total_sales.
-    const fdFactors = billDiscountFactors(foodDrinkRes.rows);
     let totalFood = 0, totalDrink = 0;
     for (const r of foodDrinkRes.rows) {
       let net = Number(r.quantity || 0) * Number(r.unit_price || 0);
       if (r.discount_type === 'percent') net *= 1 - (Number(r.discount_value || 0) / 100);
       else if (r.discount_type === 'fixed') net = Math.max(0, net - Number(r.discount_value || 0));
-      net *= (fdFactors.get(r.order_id) ?? 1);
+      net *= rowBillFactor(fdFactors, r);
       if (Number(r.is_bar) === 1) totalDrink += net;
       else                        totalFood  += net;
     }
@@ -10065,10 +10158,11 @@ app.get('/api/reports/vat', async (req, res) => {
       SELECT COALESCE(mi.vat_rate, 20) AS vat_rate,
              COALESCE(c.is_bar, 0) AS is_bar,
              oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value,
-             o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value
+             o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value,
+             o.discount_scope AS bill_discount_scope
       FROM order_items oi
       LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
-      LEFT JOIN categories  c  ON c.id  = mi.category_id
+      LEFT JOIN categories  c  ON c.id  = COALESCE(mi.category_id, oi.dest_category_id)
       LEFT JOIN orders      o  ON o.id  = oi.order_id
       WHERE o.status='closed' AND oi.voided=0
         AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
@@ -10086,7 +10180,7 @@ app.get('/api/reports/vat', async (req, res) => {
       let base = Number(row.quantity || 0) * Number(row.unit_price || 0);
       if (row.discount_type === 'percent') base *= 1 - (Number(row.discount_value || 0) / 100);
       else if (row.discount_type === 'fixed') base = Math.max(0, base - Number(row.discount_value || 0));
-      base *= (vatFactors.get(row.order_id) ?? 1); // distribute the order's bill-level discount
+      base *= rowBillFactor(vatFactors, row); // distribute the order's bill-level discount (scope-aware)
       const { net, vat } = vatLine(base, rate, vatMode); // SEPOS-VATMODE-001
       const gross = net + vat;
       const qty = Number(row.quantity || 0);

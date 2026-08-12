@@ -129,6 +129,7 @@ function initSchema() {
       discount_type TEXT,
       discount_value REAL,
       discount_reason TEXT,
+      discount_scope TEXT,
       no_service_charge INTEGER DEFAULT 0,
       service_charge REAL,
       bill_printed INTEGER DEFAULT 0,
@@ -411,6 +412,15 @@ function initSchema() {
       fired_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_webhook_fires_event_entity ON webhook_fires(event_type, entity_key);
+
+    -- SEPOS-BIRTHDAY-001 — per-customer extras (birthday 'MM-DD', no year).
+    -- The CRM stays a derived view; this mirrors the cloud side-table so the
+    -- Customers tab doesn't 500 on a Pro till.
+    CREATE TABLE IF NOT EXISTS customer_profiles (
+      contact_key TEXT PRIMARY KEY,
+      birthday TEXT,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
 
     -- SEPOS-LITE-001 Phase 1 — multi-tenancy registry (mirrors cloud schema)
     CREATE TABLE IF NOT EXISTS restaurants (
@@ -843,6 +853,8 @@ function runMigrations() {
   addColumnIfMissing('menu_items', 'color', 'TEXT');
   addColumnIfMissing('staff', 'can_discount', 'INTEGER DEFAULT 0');
   addColumnIfMissing('staff', 'can_redeem_deposit', 'INTEGER DEFAULT 0');
+  // SEPOS-DISCOUNT-SCOPE-001 — 'food' / 'drink' / NULL (= whole bill)
+  addColumnIfMissing('orders', 'discount_scope', 'TEXT');
 }
 
 function seedDefaults() {

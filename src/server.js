@@ -587,6 +587,10 @@ function maybeForwardStaffWriteToCloud(req, res) {
 // subcategory / menu item. One endpoint, whitelisted tables; color is a
 // '#rrggbb' hex or null (back to the default look).
 app.put('/api/menu-color', async (req, res) => {
+  // Review M1 — menu writes are cloud-authoritative on Pro tills; without the
+  // forward a till-set colour lived only in local SQLite (the SEPOS-047i
+  // dropped-projection ghost class).
+  if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     const { type, id, color } = req.body || {};
     const table = { category: 'categories', subcategory: 'subcategories', item: 'menu_items' }[type];
@@ -8971,6 +8975,10 @@ app.post('/api/vouchers/:id/resend-email', async (req, res) => {
 // the Bill screen applies it as a 'Deposit' tender. Phase A = manual create
 // (deposit taken by phone / card machine); Stripe capture = Phase B (widget).
 app.post('/api/deposits', async (req, res) => {
+  // Review H1 — vouchers/deposits are cloud-authoritative: create on the
+  // cloud (like redeem/lookup already do) or a local till mints a deposit
+  // the cloud-forwarded redeem can't find (404 in front of the guest).
+  if (await forwardToCloudWith(req, res, 'deposit-create')) return;
   try {
     const { amount, payment_method, reservation_id, customer_name, customer_email } = req.body || {};
     const v = voucherSvc.validateAmount(amount);

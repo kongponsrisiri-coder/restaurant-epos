@@ -92,8 +92,9 @@ async function renderLines(lines) {
 // ticket that carries such text (e.g. a Thai kitchen note on an English menu).
 const NON_LATIN = /[฀-๿一-鿿぀-ヿ가-힯]/;
 function hasUnrenderableText(order, items) {
-  const parts = [order?.table_label, order?.notes];
-  for (const it of items || []) parts.push(it?.name, it?.item_name, it?.notes);
+  const parts = [order?.table_label, order?.notes, order?.customer_note,
+    order?.customer_name, order?.customer_phone, order?.delivery_address];
+  for (const it of items || []) parts.push(it?.name, it?.item_name, it?.notes, it?.item_note);
   return NON_LATIN.test(parts.filter(Boolean).join(' '));
 }
 
@@ -115,25 +116,59 @@ function toRaster(img) {
 }
 
 // Build the standard kitchen ticket as lines, render, return ESC/POS buffer.
+// Review C2 — content PARITY with the classic builder: item_note (allergy /
+// special requests), customer name+phone, the delivery address block, the
+// order-level note, and course headers all print. Anything the classic ticket
+// says, this one says.
+const COURSES_EN = { 1: 'STARTERS', 2: 'MAINS', 3: 'DESSERTS', 4: 'EXTRAS' };
 async function kitchenTicketRaster(order, items, opts = {}) {
   const tz = 'Europe/London';
   const now = new Date();
   const label = (order.table_label && String(order.table_label).trim())
     ? String(order.table_label).trim().toUpperCase()
-    : (order.order_type === 'takeaway' ? `TAKEAWAY ${order.table_number ?? ''}`.trim() : `TABLE ${order.table_number ?? ''}`.trim());
+    : (order.order_type === 'takeaway'
+        ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}`
+           : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
+        : `TABLE ${order.table_number ?? ''}`.trim());
   const lines = [
     { text: now.toLocaleString('en-GB', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: tz }), size: 22, center: true, gap: 4 },
     { rule: true },
     { text: label, size: 44, bold: true, center: true, gap: 6 },
-    ...(order.notes ? [{ text: String(order.notes), size: 24, bold: true, gap: 4 }] : []),
-    { rule: true },
   ];
-  for (const it of items || []) {
-    lines.push({ text: `${it.quantity} × ${it.name || it.item_name || ''}`, size: 32, gap: 2 });
-    if (it.notes) lines.push({ text: it.notes, size: 26, bold: true, indent: 34, gap: 4 });
+  // Course-fired ticket: the course is the headline, not a footnote.
+  const courseLabel = opts.course != null ? (COURSES_EN[opts.course] || String(opts.course).toUpperCase()) : null;
+  if (courseLabel) lines.push({ text: courseLabel, size: 34, bold: true, center: true, gap: 6 });
+  if (order.customer_name)  lines.push({ text: String(order.customer_name), size: 26, gap: 2 });
+  if (order.customer_phone) lines.push({ text: String(order.customer_phone), size: 26, gap: 2 });
+  if (order.order_subtype === 'delivery' && order.delivery_address) {
+    lines.push({ text: '-- DELIVERY --', size: 28, bold: true, center: true, gap: 2 });
+    lines.push({ text: String(order.delivery_address), size: 28, bold: true, gap: 4 });
+  }
+  const orderNote = order.notes || order.customer_note;
+  if (orderNote) lines.push({ text: String(orderNote), size: 24, bold: true, gap: 4 });
+  lines.push({ rule: true });
+
+  const pushItem = (it) => {
+    lines.push({ text: `${it.quantity || 1} × ${it.name || it.item_name || ''}`, size: 32, gap: 2 });
+    // SEPOS-024b parity — the free-text special request ("Mild", "ALLERGY — no
+    // peanuts") is the line a kitchen must never miss.
+    if (it.item_note) lines.push({ text: `** ${it.item_note} **`, size: 26, bold: true, indent: 34, gap: 2 });
+    if (it.notes) lines.push({ text: String(it.notes), size: 26, bold: true, indent: 34, gap: 4 });
+  };
+  if (courseLabel) {
+    for (const it of items || []) pushItem(it);
+  } else {
+    // Full ticket — group by course with headers, classic-style.
+    const byCourse = {};
+    for (const it of items || []) { const c = it.course || 1; (byCourse[c] = byCourse[c] || []).push(it); }
+    const courses = Object.keys(byCourse).sort((a, b) => Number(a) - Number(b));
+    for (const c of courses) {
+      if (courses.length > 1) lines.push({ text: COURSES_EN[c] || 'ITEMS', size: 28, bold: true, gap: 2 });
+      for (const it of byCourse[c]) pushItem(it);
+    }
   }
   lines.push({ rule: true });
-  lines.push({ text: `Order #${order.id}${opts.course ? ' · ' + opts.course : ''}`, size: 22, center: true });
+  lines.push({ text: `Order #${order.id}${courseLabel ? ' · ' + courseLabel : ''}`, size: 22, center: true });
   const img = await renderLines(lines);
   return Buffer.concat([toRaster(img), Buffer.from([0x0a, 0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x00])]); // feed + cut
 }

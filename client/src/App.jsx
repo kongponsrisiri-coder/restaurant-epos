@@ -324,8 +324,11 @@ export default function App() {
           const swallow = (e2) => { e2.stopPropagation(); e2.preventDefault(); };
           ['click', 'pointerup', 'touchend'].forEach((t2) =>
             window.addEventListener(t2, swallow, { capture: true, once: true }));
-          setTimeout(() => ['click', 'pointerup', 'touchend'].forEach((t2) =>
-            window.removeEventListener(t2, swallow, { capture: true })), 600);
+          const disarm = () => ['click', 'pointerup', 'touchend'].forEach((t2) =>
+            window.removeEventListener(t2, swallow, { capture: true }));
+          // F6 — a NEW press means the ghost window is over; don't eat that tap.
+          window.addEventListener('pointerdown', disarm, { capture: true, once: true });
+          setTimeout(disarm, 600);
         }
       }
     };

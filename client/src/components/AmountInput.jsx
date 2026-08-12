@@ -8,7 +8,7 @@
 // screen; a physical keyboard still types on top (digits = penny entry,
 // a typed "." switches to literal decimal so both habits work).
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 const fmtDigits = (d) => (d ? (parseInt(d, 10) / 100).toFixed(2) : '');
 
@@ -33,10 +33,14 @@ export default function AmountInput({ value, onChange, placeholder, style, autoF
   // value itself contains '.' (from fmtDigits), so "contains a dot" trapped
   // every keystroke after the first in the literal branch and froze the box.
   // Literal mode only when this keystroke ADDED a dot (the user typed '.').
+  const literal = useRef(false); // F5: once the user types a dot, stay literal
   const typed = (raw) => {
+    if (pad !== null) setPad(null); // F5: physical keyboard takes over — the pad's stale buffer must not overwrite on Done
+    if (raw === '') literal.current = false;
     const dots = (String(raw).match(/\./g) || []).length;
     const prevDots = (String(value || '').match(/\./g) || []).length;
-    if (dots > prevDots) {
+    if (dots > prevDots) literal.current = true;
+    if (literal.current) {
       const m = String(raw).replace(/[^\d.]/g, '').match(/^(\d{0,5})(?:\.(\d{0,2}))?/);
       onChange(m ? `${m[1] || '0'}.${m[2] ?? ''}` : '');
     } else {

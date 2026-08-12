@@ -161,14 +161,20 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
         // apply it, instead of telling staff "invalid" in front of the guest.
         const ok = await confirm(`"${code}" isn't in the system.\n\nRecord it as an external deposit of £${amt.toFixed(2)} and apply it to this bill?`);
         if (!ok) { setDepositBusy(false); return; }
-        const created = await createDeposit({ amount: amt, payment_method: 'external', code, customer_name: `External deposit (ref ${code})` });
+        const remainingX = Math.max(0, orderTotal - (depositApplied.amount || 0));
+        const extAmt = remainingX > 0 ? Math.min(amt, remainingX) : amt; // F2 cap
+        const created = await createDeposit({ amount: extAmt, payment_method: 'external', code, customer_name: `External deposit (ref ${code})` });
         if (!created || created.error || !created.code) { alert('Could not record the external deposit: ' + (created?.error || 'unknown')); setDepositBusy(false); return; }
-        const r2 = await redeemVoucher(created.code, amt, orderId, staff?.name || null);
+        const r2 = await redeemVoucher(created.code, extAmt, orderId, staff?.name || null);
         if (r2 && r2.error) { alert('Recorded but could not apply: ' + r2.error); setDepositBusy(false); return; }
         setDepositPopup(null); await fetchDepositApplied(); setDepositBusy(false); return;
       }
       if (v.type !== 'deposit') { alert('That\'s a gift voucher, not a booking deposit — take it as a Voucher on the pay screen.'); setDepositBusy(false); return; }
-      const use = Math.min(Number(v.balance), amt);
+      // F2 — never redeem past what's owed: cap at the bill remaining so a
+      // £20 deposit on an £18.40 bill leaves £1.60 ON the deposit, and the
+      // bill lands at exactly zero (closable via the deposit tender below).
+      const remaining = Math.max(0, orderTotal - (depositApplied.amount || 0));
+      const use = Math.min(Number(v.balance), amt, remaining > 0 ? remaining : amt);
       const r = await redeemVoucher(code, use, orderId, staff?.name || null);
       if (r && r.error) { alert('Could not apply deposit: ' + r.error); setDepositBusy(false); return; }
       setDepositPopup(null);

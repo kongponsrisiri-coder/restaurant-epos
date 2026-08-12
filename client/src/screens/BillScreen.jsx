@@ -1034,15 +1034,21 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                       }
                       return t;
                     }).filter(t => t.amount > 0.001);
-                    const method = recTenders.length === 1 ? recTenders[0].method : 'Split';
-                    const pd = { method, amountPaid: paid, tip: mixTip, change: mixChange, tenders: recTenders };
+                    let method = recTenders.length === 1 ? recTenders[0].method : 'Split';
+                    let pd = { method, amountPaid: paid, tip: mixTip, change: mixChange, tenders: recTenders };
+                    // F2 — deposit fully covered the bill: nothing left to tender,
+                    // but /pay rejects £0. Record the deposit AS the tender so the
+                    // bill closes covered (same rows a pay-screen deposit writes).
+                    if (recTenders.length === 0 && billTotal <= 0.005 && depositPaid > 0) {
+                      pd = { method: 'Deposit', amountPaid: depositPaid, tip: 0, change: 0, tenders: [{ amount: depositPaid, method: 'Deposit' }] };
+                    }
                     setPaymentDetails(pd);
                     setPaying(true);
                     try {
                       // Review C1 — onPay resolves true/false (it never rejects).
                       // Celebrate ONLY on true: no drawer, no receipt, no toast
                       // for a failed payment; onPay already alerted the error.
-                      const ok = await onPay(billTotal, pd.method, pd.amountPaid, pd.tip, pd.tenders);
+                      const ok = await onPay(pd.tenders.length && billTotal <= 0.005 ? pd.amountPaid : billTotal, pd.method, pd.amountPaid, pd.tip, pd.tenders);
                       if (ok !== true) return;
                       serverOpenDrawer().catch(() => {});
                       if (printAfter) printReceipt({ order: { ...order }, items: billItems, settings: { ...settings }, paymentDetails: { ...receiptTotals, ...pd } });

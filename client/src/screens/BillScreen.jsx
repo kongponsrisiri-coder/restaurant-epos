@@ -4,6 +4,7 @@ import { printReceipt } from './ReceiptPrinter';
 import QRPayModal from '../components/QRPayModal';
 import { orderShortLabelPlain, orderSubLabel, isTakeaway } from '../utils/orderLabel';
 import AmountInput from '../components/AmountInput';
+import CodeScanButton from '../components/CodeScanButton';
 import { confirm } from '../utils/confirm';
 
 // SEPOS-PAY-ONETAP-001 — 2-second "paid" toast. Plain DOM appended to <body>
@@ -977,6 +978,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                         )}
                         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                           <input value={mixDepositCode} onChange={e => { setMixDepositCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder={orderDeposit ? orderDeposit.code : 'Deposit code / reference'} style={{ flex: 2, height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase' }} />
+                          <CodeScanButton onScan={(v) => { setMixDepositCode(v.toUpperCase()); setMixVoucherErr(''); }} style={{ height: 48 }} />
                           <div style={{ position: 'relative', flex: 1 }}>
                             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
                             <AmountInput value={mixDepositAmt} onChange={(v) => { setMixDepositAmt(v); setMixVoucherErr(''); }} placeholder={(orderDeposit ? Math.min(Number(orderDeposit.balance), mixRemaining) : mixRemaining).toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
@@ -990,6 +992,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                       <>
                         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                           <input value={mixVoucherCode} onChange={e => { setMixVoucherCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder="Voucher code / reference" style={{ flex: 2, height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase' }} />
+                          <CodeScanButton onScan={(v) => { setMixVoucherCode(v.toUpperCase()); setMixVoucherErr(''); }} style={{ height: 48 }} />
                           <div style={{ position: 'relative', flex: 1 }}>
                             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
                             <AmountInput value={mixVoucherAmt} onChange={(v) => { setMixVoucherAmt(v); setMixVoucherErr(''); }} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote, getVoucher, redeemVoucher, getOrderDeposit, getOrderDepositApplied, createDeposit } from '../api';
 import AmountInput from '../components/AmountInput';
 import { unapplyOrderDeposit } from '../api';
+import CodeScanButton from '../components/CodeScanButton';
 
 // SEPOS-MENU-COLOR-001 — auto black/white text on a coloured button.
 const textOn = (hex) => {
@@ -2363,10 +2364,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               <div style={{ fontSize: 13, color: '#555', marginBottom: 16 }}>Enter or scan the booking deposit code. It reduces the balance the customer pays.</div>
               <div style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>Deposit code</label>
-                <input type="text" autoFocus value={depositPopup.code}
-                  onChange={(e) => setDepositPopup({ ...depositPopup, code: e.target.value.toUpperCase() })}
-                  placeholder="e.g. DEP-XXXX"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, fontWeight: 700, textAlign: 'center', boxSizing: 'border-box', letterSpacing: '1px' }} />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input type="text" autoFocus value={depositPopup.code}
+                    onChange={(e) => setDepositPopup({ ...depositPopup, code: e.target.value.toUpperCase() })}
+                    placeholder="e.g. DEP-XXXX"
+                    style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, fontWeight: 700, textAlign: 'center', boxSizing: 'border-box', letterSpacing: '1px' }} />
+                  <CodeScanButton onScan={(v) => setDepositPopup((p) => ({ ...p, code: v.toUpperCase() }))} />
+                </div>
               </div>
               <div style={{ marginBottom: 18 }}>
                 <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>Amount £</label>

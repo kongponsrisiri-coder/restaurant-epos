@@ -587,16 +587,33 @@ function maybeForwardStaffWriteToCloud(req, res) {
 // subcategory / menu item. One endpoint, whitelisted tables; color is a
 // '#rrggbb' hex or null (back to the default look).
 app.put('/api/menu-color', async (req, res) => {
-  // Review M1 — menu writes are cloud-authoritative on Pro tills; without the
-  // forward a till-set colour lived only in local SQLite (the SEPOS-047i
-  // dropped-projection ghost class).
-  if (await maybeForwardMenuWriteToCloud(req, res)) return;
+  // Review M1 + canary fix — cloud-first when the cloud SUPPORTS the endpoint,
+  // skew-tolerant when it doesn't: an older cloud answers 404 (endpoint not
+  // deployed yet) and a strict forward turned that into a failed save on the
+  // till (found live on the v1.26 host canary). Now: try the cloud; swallow
+  // ONLY 404 (old cloud) and offline; surface real cloud errors; and always
+  // write locally on success so the UI is instant — the menu pull reconciles
+  // (old clouds send no color key and the upsert drops null/undefined, so the
+  // local value survives until the cloud catches up).
   try {
     const { type, id, color } = req.body || {};
     const table = { category: 'categories', subcategory: 'subcategories', item: 'menu_items' }[type];
     if (!table || !id) return res.status(400).json({ error: 'type (category|subcategory|item) and id required' });
     const c = (color == null || color === '') ? null : String(color);
     if (c && !/^#[0-9a-fA-F]{6}$/.test(c)) return res.status(400).json({ error: 'color must be #rrggbb or null' });
+    const cloudUrl = process.env.CLOUD_API_URL;
+    if (cloudUrl) {
+      try {
+        const r = await fetch(cloudUrl.replace(/\/+$/, '') + '/api/menu-color', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type, id, color: c }),
+        });
+        if (!r.ok && r.status !== 404) {
+          const t = await r.text().catch(() => '');
+          return res.status(r.status).json({ error: 'cloud rejected the colour: ' + t.slice(0, 120) });
+        }
+      } catch { /* offline — colour still applies locally below */ }
+    }
     await pool.query(`UPDATE ${table} SET color = $1 WHERE id = $2`, [c, id]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }

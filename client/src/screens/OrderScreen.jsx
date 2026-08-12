@@ -1706,12 +1706,14 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                 (and tonight's live floors) never see or reach the new path. */}
             {String(settings.deposits_enabled) === '1' && <div style={{ marginBottom: 10 }}>
               {depositApplied.amount > 0 ? (
-                <div style={{
-                  padding: '10px 12px', borderRadius: 8, border: '2px solid #3b82f6',
-                  background: '#eff6ff', color: '#1e3a8a', fontSize: 13, fontWeight: 700,
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8
-                }}>
-                  <span>🧾 Deposit applied −£{depositApplied.amount.toFixed(2)}</span>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+                  <div style={{
+                    flex: 1, padding: '10px 12px', borderRadius: 8, border: '2px dashed #3b82f6',
+                    background: '#eff6ff', color: '#1e3a8a', fontSize: 12, fontWeight: 600,
+                    textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    🧾 Deposit applied −£{depositApplied.amount.toFixed(2)}
+                  </div>
                   <button onClick={async () => {
                     if (!await confirm('Remove the deposit from this bill? The deposit keeps its balance for later.')) return;
                     try {
@@ -1719,7 +1721,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       if (r?.error) throw new Error(r.error);
                       await fetchDepositApplied();
                     } catch (e) { alert('Could not remove the deposit: ' + (e?.message || 'unknown')); }
-                  }} style={{ padding: '6px 10px', borderRadius: 8, border: 'none', background: '#fee2e2', color: '#ef4444', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Remove</button>
+                  }} style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#fee2e2', color: '#ef4444', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Remove</button>
                 </div>
               ) : (
                 <button onClick={openDepositModal} style={{

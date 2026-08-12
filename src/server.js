@@ -9132,7 +9132,15 @@ app.get('/api/orders/:id/deposit-applied', async (req, res) => {
 // restores each deposit-voucher's balance and deletes the redemption rows, so
 // a mistaken entry (wrong code, wrong amount) is fully reversible before pay.
 app.post('/api/orders/:id/deposit-unapply', async (req, res) => {
-  if (await forwardToCloudWith(req, res, 'deposit-unapply')) return;
+  // Canary #12 — translate the LOCAL order id to its cloud id (same as the
+  // deposit-applied lookup); without it the cloud searched a wrong bill_id
+  // and 'removed' nothing.
+  {
+    const cloudId = await localOrderCloudId(req.params.id);
+    if (cloudId && await forwardToCloudWith(req, res, 'deposit-unapply', {
+      path: `/api/orders/${cloudId}/deposit-unapply`,
+    })) return;
+  }
   try {
     const rows = (await pool.query(
       `SELECT vr.id, vr.voucher_id, vr.amount_used FROM voucher_redemptions vr

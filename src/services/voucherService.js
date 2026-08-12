@@ -66,11 +66,15 @@ function isExpired(expiresAt) {
 }
 
 // ── Validation ────────────────────────────────────────────────────
-function validateAmount(amount) {
+function validateAmount(amount, opts = {}) {
   const n = Number(amount);
   if (!Number.isFinite(n) || n <= 0) return { ok: false, error: 'Amount required' };
-  if (n < VOUCHER_MIN_AMOUNT) return { ok: false, error: `Minimum voucher £${VOUCHER_MIN_AMOUNT}` };
-  if (n > VOUCHER_MAX_AMOUNT) return { ok: false, error: `Maximum voucher £${VOUCHER_MAX_AMOUNT}` };
+  // The £-minimum is a GIFT-VOUCHER product rule. A booking DEPOSIT is
+  // whatever the restaurant asked for (£5/head, £3.50 …) — callers pass
+  // { minimum: 0.01 } to accept any positive amount (Korakot, 12 Aug).
+  const min = opts.minimum ?? VOUCHER_MIN_AMOUNT;
+  if (n < min) return { ok: false, error: `Minimum £${min}` };
+  if (n > VOUCHER_MAX_AMOUNT) return { ok: false, error: `Maximum £${VOUCHER_MAX_AMOUNT}` };
   // round to pennies, no fractional pence
   return { ok: true, amount: Math.round(n * 100) / 100 };
 }

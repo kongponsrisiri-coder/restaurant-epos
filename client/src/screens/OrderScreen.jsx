@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote, getVoucher, redeemVoucher, getOrderDeposit, getOrderDepositApplied, createDeposit } from '../api';
+import AmountInput from '../components/AmountInput';
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
 import { isNativeApp } from '../native/printer';
@@ -2338,9 +2339,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               </div>
               <div style={{ marginBottom: 18 }}>
                 <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>Amount £</label>
-                <input type="number" min="0" step="0.01" value={depositPopup.amount}
-                  onChange={(e) => setDepositPopup({ ...depositPopup, amount: e.target.value })}
-                  onKeyDown={(e) => { if (e.key === 'Enter') confirmDeposit(); }}
+                <AmountInput value={depositPopup.amount}
+                  onChange={(v) => setDepositPopup({ ...depositPopup, amount: v })}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, fontWeight: 700, textAlign: 'center', boxSizing: 'border-box' }} />
               </div>
               <div style={{ display: 'flex', gap: 10 }}>

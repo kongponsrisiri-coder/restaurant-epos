@@ -156,7 +156,7 @@ export default function TablePlanScreen() {
         {/* Properties panel */}
         <div style={{ width: 240, background: 'white', borderRadius: 16, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', alignSelf: 'flex-start' }}>
           <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 16 }}>
-            {selectedTable ? (selectedTable.is_takeaway ? `🥡 Takeaway ${selectedTable.table_number}` : `Table ${selectedTable.table_number}`) : 'Select a table'}
+            {selectedTable ? (selectedTable.is_takeaway ? `🥡 Takeaway ${selectedTable.table_number}` : (selectedTable.name && String(selectedTable.name).trim() ? String(selectedTable.name).trim() : `Table ${selectedTable.table_number}`)) : 'Select a table'}
           </div>
 
           {selectedTable ? (

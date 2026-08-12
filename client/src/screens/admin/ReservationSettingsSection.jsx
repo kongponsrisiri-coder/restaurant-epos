@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { SERVER_URL } from '../../api';
+import StickySaveBar, { SAVE_BAR_CLEARANCE } from '../../components/StickySaveBar';
 
 // SEPOS-049 follow-up — restaurant_id is discovered server-side via the
 // no-param GET below, NOT hardcoded. A hardcoded fallback would silently
@@ -130,7 +131,7 @@ export default function ReservationSettingsSection() {
   const isSplit = settings.service_type === 'split';
 
   return (
-    <div style={{ padding: 24, maxWidth: 640 }}>
+    <div style={{ padding: 24, paddingBottom: SAVE_BAR_CLEARANCE, maxWidth: 640 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 6 }}>Reservation Settings</h1>
       <p style={{ fontSize: 13, color: '#888', marginBottom: 24 }}>Configure your online booking widget and availability rules.</p>
 
@@ -339,11 +340,8 @@ export default function ReservationSettingsSection() {
         </div>
       </Card>
 
-      {/* Save */}
-      <button onClick={handleSave} disabled={saving}
-        style={{ width: '100%', padding: '16px', borderRadius: 12, border: 'none', background: saved ? '#22c55e' : saving ? '#9ca3af' : 'var(--brand-primary, #1a1a2e)', color: 'white', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 16, transition: 'background .2s' }}>
-        {saving ? 'Saving…' : saved ? '✓ Settings Saved!' : 'Save Reservation Settings'}
-      </button>
+      <StickySaveBar onSave={handleSave} label="💾 Save Reservation Settings"
+        saving={saving} saved={saved} savedLabel="✓ Settings Saved!" />
     </div>
   );
 }

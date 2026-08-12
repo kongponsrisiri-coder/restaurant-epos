@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { SERVER_URL, authHeaders } from '../../api';
+import { SERVER_URL, authHeaders, setMenuColor } from '../../api';
 import {
   getAllMenu as getMenu, addMenuItem, updateMenuItem, deleteMenuItem,
+  uploadMenuItemImage, deleteMenuItemImage,
   getItemModifiers, addModifierGroup, addModifierOption,
   deleteModifierGroup, deleteModifier,
   getModifierLibrary, createLibraryGroup, attachGroupToItem, detachGroupFromItem,
@@ -165,6 +166,24 @@ function AIScannerModal({ onClose, onImported }) {
 export default function MenuSection() {
   const [menu, setMenu]                     = useState([]);
   const [subcategories, setSubcategories]   = useState([]);
+  // SEPOS-MENU-COLOR-001 — order-screen button colour picker
+  const [colorPick, setColorPick] = useState(null); // { type, id, current } | null
+  const MENU_COLORS = ['#dc2626','#fecaca','#f59e0b','#fde68a','#16a34a','#bbf7d0','#2563eb','#bfdbfe','#8b5cf6','#14b8a6','#C9A84C','#6b7280'];
+  const applyColor = async (color) => {
+    const pick = colorPick; setColorPick(null);
+    if (!pick) return;
+    try {
+      const r = await setMenuColor(pick.type, pick.id, color);
+      if (r?.error) throw new Error(r.error);
+      if (pick.type === 'subcategory') {
+        setSubcategories(prev => prev.map(sub => sub.id === pick.id ? { ...sub, color } : sub));
+      } else {
+        setMenu(prev => prev.map(cat => pick.type === 'category'
+          ? (cat.id === pick.id ? { ...cat, color } : cat)
+          : ({ ...cat, items: (cat.items || []).map(it => it.id === pick.id ? { ...it, color } : it) })));
+      }
+    } catch (e) { alert('Could not save colour: ' + (e?.message || 'unknown')); }
+  };
   const [activeCategory, setActiveCategory] = useState(null);
   const [showForm, setShowForm]             = useState(false);
   const [showScanner, setShowScanner]       = useState(false);
@@ -212,8 +231,61 @@ export default function MenuSection() {
     if (cat?.id) setActiveCategory(cat.id);
   };
 
-  const openAddForm  = () => { setForm({ name: '', description: '', price: '', category_id: activeCategory, subcategory_id: null, vat_rate: 20, default_course: '', printer_id: '' }); setEditItem(null); setShowForm(true); };
-  const openEditForm = (item) => { setForm({ name: item.name, name_alt: item.name_alt || '', description: item.description || '', price: item.price, category_id: item.category_id, subcategory_id: item.subcategory_id || null, vat_rate: item.vat_rate ?? 20, default_course: item.default_course ?? '', printer_id: item.printer_id ?? '' }); setEditItem(item); setShowForm(true); };
+  // SEPOS-MENU-PHOTO-001 — the owner photographs a dish on their phone and it
+  // appears on the online/QR menu. Resize HERE, on the device: a modern phone
+  // camera produces 4-8 MB, which is pointless for a 78px menu thumbnail and
+  // slow to upload over restaurant wifi. ~900px JPEG lands at ~100-150 KB.
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const resizeImage = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('That file is not an image'));
+      img.onload = () => {
+        const MAX = 900;
+        let { width: w, height: h } = img;
+        if (w > MAX || h > MAX) { const r = Math.min(MAX / w, MAX / h); w = Math.round(w * r); h = Math.round(h * r); }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);   // flatten PNG alpha
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', 0.82));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  const handlePhotoPick = async (file) => {
+    if (!file || !editItem) return;
+    setPhotoBusy(true);
+    try {
+      const dataUrl = await resizeImage(file);
+      const r = await uploadMenuItemImage(editItem.id, dataUrl);
+      assertOk(r);
+      setForm(f => ({ ...f, image_url: r.image_url }));
+      setMenu(prev => prev.map(cat => ({ ...cat, items: (cat.items || []).map(it => it.id === editItem.id ? { ...it, image_url: r.image_url } : it) })));
+    } catch (err) {
+      alert('Could not upload the photo: ' + (err?.message || 'unknown'));
+    }
+    setPhotoBusy(false);
+  };
+
+  const handlePhotoRemove = async () => {
+    if (!editItem) return;
+    setPhotoBusy(true);
+    try {
+      assertOk(await deleteMenuItemImage(editItem.id));
+      setForm(f => ({ ...f, image_url: '' }));
+      setMenu(prev => prev.map(cat => ({ ...cat, items: (cat.items || []).map(it => it.id === editItem.id ? { ...it, image_url: null } : it) })));
+    } catch (err) { alert('Could not remove the photo: ' + (err?.message || 'unknown')); }
+    setPhotoBusy(false);
+  };
+
+  const openAddForm  = () => { setForm({ name: '', description: '', price: '', category_id: activeCategory, subcategory_id: null, vat_rate: 20, default_course: '', printer_id: '', image_url: '' }); setEditItem(null); setShowForm(true); };
+  const openEditForm = (item) => { setForm({ name: item.name, name_alt: item.name_alt || '', description: item.description || '', price: item.price, category_id: item.category_id, subcategory_id: item.subcategory_id || null, vat_rate: item.vat_rate ?? 20, default_course: item.default_course ?? '', printer_id: item.printer_id ?? '', image_url: item.image_url || '' }); setEditItem(item); setShowForm(true); };
 
   // SEPOS-046v — optimistic item save. Reflects the change in local menu
   // state immediately (including moving the item between categories when
@@ -428,6 +500,13 @@ export default function MenuSection() {
                       style={{ padding: '0 10px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: 'var(--brand-primary, #1a1a2e)', color: 'var(--brand-accent,#C9A84C)', fontSize: 13 }}
                     >✎</button>
                   )}
+                  {canEdit && (
+                    <button
+                      onClick={() => setColorPick({ type: 'category', id: cat.id, current: cat.color })}
+                      title="Button colour on the order screen"
+                      style={{ padding: '0 10px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', background: cat.color || 'var(--brand-primary, #1a1a2e)', fontSize: 13 }}
+                    >🎨</button>
+                  )}
                   {canDelete && (
                     <button
                       onClick={async () => {
@@ -576,6 +655,7 @@ export default function MenuSection() {
               return (<div key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'white', borderRadius: 20, padding: '4px 12px', border: '1px solid #bfdbfe' }}>
               {subIdx > 0 && <button onClick={() => swapSub(subIdx - 1)} title="Move left" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', fontSize: 11, fontWeight: 800, padding: 0 }}>◀</button>}
               <span style={{ fontSize: 13, color: '#1e40af', fontWeight: 500 }}>{sub.name}</span>
+              <button onClick={() => setColorPick({ type: 'subcategory', id: sub.id, current: sub.color })} title="Button colour on the order screen" style={{ background: sub.color || 'none', border: 'none', cursor: 'pointer', fontSize: 12, padding: '1px 4px', borderRadius: 6 }}>🎨</button>
               {subIdx < activeCatSubs.length - 1 && <button onClick={() => swapSub(subIdx + 1)} title="Move right" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', fontSize: 11, fontWeight: 800, padding: 0 }}>▶</button>}
               <button onClick={async () => {
               if (!await confirm(`Delete "${sub.name}"?`)) return;
@@ -637,6 +717,7 @@ export default function MenuSection() {
                   <button onClick={e => { e.stopPropagation(); toggleOnline(item); }} title={item.is_online === 0 ? 'Hidden from online ordering' : 'Visible on online ordering'} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: item.is_online === 0 ? '#e5e7eb' : '#dbeafe', color: item.is_online === 0 ? '#374151' : '#1e40af' }}>{item.is_online === 0 ? '🌐 Hidden' : '🌐 Online'}</button>
                   <button onClick={e => { e.stopPropagation(); openModifiers(item); }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#fef9c3', color: '#713f12', fontWeight: 600, fontSize: 12 }}>Options</button>
                   <button onClick={e => { e.stopPropagation(); openEditForm(item); }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#f0f0f0', fontWeight: 600, fontSize: 12 }}>Edit</button>
+                  <button onClick={e => { e.stopPropagation(); setColorPick({ type: 'item', id: item.id, current: item.color }); }} title="Card colour on the order screen" style={{ padding: '6px 10px', borderRadius: 8, border: item.color ? 'none' : '1px solid #ddd', cursor: 'pointer', background: item.color || '#fff', fontWeight: 600, fontSize: 12 }}>🎨</button>
                   <button onClick={async e => {
                     e.stopPropagation();
                     if (!await confirm(`Delete "${item.name}" permanently?`)) return;
@@ -673,6 +754,41 @@ export default function MenuSection() {
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Item name (English) *</label><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Second language name <span style={{ fontWeight: 400, color: '#aaa' }}>(optional)</span></label><input value={form.name_alt || ''} onChange={e => setForm({ ...form, name_alt: e.target.value })} placeholder="e.g. ไก่ผัดเม็ดมะม่วง" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--brand-accent,#C9A84C)', fontSize: 14, boxSizing: 'border-box' }} /></div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Description</label><input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
+              {/* SEPOS-MENU-PHOTO-001 — dish photo. Only on an existing dish:
+                  the upload needs an item id, so a brand-new dish is saved
+                  first and the photo added on the next open (the hint says so). */}
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>
+                  Photo <span style={{ fontWeight: 400, color: '#aaa' }}>(shows on your online menu &amp; table QR ordering)</span>
+                </label>
+                {editItem ? (
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ width: 84, height: 84, borderRadius: 10, border: '1px solid #ddd', background: '#faf9f6', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {form.image_url
+                        ? <img src={form.image_url.startsWith('http') ? form.image_url : `${SERVER_URL}${form.image_url}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : <span style={{ fontSize: 24, opacity: .35 }}>🍽️</span>}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <label style={{ padding: '9px 14px', borderRadius: 8, border: 'none', background: 'var(--brand-primary,#0D1B3E)', color: '#fff', fontWeight: 700, fontSize: 13.5, cursor: photoBusy ? 'wait' : 'pointer', opacity: photoBusy ? .6 : 1 }}>
+                        {photoBusy ? 'Uploading…' : (form.image_url ? '📷 Replace photo' : '📷 Add photo')}
+                        <input type="file" accept="image/*" disabled={photoBusy} style={{ display: 'none' }}
+                               onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; handlePhotoPick(f); }} />
+                      </label>
+                      {form.image_url && !photoBusy && (
+                        <button type="button" onClick={handlePhotoRemove}
+                                style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #e0b4b4', background: '#fff', color: '#b02a2a', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>
+                          Remove photo
+                        </button>
+                      )}
+                      <div style={{ fontSize: 11, color: '#aaa' }}>Take a photo or pick one — we shrink it for you.</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12.5, color: '#999', padding: '10px 12px', background: '#faf9f6', borderRadius: 8, border: '1px dashed #ddd' }}>
+                    Save the dish first, then reopen it to add a photo.
+                  </div>
+                )}
+              </div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Price (£) *</label><input value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} type="number" step="0.01" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>VAT rate</label><select value={form.vat_rate ?? 20} onChange={e => setForm({ ...form, vat_rate: Number(e.target.value) })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}><option value={20}>20% (standard)</option><option value={5}>5% (reduced)</option><option value={0}>0% (zero rated)</option></select><div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>Prices are VAT-inclusive — this affects the VAT breakdown on bills + reports.</div></div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Kitchen course</label><select value={form.default_course ?? ''} onChange={e => setForm({ ...form, default_course: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}><option value="">Inherit from category</option><option value={1}>Starter</option><option value={2}>Main</option><option value={3}>Dessert</option><option value={4}>Extra</option></select><div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>Set this for a mixed category (e.g. a Lunch menu) so this dish always prints on the right course — otherwise it follows the category.</div></div>
@@ -735,6 +851,22 @@ export default function MenuSection() {
                 <button onClick={handleAddDietaryPreset} style={{ width: '100%', padding: '11px', borderRadius: 8, border: 'none', background: 'var(--brand-accent, #C9A84C)', color: 'white', cursor: 'pointer', fontWeight: 700 }}>🧾 Add standard dietary group</button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+      {/* SEPOS-MENU-COLOR-001 — swatch picker */}
+      {colorPick && (
+        <div onClick={() => setColorPick(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 20, width: 320, maxWidth: '92vw' }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 4 }}>Button colour</div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>Shown on the order screen — text flips black/white automatically.</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
+              {MENU_COLORS.map(c => (
+                <button key={c} onClick={() => applyColor(c)} style={{ height: 46, borderRadius: 10, cursor: 'pointer', background: c, border: colorPick.current === c ? '3px solid #1a1a2e' : '1px solid #ddd' }} />
+              ))}
+            </div>
+            <button onClick={() => applyColor(null)} style={{ width: '100%', padding: '11px', borderRadius: 10, border: '1.5px solid #ddd', background: '#fff', fontWeight: 700, cursor: 'pointer', marginBottom: 8 }}>Default (no colour)</button>
+            <button onClick={() => setColorPick(null)} style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', background: '#f0f0f0', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
           </div>
         </div>
       )}

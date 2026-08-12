@@ -1,5 +1,16 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote } from '../api';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote, getVoucher, redeemVoucher, getOrderDeposit, getOrderDepositApplied, createDeposit } from '../api';
+import AmountInput from '../components/AmountInput';
+
+// SEPOS-MENU-COLOR-001 — auto black/white text on a coloured button.
+const textOn = (hex) => {
+  try {
+    const n = hex.replace('#', '');
+    const L = parseInt(n.substr(0,2),16)*0.299 + parseInt(n.substr(2,2),16)*0.587 + parseInt(n.substr(4,2),16)*0.114;
+    return L > 150 ? '#1a1a2e' : '#ffffff';
+  } catch { return '#1a1a2e'; }
+};
+
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
 import { isNativeApp } from '../native/printer';
@@ -8,6 +19,7 @@ import { isNativeApp } from '../native/printer';
 // closed-bill delete still lives in Admin → Bills for managers.
 import KitchenMessageModal from '../components/KitchenMessageModal';
 import { confirm } from '../utils/confirm';
+import { dineTableLabel } from '../utils/orderLabel';
 import AllergenChips from '../components/AllergenChips';
 import { parseAllergens } from '../utils/allergens';
 
@@ -29,9 +41,16 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   // Loaded once on mount; merged with menu_items.allergens at render time.
   const [allergenOverrides, setAllergenOverrides] = useState({});
   const [order, setOrder] = useState(null);
-  // Cart persists per-order in localStorage so un-sent items aren't lost when
-  // the waiter leaves the table without sending — they're restored on return.
-  const cartKey = orderId ? `sepos_cart_${orderId}` : null;
+  // Cart persists in localStorage so un-sent items aren't lost when the waiter
+  // leaves the table without sending — they're restored on return. Keyed by
+  // order id when one exists; for a BRAND-NEW table (no order created until the
+  // first Send) there is no order id yet, so we key by TABLE id — otherwise the
+  // items a waiter tapped on a fresh table vanished the moment they navigated
+  // away (Korakot 2026-08-08: "sometimes you have to go to another page… the
+  // order the staff took will be gone"). Cleared on a successful Send.
+  const cartKey = orderId
+    ? `sepos_cart_${orderId}`
+    : (tableId ? `sepos_cart_table_${tableId}` : null);
   const [cart, setCart] = useState(() => {
     try { const raw = cartKey && localStorage.getItem(cartKey); return raw ? JSON.parse(raw) : []; }
     catch { return []; }
@@ -59,6 +78,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   // silently did nothing on desktop installs.
   // { scope: 'item'|'bill', item?, type: 'percent'|'fixed', value, reason? }
   const [discountPopup, setDiscountPopup] = useState(null);
+  // SEPOS-DEPOSIT-ORDER-001 — apply a booking deposit right on the order screen
+  // (redeem-on-tap, model A). depositApplied = { amount, code } already redeemed.
+  const [depositPopup, setDepositPopup]   = useState(null); // { code, amount } modal
+  const [depositApplied, setDepositApplied] = useState({ amount: 0, code: null });
+  const [depositBusy, setDepositBusy]     = useState(false);
   const [serviceChargeRemoved, setServiceChargeRemoved] = useState(false);
   const [settings, setSettings] = useState({}); // for the configured service-charge rate
   const [activeCourse, setActiveCourse] = useState(1);
@@ -91,6 +115,67 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
     const seq = ++fetchSeqRef.current;
     const orderData = await getOrder(orderId);
     if (seq === fetchSeqRef.current) setOrder(orderData);
+  };
+
+  // SEPOS-DEPOSIT-ORDER-001 — reload any deposit already redeemed against this
+  // order, so it persists across navigation and shows on the summary + bill.
+  const fetchDepositApplied = async () => {
+    if (!orderId) { setDepositApplied({ amount: 0, code: null }); return; }
+    try {
+      const r = await getOrderDepositApplied(orderId);
+      setDepositApplied({ amount: Number(r?.applied || 0), code: r?.code || null });
+    } catch { /* keep whatever we have */ }
+  };
+  useEffect(() => { fetchDepositApplied(); }, [orderId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // SEPOS-DEPOSIT-ORDER-001 — open the deposit modal (permission-gated).
+  const openDepositModal = async () => {
+    const allowedRoles = ['admin', 'manager', 'supervisor'];
+    if (!allowedRoles.includes(staff?.role) && !staff?.can_redeem_deposit) {
+      alert('⛔ You don\'t have permission to redeem deposits.\n\nA manager can enable it for you in Admin → Staff → "Can redeem deposit".');
+      return;
+    }
+    if (!orderId) { alert('Send the order first, then apply the deposit.'); return; }
+    // Auto-suggest a deposit linked to this table's booking, if any.
+    let suggested = { code: '', amount: '' };
+    try { const d = await getOrderDeposit(orderId); if (d?.deposit) suggested = { code: d.deposit.code, amount: String(d.deposit.balance) }; } catch { /* none */ }
+    setDepositPopup(suggested);
+  };
+
+  // SEPOS-DEPOSIT-ORDER-001 — redeem the deposit NOW (model A). Reuses the
+  // hardened voucher redeem path; the deposit reduces the balance due.
+  const confirmDeposit = async () => {
+    if (!depositPopup || depositBusy) return;
+    const code = (depositPopup.code || '').trim().toUpperCase();
+    const amt = parseFloat(depositPopup.amount);
+    if (!code) { alert('Enter or scan the deposit code.'); return; }
+    if (!(amt > 0)) { alert('Enter the deposit amount.'); return; }
+    setDepositBusy(true);
+    try {
+      // Must be a real deposit voucher (a gift code is bounced).
+      let v = null; try { v = await getVoucher(code); } catch { v = null; }
+      if (!v || v.error || v.status !== 'active' || !(Number(v.balance) > 0)) {
+        // SEPOS-DEPOSIT-EXT-001 — external bypass, same philosophy as the pay
+        // screen: a deposit taken outside SiamEPOS (old system, phone, paper)
+        // is still real money the customer paid. Record it as a deposit and
+        // apply it, instead of telling staff "invalid" in front of the guest.
+        const ok = await confirm(`"${code}" isn't in the system.\n\nRecord it as an external deposit of £${amt.toFixed(2)} and apply it to this bill?`);
+        if (!ok) { setDepositBusy(false); return; }
+        const created = await createDeposit({ amount: amt, payment_method: 'external', customer_name: `External · ${code}` });
+        if (!created || created.error || !created.code) { alert('Could not record the external deposit: ' + (created?.error || 'unknown')); setDepositBusy(false); return; }
+        const r2 = await redeemVoucher(created.code, amt, orderId, staff?.name || null);
+        if (r2 && r2.error) { alert('Recorded but could not apply: ' + r2.error); setDepositBusy(false); return; }
+        setDepositPopup(null); await fetchDepositApplied(); setDepositBusy(false); return;
+      }
+      if (v.type !== 'deposit') { alert('That\'s a gift voucher, not a booking deposit — take it as a Voucher on the pay screen.'); setDepositBusy(false); return; }
+      const use = Math.min(Number(v.balance), amt);
+      const r = await redeemVoucher(code, use, orderId, staff?.name || null);
+      if (r && r.error) { alert('Could not apply deposit: ' + r.error); setDepositBusy(false); return; }
+      setDepositPopup(null);
+      await fetchDepositApplied();
+    } catch (e) {
+      alert('Could not apply deposit: ' + (e?.message || 'unknown'));
+    } finally { setDepositBusy(false); }
   };
 
   // SEPOS — toggle + PERSIST the per-order service-charge removal. Optimistic:
@@ -626,8 +711,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   // DiscountModal. Apply/remove are optimistic with fetchOrder reconcile.
   const handleItemDiscount = async (item) => {
     const allowedRoles = ['admin', 'manager', 'supervisor'];
-    if (!allowedRoles.includes(staff?.role)) {
-      alert('⛔ Only Admin, Manager or Supervisor can apply discounts!');
+    if (!allowedRoles.includes(staff?.role) && !staff?.can_discount) {
+      alert('⛔ You don\'t have permission to give discounts.\n\nA manager can enable it for you in Admin → Staff → "Can give discount".');
       return;
     }
     if (item.id < 0) return alert('Still sending — try again in a second.');
@@ -818,7 +903,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
           <div style={{ fontSize: 84, lineHeight: 1 }}>✓</div>
           <div style={{ fontSize: 26, fontWeight: 800, marginTop: 12 }}>Order sent to kitchen</div>
           {order?.table_number != null && (
-            <div style={{ fontSize: 17, marginTop: 6, opacity: 0.9 }}>Table {order.table_number}</div>
+            <div style={{ fontSize: 17, marginTop: 6, opacity: 0.9 }}>{dineTableLabel(order)}</div>
           )}
         </div>
       )}
@@ -871,7 +956,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               ← Back
             </button>
             <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', flex: 1 }}>
-              Table {order?.table_number} — Order #{orderId}
+              {dineTableLabel(order)} — Order #{orderId}
               {order?.covers && (
                 <span style={{ fontSize: 14, fontWeight: 400, color: '#888', marginLeft: 8 }}>
                   {order.covers} covers
@@ -944,8 +1029,9 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               }} style={{
                 padding: '10px 20px', borderRadius: 20, border: 'none', cursor: 'pointer',
                 fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap',
-                background: activeCategory === cat.id ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary, #1a1a2e)') : '#f0f0f0',
-                color: activeCategory === cat.id ? 'white' : '#555',
+                background: cat.color ? (activeCategory === cat.id ? cat.color : cat.color + 'cc') : (activeCategory === cat.id ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary, #1a1a2e)') : '#f0f0f0'),
+                color: cat.color ? textOn(cat.color) : (activeCategory === cat.id ? 'white' : '#555'),
+                outline: cat.color && activeCategory === cat.id ? '3px solid #1a1a2e' : 'none',
               }}>
                 {cat.name} {cat.is_bar ? '🍹' : ''}
               </button>
@@ -972,8 +1058,9 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                 <button key={sub.id} onClick={() => setActiveSubcat(sub.id)} style={{
                   padding: '7px 16px', borderRadius: 16, border: 'none', cursor: 'pointer',
                   fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap',
-                  background: activeSubcat === sub.id ? '#3b82f6' : '#e0e0e0',
-                  color: activeSubcat === sub.id ? 'white' : '#555'
+                  background: sub.color ? (activeSubcat === sub.id ? sub.color : sub.color + 'cc') : (activeSubcat === sub.id ? '#3b82f6' : '#e0e0e0'),
+                  color: sub.color ? textOn(sub.color) : (activeSubcat === sub.id ? 'white' : '#555'),
+                  outline: sub.color && activeSubcat === sub.id ? '3px solid #1a1a2e' : 'none'
                 }}>{sub.name}</button>
               ))}
             </div>
@@ -1079,7 +1166,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                 onClose();
               }} style={{ background: '#F4F1EA', border: '1px solid #E7E2D6', borderRadius: 10, padding: '10px 16px', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: 'var(--brand-primary, #1a1a2e)' }}>‹ Tables</button>
               <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', whiteSpace: 'nowrap' }}>
-                Table {order?.table_number}
+                {dineTableLabel(order)}
                 {(order?.covers || staff?.name) ? <span style={{ fontFamily: "'Archivo', sans-serif", fontSize: 13, color: '#9A9488', marginLeft: 10, fontWeight: 600 }}>{order?.covers ? `${order.covers} covers` : ''}{order?.covers && staff?.name ? ' · ' : ''}{staff?.name || ''}</span> : null}
               </div>
               {/* SEPOS-ORDER-REDESIGN — whole-menu search box */}
@@ -1144,7 +1231,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     <button onClick={openArrange} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #E7E2D6', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13, color: '#7C766A' }}>⇅ Arrange menu</button>
                   </div>
                 ))}
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 10 }}>
                   {(arrangeMode ? arrangeItems : dishesToShow).map((item, gridIdx) => {
                     const inCart = cart.filter(c => c.menu_item_id === item.id);
                     const totalQty = inCart.reduce((s, c) => s + c.quantity, 0);
@@ -1155,12 +1242,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                         onDragStart={arrangeMode ? () => setArrangeDrag(gridIdx) : undefined}
                         onDragOver={arrangeMode ? (e) => e.preventDefault() : undefined}
                         onDrop={arrangeMode ? (e) => { e.preventDefault(); onArrangeDrop(gridIdx); } : undefined}
-                        style={{ background: '#fff', borderRadius: 14, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : '#E7E2D6'}`, padding: 14, cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 104, display: 'flex', flexDirection: 'column', boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
-                        <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
-                        <AllergenChips list={allergensByItemId[item.id]} />
-                        <div style={{ flex: 1 }} />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                          <span style={{ fontSize: 17, fontWeight: 800, color: '#9A7B1F', fontVariantNumeric: 'tabular-nums' }}>£{Number(item.price || 0).toFixed(2)}</span>
+                        style={{ background: item.color || '#fff', borderRadius: 12, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : (item.color ? item.color : '#E7E2D6')}`, padding: '10px 12px', cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 56, display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
+                        {/* SEPOS-MENU-COMPACT-001 — no price on the card, half-height row layout */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: item.color ? textOn(item.color) : 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
+                          <AllergenChips list={allergensByItemId[item.id]} />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', flex: 'none' }}>
                           {arrangeMode ? (
                             <span style={{ color: '#C9A84C', fontSize: 20, fontWeight: 800, cursor: 'grab' }} title="Drag to reorder">⣿</span>
                           ) : totalQty > 0 ? (
@@ -1170,7 +1258,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                               <button onClick={e => { e.stopPropagation(); incrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: 'var(--brand-accent,#C9A84C)', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>+</button>
                             </div>
                           ) : (
-                            <div style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--brand-primary,#0D1B3E)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700 }}>+</div>
+                            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--brand-primary,#0D1B3E)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700 }}>+</div>
                           )}
                         </div>
                       </div>
@@ -1208,7 +1296,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
-                    Table {order?.table_number}
+                    {dineTableLabel(order)}
                   </div>
                   <div style={{ fontSize: 12, color: '#888', marginTop: 1 }}>
                     Order #{orderId}{order?.covers ? ` · ${order.covers} covers` : ''}
@@ -1227,7 +1315,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             ) : (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Order · Table {order?.table_number}</span>
+                  <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>Order · {dineTableLabel(order)}</span>
                   <span style={{ fontSize: 13, color: '#9A9488', fontWeight: 600 }}>{existingItems.filter(i => !i.voided).reduce((s, i) => s + (i.quantity || 0), 0) + cart.reduce((s, c) => s + (c.quantity || 0), 0)} items</span>
                 </div>
                 {/* Course selector — moved here from the left menu (mockup). */}
@@ -1533,6 +1621,17 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             paddingBottom: isMobile ? 'calc(58px + env(safe-area-inset-bottom, 0px) + 14px)' : '14px',
             borderTop: '1px solid #eee', flexShrink: 0
           }}>
+            {/* SEPOS-QR-ORDER-001 — customer PAID at order time; staff must not
+                charge again. The bill closes itself when everything is served. */}
+            {order?.source === 'qr' && (order?.payment_status === 'paid' || order?.payment_status === 'mock') && (
+              <div style={{
+                marginBottom: 10, padding: '10px 12px', borderRadius: 10,
+                background: '#dcfce7', border: '2px solid #16a34a',
+                color: '#14532d', fontSize: 13, fontWeight: 800, textAlign: 'center',
+              }}>
+                📱💳 PAID ONLINE{order.payment_status === 'mock' ? ' (demo)' : ''} — do not charge. Closes itself when all items are served.
+              </div>
+            )}
             <div style={{ marginBottom: 10 }}>
               {order?.discount_value > 0 ? (
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -1575,8 +1674,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               ) : (
                 <button onClick={() => {
                   const allowedRoles = ['admin', 'manager', 'supervisor'];
-                  if (!allowedRoles.includes(staff?.role)) {
-                    alert('⛔ Only Admin, Manager or Supervisor can apply discounts!\n\nPlease ask a manager to authorise.');
+                  if (!allowedRoles.includes(staff?.role) && !staff?.can_discount) {
+                    alert('⛔ You don\'t have permission to give discounts.\n\nA manager can enable it for you in Admin → Staff → "Can give discount".');
                     return;
                   }
                   // SEPOS-046z — DiscountModal replaces window.prompt()
@@ -1592,6 +1691,29 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                 </button>
               )}
             </div>
+
+            {/* SEPOS-DEPOSIT-ORDER-001 — apply a booking deposit here, like the discount.
+                Gated behind deposits_enabled so venues that don't take deposits
+                (and tonight's live floors) never see or reach the new path. */}
+            {String(settings.deposits_enabled) === '1' && <div style={{ marginBottom: 10 }}>
+              {depositApplied.amount > 0 ? (
+                <div style={{
+                  padding: '10px 12px', borderRadius: 8, border: '2px solid #3b82f6',
+                  background: '#eff6ff', color: '#1e3a8a', fontSize: 13, fontWeight: 700,
+                  textAlign: 'center'
+                }}>
+                  🧾 Deposit applied −£{depositApplied.amount.toFixed(2)}{depositApplied.code ? ` · ${depositApplied.code}` : ''}
+                </div>
+              ) : (
+                <button onClick={openDepositModal} style={{
+                  width: '100%', padding: '10px', borderRadius: 8,
+                  border: '2px dashed #3b82f6', background: 'white',
+                  color: '#2563eb', cursor: 'pointer', fontWeight: 700, fontSize: 13
+                }}>
+                  + Add Deposit
+                </button>
+              )}
+            </div>}
 
             {discountAmount > 0 && (
               <div style={{
@@ -1628,7 +1750,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             </div>}
 
             <div style={{
-              display: 'flex', justifyContent: 'space-between', marginBottom: 14,
+              display: 'flex', justifyContent: 'space-between',
+              marginBottom: depositApplied.amount > 0 ? 6 : 14,
               borderTop: '2px solid #eee', paddingTop: 10
             }}>
               <span style={{ fontSize: 20, fontWeight: 800 }}>Total</span>
@@ -1637,15 +1760,28 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               </span>
             </div>
 
+            {/* SEPOS-DEPOSIT-ORDER-001 — deposit + balance due on the summary. */}
+            {depositApplied.amount > 0 && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#2563eb', marginBottom: 4 }}>
+                  <span>Deposit paid</span><span>-£{depositApplied.amount.toFixed(2)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, fontWeight: 800 }}>
+                  <span style={{ fontSize: 16 }}>Balance due</span>
+                  <span style={{ fontSize: 16, color: '#e94560' }}>£{Math.max(0, orderTotal - depositApplied.amount).toFixed(2)}</span>
+                </div>
+              </>
+            )}
+
             {/* Send Order — full-width, right above View Bill & Pay (moved out of
                 the small header button per operator feedback). Desktop only;
                 mobile keeps its own compact Send in the summary header. */}
             {!isMobile && cart.length > 0 && (
               <button onClick={sendOrder} disabled={sendBusy} style={{
-                width: '100%', padding: '14px', borderRadius: 12, border: 'none',
+                width: '100%', padding: '28px', borderRadius: 14, border: 'none',
                 background: sendBusy ? '#9aa0b0' : 'var(--brand-primary, #0D1B3E)', color: 'white',
-                fontSize: 16, fontWeight: 800, cursor: sendBusy ? 'wait' : 'pointer',
-                marginBottom: 10, boxShadow: '0 6px 14px rgba(13,27,62,.24)'
+                fontSize: 24, fontWeight: 800, cursor: sendBusy ? 'wait' : 'pointer',
+                marginBottom: 10, boxShadow: '0 8px 18px rgba(13,27,62,.28)'
               }}>
                 {sendBusy ? 'Sending…' : `Send to kitchen — ${cart.reduce((s, c) => s + c.quantity, 0)} item${cart.reduce((s, c) => s + c.quantity, 0) > 1 ? 's' : ''}`}
               </button>
@@ -2191,6 +2327,44 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                   background: '#22c55e', color: 'white', cursor: 'pointer',
                   fontWeight: 700, fontSize: 15
                 }}>Apply</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SEPOS-DEPOSIT-ORDER-001 — DEPOSIT POPUP */}
+        {depositPopup && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          }}>
+            <div style={{ background: 'white', borderRadius: 16, padding: 24, width: 380, maxWidth: '92vw' }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 6 }}>Apply deposit</h2>
+              <div style={{ fontSize: 13, color: '#555', marginBottom: 16 }}>Enter or scan the booking deposit code. It reduces the balance the customer pays.</div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>Deposit code</label>
+                <input type="text" autoFocus value={depositPopup.code}
+                  onChange={(e) => setDepositPopup({ ...depositPopup, code: e.target.value.toUpperCase() })}
+                  placeholder="e.g. DEP-XXXX"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, fontWeight: 700, textAlign: 'center', boxSizing: 'border-box', letterSpacing: '1px' }} />
+              </div>
+              <div style={{ marginBottom: 18 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>Amount £</label>
+                <AmountInput value={depositPopup.amount}
+                  onChange={(v) => setDepositPopup({ ...depositPopup, amount: v })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, fontWeight: 700, textAlign: 'center', boxSizing: 'border-box' }} />
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setDepositPopup(null)} disabled={depositBusy} style={{
+                  flex: 1, padding: '12px', borderRadius: 10, border: 'none',
+                  background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15
+                }}>Cancel</button>
+                <button onClick={confirmDeposit} disabled={depositBusy} style={{
+                  flex: 1, padding: '12px', borderRadius: 10, border: 'none',
+                  background: depositBusy ? '#93c5fd' : '#2563eb', color: 'white',
+                  cursor: depositBusy ? 'wait' : 'pointer', fontWeight: 700, fontSize: 15
+                }}>{depositBusy ? 'Applying…' : 'Apply deposit'}</button>
               </div>
             </div>
           </div>

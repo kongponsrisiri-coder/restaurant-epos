@@ -34,8 +34,13 @@ export function printReceipt({ order, items, settings, paymentDetails = {} }) {
   // a target. The desktop's chosen device lives in localStorage.receipt_printer_name.
   const deviceName = (typeof localStorage !== 'undefined' && localStorage.getItem('receipt_printer_name')) || '';
   const usbName = (!settings.printer_receipt_ip && deviceName && window.siamepos?.isElectron) ? deviceName : null;
-  if (settings.printer_receipt_ip || usbName) {
-    serverPrintReceipt(order.id, paymentDetails, usbName || undefined)
+  // SEPOS-BILL-STATIONS-001 — per-device bill station: this device's chosen
+  // printers-table row (Admin → Printers → "Bills from this device"). When
+  // set, bills from THIS till/tablet print at that station; server falls back
+  // to the shared default if the row disappeared.
+  const stationId = (typeof localStorage !== 'undefined' && localStorage.getItem('siamepos_device_bill_printer')) || '';
+  if (settings.printer_receipt_ip || usbName || stationId) {
+    serverPrintReceipt(order.id, paymentDetails, usbName || undefined, stationId ? Number(stationId) : undefined)
       .then(r => {
         if (!r || !r.success) {
           console.warn('[receipt] server print failed, falling back:', r?.error || r?.reason);
@@ -127,7 +132,12 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
   // SEPOS-PRINT-FONT-001 — receipt font multiplier (normal = today, no regression).
   const rfs = ({ normal: 1.0, large: 1.2, xlarge: 1.4 })[settings?.receipt_font_scale || 'normal'] ?? 1;
   const rpx = (n) => `${+(n * rfs).toFixed(1)}px`;
-  const restaurantName  = settings?.company_name        || settings?.restaurant_name || 'SiamEPOS';
+  // company_name is authoritative once the key exists — including blank
+  // (logo-only receipts). Legacy restaurant_name only covers old installs.
+  const restaurantName  = (settings?.company_name !== undefined && settings?.company_name !== null)
+    ? String(settings.company_name).trim()
+    : (String(settings?.restaurant_name || '').trim() || 'SiamEPOS');
+  const qrCaption       = String(settings?.receipt_qr_caption || 'Scan to leave us a review');
   const restaurantAddr  = settings?.company_address     || settings?.address         || '';
   const restaurantPhone = settings?.company_phone       || settings?.phone           || '';
   const restaurantVat   = settings?.company_vat         || '';
@@ -144,6 +154,7 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
   // ── Use pre-calculated values from BillScreen ─────────────────
   const subtotal       = parseFloat(paymentDetails.subtotal       ?? 0);
   const discountAmount = parseFloat(paymentDetails.discountAmount ?? 0);
+  const depositPaid    = parseFloat(paymentDetails.depositPaid    ?? 0);
   const serviceCharge  = parseFloat(paymentDetails.serviceCharge  ?? 0);
   const tip            = parseFloat(paymentDetails.tip            ?? 0);
   const billTotal      = parseFloat(paymentDetails.billTotal      ?? (subtotal - discountAmount + serviceCharge + tip));
@@ -213,31 +224,35 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
   // VAT is the owner/accountant's domain — no VAT breakdown on the customer
   // receipt (the admin VAT Report is kept separately for the accountant).
   const vatBlock = '';
+  const tenders = Array.isArray(paymentDetails.tenders) ? paymentDetails.tenders : [];
   const paymentRows  = method ? `
     <tr><td>Payment</td><td style="text-align:right;">${method}</td></tr>
+    ${tenders.length > 1 ? tenders.map((t, i) =>
+      `<tr><td style="padding-left:10px;color:#333;">${i + 1}. ${t.method || ''}</td><td style="text-align:right;">${fmt(Number(t.amount || 0))}</td></tr>`
+    ).join('') : ''}
     ${method==='Cash'&&amountPaid>0?`
       <tr><td>Cash tendered</td><td style="text-align:right;">${fmt(amountPaid)}</td></tr>
       <tr style="font-weight:700;"><td>Change</td><td style="text-align:right;">${fmt(change)}</td></tr>
     `:''}
   ` : '';
 
-  const logoHtml = logoDataUrl ? `
+  // SEPOS-PAPER-SAVER-001 — settled receipt (has method) = record: no logo/QR.
+  const logoHtml = (logoDataUrl && !method) ? `
     <div style="text-align:center;margin-bottom:10px;">
       <img src="${logoDataUrl}" style="max-width:${logoSizePx};${logoSizePx==='100%'?'width:100%;':''}object-fit:contain;display:block;margin:0 auto;" alt="Logo" />
     </div>` : '';
 
-  const qrHtml = googleReviewUrl ? `
+  const qrHtml = (googleReviewUrl && !method) ? `
     <div style="text-align:center;margin-top:10px;">
-      <div style="font-size:10px;color:#666;margin-bottom:4px;">Enjoyed your meal? Leave us a review!</div>
       <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(googleReviewUrl)}" width="80" height="80" alt="QR" style="border:1px solid #eee;" />
-      <div style="font-size:9px;color:#aaa;margin-top:2px;">Scan to review on Google</div>
+      <div style="font-size:10px;color:#666;margin-top:3px;">${qrCaption}</div>
     </div>` : '';
 
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Receipt - ${order.order_type === 'takeaway' ? (order.table_number != null ? `Takeaway ${order.table_number}` : `Online Order #${order.id}`) : `Table ${order.table_number}`}</title>
+  <title>Receipt - ${order.order_type === 'takeaway' ? (order.table_number != null ? `Takeaway ${order.table_number}` : `Online Order #${order.id}`) : ((order.table_label && String(order.table_label).trim()) || `Table ${order.table_number}`)}</title>
   <style>
     *    { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:'Courier New',Courier,monospace; font-size:${rpx(12)}; color:#000; background:white; width:80mm; margin:0 auto; padding:4mm 2mm; }
@@ -257,15 +272,15 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
 
   ${logoHtml}
 
-  <div class="center" style="font-size:15px;font-weight:900;letter-spacing:1px;margin-bottom:2px;">${restaurantName}</div>
+  ${restaurantName ? `<div class="center" style="font-size:15px;font-weight:900;letter-spacing:1px;margin-bottom:2px;">${restaurantName}</div>` : ''}
   ${restaurantAddr  ? `<div class="center small">${restaurantAddr}</div>` : ''}
   ${restaurantPhone ? `<div class="center small">Tel: ${restaurantPhone}</div>` : ''}
   ${restaurantVat   ? `<div class="center small">VAT No: ${restaurantVat}</div>` : ''}
 
   <hr class="divider"/>
 
-  ${order.order_type !== 'takeaway' && order.table_number != null
-    ? `<div style="text-align:center;font-size:24px;font-weight:900;margin:2px 0 10px;">TABLE ${order.table_number}</div>` : ''}
+  ${order.order_type !== 'takeaway' && (order.table_number != null || (order.table_label && String(order.table_label).trim()))
+    ? `<div style="text-align:center;font-size:24px;font-weight:900;margin:2px 0 10px;">${(order.table_label && String(order.table_label).trim()) ? String(order.table_label).trim().toUpperCase() : `TABLE ${order.table_number}`}</div>` : ''}
 
   <table>
     ${order.order_type === 'takeaway'
@@ -290,6 +305,8 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
     ${scRow}
     ${tipRow}
     <tr class="total-row"><td>TOTAL</td><td style="text-align:right;">${fmt(billTotal)}</td></tr>
+    ${depositPaid > 0 ? `<tr><td>Deposit paid</td><td style="text-align:right;">-${fmt(depositPaid)}</td></tr>
+    <tr style="font-weight:800;"><td>Balance due</td><td style="text-align:right;">${fmt(Math.max(0, billTotal - depositPaid))}</td></tr>` : ''}
     ${paymentRows}
   </table>
 

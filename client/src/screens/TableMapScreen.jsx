@@ -1,7 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getTables, createOrder, getOrders, getTableStatus, moveTable, mergeTables, getReservations, assertOk } from '../api';
-import { tableLabel } from '../utils/orderLabel'; // SEPOS-TABLE-NAME
+import { tableLabel } from '../utils/orderLabel';
+// Round 6 — a table can hold a waiter bill AND a customer's prepaid QR bill.
+// The QR order is read-only (staff can't touch it) and auto-closes when served,
+// so on the floor we prefer the STAFF order: the waiter's bill must never be
+// hidden behind the customer's. Falls back to the QR order when it's the only
+// one (shown read-only via the existing PAID banner on the order screen).
+const orderForTable = (orders, tid) =>
+  orders.find(o => o.table_id === tid && o.source !== 'qr') || orders.find(o => o.table_id === tid);
+ // SEPOS-TABLE-NAME
+import { roomSize } from '../utils/floorRoom';    // SEPOS-FLOOR-FIT shared room
 import TakeawayStrip    from '../components/TakeawayStrip';
 import BillPeek         from '../components/BillPeek';
 import SyncHealthBanner from '../components/SyncHealthBanner';
@@ -40,6 +49,41 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
   // Sandy: Mobile state — defaults to grid on mobile (more touch-friendly)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [viewMode, setViewMode] = useState(window.innerWidth < 768 ? 'grid' : 'plan');
+
+  // SEPOS-FLOOR-FIT — the plan view auto-zooms the floor plan to fill the
+  // screen. Editor coordinates are absolute pixels laid out on a small canvas,
+  // so on a big monitor the plan huddled in the top-left corner with most of
+  // the screen empty (Korakot, 2026-08-05). Measure the viewport, measure the
+  // plan's bounding box, scale + centre. Clamped so tiny plans don't balloon
+  // (max 2.2×) and huge plans stay tappable (min 0.5× — beyond that the
+  // container still scrolls).
+  const planViewRef = useRef(null);
+  const [planViewSize, setPlanViewSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    if (viewMode !== 'plan') return;
+    const el = planViewRef.current;
+    if (!el) return;
+    const measure = () => setPlanViewSize({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [viewMode, loading]);
+
+  // Manual zoom on top of the auto-fit — a per-device multiplier the operator
+  // controls with −/Fit/+ buttons (Korakot: "where's the zoom button, and it's
+  // too big"). 1 = auto-fit; persisted so each till remembers its preference.
+  const [userZoom, setUserZoom] = useState(() => {
+    const v = parseFloat(localStorage.getItem('siamepos_floor_zoom'));
+    return Number.isFinite(v) && v > 0 ? v : 1;
+  });
+  const changeZoom = (factor) => {
+    setUserZoom((z) => {
+      const next = factor === 0 ? 1 : Math.min(2, Math.max(0.5, +(z * factor).toFixed(3)));
+      try { localStorage.setItem('siamepos_floor_zoom', String(next)); } catch { /* private mode */ }
+      return next;
+    });
+  };
 
   // Move/Merge state — unchanged
   const [tableActionPopup, setTableActionPopup] = useState(null);
@@ -119,7 +163,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
   };
 
   const getTableTime = (tableId) => {
-    const order = openOrders.find(o => o.table_id === tableId);
+    const order = orderForTable(openOrders, tableId);
     if (!order) return null;
     const rawDate = order.opened_at || order.created_at;
     const opened = new Date(rawDate);
@@ -133,7 +177,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
   };
 
   const getTimeColor = (tableId) => {
-    const order = openOrders.find(o => o.table_id === tableId);
+    const order = orderForTable(openOrders, tableId);
     if (!order) return 'white';
     const rawDate = order.opened_at || order.created_at;
     const opened = new Date(rawDate);
@@ -146,7 +190,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
 
   // ── Table click handler — unchanged ───────────────────
   const handleTableClick = async (table) => {
-    const existingOrder = openOrders.find(o => o.table_id === table.id);
+    const existingOrder = orderForTable(openOrders, table.id);
 
     if (moveMode && tableActionPopup) {
       if (existingOrder) {
@@ -378,22 +422,42 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
               💡 Scroll to see all tables · Tap ⊞ Grid for an easier view on this screen
             </div>
           )}
-          <div style={{
-            flex: 1, overflow: 'auto',
-            background: '#f0ede8', position: 'relative',
+          <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+          <div ref={planViewRef} style={{
+            position: 'absolute', inset: 0, overflow: 'auto',
+            background: '#f0ede8',
             backgroundImage: 'radial-gradient(circle, #ccc 1px, transparent 1px)',
             backgroundSize: '30px 30px'
           }}>
-            {tables.map(table => {
+            {(() => {
+              // SEPOS-FLOOR-FIT v2 — render the ROOM, not the table cluster.
+              // The editor's canvas rectangle IS the room; scaling that whole
+              // rectangle to the viewport keeps every table at the same
+              // relative spot on both screens (a bar at the left wall stays
+              // left — centring just the cluster made it jump to the middle).
+              const PAD = 16;
+              const room = roomSize(tables);
+              const availW = Math.max(0, planViewSize.w - PAD * 2);
+              const availH = Math.max(0, planViewSize.h - PAD * 2);
+              const fitScale = (availW > 0 && availH > 0)
+                ? Math.min(1.5, availW / room.w, availH / room.h)
+                : 1;
+              const scale = Math.min(3, Math.max(0.35, fitScale * userZoom));
+              // Letterbox-centre the room itself (like a blueprint on a desk);
+              // geometry inside the room is untouched.
+              const offX = PAD + Math.max(0, (availW - room.w * scale) / 2);
+              const offY = PAD + Math.max(0, (availH - room.h * scale) / 2);
+
+              return tables.map(table => {
               const colours = getTableColour(table);
-              const w = table.width || 80;
-              const h = table.height || 80;
+              const w = Math.round((table.width || 80) * scale);
+              const h = Math.round((table.height || 80) * scale);
               // ?? not || — a table dragged flush to the top/left edge is saved
               // at pos 0, and `0 || 40` silently bumped it 40px on the FLOOR
               // while the editor drew it at 0 → "I saved but the layout still
               // differs" (Korakot, 2026-08-03: only T1/T2 at y=0 were off).
-              const x = table.pos_x ?? 40;
-              const y = table.pos_y ?? 40;
+              const x = Math.round((table.pos_x ?? 40) * scale + offX);
+              const y = Math.round((table.pos_y ?? 40) * scale + offY);
               const time = getTableTime(table.id);
               const timeColor = getTimeColor(table.id);
               const isSelected = tableActionPopup?.table.id === table.id;
@@ -414,12 +478,12 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                   onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.06)'; }}
                   onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
                 >
-                  <div style={{ fontSize: w > 90 ? 16 : 13, fontWeight: 800, color: colours.text, textAlign: 'center', padding: '0 4px' }}>
+                  <div style={{ fontSize: Math.max(12, Math.min(22, Math.round(w * 0.17))), fontWeight: 800, color: colours.text, textAlign: 'center', padding: '0 4px' }}>
                     {table.is_takeaway ? '🥡 ' : ''}{tableLabel(table)}
                   </div>
                   {time && (
                     <div style={{
-                      fontSize: 13, fontWeight: 800,
+                      fontSize: Math.max(11, Math.min(17, Math.round(w * 0.13))), fontWeight: 800,
                       color: '#000000',
                       marginTop: 3,
                       background: 'rgba(255,255,255,0.85)',
@@ -444,7 +508,36 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                   )}
                 </div>
               );
-            })}
+              });
+            })()}
+          </div>
+          {/* SEPOS-FLOOR-FIT — manual zoom on top of auto-fit. Per-device,
+              remembered. Fit (⊡) returns to automatic. */}
+          <div style={{
+            position: 'absolute', right: 14, bottom: 14,
+            display: 'flex', flexDirection: 'column', gap: 6, zIndex: 5,
+          }}>
+            {[
+              { label: '+', title: 'Zoom in',            act: () => changeZoom(1.15) },
+              { label: '⊡', title: 'Fit to screen',      act: () => changeZoom(0) },
+              { label: '−', title: 'Zoom out',           act: () => changeZoom(1 / 1.15) },
+            ].map(b => (
+              <button key={b.label} title={b.title} onClick={b.act} style={{
+                width: 44, height: 44, borderRadius: 10,
+                border: '1px solid #d6d3cb', background: 'rgba(255,255,255,0.95)',
+                color: 'var(--brand-primary, #1a1a2e)', fontSize: b.label === '⊡' ? 20 : 24,
+                fontWeight: 700, cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>{b.label}</button>
+            ))}
+            {userZoom !== 1 && (
+              <div style={{
+                textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#7C766A',
+                background: 'rgba(255,255,255,0.9)', borderRadius: 6, padding: '2px 4px',
+              }}>{Math.round(userZoom * 100)}%</div>
+            )}
+          </div>
           </div>
         </>
       )}
@@ -470,7 +563,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
               .sort((a, b) => String(a.table_number).localeCompare(String(b.table_number), undefined, { numeric: true }))
               .map(table => {
                 const colours = getTableColour(table);
-                const order = openOrders.find(o => o.table_id === table.id);
+                const order = orderForTable(openOrders, table.id);
                 const time = getTableTime(table.id);
                 const isSelected = tableActionPopup?.table.id === table.id;
                 const upcoming = getUpcomingReservation(table.id);
@@ -564,7 +657,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           }}>
             <div style={{ textAlign: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>
-                Table {tableActionPopup.table.table_number}
+                {(() => { const l = tableLabel(tableActionPopup.table); return typeof l === 'string' ? l : `Table ${l}`; })()}
               </div>
               <div style={{ color: '#888', fontSize: 14 }}>
                 {tableActionPopup.order.covers} covers · £{Number(tableActionPopup.order.total || 0).toFixed(2)}
@@ -656,7 +749,7 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           }}>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
-                Table {showCoversPopup.table_number}
+                {(() => { const l = tableLabel(showCoversPopup); return typeof l === 'string' ? l : `Table ${l}`; })()}
               </div>
               <div style={{ color: '#888', fontSize: 14 }}>How many covers?</div>
             </div>

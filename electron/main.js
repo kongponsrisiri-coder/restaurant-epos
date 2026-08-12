@@ -63,6 +63,11 @@ function saveConfig(data) {
 }
 
 // IPC handler registered once at module load — setup window invokes it.
+// SEPOS-REMOTE-INSTALL-001 — clipboard read for the wizard's 📋 Paste buttons.
+ipcMain.handle('read-clipboard', () => {
+  try { return clipboard.readText() || ''; } catch { return ''; }
+});
+
 ipcMain.handle('save-config', async (event, data) => {
   if (!data || !data.restaurant_name || !data.cloud_api_url || !data.restaurant_id) {
     return { success: false, error: 'Restaurant name, URL and ID are required.' };
@@ -245,6 +250,12 @@ async function runSetupWizard() {
   label { display:block; font-size:12px; font-weight:700;
     color:rgba(255,255,255,0.85); margin:14px 0 6px;
     text-transform:uppercase; letter-spacing:0.05em; }
+  .fieldrow { display:flex; gap:8px; align-items:stretch; }
+  .fieldrow input { flex:1; }
+  .pastebtn { flex:none; padding:0 12px; border-radius:10px; cursor:pointer;
+    border:1px solid rgba(201,168,76,0.4); background:rgba(201,168,76,0.12);
+    color:#C9A84C; font-size:12px; font-weight:700; white-space:nowrap; }
+  .pastebtn:active { background:rgba(201,168,76,0.3); }
   input { width:100%; padding:11px 14px; border-radius:10px;
     border:1px solid rgba(201,168,76,0.3); background:rgba(255,255,255,0.05);
     color:white; font-size:15px; box-sizing:border-box;
@@ -272,18 +283,18 @@ async function runSetupWizard() {
   </div>
 
   <label for="name">Restaurant name</label>
-  <input id="name" type="text" placeholder="e.g. Siam Garden" autofocus />
+  <div class="fieldrow"><input id="name" type="text" placeholder="e.g. Siam Garden" autofocus /><button type="button" class="pastebtn" data-for="name">📋 Paste</button></div>
 
   <label for="url">Cloud API URL</label>
-  <input id="url" type="url" placeholder="https://your-app.up.railway.app" />
+  <div class="fieldrow"><input id="url" type="url" placeholder="https://your-app.up.railway.app" /><button type="button" class="pastebtn" data-for="url">📋 Paste</button></div>
   <div class="hint">The Railway backend SiamEPOS will sync to.</div>
 
   <label for="rid">Restaurant ID</label>
-  <input id="rid" type="text" placeholder="siamepos-001" />
+  <div class="fieldrow"><input id="rid" type="text" placeholder="siamepos-001" /><button type="button" class="pastebtn" data-for="rid">📋 Paste</button></div>
   <div class="hint">Lowercase letters, numbers and dashes. Identifies this restaurant in the cloud.</div>
 
   <label for="secret">Sync secret <span style="color:rgba(255,255,255,0.4);text-transform:none;font-weight:400;letter-spacing:0;">(optional)</span></label>
-  <input id="secret" type="text" placeholder="from Railway → Variables → SYNC_SECRET" />
+  <div class="fieldrow"><input id="secret" type="text" placeholder="from Railway → Variables → SYNC_SECRET" /><button type="button" class="pastebtn" data-for="secret">📋 Paste</button></div>
   <div class="hint">Required to pull bill history from cloud. Match what's set on Railway.</div>
 
   <div id="error"></div>
@@ -297,6 +308,20 @@ async function runSetupWizard() {
 
   function showError(msg) { errEl.textContent = msg; errEl.classList.add('show'); }
   function clearError() { errEl.classList.remove('show'); }
+
+  // SEPOS-REMOTE-INSTALL-001 — 📋 Paste per field (TeamViewer-friendly).
+  document.querySelectorAll('.pastebtn').forEach((pb) => {
+    pb.addEventListener('click', async () => {
+      try {
+        const t = String(await window.siamepos.readClipboard() || '').trim();
+        if (!t) { showError('Clipboard is empty — copy the value first (clipboard sync must be on in your remote tool).'); return; }
+        const el = $(pb.dataset.for);
+        el.value = t;
+        el.focus();
+        clearError();
+      } catch (e) { showError('Could not read the clipboard: ' + e); }
+    });
+  });
 
   btn.addEventListener('click', async () => {
     clearError();
@@ -651,6 +676,12 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
+
+  // Paste was only wired to the first-run setup wizard (a7ce698), so the main
+  // till/admin had no right-click/long-press paste (critical on keyboard-less
+  // touchscreen tills) and no reliable Ctrl+V on Windows (autoHideMenuBar hides
+  // the default Edit menu). Give the main window the same clipboard shortcuts.
+  enableClipboardShortcuts(mainWindow);
 
   const forceDev = process.env.ELECTRON_DEV === '1';
   const indexFile = resolveClientIndex();

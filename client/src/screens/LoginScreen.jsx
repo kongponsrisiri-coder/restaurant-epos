@@ -82,6 +82,10 @@ export default function LoginScreen({ onLogin }) {
   const [password, setPassword] = useState('');
   const [staffList, setStaffList]         = useState([]);
   const [selectedStaff, setSelectedStaff] = useState(null);
+  // SEPOS-PINONLY-001 — when the venue sets login_pin_only, skip the name grid:
+  // the staff just type their PIN and the till identifies them from it (PINs
+  // are unique; the backend already matches on PIN alone).
+  const [pinOnly, setPinOnly]             = useState(false);
   // SEPOS-SEC-LOGIN — forced PIN change off the default 1234.
   const [mustChange, setMustChange] = useState(false);
   const [pendingStaff, setPendingStaff] = useState(null);
@@ -150,6 +154,7 @@ export default function LoginScreen({ onLogin }) {
       setRestaurantName(String(name || '').trim());
       if (settings && settings.brand_logo) setBrandLogo(settings.brand_logo); // SEPOS-BRAND-001
       if (settings && settings.brand_logo_size) setLogoSize(settings.brand_logo_size); // SEPOS-BRAND-001
+      setPinOnly(settings && String(settings.login_pin_only) === '1'); // SEPOS-PINONLY-001
     };
     load();
     return () => { cancelled = true; };
@@ -380,6 +385,31 @@ export default function LoginScreen({ onLogin }) {
           </div>
         </div>
         {/* numpad */}
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 96px)', gap: 12, width: isMobile ? '100%' : undefined, maxWidth: isMobile ? 320 : undefined }}>
+          {['1','2','3','4','5','6','7','8','9'].map(d => (
+            <button key={d} onClick={() => pressDigit(d)} style={isMobile ? mobileNumKey : numKey}>{d}</button>
+          ))}
+          <button onClick={pressDelete} style={{ ...(isMobile ? mobileNumKey : numKey), background: '#EFEAE0', fontSize: 22 }}>⌫</button>
+          <button onClick={() => pressDigit('0')} style={isMobile ? mobileNumKey : numKey}>0</button>
+          <button onClick={() => handleLogin()} disabled={loading || !pin}
+            style={{ ...(isMobile ? mobileNumKey : numKey), background: GREEN, color: '#fff', opacity: (loading || !pin) ? 0.5 : 1 }}>✓</button>
+        </div>
+      </div>
+    );
+  } else if (pinOnly) {
+    // SEPOS-PINONLY-001 — no name grid; PIN alone identifies the staff.
+    panelContent = (
+      <div style={{ display: 'flex', gap: isMobile ? 20 : 48, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+        <div style={{ width: isMobile ? '100%' : 240, maxWidth: 280, textAlign: isMobile ? 'center' : 'left' }}>
+          <div style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: INK }}>Enter your PIN</div>
+          <div style={{ color: MUTED, fontSize: 14, marginTop: 6 }}>Type your PIN to sign in</div>
+          <div style={{ display: 'flex', gap: 14, marginTop: 18, justifyContent: isMobile ? 'center' : 'flex-start' }}>
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} style={{ width: 16, height: 16, borderRadius: '50%',
+                background: i < pin.length ? GOLD : 'transparent', border: i < pin.length ? `2px solid ${GOLD}` : '2px solid #C9C2B2' }} />
+            ))}
+          </div>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 96px)', gap: 12, width: isMobile ? '100%' : undefined, maxWidth: isMobile ? 320 : undefined }}>
           {['1','2','3','4','5','6','7','8','9'].map(d => (
             <button key={d} onClick={() => pressDigit(d)} style={isMobile ? mobileNumKey : numKey}>{d}</button>

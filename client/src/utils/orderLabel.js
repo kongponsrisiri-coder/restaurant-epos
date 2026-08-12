@@ -27,6 +27,22 @@ export function isDelivery(order) {
 //   delivery → "🚗 Online Delivery #123"
 //   takeaway → "🥡 Online Order #123"
 //   dine-in  → "Table 5"
+// SEPOS-QR-ORDER-001 follow-up — tables can carry a NAME ("Bar 3") whose
+// internal number differs (Bar 3 = table_number 9). Prefer the name whenever
+// the payload carries it; numeric fallback identical to before.
+function dineInLabel(order) {
+  const label = order.table_label && String(order.table_label).trim();
+  return label || `Table ${order.table_number ?? '—'}`;
+}
+
+// Exported for screens that show a table heading on an ORDER row (OrderScreen,
+// Bills, Reports, Z…). Every surface must use this instead of building
+// `Table ${order.table_number}` by hand — that's how "Bar 2" leaks as
+// "Table 2" (the 2026-08-07 sweep). For a TABLE object use tableLabel(t).
+export function dineTableLabel(order) {
+  return dineInLabel(order || {});
+}
+
 export function orderShortLabel(order) {
   if (!order) return '—';
   if (isTakeawayTable(order)) return `🥡 Takeaway ${order.table_number}`;
@@ -36,7 +52,10 @@ export function orderShortLabel(order) {
       ? `🚗 Online Delivery #${id}`
       : `🥡 Online Order #${id}`;
   }
-  return `Table ${order.table_number ?? '—'}`;
+  // SEPOS-QR-ORDER-001 — customer placed it themselves from the table QR;
+  // the 📱 tells staff nobody keyed it (and that it's already PAID).
+  if (order.source === 'qr') return `📱 ${dineInLabel(order)}`;
+  return dineInLabel(order);
 }
 
 // Same but for plain-text contexts (receipts, alerts) — no emoji.
@@ -49,7 +68,7 @@ export function orderShortLabelPlain(order) {
       ? `Online Delivery #${id}`
       : `Online Order #${id}`;
   }
-  return `Table ${order.table_number ?? '—'}`;
+  return dineInLabel(order);
 }
 
 // Returns a secondary string with covers (dine-in) or customer + pickup

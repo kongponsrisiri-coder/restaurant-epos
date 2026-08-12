@@ -190,7 +190,19 @@ function initSchema() {
       start_date TEXT,
       notes TEXT,
       employment_status TEXT DEFAULT 'active',
+      can_discount INTEGER DEFAULT 0,
+      can_redeem_deposit INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- SEPOS-MENU-PHOTO-001 — owner-uploaded dish photos (mirrors the cloud
+    -- schema). Deliberately NOT part of the menu tree pull: the till doesn't
+    -- need photo bytes, the customer-facing pages are cloud-served.
+    CREATE TABLE IF NOT EXISTS menu_item_images (
+      menu_item_id INTEGER PRIMARY KEY REFERENCES menu_items(id) ON DELETE CASCADE,
+      mime TEXT NOT NULL DEFAULT 'image/jpeg',
+      data TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS payments (
@@ -709,6 +721,11 @@ function runMigrations() {
   // SEPOS-021: VAT rate per menu item
   addColumnIfMissing('menu_items', 'vat_rate', 'REAL DEFAULT 20.0');
   addColumnIfMissing('menu_items', 'is_online', 'INTEGER DEFAULT 1');
+  // SEPOS-QR-ORDER-001 — dish photo URL + dietary tags (customer menu card)
+  // + order source ('qr' = customer-placed, drives 📱 badge & auto-close).
+  addColumnIfMissing('menu_items', 'image_url', 'TEXT');
+  addColumnIfMissing('menu_items', 'dietary', 'TEXT');
+  addColumnIfMissing('orders', 'source', 'TEXT');
   // SEPOS-033: marketing consent + unsubscribe (GDPR)
   addColumnIfMissing('reservations', 'marketing_consent', 'INTEGER DEFAULT 0');
   addColumnIfMissing('reservations', 'unsubscribed_at', 'TIMESTAMP');
@@ -783,10 +800,17 @@ function runMigrations() {
   addColumnIfMissing('printers', 'role_bar', 'INTEGER DEFAULT 0');
   addColumnIfMissing('printers', 'lpr_queue', 'TEXT');
   addColumnIfMissing('order_items', 'cloud_id', 'INTEGER');
+  // SEPOS-QR-RECEIPT-001 — the tender that paid for this line (per-round receipts).
+  addColumnIfMissing('order_items', 'payment_id', 'INTEGER');
+  // SEPOS-SYNC-TENDERS-001 — cloud id of a mirrored tender (see syncService).
+  addColumnIfMissing('payments', 'cloud_id', 'INTEGER');
+  addColumnIfMissing('payments', 'payment_intent_id', 'TEXT');   // SEPOS-QR-PAY-REDO
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_cloud_id      ON orders(cloud_id)      WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] orders.cloud_id index:', err.message); }
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_order_items_cloud_id ON order_items(cloud_id) WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] order_items.cloud_id index:', err.message); }
   // SEPOS-047b — one Stripe PaymentIntent settles exactly one takeaway order.
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_payment_intent ON orders(payment_intent_id) WHERE payment_intent_id IS NOT NULL'); } catch (err) { console.warn('[db:local] orders.payment_intent index:', err.message); }
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_cloud_id ON payments(cloud_id) WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] payments.cloud_id index:', err.message); }
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_payment_intent ON payments(payment_intent_id) WHERE payment_intent_id IS NOT NULL'); } catch (err) { console.warn('[db:local] payments.payment_intent index:', err.message); }
   // SEPOS-053 — the trading session an order closed under + its cloud binding.
   addColumnIfMissing('orders', 'session_id', 'INTEGER');
   addColumnIfMissing('till_sessions', 'cloud_id', 'INTEGER');
@@ -810,6 +834,15 @@ function runMigrations() {
   // SEPOS-LITE-003 — email + password login on the staff table.
   addColumnIfMissing('staff', 'email', 'TEXT');
   addColumnIfMissing('staff', 'password_hash', 'TEXT');
+  // SEPOS-STAFF-PERMS-001 — v1.9.2 added these to the CREATE but MISSED the
+  // migration for existing tills → GET /api/staff 500'd on every already-
+  // installed till and the login screen lost both the name grid and the pad.
+  // SEPOS-MENU-COLOR-001 — button colours
+  addColumnIfMissing('categories', 'color', 'TEXT');
+  addColumnIfMissing('subcategories', 'color', 'TEXT');
+  addColumnIfMissing('menu_items', 'color', 'TEXT');
+  addColumnIfMissing('staff', 'can_discount', 'INTEGER DEFAULT 0');
+  addColumnIfMissing('staff', 'can_redeem_deposit', 'INTEGER DEFAULT 0');
 }
 
 function seedDefaults() {

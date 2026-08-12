@@ -27,13 +27,18 @@ const subscribers = new Set();
 // /api/menu/all is handled separately because it returns a nested tree
 // (categories → subcategories + items) — see pullMenuTree().
 const PULL_TABLES = [
-  { path: '/api/tables',                 table: 'tables',                 pk: 'id' },
+  // orphan: true — a table/wall deleted on the cloud must ALSO delete locally,
+  // or it lingers as a ghost on the till's floor forever (pull was upsert-only;
+  // found live on Baan Siam 2026-08-05: cloud-deleted test table never left the
+  // local plan). Safe now that plan writes are strict write-through — a row
+  // can't exist locally without the cloud knowing about it.
+  { path: '/api/tables',                 table: 'tables',                 pk: 'id', orphan: true },
   // SEPOS-047k — staff is pulled separately via the SYNC_SECRET-gated
   // /api/sync/staff feed (pullStaff), because the public /api/staff omits
   // pin and local staff.pin is NOT NULL. See pullStaff() below.
   { path: '/api/settings',               table: 'settings',               pk: 'key' },
-  { path: '/api/table-walls',            table: 'table_walls',            pk: 'id' },
-  { path: '/api/table-combinations',     table: 'table_combinations',     pk: 'id' },
+  { path: '/api/table-walls',            table: 'table_walls',            pk: 'id', orphan: true },
+  { path: '/api/table-combinations',     table: 'table_combinations',     pk: 'id', orphan: true },
   { path: '/api/dining-duration-tiers',  table: 'dining_duration_tiers',  pk: 'id' },
   { path: '/api/reservations',           table: 'reservations',           pk: 'id' },
   // SEPOS-049 — reservation/takeaway hours, party limits, wait-time tiers
@@ -655,9 +660,58 @@ async function applyToCloud(actionType, payload) {
       if (!r.ok) throw new Error(`session_close ${r.status}`);
       return r.json();
     }
+    // SEPOS-CONFIG-QUEUE — replay a config write (floor plan UPDATE/DELETE)
+    // that was made while the cloud was unreachable. "The till is the boss":
+    // the host's edit applied locally the moment it was made; this pushes it
+    // up verbatim once internet returns. PUT/DELETE are idempotent so queue
+    // retries are safe. x-sync-secret rides along for gated endpoints.
+    case 'config_write': {
+      const headers = { 'Content-Type': 'application/json' };
+      if (process.env.SYNC_SECRET) headers['x-sync-secret'] = process.env.SYNC_SECRET;
+      const init = { method: payload.method, headers };
+      if (payload.method !== 'DELETE' && payload.body && Object.keys(payload.body).length) {
+        init.body = JSON.stringify(payload.body);
+      }
+      const r = await fetch(url(payload.path), init);
+      if (!r.ok) throw new Error(`config_write ${payload.method} ${payload.path} ${r.status}`);
+      return r.json().catch(() => ({ success: true }));
+    }
     default:
       throw new Error('unknown sync action: ' + actionType);
   }
+}
+
+// SEPOS-CONFIG-QUEUE — local row ids (per flat table) that have an unfinished
+// config_write in the queue. The pull must not upsert (revert) or orphan-delete
+// these rows until the host's edit has landed on the cloud.
+const CONFIG_WRITE_PATHS = {
+  tables:              /^\/api\/tables\/(\d+)(?:\/plan)?$/,
+  table_walls:         /^\/api\/table-walls\/(\d+)$/,
+  table_combinations:  /^\/api\/table-combinations\/(\d+)$/,
+  // SEPOS-CONFIG-QUEUE phase 2 — menu + staff ride the same rail.
+  categories:          /^\/api\/categories\/(\d+)$/,
+  subcategories:       /^\/api\/subcategories\/(\d+)$/,
+  menu_items:          /^\/api\/menu\/items\/(\d+)$/,
+  modifier_groups:     /^\/api\/(?:modifier-groups|menu\/items\/\d+\/modifiers)\/(\d+)$/,
+  modifiers:           /^\/api\/modifiers\/(\d+)$/,
+  staff:               /^\/api\/staff\/(\d+)$/,
+};
+async function pendingConfigWriteIds(table) {
+  const re = CONFIG_WRITE_PATHS[table];
+  if (!re) return new Set();
+  try {
+    const r = await pool.query(
+      `SELECT payload FROM sync_queue WHERE synced = 0 AND action_type = 'config_write'`);
+    const ids = new Set();
+    for (const row of r.rows) {
+      try {
+        const p = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+        const m = re.exec(p?.path || '');
+        if (m) ids.add(Number(m[1]));
+      } catch { /* malformed payload — ignore */ }
+    }
+    return ids;
+  } catch { return new Set(); }
 }
 
 async function getLocalColumns(table) {
@@ -718,8 +772,23 @@ async function deleteOrphans(table, cloudIds) {
     const localRes = await pool.query(`SELECT id FROM ${table}`);
     const cloudSet = new Set(cloudIds.map(Number));
     const localIds = localRes.rows.map(r => Number(r.id));
-    const orphanIds = localIds.filter(id => !cloudSet.has(id));
+    let orphanIds = localIds.filter(id => !cloudSet.has(id));
     if (orphanIds.length === 0) return 0;
+    // AUDIT-002 LOW — orphan-delete assumes "a local row the cloud doesn't know
+    // about was deleted on the cloud". That only holds for rows created AFTER
+    // strict write-through; an older local-only table would be deleted and its
+    // OPEN order detached (the floor loses a live bill). A genuinely
+    // cloud-deleted table has no open orders.
+    if (table === 'tables' && orphanIds.length) {
+      const keep = [], drop = [];
+      for (const id of orphanIds) {
+        const r = await pool.query(`SELECT COUNT(*) AS n FROM orders WHERE table_id = $1 AND status = 'open'`, [id]);
+        (Number(r.rows[0]?.n || 0) > 0 ? keep : drop).push(id);
+      }
+      if (keep.length) console.warn(`[sync] keeping ${keep.length} local-only table(s) with open orders: ${keep.join(', ')}`);
+      orphanIds = drop;
+      if (orphanIds.length === 0) return 0;
+    }
     for (const id of orphanIds) {
       try {
         await pool.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
@@ -786,16 +855,29 @@ async function pullMenuTree() {
         // SEPOS-STATION-003 — per-dish station override; included from day
         // one so it can never hit the dropped-projection bug class above.
         printer_id: i.printer_id,
+        // SEPOS-QR-ORDER-001 — customer-card fields, included from day one
+        // (same dropped-projection bug class guard).
+        image_url: i.image_url, dietary: i.dietary,
       }))
     );
 
+    // SEPOS-CONFIG-QUEUE phase 2 — rows the till edited while offline (pending
+    // config_write in the queue) are host-authoritative: don't let the cloud's
+    // stale copy revert them before the push lands.
+    const pendCat  = await pendingConfigWriteIds('categories');
+    const pendSub  = await pendingConfigWriteIds('subcategories');
+    const pendItem = await pendingConfigWriteIds('menu_items');
+    const catList  = pendCat.size  ? flatCategories.filter(r => !pendCat.has(Number(r.id)))    : flatCategories;
+    const subList  = pendSub.size  ? flatSubcategories.filter(r => !pendSub.has(Number(r.id))) : flatSubcategories;
+    const itemList = pendItem.size ? flatItems.filter(r => !pendItem.has(Number(r.id)))        : flatItems;
+
     // printer_id opted into null-sync so removing a category→printer route in
     // the till actually clears on desktop (SEPOS-PRINT-002 flexible routing).
-    const nCat   = await upsertRows('categories', 'id', flatCategories, ['printer_id']);
-    const nSub   = await upsertRows('subcategories', 'id', flatSubcategories);
+    const nCat   = await upsertRows('categories', 'id', catList, ['printer_id']);
+    const nSub   = await upsertRows('subcategories', 'id', subList);
     // menu_items.printer_id (SEPOS-STATION-003 per-dish override) also
     // null-syncs, so switching a dish back to "Inherit" clears on desktop.
-    const nItems = await upsertRows('menu_items', 'id', flatItems, ['printer_id']);
+    const nItems = await upsertRows('menu_items', 'id', itemList, ['printer_id']);
 
     // SEPOS-046p — propagate cloud-side deletions. Pull was upsert-only
     // before, so deleting an item / subcategory / category on the web
@@ -804,9 +886,10 @@ async function pullMenuTree() {
     // Safe because we only reach this branch after a successful cloud
     // fetch with a non-empty top-level array — no risk of wiping
     // local data due to a transient network blip.
-    const nItemsDel = await deleteOrphans('menu_items',   flatItems.map(i => i.id));
-    const nSubDel   = await deleteOrphans('subcategories', flatSubcategories.map(s => s.id));
-    const nCatDel   = await deleteOrphans('categories',    flatCategories.map(c => c.id));
+    // Pending-write rows are also spared from orphan-delete until the push lands.
+    const nItemsDel = await deleteOrphans('menu_items',   flatItems.map(i => i.id).concat([...pendItem]));
+    const nSubDel   = await deleteOrphans('subcategories', flatSubcategories.map(s => s.id).concat([...pendSub]));
+    const nCatDel   = await deleteOrphans('categories',    flatCategories.map(c => c.id).concat([...pendCat]));
     console.log(`[sync] pull menu tree: ${nCat}/${nSub}/${nItems} upserts (cats/subs/items), ${nCatDel}/${nSubDel}/${nItemsDel} deletes`);
 
     return flatItems.map((i) => i.id);
@@ -900,6 +983,14 @@ async function pullFromCloud() {
         }
         list = filtered;
       }
+      // SEPOS-CONFIG-QUEUE — rows the host edited while offline (unfinished
+      // config_write in the queue) are host-authoritative: don't let the
+      // cloud's stale copy revert them, and don't orphan-delete them either.
+      const pendingIds = await pendingConfigWriteIds(ep.table);
+      if (pendingIds.size > 0) {
+        list = list.filter((row) => !pendingIds.has(Number(row?.id)));
+        console.log(`[sync] pull ${ep.table}: skipping ${pendingIds.size} row(s) with pending config_write`);
+      }
       const n = await upsertRows(ep.table, ep.pk, list);
       if (n > 0) console.log(`[sync] pull ${ep.table}: ${n} rows`);
       // SEPOS-059 fix — cloud-wins DELETE for flagged flat tables (the modifier
@@ -908,7 +999,8 @@ async function pullFromCloud() {
       // above) so a transient failure never wipes local; an empty 200 list
       // legitimately means "cloud has none" → remove all local.
       if (ep.orphan && ep.pk === 'id') {
-        const removed = await deleteOrphans(ep.table, list.map((row) => row.id));
+        const keep = list.map((row) => row.id).concat([...pendingIds]);
+        const removed = await deleteOrphans(ep.table, keep);
         if (removed > 0) console.log(`[sync] orphan-delete ${ep.table}: ${removed} rows`);
       }
     } catch (err) {
@@ -926,6 +1018,7 @@ async function pullFromCloud() {
 
   // Closed orders + items + payments — gated by SYNC_SECRET.
   await pullClosedOrders();
+  await repairMissingClosedPayments();
 
   // Active (open) orders + items + payments — also gated by SYNC_SECRET.
   // Enables bidirectional sync: orders Chrome creates now show up on the Mac.
@@ -1111,8 +1204,42 @@ async function pullActiveOrders() {
     }
   }
 
-  if (inserted || updated || itemsInserted || itemsUpdated || skippedPending || skippedDelete) {
-    console.log(`[sync] active-orders: ${inserted}+${updated} orders, ${itemsInserted}+${itemsUpdated} items${itemsSkipped ? ` (${itemsSkipped} item-skips, parent not yet pulled)` : ''}${skippedPending ? ` (${skippedPending} skipped — local pending)` : ''}${skippedDelete ? ` (${skippedDelete} skipped — pending delete push)` : ''}`);
+  // ── Payments (SEPOS-SYNC-TENDERS-001) ─────────────────────────────────
+  // The active-orders feed has ALWAYS carried payments — server.js sends them —
+  // but this puller destructured the array and dropped it. A QR round is paid
+  // on the customer's phone, i.e. on the CLOUD, so the till received the order
+  // with no tender behind it. Live proof (Korakot's till, 2026-08-07): closed
+  // orders #113/#114 arrived with £0 recorded against £51.70 and £37.90 taken —
+  // invisible in the till's Bills and missing from its Z.
+  let paysInserted = 0, paysSkipped = 0;
+  if (payments.length) {
+    const payColsRow = await pool.query('PRAGMA table_info(payments)');
+    const payCols = payColsRow.rows.map(r => r.name);
+    if (!payCols.includes('cloud_id')) {
+      console.warn('[sync] payments.cloud_id missing — skipping tender mirror until the migration runs');
+    } else {
+      for (const cloudPay of payments) {
+        const localOrder = await pool.query('SELECT id FROM orders WHERE cloud_id = $1', [cloudPay.order_id]);
+        const localOrderId = localOrder.rows[0]?.id;
+        if (!localOrderId) { paysSkipped++; continue; }                       // parent not pulled yet
+        if (pendingOrderIds.has(localOrderId)) { paysSkipped++; continue; }   // till is authoritative
+        const existing = await pool.query('SELECT id FROM payments WHERE cloud_id = $1', [cloudPay.id]);
+        if (existing.rows[0]) continue;
+        const fields = pickFields(cloudPay, payCols, { order_id: localOrderId, cloud_id: cloudPay.id });
+        // order_items.payment_id is a LOCAL id space — never carry the cloud's.
+        delete fields.payment_id;
+        const cols = Object.keys(fields);
+        try {
+          await pool.query(`INSERT INTO payments (${cols.join(',')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(',')})`,
+            cols.map(c => fields[c]));
+          paysInserted++;
+        } catch (err) { console.warn('[sync] active-order payment insert failed:', err.message); }
+      }
+    }
+  }
+
+  if (inserted || updated || itemsInserted || itemsUpdated || skippedPending || skippedDelete || paysInserted) {
+    console.log(`[sync] active-orders: ${inserted}+${updated} orders, ${itemsInserted}+${itemsUpdated} items${paysInserted ? `, ${paysInserted} payments` : ''}${itemsSkipped ? ` (${itemsSkipped} item-skips, parent not yet pulled)` : ''}${skippedPending ? ` (${skippedPending} skipped — local pending)` : ''}${skippedDelete ? ` (${skippedDelete} skipped — pending delete push)` : ''}`);
   }
 
 }
@@ -1147,16 +1274,36 @@ async function reconcileCloudDeletions(orders, pendingOrderIds, pendingDeleteClo
         const pr = await fetch(`${CLOUD_API_URL}/api/orders/${cid}`, {
           signal: AbortSignal.timeout(PING_TIMEOUT_MS),
         });
+        let mirrored = null;
         if (pr.status === 404) {
+          mirrored = { status: 'cancelled', closed_at: null, why: 'deleted on the cloud' };
+        } else if (pr.ok) {
+          // SEPOS-GHOST-002 — an order CANCELLED or CLOSED on the cloud isn't
+          // deleted: it returns 200 with its terminal status, which this probe
+          // used to ignore — so the local copy stayed open forever (the ghost
+          // factory found during the 2026-08-05 Baan Siam cleanup: 11 local
+          // "open" orders whose cloud rows were long closed).
+          const cloudOrder = await pr.json().catch(() => null);
+          const st = cloudOrder && String(cloudOrder.status || '');
+          if (st === 'cancelled' || st === 'closed') {
+            mirrored = { status: st, closed_at: cloudOrder.closed_at || null, why: `${st} on the cloud` };
+          }
+        }
+        if (mirrored) {
           await pool.query(
-            `UPDATE orders SET status = 'cancelled', closed_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = 'open'`,
-            [row.id]
+            `UPDATE orders SET status = $1, closed_at = COALESCE($2, CURRENT_TIMESTAMP) WHERE id = $3 AND status = 'open'`,
+            [mirrored.status, mirrored.closed_at, row.id]
           );
           if (row.table_id) {
-            await pool.query(`UPDATE tables SET status = 'available' WHERE id = $1`, [row.table_id]);
+            // Free the table only if nothing else is open on it.
+            const others = await pool.query(
+              `SELECT COUNT(*) AS n FROM orders WHERE table_id = $1 AND status = 'open'`, [row.table_id]);
+            if (Number(others.rows[0]?.n || 0) === 0) {
+              await pool.query(`UPDATE tables SET status = 'available' WHERE id = $1`, [row.table_id]);
+            }
           }
           ghostsCancelled++;
-          console.log(`[sync] local order ${row.id} (cloud ${cid}) was deleted on the cloud — cancelled locally`);
+          console.log(`[sync] local order ${row.id} (cloud ${cid}) was ${mirrored.why} — mirrored locally`);
         }
       } catch { /* offline blip — retry next tick */ }
     }
@@ -1193,6 +1340,21 @@ async function writeSyncState(key, value) {
 // are delete-and-replaced — a closed order is terminal so there are no
 // local edits to preserve, and a clean replace is naturally idempotent
 // (re-pulling the same closed order can't accumulate duplicate items).
+// Build an INSERT/UPDATE-safe field map: known columns only, drop the cloud
+// `id` and `order_id` (we map those ourselves), drop nulls so a cloud null
+// can't clobber a local default. Module-scoped: both the closed-order upsert
+// and the active-order payment mirror use it.
+function pickFields(row, cols, extra) {
+  const f = { ...extra };
+  for (const [k, v] of Object.entries(row)) {
+    if (k === 'id' || k === 'order_id') continue;
+    if (!cols.includes(k)) continue;
+    if (v === null || v === undefined) continue;
+    f[k] = v;
+  }
+  return f;
+}
+
 async function upsertClosedOrders(orders, order_items, payments) {
   const orderCols = (await pool.query('PRAGMA table_info(orders)')).rows.map(r => r.name);
   const itemCols  = (await pool.query('PRAGMA table_info(order_items)')).rows.map(r => r.name);
@@ -1203,20 +1365,6 @@ async function upsertClosedOrders(orders, order_items, payments) {
   for (const it of order_items) (itemsByCloudOrder[it.order_id] ||= []).push(it);
   const paysByCloudOrder = {};
   for (const p of payments) (paysByCloudOrder[p.order_id] ||= []).push(p);
-
-  // Build an INSERT/UPDATE-safe field map: known columns only, drop the
-  // cloud `id` and `order_id` (we map those ourselves), drop nulls so a
-  // cloud null can't clobber a local default.
-  const pickFields = (row, cols, extra) => {
-    const f = { ...extra };
-    for (const [k, v] of Object.entries(row)) {
-      if (k === 'id' || k === 'order_id') continue;
-      if (!cols.includes(k)) continue;
-      if (v === null || v === undefined) continue;
-      f[k] = v;
-    }
-    return f;
-  };
 
   let skipped = 0, closedApplied = 0;
   // SEPOS-047f — local orders with a pending push are authoritative; never
@@ -1243,7 +1391,21 @@ async function upsertClosedOrders(orders, order_items, payments) {
       // pending mutation for it.
       const stRes = await pool.query('SELECT status FROM orders WHERE id = $1', [localId]);
       const localStatus = stRes.rows[0]?.status;
-      if (localStatus === 'open' && !pendingOrderIds.has(Number(localId))) {
+      // SEPOS-SYNC-TENDERS-001 — the GHOST-002 reconciler mirrors a cloud-closed
+      // order to status='closed' locally the moment it sees it, which is BEFORE
+      // this pull reaches it. The 'open' test then skipped it forever and its
+      // payments never landed — the exact failure Korakot hit on 2026-08-07
+      // (local #113/#114 closed with zero tenders against £51.70/£37.90 taken).
+      // So also apply when the local row is closed but has NO tenders while the
+      // cloud copy does: that combination only happens when we mirrored a
+      // status without ever receiving the money behind it.
+      let moneyMissingLocally = false;
+      if (localStatus && localStatus !== 'open' && (paysByCloudOrder[cloudId] || []).length) {
+        const localPays = await pool.query('SELECT COUNT(*) AS n FROM payments WHERE order_id = $1', [localId]);
+        moneyMissingLocally = Number(localPays.rows[0]?.n || 0) === 0;
+        if (moneyMissingLocally) console.log(`[sync] closed order local#${localId} (cloud#${cloudId}) has no tenders — filling them in`);
+      }
+      if ((localStatus === 'open' || moneyMissingLocally) && !pendingOrderIds.has(Number(localId))) {
         const setCols = Object.keys(fields).filter(k => k !== 'cloud_id');
         if (setCols.length > 0) {
           const sets = setCols.map((c, i) => `${c} = $${i + 1}`).join(',');
@@ -1283,7 +1445,7 @@ async function upsertClosedOrders(orders, order_items, payments) {
 
     await pool.query('DELETE FROM payments WHERE order_id = $1', [localId]);
     for (const p of (paysByCloudOrder[cloudId] || [])) {
-      const f = pickFields(p, payCols, { order_id: localId });
+      const f = pickFields(p, payCols, { order_id: localId }); delete f.payment_id; /* local id space (verify pass) */
       const cols = Object.keys(f);
       const ph = cols.map((_, i) => `$${i + 1}`).join(',');
       try {
@@ -1292,6 +1454,57 @@ async function upsertClosedOrders(orders, order_items, payments) {
     }
   }
   if (skipped > 0 || closedApplied > 0) console.log(`[sync] closed-orders: ${closedApplied} applied (cloud-closed), ${skipped} skipped (already local — Phase 2)`);
+}
+
+// SEPOS-SYNC-TENDERS-001 — repair pass for orders stranded BEFORE this fix
+// existed. The closed-orders cursor only moves forward, so an order that was
+// skipped once is never revisited: Korakot's #113/#114 would stay tender-less
+// forever. This looks for recent local closed orders with no tenders at all and
+// re-requests just those, by cloud id. Cheap (bounded, and only ever finds
+// something when there is a real gap).
+// cloud_id -> attempts. Bounded; an order we couldn't repair in 3 goes is not
+// going to repair on the 400th.
+const _repairAttempts = new Map();
+async function repairMissingClosedPayments() {
+  if (!offlineQueue.isLocal || !CLOUD_API_URL || !process.env.SYNC_SECRET) return;
+  try {
+    const colRes = await pool.query('PRAGMA table_info(payments)');
+    if (!colRes.rows.map(r => r.name).includes('cloud_id')) return;
+    // Verify pass (HIGH): without a memo this re-requested the same orders on
+    // EVERY 5s tick forever — an order the cloud genuinely has no tenders for
+    // (a £0 comp, a cancelled bill) is a permanent gap, and 25 HTTP calls every
+    // 5 seconds is a self-inflicted denial of service on the tenant. Try each
+    // order a few times, then leave it alone.
+    const gaps = (await pool.query(
+      `SELECT o.id, o.cloud_id FROM orders o
+        WHERE o.status = 'closed' AND o.cloud_id IS NOT NULL AND o.total > 0
+          AND o.closed_at > datetime('now', '-3 days')
+          AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id)
+        LIMIT 25`)).rows.filter((row) => (_repairAttempts.get(row.cloud_id) || 0) < 3);
+    if (!gaps.length) return;
+    console.log(`[sync] repairing ${gaps.length} closed order(s) that have no tenders locally`);
+    const payCols = colRes.rows.map(r => r.name);
+    for (const row of gaps) {
+      _repairAttempts.set(row.cloud_id, (_repairAttempts.get(row.cloud_id) || 0) + 1);
+      try {
+        const r = await fetch(`${CLOUD_API_URL}/api/sync/order-payments/${row.cloud_id}`, {
+          headers: { 'x-sync-secret': process.env.SYNC_SECRET }, signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+        });
+        if (!r.ok) continue;
+        const pays = await r.json();
+        for (const p of (Array.isArray(pays) ? pays : [])) {
+          // order_items.payment_id points at LOCAL payment ids; a cloud id
+          // mirrored verbatim would point at a different tender entirely.
+          const f = pickFields(p, payCols, { order_id: row.id, cloud_id: p.id });
+          delete f.payment_id;
+          const cols = Object.keys(f);
+          await pool.query(`INSERT INTO payments (${cols.join(',')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(',')})`,
+            cols.map(c => f[c])).catch(() => {});
+        }
+        console.log(`[sync] repaired local#${row.id} (cloud#${row.cloud_id}) — ${(pays || []).length} tender(s)`);
+      } catch { /* try again next tick */ }
+    }
+  } catch (err) { console.warn('[sync] repairMissingClosedPayments:', err.message); }
 }
 
 async function pullClosedOrders() {
@@ -1526,15 +1739,24 @@ async function pullTablesSnapshot() {
   const feeds = [
     { path: '/api/tables', table: 'tables' },
     { path: '/api/table-combinations', table: 'table_combinations' },
+    // AUDIT-002 LOW — walls use the same write-through and THIS is their
+    // instant pull-back, but the feed was missing, so every wall edit visibly
+    // reverted until the next tick caught up.
+    { path: '/api/table-walls', table: 'table_walls' },
   ];
   for (const f of feeds) {
     try {
       const r = await fetch(CLOUD_API_URL + f.path, { signal: AbortSignal.timeout(PING_TIMEOUT_MS) });
       if (!r.ok) continue;
       const rows = await r.json();
-      const list = Array.isArray(rows) ? rows : (rows?.data || []);
+      let list = Array.isArray(rows) ? rows : (rows?.data || []);
+      // SEPOS-AUDIT-002 F21 — honour pending offline edits, exactly as the main
+      // tick does; and keep those ids out of the orphan-delete list so a queued
+      // row isn't deleted while its push is still in flight.
+      const pending = await pendingConfigWriteIds(f.table);
+      if (pending.size > 0) list = list.filter((row) => !pending.has(Number(row?.id)));
       await upsertRows(f.table, 'id', list);
-      await deleteOrphans(f.table, list.map((row) => row.id));
+      await deleteOrphans(f.table, [...list.map((row) => row.id), ...pending]);
     } catch (err) {
       console.warn(`[sync] pullTablesSnapshot ${f.path} failed:`, err.message);
     }
@@ -1559,9 +1781,11 @@ async function pullModifiersSnapshot() {
       const r = await fetch(CLOUD_API_URL + f.path, { signal: AbortSignal.timeout(PING_TIMEOUT_MS) });
       if (!r.ok) continue;
       const rows = await r.json();
-      const list = Array.isArray(rows) ? rows : (rows?.data || []);
+      let list = Array.isArray(rows) ? rows : (rows?.data || []);
+      const pending = await pendingConfigWriteIds(f.table);   // F21
+      if (pending.size > 0) list = list.filter((row) => !pending.has(Number(row?.id)));
       await upsertRows(f.table, 'id', list);
-      await deleteOrphans(f.table, list.map((row) => row.id));
+      await deleteOrphans(f.table, [...list.map((row) => row.id), ...pending]);
     } catch (err) {
       console.warn(`[sync] pullModifiersSnapshot ${f.path} failed:`, err.message);
     }
@@ -1610,8 +1834,12 @@ async function pullStaff() {
     const rows = await r.json();
     const list = Array.isArray(rows) ? rows : (rows?.data || []);
     if (!Array.isArray(list) || list.length === 0) return;
-    const n = await upsertRows('staff', 'id', list);
-    await deleteOrphans('staff', list.map(s => s.id));
+    // SEPOS-CONFIG-QUEUE phase 2 — offline staff edits are host-authoritative
+    // until their queued push lands.
+    const pendStaff = await pendingConfigWriteIds('staff');
+    const staffList = pendStaff.size ? list.filter(s => !pendStaff.has(Number(s.id))) : list;
+    const n = await upsertRows('staff', 'id', staffList);
+    await deleteOrphans('staff', list.map(s => s.id).concat([...pendStaff]));
     if (n > 0) console.log(`[sync] pull staff: ${n} rows`);
   } catch (err) {
     console.warn('[sync] pullStaff failed:', err.message);

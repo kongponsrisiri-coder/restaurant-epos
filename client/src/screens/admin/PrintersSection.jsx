@@ -11,6 +11,7 @@
 
 import { useState, useEffect } from 'react';
 import { getSettings, updateSettings, testNetworkPrinter, cupsQueueForIp, printerHealth, printerGetMac, printerDiscover, printerThaiTest, getPrintTestBuffer, getPrinters, createPrinter, updatePrinter, deletePrinter, testPrinter, setPrinterDefault, getCategories, setCategoryPrinter, scanPrinters } from '../../api';
+import StickySaveBar, { SAVE_BAR_CLEARANCE } from '../../components/StickySaveBar';
 import { isNativeApp, sendRawToPrinter } from '../../native/printer'; // SEPOS-ANDROID-001
 
 // ── Network Printers card (IP-based, RAW + LPR + CUPS fallback chain) ──
@@ -117,7 +118,7 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
       if (isNativeApp() && ip) {
         // SEPOS-ANDROID-001 — on the Android app the cloud can't reach a LAN
         // printer, so fetch the server's ESC/POS test page and send it ourselves.
-        const buf = await getPrintTestBuffer();
+        const buf = await getPrintTestBuffer(ip, name, port);   // identity echoed on the slip
         const r = await sendRawToPrinter(ip, port, buf.data);
         setTest(key, r && r.ok ? 'ok' : 'fail');
       } else {
@@ -377,6 +378,66 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
 
       <div style={{ background:'#f0f9ff', border:'1px solid #bae6fd', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#0369a1' }}>
         💡 <strong>How to find your printer's IP:</strong> Log into your router admin page (usually 192.168.1.1) and look for the WAVLINK print server in the connected devices list. Give it a fixed/static IP so it never changes.
+      </div>
+    </div>
+  );
+}
+
+// SEPOS-BILL-STATIONS-001 — per-DEVICE bill station (Phakoon request).
+// A multi-section venue runs a till/tablet per section; each device picks
+// which network printer ITS bills come out of. The choice is device-local
+// (localStorage) — the shared role_receipt printer stays the default for
+// devices that pick nothing.
+function BillStationCard({ cardStyle }) {
+  const [stations, setStations] = useState([]);
+  const [choice, setChoice] = useState(() => {
+    try { return localStorage.getItem('siamepos_device_bill_printer') || ''; } catch { return ''; }
+  });
+  const [testState, setTestState] = useState('idle');
+
+  useEffect(() => {
+    getPrinters().then(list => setStations((Array.isArray(list) ? list : []).filter(p => p.is_active && p.ip)))
+      .catch(() => setStations([]));
+  }, []);
+
+  const save = (v) => {
+    setChoice(v);
+    try { v ? localStorage.setItem('siamepos_device_bill_printer', v) : localStorage.removeItem('siamepos_device_bill_printer'); } catch {}
+  };
+
+  const testStation = async () => {
+    if (!choice) return;
+    setTestState('printing');
+    try {
+      const r = await testPrinter(Number(choice));
+      setTestState(r && (r.success || r.ok) ? 'ok' : 'fail');
+    } catch { setTestState('fail'); }
+    setTimeout(() => setTestState('idle'), 3000);
+  };
+
+  const def = stations.find(p => Number(p.role_receipt) === 1);
+  return (
+    <div style={cardStyle}>
+      <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:6 }}>🧾 Bill station (this device)</h2>
+      <p style={{ fontSize:13, color:'#888', lineHeight:1.6, marginBottom:12 }}>
+        Bills printed from <b>this till or tablet</b> come out of the station chosen here — so each
+        section of the restaurant prints bills at its own printer. Leave on Default to use the shared
+        Bills printer{def ? ` (${def.name})` : ''}.
+      </p>
+      <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+        <select value={choice} onChange={e => save(e.target.value)}
+          style={{ width:'100%', maxWidth:380, padding:'10px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14, background:'white' }}>
+          <option value="">Default — shared Bills printer{def ? ` (${def.name})` : ''}</option>
+          {stations.map(p => (
+            <option key={p.id} value={p.id}>{p.name} — {p.ip}</option>
+          ))}
+        </select>
+        {choice && (
+          <button onClick={testStation} style={{ padding:'10px 16px', borderRadius:8, border:'none', fontWeight:700, fontSize:13, cursor:'pointer',
+            background: testState==='ok' ? '#16a34a' : testState==='fail' ? '#dc2626' : 'var(--brand-primary, #1a1a2e)', color:'white' }}>
+            {testState==='printing' ? 'Printing…' : testState==='ok' ? '✓ Sent' : testState==='fail' ? '✗ Failed' : 'Test this station'}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -842,11 +903,12 @@ export default function PrintersSection() {
   }
 
   return (
-    <div style={{ padding:30, maxWidth:900 }}>
+    <div style={{ padding:30, paddingBottom:SAVE_BAR_CLEARANCE, maxWidth:900 }}>
       <h1 style={{ fontSize:24, fontWeight:800, color:'var(--brand-primary, #1a1a2e)', marginBottom:24 }}>🖨️ Printers</h1>
 
       <PrintRoutingCard cardStyle={cardStyle} settings={settings} setSettings={setSettings} />
       <NetworkPrinterCard cardStyle={cardStyle} settings={settings} setSettings={setSettings} />
+      <BillStationCard cardStyle={cardStyle} />
       <PrinterCard cardStyle={cardStyle} />
 
       {/* Print text size (SEPOS-PRINT-FONT-001) — a printer setting, so it lives here. */}
@@ -895,13 +957,8 @@ export default function PrintersSection() {
 
       <DeviceKeyboardToggle cardStyle={cardStyle} />
 
-      <button onClick={handleSave} disabled={saving}
-        style={{ width:'100%', padding:'14px', borderRadius:10, border:'none',
-                 background: saved ? '#22c55e' : 'var(--brand-primary, #1a1a2e)', color:'white',
-                 cursor:'pointer', fontWeight:700, fontSize:16,
-                 transition:'background 0.3s' }}>
-        {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Printer Settings'}
-      </button>
+      <StickySaveBar onSave={handleSave} label="💾 Save Printer Settings"
+        saving={saving} saved={saved} savedLabel="✓ Saved" />
     </div>
   );
 }

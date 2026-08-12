@@ -64,9 +64,28 @@ function headerOps(ops, order, title, kw = SUNMI_KITCHEN_WIDTH) {
     label = t === 'counter' ? 'COUNTER'
       : (t === 'takeaway' && order.table_number != null && order.table_number !== '') ? `TAKEAWAY ${order.table_number}`
       : 'ONLINE ORDER';
-  } else label = 'TABLE ' + ((order && (order.table_number ?? order.table_id)) ?? '');
+  } else {
+    // Table NAME wins over the raw number (Bar 2 = table_number 2) — same
+    // rule as printService.tableHeading / KitchenTicket.orderHeading.
+    const tl = order && order.table_label && String(order.table_label).trim();
+    label = tl ? tl.toUpperCase() : 'TABLE ' + ((order && (order.table_number ?? order.table_id)) ?? '');
+  }
   ops.push({ op: 'size', v: 'h' }, { op: 'text', v: label }, { op: 'size', v: 'n' }, { op: 'bold', v: false }); // big table no.
   if (order && order.id != null) ops.push({ op: 'text', v: 'Order #' + order.id });
+  // SEPOS-AUDIT-002 F13 — the native ticket printed the heading and item lines
+  // ONLY, dropping everything the desktop/server builders include: who the
+  // order is for, how to reach them, where it's going and — worst — the
+  // order-level ALLERGY note. A Sunmi-only kitchen was cooking online orders
+  // blind to "no peanuts".
+  if (order) {
+    if (order.customer_name)    ops.push({ op: 'text', v: String(order.customer_name) });
+    if (order.customer_phone)   ops.push({ op: 'text', v: 'Tel: ' + String(order.customer_phone) });
+    if (order.delivery_address) ops.push({ op: 'text', v: String(order.delivery_address) });
+    const note = order.customer_note || order.notes;
+    if (note) ops.push({ op: 'bold', v: true }, { op: 'size', v: 'b' },
+                       { op: 'text', v: '** ' + String(note).toUpperCase() + ' **' },
+                       { op: 'size', v: 'n' }, { op: 'bold', v: false });
+  }
   // 'krule' = a rule sized per printer (kitchen font is big, so the Sunmi needs a
   // shorter dash run than the network 32 or it wraps). See renderers below.
   ops.push({ op: 'align', v: 0 }, { op: 'krule', w: Math.min(kw, SUNMI_KITCHEN_WIDTH) });
@@ -122,7 +141,11 @@ export function buildKitchenOps(native) {
 // ── Customer bill / receipt layout → ops ──────────────────────────────────────
 export function buildReceiptOps({ order, items, settings, paymentDetails = {} }) {
   const s = settings || {};
-  const name = s.company_name || s.restaurant_name || 'SiamEPOS';
+  // company_name is authoritative once set — including blank (logo-only
+  // receipts); legacy restaurant_name only covers pre-company_name installs.
+  const name = (s.company_name !== undefined && s.company_name !== null)
+    ? String(s.company_name).trim()
+    : (String(s.restaurant_name || '').trim() || 'SiamEPOS');
   const addr = s.company_address || s.address || '';
   const phone = s.company_phone || s.phone || '';
   const vat = s.company_vat || '';
@@ -157,7 +180,9 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
     const w = LOGO_W[s.receipt_logo_size] || LOGO_W.medium;
     ops.push({ op: 'align', v: 1 }, { op: 'image', v: b64, w }, { op: 'feed', v: 1 });
   }
-  ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: name }, { op: 'size', v: 'r' }, { op: 'bold', v: false });
+  ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' });
+  if (name) ops.push({ op: 'text', v: name });
+  ops.push({ op: 'size', v: 'r' }, { op: 'bold', v: false });
   if (addr)  ops.push({ op: 'text', v: addr });
   if (phone) ops.push({ op: 'text', v: 'Tel: ' + phone });
   if (vat)   ops.push({ op: 'text', v: 'VAT No: ' + vat });
@@ -176,7 +201,7 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
   } else {
     // Table number BIG + bold + centred so it's obvious at a glance.
     ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' },
-             { op: 'text', v: `TABLE ${(order && (order.table_number ?? order.table_id)) ?? '-'}` },
+             { op: 'text', v: (order && order.table_label && String(order.table_label).trim()) ? String(order.table_label).trim().toUpperCase() : `TABLE ${(order && (order.table_number ?? order.table_id)) ?? '-'}` },
              { op: 'size', v: 'r' }, { op: 'bold', v: false }, { op: 'align', v: 0 });
     ops.push({ op: 'row', l: 'Covers', r: String((order && order.covers) || '-') });
   }

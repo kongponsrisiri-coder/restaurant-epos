@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { startMonitoring, onStatusChange, getServerStatus } from './utils/serverDetect';
 import { getRestaurant, getLicenseState, syncLocalOrders, getSettings, TENANT_MISCONFIGURED, getCurrentSession, isHostMode } from './api';
-import { startHost } from './native/nodeHost';        // SEPOS host spike
+import { startHost } from './native/nodeHost';        // SEPOS host spike — no-op unless host mode
 import { applyBrandTheme } from './theme'; // SEPOS-BRAND-001 — per-client theme
 import { backupSalesToDevice } from './native/salesBackup'; // SEPOS-ANDROID-003
 import { canAccessReservations, canAccessKitchen, canAccessFullEPOS } from './utils/plan';
@@ -110,25 +110,23 @@ export default function App() {
     }
   }, []);
 
-  // SEPOS host spike — host till boots straight into host mode. Auto-start the
-  // embedded server on launch so the client never has to tap Start. startHost()
-  // launches the foreground service / Node off the main thread, so this does NOT
-  // block or ANR the UI on the ~78MB first-launch unpack. If the server is
-  // already running the native plugin no-ops. Host-only + native-only; web,
-  // desktop, and cloud-mode Android never reach this.
-  useEffect(() => {
-    if (!isHostMode()) return;
-    let alive = true;
-    // Defer one tick so first paint isn't held by the bridge call.
-    const id = setTimeout(() => { if (alive) startHost().catch(() => {}); }, 0);
-    return () => { alive = false; clearTimeout(id); };
-  }, []);
-
   // SEPOS-OPENDAY-001 — 'idle' | 'checking' | 'ok' | 'needed'. Drives the
   // once-per-day "Open the day" prompt so a trading session always exists before
   // the first sale (otherwise orders close against a NULL session and never land
   // in a Z report).
   const [dayCheck, setDayCheck] = useState('idle');
+
+  // SEPOS host spike — when this device is the host till, auto-start its
+  // embedded Node server on launch so the client never has to tap Start. Deferred
+  // one tick so first paint isn't held by the bridge call; the native plugin
+  // no-ops if already running. Host-only + native-only — web, desktop, and
+  // cloud-mode Android never reach past the isHostMode() guard.
+  useEffect(() => {
+    if (!isHostMode()) return;
+    let alive = true;
+    const id = setTimeout(() => { if (alive) startHost().catch(() => {}); }, 0);
+    return () => { alive = false; clearTimeout(id); };
+  }, []);
 
   // SEPOS-BRAND-001 — apply the tenant's brand colours app-wide at load. Safe
   // if it fails / is unset (falls back to the default SiamEPOS navy+gold).

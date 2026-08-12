@@ -401,7 +401,7 @@ export default function KitchenScreen() {
               <div style={{ fontSize:24 }}>📢</div>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:13, fontWeight:800, marginBottom:2, display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-                  <span>{m.order_type === 'takeaway' ? `🥡 TAKEAWAY ${m.table_number ? m.table_number : (m.order_id ? '#' + m.order_id : '')}` : (m.table_number ? `TABLE ${m.table_number}` : 'KITCHEN')}</span>
+                  <span>{m.order_type === 'takeaway' ? `🥡 TAKEAWAY ${m.table_number ? m.table_number : (m.order_id ? '#' + m.order_id : '')}` : ((m.table_label && String(m.table_label).trim()) ? String(m.table_label).trim().toUpperCase() : (m.table_number ? `TABLE ${m.table_number}` : 'KITCHEN'))}</span>
                   {m.customer_name && <span style={{ fontWeight:600, color:'#92400e' }}>· {m.customer_name}</span>}
                   {m.waiter_name && <span style={{ fontWeight:500, color:'#92400e', fontSize:11 }}>· from {m.waiter_name}</span>}
                 </div>

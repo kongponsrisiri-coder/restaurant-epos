@@ -17,19 +17,6 @@ const isLocalId = (id) => typeof id === 'string' && String(id).startsWith('L');
 // they start with 'L', so always test isLocalItemId FIRST where it matters).
 const isLocalItemId = (id) => typeof id === 'string' && String(id).startsWith('LI');
 
-// SEPOS host spike — "host mode": this Android device runs the embedded Node
-// host server and the POS UI talks to it over loopback instead of the cloud.
-// The flag is persisted in localStorage by SettingsSection's "Run this device
-// as the host till" toggle. On web/desktop it is never set, so this is a no-op.
-export const HOST_MODE_KEY = 'siamepos_host_mode';
-export const isHostMode = () => {
-  try {
-    return (typeof window !== 'undefined' && window.Capacitor &&
-      typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform() &&
-      localStorage.getItem(HOST_MODE_KEY) === '1');
-  } catch { return false; }
-};
-
 // The shared MAIN SiamEPOS cloud, and the ONLY public host allowed to use it
 // without an explicit VITE_API_URL. Every other public host MUST declare its
 // restaurant's backend via the VITE_API_URL build env var — otherwise it is a
@@ -43,6 +30,21 @@ const MAIN_HOSTS = ['app.siamepos.co.uk'];
 // getServerURL runs at module init) and read by App.jsx to block with a loud
 // setup-error screen instead of loading another restaurant's data.
 let tenantMisconfigured = false;
+
+// SEPOS host spike — "host mode": this Android device runs the embedded Node
+// host server (NodeHost plugin) and the POS UI talks to it over loopback
+// instead of the cloud. The flag is persisted in localStorage by
+// SettingsSection's "Run this device as the host till" toggle. On web/desktop
+// and on a normal cloud Android till it is never set, so everything below is a
+// no-op — host mode only ever activates on a native device with the flag on.
+export const HOST_MODE_KEY = 'siamepos_host_mode';
+export const isHostMode = () => {
+  try {
+    return (typeof window !== 'undefined' && window.Capacitor &&
+      typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform() &&
+      localStorage.getItem(HOST_MODE_KEY) === '1');
+  } catch { return false; }
+};
 
 const getServerURL = () => {
   // Electron desktop: the bundled local server lives on :3001 regardless of
@@ -162,16 +164,13 @@ export const getTables = () => get('/api/tables');
 export const updateTableStatus = (id, status) => put(`/api/tables/${id}`, { status });
 // SEPOS-ANDROID-002 — when online, warm EVERY item's modifiers into the cache
 // (once) so offline taps still show modifier choices. Background, best-effort.
-// `isNative()` doubles as the master gate for the client-side single-device
-// offline engine (local 'L…' orders, localdb, promote/replay). In HOST MODE the
-// embedded local host server is the authoritative backend (its own SQLite +
-// cloud sync), so the WebView offline engine must NOT double up — return false
-// so every offline branch (createOrder/payOrder/promoteOrder/localTarget/…)
-// falls back to talking straight to the host server. Cloud-mode Android keeps
-// the offline engine; web/desktop were never native.
 const isNative = () => {
   try {
     if (!(typeof window !== 'undefined' && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) return false;
+    // In HOST MODE the embedded local server is the authoritative backend (own
+    // SQLite + cloud sync), so the WebView offline engine must NOT double up —
+    // return false so createOrder/payOrder/promote/localTarget talk straight to
+    // the host server. Cloud-mode Android keeps the offline engine.
     return !isHostMode();
   } catch { return false; }
 };
@@ -195,6 +194,10 @@ export const getMenu = async () => {
 export const getAllMenu = () => get('/api/menu/all');
 export const addMenuItem = (item) => post('/api/menu/items', item);
 export const updateMenuItem = (id, item) => put(`/api/menu/items/${id}`, item);
+// SEPOS-MENU-PHOTO-001 — dish photos the owner uploads themselves.
+export const uploadMenuItemImage = (id, dataUrl) => post(`/api/menu/items/${id}/image`, { data: dataUrl });
+export const deleteMenuItemImage = (id) => del(`/api/menu/items/${id}/image`);
+
 // SEPOS-ANDROID-002 — "promote" a cloud order into the local store so a table
 // opened BEFORE the outage can still be edited offline. Keyed by its own
 // (stringified) cloud id and carries cloud_id, so the sync engine later pushes
@@ -552,6 +555,7 @@ export const getRestaurant = () => get('/api/restaurant');
 
 // SEPOS-STATION-001 — extra printer stations (wok/grill/cold…) + category routing.
 export const getPrinters        = () => get('/api/printers');
+export const setMenuColor       = (type, id, color) => put(`/api/menu-color`, { type, id, color }); // SEPOS-MENU-COLOR-001
 export const createPrinter      = (body) => post('/api/printers', body);
 export const updatePrinter      = (id, body) => put(`/api/printers/${id}`, body);
 export const deletePrinter      = (id) => del(`/api/printers/${id}`);
@@ -574,7 +578,7 @@ export const serverPrintKitchenToStation = (order_id, items, printer_id, printer
 // SEPOS-025/026 — Network printing (server-side ESC/POS to TCP port 9100)
 export const testNetworkPrinter   = (ip, port, printer_name) => post('/api/print/test',    { ip, port, printer_name });
 // SEPOS-ANDROID-001 — ESC/POS buffers (base64) for the native app to send itself.
-export const getPrintTestBuffer   = () => get('/api/print/buffers/test');
+export const getPrintTestBuffer   = (ip, name, port) => get(`/api/print/buffers/test?ip=${encodeURIComponent(ip || '')}&name=${encodeURIComponent(name || '')}&port=${encodeURIComponent(port || '')}`);
 export const getReceiptBuffer     = (order_id, payment_details) => post('/api/print/buffers/receipt', { order_id, payment_details });
 export const getKitchenBuffer     = (order_id) => post('/api/print/buffers/kitchen', { order_id });
 // SEPOS-ANDROID-001 — dine-in kitchen/bar/fire-notice buffer (firing device pushes it to the LAN printer)
@@ -613,7 +617,7 @@ export const sendKitchenMessage   = (body) => post('/api/print/kitchen-message',
 export const saveOrderNote        = (orderId, note) => put(`/api/orders/${orderId}/note`, { note });
 // SEPOS-ANDROID-001 — kitchen-message buffer for the native app to print on-device
 export const getKitchenMessageBuffer = (body) => post('/api/print/buffers/kitchen-message', body);
-export const serverPrintReceipt   = (order_id, payment_details, printer_name) => post('/api/print/receipt', { order_id, payment_details, printer_name });
+export const serverPrintReceipt   = (order_id, payment_details, printer_name, printer_id) => post('/api/print/receipt', { order_id, payment_details, printer_name, printer_id });
 // SEPOS-REPORTS-001 — ESC/POS print for admin reports (Sales / Items /
 // Z / VAT / Bills). Takes a line DSL — see printService.buildReportText.
 export const serverPrintReportText = (lines) => post('/api/print/report-text', { lines });
@@ -751,8 +755,12 @@ export const getBills = (from, to, method) => get(`/api/bills?from=${from}&to=${
 export const getBillItems = (orderId) => get(`/api/bills/${orderId}/items`);
 export const getKitchenCompleted = () => get('/api/kitchen/completed');
 export const getBarCompleted = () => get('/api/bar/completed');
-export const resendToKitchen = async (orderId, itemIds, reason) =>
-  (await localTarget(orderId)) ? { success: true } : post(`/api/orders/${orderId}/resend`, { item_ids: itemIds, reason });
+// Resend to the kitchen. Was a no-op on local/host tills (returned success
+// without doing anything) — but the local embedded server has the same
+// /api/orders/:id/resend route (server.js), so post() reaches it on a local
+// till just as it reaches the cloud on a browser till. Always POST.
+export const resendToKitchen = (orderId, itemIds, reason) =>
+  post(`/api/orders/${orderId}/resend`, { item_ids: itemIds, reason });
 export const applyItemDiscount = async (itemId, discount_type, discount_value) => {
   if (isNative()) {
     const ok = await localItemPatch(itemId, { discount_type, discount_value });
@@ -912,9 +920,11 @@ export const sellVoucher        = (body) => post('/api/vouchers/sell', body);
 // ── SEPOS-DEPOSIT-001 — booking deposits (typed vouchers, redeemed as a tender) ──
 export const createDeposit   = (body) => post('/api/deposits', body);
 export const getOrderDeposit = (orderId) => get(`/api/orders/${orderId}/deposit`);
+// SEPOS-DEPOSIT-ORDER-001 — deposit already redeemed against this order.
+export const getOrderDepositApplied = (orderId) => get(`/api/orders/${orderId}/deposit-applied`);
 // Manual forfeit of a no-show's deposit (kept as income).
 export const forfeitDeposit  = (code) => post(`/api/deposits/${encodeURIComponent(code)}/forfeit`, {});
 
 // ── SEPOS-PRINT-ALERT-001 — held tickets + printer health (local tills) ──
 export const getPrintAlerts    = () => get('/api/print/alerts');
-export const printAlertAction  = (action, ids) => post('/api/print/alerts/action', { action, ids });
+export const printAlertAction  = (action, ids, printer_id) => post('/api/print/alerts/action', { action, ids, printer_id });

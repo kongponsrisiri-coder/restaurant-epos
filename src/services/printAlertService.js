@@ -48,8 +48,13 @@ function notify() {
 }
 
 // ── Failure queue ────────────────────────────────────────────────────
+// Returns TRUE only when a ticket was really queued for staff to retry.
+// The callers use that to decide whether to tell the client "held" — a cloud
+// install has no queue at all (it can never reach a restaurant's LAN printer),
+// so claiming "held" there makes the client stop its fallback chain and the
+// ticket prints NOWHERE, with no alert anywhere. Verify pass, CRITICAL.
 async function recordFailure({ kind, printer, order, items, reason }) {
-  if (!isLocal || !pool) return;
+  if (!isLocal || !pool) return false;
   try {
     await pool.query(
       `INSERT INTO print_failures
@@ -67,16 +72,18 @@ async function recordFailure({ kind, printer, order, items, reason }) {
       ]);
     console.error(`[print-alert] HELD ticket for order #${order && order.id} — ${kind} "${printer && printer.name}" (${reason})`);
     notify();
+    return true;
   } catch (err) {
     console.error('[print-alert] recordFailure failed:', err.message);
   }
+  return false;
 }
 
 function snapshotOrder(order) {
   if (!order) return {};
   // Only what the ticket renderers actually use — small + stable.
   const o = {};
-  for (const k of ['id', 'table_number', 'order_type', 'order_subtype', 'customer_name',
+  for (const k of ['id', 'table_number', 'table_label', 'order_type', 'order_subtype', 'customer_name',
                    'customer_phone', 'delivery_address', 'notes', 'created_at']) {
     if (order[k] !== undefined) o[k] = order[k];
   }
@@ -86,6 +93,8 @@ function snapshotOrder(order) {
 function buildOrderLabel(order) {
   if (!order) return '';
   if (order.order_type === 'takeaway') return `Online #${order.id} · ${order.customer_name || ''}`.trim();
+  const label = order.table_label && String(order.table_label).trim();
+  if (label) return label; // table NAME wins over the raw number (Bar 2 ≠ Table 2)
   return order.table_number ? `Table ${order.table_number}` : `Order #${order.id}`;
 }
 
@@ -94,6 +103,34 @@ async function loadSettingsKV() {
   const r = await pool.query('SELECT key, value FROM settings');
   const s = {};
   r.rows.forEach(row => { s[row.key] = row.value; });
+  // SEPOS-AUDIT-002 F11 — the raw KV only carries the LEGACY fixed
+  // printer_{role}_ip keys. On a till configured through the unified Network
+  // Printers list (normal since SEPOS-PRINT-UNIFY-001) those are empty, so
+  // retry()/redirect() threw 'no kitchen printer configured' for every held
+  // ticket and staff could never clear the banner. Same overlay the print
+  // routes use.
+  try {
+    const printers = (await pool.query('SELECT * FROM printers WHERE is_active = 1 ORDER BY sort_order, id')).rows;
+    if (printers && printers.length) {
+      const byId = new Map(printers.map(p => [String(p.id), p]));
+      for (const role of ['receipt', 'kitchen', 'bar']) {
+        const defId = s[`default_${role}_printer_id`];
+        const starred = defId ? byId.get(String(defId)) : null;
+        const p = (starred && Number(starred[`role_${role}`]) === 1 ? starred : null)
+          || printers.find(x => Number(x[`role_${role}`]) === 1);
+        if (!p || !(p.ip || p.name)) continue;
+        // Verify pass (HIGH) — never BLANK an existing value with '': a
+        // name-only (USB/CUPS) printer has no IP, and blanking it here left the
+        // bar-retry branch (which required an IP) unable to reprint a held
+        // ticket forever.
+        if (p.ip) s[`printer_${role}_ip`] = p.ip;
+        if (p.port) s[`printer_${role}_port`] = p.port;
+        if (p.name) s[`printer_${role}_name`] = p.name;
+        s[`printer_${role}_lpr_queue`] = p.lpr_queue || s[`printer_${role}_lpr_queue`] || 'lp';
+        if (role === 'kitchen' && p.copies) s.printer_kitchen_copies = String(p.copies);
+      }
+    }
+  } catch { /* no printers table — legacy keys stand */ }
   return s;
 }
 
@@ -127,7 +164,7 @@ async function retry(ids) {
         if (!p.rows.length) throw new Error('station no longer configured');
         await printService.printKitchenToPrinter(p.rows[0], settings, payload.order, payload.items);
       } else if (row.kind === 'bar') {
-        if (!settings.printer_bar_ip) throw new Error('no bar printer configured');
+        if (!settings.printer_bar_ip && !settings.printer_bar_name) throw new Error('no bar printer configured');
         await printService.printBarTicket(settings, payload.order, payload.items);
       } else {
         if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) throw new Error('no kitchen printer configured');
@@ -158,6 +195,40 @@ async function redirect(ids) {
       order.notes = order.notes ? `${tag} · ${order.notes}` : tag;
       await printService.printFullKitchenTicket(settings, order, payload.items);
       await markResolved(row.id, 'redirected');
+      results.push({ id: row.id, ok: true });
+    } catch (err) {
+      results.push({ id: row.id, ok: false, error: err.message });
+    }
+  }
+  notify();
+  return results;
+}
+
+// SEPOS-PRINT-FALLBACK-001 — print held tickets to a CHOSEN printer (staff
+// picks from the active list when a station is down). Same explicit hand-off
+// tag as redirect, but the target is any printers-table row, not just the
+// main kitchen.
+async function reroute(ids, printerId) {
+  const rows = await resolveRows(ids);
+  const results = [];
+  if (!printerId) return rows.map(r => ({ id: r.id, ok: false, error: 'no printer chosen' }));
+  const pr = await pool.query(`SELECT ip, port, name, lpr_queue FROM printers WHERE id = $1 AND is_active = 1`, [Number(printerId)]);
+  const target = pr.rows[0];
+  if (!target || !target.ip) return rows.map(r => ({ id: r.id, ok: false, error: 'chosen printer missing/inactive' }));
+  const settings = await loadSettingsKV();
+  // Point the kitchen role at the chosen device for this print only.
+  settings.printer_kitchen_ip = target.ip;
+  settings.printer_kitchen_port = target.port || 9100;
+  settings.printer_kitchen_lpr_queue = target.lpr_queue || '';
+  settings.printer_kitchen_name = '';
+  for (const row of rows) {
+    const payload = safeParse(row.items);
+    try {
+      const order = { ...(payload.order || {}) };
+      const tag = `⚠ REDIRECTED FROM ${row.printer_name || 'station'}`;
+      order.notes = order.notes ? `${tag} · ${order.notes}` : tag;
+      await printService.printFullKitchenTicket(settings, order, payload.items);
+      await markResolved(row.id, 'rerouted:' + (target.name || target.ip));
       results.push({ id: row.id, ok: true });
     } catch (err) {
       results.push({ id: row.id, ok: false, error: err.message });
@@ -244,4 +315,4 @@ async function pingAll() {
   if (changed) notify();
 }
 
-module.exports = { init, recordFailure, retry, redirect, dismiss, list, isLocal };
+module.exports = { init, recordFailure, retry, redirect, reroute, dismiss, list, isLocal };

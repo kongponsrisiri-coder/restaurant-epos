@@ -8,14 +8,13 @@
 import { Capacitor } from '@capacitor/core';
 
 const KEY = 'siamepos_tenant_url';
-// SEPOS host spike — the ONE-TIME setup-screen choice. Once set, this device has
-// a role and boots straight into it; SetupScreen never shows again until a
-// deliberate "Re-set up this device". Host mode is recorded by HOST_MODE_KEY in
-// localStorage (see api.js); a satellite/cloud role is recorded by a non-empty
-// tenant URL. This flag records that setup ran at all, so a host till (which has
-// NO tenant URL) is still recognised as "set up".
+// SEPOS host spike — the ONE-TIME setup-screen choice. A host till has NO tenant
+// URL (it runs its own embedded server), so we can't recognise "already set up"
+// from the tenant URL alone. ROLE_KEY records that setup ran at all; HOST_MODE_KEY
+// (see api.js) records the host role. Kept as string literals here to avoid a
+// circular import with api.js.
 const ROLE_KEY = 'siamepos_setup_done';
-const HOST_MODE_KEY = 'siamepos_host_mode'; // kept in sync with api.js
+const HOST_MODE_KEY = 'siamepos_host_mode';
 
 export function isNativePlatform() {
   try { return Capacitor.isNativePlatform(); } catch { return false; }
@@ -64,8 +63,8 @@ export function clearRole() {
 }
 
 /**
- * First launch on the native app with no role chosen yet → show the setup
- * screen. A host till has no tenant URL but IS set up, so check isSetUp().
+ * First launch on the native app with no role chosen yet → show the setup screen.
+ * A host till has no tenant URL but IS set up, so check isSetUp().
  */
 export function needsTenantSetup() {
   return isNativePlatform() && !isSetUp();

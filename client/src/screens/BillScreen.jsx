@@ -14,9 +14,17 @@ function showPaidToast(pd, label) {
     const el = document.createElement('div');
     el.style.cssText = 'position:fixed;top:18%;left:50%;transform:translateX(-50%);z-index:99999;background:#14532d;color:#fff;border-radius:18px;padding:22px 34px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.35);font-family:inherit;min-width:280px';
     const change = Number(pd?.change || 0);
-    el.innerHTML = change > 0.001
-      ? `<div style="font-size:15px;opacity:.85;margin-bottom:2px">💚 Change to give</div><div style="font-size:46px;font-weight:900;color:#4ade80">£${change.toFixed(2)}</div><div style="font-size:14px;margin-top:6px;opacity:.85">✓ ${label} paid</div>`
-      : `<div style="font-size:34px;margin-bottom:4px">✅</div><div style="font-size:18px;font-weight:800">${label} paid</div><div style="font-size:14px;opacity:.85">${pd?.method || ''}</div>`;
+    // Review LOW — build with textContent, never interpolate labels into HTML.
+    const line = (text, css) => { const d = document.createElement('div'); d.style.cssText = css; d.textContent = text; el.appendChild(d); };
+    if (change > 0.001) {
+      line('💚 Change to give', 'font-size:15px;opacity:.85;margin-bottom:2px');
+      line('£' + change.toFixed(2), 'font-size:46px;font-weight:900;color:#4ade80');
+      line('✓ ' + label + ' paid', 'font-size:14px;margin-top:6px;opacity:.85');
+    } else {
+      line('✅', 'font-size:34px;margin-bottom:4px');
+      line(label + ' paid', 'font-size:18px;font-weight:800');
+      line(String(pd?.method || ''), 'font-size:14px;opacity:.85');
+    }
     document.body.appendChild(el);
     setTimeout(() => { el.style.transition = 'opacity .4s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 450); }, change > 0.001 ? 3200 : 2000);
   } catch { /* a toast must never break a payment */ }
@@ -537,11 +545,12 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     try {
       // SEPOS-062 — pass the per-tender breakdown for splits so each Cash/Card
       // amount is recorded as its own payment row (correct Z-report reconciliation).
-      await onPay(billTotal, paymentDetails?.method, paymentDetails?.amountPaid, paymentDetails?.tip, paymentDetails?.tenders);
+      // Review C1 (class fix) — gate the drawer on real success too.
+      const ok = await onPay(billTotal, paymentDetails?.method, paymentDetails?.amountPaid, paymentDetails?.tip, paymentDetails?.tenders);
       // SEPOS-DRAWER-001 — open the cash drawer on payment (fire-and-forget;
       // never blocks/fails the close). Silent no-op where there's no raw
       // ESC/POS receipt printer (browser print / no drawer / disabled setting).
-      serverOpenDrawer().catch(() => {});
+      if (ok === true) serverOpenDrawer().catch(() => {});
     } finally {
       // onPay closes the bill on success; on failure it keeps the bill open,
       // so re-enable the button to allow a genuine retry.
@@ -559,7 +568,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     setPaying(true);
     (async () => {
       try {
-        await onPay(billTotal, pd.method, pd.amountPaid, pd.tip, pd.tenders);
+        // Review C1 — gate on onPay's boolean (it never rejects).
+        const ok = await onPay(billTotal, pd.method, pd.amountPaid, pd.tip, pd.tenders);
+        if (ok !== true) return;
         serverOpenDrawer().catch(() => {});
         showPaidToast(pd, orderShortLabelPlain(order));
       } catch (e) {
@@ -1028,7 +1039,11 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                     setPaymentDetails(pd);
                     setPaying(true);
                     try {
-                      await onPay(billTotal, pd.method, pd.amountPaid, pd.tip, pd.tenders);
+                      // Review C1 — onPay resolves true/false (it never rejects).
+                      // Celebrate ONLY on true: no drawer, no receipt, no toast
+                      // for a failed payment; onPay already alerted the error.
+                      const ok = await onPay(billTotal, pd.method, pd.amountPaid, pd.tip, pd.tenders);
+                      if (ok !== true) return;
                       serverOpenDrawer().catch(() => {});
                       if (printAfter) printReceipt({ order: { ...order }, items: billItems, settings: { ...settings }, paymentDetails: { ...receiptTotals, ...pd } });
                       showPaidToast(pd, orderShortLabelPlain(order));

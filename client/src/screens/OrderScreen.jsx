@@ -2522,6 +2522,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             // straight through to "✓ Payment received!" and closed the
             // bill while nothing was recorded. On failure: surface the
             // real error and KEEP the bill open so staff can retry.
+            //
+            // SEPOS-PAY-ONETAP-001 review C1 — RETURNS true/false. onPay
+            // never rejects (failures alert + return), so callers that ran
+            // drawer/print/toast after `await onPay(...)` celebrated FAILED
+            // payments. Every caller now gates on the boolean.
             try {
               // SEPOS-AUDIT-001 — never silently append unsent cart items at
               // pay time: the payment amount was fixed from the server bill
@@ -2530,26 +2535,23 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               // now blocks on a non-empty cart; this is the belt-and-braces.
               if (cart.length > 0) {
                 alert('⚠️ Payment NOT taken — items in the cart were never sent to the kitchen.\n\nClose the bill, tap "Send to kitchen", then pay.');
-                return;
+                return false;
               }
               const payRes = await payOrder(orderId, total, method, tenders);
               // SEPOS-DBLPAY-001 — the server rejects a second payment on an
               // already-closed bill (409 alreadyPaid). That means the payment
               // is ALREADY recorded (a double-tap or another device beat us),
               // so don't error and don't re-charge — just close the bill.
-              if (payRes && payRes.alreadyPaid) { onClose(); return; }
+              if (payRes && payRes.alreadyPaid) { onClose(); return true; }
               assertOk(payRes);
             } catch (e) {
               alert(`⚠️ Payment NOT completed — the bill is still open.\n\n${e.message || 'Please try again.'}`);
-              return;
+              return false;
             }
-            const change = amountPaid - total;
-            if (method === 'Cash' && change > 0) {
-              alert(`✓ Payment received!\nChange to give: £${change.toFixed(2)}`);
-            } else if (tip > 0) {
-              alert(`✓ Payment received!\nTip: £${tip.toFixed(2)} — thank you!`);
-            }
+            // Review M3 — no success alert here: the one-tap toast owns the
+            // change/tip moment now (double confirmation defeated the point).
             onClose();
+            return true;
           }}
         />
       )}

@@ -15,7 +15,12 @@ const fmtDigits = (d) => (d ? (parseInt(d, 10) / 100).toFixed(2) : '');
 export default function AmountInput({ value, onChange, placeholder, style, autoFocus }) {
   const [pad, setPad] = useState(null); // digit buffer while the pad is open; null = closed
 
-  const openPad = () => setPad(String(value || '').replace(/\D/g, '').replace(/^0+/, ''));
+  // Review H3 — seed from the VALUE as money: '45' is £45.00 (4500 pence),
+  // never £0.45. Stripping characters turned pre-seeded deposits into pennies.
+  const openPad = () => {
+    const pence = Math.round((parseFloat(value) || 0) * 100);
+    setPad(pence > 0 ? String(pence) : '');
+  };
   const tapKey = (k) => setPad((p) => {
     let d = p || '';
     if (k === 'back') d = d.slice(0, -1);
@@ -24,9 +29,14 @@ export default function AmountInput({ value, onChange, placeholder, style, autoF
   });
   const done = () => { onChange(fmtDigits(pad)); setPad(null); };
 
-  // Physical keyboard path — penny entry, unless a "." makes it literal.
+  // Physical keyboard path — penny entry by default. Review H2: the displayed
+  // value itself contains '.' (from fmtDigits), so "contains a dot" trapped
+  // every keystroke after the first in the literal branch and froze the box.
+  // Literal mode only when this keystroke ADDED a dot (the user typed '.').
   const typed = (raw) => {
-    if (raw.includes('.')) {
+    const dots = (String(raw).match(/\./g) || []).length;
+    const prevDots = (String(value || '').match(/\./g) || []).length;
+    if (dots > prevDots) {
       const m = String(raw).replace(/[^\d.]/g, '').match(/^(\d{0,5})(?:\.(\d{0,2}))?/);
       onChange(m ? `${m[1] || '0'}.${m[2] ?? ''}` : '');
     } else {
@@ -39,6 +49,7 @@ export default function AmountInput({ value, onChange, placeholder, style, autoF
     <>
       <input type="text" inputMode="none" value={value} autoFocus={autoFocus}
         onChange={(e) => typed(e.target.value)} onFocus={openPad}
+        onClick={() => { if (pad === null) openPad(); }}
         placeholder={placeholder} style={style} />
       {pad !== null && (
         <div onClick={done} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

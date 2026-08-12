@@ -9022,8 +9022,23 @@ app.post('/api/deposits', async (req, res) => {
         resId = null; // unknown reservation → don't link a phantom id
       }
     }
-    let code;
-    for (let i = 0; i < 10; i++) {
+    // SEPOS-DEPOSIT-EXT-001b (Korakot, 12 Aug) — an EXTERNAL deposit keeps the
+    // CUSTOMER'S OWN reference as its code (the number on their old-system
+    // receipt / paper), so next week's lookup matches what's in their hand.
+    // Rejected if the reference already exists as any voucher — a typed
+    // reference can never hijack or shadow a real SiamEPOS code.
+    const requestedCode = String(req.body?.code || '').trim().toUpperCase().slice(0, 24);
+    if (requestedCode) {
+      if (!/^[A-Z0-9][A-Z0-9 _\/-]*$/.test(requestedCode)) {
+        return res.status(400).json({ error: 'Reference can use letters, numbers, spaces and - _ /' });
+      }
+      const clash = await pool.query('SELECT id FROM vouchers WHERE code = $1', [requestedCode]);
+      if (clash.rows[0]) {
+        return res.status(409).json({ error: `${requestedCode} already exists in the system — look it up and use the real balance instead.` });
+      }
+    }
+    let code = requestedCode || null;
+    if (!code) for (let i = 0; i < 10; i++) {
       code = voucherSvc.generateCode('DEP-');
       const exists = await pool.query('SELECT id FROM vouchers WHERE code = $1', [code]);
       if (!exists.rows[0]) break;

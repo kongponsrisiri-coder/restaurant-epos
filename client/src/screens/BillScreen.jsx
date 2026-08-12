@@ -727,8 +727,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: MUTED, marginBottom: 6 }}><span>Subtotal</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>£{subtotal.toFixed(2)}</span></div>
               {discountAmount > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#2E9E6E', marginBottom: 6 }}><span>Discount</span><span>-£{discountAmount.toFixed(2)}</span></div>}
               {serviceChargeEnabled && !noServiceCharge && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: MUTED, marginBottom: 6 }}><span>Service charge ({parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5)}%)</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>£{serviceCharge.toFixed(2)}</span></div>}
+              {depositPaid > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#2563eb', marginBottom: 6 }}><span>Deposit paid</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>-£{depositPaid.toFixed(2)}</span></div>}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: `2px solid ${INK}`, marginTop: 10, paddingTop: 10 }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: INK }}>Total due</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: INK }}>{depositPaid > 0 ? 'Balance due' : 'Total due'}</span>
                 <span style={{ fontSize: 34, fontWeight: 800, color: INK, fontVariantNumeric: 'tabular-nums' }}>£{billTotal.toFixed(2)}</span>
               </div>
             </div>

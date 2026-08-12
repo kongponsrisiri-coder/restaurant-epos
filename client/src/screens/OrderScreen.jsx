@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote, getVoucher, redeemVoucher, getOrderDeposit, getOrderDepositApplied, createDeposit } from '../api';
 import AmountInput from '../components/AmountInput';
+import { unapplyOrderDeposit } from '../api';
 
 // SEPOS-MENU-COLOR-001 — auto black/white text on a coloured button.
 const textOn = (hex) => {
@@ -1708,9 +1709,17 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                 <div style={{
                   padding: '10px 12px', borderRadius: 8, border: '2px solid #3b82f6',
                   background: '#eff6ff', color: '#1e3a8a', fontSize: 13, fontWeight: 700,
-                  textAlign: 'center'
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8
                 }}>
-                  🧾 Deposit applied −£{depositApplied.amount.toFixed(2)}
+                  <span>🧾 Deposit applied −£{depositApplied.amount.toFixed(2)}</span>
+                  <button onClick={async () => {
+                    if (!await confirm('Remove the deposit from this bill? The deposit keeps its balance for later.')) return;
+                    try {
+                      const r = await unapplyOrderDeposit(orderId);
+                      if (r?.error) throw new Error(r.error);
+                      await fetchDepositApplied();
+                    } catch (e) { alert('Could not remove the deposit: ' + (e?.message || 'unknown')); }
+                  }} style={{ padding: '6px 10px', borderRadius: 8, border: 'none', background: '#fee2e2', color: '#ef4444', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Remove</button>
                 </div>
               ) : (
                 <button onClick={openDepositModal} style={{

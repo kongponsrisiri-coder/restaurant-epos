@@ -1,5 +1,18 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote } from '../api';
+import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote, getVoucher, redeemVoucher, getOrderDeposit, getOrderDepositApplied, createDeposit } from '../api';
+import AmountInput from '../components/AmountInput';
+import { unapplyOrderDeposit } from '../api';
+import CodeScanButton from '../components/CodeScanButton';
+
+// SEPOS-MENU-COLOR-001 — auto black/white text on a coloured button.
+const textOn = (hex) => {
+  try {
+    const n = hex.replace('#', '');
+    const L = parseInt(n.substr(0,2),16)*0.299 + parseInt(n.substr(2,2),16)*0.587 + parseInt(n.substr(4,2),16)*0.114;
+    return L > 150 ? '#1a1a2e' : '#ffffff';
+  } catch { return '#1a1a2e'; }
+};
+
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
 import { isNativeApp } from '../native/printer';
@@ -9,6 +22,7 @@ import { isNativeApp } from '../native/printer';
 import KitchenMessageModal from '../components/KitchenMessageModal';
 import { confirm } from '../utils/confirm';
 import { dineTableLabel } from '../utils/orderLabel';
+import { billDiscountAmount, scopeLabel } from '../utils/discountScope';
 import AllergenChips from '../components/AllergenChips';
 import { parseAllergens } from '../utils/allergens';
 
@@ -67,6 +81,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   // silently did nothing on desktop installs.
   // { scope: 'item'|'bill', item?, type: 'percent'|'fixed', value, reason? }
   const [discountPopup, setDiscountPopup] = useState(null);
+  // SEPOS-DEPOSIT-ORDER-001 — apply a booking deposit right on the order screen
+  // (redeem-on-tap, model A). depositApplied = { amount, code } already redeemed.
+  const [depositPopup, setDepositPopup]   = useState(null); // { code, amount } modal
+  const [depositApplied, setDepositApplied] = useState({ amount: 0, code: null });
+  const [depositBusy, setDepositBusy]     = useState(false);
   const [serviceChargeRemoved, setServiceChargeRemoved] = useState(false);
   const [settings, setSettings] = useState({}); // for the configured service-charge rate
   const [activeCourse, setActiveCourse] = useState(1);
@@ -99,6 +118,73 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
     const seq = ++fetchSeqRef.current;
     const orderData = await getOrder(orderId);
     if (seq === fetchSeqRef.current) setOrder(orderData);
+  };
+
+  // SEPOS-DEPOSIT-ORDER-001 — reload any deposit already redeemed against this
+  // order, so it persists across navigation and shows on the summary + bill.
+  const fetchDepositApplied = async () => {
+    if (!orderId) { setDepositApplied({ amount: 0, code: null }); return; }
+    try {
+      const r = await getOrderDepositApplied(orderId);
+      setDepositApplied({ amount: Number(r?.applied || 0), code: r?.code || null });
+    } catch { /* keep whatever we have */ }
+  };
+  useEffect(() => { fetchDepositApplied(); }, [orderId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // SEPOS-DEPOSIT-ORDER-001 — open the deposit modal (permission-gated).
+  const openDepositModal = async () => {
+    const allowedRoles = ['admin', 'manager', 'supervisor'];
+    if (!allowedRoles.includes(staff?.role) && !staff?.can_redeem_deposit) {
+      alert('⛔ You don\'t have permission to redeem deposits.\n\nA manager can enable it for you in Admin → Staff → "Can redeem deposit".');
+      return;
+    }
+    if (!orderId) { alert('Send the order first, then apply the deposit.'); return; }
+    // Auto-suggest a deposit linked to this table's booking, if any.
+    let suggested = { code: '', amount: '' };
+    try { const d = await getOrderDeposit(orderId); if (d?.deposit) suggested = { code: d.deposit.code, amount: String(d.deposit.balance) }; } catch { /* none */ }
+    setDepositPopup(suggested);
+  };
+
+  // SEPOS-DEPOSIT-ORDER-001 — redeem the deposit NOW (model A). Reuses the
+  // hardened voucher redeem path; the deposit reduces the balance due.
+  const confirmDeposit = async () => {
+    if (!depositPopup || depositBusy) return;
+    const code = (depositPopup.code || '').trim().toUpperCase();
+    const amt = parseFloat(depositPopup.amount);
+    if (!code) { alert('Enter or scan the deposit code.'); return; }
+    if (!(amt > 0)) { alert('Enter the deposit amount.'); return; }
+    setDepositBusy(true);
+    try {
+      // Must be a real deposit voucher (a gift code is bounced).
+      let v = null; try { v = await getVoucher(code); } catch { v = null; }
+      if (!v || v.error || v.status !== 'active' || !(Number(v.balance) > 0)) {
+        // SEPOS-DEPOSIT-EXT-001 — external bypass, same philosophy as the pay
+        // screen: a deposit taken outside SiamEPOS (old system, phone, paper)
+        // is still real money the customer paid. Record it as a deposit and
+        // apply it, instead of telling staff "invalid" in front of the guest.
+        const ok = await confirm(`"${code}" isn't in the system.\n\nRecord it as an external deposit of £${amt.toFixed(2)} and apply it to this bill?`);
+        if (!ok) { setDepositBusy(false); return; }
+        const remainingX = Math.max(0, orderTotal - (depositApplied.amount || 0));
+        const extAmt = remainingX > 0 ? Math.min(amt, remainingX) : amt; // F2 cap
+        const created = await createDeposit({ amount: extAmt, payment_method: 'external', code, customer_name: `External deposit (ref ${code})` });
+        if (!created || created.error || !created.code) { alert('Could not record the external deposit: ' + (created?.error || 'unknown')); setDepositBusy(false); return; }
+        const r2 = await redeemVoucher(created.code, extAmt, orderId, staff?.id ?? null);
+        if (r2 && r2.error) { alert('Recorded but could not apply: ' + r2.error); setDepositBusy(false); return; }
+        setDepositPopup(null); await fetchDepositApplied(); setDepositBusy(false); return;
+      }
+      if (v.type !== 'deposit') { alert('That\'s a gift voucher, not a booking deposit — take it as a Voucher on the pay screen.'); setDepositBusy(false); return; }
+      // F2 — never redeem past what's owed: cap at the bill remaining so a
+      // £20 deposit on an £18.40 bill leaves £1.60 ON the deposit, and the
+      // bill lands at exactly zero (closable via the deposit tender below).
+      const remaining = Math.max(0, orderTotal - (depositApplied.amount || 0));
+      const use = Math.min(Number(v.balance), amt, remaining > 0 ? remaining : amt);
+      const r = await redeemVoucher(code, use, orderId, staff?.id ?? null);
+      if (r && r.error) { alert('Could not apply deposit: ' + r.error); setDepositBusy(false); return; }
+      setDepositPopup(null);
+      await fetchDepositApplied();
+    } catch (e) {
+      alert('Could not apply deposit: ' + (e?.message || 'unknown'));
+    } finally { setDepositBusy(false); }
   };
 
   // SEPOS — toggle + PERSIST the per-order service-charge removal. Optimistic:
@@ -634,8 +720,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   // DiscountModal. Apply/remove are optimistic with fetchOrder reconcile.
   const handleItemDiscount = async (item) => {
     const allowedRoles = ['admin', 'manager', 'supervisor'];
-    if (!allowedRoles.includes(staff?.role)) {
-      alert('⛔ Only Admin, Manager or Supervisor can apply discounts!');
+    if (!allowedRoles.includes(staff?.role) && !staff?.can_discount) {
+      alert('⛔ You don\'t have permission to give discounts.\n\nA manager can enable it for you in Admin → Staff → "Can give discount".');
       return;
     }
     if (item.id < 0) return alert('Still sending — try again in a second.');
@@ -656,7 +742,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
 
   const confirmDiscount = async () => {
     if (!discountPopup) return;
-    const { scope, item, type, value, reason } = discountPopup;
+    const { scope, item, type, value, reason, applies } = discountPopup;
     const num = parseFloat(value);
     if (isNaN(num) || num <= 0) { alert('Invalid value!'); return; }
     if (type === 'percent' && num > 100) { alert('Percentage cannot exceed 100.'); return; }
@@ -668,8 +754,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
       try { assertOk(await applyItemDiscount(item.id, type, num)); fetchOrder(); }
       catch (e) { alert('Discount failed: ' + (e?.message || 'unknown')); fetchOrder(); }
     } else {
-      setOrder(prev => prev ? { ...prev, discount_type: type, discount_value: num, discount_reason: reason.trim() } : prev);
-      try { assertOk(await applyDiscount(orderId, type, num, reason.trim())); fetchOrder(); }
+      // SEPOS-DISCOUNT-SCOPE-001 — 'applies' pill: 'all' | 'food' | 'drink'
+      const dScope = (applies === 'food' || applies === 'drink') ? applies : null;
+      setOrder(prev => prev ? { ...prev, discount_type: type, discount_value: num, discount_reason: reason.trim(), discount_scope: dScope } : prev);
+      try { assertOk(await applyDiscount(orderId, type, num, reason.trim(), dScope)); fetchOrder(); }
       catch (e) { alert('Discount failed: ' + (e?.message || 'unknown')); fetchOrder(); }
     }
   };
@@ -695,8 +783,12 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   // order.discount_value comes back from the server as a STRING (PG DECIMAL),
   // so coerce — otherwise the fixed-discount branch returned a string and
   // discountAmount.toFixed() crashed the screen ("ct.toFixed is not a function").
+  // SEPOS-DISCOUNT-SCOPE-001 — scope-aware (food/drink via is_bar), shared
+  // helper with BillScreen. Unsent cart lines count too (they carry is_bar),
+  // so the summary matches what the Bill will show after Send. A fixed £
+  // discount now caps at its scope's subtotal (was shown uncapped).
   const discountAmount = Number(order?.discount_value) > 0
-    ? order.discount_type === 'percent' ? subtotal * (Number(order.discount_value) / 100) : (parseFloat(order.discount_value) || 0)
+    ? billDiscountAmount(order, [...(order?.items || []), ...cart])
     : 0;
   const afterDiscount = Math.max(0, subtotal - discountAmount);
   // Mirror BillScreen's logic exactly (single source of truth for the rate).
@@ -952,8 +1044,9 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               }} style={{
                 padding: '10px 20px', borderRadius: 20, border: 'none', cursor: 'pointer',
                 fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap',
-                background: activeCategory === cat.id ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary, #1a1a2e)') : '#f0f0f0',
-                color: activeCategory === cat.id ? 'white' : '#555',
+                background: cat.color ? (activeCategory === cat.id ? cat.color : cat.color + 'cc') : (activeCategory === cat.id ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary, #1a1a2e)') : '#f0f0f0'),
+                color: cat.color ? textOn(cat.color) : (activeCategory === cat.id ? 'white' : '#555'),
+                outline: cat.color && activeCategory === cat.id ? '3px solid #1a1a2e' : 'none',
               }}>
                 {cat.name} {cat.is_bar ? '🍹' : ''}
               </button>
@@ -980,8 +1073,9 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                 <button key={sub.id} onClick={() => setActiveSubcat(sub.id)} style={{
                   padding: '7px 16px', borderRadius: 16, border: 'none', cursor: 'pointer',
                   fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap',
-                  background: activeSubcat === sub.id ? '#3b82f6' : '#e0e0e0',
-                  color: activeSubcat === sub.id ? 'white' : '#555'
+                  background: sub.color ? (activeSubcat === sub.id ? sub.color : sub.color + 'cc') : (activeSubcat === sub.id ? '#3b82f6' : '#e0e0e0'),
+                  color: sub.color ? textOn(sub.color) : (activeSubcat === sub.id ? 'white' : '#555'),
+                  outline: sub.color && activeSubcat === sub.id ? '3px solid #1a1a2e' : 'none'
                 }}>{sub.name}</button>
               ))}
             </div>
@@ -1110,9 +1204,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     return (
                       <button key={cat.id} onClick={() => selectCategory(cat)} style={{
                         padding: '12px 26px', borderRadius: 14, cursor: 'pointer', fontWeight: 800, fontSize: 17, whiteSpace: 'nowrap',
-                        border: active ? 'none' : '1.5px solid #E7E2D6',
-                        background: active ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary,#0D1B3E)') : '#fff',
-                        color: active ? '#fff' : 'var(--brand-primary, #1a1a2e)' }}>
+                        border: active ? 'none' : (cat.color ? `1.5px solid ${cat.color}` : '1.5px solid #E7E2D6'),
+                        background: cat.color ? (active ? cat.color : cat.color + '33') : (active ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary,#0D1B3E)') : '#fff'),
+                        color: cat.color ? (active ? textOn(cat.color) : 'var(--brand-primary, #1a1a2e)') : (active ? '#fff' : 'var(--brand-primary, #1a1a2e)'),
+                        boxShadow: cat.color && active ? '0 0 0 3px rgba(13,27,62,.35)' : 'none' }}>
                         {cat.name}{cat.is_bar ? ' 🍹' : ''}
                       </button>
                     );
@@ -1129,9 +1224,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       return (
                         <button key={sub.id} onClick={() => setActiveSubcat(sub.id)} style={{
                           padding: '9px 18px', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: 14,
-                          border: active ? 'none' : '1px solid #E7E2D6',
-                          background: active ? 'var(--brand-accent,#C9A84C)' : '#fff',
-                          color: active ? '#fff' : '#7C766A' }}>
+                          border: active ? 'none' : (sub.color ? `1px solid ${sub.color}` : '1px solid #E7E2D6'),
+                          background: sub.color ? (active ? sub.color : sub.color + '33') : (active ? 'var(--brand-accent,#C9A84C)' : '#fff'),
+                          color: sub.color ? (active ? textOn(sub.color) : 'var(--brand-primary, #1a1a2e)') : (active ? '#fff' : '#7C766A'),
+                          boxShadow: sub.color && active ? '0 0 0 3px rgba(13,27,62,.35)' : 'none' }}>
                           {sub.name}
                         </button>
                       );
@@ -1152,7 +1248,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     <button onClick={openArrange} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #E7E2D6', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13, color: '#7C766A' }}>⇅ Arrange menu</button>
                   </div>
                 ))}
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 10 }}>
                   {(arrangeMode ? arrangeItems : dishesToShow).map((item, gridIdx) => {
                     const inCart = cart.filter(c => c.menu_item_id === item.id);
                     const totalQty = inCart.reduce((s, c) => s + c.quantity, 0);
@@ -1163,12 +1259,13 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                         onDragStart={arrangeMode ? () => setArrangeDrag(gridIdx) : undefined}
                         onDragOver={arrangeMode ? (e) => e.preventDefault() : undefined}
                         onDrop={arrangeMode ? (e) => { e.preventDefault(); onArrangeDrop(gridIdx); } : undefined}
-                        style={{ background: '#fff', borderRadius: 14, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : '#E7E2D6'}`, padding: 14, cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 104, display: 'flex', flexDirection: 'column', boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
-                        <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
-                        <AllergenChips list={allergensByItemId[item.id]} />
-                        <div style={{ flex: 1 }} />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                          <span style={{ fontSize: 17, fontWeight: 800, color: '#9A7B1F', fontVariantNumeric: 'tabular-nums' }}>£{Number(item.price || 0).toFixed(2)}</span>
+                        style={{ background: item.color || '#fff', borderRadius: 12, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : (item.color ? item.color : '#E7E2D6')}`, padding: '10px 12px', cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 56, display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
+                        {/* SEPOS-MENU-COMPACT-001 — no price on the card, half-height row layout */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: item.color ? textOn(item.color) : 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
+                          <AllergenChips list={allergensByItemId[item.id]} />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', flex: 'none' }}>
                           {arrangeMode ? (
                             <span style={{ color: '#C9A84C', fontSize: 20, fontWeight: 800, cursor: 'grab' }} title="Drag to reorder">⣿</span>
                           ) : totalQty > 0 ? (
@@ -1178,7 +1275,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                               <button onClick={e => { e.stopPropagation(); incrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: 'var(--brand-accent,#C9A84C)', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>+</button>
                             </div>
                           ) : (
-                            <div style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--brand-primary,#0D1B3E)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700 }}>+</div>
+                            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--brand-primary,#0D1B3E)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700 }}>+</div>
                           )}
                         </div>
                       </div>
@@ -1560,7 +1657,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     border: '2px dashed #22c55e', background: '#f0fdf4',
                     color: '#14532d', fontSize: 12, fontWeight: 600, textAlign: 'center'
                   }}>
-                    {order.discount_type === 'percent' ? `${order.discount_value}%` : `£${order.discount_value}`} off — {order.discount_reason}
+                    {order.discount_type === 'percent' ? `${order.discount_value}%` : `£${order.discount_value}`} off{scopeLabel(order.discount_scope)} — {order.discount_reason}
                   </div>
                   <button onClick={async () => {
                     // SEPOS-VOUCHER-REMOVE-001 — if the discount is a voucher
@@ -1574,7 +1671,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     if (!await confirm(msg)) return;
                     // SEPOS-046z — optimistic: totals update instantly,
                     // fetchOrder reconciles or rolls back.
-                    setOrder(prev => prev ? { ...prev, discount_type: null, discount_value: 0, discount_reason: null } : prev);
+                    setOrder(prev => prev ? { ...prev, discount_type: null, discount_value: 0, discount_reason: null, discount_scope: null } : prev);
                     try {
                       if (isVoucher) assertOk(await removeVoucherFromBill(orderId));
                       else assertOk(await applyDiscount(orderId, null, 0, null));
@@ -1594,14 +1691,14 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               ) : (
                 <button onClick={() => {
                   const allowedRoles = ['admin', 'manager', 'supervisor'];
-                  if (!allowedRoles.includes(staff?.role)) {
-                    alert('⛔ Only Admin, Manager or Supervisor can apply discounts!\n\nPlease ask a manager to authorise.');
+                  if (!allowedRoles.includes(staff?.role) && !staff?.can_discount) {
+                    alert('⛔ You don\'t have permission to give discounts.\n\nA manager can enable it for you in Admin → Staff → "Can give discount".');
                     return;
                   }
                   // SEPOS-046z — DiscountModal replaces window.prompt()
                   // (disabled in Electron — this button did nothing on
                   // desktop installs).
-                  setDiscountPopup({ scope: 'bill', type: 'percent', value: '10', reason: 'Manager approval' });
+                  setDiscountPopup({ scope: 'bill', type: 'percent', value: '10', reason: 'Manager approval', applies: 'all' });
                 }} style={{
                   width: '100%', padding: '10px', borderRadius: 8,
                   border: '2px dashed #e94560', background: 'white',
@@ -1612,12 +1709,45 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               )}
             </div>
 
+            {/* SEPOS-DEPOSIT-ORDER-001 — apply a booking deposit here, like the discount.
+                Gated behind deposits_enabled so venues that don't take deposits
+                (and tonight's live floors) never see or reach the new path. */}
+            {String(settings.deposits_enabled) === '1' && <div style={{ marginBottom: 10 }}>
+              {depositApplied.amount > 0 ? (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+                  <div style={{
+                    flex: 1, padding: '10px 12px', borderRadius: 8, border: '2px dashed #3b82f6',
+                    background: '#eff6ff', color: '#1e3a8a', fontSize: 12, fontWeight: 600,
+                    textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    🧾 Deposit applied −£{depositApplied.amount.toFixed(2)}
+                  </div>
+                  <button onClick={async () => {
+                    if (!await confirm('Remove the deposit from this bill? The deposit keeps its balance for later.')) return;
+                    try {
+                      const r = await unapplyOrderDeposit(orderId);
+                      if (r?.error) throw new Error(r.error);
+                      await fetchDepositApplied();
+                    } catch (e) { alert('Could not remove the deposit: ' + (e?.message || 'unknown')); }
+                  }} style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#fee2e2', color: '#ef4444', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Remove</button>
+                </div>
+              ) : (
+                <button onClick={openDepositModal} style={{
+                  width: '100%', padding: '10px', borderRadius: 8,
+                  border: '2px dashed #3b82f6', background: 'white',
+                  color: '#2563eb', cursor: 'pointer', fontWeight: 700, fontSize: 13
+                }}>
+                  + Add Deposit
+                </button>
+              )}
+            </div>}
+
             {discountAmount > 0 && (
               <div style={{
                 display: 'flex', justifyContent: 'space-between',
                 fontSize: 13, color: '#22c55e', marginBottom: 4
               }}>
-                <span>Discount</span><span>-£{discountAmount.toFixed(2)}</span>
+                <span>Discount{scopeLabel(order?.discount_scope)}</span><span>-£{discountAmount.toFixed(2)}</span>
               </div>
             )}
 
@@ -1647,7 +1777,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             </div>}
 
             <div style={{
-              display: 'flex', justifyContent: 'space-between', marginBottom: 14,
+              display: 'flex', justifyContent: 'space-between',
+              marginBottom: depositApplied.amount > 0 ? 6 : 14,
               borderTop: '2px solid #eee', paddingTop: 10
             }}>
               <span style={{ fontSize: 20, fontWeight: 800 }}>Total</span>
@@ -1656,15 +1787,28 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               </span>
             </div>
 
+            {/* SEPOS-DEPOSIT-ORDER-001 — deposit + balance due on the summary. */}
+            {depositApplied.amount > 0 && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#2563eb', marginBottom: 4 }}>
+                  <span>Deposit paid</span><span>-£{depositApplied.amount.toFixed(2)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, fontWeight: 800 }}>
+                  <span style={{ fontSize: 16 }}>Balance due</span>
+                  <span style={{ fontSize: 16, color: '#e94560' }}>£{Math.max(0, orderTotal - depositApplied.amount).toFixed(2)}</span>
+                </div>
+              </>
+            )}
+
             {/* Send Order — full-width, right above View Bill & Pay (moved out of
                 the small header button per operator feedback). Desktop only;
                 mobile keeps its own compact Send in the summary header. */}
             {!isMobile && cart.length > 0 && (
               <button onClick={sendOrder} disabled={sendBusy} style={{
-                width: '100%', padding: '14px', borderRadius: 12, border: 'none',
+                width: '100%', padding: '28px', borderRadius: 14, border: 'none',
                 background: sendBusy ? '#9aa0b0' : 'var(--brand-primary, #0D1B3E)', color: 'white',
-                fontSize: 16, fontWeight: 800, cursor: sendBusy ? 'wait' : 'pointer',
-                marginBottom: 10, boxShadow: '0 6px 14px rgba(13,27,62,.24)'
+                fontSize: 24, fontWeight: 800, cursor: sendBusy ? 'wait' : 'pointer',
+                marginBottom: 10, boxShadow: '0 8px 18px rgba(13,27,62,.28)'
               }}>
                 {sendBusy ? 'Sending…' : `Send to kitchen — ${cart.reduce((s, c) => s + c.quantity, 0)} item${cart.reduce((s, c) => s + c.quantity, 0) > 1 ? 's' : ''}`}
               </button>
@@ -2148,6 +2292,28 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                   {discountPopup.item.quantity}× {discountPopup.item.name}
                 </div>
               )}
+              {discountPopup.scope === 'bill' && (
+                // SEPOS-DISCOUNT-SCOPE-001 — Drinks = categories flagged 🍹 Bar
+                // (same flag that routes drinks to the bar), Food = the rest.
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>
+                    Applies to
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                    {[['all', 'All'], ['food', '🍽️ Food'], ['drink', '🍹 Drinks']].map(([k, label]) => (
+                      <button key={k}
+                        onClick={() => setDiscountPopup({ ...discountPopup, applies: k })}
+                        style={{
+                          padding: '10px 0', borderRadius: 8,
+                          border: '2px solid ' + ((discountPopup.applies || 'all') === k ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0'),
+                          background: (discountPopup.applies || 'all') === k ? 'var(--brand-primary, #1a1a2e)' : 'white',
+                          color: (discountPopup.applies || 'all') === k ? 'white' : '#555',
+                          cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                        }}>{label}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>
                   Discount type
@@ -2210,6 +2376,58 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                   background: '#22c55e', color: 'white', cursor: 'pointer',
                   fontWeight: 700, fontSize: 15
                 }}>Apply</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SEPOS-DEPOSIT-ORDER-001 — DEPOSIT POPUP */}
+        {depositPopup && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          }}>
+            <div style={{ background: 'white', borderRadius: 16, padding: 24, width: 380, maxWidth: '92vw' }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 6 }}>Apply deposit</h2>
+              <div style={{ fontSize: 13, color: '#555', marginBottom: 16 }}>Enter or scan the booking deposit code. It reduces the balance the customer pays.</div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>Deposit code</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input type="text" autoFocus value={depositPopup.code}
+                    onChange={(e) => setDepositPopup({ ...depositPopup, code: e.target.value.toUpperCase() })}
+                    placeholder="e.g. DEP-XXXX"
+                    style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, fontWeight: 700, textAlign: 'center', boxSizing: 'border-box', letterSpacing: '1px' }} />
+                  <CodeScanButton onScan={async (v) => {
+                    const code = v.toUpperCase();
+                    setDepositPopup((p) => p ? { ...p, code } : p);
+                    // SEPOS-SCAN-EVERYWHERE-001 — auto-lookup so the flow is
+                    // scan → see money → apply. Unknown/external refs stay manual.
+                    try {
+                      const d = await getVoucher(code);
+                      if (d && !d.error && d.type === 'deposit' && d.status === 'active' && Number(d.balance) > 0) {
+                        setDepositPopup((p) => p ? { ...p, amount: Number(d.balance).toFixed(2) } : p);
+                      }
+                    } catch { /* offline — staff type the amount */ }
+                  }} />
+                </div>
+              </div>
+              <div style={{ marginBottom: 18 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>Amount £</label>
+                <AmountInput value={depositPopup.amount}
+                  onChange={(v) => setDepositPopup({ ...depositPopup, amount: v })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, fontWeight: 700, textAlign: 'center', boxSizing: 'border-box' }} />
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setDepositPopup(null)} disabled={depositBusy} style={{
+                  flex: 1, padding: '12px', borderRadius: 10, border: 'none',
+                  background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15
+                }}>Cancel</button>
+                <button onClick={confirmDeposit} disabled={depositBusy} style={{
+                  flex: 1, padding: '12px', borderRadius: 10, border: 'none',
+                  background: depositBusy ? '#93c5fd' : '#2563eb', color: 'white',
+                  cursor: depositBusy ? 'wait' : 'pointer', fontWeight: 700, fontSize: 15
+                }}>{depositBusy ? 'Applying…' : 'Apply deposit'}</button>
               </div>
             </div>
           </div>
@@ -2367,6 +2585,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             // straight through to "✓ Payment received!" and closed the
             // bill while nothing was recorded. On failure: surface the
             // real error and KEEP the bill open so staff can retry.
+            //
+            // SEPOS-PAY-ONETAP-001 review C1 — RETURNS true/false. onPay
+            // never rejects (failures alert + return), so callers that ran
+            // drawer/print/toast after `await onPay(...)` celebrated FAILED
+            // payments. Every caller now gates on the boolean.
             try {
               // SEPOS-AUDIT-001 — never silently append unsent cart items at
               // pay time: the payment amount was fixed from the server bill
@@ -2375,26 +2598,23 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               // now blocks on a non-empty cart; this is the belt-and-braces.
               if (cart.length > 0) {
                 alert('⚠️ Payment NOT taken — items in the cart were never sent to the kitchen.\n\nClose the bill, tap "Send to kitchen", then pay.');
-                return;
+                return false;
               }
               const payRes = await payOrder(orderId, total, method, tenders);
               // SEPOS-DBLPAY-001 — the server rejects a second payment on an
               // already-closed bill (409 alreadyPaid). That means the payment
               // is ALREADY recorded (a double-tap or another device beat us),
               // so don't error and don't re-charge — just close the bill.
-              if (payRes && payRes.alreadyPaid) { onClose(); return; }
+              if (payRes && payRes.alreadyPaid) { onClose(); return true; }
               assertOk(payRes);
             } catch (e) {
               alert(`⚠️ Payment NOT completed — the bill is still open.\n\n${e.message || 'Please try again.'}`);
-              return;
+              return false;
             }
-            const change = amountPaid - total;
-            if (method === 'Cash' && change > 0) {
-              alert(`✓ Payment received!\nChange to give: £${change.toFixed(2)}`);
-            } else if (tip > 0) {
-              alert(`✓ Payment received!\nTip: £${tip.toFixed(2)} — thank you!`);
-            }
+            // Review M3 — no success alert here: the one-tap toast owns the
+            // change/tip moment now (double confirmation defeated the point).
             onClose();
+            return true;
           }}
         />
       )}

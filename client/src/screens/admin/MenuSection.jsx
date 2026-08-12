@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { SERVER_URL, authHeaders } from '../../api';
+import { SERVER_URL, authHeaders, setMenuColor } from '../../api';
 import {
   getAllMenu as getMenu, addMenuItem, updateMenuItem, deleteMenuItem,
   uploadMenuItemImage, deleteMenuItemImage,
@@ -166,6 +166,24 @@ function AIScannerModal({ onClose, onImported }) {
 export default function MenuSection() {
   const [menu, setMenu]                     = useState([]);
   const [subcategories, setSubcategories]   = useState([]);
+  // SEPOS-MENU-COLOR-001 — order-screen button colour picker
+  const [colorPick, setColorPick] = useState(null); // { type, id, current } | null
+  const MENU_COLORS = ['#dc2626','#fecaca','#f59e0b','#fde68a','#16a34a','#bbf7d0','#2563eb','#bfdbfe','#8b5cf6','#14b8a6','#C9A84C','#6b7280'];
+  const applyColor = async (color) => {
+    const pick = colorPick; setColorPick(null);
+    if (!pick) return;
+    try {
+      const r = await setMenuColor(pick.type, pick.id, color);
+      if (r?.error) throw new Error(r.error);
+      if (pick.type === 'subcategory') {
+        setSubcategories(prev => prev.map(sub => sub.id === pick.id ? { ...sub, color } : sub));
+      } else {
+        setMenu(prev => prev.map(cat => pick.type === 'category'
+          ? (cat.id === pick.id ? { ...cat, color } : cat)
+          : ({ ...cat, items: (cat.items || []).map(it => it.id === pick.id ? { ...it, color } : it) })));
+      }
+    } catch (e) { alert('Could not save colour: ' + (e?.message || 'unknown')); }
+  };
   const [activeCategory, setActiveCategory] = useState(null);
   const [showForm, setShowForm]             = useState(false);
   const [showScanner, setShowScanner]       = useState(false);
@@ -482,6 +500,13 @@ export default function MenuSection() {
                       style={{ padding: '0 10px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', fontWeight: 800, background: 'var(--brand-primary, #1a1a2e)', color: 'var(--brand-accent,#C9A84C)', fontSize: 13 }}
                     >✎</button>
                   )}
+                  {canEdit && (
+                    <button
+                      onClick={() => setColorPick({ type: 'category', id: cat.id, current: cat.color })}
+                      title="Button colour on the order screen"
+                      style={{ padding: '0 10px', border: 'none', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', background: cat.color || 'var(--brand-primary, #1a1a2e)', fontSize: 13 }}
+                    >🎨</button>
+                  )}
                   {canDelete && (
                     <button
                       onClick={async () => {
@@ -630,6 +655,7 @@ export default function MenuSection() {
               return (<div key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'white', borderRadius: 20, padding: '4px 12px', border: '1px solid #bfdbfe' }}>
               {subIdx > 0 && <button onClick={() => swapSub(subIdx - 1)} title="Move left" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', fontSize: 11, fontWeight: 800, padding: 0 }}>◀</button>}
               <span style={{ fontSize: 13, color: '#1e40af', fontWeight: 500 }}>{sub.name}</span>
+              <button onClick={() => setColorPick({ type: 'subcategory', id: sub.id, current: sub.color })} title="Button colour on the order screen" style={{ background: sub.color || 'none', border: 'none', cursor: 'pointer', fontSize: 12, padding: '1px 4px', borderRadius: 6 }}>🎨</button>
               {subIdx < activeCatSubs.length - 1 && <button onClick={() => swapSub(subIdx + 1)} title="Move right" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', fontSize: 11, fontWeight: 800, padding: 0 }}>▶</button>}
               <button onClick={async () => {
               if (!await confirm(`Delete "${sub.name}"?`)) return;
@@ -691,6 +717,7 @@ export default function MenuSection() {
                   <button onClick={e => { e.stopPropagation(); toggleOnline(item); }} title={item.is_online === 0 ? 'Hidden from online ordering' : 'Visible on online ordering'} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: item.is_online === 0 ? '#e5e7eb' : '#dbeafe', color: item.is_online === 0 ? '#374151' : '#1e40af' }}>{item.is_online === 0 ? '🌐 Hidden' : '🌐 Online'}</button>
                   <button onClick={e => { e.stopPropagation(); openModifiers(item); }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#fef9c3', color: '#713f12', fontWeight: 600, fontSize: 12 }}>Options</button>
                   <button onClick={e => { e.stopPropagation(); openEditForm(item); }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#f0f0f0', fontWeight: 600, fontSize: 12 }}>Edit</button>
+                  <button onClick={e => { e.stopPropagation(); setColorPick({ type: 'item', id: item.id, current: item.color }); }} title="Card colour on the order screen" style={{ padding: '6px 10px', borderRadius: 8, border: item.color ? 'none' : '1px solid #ddd', cursor: 'pointer', background: item.color || '#fff', fontWeight: 600, fontSize: 12 }}>🎨</button>
                   <button onClick={async e => {
                     e.stopPropagation();
                     if (!await confirm(`Delete "${item.name}" permanently?`)) return;
@@ -824,6 +851,22 @@ export default function MenuSection() {
                 <button onClick={handleAddDietaryPreset} style={{ width: '100%', padding: '11px', borderRadius: 8, border: 'none', background: 'var(--brand-accent, #C9A84C)', color: 'white', cursor: 'pointer', fontWeight: 700 }}>🧾 Add standard dietary group</button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+      {/* SEPOS-MENU-COLOR-001 — swatch picker */}
+      {colorPick && (
+        <div onClick={() => setColorPick(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 20, width: 320, maxWidth: '92vw' }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 4 }}>Button colour</div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>Shown on the order screen — text flips black/white automatically.</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
+              {MENU_COLORS.map(c => (
+                <button key={c} onClick={() => applyColor(c)} style={{ height: 46, borderRadius: 10, cursor: 'pointer', background: c, border: colorPick.current === c ? '3px solid #1a1a2e' : '1px solid #ddd' }} />
+              ))}
+            </div>
+            <button onClick={() => applyColor(null)} style={{ width: '100%', padding: '11px', borderRadius: 10, border: '1.5px solid #ddd', background: '#fff', fontWeight: 700, cursor: 'pointer', marginBottom: 8 }}>Default (no colour)</button>
+            <button onClick={() => setColorPick(null)} style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', background: '#f0f0f0', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
           </div>
         </div>
       )}

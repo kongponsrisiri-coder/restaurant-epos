@@ -210,6 +210,7 @@ async function initDB() {
         discount_type VARCHAR(50),
         discount_value DECIMAL(10,2),
         discount_reason TEXT,
+        discount_scope VARCHAR(10),
         no_service_charge INTEGER DEFAULT 0,
         bill_printed INTEGER DEFAULT 0,
         opened_at TIMESTAMP DEFAULT NOW(),
@@ -337,6 +338,19 @@ async function initDB() {
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_webhook_fires_event_entity ON webhook_fires(event_type, entity_key)`);
+
+    // SEPOS-BIRTHDAY-001 — per-customer extras. The CRM itself stays a
+    // DERIVED view (reservations + takeaway orders, keyed by contact_key =
+    // lower(email) or 'p:'+phone); this side-table holds the bits a customer
+    // row can't derive. birthday is 'MM-DD' — no year: age is none of our
+    // business and customers rarely give it.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS customer_profiles (
+        contact_key VARCHAR(255) PRIMARY KEY,
+        birthday VARCHAR(5),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
     await pool.query(`ALTER TABLE order_items ALTER COLUMN menu_item_id DROP NOT NULL`).catch(() => {});
 
     await pool.query(`
@@ -770,9 +784,20 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
     // is unaffected — a staff member can have a PIN, an email login, or
     // both. pin becomes nullable so an email-only owner needs no PIN
     // (pin stays UNIQUE — Postgres allows multiple NULLs).
+    // SEPOS-MENU-COLOR-001 — owner-editable button colours (order screen)
+    await pool.query(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS color VARCHAR(20)`).catch(() => {});
+    await pool.query(`ALTER TABLE subcategories ADD COLUMN IF NOT EXISTS color VARCHAR(20)`).catch(() => {});
+    await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS color VARCHAR(20)`).catch(() => {});
     await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS email VARCHAR(255)`);
     await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS password_hash TEXT`);
     await pool.query(`ALTER TABLE staff ALTER COLUMN pin DROP NOT NULL`).catch(() => {});
+    // SEPOS-STAFF-PERMS-001 — per-staff permissions so a chosen non-manager can
+    // give discounts and/or redeem deposits without being made a manager.
+    await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS can_discount INTEGER DEFAULT 0`).catch(() => {});
+    await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS can_redeem_deposit INTEGER DEFAULT 0`).catch(() => {});
+    // SEPOS-DISCOUNT-SCOPE-001 — bill discount limited to 'food' / 'drink'
+    // (NULL = whole bill). Drinks = items in categories with is_bar=1.
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_scope VARCHAR(10)`).catch(() => {});
 
     // ── SEPOS-LITE-001 Phase 1 — multi-tenancy foundation ────────────
     // A `restaurants` registry plus a `restaurant_id` column on every

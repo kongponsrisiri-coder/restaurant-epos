@@ -581,6 +581,18 @@
       <input class="sw-input" id="sw-phone" type="tel" placeholder="e.g. 07700 900000" autocomplete="tel" />
       <label class="sw-label">Email (optional)</label>
       <input class="sw-input" id="sw-email" type="email" placeholder="your@email.com" autocomplete="email" />
+      <label class="sw-label">Birthday (optional) 🎂 <span style="font-weight:400;color:#888;">— so we can treat you on your day</span></label>
+      <div style="display:flex;gap:8px;">
+        <select class="sw-input" id="sw-bday-day" style="flex:1;">
+          <option value="">Day</option>
+          ${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}
+        </select>
+        <select class="sw-input" id="sw-bday-month" style="flex:1.3;">
+          <option value="">Month</option>
+          ${['January','February','March','April','May','June','July','August','September','October','November','December']
+            .map((m, i) => `<option value="${i + 1}">${m}</option>`).join('')}
+        </select>
+      </div>
       <label class="sw-label">Special Requests (optional)</label>
       <input class="sw-input" id="sw-notes" type="text" placeholder="Allergies, highchair, anniversary…" />
       <label style="display:flex;align-items:flex-start;gap:8px;margin:14px 0 6px;font-size:13px;color:#555;cursor:pointer;line-height:1.4;">
@@ -593,6 +605,16 @@
     `;
     el('sw-back-3').addEventListener('click', () => renderStep(2));
     el('sw-submit').addEventListener('click', submitBooking);
+    // Birthday day list follows the month (Feb → 29, Apr/Jun/Sep/Nov → 30)
+    el('sw-bday-month').addEventListener('change', () => {
+      const m = Number(el('sw-bday-month').value) || 0;
+      const dayEl = el('sw-bday-day');
+      const keep = Number(dayEl.value) || 0;
+      const maxDay = !m ? 31 : [4, 6, 9, 11].includes(m) ? 30 : m === 2 ? 29 : 31;
+      dayEl.innerHTML = '<option value="">Day</option>' +
+        Array.from({ length: maxDay }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('');
+      if (keep && keep <= maxDay) dayEl.value = String(keep);
+    });
     setTimeout(() => { const n = el('sw-name'); if (n) n.focus(); }, 100);
   }
 
@@ -625,6 +647,12 @@
     const email = el('sw-email')?.value.trim() || '';
     const notes = el('sw-notes')?.value.trim() || '';
     const marketing = !!el('sw-marketing')?.checked;  // SEPOS-033 GDPR consent
+    // SEPOS-BIRTHDAY-001 — optional day+month, sent as 'MM-DD' only when both chosen
+    const bdayDay = Number(el('sw-bday-day')?.value) || 0;
+    const bdayMonth = Number(el('sw-bday-month')?.value) || 0;
+    const birthday = (bdayDay && bdayMonth)
+      ? `${String(bdayMonth).padStart(2, '0')}-${String(bdayDay).padStart(2, '0')}`
+      : null;
     if (!name)  { showError('Please enter your name'); return; }
     if (!phone) { showError('Please enter your phone number'); return; }
     const btn = el('sw-submit');
@@ -640,6 +668,7 @@
           covers: selected.covers, reservation_date: selected.date,
           reservation_time: selected.time, notes: notes || null, source: 'widget',
           marketing_consent: marketing ? 1 : 0,
+          customer_birthday: birthday,
         }),
       });
       const data = await r.json();

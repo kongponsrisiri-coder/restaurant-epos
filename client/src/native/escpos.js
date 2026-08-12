@@ -270,7 +270,7 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
   }
   ops.push({ op: 'rule' });
   ops.push({ op: 'row', l: 'Subtotal', r: money(subtotal) });
-  if (discountAmount > 0) ops.push({ op: 'row', l: 'Discount', r: '-' + money(discountAmount) });
+  if (discountAmount > 0) ops.push({ op: 'row', l: 'Discount' + (paymentDetails.discountLabel || ''), r: '-' + money(discountAmount) });
   if (serviceCharge > 0)  ops.push({ op: 'row', l: `Service (${scRate}%)`, r: money(serviceCharge) });
   if (tip > 0)            ops.push({ op: 'row', l: 'Gratuity', r: money(tip) });
   ops.push({ op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: 'TOTAL ' + money(billTotal) }, { op: 'size', v: 'r' }, { op: 'bold', v: false });

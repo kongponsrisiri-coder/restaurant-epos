@@ -10,6 +10,7 @@ import {
   createDeposit, forfeitDeposit, getSettings,
   assertOk,
 } from '../../api';
+import CodeScanButton from '../../components/CodeScanButton';
 import { downloadCsv } from '../../utils/csv';
 import { confirm } from '../../utils/confirm';
 
@@ -50,12 +51,18 @@ export default function VouchersSection() {
   const [depositOpen,  setDepositOpen]  = useState(false);
   useEffect(() => { getSettings().then(s => setDepositsOn((s?.deposits_enabled ?? s?.settings?.deposits_enabled) === '1')).catch(() => {}); }, []);
 
-  async function load() {
+  // qOverride: the scan button passes the freshly scanned code directly —
+  // setQ hasn't rendered yet at that point. Non-string (e.g. the click event
+  // from onClick={load}) falls back to the q state.
+  async function load(qOverride) {
+    const query = typeof qOverride === 'string' ? qOverride : q;
     setLoading(true);
     try {
-      const r = await listVouchers(q || undefined, statusFilter || undefined);
-      setRows(Array.isArray(r) ? r : []);
-    } catch (e) { console.error(e); }
+      const r = await listVouchers(query || undefined, statusFilter || undefined);
+      const arr = Array.isArray(r) ? r : [];
+      setRows(arr);
+      return arr;
+    } catch (e) { console.error(e); return []; }
     finally     { setLoading(false); }
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [statusFilter]);
@@ -191,6 +198,14 @@ export default function VouchersSection() {
           style={{ padding: '10px 16px', borderRadius: 8, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
           Search
         </button>
+        {/* SEPOS-SCAN-EVERYWHERE-001 — scan a customer's voucher QR at the
+            counter: filters to it and opens its balance in one step. */}
+        <CodeScanButton onScan={async (v) => {
+          const code = v.toUpperCase();
+          setQ(code);
+          const arr = await load(code);
+          if (arr.length === 1) openDetail(arr[0].id);
+        }} style={{ height: 40 }} />
         {['', 'active', 'depleted', 'expired', 'voided'].map(s => (
           <button key={s || 'all'} onClick={() => setStatusFilter(s)}
             style={{ padding: '8px 14px', borderRadius: 20, border: 'none', background: statusFilter === s ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0', color: statusFilter === s ? 'white' : '#555', fontWeight: 600, fontSize: 12, cursor: 'pointer', textTransform: 'capitalize' }}>
@@ -345,7 +360,7 @@ function SellVoucherModal({ onClose, onSold }) {
   const [busy, setBusy]                       = useState(false);
   const [err, setErr]                         = useState('');
 
-  const valid = amount >= 10 && amount <= 500 && !!method;
+  const valid = amount >= 0.01 && amount <= 500 && !!method; // F1: any-amount sale (floor removed 12 Aug)
 
   async function submit() {
     if (!valid || busy) return;
@@ -374,7 +389,7 @@ function SellVoucherModal({ onClose, onSold }) {
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>×</button>
         </div>
         <div style={{ padding: 22 }}>
-          <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, fontWeight: 700 }}>Amount (£10–£500)</div>
+          <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, fontWeight: 700 }}>Amount (up to £500)</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 8 }}>
             {PRESETS.map(p => (
               <button key={p} onClick={() => setAmount(p)}
@@ -383,8 +398,8 @@ function SellVoucherModal({ onClose, onSold }) {
               </button>
             ))}
           </div>
-          <input type="number" min="10" max="500" step="1" value={amount}
-            onChange={(e) => setAmount(parseInt(e.target.value, 10) || 0)}
+          <input type="number" min="0.01" max="500" step="0.01" value={amount}
+            onChange={(e) => setAmount(Math.round((parseFloat(e.target.value) || 0) * 100) / 100)}
             placeholder="Custom amount"
             style={{ width: '100%', padding: '12px', border: '1px solid #ccc', borderRadius: 8, fontSize: 16, fontWeight: 700, marginBottom: 16, boxSizing: 'border-box' }}/>
 
@@ -472,8 +487,8 @@ function TakeDepositModal({ onClose, onTaken }) {
               </button>
             ))}
           </div>
-          <input type="number" min="1" max="1000" step="1" value={amount}
-            onChange={(e) => setAmount(parseInt(e.target.value, 10) || 0)}
+          <input type="number" min="0.01" max="500" step="0.01" value={amount}
+            onChange={(e) => setAmount(Math.round((parseFloat(e.target.value) || 0) * 100) / 100)}
             placeholder="Custom amount"
             style={{ width: '100%', padding: '12px', border: '1px solid #ccc', borderRadius: 8, fontSize: 16, fontWeight: 700, marginBottom: 16, boxSizing: 'border-box' }}/>
 

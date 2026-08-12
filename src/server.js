@@ -50,6 +50,9 @@ app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 // raw, unparsed body. Same constraint as Stripe — register before
 // express.json so the global JSON parser doesn't consume it first.
 app.use('/api/line/webhook', express.raw({ type: 'application/json' }));
+// SEPOS-SALESCHAT-002 — Messenger webhook needs the raw body for Meta's
+// X-Hub-Signature-256 HMAC, same pattern as stripe/line above.
+app.use('/api/messenger/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
 
@@ -102,27 +105,73 @@ const ORDER_TOTAL_EXPR = `SUM(CASE
 // (by item-gross) and returns order_id -> multiplicative factor in [0,1].
 // Rows must carry order_id, discount_type/discount_value (item) and
 // bill_discount_type/bill_discount_value (order).
+// SEPOS-DISCOUNT-SCOPE-001 — a bill discount may be limited to 'food' or
+// 'drink' (orders.discount_scope; NULL/'all' = whole bill). Drinks = items in
+// categories with is_bar=1, mirroring the kitchen/bar routing split.
+function rowInScope(scope, isBar) {
+  if (scope === 'drink') return Number(isBar) === 1;
+  if (scope === 'food')  return Number(isBar) !== 1;
+  return true;
+}
+
+// Scope-aware bill-discount £ for one order. `items` rows need quantity,
+// unit_price, discount_type/discount_value (item-level), voided, is_bar.
+function billDiscountAmountFor(order, items) {
+  const bdv = Number(order.discount_value || 0);
+  if (!(bdv > 0)) return 0;
+  const scope = order.discount_scope || 'all';
+  let base = 0;
+  for (const it of items) {
+    if (it.voided) continue;
+    if (!rowInScope(scope, it.is_bar)) continue;
+    let p = Number(it.unit_price || 0) * Number(it.quantity || 0);
+    if (it.discount_value > 0) {
+      if (it.discount_type === 'percent') p *= 1 - Number(it.discount_value) / 100;
+      else p = Math.max(0, p - Number(it.discount_value));
+    }
+    base += p;
+  }
+  return order.discount_type === 'percent' ? base * (bdv / 100) : Math.min(bdv, base);
+}
+
 function billDiscountFactors(rows) {
+  // Per order: full gross + in-scope gross (both after per-ITEM discounts).
   const grossByOrder = new Map();
   for (const row of rows) {
     let g = Number(row.quantity || 0) * Number(row.unit_price || 0);
     if (row.discount_type === 'percent') g *= 1 - (Number(row.discount_value || 0) / 100);
     else if (row.discount_type === 'fixed') g = Math.max(0, g - Number(row.discount_value || 0));
-    grossByOrder.set(row.order_id, (grossByOrder.get(row.order_id) || 0) + g);
-  }
-  const factor = new Map();
-  for (const row of rows) {
-    if (factor.has(row.order_id)) continue;
-    const og = grossByOrder.get(row.order_id) || 0;
-    const bdv = Number(row.bill_discount_value || 0);
-    let f = 1;
-    if (bdv > 0 && og > 0) {
-      if (row.bill_discount_type === 'percent') f = Math.max(0, 1 - bdv / 100);
-      else if (row.bill_discount_type === 'fixed') f = Math.max(0, (og - bdv) / og);
+    let e = grossByOrder.get(row.order_id);
+    if (!e) {
+      e = { full: 0, scoped: 0,
+            scope: row.bill_discount_scope || 'all',
+            type: row.bill_discount_type, value: Number(row.bill_discount_value || 0) };
+      grossByOrder.set(row.order_id, e);
     }
-    factor.set(row.order_id, f);
+    e.full += g;
+    if (rowInScope(e.scope, row.is_bar)) e.scoped += g;
+  }
+  // order_id -> { f: factor for IN-SCOPE rows, scope, amount: discount £ }.
+  // Out-of-scope rows always keep factor 1 — use rowBillFactor(), not .f.
+  const factor = new Map();
+  for (const [oid, e] of grossByOrder) {
+    const base = e.scope === 'all' ? e.full : e.scoped;
+    let f = 1, amount = 0;
+    if (e.value > 0 && base > 0) {
+      if (e.type === 'percent')    { amount = base * (e.value / 100); f = Math.max(0, 1 - e.value / 100); }
+      else if (e.type === 'fixed') { amount = Math.min(e.value, base); f = Math.max(0, (base - amount) / base); }
+    }
+    factor.set(oid, { f, scope: e.scope, amount });
   }
   return factor;
+}
+
+// The multiplicative bill-discount factor for ONE item row: the order's
+// factor when the row is in the discount's scope, 1 otherwise.
+function rowBillFactor(factors, row) {
+  const e = factors.get(row.order_id);
+  if (!e) return 1;
+  return rowInScope(e.scope, row.is_bar) ? e.f : 1;
 }
 
 // SEPOS-SVCFIX-001 — service charge must be computed PER BILL, not derived from
@@ -134,7 +183,7 @@ function orderIsDineIn(o) {
   const t = o.order_type || 'dine_in';
   return t !== 'takeaway' && t !== 'counter';
 }
-function serviceChargeForOrder(o, scEnabled, scRatePct) {
+function serviceChargeForOrder(o, scEnabled, scRatePct, billDiscountOverride = null) {
   // SEPOS-AUDIT-001 — prefer the close-time SNAPSHOT (orders.service_charge,
   // stamped by /pay since this fix). Deriving from today's settings rewrote
   // history whenever the rate changed. NULL = legacy row → derive as before.
@@ -146,8 +195,14 @@ function serviceChargeForOrder(o, scEnabled, scRatePct) {
   // matching what the till actually took (BillScreen applies service to
   // subtotal − bill discount). Using o.total (pre-bill-discount) overstated
   // service on discounted bills. Per-item discounts are already baked into total.
+  // SEPOS-DISCOUNT-SCOPE-001 — a food/drink-scoped discount needs the order's
+  // ITEMS to compute its £, so /pay passes it in (billDiscountOverride). This
+  // derive branch only otherwise runs for legacy rows (service_charge NULL),
+  // which predate scoped discounts — every scoped order carries a snapshot.
   let base = Number(o.total ?? 0);
-  if (o.discount_value > 0) {
+  if (billDiscountOverride != null) {
+    base = Math.max(0, base - Number(billDiscountOverride));
+  } else if (o.discount_value > 0) {
     base = o.discount_type === 'percent'
       ? base * (1 - Number(o.discount_value) / 100)
       : Math.max(0, base - Number(o.discount_value));
@@ -579,6 +634,43 @@ function maybeForwardTableWriteToCloud(req, res) {
 function maybeForwardStaffWriteToCloud(req, res) {
   return forwardWriteToCloud(req, res, 'staff-write', () => syncService.pullStaffSnapshot(), { strict: true });
 }
+
+// SEPOS-MENU-COLOR-001 — owner-editable button colour for category /
+// subcategory / menu item. One endpoint, whitelisted tables; color is a
+// '#rrggbb' hex or null (back to the default look).
+app.put('/api/menu-color', async (req, res) => {
+  // Review M1 + canary fix — cloud-first when the cloud SUPPORTS the endpoint,
+  // skew-tolerant when it doesn't: an older cloud answers 404 (endpoint not
+  // deployed yet) and a strict forward turned that into a failed save on the
+  // till (found live on the v1.26 host canary). Now: try the cloud; swallow
+  // ONLY 404 (old cloud) and offline; surface real cloud errors; and always
+  // write locally on success so the UI is instant — the menu pull reconciles
+  // (old clouds send no color key and the upsert drops null/undefined, so the
+  // local value survives until the cloud catches up).
+  try {
+    const { type, id, color } = req.body || {};
+    const table = { category: 'categories', subcategory: 'subcategories', item: 'menu_items' }[type];
+    if (!table || !id) return res.status(400).json({ error: 'type (category|subcategory|item) and id required' });
+    const c = (color == null || color === '') ? null : String(color);
+    if (c && !/^#[0-9a-fA-F]{6}$/.test(c)) return res.status(400).json({ error: 'color must be #rrggbb or null' });
+    const cloudUrl = process.env.CLOUD_API_URL;
+    if (cloudUrl) {
+      try {
+        const r = await fetch(cloudUrl.replace(/\/+$/, '') + '/api/menu-color', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type, id, color: c }),
+          signal: AbortSignal.timeout(8000), // F4: a wedged cloud must not hang the save
+        });
+        if (!r.ok && r.status !== 404) {
+          const t = await r.text().catch(() => '');
+          return res.status(r.status).json({ error: 'cloud rejected the colour: ' + t.slice(0, 120) });
+        }
+      } catch { /* offline — colour still applies locally below */ }
+    }
+    await pool.query(`UPDATE ${table} SET color = $1 WHERE id = $2`, [c, id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 app.post('/api/categories', async (req, res) => {
   if (await maybeForwardMenuWriteToCloud(req, res)) return;
@@ -1680,11 +1772,14 @@ app.put('/api/orders/:id/discount', async (req, res) => {
   try {
     if (await refuseQrMutation(req.params.id, res)) return;
     const { discount_type, discount_value, discount_reason } = req.body;
-    await pool.query('UPDATE orders SET discount_type=$1, discount_value=$2, discount_reason=$3 WHERE id=$4', [discount_type, discount_value, discount_reason, req.params.id]);
+    // SEPOS-DISCOUNT-SCOPE-001 — 'food' / 'drink' limits the discount to that
+    // side of the bill (categories.is_bar). Anything else (incl. 'all') → NULL.
+    const discount_scope = ['food', 'drink'].includes(req.body.discount_scope) ? req.body.discount_scope : null;
+    await pool.query('UPDATE orders SET discount_type=$1, discount_value=$2, discount_reason=$3, discount_scope=$4 WHERE id=$5', [discount_type, discount_value, discount_reason, discount_scope, req.params.id]);
     // SEPOS-AUDIT-001 — push to cloud on local installs (no-op on cloud);
     // without this the 5s cloud-wins pull reverted the discount within a tick.
     await offlineQueue.enqueue('apply_discount', {
-      localOrderId: Number(req.params.id), discount_type, discount_value, discount_reason,
+      localOrderId: Number(req.params.id), discount_type, discount_value, discount_reason, discount_scope,
     });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1728,13 +1823,20 @@ app.post('/api/orders/:id/close-zero', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const ord = await client.query('SELECT id, status, discount_type, discount_value FROM orders WHERE id=$1 FOR UPDATE', [orderId]);
+    const ord = await client.query('SELECT id, status, discount_type, discount_value, discount_scope FROM orders WHERE id=$1 FOR UPDATE', [orderId]);
     const order = ord.rows[0];
     if (!order)                  { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Order not found' }); }
     if (order.status !== 'open') { await client.query('ROLLBACK'); return res.status(409).json({ error: `Order is ${order.status}` }); }
 
+    // SEPOS-DISCOUNT-SCOPE-001 — is_bar joined so a food/drink-scoped discount
+    // computes on the right base (a £ off drinks must not zero a food bill).
     const itemsRes = await client.query(
-      `SELECT unit_price, quantity, discount_type, discount_value, voided FROM order_items WHERE order_id=$1`,
+      `SELECT oi.unit_price, oi.quantity, oi.discount_type, oi.discount_value, oi.voided,
+              COALESCE(c.is_bar, 0) AS is_bar
+         FROM order_items oi
+         LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+         LEFT JOIN categories  c ON c.id  = COALESCE(mi.category_id, oi.dest_category_id)
+        WHERE oi.order_id=$1`,
       [orderId]
     );
     let subtotal = 0;
@@ -1747,11 +1849,7 @@ app.post('/api/orders/:id/close-zero', async (req, res) => {
       }
       subtotal += p;
     }
-    let total = subtotal;
-    if (order.discount_value > 0) {
-      if (order.discount_type === 'percent') total *= (1 - Number(order.discount_value) / 100);
-      else total = Math.max(0, total - Number(order.discount_value));
-    }
+    const total = Math.max(0, subtotal - billDiscountAmountFor(order, itemsRes.rows));
     if (total > 0.01) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: `Bill total is £${total.toFixed(2)}, not £0 — use the normal pay flow` });
@@ -1891,7 +1989,21 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
       const scCfg = {}; for (const r of scRes.rows) scCfg[r.key] = r.value;
       const scOn = String(scCfg.service_charge_enabled ?? 'true') !== '0' && String(scCfg.service_charge_enabled ?? 'true') !== 'false';
       const scPct = Number(scCfg.service_charge_rate ?? scCfg.service_charge_percent ?? 12.5) || 0;
-      closeServiceCharge = Number(serviceChargeForOrder({ ...order, service_charge: null }, scOn, scPct).toFixed(2));
+      // SEPOS-DISCOUNT-SCOPE-001 — a food/drink-scoped discount's £ depends on
+      // the items, not the whole total; compute it here so the service-charge
+      // snapshot is taken on the right base.
+      let discOverride = null;
+      if (Number(order.discount_value) > 0 && (order.discount_scope === 'food' || order.discount_scope === 'drink')) {
+        const scopedItems = await client.query(
+          `SELECT oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value, oi.voided,
+                  COALESCE(c.is_bar, 0) AS is_bar
+             FROM order_items oi
+             LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
+             LEFT JOIN categories  c ON c.id  = COALESCE(mi.category_id, oi.dest_category_id)
+            WHERE oi.order_id = $1`, [orderId]);
+        discOverride = billDiscountAmountFor(order, scopedItems.rows);
+      }
+      closeServiceCharge = Number(serviceChargeForOrder({ ...order, service_charge: null }, scOn, scPct, discOverride).toFixed(2));
     } catch { closeServiceCharge = 0; }
     await client.query(`UPDATE orders SET status='closed', closed_at=NOW(), service_charge=$2, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId, closeServiceCharge]);
     await client.query('COMMIT');
@@ -2055,7 +2167,10 @@ app.post('/api/staff/login', async (req, res) => {
     // SEPOS-SEC-LOGIN — an operator still on a weak/default PIN (the seeded 1234)
     // must set a real one before using the till; the public default can't persist.
     const must_change_pin = _isWeakPin(pin) && ['admin', 'manager', 'supervisor'].includes(staff.role);
-    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp, must_change_pin });
+    // SEPOS-STAFF-PERMS-001 — per-staff permissions travel with the session so
+    // the client can honour "can give discount / can redeem deposit" for a
+    // non-manager the owner has trusted.
+    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp, must_change_pin, can_discount: staff.can_discount ? 1 : 0, can_redeem_deposit: staff.can_redeem_deposit ? 1 : 0 });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2565,7 +2680,7 @@ app.post('/api/stripe/webhook', async (req, res) => {
 
 app.get('/api/staff', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, role, is_active, created_at, start_date, notes, employment_status FROM staff ORDER BY name');
+    const result = await pool.query('SELECT id, name, role, is_active, created_at, start_date, notes, employment_status, can_discount, can_redeem_deposit FROM staff ORDER BY name');
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2573,7 +2688,7 @@ app.get('/api/staff', async (req, res) => {
 app.post('/api/staff', async (req, res) => {
   if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
-    const { name, pin, role, start_date, notes, employment_status } = req.body;
+    const { name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit } = req.body;
     // SEPOS-047k — PINs are UNIQUE (staff_pin_key / staff.pin UNIQUE). A
     // collision used to surface as a raw 500 "duplicate key value violates
     // unique constraint" → the Staff screen just said "Save failed!" with
@@ -2582,7 +2697,7 @@ app.post('/api/staff', async (req, res) => {
     if (dup.rows[0]) {
       return res.status(409).json({ error: `PIN ${pin} is already used by ${dup.rows[0].name}. Please choose a different 4-digit PIN.` });
     }
-    const result = await pool.query('INSERT INTO staff (name, pin, role, start_date, notes, employment_status) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [name, pin, role, start_date || null, notes || null, employment_status || 'active']);
+    const result = await pool.query('INSERT INTO staff (name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id', [name, pin, role, start_date || null, notes || null, employment_status || 'active', can_discount ? 1 : 0, can_redeem_deposit ? 1 : 0]);
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) {
     if (/unique|duplicate/i.test(err.message || '')) {
@@ -2595,7 +2710,8 @@ app.post('/api/staff', async (req, res) => {
 app.put('/api/staff/:id', async (req, res) => {
   if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
-    const { name, pin, role, is_active, start_date, notes, employment_status } = req.body;
+    const { name, pin, role, is_active, start_date, notes, employment_status, can_discount, can_redeem_deposit } = req.body;
+    const cd = can_discount ? 1 : 0, crd = can_redeem_deposit ? 1 : 0;
     // Normalise: when the client doesn't send is_active (or sends an empty
     // string), keep whatever's already in the DB — DON'T null it. The old
     // version would clobber a manager's is_active flag to NULL on every
@@ -2621,9 +2737,11 @@ app.put('/api/staff/:id', async (req, res) => {
            is_active = COALESCE($4::int, is_active),
            start_date = $5,
            notes = $6,
-           employment_status = $7
-         WHERE id = $8`,
-        [name, pin, role, activeParam, start_date || null, notes || null, employment_status || 'active', req.params.id]
+           employment_status = $7,
+           can_discount = $8,
+           can_redeem_deposit = $9
+         WHERE id = $10`,
+        [name, pin, role, activeParam, start_date || null, notes || null, employment_status || 'active', cd, crd, req.params.id]
       );
     } else {
       await pool.query(
@@ -2633,9 +2751,11 @@ app.put('/api/staff/:id', async (req, res) => {
            is_active = COALESCE($3::int, is_active),
            start_date = $4,
            notes = $5,
-           employment_status = $6
-         WHERE id = $7`,
-        [name, role, activeParam, start_date || null, notes || null, employment_status || 'active', req.params.id]
+           employment_status = $6,
+           can_discount = $7,
+           can_redeem_deposit = $8
+         WHERE id = $9`,
+        [name, role, activeParam, start_date || null, notes || null, employment_status || 'active', cd, crd, req.params.id]
       );
     }
     res.json({ success: true });
@@ -3110,7 +3230,7 @@ app.get('/api/reports/summary', async (req, res) => {
       // (verify pass: orders.service_charge added — without it in the SELECT,
       // serviceChargeForOrder saw undefined and silently fell back to deriving
       // from today's rate, defeating the snapshot.)
-      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.order_type, orders.no_service_charge, orders.service_charge, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [sumFromIso, sumToIso]),
+      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.discount_scope, orders.order_type, orders.no_service_charge, orders.service_charge, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [sumFromIso, sumToIso]),
       // SEPOS-REPREC-001 — a cancelled/void bill closes with a payment row
       // method='cancelled', £0. It collected nothing, so it must NOT count as a
       // sale or an order here — otherwise Trading's "Total Sales" (orders.total)
@@ -3127,10 +3247,11 @@ app.get('/api/reports/summary', async (req, res) => {
       pool.query(`
         SELECT oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value,
                COALESCE(c.is_bar, 0) AS is_bar,
-               o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value
+               o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value,
+               o.discount_scope AS bill_discount_scope
         FROM order_items oi
         LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
-        LEFT JOIN categories  c  ON c.id  = mi.category_id
+        LEFT JOIN categories  c  ON c.id  = COALESCE(mi.category_id, oi.dest_category_id)
         LEFT JOIN orders      o  ON o.id  = oi.order_id
         WHERE o.status='closed' AND oi.voided=0
           AND o.closed_at >= $1::timestamp AND o.closed_at < $2::timestamp
@@ -3154,7 +3275,18 @@ app.get('/api/reports/summary', async (req, res) => {
     for (const r of rows) if (!byOrder.has(r.id)) byOrder.set(r.id, r);
     const uniqueOrders = [...byOrder.values()];
     const total_subtotal = uniqueOrders.reduce((sum, r) => sum + Number(r.total ?? 0), 0);
-    const total_discounts = uniqueOrders.reduce((s, r) => { if (!r.discount_value) return s; return s + (r.discount_type === 'percent' ? (r.total || 0) * (r.discount_value / 100) : r.discount_value); }, 0);
+    // SEPOS-DISCOUNT-SCOPE-001 — factors computed here (not just for the
+    // food/drink split below) because a scoped discount's £ depends on the
+    // order's ITEMS, which only the per-item rows carry. Unscoped orders keep
+    // the exact total-based formula they always had.
+    const fdFactors = billDiscountFactors(foodDrinkRes.rows);
+    const total_discounts = uniqueOrders.reduce((s, r) => {
+      if (!r.discount_value) return s;
+      if (r.discount_scope === 'food' || r.discount_scope === 'drink') {
+        return s + (fdFactors.get(r.id)?.amount || 0);
+      }
+      return s + (r.discount_type === 'percent' ? (r.total || 0) * (r.discount_value / 100) : Number(r.discount_value));
+    }, 0);
     // SEPOS-SVCFIX-001 — service charge summed PER BILL (dine-in only × rate),
     // not money-taken − subtotal. total_sales foots to items − discounts + service.
     const total_service  = uniqueOrders.reduce((sum, r) => sum + serviceChargeForOrder(r, scEnabled, scRate), 0);
@@ -3180,14 +3312,14 @@ app.get('/api/reports/summary', async (req, res) => {
     const vRedeemed = voucherRedeemedRes.rows[0] || { count: 0, total: 0 };
 
     // SEPOS-AUDIT-001 — aggregate the per-item rows with the bill-level
-    // discount factor (see the query comment above).
-    const fdFactors = billDiscountFactors(foodDrinkRes.rows);
+    // discount factor (see the query comment above). SEPOS-DISCOUNT-SCOPE-001:
+    // the factor is per-ROW now — out-of-scope items keep factor 1.
     let total_food = 0, total_drink = 0;
     for (const r of foodDrinkRes.rows) {
       let net = Number(r.quantity || 0) * Number(r.unit_price || 0);
       if (r.discount_type === 'percent') net *= 1 - (Number(r.discount_value || 0) / 100);
       else if (r.discount_type === 'fixed') net = Math.max(0, net - Number(r.discount_value || 0));
-      net *= (fdFactors.get(r.order_id) ?? 1);
+      net *= rowBillFactor(fdFactors, r);
       if (Number(r.is_bar) === 1) total_drink += net;
       else                        total_food  += net;
     }
@@ -3881,7 +4013,7 @@ app.get('/api/z-report/preview', async (req, res) => {
       // SEPOS-AUDIT-001 — exclude bills whose payments were all written off
       // (method='cancelled' via the Bills editor): their items counted in the
       // VAT/food/drink breakdowns while total_sales excluded them.
-      pool.query(`SELECT COALESCE(mi.vat_rate, 20) AS vat_rate, oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value, o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id LEFT JOIN orders o ON o.id = oi.order_id WHERE o.status='closed' AND oi.voided=0 AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))`, [from, to]),
+      pool.query(`SELECT COALESCE(mi.vat_rate, 20) AS vat_rate, oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value, COALESCE(c.is_bar, 0) AS is_bar, o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value, o.discount_scope AS bill_discount_scope FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id LEFT JOIN categories c ON c.id = COALESCE(mi.category_id, oi.dest_category_id) LEFT JOIN orders o ON o.id = oi.order_id WHERE o.status='closed' AND oi.voided=0 AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))`, [from, to]),
       // Korakot 2026-06-02: food vs drink split via categories.is_bar.
       // SEPOS-AUDIT-001 — per-order rows (aggregated in JS with the bill-level
       // discount factor, like VAT): the flat SUM ignored bill discounts, so a
@@ -3890,10 +4022,11 @@ app.get('/api/z-report/preview', async (req, res) => {
       pool.query(`
         SELECT oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value,
                COALESCE(c.is_bar, 0) AS is_bar,
-               o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value
+               o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value,
+               o.discount_scope AS bill_discount_scope
         FROM order_items oi
         LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
-        LEFT JOIN categories  c  ON c.id  = mi.category_id
+        LEFT JOIN categories  c  ON c.id  = COALESCE(mi.category_id, oi.dest_category_id)
         LEFT JOIN orders      o  ON o.id  = oi.order_id
         WHERE o.status='closed' AND oi.voided=0
           AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
@@ -3943,7 +4076,7 @@ app.get('/api/z-report/preview', async (req, res) => {
       let gross = Number(row.quantity || 0) * Number(row.unit_price || 0);
       if (row.discount_type === 'percent') gross *= 1 - (Number(row.discount_value || 0) / 100);
       else if (row.discount_type === 'fixed') gross = Math.max(0, gross - Number(row.discount_value || 0));
-      gross *= (vatFactors.get(row.order_id) ?? 1); // distribute the order's bill-level discount
+      gross *= rowBillFactor(vatFactors, row); // distribute the order's bill-level discount (scope-aware)
       const { net, vat } = vatLine(gross, rate, vatMode);
       const b = vatBuckets.get(rate) || { rate, net: 0, vat: 0, gross: 0 };
       b.net += net; b.vat += vat; b.gross += (net + vat);
@@ -3966,7 +4099,16 @@ app.get('/api/z-report/preview', async (req, res) => {
     const uniqueOrders = [...byOrder.values()].filter(o => !isShellArtifact(o));
     const countableRows = orders.filter(o => !isShellArtifact(o));
     const totalSubtotal  = uniqueOrders.reduce((s, o) => s + Number(o.total ?? 0), 0);
-    const totalDiscounts = uniqueOrders.reduce((s, o) => { if (!o.discount_value) return s; return s + (o.discount_type === 'percent' ? (o.total || 0) * (o.discount_value / 100) : o.discount_value); }, 0);
+    // SEPOS-DISCOUNT-SCOPE-001 — scoped discounts take their £ from the
+    // per-item rows (fdFactors); unscoped keep the exact legacy formula.
+    const fdFactors = billDiscountFactors(foodDrinkRes.rows);
+    const totalDiscounts = uniqueOrders.reduce((s, o) => {
+      if (!o.discount_value) return s;
+      if (o.discount_scope === 'food' || o.discount_scope === 'drink') {
+        return s + (fdFactors.get(o.id)?.amount || 0);
+      }
+      return s + (o.discount_type === 'percent' ? (o.total || 0) * (o.discount_value / 100) : Number(o.discount_value));
+    }, 0);
     // SEPOS-SVCFIX-001 — service charge is the SUM of each dine-in bill's own
     // charge (subtotal × rate), NOT money-taken − subtotal. Immune to tips,
     // overpayments and double-charges leaking into the service line.
@@ -3985,13 +4127,12 @@ app.get('/api/z-report/preview', async (req, res) => {
     // SEPOS-AUDIT-001 — food/drink now aggregates per-item rows in JS with the
     // bill-level discount factor (same treatment as VAT), so a comped bill's
     // items scale down exactly like they do in total_sales.
-    const fdFactors = billDiscountFactors(foodDrinkRes.rows);
     let totalFood = 0, totalDrink = 0;
     for (const r of foodDrinkRes.rows) {
       let net = Number(r.quantity || 0) * Number(r.unit_price || 0);
       if (r.discount_type === 'percent') net *= 1 - (Number(r.discount_value || 0) / 100);
       else if (r.discount_type === 'fixed') net = Math.max(0, net - Number(r.discount_value || 0));
-      net *= (fdFactors.get(r.order_id) ?? 1);
+      net *= rowBillFactor(fdFactors, r);
       if (Number(r.is_bar) === 1) totalDrink += net;
       else                        totalFood  += net;
     }
@@ -4787,7 +4928,64 @@ app.post('/api/saleschat/admin/conversations/:sid/reply', salesAdminAuth, async 
   const msgs = _salesMsgs(r.messages);
   msgs.push({ role: 'assistant', content: text, operator: true, ts: new Date().toISOString() });
   await pool.query('UPDATE sales_chats SET messages=$2, handoff=TRUE, updated_at=NOW() WHERE session_id=$1', [req.params.sid, JSON.stringify(msgs)]);
+  // SEPOS-SALESCHAT-002 — web visitors poll for replies; Messenger users don't.
+  // A takeover reply on an fb- thread must be pushed out through the Graph API.
+  if (/^fb-\d+$/.test(req.params.sid)) {
+    messengerSales.sendText(req.params.sid.slice(3), text)
+      .catch(e => console.error('[saleschat] messenger push', e.message));
+  }
   res.json({ ok: true, handoff: true });
+});
+
+// ─── SEPOS-SALESCHAT-002 — Facebook Messenger doorway for Tara ───
+// DMs to the SiamEPOS page flow into the SAME sales_chats store as the
+// website chat: same persona, same Control Room list, same human takeover.
+// Inert unless the MESSENGER_* env vars are set (main cloud only).
+const messengerSales = require('./services/messengerSales');
+const MESSENGER_ADDENDUM = `
+CHANNEL NOTE — you are replying in Facebook Messenger on the SiamEPOS page:
+- Keep replies SHORT (1-3 sentences, max ~2 short paragraphs). No markdown, no headers, no bullet walls — plain chat text.
+- First reply to a new person: greet briefly, thank them for messaging the page, then answer.
+- If they want a demo or a call, ask for their restaurant/spa name and a phone number or email, and say the team (กต) will get back to them the same day.`;
+
+app.get('/api/messenger/webhook', (req, res) => {
+  const challenge = messengerSales.verifyWebhook(req.query || {});
+  if (challenge != null) return res.status(200).send(challenge);
+  res.sendStatus(403);
+});
+
+app.post('/api/messenger/webhook', async (req, res) => {
+  const raw = req.body; // Buffer (raw mount above)
+  if (!messengerSales.verifySignature(raw, req.headers['x-hub-signature-256'])) return res.sendStatus(403);
+  res.sendStatus(200); // ack fast — Meta retries on slow responses
+  let payload;
+  try { payload = JSON.parse(raw.toString('utf8')); } catch { return; }
+  if (payload.object !== 'page') return;
+  for (const m of messengerSales.extractMessages(payload)) {
+    const sid = `fb-${m.senderId}`;
+    try {
+      const cur = (await pool.query('SELECT messages, handoff FROM sales_chats WHERE session_id=$1', [sid])).rows[0];
+      const msgs = cur ? _salesMsgs(cur.messages) : [];
+      msgs.push({ role: 'user', content: m.text, ts: new Date().toISOString() });
+      let reply = null;
+      if (cur && cur.handoff) {
+        // human owns this thread — store the message; the operator replies from
+        // the Control Room (which pushes back through Messenger above)
+      } else if (!process.env.ANTHROPIC_API_KEY) {
+        reply = 'Thanks for messaging SiamEPOS! Our team will reply shortly. 🙏';
+        msgs.push({ role: 'assistant', content: reply, ts: new Date().toISOString() });
+      } else {
+        const aiMsgs = msgs.map(x => ({ role: x.role === 'user' ? 'user' : 'assistant', content: x.content }));
+        reply = (await anthropicChat(SALESCHAT_SYSTEM + MESSENGER_ADDENDUM, aiMsgs))
+          || 'Sorry — I had a hiccup. Please try again, or visit siamepos.co.uk. 🙏';
+        msgs.push({ role: 'assistant', content: reply, ts: new Date().toISOString() });
+      }
+      await pool.query(`INSERT INTO sales_chats (session_id, name, messages) VALUES ($1,$2,$3)
+        ON CONFLICT (session_id) DO UPDATE SET messages=$3, updated_at=NOW()`,
+        [sid, 'Facebook Messenger', JSON.stringify(msgs)]);
+      if (reply) await messengerSales.sendText(m.senderId, reply);
+    } catch (e) { console.error('[messenger-sales] handle', e.message); }
+  }
 });
 app.post('/api/saleschat/admin/conversations/:sid/handoff', salesAdminAuth, async (req, res) => {
   const on = !!req.body?.handoff;
@@ -5212,6 +5410,20 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
       [restaurant_id, assignTableId, assignTableIds, customer_name.trim(), customer_phone.trim(), customer_email?.trim() || null, coversNum, reservation_date, reservation_time, insertStatus, notes?.trim() || null, source, marketing_consent ? 1 : 0]
     );
     const reservation = result.rows[0];
+    // SEPOS-BIRTHDAY-001 — the widget lets guests add day+month ('MM-DD', no
+    // year). Best-effort upsert into customer_profiles with the same key
+    // rules as the CRM view; a failure here never fails the booking.
+    const bday = String(req.body.customer_birthday || '').trim();
+    const bdayM = bday.match(/^(\d{2})-(\d{2})$/);
+    if (bdayM && Number(bdayM[1]) >= 1 && Number(bdayM[1]) <= 12 && Number(bdayM[2]) >= 1 && Number(bdayM[2]) <= 31) {
+      const bKey = customer_email?.trim() ? customer_email.trim().toLowerCase() : 'p:' + customer_phone.trim();
+      pool.query(
+        `INSERT INTO customer_profiles (contact_key, birthday, updated_at)
+         VALUES ($1, $2, CURRENT_TIMESTAMP)
+         ON CONFLICT (contact_key) DO UPDATE SET birthday = $2, updated_at = CURRENT_TIMESTAMP`,
+        [bKey, bday]
+      ).catch(e => console.warn('[birthday] profile upsert skipped:', e.message));
+    }
     io.emit('new_reservation', { ...reservation, reservation_date: String(reservation.reservation_date).split('T')[0], reservation_time: String(reservation.reservation_time).slice(0, 5) });
     if (customer_email) sendBookingConfirmation(reservation).catch(err => console.error('❌ Email error:', err.message));
     if (customer_phone) sendBookingSms(reservation).catch(() => {});
@@ -8392,6 +8604,11 @@ app.get('/api/widget/voucher/config', widgetCors, (req, res) => {
 // purchases don't leave phantom vouchers in the DB.
 app.post('/api/widget/voucher/purchase', widgetCors, async (req, res) => {
   try {
+    // F8 — card charges under 30p are rejected by Stripe with a raw 500; with
+    // the £10 floor gone, guard here like qr-pay does.
+    if (Number(req.body?.amount) > 0 && Number(req.body.amount) < 0.30) {
+      return res.status(400).json({ error: 'Card payments need a minimum of £0.30' });
+    }
     const v = voucherSvc.validateAmount(req.body?.amount);
     if (!v.ok) return res.status(400).json({ error: v.error });
     // Demo tenants force mock pay via the same flag the takeaway widget
@@ -8888,13 +9105,22 @@ app.post('/api/vouchers/:id/resend-email', async (req, res) => {
 // the Bill screen applies it as a 'Deposit' tender. Phase A = manual create
 // (deposit taken by phone / card machine); Stripe capture = Phase B (widget).
 app.post('/api/deposits', async (req, res) => {
+  // Review H1 — vouchers/deposits are cloud-authoritative: create on the
+  // cloud (like redeem/lookup already do) or a local till mints a deposit
+  // the cloud-forwarded redeem can't find (404 in front of the guest).
+  if (await forwardToCloudWith(req, res, 'deposit-create')) return;
   try {
     const { amount, payment_method, reservation_id, customer_name, customer_email } = req.body || {};
-    const v = voucherSvc.validateAmount(amount);
+    // Deposits: any positive amount — the £10 floor is a gift-voucher rule.
+    const v = voucherSvc.validateAmount(amount, { minimum: 0.01 });
     if (!v.ok) return res.status(400).json({ error: v.error });
     const method = String(payment_method || 'card').toLowerCase();
-    if (!['cash', 'card', 'mock'].includes(method)) {
-      return res.status(400).json({ error: 'payment_method must be cash, card or mock' });
+    // 'external' = SEPOS-DEPOSIT-EXT-001: a deposit taken OUTSIDE SiamEPOS
+    // (old system / phone / paper), recorded here so it can be applied to a
+    // bill. Kept as its own method so deposit reports can separate it from
+    // money actually taken through the till.
+    if (!['cash', 'card', 'mock', 'external'].includes(method)) {
+      return res.status(400).json({ error: 'payment_method must be cash, card, mock or external' });
     }
     // Expiry = reservation date + 7 days grace (fallback to default if unlinked).
     let expires = voucherSvc.defaultExpiryDate();
@@ -8909,8 +9135,35 @@ app.post('/api/deposits', async (req, res) => {
         resId = null; // unknown reservation → don't link a phantom id
       }
     }
-    let code;
-    for (let i = 0; i < 10; i++) {
+    // SEPOS-DEPOSIT-EXT-001b (Korakot, 12 Aug) — an EXTERNAL deposit keeps the
+    // CUSTOMER'S OWN reference as its code (the number on their old-system
+    // receipt / paper), so next week's lookup matches what's in their hand.
+    // Rejected if the reference already exists as any voucher — a typed
+    // reference can never hijack or shadow a real SiamEPOS code.
+    let requestedCode = String(req.body?.code || '').trim().toUpperCase().slice(0, 20).trim(); // F3: vouchers.code is VARCHAR(20)
+    if (requestedCode) {
+      if (!/^[A-Z0-9][A-Z0-9 _\/-]*$/.test(requestedCode)) {
+        return res.status(400).json({ error: 'Reference can use letters, numbers, spaces and - _ /' });
+      }
+      // Canary find #11 — references are casual ("T", a daily ticket number),
+      // so collisions are NORMAL. Only a LIVE code with money on it is
+      // protected; a spent/expired/old reference auto-suffixes silently —
+      // staff never solve naming puzzles at the table.
+      const clash = await pool.query('SELECT id, status, balance, type FROM vouchers WHERE code = $1', [requestedCode]);
+      const row = clash.rows[0];
+      if (row && row.status === 'active' && Number(row.balance) > 0) {
+        return res.status(409).json({ error: `${requestedCode} is a live SiamEPOS ${row.type === 'deposit' ? 'deposit' : 'voucher'} with £${Number(row.balance).toFixed(2)} on it — look it up and use its real balance.` });
+      }
+      if (row) {
+        for (let n = 2; n <= 99; n++) {
+          const cand = `${requestedCode.slice(0, 16)}-${n}`;
+          const e2 = await pool.query('SELECT id FROM vouchers WHERE code = $1', [cand]);
+          if (!e2.rows[0]) { requestedCode = cand; break; }
+        }
+      }
+    }
+    let code = requestedCode || null;
+    if (!code) for (let i = 0; i < 10; i++) {
       code = voucherSvc.generateCode('DEP-');
       const exists = await pool.query('SELECT id FROM vouchers WHERE code = $1', [code]);
       if (!exists.rows[0]) break;
@@ -8955,6 +9208,58 @@ app.get('/api/orders/:id/deposit', async (req, res) => {
     );
     const dep = d.rows[0];
     res.json({ deposit: dep ? { ...dep, balance: Number(dep.balance), original_amount: Number(dep.original_amount) } : null });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-DEPOSIT-ORDER-001 — how much DEPOSIT has already been redeemed against
+// this order. Lets the Order screen show "Deposit paid / Balance due" and
+// survive navigation, and lets the Bill screen avoid double-redeeming the same
+// deposit. Sums voucher_redemptions of type='deposit' for the order (bill_id).
+app.get('/api/orders/:id/deposit-applied', async (req, res) => {
+  {
+    const cloudId = await localOrderCloudId(req.params.id);
+    if (cloudId && await forwardToCloudWith(req, res, 'deposit-applied', {
+      path: `/api/orders/${cloudId}/deposit-applied`,
+    })) return;
+  }
+  try {
+    const r = await pool.query(
+      `SELECT COALESCE(SUM(vr.amount_used),0) AS applied,
+              MAX(v.code) AS code
+         FROM voucher_redemptions vr
+         JOIN vouchers v ON v.id = vr.voucher_id
+        WHERE vr.bill_id = $1 AND v.type = 'deposit'`,
+      [req.params.id]);
+    const applied = Number(r.rows[0]?.applied || 0);
+    res.json({ applied, code: applied > 0 ? (r.rows[0].code || null) : null });
+  } catch (err) { res.json({ applied: 0, code: null }); }
+});
+
+// SEPOS-DEPOSIT-REMOVE-001 (canary find #9) — un-apply a deposit from a bill:
+// restores each deposit-voucher's balance and deletes the redemption rows, so
+// a mistaken entry (wrong code, wrong amount) is fully reversible before pay.
+app.post('/api/orders/:id/deposit-unapply', async (req, res) => {
+  // Canary #12 — translate the LOCAL order id to its cloud id (same as the
+  // deposit-applied lookup); without it the cloud searched a wrong bill_id
+  // and 'removed' nothing.
+  {
+    const cloudId = await localOrderCloudId(req.params.id);
+    if (cloudId && await forwardToCloudWith(req, res, 'deposit-unapply', {
+      path: `/api/orders/${cloudId}/deposit-unapply`,
+    })) return;
+  }
+  try {
+    const rows = (await pool.query(
+      `SELECT vr.id, vr.voucher_id, vr.amount_used FROM voucher_redemptions vr
+        JOIN vouchers v ON v.id = vr.voucher_id
+       WHERE vr.bill_id = $1 AND v.type = 'deposit'`, [req.params.id])).rows;
+    let restored = 0;
+    for (const r of rows) {
+      await pool.query(`UPDATE vouchers SET balance = balance + $1, status = 'active' WHERE id = $2`, [r.amount_used, r.voucher_id]);
+      await pool.query('DELETE FROM voucher_redemptions WHERE id = $1', [r.id]);
+      restored += Number(r.amount_used);
+    }
+    res.json({ success: true, restored });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -9368,6 +9673,35 @@ app.put('/api/customers/marketing-consent', requireStaffAuth(['admin', 'manager'
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-BIRTHDAY-001 — set/clear a customer's birthday ('MM-DD', no year).
+// Body: { email?, phone?, birthday } — key derived exactly like the CRM view
+// (lower(email), else 'p:'+phone). birthday '' clears it.
+app.put('/api/customers/birthday', requireStaffAuth(['admin', 'manager', 'supervisor']), async (req, res) => {
+  try {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const phone = String(req.body.phone || '').trim();
+    const key = email || (phone ? 'p:' + phone : '');
+    if (!key) return res.status(400).json({ error: 'email or phone required' });
+    const birthday = String(req.body.birthday || '').trim();
+    if (birthday === '') {
+      await pool.query('DELETE FROM customer_profiles WHERE contact_key = $1', [key]);
+      return res.json({ success: true, cleared: true });
+    }
+    const m = birthday.match(/^(\d{2})-(\d{2})$/);
+    const mm = m ? Number(m[1]) : 0, dd = m ? Number(m[2]) : 0;
+    if (!m || mm < 1 || mm > 12 || dd < 1 || dd > 31) {
+      return res.status(400).json({ error: 'birthday must be MM-DD' });
+    }
+    await pool.query(
+      `INSERT INTO customer_profiles (contact_key, birthday, updated_at)
+       VALUES ($1, $2, CURRENT_TIMESTAMP)
+       ON CONFLICT (contact_key) DO UPDATE SET birthday = $2, updated_at = CURRENT_TIMESTAMP`,
+      [key, birthday]
+    );
+    res.json({ success: true, birthday });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─────────────────────────────────────────────────────────────────────
 // SEPOS-033 Phase 2 — email campaigns + unsubscribe
 // ─────────────────────────────────────────────────────────────────────
@@ -9639,6 +9973,20 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
       new Date(b.last_visit || 0) - new Date(a.last_visit || 0)
     );
 
+    // SEPOS-BIRTHDAY-001 — attach birthdays from the side-table + compute
+    // days until the NEXT occurrence (wraps the year end; 29 Feb rolls to
+    // 1 Mar in non-leap years via JS Date overflow).
+    const profRes = await pool.query('SELECT contact_key, birthday FROM customer_profiles').catch(() => ({ rows: [] }));
+    const birthdayByKey = new Map(profRes.rows.map(p => [p.contact_key, p.birthday]));
+    const daysToBirthday = (mmdd, today) => {
+      const m = String(mmdd || '').match(/^(\d{2})-(\d{2})$/);
+      if (!m) return null;
+      const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      let next = new Date(today.getFullYear(), Number(m[1]) - 1, Number(m[2]));
+      if (next < startOfToday) next = new Date(today.getFullYear() + 1, Number(m[1]) - 1, Number(m[2]));
+      return Math.round((next - startOfToday) / 86400000);
+    };
+
     const today = new Date();
     const customers = merged.map(c => {
       const visits = Number(c.total_visits || 0);
@@ -9653,6 +10001,7 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
       else if (visits >= 2)                             status = 'Regular';
       else                                              status = 'New';
 
+      const birthday = birthdayByKey.get(c.contact_key) || null;
       return {
         customer_email: c.customer_email,
         customer_name:  c.customer_name,
@@ -9665,6 +10014,8 @@ app.get('/api/customers', requireStaffAuth(['admin', 'manager', 'supervisor']), 
         marketing_consent: !!c.marketing_consent,
         unsubscribed:   !!c.unsubscribed,
         status,
+        birthday,
+        days_to_birthday: birthday ? daysToBirthday(birthday, today) : null,
       };
     });
 
@@ -9867,10 +10218,11 @@ app.get('/api/reports/vat', async (req, res) => {
       SELECT COALESCE(mi.vat_rate, 20) AS vat_rate,
              COALESCE(c.is_bar, 0) AS is_bar,
              oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value,
-             o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value
+             o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value,
+             o.discount_scope AS bill_discount_scope
       FROM order_items oi
       LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
-      LEFT JOIN categories  c  ON c.id  = mi.category_id
+      LEFT JOIN categories  c  ON c.id  = COALESCE(mi.category_id, oi.dest_category_id)
       LEFT JOIN orders      o  ON o.id  = oi.order_id
       WHERE o.status='closed' AND oi.voided=0
         AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
@@ -9888,7 +10240,7 @@ app.get('/api/reports/vat', async (req, res) => {
       let base = Number(row.quantity || 0) * Number(row.unit_price || 0);
       if (row.discount_type === 'percent') base *= 1 - (Number(row.discount_value || 0) / 100);
       else if (row.discount_type === 'fixed') base = Math.max(0, base - Number(row.discount_value || 0));
-      base *= (vatFactors.get(row.order_id) ?? 1); // distribute the order's bill-level discount
+      base *= rowBillFactor(vatFactors, row); // distribute the order's bill-level discount (scope-aware)
       const { net, vat } = vatLine(base, rate, vatMode); // SEPOS-VATMODE-001
       const gross = net + vat;
       const qty = Number(row.quantity || 0);
@@ -10983,11 +11335,12 @@ app.get('/api/print/alerts', async (req, res) => {
 //         'dismiss'
 app.post('/api/print/alerts/action', async (req, res) => {
   try {
-    const { action, ids } = req.body || {};
+    const { action, ids, printer_id } = req.body || {};
     if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids required' });
     let results;
     if (action === 'retry') results = await printAlerts.retry(ids);
     else if (action === 'redirect') results = await printAlerts.redirect(ids);
+    else if (action === 'reroute') results = await printAlerts.reroute(ids, printer_id); // SEPOS-PRINT-FALLBACK-001
     else if (action === 'dismiss') results = await printAlerts.dismiss(ids);
     else return res.status(400).json({ error: 'unknown action' });
     res.json({ results });

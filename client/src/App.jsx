@@ -312,9 +312,17 @@ export default function App() {
   useEffect(() => {
     if (!staff || staff.role === 'kitchen' || staff.role === 'bar' || !tillSec.idleMin) return;
     lastActivity.current = Date.now();
-    const bump = () => {
+    const bump = (ev) => {
       lastActivity.current = Date.now();
-      if (warnStart.current) { warnStart.current = 0; setIdleWarn(false); }
+      // Ghost-tap fix, final form (canary finds #5/#8b): pointer presses do NOT
+      // dismiss the warning here — the full-screen overlay stays up, catches the
+      // COMPLETE tap itself (its own onClick), and dismisses then. With the
+      // overlay still covering the screen at click time, nothing underneath can
+      // ever receive the tap — no event-swallowing games needed. Keyboard/wheel
+      // activity (which never lands "through" anything) still dismisses here.
+      if (warnStart.current && ev && (ev.type === 'keydown' || ev.type === 'wheel')) {
+        warnStart.current = 0; setIdleWarn(false);
+      }
     };
     const evs = ['pointerdown', 'keydown', 'touchstart', 'wheel'];
     evs.forEach((e) => window.addEventListener(e, bump, { capture: true, passive: true }));
@@ -640,7 +648,7 @@ export default function App() {
           resets the timer and dismisses this), so no dedicated button needed —
           but we show one anyway to make the escape route obvious. */}
       {staff && idleWarn !== false && (
-        <div style={{
+        <div onClick={() => { warnStart.current = 0; lastActivity.current = Date.now(); setIdleWarn(false); }} style={{
           position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, zIndex: 100002,
           background: 'rgba(13,27,62,0.82)', display: 'flex', alignItems: 'center',
           justifyContent: 'center', padding: 24, textAlign: 'center',

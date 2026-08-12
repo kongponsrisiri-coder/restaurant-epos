@@ -338,6 +338,19 @@ async function initDB() {
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_webhook_fires_event_entity ON webhook_fires(event_type, entity_key)`);
+
+    // SEPOS-BIRTHDAY-001 — per-customer extras. The CRM itself stays a
+    // DERIVED view (reservations + takeaway orders, keyed by contact_key =
+    // lower(email) or 'p:'+phone); this side-table holds the bits a customer
+    // row can't derive. birthday is 'MM-DD' — no year: age is none of our
+    // business and customers rarely give it.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS customer_profiles (
+        contact_key VARCHAR(255) PRIMARY KEY,
+        birthday VARCHAR(5),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
     await pool.query(`ALTER TABLE order_items ALTER COLUMN menu_item_id DROP NOT NULL`).catch(() => {});
 
     await pool.query(`

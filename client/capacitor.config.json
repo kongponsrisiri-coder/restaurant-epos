@@ -3,5 +3,6 @@
   "appName": "SiamEPOS",
   "webDir": "dist",
   "android": { "allowMixedContent": false },
+  "packageClassList": ["PrinterPlugin"],
   "plugins": { "CapacitorHttp": { "enabled": true } }
 }

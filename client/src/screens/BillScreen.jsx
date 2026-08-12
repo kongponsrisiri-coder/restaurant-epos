@@ -548,6 +548,25 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     }
   };
 
+  // SEPOS-PAY-ONETAP-001 — splits finish one-tap too: the LAST share tap
+  // records the payment, kicks the drawer and toasts — no confirmed card.
+  // Whole-bill receipt stays available via Print Bill before paying or
+  // Admin → Bills reprint after.
+  const finalizeSplit = (pd) => {
+    if (paying) return;
+    setPaymentDetails(pd);
+    setPaying(true);
+    (async () => {
+      try {
+        await onPay(billTotal, pd.method, pd.amountPaid, pd.tip, pd.tenders);
+        serverOpenDrawer().catch(() => {});
+        showPaidToast(pd, orderShortLabelPlain(order));
+      } catch (e) {
+        alert('Payment could not be recorded: ' + (e?.message || 'unknown') + '\nThe bill is still open — try again.');
+      } finally { setPaying(false); }
+    })();
+  };
+
   const handleSplitEqualPayment = (index, method = 'Cash') => {
     const newPaid = [...splitPaid, index];
     const isLast = newPaid.length >= splitCount;
@@ -558,7 +577,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     setSplitPaid(newPaid);
     const newTenders = [...splitTenders, { amount, method }];
     setSplitTenders(newTenders);
-    if (isLast) { setPaymentDetails({ method:'Split', amountPaid:billTotal, tip:0, change:0, tenders:newTenders }); setStage('receipt'); }
+    if (isLast) { finalizeSplit({ method:'Split', amountPaid:billTotal, tip:0, change:0, tenders:newTenders }); }
   };
 
   const handleSplitItemPayment = (personIdx, method = 'Cash') => {
@@ -576,7 +595,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     setSplitItemPaid(newPaid);
     const newTenders = [...splitTenders, { amount, method }];
     setSplitTenders(newTenders);
-    if (isLast) { setPaymentDetails({ method:'Split by Item', amountPaid:billTotal, tip:0, change:0, tenders:newTenders }); setStage('receipt'); }
+    if (isLast) { finalizeSplit({ method:'Split by Item', amountPaid:billTotal, tip:0, change:0, tenders:newTenders }); }
   };
 
   const handleSplitEqualPrint = (i) => {

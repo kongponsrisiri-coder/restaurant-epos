@@ -1158,12 +1158,34 @@ async function printFireNotice(settings, order, course) {
   }
 }
 
+// SEPOS-TICKET-FONT-001 — the rendered typeface is THE ticket font. A venue
+// can opt back to the printer's built-in font with kitchen_ticket_style=
+// 'classic'; bilingual-Thai venues stay classic until the Thai fallback font
+// lands (SEPOS-TICKET-FONT-002). Any render/send failure returns false so the
+// caller's classic builder runs — a font problem can never lose a ticket.
+async function tryRenderedTicket(dest, settings, order, items, opts = {}) {
+  if (settings.kitchen_ticket_style === 'classic') return false;
+  if (settings.kitchen_language === 'en_th') return false;
+  if (!dest.ip && !dest.printerName) return false;
+  try {
+    const buf = await require('./ticketRender').kitchenTicketRaster(order, items, opts);
+    for (let c = 0; c < (dest.copies || 1); c++) {
+      await sendRaw(dest.ip, dest.port, buf, { printerName: dest.printerName, lprQueue: dest.lprQueue });
+    }
+    return true;
+  } catch (e) {
+    console.warn('[print] rendered ticket failed — classic fallback:', e.message);
+    return false;
+  }
+}
+
 async function printKitchenTicket(settings, order, items, course) {
   const ip       = settings.printer_kitchen_ip;
   const port     = settings.printer_kitchen_port || 9100;
   const printerName = settings.printer_kitchen_name || '';
   const lprQueue    = settings.printer_kitchen_lpr_queue || 'lp';
   const copies   = Math.max(1, Math.min(5, parseInt(settings.printer_kitchen_copies || 1, 10) || 1));
+  if (await tryRenderedTicket({ ip, port, printerName, lprQueue, copies }, settings, order, items, { course })) return;
   // Opt-in: bilingual Thai labels only print if the operator explicitly
   // sets kitchen_language='en_th' AND has a Thai-capable printer. Default
   // is English-only, since most UK thermal printers can't render Thai
@@ -1191,22 +1213,7 @@ async function printFullKitchenTicket(settings, order, items) {
   const printerName = settings.printer_kitchen_name || '';
   const lprQueue    = settings.printer_kitchen_lpr_queue || 'lp';
   const copies   = Math.max(1, Math.min(5, parseInt(settings.printer_kitchen_copies || 1, 10) || 1));
-  // SEPOS-TICKET-FONT-001 — opt-in rendered tickets (real typeface, printed
-  // as a bitmap). kitchen_ticket_style='rendered' switches this station's
-  // tickets to the smooth Noto Sans look; anything else = classic ESC/POS
-  // text, byte-for-byte unchanged. Falls back to classic on any render error
-  // so a font problem can never lose a ticket.
-  if (settings.kitchen_ticket_style === 'rendered') {
-    try {
-      const buf = await require('./ticketRender').kitchenTicketRaster(order, items);
-      for (let c = 0; c < copies; c++) {
-        await sendRaw(ip, port, buf, { printerName, lprQueue });
-      }
-      return;
-    } catch (e) {
-      console.warn('[print] rendered ticket failed — falling back to classic:', e.message);
-    }
-  }
+  if (await tryRenderedTicket({ ip, port, printerName, lprQueue, copies }, settings, order, items)) return;
   // Opt-in: bilingual Thai labels only print if the operator explicitly
   // sets kitchen_language='en_th' AND has a Thai-capable printer. Default
   // is English-only, since most UK thermal printers can't render Thai
@@ -1238,6 +1245,7 @@ async function printKitchenToPrinter(printer, settings, order, items) {
   const lprQueue = printer.lpr_queue || 'lp';
   const copies = Math.max(1, Math.min(5, parseInt(printer.copies || 1, 10) || 1));
   if (!ip && !printerName) throw new Error('NO_IP');
+  if (await tryRenderedTicket({ ip, port, printerName, lprQueue, copies }, settings, order, items)) return;
   const bilingual = settings.kitchen_language === 'en_th';
   const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
   const buf = buildFullKitchenTicket({ order, items, bilingual, thaiCodepage, fontScale: settings.kitchen_font_scale });
@@ -1254,6 +1262,7 @@ async function printBarTicket(settings, order, items) {
   const port     = settings.printer_bar_port || 9100;
   const printerName = settings.printer_bar_name || '';
   const lprQueue    = settings.printer_bar_lpr_queue || 'lp';
+  if (await tryRenderedTicket({ ip, port, printerName, lprQueue, copies: 1 }, settings, order, items, { course: 'BAR' })) return;
   // Opt-in: bilingual Thai labels only print if the operator explicitly
   // sets kitchen_language='en_th' AND has a Thai-capable printer. Default
   // is English-only, since most UK thermal printers can't render Thai

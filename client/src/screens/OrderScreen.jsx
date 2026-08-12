@@ -1704,7 +1704,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                   background: '#eff6ff', color: '#1e3a8a', fontSize: 13, fontWeight: 700,
                   textAlign: 'center'
                 }}>
-                  🧾 Deposit applied −£{depositApplied.amount.toFixed(2)}{depositApplied.code ? ` · ${depositApplied.code}` : ''}
+                  🧾 Deposit applied −£{depositApplied.amount.toFixed(2)}
                 </div>
               ) : (
                 <button onClick={openDepositModal} style={{

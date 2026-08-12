@@ -1,6 +1,16 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote, getVoucher, redeemVoucher, getOrderDeposit, getOrderDepositApplied, createDeposit } from '../api';
 import AmountInput from '../components/AmountInput';
+
+// SEPOS-MENU-COLOR-001 — auto black/white text on a coloured button.
+const textOn = (hex) => {
+  try {
+    const n = hex.replace('#', '');
+    const L = parseInt(n.substr(0,2),16)*0.299 + parseInt(n.substr(2,2),16)*0.587 + parseInt(n.substr(4,2),16)*0.114;
+    return L > 150 ? '#1a1a2e' : '#ffffff';
+  } catch { return '#1a1a2e'; }
+};
+
 import BillScreen from './BillScreen';
 import { printKitchenTicket, printFullOrderTicket, printBarOrderTicket, printFireNoticeTicket } from './KitchenTicket';
 import { isNativeApp } from '../native/printer';
@@ -1019,8 +1029,9 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
               }} style={{
                 padding: '10px 20px', borderRadius: 20, border: 'none', cursor: 'pointer',
                 fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap',
-                background: activeCategory === cat.id ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary, #1a1a2e)') : '#f0f0f0',
-                color: activeCategory === cat.id ? 'white' : '#555',
+                background: cat.color ? (activeCategory === cat.id ? cat.color : cat.color + 'cc') : (activeCategory === cat.id ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary, #1a1a2e)') : '#f0f0f0'),
+                color: cat.color ? textOn(cat.color) : (activeCategory === cat.id ? 'white' : '#555'),
+                outline: cat.color && activeCategory === cat.id ? '3px solid #1a1a2e' : 'none',
               }}>
                 {cat.name} {cat.is_bar ? '🍹' : ''}
               </button>
@@ -1047,8 +1058,9 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                 <button key={sub.id} onClick={() => setActiveSubcat(sub.id)} style={{
                   padding: '7px 16px', borderRadius: 16, border: 'none', cursor: 'pointer',
                   fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap',
-                  background: activeSubcat === sub.id ? '#3b82f6' : '#e0e0e0',
-                  color: activeSubcat === sub.id ? 'white' : '#555'
+                  background: sub.color ? (activeSubcat === sub.id ? sub.color : sub.color + 'cc') : (activeSubcat === sub.id ? '#3b82f6' : '#e0e0e0'),
+                  color: sub.color ? textOn(sub.color) : (activeSubcat === sub.id ? 'white' : '#555'),
+                  outline: sub.color && activeSubcat === sub.id ? '3px solid #1a1a2e' : 'none'
                 }}>{sub.name}</button>
               ))}
             </div>
@@ -1230,10 +1242,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                         onDragStart={arrangeMode ? () => setArrangeDrag(gridIdx) : undefined}
                         onDragOver={arrangeMode ? (e) => e.preventDefault() : undefined}
                         onDrop={arrangeMode ? (e) => { e.preventDefault(); onArrangeDrop(gridIdx); } : undefined}
-                        style={{ background: '#fff', borderRadius: 12, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : '#E7E2D6'}`, padding: '10px 12px', cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 56, display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
+                        style={{ background: item.color || '#fff', borderRadius: 12, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : (item.color ? item.color : '#E7E2D6')}`, padding: '10px 12px', cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 56, display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
                         {/* SEPOS-MENU-COMPACT-001 — no price on the card, half-height row layout */}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: item.color ? textOn(item.color) : 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
                           <AllergenChips list={allergensByItemId[item.id]} />
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', flex: 'none' }}>

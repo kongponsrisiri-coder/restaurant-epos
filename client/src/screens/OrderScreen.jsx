@@ -1189,9 +1189,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     return (
                       <button key={cat.id} onClick={() => selectCategory(cat)} style={{
                         padding: '12px 26px', borderRadius: 14, cursor: 'pointer', fontWeight: 800, fontSize: 17, whiteSpace: 'nowrap',
-                        border: active ? 'none' : '1.5px solid #E7E2D6',
-                        background: active ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary,#0D1B3E)') : '#fff',
-                        color: active ? '#fff' : 'var(--brand-primary, #1a1a2e)' }}>
+                        border: active ? 'none' : (cat.color ? `1.5px solid ${cat.color}` : '1.5px solid #E7E2D6'),
+                        background: cat.color ? (active ? cat.color : cat.color + '33') : (active ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary,#0D1B3E)') : '#fff'),
+                        color: cat.color ? (active ? textOn(cat.color) : 'var(--brand-primary, #1a1a2e)') : (active ? '#fff' : 'var(--brand-primary, #1a1a2e)'),
+                        boxShadow: cat.color && active ? '0 0 0 3px rgba(13,27,62,.35)' : 'none' }}>
                         {cat.name}{cat.is_bar ? ' 🍹' : ''}
                       </button>
                     );
@@ -1208,9 +1209,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       return (
                         <button key={sub.id} onClick={() => setActiveSubcat(sub.id)} style={{
                           padding: '9px 18px', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: 14,
-                          border: active ? 'none' : '1px solid #E7E2D6',
-                          background: active ? 'var(--brand-accent,#C9A84C)' : '#fff',
-                          color: active ? '#fff' : '#7C766A' }}>
+                          border: active ? 'none' : (sub.color ? `1px solid ${sub.color}` : '1px solid #E7E2D6'),
+                          background: sub.color ? (active ? sub.color : sub.color + '33') : (active ? 'var(--brand-accent,#C9A84C)' : '#fff'),
+                          color: sub.color ? (active ? textOn(sub.color) : 'var(--brand-primary, #1a1a2e)') : (active ? '#fff' : '#7C766A'),
+                          boxShadow: sub.color && active ? '0 0 0 3px rgba(13,27,62,.35)' : 'none' }}>
                           {sub.name}
                         </button>
                       );

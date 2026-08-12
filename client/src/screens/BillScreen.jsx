@@ -3,7 +3,9 @@ import { getBill, markBillPrinted, getVoucher, redeemVoucher, applyDiscount, rem
 import { printReceipt } from './ReceiptPrinter';
 import QRPayModal from '../components/QRPayModal';
 import { orderShortLabelPlain, orderSubLabel, isTakeaway } from '../utils/orderLabel';
+import { billDiscountAmount, scopedBase, scopeLabel } from '../utils/discountScope';
 import AmountInput from '../components/AmountInput';
+import CodeScanButton from '../components/CodeScanButton';
 import { confirm } from '../utils/confirm';
 
 // SEPOS-PAY-ONETAP-001 — 2-second "paid" toast. Plain DOM appended to <body>
@@ -131,6 +133,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
             try {
               const v = await getVoucher(code);
               if (v.error)                      setVoucherErr(v.error);
+              else if (v.type === 'deposit')    setVoucherErr('This is a booking deposit — use the Deposit tender, not the voucher discount.');
               else if (v.status !== 'active')   setVoucherErr(`Voucher is ${v.status}`);
               else if (Number(v.balance) <= 0)  setVoucherErr('Voucher has no balance left');
               else                              setVoucherDetails(v);
@@ -198,10 +201,13 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const vatBreakdown = Object.values(vatBuckets).sort((a, b) => a.rate - b.rate);
   const vatTotal = vatBreakdown.reduce((s, b) => s + b.vat, 0);
 
-  const discountAmount = order.discount_value > 0
-    ? order.discount_type === 'percent' ? subtotal * (order.discount_value / 100) : parseFloat(order.discount_value)
-    : 0;
-  const discountRate  = subtotal > 0 ? discountAmount / subtotal : 0;
+  // SEPOS-DISCOUNT-SCOPE-001 — scope-aware ('food'/'drink' via is_bar; shared
+  // helper with OrderScreen). A fixed £ discount caps at its scope's subtotal.
+  // discountRate spreads the discount over the IN-SCOPE £ only, so splits
+  // charge the discount to the people who ordered the discounted items.
+  const discountAmount   = billDiscountAmount(order, billItems);
+  const discountBaseAmt  = scopedBase(billItems, order.discount_scope || 'all');
+  const discountRate     = discountBaseAmt > 0 ? discountAmount / discountBaseAmt : 0;
   const afterDiscount = subtotal - discountAmount;
   // SEPOS — honour the per-order "Remove service charge" flag persisted from
   // the Order screen. Previously the Bill recomputed SC from the global setting
@@ -240,7 +246,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
       const d = i.discount_value > 0 ? i.discount_type === 'percent' ? p * (i.discount_value / 100) : Math.min(i.discount_value, p) : 0;
       return sum + p - d;
     }, 0);
-    const personDiscount     = personSubtotal * discountRate;
+    // SEPOS-DISCOUNT-SCOPE-001 — only this person's IN-SCOPE £ carries the
+    // discount (their drinks for a drinks discount; everything when unscoped).
+    const personDiscount     = scopedBase(personItems, order.discount_scope || 'all') * discountRate;
     const personAfterDiscount = personSubtotal - personDiscount;
     const personService      = (serviceChargeEnabled && !noServiceCharge) ? personAfterDiscount * serviceChargePercent : 0;
     return { items: personItems, subtotal: personSubtotal, discount: personDiscount, afterDiscount: personAfterDiscount, service: personService, total: personAfterDiscount + personService };
@@ -290,7 +298,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   // SEPOS-DEPOSIT-ORDER-001 — the receipt shows the FULL total then the deposit
   // deduction + balance, so billTotal on the receipt is the gross (not the
   // already-reduced balance); depositPaid drives the "Deposit paid / Balance due".
-  const receiptTotals = { subtotal, discountAmount, serviceCharge, billTotal: grossTotal, depositPaid };
+  const receiptTotals = { subtotal, discountAmount, discountLabel: scopeLabel(order.discount_scope), serviceCharge, billTotal: grossTotal, depositPaid };
 
   const handlePrintBill = () => {
     // SEPOS-DEPOSIT-PRINT — if a booking deposit has been applied, show it on
@@ -339,6 +347,38 @@ export default function BillScreen({ orderId, onClose, onPay }) {
       else                              { setVoucherDetails(v); }
     } catch (e) { setVoucherErr(e.message || 'Lookup failed'); }
     finally     { setVoucherLoading(false); }
+  };
+
+  // SEPOS-SCAN-EVERYWHERE-001 — after a 📷 scan on the mixed-payment boxes,
+  // look the code up straight away so staff see the balance and get the
+  // amount prefilled (scan → see money → apply). Unknown codes stay silent —
+  // they're legitimate external references (pre-SiamEPOS vouchers). Offline
+  // lookup failures are swallowed: staff can still type the amount.
+  const scanMixVoucher = async (raw, remaining) => {
+    const code = String(raw || '').toUpperCase();
+    setMixVoucherCode(code); setMixVoucherErr('');
+    try {
+      const v = await getVoucher(code);
+      if (!v || v.error || !v.status) return;
+      if (v.type === 'deposit')    { setMixVoucherErr('This is a booking deposit — use the Deposit tender.'); return; }
+      if (v.status !== 'active')   { setMixVoucherErr(`Voucher is ${v.status}`); return; }
+      const bal = Number(v.balance || 0);
+      if (bal <= 0)                { setMixVoucherErr('Voucher has no balance left'); return; }
+      setMixVoucherAmt(Math.min(bal, remaining).toFixed(2));
+    } catch { /* offline — amount stays manual */ }
+  };
+  const scanMixDeposit = async (raw, remaining) => {
+    const code = String(raw || '').toUpperCase();
+    setMixDepositCode(code); setMixVoucherErr('');
+    try {
+      const v = await getVoucher(code);
+      if (!v || v.error || !v.status) return;
+      if (v.type !== 'deposit')    { setMixVoucherErr('This is a gift voucher — use the Voucher tender.'); return; }
+      if (v.status !== 'active')   { setMixVoucherErr(`Deposit is ${v.status}`); return; }
+      const bal = Number(v.balance || 0);
+      if (bal <= 0)                { setMixVoucherErr('Deposit has no balance left'); return; }
+      setMixDepositAmt(Math.min(bal, remaining).toFixed(2));
+    } catch { /* offline — amount stays manual */ }
   };
 
   // SEPOS-VOUCHER-SCAN-001 — operator pressed cancel on the scanner sheet
@@ -725,7 +765,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
             ))}
             <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14, marginTop: 6 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: MUTED, marginBottom: 6 }}><span>Subtotal</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>£{subtotal.toFixed(2)}</span></div>
-              {discountAmount > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#2E9E6E', marginBottom: 6 }}><span>Discount</span><span>-£{discountAmount.toFixed(2)}</span></div>}
+              {discountAmount > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#2E9E6E', marginBottom: 6 }}><span>Discount{scopeLabel(order.discount_scope)}</span><span>-£{discountAmount.toFixed(2)}</span></div>}
               {serviceChargeEnabled && !noServiceCharge && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: MUTED, marginBottom: 6 }}><span>Service charge ({parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5)}%)</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>£{serviceCharge.toFixed(2)}</span></div>}
               {depositPaid > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#2563eb', marginBottom: 6 }}><span>Deposit paid</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>-£{depositPaid.toFixed(2)}</span></div>}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: `2px solid ${INK}`, marginTop: 10, paddingTop: 10 }}>
@@ -834,7 +874,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
               </div>
               <div style={{ borderTop:'1px dashed #ccc', paddingTop:12, marginBottom:16 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:14, marginBottom:6, color:'#555' }}><span>Subtotal</span><span>£{subtotal.toFixed(2)}</span></div>
-                {discountAmount>0 && <div style={{ display:'flex', justifyContent:'space-between', fontSize:14, marginBottom:6, color:'#22c55e' }}><span>Discount ({order.discount_reason})</span><span>-£{discountAmount.toFixed(2)}</span></div>}
+                {discountAmount>0 && <div style={{ display:'flex', justifyContent:'space-between', fontSize:14, marginBottom:6, color:'#22c55e' }}><span>Discount{scopeLabel(order.discount_scope)} ({order.discount_reason})</span><span>-£{discountAmount.toFixed(2)}</span></div>}
                 {serviceChargeEnabled && !noServiceCharge && <div style={{ display:'flex', justifyContent:'space-between', fontSize:14, marginBottom:6, color:'#555' }}><span>Service charge ({parseFloat(settings.service_charge_rate||settings.service_charge_percent||12.5)}%)</span><span>£{serviceCharge.toFixed(2)}</span></div>}
                 {/* VAT breakdown removed — VAT is the owner/accountant's domain (VAT Report kept for them). */}
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:24, fontWeight:800, marginTop:10, color:'var(--brand-primary, #1a1a2e)' }}><span>TOTAL</span><span>£{billTotal.toFixed(2)}</span></div>
@@ -977,6 +1017,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                         )}
                         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                           <input value={mixDepositCode} onChange={e => { setMixDepositCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder={orderDeposit ? orderDeposit.code : 'Deposit code / reference'} style={{ flex: 2, height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase' }} />
+                          <CodeScanButton onScan={(v) => scanMixDeposit(v, mixRemaining)} style={{ height: 48 }} />
                           <div style={{ position: 'relative', flex: 1 }}>
                             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
                             <AmountInput value={mixDepositAmt} onChange={(v) => { setMixDepositAmt(v); setMixVoucherErr(''); }} placeholder={(orderDeposit ? Math.min(Number(orderDeposit.balance), mixRemaining) : mixRemaining).toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
@@ -990,6 +1031,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                       <>
                         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                           <input value={mixVoucherCode} onChange={e => { setMixVoucherCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder="Voucher code / reference" style={{ flex: 2, height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase' }} />
+                          <CodeScanButton onScan={(v) => scanMixVoucher(v, mixRemaining)} style={{ height: 48 }} />
                           <div style={{ position: 'relative', flex: 1 }}>
                             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
                             <AmountInput value={mixVoucherAmt} onChange={(v) => { setMixVoucherAmt(v); setMixVoucherErr(''); }} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />

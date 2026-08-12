@@ -129,6 +129,7 @@ function initSchema() {
       discount_type TEXT,
       discount_value REAL,
       discount_reason TEXT,
+      discount_scope TEXT,
       no_service_charge INTEGER DEFAULT 0,
       service_charge REAL,
       bill_printed INTEGER DEFAULT 0,
@@ -843,6 +844,8 @@ function runMigrations() {
   addColumnIfMissing('menu_items', 'color', 'TEXT');
   addColumnIfMissing('staff', 'can_discount', 'INTEGER DEFAULT 0');
   addColumnIfMissing('staff', 'can_redeem_deposit', 'INTEGER DEFAULT 0');
+  // SEPOS-DISCOUNT-SCOPE-001 — 'food' / 'drink' / NULL (= whole bill)
+  addColumnIfMissing('orders', 'discount_scope', 'TEXT');
 }
 
 function seedDefaults() {

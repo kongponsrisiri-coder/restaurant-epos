@@ -198,7 +198,9 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
     `;
   }).join('');
 
-  const discountRow  = discountAmount > 0 ? `<tr><td>Discount ${order.discount_type==='percent'?`(${order.discount_value}%)`:''}  </td><td style="text-align:right;">-${fmt(discountAmount)}</td></tr>` : '';
+  // SEPOS-DISCOUNT-SCOPE-001 — discountLabel is " (drinks)" / " (food)" for a
+  // scoped discount (from BillScreen's receiptTotals), '' for a whole-bill one.
+  const discountRow  = discountAmount > 0 ? `<tr><td>Discount${paymentDetails.discountLabel || ''} ${order.discount_type==='percent'?`(${order.discount_value}%)`:''}  </td><td style="text-align:right;">-${fmt(discountAmount)}</td></tr>` : '';
   const scRow        = serviceCharge  > 0 ? `<tr><td>Service charge (${scRate}%)</td><td style="text-align:right;">${fmt(serviceCharge)}</td></tr>` : '';
   const tipRow       = tip            > 0 ? `<tr><td>Gratuity</td><td style="text-align:right;">${fmt(tip)}</td></tr>` : '';
 

@@ -22,6 +22,7 @@ import { isNativeApp } from '../native/printer';
 import KitchenMessageModal from '../components/KitchenMessageModal';
 import { confirm } from '../utils/confirm';
 import { dineTableLabel } from '../utils/orderLabel';
+import { billDiscountAmount, scopeLabel } from '../utils/discountScope';
 import AllergenChips from '../components/AllergenChips';
 import { parseAllergens } from '../utils/allergens';
 
@@ -741,7 +742,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
 
   const confirmDiscount = async () => {
     if (!discountPopup) return;
-    const { scope, item, type, value, reason } = discountPopup;
+    const { scope, item, type, value, reason, applies } = discountPopup;
     const num = parseFloat(value);
     if (isNaN(num) || num <= 0) { alert('Invalid value!'); return; }
     if (type === 'percent' && num > 100) { alert('Percentage cannot exceed 100.'); return; }
@@ -753,8 +754,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
       try { assertOk(await applyItemDiscount(item.id, type, num)); fetchOrder(); }
       catch (e) { alert('Discount failed: ' + (e?.message || 'unknown')); fetchOrder(); }
     } else {
-      setOrder(prev => prev ? { ...prev, discount_type: type, discount_value: num, discount_reason: reason.trim() } : prev);
-      try { assertOk(await applyDiscount(orderId, type, num, reason.trim())); fetchOrder(); }
+      // SEPOS-DISCOUNT-SCOPE-001 — 'applies' pill: 'all' | 'food' | 'drink'
+      const dScope = (applies === 'food' || applies === 'drink') ? applies : null;
+      setOrder(prev => prev ? { ...prev, discount_type: type, discount_value: num, discount_reason: reason.trim(), discount_scope: dScope } : prev);
+      try { assertOk(await applyDiscount(orderId, type, num, reason.trim(), dScope)); fetchOrder(); }
       catch (e) { alert('Discount failed: ' + (e?.message || 'unknown')); fetchOrder(); }
     }
   };
@@ -780,8 +783,12 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   // order.discount_value comes back from the server as a STRING (PG DECIMAL),
   // so coerce — otherwise the fixed-discount branch returned a string and
   // discountAmount.toFixed() crashed the screen ("ct.toFixed is not a function").
+  // SEPOS-DISCOUNT-SCOPE-001 — scope-aware (food/drink via is_bar), shared
+  // helper with BillScreen. Unsent cart lines count too (they carry is_bar),
+  // so the summary matches what the Bill will show after Send. A fixed £
+  // discount now caps at its scope's subtotal (was shown uncapped).
   const discountAmount = Number(order?.discount_value) > 0
-    ? order.discount_type === 'percent' ? subtotal * (Number(order.discount_value) / 100) : (parseFloat(order.discount_value) || 0)
+    ? billDiscountAmount(order, [...(order?.items || []), ...cart])
     : 0;
   const afterDiscount = Math.max(0, subtotal - discountAmount);
   // Mirror BillScreen's logic exactly (single source of truth for the rate).
@@ -1650,7 +1657,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     border: '2px dashed #22c55e', background: '#f0fdf4',
                     color: '#14532d', fontSize: 12, fontWeight: 600, textAlign: 'center'
                   }}>
-                    {order.discount_type === 'percent' ? `${order.discount_value}%` : `£${order.discount_value}`} off — {order.discount_reason}
+                    {order.discount_type === 'percent' ? `${order.discount_value}%` : `£${order.discount_value}`} off{scopeLabel(order.discount_scope)} — {order.discount_reason}
                   </div>
                   <button onClick={async () => {
                     // SEPOS-VOUCHER-REMOVE-001 — if the discount is a voucher
@@ -1664,7 +1671,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     if (!await confirm(msg)) return;
                     // SEPOS-046z — optimistic: totals update instantly,
                     // fetchOrder reconciles or rolls back.
-                    setOrder(prev => prev ? { ...prev, discount_type: null, discount_value: 0, discount_reason: null } : prev);
+                    setOrder(prev => prev ? { ...prev, discount_type: null, discount_value: 0, discount_reason: null, discount_scope: null } : prev);
                     try {
                       if (isVoucher) assertOk(await removeVoucherFromBill(orderId));
                       else assertOk(await applyDiscount(orderId, null, 0, null));
@@ -1691,7 +1698,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                   // SEPOS-046z — DiscountModal replaces window.prompt()
                   // (disabled in Electron — this button did nothing on
                   // desktop installs).
-                  setDiscountPopup({ scope: 'bill', type: 'percent', value: '10', reason: 'Manager approval' });
+                  setDiscountPopup({ scope: 'bill', type: 'percent', value: '10', reason: 'Manager approval', applies: 'all' });
                 }} style={{
                   width: '100%', padding: '10px', borderRadius: 8,
                   border: '2px dashed #e94560', background: 'white',
@@ -1740,7 +1747,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                 display: 'flex', justifyContent: 'space-between',
                 fontSize: 13, color: '#22c55e', marginBottom: 4
               }}>
-                <span>Discount</span><span>-£{discountAmount.toFixed(2)}</span>
+                <span>Discount{scopeLabel(order?.discount_scope)}</span><span>-£{discountAmount.toFixed(2)}</span>
               </div>
             )}
 
@@ -2285,6 +2292,28 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                   {discountPopup.item.quantity}× {discountPopup.item.name}
                 </div>
               )}
+              {discountPopup.scope === 'bill' && (
+                // SEPOS-DISCOUNT-SCOPE-001 — Drinks = categories flagged 🍹 Bar
+                // (same flag that routes drinks to the bar), Food = the rest.
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>
+                    Applies to
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                    {[['all', 'All'], ['food', '🍽️ Food'], ['drink', '🍹 Drinks']].map(([k, label]) => (
+                      <button key={k}
+                        onClick={() => setDiscountPopup({ ...discountPopup, applies: k })}
+                        style={{
+                          padding: '10px 0', borderRadius: 8,
+                          border: '2px solid ' + ((discountPopup.applies || 'all') === k ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0'),
+                          background: (discountPopup.applies || 'all') === k ? 'var(--brand-primary, #1a1a2e)' : 'white',
+                          color: (discountPopup.applies || 'all') === k ? 'white' : '#555',
+                          cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                        }}>{label}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>
                   Discount type
@@ -2369,7 +2398,18 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     onChange={(e) => setDepositPopup({ ...depositPopup, code: e.target.value.toUpperCase() })}
                     placeholder="e.g. DEP-XXXX"
                     style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, fontWeight: 700, textAlign: 'center', boxSizing: 'border-box', letterSpacing: '1px' }} />
-                  <CodeScanButton onScan={(v) => setDepositPopup((p) => ({ ...p, code: v.toUpperCase() }))} />
+                  <CodeScanButton onScan={async (v) => {
+                    const code = v.toUpperCase();
+                    setDepositPopup((p) => p ? { ...p, code } : p);
+                    // SEPOS-SCAN-EVERYWHERE-001 — auto-lookup so the flow is
+                    // scan → see money → apply. Unknown/external refs stay manual.
+                    try {
+                      const d = await getVoucher(code);
+                      if (d && !d.error && d.type === 'deposit' && d.status === 'active' && Number(d.balance) > 0) {
+                        setDepositPopup((p) => p ? { ...p, amount: Number(d.balance).toFixed(2) } : p);
+                      }
+                    } catch { /* offline — staff type the amount */ }
+                  }} />
                 </div>
               </div>
               <div style={{ marginBottom: 18 }}>

@@ -10,6 +10,7 @@ import {
   createDeposit, forfeitDeposit, getSettings,
   assertOk,
 } from '../../api';
+import CodeScanButton from '../../components/CodeScanButton';
 import { downloadCsv } from '../../utils/csv';
 import { confirm } from '../../utils/confirm';
 
@@ -50,12 +51,18 @@ export default function VouchersSection() {
   const [depositOpen,  setDepositOpen]  = useState(false);
   useEffect(() => { getSettings().then(s => setDepositsOn((s?.deposits_enabled ?? s?.settings?.deposits_enabled) === '1')).catch(() => {}); }, []);
 
-  async function load() {
+  // qOverride: the scan button passes the freshly scanned code directly —
+  // setQ hasn't rendered yet at that point. Non-string (e.g. the click event
+  // from onClick={load}) falls back to the q state.
+  async function load(qOverride) {
+    const query = typeof qOverride === 'string' ? qOverride : q;
     setLoading(true);
     try {
-      const r = await listVouchers(q || undefined, statusFilter || undefined);
-      setRows(Array.isArray(r) ? r : []);
-    } catch (e) { console.error(e); }
+      const r = await listVouchers(query || undefined, statusFilter || undefined);
+      const arr = Array.isArray(r) ? r : [];
+      setRows(arr);
+      return arr;
+    } catch (e) { console.error(e); return []; }
     finally     { setLoading(false); }
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [statusFilter]);
@@ -191,6 +198,14 @@ export default function VouchersSection() {
           style={{ padding: '10px 16px', borderRadius: 8, border: 'none', background: 'var(--brand-primary, #1a1a2e)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
           Search
         </button>
+        {/* SEPOS-SCAN-EVERYWHERE-001 — scan a customer's voucher QR at the
+            counter: filters to it and opens its balance in one step. */}
+        <CodeScanButton onScan={async (v) => {
+          const code = v.toUpperCase();
+          setQ(code);
+          const arr = await load(code);
+          if (arr.length === 1) openDetail(arr[0].id);
+        }} style={{ height: 40 }} />
         {['', 'active', 'depleted', 'expired', 'voided'].map(s => (
           <button key={s || 'all'} onClick={() => setStatusFilter(s)}
             style={{ padding: '8px 14px', borderRadius: 20, border: 'none', background: statusFilter === s ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0', color: statusFilter === s ? 'white' : '#555', fontWeight: 600, fontSize: 12, cursor: 'pointer', textTransform: 'capitalize' }}>

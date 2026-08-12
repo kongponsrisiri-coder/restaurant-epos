@@ -9033,14 +9033,26 @@ app.post('/api/deposits', async (req, res) => {
     // receipt / paper), so next week's lookup matches what's in their hand.
     // Rejected if the reference already exists as any voucher — a typed
     // reference can never hijack or shadow a real SiamEPOS code.
-    const requestedCode = String(req.body?.code || '').trim().toUpperCase().slice(0, 20).trim(); // F3: vouchers.code is VARCHAR(20)
+    let requestedCode = String(req.body?.code || '').trim().toUpperCase().slice(0, 20).trim(); // F3: vouchers.code is VARCHAR(20)
     if (requestedCode) {
       if (!/^[A-Z0-9][A-Z0-9 _\/-]*$/.test(requestedCode)) {
         return res.status(400).json({ error: 'Reference can use letters, numbers, spaces and - _ /' });
       }
-      const clash = await pool.query('SELECT id FROM vouchers WHERE code = $1', [requestedCode]);
-      if (clash.rows[0]) {
-        return res.status(409).json({ error: `${requestedCode} already exists in the system — if it's spent/expired, add a suffix (e.g. ${requestedCode}-2); otherwise look it up and use its real balance.` });
+      // Canary find #11 — references are casual ("T", a daily ticket number),
+      // so collisions are NORMAL. Only a LIVE code with money on it is
+      // protected; a spent/expired/old reference auto-suffixes silently —
+      // staff never solve naming puzzles at the table.
+      const clash = await pool.query('SELECT id, status, balance, type FROM vouchers WHERE code = $1', [requestedCode]);
+      const row = clash.rows[0];
+      if (row && row.status === 'active' && Number(row.balance) > 0) {
+        return res.status(409).json({ error: `${requestedCode} is a live SiamEPOS ${row.type === 'deposit' ? 'deposit' : 'voucher'} with £${Number(row.balance).toFixed(2)} on it — look it up and use its real balance.` });
+      }
+      if (row) {
+        for (let n = 2; n <= 99; n++) {
+          const cand = `${requestedCode.slice(0, 16)}-${n}`;
+          const e2 = await pool.query('SELECT id FROM vouchers WHERE code = $1', [cand]);
+          if (!e2.rows[0]) { requestedCode = cand; break; }
+        }
       }
     }
     let code = requestedCode || null;

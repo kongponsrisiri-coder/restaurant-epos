@@ -8998,7 +8998,8 @@ app.post('/api/deposits', async (req, res) => {
   if (await forwardToCloudWith(req, res, 'deposit-create')) return;
   try {
     const { amount, payment_method, reservation_id, customer_name, customer_email } = req.body || {};
-    const v = voucherSvc.validateAmount(amount);
+    // Deposits: any positive amount — the £10 floor is a gift-voucher rule.
+    const v = voucherSvc.validateAmount(amount, { minimum: 0.01 });
     if (!v.ok) return res.status(400).json({ error: v.error });
     const method = String(payment_method || 'card').toLowerCase();
     // 'external' = SEPOS-DEPOSIT-EXT-001: a deposit taken OUTSIDE SiamEPOS

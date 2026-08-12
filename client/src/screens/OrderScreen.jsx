@@ -161,7 +161,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
         // apply it, instead of telling staff "invalid" in front of the guest.
         const ok = await confirm(`"${code}" isn't in the system.\n\nRecord it as an external deposit of £${amt.toFixed(2)} and apply it to this bill?`);
         if (!ok) { setDepositBusy(false); return; }
-        const created = await createDeposit({ amount: amt, payment_method: 'external', customer_name: `External · ${code}` });
+        const created = await createDeposit({ amount: amt, payment_method: 'external', code, customer_name: `External deposit (ref ${code})` });
         if (!created || created.error || !created.code) { alert('Could not record the external deposit: ' + (created?.error || 'unknown')); setDepositBusy(false); return; }
         const r2 = await redeemVoucher(created.code, amt, orderId, staff?.name || null);
         if (r2 && r2.error) { alert('Recorded but could not apply: ' + r2.error); setDepositBusy(false); return; }

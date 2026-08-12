@@ -312,9 +312,22 @@ export default function App() {
   useEffect(() => {
     if (!staff || staff.role === 'kitchen' || staff.role === 'bar' || !tillSec.idleMin) return;
     lastActivity.current = Date.now();
-    const bump = () => {
+    const bump = (ev) => {
       lastActivity.current = Date.now();
-      if (warnStart.current) { warnStart.current = 0; setIdleWarn(false); }
+      if (warnStart.current) {
+        warnStart.current = 0; setIdleWarn(false);
+        // SEPOS-TILL-LOCK ghost-tap fix (tablet canary find #5): the PRESS that
+        // dismisses the warning unmounts the overlay before the finger lifts,
+        // so the browser's click landed on whatever sat underneath — adding a
+        // dish to the order. Swallow the follow-through of this one tap.
+        if (ev && (ev.type === 'pointerdown' || ev.type === 'touchstart')) {
+          const swallow = (e2) => { e2.stopPropagation(); e2.preventDefault(); };
+          ['click', 'pointerup', 'touchend'].forEach((t2) =>
+            window.addEventListener(t2, swallow, { capture: true, once: true }));
+          setTimeout(() => ['click', 'pointerup', 'touchend'].forEach((t2) =>
+            window.removeEventListener(t2, swallow, { capture: true })), 600);
+        }
+      }
     };
     const evs = ['pointerdown', 'keydown', 'touchstart', 'wheel'];
     evs.forEach((e) => window.addEventListener(e, bump, { capture: true, passive: true }));

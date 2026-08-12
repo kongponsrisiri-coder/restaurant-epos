@@ -555,6 +555,7 @@ export const getRestaurant = () => get('/api/restaurant');
 
 // SEPOS-STATION-001 — extra printer stations (wok/grill/cold…) + category routing.
 export const getPrinters        = () => get('/api/printers');
+export const setMenuColor       = (type, id, color) => put(`/api/menu-color`, { type, id, color }); // SEPOS-MENU-COLOR-001
 export const createPrinter      = (body) => post('/api/printers', body);
 export const updatePrinter      = (id, body) => put(`/api/printers/${id}`, body);
 export const deletePrinter      = (id) => del(`/api/printers/${id}`);

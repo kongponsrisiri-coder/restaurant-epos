@@ -583,6 +583,21 @@ function maybeForwardStaffWriteToCloud(req, res) {
   return forwardWriteToCloud(req, res, 'staff-write', () => syncService.pullStaffSnapshot(), { strict: true });
 }
 
+// SEPOS-MENU-COLOR-001 — owner-editable button colour for category /
+// subcategory / menu item. One endpoint, whitelisted tables; color is a
+// '#rrggbb' hex or null (back to the default look).
+app.put('/api/menu-color', async (req, res) => {
+  try {
+    const { type, id, color } = req.body || {};
+    const table = { category: 'categories', subcategory: 'subcategories', item: 'menu_items' }[type];
+    if (!table || !id) return res.status(400).json({ error: 'type (category|subcategory|item) and id required' });
+    const c = (color == null || color === '') ? null : String(color);
+    if (c && !/^#[0-9a-fA-F]{6}$/.test(c)) return res.status(400).json({ error: 'color must be #rrggbb or null' });
+    await pool.query(`UPDATE ${table} SET color = $1 WHERE id = $2`, [c, id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/categories', async (req, res) => {
   if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {

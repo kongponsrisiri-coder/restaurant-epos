@@ -1167,6 +1167,8 @@ async function tryRenderedTicket(dest, settings, order, items, opts = {}) {
   if (settings.kitchen_ticket_style === 'classic') return false;
   if (settings.kitchen_language === 'en_th') return false;
   if (!dest.ip && !dest.printerName) return false;
+  // Thai/CJK text in any field → classic (codepage) path so it prints, not blanks.
+  if (require('./ticketRender').hasUnrenderableText(order, items)) return false;
   try {
     const buf = await require('./ticketRender').kitchenTicketRaster(order, items, opts);
     for (let c = 0; c < (dest.copies || 1); c++) {

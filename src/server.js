@@ -8976,8 +8976,12 @@ app.post('/api/deposits', async (req, res) => {
     const v = voucherSvc.validateAmount(amount);
     if (!v.ok) return res.status(400).json({ error: v.error });
     const method = String(payment_method || 'card').toLowerCase();
-    if (!['cash', 'card', 'mock'].includes(method)) {
-      return res.status(400).json({ error: 'payment_method must be cash, card or mock' });
+    // 'external' = SEPOS-DEPOSIT-EXT-001: a deposit taken OUTSIDE SiamEPOS
+    // (old system / phone / paper), recorded here so it can be applied to a
+    // bill. Kept as its own method so deposit reports can separate it from
+    // money actually taken through the till.
+    if (!['cash', 'card', 'mock', 'external'].includes(method)) {
+      return res.status(400).json({ error: 'payment_method must be cash, card, mock or external' });
     }
     // Expiry = reservation date + 7 days grace (fallback to default if unlinked).
     let expires = voucherSvc.defaultExpiryDate();

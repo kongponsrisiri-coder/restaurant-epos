@@ -27,19 +27,52 @@ function loadFonts() {
   return fontsReady;
 }
 
-// lines: [{ text, size, bold, center, gap, rule }]
+// lines: [{ text, size, bold, center, gap, rule, indent }]
 async function renderLines(lines) {
   await loadFonts();
   const PAD = 8, LH = 1.35;
+
+  // Measure pass — WRAP long text (greedy, word-boundary; hard-break a single
+  // over-wide word) so "Stir-Fried Cashew Nut with Jasmine Rice" never clips
+  // off the paper's right edge. Uses a 1×1 scratch context for measureText.
+  const scratch = PImage.make(1, 1).getContext('2d');
+  const wrapped = [];
+  for (const l of lines) {
+    if (l.rule) { wrapped.push(l); continue; }
+    const size = l.size || 30;
+    scratch.font = `${size}pt ${l.bold ? 'TicketSansBold' : 'TicketSans'}`;
+    const maxW = W - PAD * 2 - (l.indent || 0);
+    const words = String(l.text ?? '').split(/\s+/).filter(Boolean);
+    if (!words.length) { wrapped.push({ ...l, text: '' }); continue; }
+    let cur = '';
+    const flush = () => { if (cur) { wrapped.push({ ...l, text: cur, gap: 0 }); cur = ''; } };
+    for (const word of words) {
+      const cand = cur ? cur + ' ' + word : word;
+      if (scratch.measureText(cand).width <= maxW) { cur = cand; continue; }
+      flush();
+      if (scratch.measureText(word).width <= maxW) { cur = word; continue; }
+      // single word wider than the paper — hard-break it
+      let piece = '';
+      for (const ch of word) {
+        if (scratch.measureText(piece + ch).width > maxW) { wrapped.push({ ...l, text: piece, gap: 0 }); piece = ch; }
+        else piece += ch;
+      }
+      cur = piece;
+    }
+    flush();
+    // the last wrapped segment keeps the original gap
+    if (wrapped.length && !wrapped[wrapped.length - 1].rule) wrapped[wrapped.length - 1] = { ...wrapped[wrapped.length - 1], gap: l.gap || 0 };
+  }
+
   let h = 24;
-  for (const l of lines) h += l.rule ? 18 : Math.ceil((l.size || 30) * LH) + (l.gap || 0);
+  for (const l of wrapped) h += l.rule ? 18 : Math.ceil((l.size || 30) * LH) + (l.gap || 0);
   h += 30;
   const img = PImage.make(W, h);
   const ctx = img.getContext('2d');
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, h);
   ctx.fillStyle = '#000000';
   let y = 24;
-  for (const l of lines) {
+  for (const l of wrapped) {
     if (l.rule) {
       ctx.fillRect(PAD, y + 6, W - PAD * 2, 3); y += 18; continue;
     }
@@ -52,6 +85,16 @@ async function renderLines(lines) {
     y += (l.gap || 0);
   }
   return img;
+}
+
+// The bundled font covers Latin — text outside it (Thai, CJK) would render as
+// blanks. Callers use this to fall back to the classic codepage path for any
+// ticket that carries such text (e.g. a Thai kitchen note on an English menu).
+const NON_LATIN = /[฀-๿一-鿿぀-ヿ가-힯]/;
+function hasUnrenderableText(order, items) {
+  const parts = [order?.table_label, order?.notes];
+  for (const it of items || []) parts.push(it?.name, it?.item_name, it?.notes);
+  return NON_LATIN.test(parts.filter(Boolean).join(' '));
 }
 
 // 1-bit pack → ESC/POS GS v 0 raster
@@ -122,4 +165,4 @@ async function _linesFor(order, items, opts) {
   return lines;
 }
 
-module.exports = { kitchenTicketRaster, previewPNG };
+module.exports = { kitchenTicketRaster, previewPNG, hasUnrenderableText };

@@ -190,6 +190,8 @@ function initSchema() {
       start_date TEXT,
       notes TEXT,
       employment_status TEXT DEFAULT 'active',
+      can_discount INTEGER DEFAULT 0,
+      can_redeem_deposit INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -832,6 +834,15 @@ function runMigrations() {
   // SEPOS-LITE-003 — email + password login on the staff table.
   addColumnIfMissing('staff', 'email', 'TEXT');
   addColumnIfMissing('staff', 'password_hash', 'TEXT');
+  // SEPOS-STAFF-PERMS-001 — v1.9.2 added these to the CREATE but MISSED the
+  // migration for existing tills → GET /api/staff 500'd on every already-
+  // installed till and the login screen lost both the name grid and the pad.
+  // SEPOS-MENU-COLOR-001 — button colours
+  addColumnIfMissing('categories', 'color', 'TEXT');
+  addColumnIfMissing('subcategories', 'color', 'TEXT');
+  addColumnIfMissing('menu_items', 'color', 'TEXT');
+  addColumnIfMissing('staff', 'can_discount', 'INTEGER DEFAULT 0');
+  addColumnIfMissing('staff', 'can_redeem_deposit', 'INTEGER DEFAULT 0');
 }
 
 function seedDefaults() {

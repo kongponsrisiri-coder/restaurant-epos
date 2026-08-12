@@ -154,6 +154,7 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
   // ── Use pre-calculated values from BillScreen ─────────────────
   const subtotal       = parseFloat(paymentDetails.subtotal       ?? 0);
   const discountAmount = parseFloat(paymentDetails.discountAmount ?? 0);
+  const depositPaid    = parseFloat(paymentDetails.depositPaid    ?? 0);
   const serviceCharge  = parseFloat(paymentDetails.serviceCharge  ?? 0);
   const tip            = parseFloat(paymentDetails.tip            ?? 0);
   const billTotal      = parseFloat(paymentDetails.billTotal      ?? (subtotal - discountAmount + serviceCharge + tip));
@@ -235,12 +236,13 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
     `:''}
   ` : '';
 
-  const logoHtml = logoDataUrl ? `
+  // SEPOS-PAPER-SAVER-001 — settled receipt (has method) = record: no logo/QR.
+  const logoHtml = (logoDataUrl && !method) ? `
     <div style="text-align:center;margin-bottom:10px;">
       <img src="${logoDataUrl}" style="max-width:${logoSizePx};${logoSizePx==='100%'?'width:100%;':''}object-fit:contain;display:block;margin:0 auto;" alt="Logo" />
     </div>` : '';
 
-  const qrHtml = googleReviewUrl ? `
+  const qrHtml = (googleReviewUrl && !method) ? `
     <div style="text-align:center;margin-top:10px;">
       <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(googleReviewUrl)}" width="80" height="80" alt="QR" style="border:1px solid #eee;" />
       <div style="font-size:10px;color:#666;margin-top:3px;">${qrCaption}</div>
@@ -303,6 +305,8 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
     ${scRow}
     ${tipRow}
     <tr class="total-row"><td>TOTAL</td><td style="text-align:right;">${fmt(billTotal)}</td></tr>
+    ${depositPaid > 0 ? `<tr><td>Deposit paid</td><td style="text-align:right;">-${fmt(depositPaid)}</td></tr>
+    <tr style="font-weight:800;"><td>Balance due</td><td style="text-align:right;">${fmt(Math.max(0, billTotal - depositPaid))}</td></tr>` : ''}
     ${paymentRows}
   </table>
 

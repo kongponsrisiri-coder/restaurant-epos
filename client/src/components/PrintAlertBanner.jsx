@@ -9,7 +9,7 @@
 // Polls every 15s; cloud/web tills get empty lists so it never renders there.
 
 import { useEffect, useRef, useState } from 'react';
-import { getPrintAlerts, printAlertAction } from '../api';
+import { getPrintAlerts, printAlertAction, getPrinters } from '../api';
 
 const POLL_MS = 15 * 1000;
 
@@ -38,11 +38,23 @@ export default function PrintAlertBanner() {
     return () => { clearInterval(timerRef.current); window.removeEventListener('focus', onFocus); };
   }, []);
 
-  const act = async (action, ids) => {
+  // SEPOS-PRINT-FALLBACK-001 — staff picks WHICH printer takes the held tickets.
+  const [pickFor, setPickFor] = useState(null);   // group whose tickets are being rerouted
+  const [printerList, setPrinterList] = useState([]);
+  const openPicker = async (g) => {
+    try {
+      const list = await getPrinters();
+      const rows = (Array.isArray(list) ? list : []).filter(p => p.is_active && p.ip && p.name !== g.name);
+      if (!rows.length) { window.alert('No other active printer is configured — add one in Admin → Printers.'); return; }
+      setPrinterList(rows); setPickFor(g);
+    } catch { window.alert('Could not load the printer list.'); }
+  };
+
+  const act = async (action, ids, printerId) => {
     if (busy) return;
     setBusy(true);
     try {
-      const r = await printAlertAction(action, ids);
+      const r = await printAlertAction(action, ids, printerId);
       // Surface per-ticket failures (e.g. retry while still off) simply.
       const failed = (r?.results || []).filter(x => !x.ok);
       if (failed.length && action !== 'dismiss') {
@@ -87,11 +99,31 @@ export default function PrintAlertBanner() {
           {g.kind !== 'kitchen' && (
             <button style={btn} disabled={busy} onClick={() => act('redirect', g.ids)}>→ Print to main kitchen</button>
           )}
+          {/* SEPOS-PRINT-FALLBACK-001 — reroute to a chosen printer */}
+          <button style={btn} disabled={busy} onClick={() => openPicker(g)}>→ Another printer…</button>
           <button style={btnGhost} disabled={busy} onClick={() => {
             if (window.confirm(`Throw away ${g.ids.length} held ticket(s) for ${g.name}? The kitchen will NOT get them.`)) act('dismiss', g.ids);
           }}>✕</button>
         </div>
       ))}
+      {/* SEPOS-PRINT-FALLBACK-001 — printer picker for held tickets */}
+      {pickFor && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
+          <div style={{ background: '#fff', color: '#1a1a2e', borderRadius: 16, padding: 22, width: 380, maxWidth: '92vw' }}>
+            <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 4 }}>Print {pickFor.ids.length} held ticket{pickFor.ids.length > 1 ? 's' : ''} on…</div>
+            <div style={{ fontSize: 13, color: '#666', marginBottom: 14 }}>{pickFor.name} is down — pick the printer that should take its tickets. The ticket is tagged so the station knows it was redirected.</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
+              {printerList.map(p => (
+                <button key={p.id} disabled={busy} onClick={async () => { const grp = pickFor; setPickFor(null); await act('reroute', grp.ids, p.id); }}
+                  style={{ padding: '13px 14px', borderRadius: 10, border: '1.5px solid #ddd', background: '#fff', textAlign: 'left', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>
+                  🖨 {p.name} <span style={{ color: '#888', fontWeight: 400, fontSize: 12 }}>({p.ip})</span>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setPickFor(null)} style={{ marginTop: 14, width: '100%', padding: '11px', borderRadius: 10, border: 'none', background: '#f0f0f0', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+          </div>
+        </div>
+      )}
       {amber.map(p => (
         <div key={`amber-${p.name}-${p.down_since}`} style={amberRow}>
           <span style={{ flex: 1 }}>

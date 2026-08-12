@@ -756,6 +756,7 @@ export default function SettingsSection() {
     service_charge_rate:     '12.5',
     service_charge_enabled:  '1',
     till_send_lock:          '1',   // SEPOS-TILL-LOCK-001 — back to sign-in after sending an order
+    login_pin_only:          '0',   // SEPOS-PINONLY-001 — skip the name grid; PIN identifies the staff
     till_idle_minutes:       '2',   // SEPOS-TILL-LOCK-001 — auto sign-out after idle ('0' = off)
     kitchen_print_mode:      'print',   // 'print' | 'kds' | 'both'
     kitchen_language:        'en_th',  // 'en_th' | 'en'
@@ -1352,6 +1353,13 @@ export default function SettingsSection() {
           <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:14 }}>
             <input type="checkbox" checked={settings.till_send_lock!=='0'} onChange={e => setSettings({...settings, till_send_lock:e.target.checked?'1':'0'})} />
             Return to the sign-in screen after sending an order
+          </label>
+        </div>
+        {/* SEPOS-PINONLY-001 — skip the staff-name grid; the PIN alone identifies the person. */}
+        <div style={{ display:'flex', alignItems:'flex-start', gap:16, marginBottom:14 }}>
+          <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:14 }}>
+            <input type="checkbox" checked={settings.login_pin_only==='1'} onChange={e => setSettings({...settings, login_pin_only:e.target.checked?'1':'0'})} />
+            PIN-only sign-in <span style={{ fontSize:12, color:'#888', fontWeight:400 }}>— skip the name list; staff just type their PIN and the till knows who they are (each PIN must be unique)</span>
           </label>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:8 }}>

@@ -5,6 +5,11 @@ contextBridge.exposeInMainWorld('siamepos', {
   isElectron: true,
   // Used by the first-time setup wizard to persist electron/config.json
   saveConfig: (data) => ipcRenderer.invoke('save-config', data),
+  // SEPOS-REMOTE-INSTALL-001 — 📋 Paste buttons in the setup wizard. Remote
+  // sessions (TeamViewer/AnyDesk) sync the clipboard to this machine; the
+  // button reads it via the main process so paste works even when keyboard
+  // forwarding is flaky.
+  readClipboard: () => ipcRenderer.invoke('read-clipboard'),
   // SEPOS-RESET-001 — wipe config.json + local DB and relaunch to the wizard
   // (hand this install to a different client). Triggered by the hidden reset.
   resetConfig: () => ipcRenderer.invoke('reset-config'),

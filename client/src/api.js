@@ -555,6 +555,7 @@ export const getRestaurant = () => get('/api/restaurant');
 
 // SEPOS-STATION-001 — extra printer stations (wok/grill/cold…) + category routing.
 export const getPrinters        = () => get('/api/printers');
+export const setMenuColor       = (type, id, color) => put(`/api/menu-color`, { type, id, color }); // SEPOS-MENU-COLOR-001
 export const createPrinter      = (body) => post('/api/printers', body);
 export const updatePrinter      = (id, body) => put(`/api/printers/${id}`, body);
 export const deletePrinter      = (id) => del(`/api/printers/${id}`);
@@ -754,8 +755,12 @@ export const getBills = (from, to, method) => get(`/api/bills?from=${from}&to=${
 export const getBillItems = (orderId) => get(`/api/bills/${orderId}/items`);
 export const getKitchenCompleted = () => get('/api/kitchen/completed');
 export const getBarCompleted = () => get('/api/bar/completed');
-export const resendToKitchen = async (orderId, itemIds, reason) =>
-  (await localTarget(orderId)) ? { success: true } : post(`/api/orders/${orderId}/resend`, { item_ids: itemIds, reason });
+// Resend to the kitchen. Was a no-op on local/host tills (returned success
+// without doing anything) — but the local embedded server has the same
+// /api/orders/:id/resend route (server.js), so post() reaches it on a local
+// till just as it reaches the cloud on a browser till. Always POST.
+export const resendToKitchen = (orderId, itemIds, reason) =>
+  post(`/api/orders/${orderId}/resend`, { item_ids: itemIds, reason });
 export const applyItemDiscount = async (itemId, discount_type, discount_value) => {
   if (isNative()) {
     const ok = await localItemPatch(itemId, { discount_type, discount_value });
@@ -915,9 +920,12 @@ export const sellVoucher        = (body) => post('/api/vouchers/sell', body);
 // ── SEPOS-DEPOSIT-001 — booking deposits (typed vouchers, redeemed as a tender) ──
 export const createDeposit   = (body) => post('/api/deposits', body);
 export const getOrderDeposit = (orderId) => get(`/api/orders/${orderId}/deposit`);
+// SEPOS-DEPOSIT-ORDER-001 — deposit already redeemed against this order.
+export const getOrderDepositApplied = (orderId) => get(`/api/orders/${orderId}/deposit-applied`);
+export const unapplyOrderDeposit = (orderId) => post(`/api/orders/${orderId}/deposit-unapply`, {}); // SEPOS-DEPOSIT-REMOVE-001
 // Manual forfeit of a no-show's deposit (kept as income).
 export const forfeitDeposit  = (code) => post(`/api/deposits/${encodeURIComponent(code)}/forfeit`, {});
 
 // ── SEPOS-PRINT-ALERT-001 — held tickets + printer health (local tills) ──
 export const getPrintAlerts    = () => get('/api/print/alerts');
-export const printAlertAction  = (action, ids) => post('/api/print/alerts/action', { action, ids });
+export const printAlertAction  = (action, ids, printer_id) => post('/api/print/alerts/action', { action, ids, printer_id });

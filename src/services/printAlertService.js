@@ -204,6 +204,40 @@ async function redirect(ids) {
   return results;
 }
 
+// SEPOS-PRINT-FALLBACK-001 — print held tickets to a CHOSEN printer (staff
+// picks from the active list when a station is down). Same explicit hand-off
+// tag as redirect, but the target is any printers-table row, not just the
+// main kitchen.
+async function reroute(ids, printerId) {
+  const rows = await resolveRows(ids);
+  const results = [];
+  if (!printerId) return rows.map(r => ({ id: r.id, ok: false, error: 'no printer chosen' }));
+  const pr = await pool.query(`SELECT ip, port, name, lpr_queue FROM printers WHERE id = $1 AND is_active = 1`, [Number(printerId)]);
+  const target = pr.rows[0];
+  if (!target || !target.ip) return rows.map(r => ({ id: r.id, ok: false, error: 'chosen printer missing/inactive' }));
+  const settings = await loadSettingsKV();
+  // Point the kitchen role at the chosen device for this print only.
+  settings.printer_kitchen_ip = target.ip;
+  settings.printer_kitchen_port = target.port || 9100;
+  settings.printer_kitchen_lpr_queue = target.lpr_queue || '';
+  settings.printer_kitchen_name = '';
+  for (const row of rows) {
+    const payload = safeParse(row.items);
+    try {
+      const order = { ...(payload.order || {}) };
+      const tag = `⚠ REDIRECTED FROM ${row.printer_name || 'station'}`;
+      order.notes = order.notes ? `${tag} · ${order.notes}` : tag;
+      await printService.printFullKitchenTicket(settings, order, payload.items);
+      await markResolved(row.id, 'rerouted:' + (target.name || target.ip));
+      results.push({ id: row.id, ok: true });
+    } catch (err) {
+      results.push({ id: row.id, ok: false, error: err.message });
+    }
+  }
+  notify();
+  return results;
+}
+
 async function dismiss(ids) {
   const rows = await resolveRows(ids);
   for (const row of rows) await markResolved(row.id, 'dismissed');
@@ -281,4 +315,4 @@ async function pingAll() {
   if (changed) notify();
 }
 
-module.exports = { init, recordFailure, retry, redirect, dismiss, list, isLocal };
+module.exports = { init, recordFailure, retry, redirect, reroute, dismiss, list, isLocal };

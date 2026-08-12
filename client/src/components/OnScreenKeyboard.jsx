@@ -27,6 +27,9 @@ function isTextField(el) {
   if (tag !== 'INPUT') return false;
   if (el.dataset && el.dataset.noOsk != null) return false;
   if (String(el.inputMode || '').toLowerCase() === 'numeric') return false;
+  // SEPOS-AMOUNT-PAD-001 — money boxes carry their own numpad (inputMode='none');
+  // never stack the text keyboard on top of it.
+  if (String(el.inputMode || '').toLowerCase() === 'none') return false;
   const t = String(el.type || 'text').toLowerCase();
   return ['text', 'search', 'email', 'tel', 'url', ''].includes(t);
 }

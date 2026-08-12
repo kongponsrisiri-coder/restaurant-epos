@@ -1,11 +1,36 @@
 import { useState, useEffect, useRef } from 'react';
-import { getBill, markBillPrinted, getVoucher, redeemVoucher, applyDiscount, removeVoucherFromBill, getOrderDeposit, assertOk, serverOpenDrawer } from '../api';
+import { getBill, markBillPrinted, getVoucher, redeemVoucher, applyDiscount, removeVoucherFromBill, getOrderDeposit, getOrderDepositApplied, assertOk, serverOpenDrawer } from '../api';
 import { isNativeApp } from '../native/printer';
 import { sunmiAvailable, sunmiKickDrawer } from '../native/sunmiPrinter';
 import { printReceipt } from './ReceiptPrinter';
 import QRPayModal from '../components/QRPayModal';
 import { orderShortLabelPlain, orderSubLabel, isTakeaway } from '../utils/orderLabel';
+import AmountInput from '../components/AmountInput';
 import { confirm } from '../utils/confirm';
+
+// SEPOS-PAY-ONETAP-001 — 2-second "paid" toast. Plain DOM appended to <body>
+// so it survives the Bill screen unmounting when onPay closes the table.
+// Cash change is THE thing staff must see, so it leads, huge.
+function showPaidToast(pd, label) {
+  try {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;top:18%;left:50%;transform:translateX(-50%);z-index:99999;background:#14532d;color:#fff;border-radius:18px;padding:22px 34px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.35);font-family:inherit;min-width:280px';
+    const change = Number(pd?.change || 0);
+    // Review LOW — build with textContent, never interpolate labels into HTML.
+    const line = (text, css) => { const d = document.createElement('div'); d.style.cssText = css; d.textContent = text; el.appendChild(d); };
+    if (change > 0.001) {
+      line('💚 Change to give', 'font-size:15px;opacity:.85;margin-bottom:2px');
+      line('£' + change.toFixed(2), 'font-size:46px;font-weight:900;color:#4ade80');
+      line('✓ ' + label + ' paid', 'font-size:14px;margin-top:6px;opacity:.85');
+    } else {
+      line('✅', 'font-size:34px;margin-bottom:4px');
+      line(label + ' paid', 'font-size:18px;font-weight:800');
+      line(String(pd?.method || ''), 'font-size:14px;opacity:.85');
+    }
+    document.body.appendChild(el);
+    setTimeout(() => { el.style.transition = 'opacity .4s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 450); }, change > 0.001 ? 3200 : 2000);
+  } catch { /* a toast must never break a payment */ }
+}
 
 export default function BillScreen({ orderId, onClose, onPay }) {
 
@@ -37,6 +62,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const [mixDepositCode, setMixDepositCode] = useState('');
   const [mixDepositAmt,  setMixDepositAmt]  = useState('');
   const [orderDeposit,   setOrderDeposit]   = useState(undefined); // undefined=not fetched, null=none, {..}=found
+  // SEPOS-DEPOSIT-ORDER-001 — deposit already redeemed on the Order screen
+  // (model A). It reduces the balance due and prints as "Deposit paid".
+  const [depositApplied, setDepositApplied] = useState({ amount: 0, code: null });
   const [splitItemCount, setSplitItemCount] = useState(2);
   const [itemAssignments, setItemAssignments] = useState({});
   const [splitItemPaid, setSplitItemPaid]   = useState([]);
@@ -59,6 +87,11 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     getBill(orderId)
       .then(data => { setBill(data); setLoading(false); markBillPrinted(orderId); })
       .catch(() => setLoading(false));   // never hang on a fetch failure (offline / cloud error)
+    // SEPOS-DEPOSIT-ORDER-001 — pick up any deposit already redeemed on the
+    // Order screen so the bill charges only the balance and prints the deposit.
+    getOrderDepositApplied(orderId)
+      .then(r => setDepositApplied({ amount: Number(r?.applied || 0), code: r?.code || null }))
+      .catch(() => {});
   }, [orderId]);
 
   useEffect(() => {
@@ -179,8 +212,14 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   // (walk-in table or online) and counter orders never do.
   const noServiceCharge = !!order.no_service_charge || (order.order_type && order.order_type !== 'dine_in');
   const serviceCharge = (serviceChargeEnabled && !noServiceCharge) ? afterDiscount * serviceChargePercent : 0;
-  const billTotalPence = Math.round(afterDiscount * 100) + Math.round(serviceCharge * 100);
-  const billTotal      = billTotalPence / 100;
+  const grossTotalPence = Math.round(afterDiscount * 100) + Math.round(serviceCharge * 100);
+  const grossTotal      = grossTotalPence / 100;
+  // SEPOS-DEPOSIT-ORDER-001 — a deposit redeemed on the Order screen is already
+  // paid, so the amount still to collect is the balance. billTotal is that
+  // balance-due everywhere below (payment maths, split, quick-tender buttons).
+  const depositPaid     = Math.min(depositApplied.amount || 0, grossTotal);
+  const billTotalPence  = grossTotalPence - Math.round(depositPaid * 100);
+  const billTotal       = Math.max(0, billTotalPence / 100);
 
   const amountPaid      = parseFloat(paymentInput) || 0;
   const amountPaidPence = Math.round(amountPaid * 100);
@@ -250,10 +289,17 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   };
 
   // ── The shared receipt payload — pre-calculated totals from BillScreen ──
-  const receiptTotals = { subtotal, discountAmount, serviceCharge, billTotal };
+  // SEPOS-DEPOSIT-ORDER-001 — the receipt shows the FULL total then the deposit
+  // deduction + balance, so billTotal on the receipt is the gross (not the
+  // already-reduced balance); depositPaid drives the "Deposit paid / Balance due".
+  const receiptTotals = { subtotal, discountAmount, serviceCharge, billTotal: grossTotal, depositPaid };
 
   const handlePrintBill = () => {
-    printReceipt({ order: { ...order }, items: billItems, settings: { ...settings }, paymentDetails: { ...receiptTotals } });
+    // SEPOS-DEPOSIT-PRINT — if a booking deposit has been applied, show it on
+    // the printed bill (Deposit paid −£X + Balance due) so the customer sees it.
+    const depositPaid = splitTenders.filter(t => t.method === 'Deposit')
+      .reduce((s, t) => s + Number(t.amount || 0), 0);
+    printReceipt({ order: { ...order }, items: billItems, settings: { ...settings }, paymentDetails: { ...receiptTotals, depositPaid } });
   };
 
   const handlePrintReceipt = () => {
@@ -501,14 +547,17 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     try {
       // SEPOS-062 — pass the per-tender breakdown for splits so each Cash/Card
       // amount is recorded as its own payment row (correct Z-report reconciliation).
-      await onPay(billTotal, paymentDetails?.method, paymentDetails?.amountPaid, paymentDetails?.tip, paymentDetails?.tenders);
+      // Review C1 (class fix) — gate the drawer on real success too.
+      const ok = await onPay(billTotal, paymentDetails?.method, paymentDetails?.amountPaid, paymentDetails?.tip, paymentDetails?.tenders);
       // SEPOS-DRAWER-001 — open the cash drawer on payment (fire-and-forget;
       // never blocks/fails the close). Silent no-op where there's no raw
       // ESC/POS receipt printer (browser print / no drawer / disabled setting).
       // SEPOS-ANDROID-004 — on the native app the cloud can't kick a local
       // drawer: pulse the Sunmi's own RJ11 drawer port via the built-in
       // printer instead (needs open_drawer_on_payment='1', same as desktop).
-      (async () => {
+      // Merge note (ios-app): main's ok===true guard (drawer only on a
+      // successful payment) kept around the native-aware branch.
+      if (ok === true) (async () => {
         try {
           if (isNativeApp() && await sunmiAvailable()) {
             if (settings?.open_drawer_on_payment === '1') await sunmiKickDrawer();
@@ -524,6 +573,27 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     }
   };
 
+  // SEPOS-PAY-ONETAP-001 — splits finish one-tap too: the LAST share tap
+  // records the payment, kicks the drawer and toasts — no confirmed card.
+  // Whole-bill receipt stays available via Print Bill before paying or
+  // Admin → Bills reprint after.
+  const finalizeSplit = (pd) => {
+    if (paying) return;
+    setPaymentDetails(pd);
+    setPaying(true);
+    (async () => {
+      try {
+        // Review C1 — gate on onPay's boolean (it never rejects).
+        const ok = await onPay(billTotal, pd.method, pd.amountPaid, pd.tip, pd.tenders);
+        if (ok !== true) return;
+        serverOpenDrawer().catch(() => {});
+        showPaidToast(pd, orderShortLabelPlain(order));
+      } catch (e) {
+        alert('Payment could not be recorded: ' + (e?.message || 'unknown') + '\nThe bill is still open — try again.');
+      } finally { setPaying(false); }
+    })();
+  };
+
   const handleSplitEqualPayment = (index, method = 'Cash') => {
     const newPaid = [...splitPaid, index];
     const isLast = newPaid.length >= splitCount;
@@ -534,7 +604,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     setSplitPaid(newPaid);
     const newTenders = [...splitTenders, { amount, method }];
     setSplitTenders(newTenders);
-    if (isLast) { setPaymentDetails({ method:'Split', amountPaid:billTotal, tip:0, change:0, tenders:newTenders }); setStage('receipt'); }
+    if (isLast) { finalizeSplit({ method:'Split', amountPaid:billTotal, tip:0, change:0, tenders:newTenders }); }
   };
 
   const handleSplitItemPayment = (personIdx, method = 'Cash') => {
@@ -552,7 +622,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
     setSplitItemPaid(newPaid);
     const newTenders = [...splitTenders, { amount, method }];
     setSplitTenders(newTenders);
-    if (isLast) { setPaymentDetails({ method:'Split by Item', amountPaid:billTotal, tip:0, change:0, tenders:newTenders }); setStage('receipt'); }
+    if (isLast) { finalizeSplit({ method:'Split by Item', amountPaid:billTotal, tip:0, change:0, tenders:newTenders }); }
   };
 
   const handleSplitEqualPrint = (i) => {
@@ -672,8 +742,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: MUTED, marginBottom: 6 }}><span>Subtotal</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>£{subtotal.toFixed(2)}</span></div>
               {discountAmount > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#2E9E6E', marginBottom: 6 }}><span>Discount</span><span>-£{discountAmount.toFixed(2)}</span></div>}
               {serviceChargeEnabled && !noServiceCharge && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: MUTED, marginBottom: 6 }}><span>Service charge ({parseFloat(settings.service_charge_rate || settings.service_charge_percent || 12.5)}%)</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>£{serviceCharge.toFixed(2)}</span></div>}
+              {depositPaid > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#2563eb', marginBottom: 6 }}><span>Deposit paid</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>-£{depositPaid.toFixed(2)}</span></div>}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderTop: `2px solid ${INK}`, marginTop: 10, paddingTop: 10 }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: INK }}>Total due</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: INK }}>{depositPaid > 0 ? 'Balance due' : 'Total due'}</span>
                 <span style={{ fontSize: 34, fontWeight: 800, color: INK, fontVariantNumeric: 'tabular-nums' }}>£{billTotal.toFixed(2)}</span>
               </div>
             </div>
@@ -893,7 +964,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                 )}
                 {!settled && (() => {
                   const hasVoucher = splitTenders.some(t => t.method === 'Voucher');
-                  const hasDeposit = splitTenders.some(t => t.method === 'Deposit');
+                  // SEPOS-DEPOSIT-ORDER-001 — block a 2nd deposit tender when one
+                  // was already redeemed on the Order screen (no double-redeem).
+                  const hasDeposit = splitTenders.some(t => t.method === 'Deposit') || depositPaid > 0;
                   const methods = [
                     { m: 'Cash',    label: '💵 Cash' },
                     { m: 'Card',    label: '💳 Card' },
@@ -921,7 +994,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                           <input value={mixDepositCode} onChange={e => { setMixDepositCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder={orderDeposit ? orderDeposit.code : 'Deposit code / reference'} style={{ flex: 2, height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase' }} />
                           <div style={{ position: 'relative', flex: 1 }}>
                             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
-                            <input type="text" inputMode="numeric" value={mixDepositAmt} onChange={e => { setMixDepositAmt(pennyType(e.target.value)); setMixVoucherErr(''); }} placeholder={(orderDeposit ? Math.min(Number(orderDeposit.balance), mixRemaining) : mixRemaining).toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                            <AmountInput value={mixDepositAmt} onChange={(v) => { setMixDepositAmt(v); setMixVoucherErr(''); }} placeholder={(orderDeposit ? Math.min(Number(orderDeposit.balance), mixRemaining) : mixRemaining).toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
                           </div>
                         </div>
                         {mixVoucherErr && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{mixVoucherErr}</div>}
@@ -934,7 +1007,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                           <input value={mixVoucherCode} onChange={e => { setMixVoucherCode(e.target.value.toUpperCase()); setMixVoucherErr(''); }} placeholder="Voucher code / reference" style={{ flex: 2, height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box', textTransform: 'uppercase' }} />
                           <div style={{ position: 'relative', flex: 1 }}>
                             <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
-                            <input type="text" inputMode="numeric" value={mixVoucherAmt} onChange={e => { setMixVoucherAmt(pennyType(e.target.value)); setMixVoucherErr(''); }} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                            <AmountInput value={mixVoucherAmt} onChange={(v) => { setMixVoucherAmt(v); setMixVoucherErr(''); }} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
                           </div>
                         </div>
                         {mixVoucherErr && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{mixVoucherErr}</div>}
@@ -946,7 +1019,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
                           <div style={{ position: 'relative', flex: 1 }}>
                             <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555' }}>£</span>
-                            <input type="text" inputMode="numeric" value={mixInput} onChange={e => setMixInput(pennyType(e.target.value))} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 28px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                            <AmountInput value={mixInput} onChange={setMixInput} placeholder={mixRemaining.toFixed(2)} style={{ width: '100%', height: 48, padding: '0 12px 0 28px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
                           </div>
                           <button onClick={() => setMixInput(mixRemaining.toFixed(2))} style={{ height: 48, padding: '0 16px', borderRadius: 10, border: '1.5px solid #ddd', background: '#fff', cursor: 'pointer', fontWeight: 700 }}>Rest</button>
                         </div>
@@ -956,8 +1029,13 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   </>
                   );
                 })()}
-                {settled && (
-                  <button onClick={() => {
+                {settled && (() => {
+                  // SEPOS-PAY-ONETAP-001 — one card, one tap. Confirm records the
+                  // payment, optionally prints, shows a 2s toast (big CHANGE for
+                  // cash) and returns to the floor — the old "Payment Confirmed!"
+                  // card is gone from this path.
+                  const doConfirm = async (printAfter) => {
+                    if (paying) return;
                     const paid = splitTenders.reduce((s, t) => s + t.amount, 0);
                     // SEPOS-CASHCHANGE-001 — cash change is handed BACK, so it must not be
                     // recorded as money taken. Reduce the cash tender(s) by the change so the
@@ -972,11 +1050,37 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                       }
                       return t;
                     }).filter(t => t.amount > 0.001);
-                    const method = recTenders.length === 1 ? recTenders[0].method : 'Split';
-                    setPaymentDetails({ method, amountPaid: paid, tip: mixTip, change: mixChange, tenders: recTenders });
-                    setStage('receipt');
-                  }} style={{ width: '100%', height: 56, borderRadius: 12, border: 'none', background: '#22c55e', color: '#fff', fontWeight: 800, fontSize: 17, cursor: 'pointer', marginBottom: 12 }}>✓ Confirm &amp; Close — £{billTotal.toFixed(2)}{mixChange > 0 ? ` (£${mixChange.toFixed(2)} change)` : mixTip > 0 ? ` (£${mixTip.toFixed(2)} tip)` : ''}</button>
-                )}
+                    let method = recTenders.length === 1 ? recTenders[0].method : 'Split';
+                    let pd = { method, amountPaid: paid, tip: mixTip, change: mixChange, tenders: recTenders };
+                    // F2 — deposit fully covered the bill: nothing left to tender,
+                    // but /pay rejects £0. Record the deposit AS the tender so the
+                    // bill closes covered (same rows a pay-screen deposit writes).
+                    if (recTenders.length === 0 && billTotal <= 0.005 && depositPaid > 0) {
+                      pd = { method: 'Deposit', amountPaid: depositPaid, tip: 0, change: 0, tenders: [{ amount: depositPaid, method: 'Deposit' }] };
+                    }
+                    setPaymentDetails(pd);
+                    setPaying(true);
+                    try {
+                      // Review C1 — onPay resolves true/false (it never rejects).
+                      // Celebrate ONLY on true: no drawer, no receipt, no toast
+                      // for a failed payment; onPay already alerted the error.
+                      const ok = await onPay(pd.tenders.length && billTotal <= 0.005 ? pd.amountPaid : billTotal, pd.method, pd.amountPaid, pd.tip, pd.tenders);
+                      if (ok !== true) return;
+                      serverOpenDrawer().catch(() => {});
+                      if (printAfter) printReceipt({ order: { ...order }, items: billItems, settings: { ...settings }, paymentDetails: { ...receiptTotals, ...pd } });
+                      showPaidToast(pd, orderShortLabelPlain(order));
+                    } catch (e) {
+                      alert('Payment could not be recorded: ' + (e?.message || 'unknown') + '\nThe bill is still open — try again.');
+                    } finally { setPaying(false); }
+                  };
+                  const suffix = mixChange > 0 ? ` (£${mixChange.toFixed(2)} change)` : mixTip > 0 ? ` (£${mixTip.toFixed(2)} tip)` : '';
+                  return (
+                    <>
+                      <button onClick={() => doConfirm(false)} disabled={paying} style={{ width: '100%', height: 56, borderRadius: 12, border: 'none', background: paying ? '#9ca3af' : '#22c55e', color: '#fff', fontWeight: 800, fontSize: 17, cursor: paying ? 'wait' : 'pointer', marginBottom: 10 }}>{paying ? 'Recording…' : <>✓ Confirm — £{billTotal.toFixed(2)}{suffix}</>}</button>
+                      <button onClick={() => doConfirm(true)} disabled={paying} style={{ width: '100%', height: 50, borderRadius: 12, border: '2px solid #22c55e', background: '#fff', color: '#15803d', fontWeight: 800, fontSize: 15, cursor: paying ? 'wait' : 'pointer', marginBottom: 12 }}>🖨 Confirm &amp; Print receipt</button>
+                    </>
+                  );
+                })()}
                 <button onClick={cancelMix} style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>← Back to Bill</button>
               </div>
             </div>

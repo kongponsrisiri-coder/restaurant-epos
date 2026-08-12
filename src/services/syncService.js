@@ -815,7 +815,7 @@ async function pullMenuTree() {
     if (!Array.isArray(categories)) return [];
 
     const flatCategories = categories.map((c) => ({
-      id: c.id, name: c.name, sort_order: c.sort_order,
+      id: c.id, name: c.name, sort_order: c.sort_order, color: c.color, // SEPOS-MENU-COLOR-001
       is_bar: c.is_bar, default_course: c.default_course,
       // SEPOS-047i (same bug class as the item fields below): printer_id was
       // omitted here, so a per-category station assignment made on the till —
@@ -831,7 +831,7 @@ async function pullMenuTree() {
     }));
     const flatSubcategories = categories.flatMap((c) =>
       (c.subcategories || []).map((s) => ({
-        id: s.id, category_id: s.category_id, name: s.name, sort_order: s.sort_order,
+        id: s.id, category_id: s.category_id, name: s.name, sort_order: s.sort_order, color: s.color, // SEPOS-MENU-COLOR-001
       }))
     );
     const flatItems = categories.flatMap((c) =>
@@ -839,7 +839,7 @@ async function pullMenuTree() {
         id: i.id, category_id: i.category_id, subcategory_id: i.subcategory_id,
         name: i.name, name_alt: i.name_alt, description: i.description,
         price: i.price, is_available: i.is_available,
-        allergens: i.allergens, sort_order: i.sort_order,
+        allergens: i.allergens, sort_order: i.sort_order, color: i.color, // SEPOS-MENU-COLOR-001
         // SEPOS-047i — vat_rate + is_online were omitted from this projection,
         // so a VAT-rate change made on the till (forwarded to cloud, then
         // pulled back) never landed in local menu_items. The desktop bill

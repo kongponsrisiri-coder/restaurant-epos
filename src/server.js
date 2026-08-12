@@ -50,6 +50,9 @@ app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 // raw, unparsed body. Same constraint as Stripe — register before
 // express.json so the global JSON parser doesn't consume it first.
 app.use('/api/line/webhook', express.raw({ type: 'application/json' }));
+// SEPOS-SALESCHAT-002 — Messenger webhook needs the raw body for Meta's
+// X-Hub-Signature-256 HMAC, same pattern as stripe/line above.
+app.use('/api/messenger/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
 
@@ -579,6 +582,43 @@ function maybeForwardTableWriteToCloud(req, res) {
 function maybeForwardStaffWriteToCloud(req, res) {
   return forwardWriteToCloud(req, res, 'staff-write', () => syncService.pullStaffSnapshot(), { strict: true });
 }
+
+// SEPOS-MENU-COLOR-001 — owner-editable button colour for category /
+// subcategory / menu item. One endpoint, whitelisted tables; color is a
+// '#rrggbb' hex or null (back to the default look).
+app.put('/api/menu-color', async (req, res) => {
+  // Review M1 + canary fix — cloud-first when the cloud SUPPORTS the endpoint,
+  // skew-tolerant when it doesn't: an older cloud answers 404 (endpoint not
+  // deployed yet) and a strict forward turned that into a failed save on the
+  // till (found live on the v1.26 host canary). Now: try the cloud; swallow
+  // ONLY 404 (old cloud) and offline; surface real cloud errors; and always
+  // write locally on success so the UI is instant — the menu pull reconciles
+  // (old clouds send no color key and the upsert drops null/undefined, so the
+  // local value survives until the cloud catches up).
+  try {
+    const { type, id, color } = req.body || {};
+    const table = { category: 'categories', subcategory: 'subcategories', item: 'menu_items' }[type];
+    if (!table || !id) return res.status(400).json({ error: 'type (category|subcategory|item) and id required' });
+    const c = (color == null || color === '') ? null : String(color);
+    if (c && !/^#[0-9a-fA-F]{6}$/.test(c)) return res.status(400).json({ error: 'color must be #rrggbb or null' });
+    const cloudUrl = process.env.CLOUD_API_URL;
+    if (cloudUrl) {
+      try {
+        const r = await fetch(cloudUrl.replace(/\/+$/, '') + '/api/menu-color', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type, id, color: c }),
+          signal: AbortSignal.timeout(8000), // F4: a wedged cloud must not hang the save
+        });
+        if (!r.ok && r.status !== 404) {
+          const t = await r.text().catch(() => '');
+          return res.status(r.status).json({ error: 'cloud rejected the colour: ' + t.slice(0, 120) });
+        }
+      } catch { /* offline — colour still applies locally below */ }
+    }
+    await pool.query(`UPDATE ${table} SET color = $1 WHERE id = $2`, [c, id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 app.post('/api/categories', async (req, res) => {
   if (await maybeForwardMenuWriteToCloud(req, res)) return;
@@ -2055,7 +2095,10 @@ app.post('/api/staff/login', async (req, res) => {
     // SEPOS-SEC-LOGIN — an operator still on a weak/default PIN (the seeded 1234)
     // must set a real one before using the till; the public default can't persist.
     const must_change_pin = _isWeakPin(pin) && ['admin', 'manager', 'supervisor'].includes(staff.role);
-    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp, must_change_pin });
+    // SEPOS-STAFF-PERMS-001 — per-staff permissions travel with the session so
+    // the client can honour "can give discount / can redeem deposit" for a
+    // non-manager the owner has trusted.
+    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp, must_change_pin, can_discount: staff.can_discount ? 1 : 0, can_redeem_deposit: staff.can_redeem_deposit ? 1 : 0 });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2565,7 +2608,7 @@ app.post('/api/stripe/webhook', async (req, res) => {
 
 app.get('/api/staff', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, role, is_active, created_at, start_date, notes, employment_status FROM staff ORDER BY name');
+    const result = await pool.query('SELECT id, name, role, is_active, created_at, start_date, notes, employment_status, can_discount, can_redeem_deposit FROM staff ORDER BY name');
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2573,7 +2616,7 @@ app.get('/api/staff', async (req, res) => {
 app.post('/api/staff', async (req, res) => {
   if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
-    const { name, pin, role, start_date, notes, employment_status } = req.body;
+    const { name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit } = req.body;
     // SEPOS-047k — PINs are UNIQUE (staff_pin_key / staff.pin UNIQUE). A
     // collision used to surface as a raw 500 "duplicate key value violates
     // unique constraint" → the Staff screen just said "Save failed!" with
@@ -2582,7 +2625,7 @@ app.post('/api/staff', async (req, res) => {
     if (dup.rows[0]) {
       return res.status(409).json({ error: `PIN ${pin} is already used by ${dup.rows[0].name}. Please choose a different 4-digit PIN.` });
     }
-    const result = await pool.query('INSERT INTO staff (name, pin, role, start_date, notes, employment_status) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [name, pin, role, start_date || null, notes || null, employment_status || 'active']);
+    const result = await pool.query('INSERT INTO staff (name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id', [name, pin, role, start_date || null, notes || null, employment_status || 'active', can_discount ? 1 : 0, can_redeem_deposit ? 1 : 0]);
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) {
     if (/unique|duplicate/i.test(err.message || '')) {
@@ -2595,7 +2638,8 @@ app.post('/api/staff', async (req, res) => {
 app.put('/api/staff/:id', async (req, res) => {
   if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
-    const { name, pin, role, is_active, start_date, notes, employment_status } = req.body;
+    const { name, pin, role, is_active, start_date, notes, employment_status, can_discount, can_redeem_deposit } = req.body;
+    const cd = can_discount ? 1 : 0, crd = can_redeem_deposit ? 1 : 0;
     // Normalise: when the client doesn't send is_active (or sends an empty
     // string), keep whatever's already in the DB — DON'T null it. The old
     // version would clobber a manager's is_active flag to NULL on every
@@ -2621,9 +2665,11 @@ app.put('/api/staff/:id', async (req, res) => {
            is_active = COALESCE($4::int, is_active),
            start_date = $5,
            notes = $6,
-           employment_status = $7
-         WHERE id = $8`,
-        [name, pin, role, activeParam, start_date || null, notes || null, employment_status || 'active', req.params.id]
+           employment_status = $7,
+           can_discount = $8,
+           can_redeem_deposit = $9
+         WHERE id = $10`,
+        [name, pin, role, activeParam, start_date || null, notes || null, employment_status || 'active', cd, crd, req.params.id]
       );
     } else {
       await pool.query(
@@ -2633,9 +2679,11 @@ app.put('/api/staff/:id', async (req, res) => {
            is_active = COALESCE($3::int, is_active),
            start_date = $4,
            notes = $5,
-           employment_status = $6
-         WHERE id = $7`,
-        [name, role, activeParam, start_date || null, notes || null, employment_status || 'active', req.params.id]
+           employment_status = $6,
+           can_discount = $7,
+           can_redeem_deposit = $8
+         WHERE id = $9`,
+        [name, role, activeParam, start_date || null, notes || null, employment_status || 'active', cd, crd, req.params.id]
       );
     }
     res.json({ success: true });
@@ -4787,7 +4835,64 @@ app.post('/api/saleschat/admin/conversations/:sid/reply', salesAdminAuth, async 
   const msgs = _salesMsgs(r.messages);
   msgs.push({ role: 'assistant', content: text, operator: true, ts: new Date().toISOString() });
   await pool.query('UPDATE sales_chats SET messages=$2, handoff=TRUE, updated_at=NOW() WHERE session_id=$1', [req.params.sid, JSON.stringify(msgs)]);
+  // SEPOS-SALESCHAT-002 — web visitors poll for replies; Messenger users don't.
+  // A takeover reply on an fb- thread must be pushed out through the Graph API.
+  if (/^fb-\d+$/.test(req.params.sid)) {
+    messengerSales.sendText(req.params.sid.slice(3), text)
+      .catch(e => console.error('[saleschat] messenger push', e.message));
+  }
   res.json({ ok: true, handoff: true });
+});
+
+// ─── SEPOS-SALESCHAT-002 — Facebook Messenger doorway for Tara ───
+// DMs to the SiamEPOS page flow into the SAME sales_chats store as the
+// website chat: same persona, same Control Room list, same human takeover.
+// Inert unless the MESSENGER_* env vars are set (main cloud only).
+const messengerSales = require('./services/messengerSales');
+const MESSENGER_ADDENDUM = `
+CHANNEL NOTE — you are replying in Facebook Messenger on the SiamEPOS page:
+- Keep replies SHORT (1-3 sentences, max ~2 short paragraphs). No markdown, no headers, no bullet walls — plain chat text.
+- First reply to a new person: greet briefly, thank them for messaging the page, then answer.
+- If they want a demo or a call, ask for their restaurant/spa name and a phone number or email, and say the team (กต) will get back to them the same day.`;
+
+app.get('/api/messenger/webhook', (req, res) => {
+  const challenge = messengerSales.verifyWebhook(req.query || {});
+  if (challenge != null) return res.status(200).send(challenge);
+  res.sendStatus(403);
+});
+
+app.post('/api/messenger/webhook', async (req, res) => {
+  const raw = req.body; // Buffer (raw mount above)
+  if (!messengerSales.verifySignature(raw, req.headers['x-hub-signature-256'])) return res.sendStatus(403);
+  res.sendStatus(200); // ack fast — Meta retries on slow responses
+  let payload;
+  try { payload = JSON.parse(raw.toString('utf8')); } catch { return; }
+  if (payload.object !== 'page') return;
+  for (const m of messengerSales.extractMessages(payload)) {
+    const sid = `fb-${m.senderId}`;
+    try {
+      const cur = (await pool.query('SELECT messages, handoff FROM sales_chats WHERE session_id=$1', [sid])).rows[0];
+      const msgs = cur ? _salesMsgs(cur.messages) : [];
+      msgs.push({ role: 'user', content: m.text, ts: new Date().toISOString() });
+      let reply = null;
+      if (cur && cur.handoff) {
+        // human owns this thread — store the message; the operator replies from
+        // the Control Room (which pushes back through Messenger above)
+      } else if (!process.env.ANTHROPIC_API_KEY) {
+        reply = 'Thanks for messaging SiamEPOS! Our team will reply shortly. 🙏';
+        msgs.push({ role: 'assistant', content: reply, ts: new Date().toISOString() });
+      } else {
+        const aiMsgs = msgs.map(x => ({ role: x.role === 'user' ? 'user' : 'assistant', content: x.content }));
+        reply = (await anthropicChat(SALESCHAT_SYSTEM + MESSENGER_ADDENDUM, aiMsgs))
+          || 'Sorry — I had a hiccup. Please try again, or visit siamepos.co.uk. 🙏';
+        msgs.push({ role: 'assistant', content: reply, ts: new Date().toISOString() });
+      }
+      await pool.query(`INSERT INTO sales_chats (session_id, name, messages) VALUES ($1,$2,$3)
+        ON CONFLICT (session_id) DO UPDATE SET messages=$3, updated_at=NOW()`,
+        [sid, 'Facebook Messenger', JSON.stringify(msgs)]);
+      if (reply) await messengerSales.sendText(m.senderId, reply);
+    } catch (e) { console.error('[messenger-sales] handle', e.message); }
+  }
 });
 app.post('/api/saleschat/admin/conversations/:sid/handoff', salesAdminAuth, async (req, res) => {
   const on = !!req.body?.handoff;
@@ -8392,6 +8497,11 @@ app.get('/api/widget/voucher/config', widgetCors, (req, res) => {
 // purchases don't leave phantom vouchers in the DB.
 app.post('/api/widget/voucher/purchase', widgetCors, async (req, res) => {
   try {
+    // F8 — card charges under 30p are rejected by Stripe with a raw 500; with
+    // the £10 floor gone, guard here like qr-pay does.
+    if (Number(req.body?.amount) > 0 && Number(req.body.amount) < 0.30) {
+      return res.status(400).json({ error: 'Card payments need a minimum of £0.30' });
+    }
     const v = voucherSvc.validateAmount(req.body?.amount);
     if (!v.ok) return res.status(400).json({ error: v.error });
     // Demo tenants force mock pay via the same flag the takeaway widget
@@ -8888,13 +8998,22 @@ app.post('/api/vouchers/:id/resend-email', async (req, res) => {
 // the Bill screen applies it as a 'Deposit' tender. Phase A = manual create
 // (deposit taken by phone / card machine); Stripe capture = Phase B (widget).
 app.post('/api/deposits', async (req, res) => {
+  // Review H1 — vouchers/deposits are cloud-authoritative: create on the
+  // cloud (like redeem/lookup already do) or a local till mints a deposit
+  // the cloud-forwarded redeem can't find (404 in front of the guest).
+  if (await forwardToCloudWith(req, res, 'deposit-create')) return;
   try {
     const { amount, payment_method, reservation_id, customer_name, customer_email } = req.body || {};
-    const v = voucherSvc.validateAmount(amount);
+    // Deposits: any positive amount — the £10 floor is a gift-voucher rule.
+    const v = voucherSvc.validateAmount(amount, { minimum: 0.01 });
     if (!v.ok) return res.status(400).json({ error: v.error });
     const method = String(payment_method || 'card').toLowerCase();
-    if (!['cash', 'card', 'mock'].includes(method)) {
-      return res.status(400).json({ error: 'payment_method must be cash, card or mock' });
+    // 'external' = SEPOS-DEPOSIT-EXT-001: a deposit taken OUTSIDE SiamEPOS
+    // (old system / phone / paper), recorded here so it can be applied to a
+    // bill. Kept as its own method so deposit reports can separate it from
+    // money actually taken through the till.
+    if (!['cash', 'card', 'mock', 'external'].includes(method)) {
+      return res.status(400).json({ error: 'payment_method must be cash, card, mock or external' });
     }
     // Expiry = reservation date + 7 days grace (fallback to default if unlinked).
     let expires = voucherSvc.defaultExpiryDate();
@@ -8909,8 +9028,35 @@ app.post('/api/deposits', async (req, res) => {
         resId = null; // unknown reservation → don't link a phantom id
       }
     }
-    let code;
-    for (let i = 0; i < 10; i++) {
+    // SEPOS-DEPOSIT-EXT-001b (Korakot, 12 Aug) — an EXTERNAL deposit keeps the
+    // CUSTOMER'S OWN reference as its code (the number on their old-system
+    // receipt / paper), so next week's lookup matches what's in their hand.
+    // Rejected if the reference already exists as any voucher — a typed
+    // reference can never hijack or shadow a real SiamEPOS code.
+    let requestedCode = String(req.body?.code || '').trim().toUpperCase().slice(0, 20).trim(); // F3: vouchers.code is VARCHAR(20)
+    if (requestedCode) {
+      if (!/^[A-Z0-9][A-Z0-9 _\/-]*$/.test(requestedCode)) {
+        return res.status(400).json({ error: 'Reference can use letters, numbers, spaces and - _ /' });
+      }
+      // Canary find #11 — references are casual ("T", a daily ticket number),
+      // so collisions are NORMAL. Only a LIVE code with money on it is
+      // protected; a spent/expired/old reference auto-suffixes silently —
+      // staff never solve naming puzzles at the table.
+      const clash = await pool.query('SELECT id, status, balance, type FROM vouchers WHERE code = $1', [requestedCode]);
+      const row = clash.rows[0];
+      if (row && row.status === 'active' && Number(row.balance) > 0) {
+        return res.status(409).json({ error: `${requestedCode} is a live SiamEPOS ${row.type === 'deposit' ? 'deposit' : 'voucher'} with £${Number(row.balance).toFixed(2)} on it — look it up and use its real balance.` });
+      }
+      if (row) {
+        for (let n = 2; n <= 99; n++) {
+          const cand = `${requestedCode.slice(0, 16)}-${n}`;
+          const e2 = await pool.query('SELECT id FROM vouchers WHERE code = $1', [cand]);
+          if (!e2.rows[0]) { requestedCode = cand; break; }
+        }
+      }
+    }
+    let code = requestedCode || null;
+    if (!code) for (let i = 0; i < 10; i++) {
       code = voucherSvc.generateCode('DEP-');
       const exists = await pool.query('SELECT id FROM vouchers WHERE code = $1', [code]);
       if (!exists.rows[0]) break;
@@ -8955,6 +9101,58 @@ app.get('/api/orders/:id/deposit', async (req, res) => {
     );
     const dep = d.rows[0];
     res.json({ deposit: dep ? { ...dep, balance: Number(dep.balance), original_amount: Number(dep.original_amount) } : null });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-DEPOSIT-ORDER-001 — how much DEPOSIT has already been redeemed against
+// this order. Lets the Order screen show "Deposit paid / Balance due" and
+// survive navigation, and lets the Bill screen avoid double-redeeming the same
+// deposit. Sums voucher_redemptions of type='deposit' for the order (bill_id).
+app.get('/api/orders/:id/deposit-applied', async (req, res) => {
+  {
+    const cloudId = await localOrderCloudId(req.params.id);
+    if (cloudId && await forwardToCloudWith(req, res, 'deposit-applied', {
+      path: `/api/orders/${cloudId}/deposit-applied`,
+    })) return;
+  }
+  try {
+    const r = await pool.query(
+      `SELECT COALESCE(SUM(vr.amount_used),0) AS applied,
+              MAX(v.code) AS code
+         FROM voucher_redemptions vr
+         JOIN vouchers v ON v.id = vr.voucher_id
+        WHERE vr.bill_id = $1 AND v.type = 'deposit'`,
+      [req.params.id]);
+    const applied = Number(r.rows[0]?.applied || 0);
+    res.json({ applied, code: applied > 0 ? (r.rows[0].code || null) : null });
+  } catch (err) { res.json({ applied: 0, code: null }); }
+});
+
+// SEPOS-DEPOSIT-REMOVE-001 (canary find #9) — un-apply a deposit from a bill:
+// restores each deposit-voucher's balance and deletes the redemption rows, so
+// a mistaken entry (wrong code, wrong amount) is fully reversible before pay.
+app.post('/api/orders/:id/deposit-unapply', async (req, res) => {
+  // Canary #12 — translate the LOCAL order id to its cloud id (same as the
+  // deposit-applied lookup); without it the cloud searched a wrong bill_id
+  // and 'removed' nothing.
+  {
+    const cloudId = await localOrderCloudId(req.params.id);
+    if (cloudId && await forwardToCloudWith(req, res, 'deposit-unapply', {
+      path: `/api/orders/${cloudId}/deposit-unapply`,
+    })) return;
+  }
+  try {
+    const rows = (await pool.query(
+      `SELECT vr.id, vr.voucher_id, vr.amount_used FROM voucher_redemptions vr
+        JOIN vouchers v ON v.id = vr.voucher_id
+       WHERE vr.bill_id = $1 AND v.type = 'deposit'`, [req.params.id])).rows;
+    let restored = 0;
+    for (const r of rows) {
+      await pool.query(`UPDATE vouchers SET balance = balance + $1, status = 'active' WHERE id = $2`, [r.amount_used, r.voucher_id]);
+      await pool.query('DELETE FROM voucher_redemptions WHERE id = $1', [r.id]);
+      restored += Number(r.amount_used);
+    }
+    res.json({ success: true, restored });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -10983,11 +11181,12 @@ app.get('/api/print/alerts', async (req, res) => {
 //         'dismiss'
 app.post('/api/print/alerts/action', async (req, res) => {
   try {
-    const { action, ids } = req.body || {};
+    const { action, ids, printer_id } = req.body || {};
     if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids required' });
     let results;
     if (action === 'retry') results = await printAlerts.retry(ids);
     else if (action === 'redirect') results = await printAlerts.redirect(ids);
+    else if (action === 'reroute') results = await printAlerts.reroute(ids, printer_id); // SEPOS-PRINT-FALLBACK-001
     else if (action === 'dismiss') results = await printAlerts.dismiss(ids);
     else return res.status(400).json({ error: 'unknown action' });
     res.json({ results });

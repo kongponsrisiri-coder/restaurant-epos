@@ -165,7 +165,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
         const extAmt = remainingX > 0 ? Math.min(amt, remainingX) : amt; // F2 cap
         const created = await createDeposit({ amount: extAmt, payment_method: 'external', code, customer_name: `External deposit (ref ${code})` });
         if (!created || created.error || !created.code) { alert('Could not record the external deposit: ' + (created?.error || 'unknown')); setDepositBusy(false); return; }
-        const r2 = await redeemVoucher(created.code, extAmt, orderId, staff?.name || null);
+        const r2 = await redeemVoucher(created.code, extAmt, orderId, staff?.id ?? null);
         if (r2 && r2.error) { alert('Recorded but could not apply: ' + r2.error); setDepositBusy(false); return; }
         setDepositPopup(null); await fetchDepositApplied(); setDepositBusy(false); return;
       }
@@ -175,7 +175,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
       // bill lands at exactly zero (closable via the deposit tender below).
       const remaining = Math.max(0, orderTotal - (depositApplied.amount || 0));
       const use = Math.min(Number(v.balance), amt, remaining > 0 ? remaining : amt);
-      const r = await redeemVoucher(code, use, orderId, staff?.name || null);
+      const r = await redeemVoucher(code, use, orderId, staff?.id ?? null);
       if (r && r.error) { alert('Could not apply deposit: ' + r.error); setDepositBusy(false); return; }
       setDepositPopup(null);
       await fetchDepositApplied();

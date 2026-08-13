@@ -644,7 +644,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
     setSendBusy(true);
 
     try {
-      assertOk(await addOrderItems(orderId, cartSnapshot));
+      // SEPOS-SENTBY-001 — stamp who pressed Send on this round
+      assertOk(await addOrderItems(orderId, cartSnapshot, staff?.name || null));
       fetchOrder(); // background reconcile — real ids replace the temp rows
 
       // SEPOS-026 — kitchen then bar, sequentially in background.

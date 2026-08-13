@@ -146,6 +146,9 @@ async function kitchenTicketRaster(order, items, opts = {}) {
   }
   const orderNote = order.notes || order.customer_note;
   if (orderNote) lines.push({ text: String(orderNote), size: 24, bold: true, gap: 4 });
+  // SEPOS-SENTBY-001 — who pressed Send for this round (classic-builder parity)
+  const sentBy = (items.find(i => i && i.sent_by) || {}).sent_by;
+  if (sentBy) lines.push({ text: 'Sent: ' + String(sentBy), size: 22, center: true, gap: 4 });
   lines.push({ rule: true });
 
   const pushItem = (it) => {

@@ -50,7 +50,7 @@ function pad(left, right, width = WIDTH) {
   return left + ' '.repeat(width - left.length - right.length) + right;
 }
 
-function headerOps(ops, order, title, kw = SUNMI_KITCHEN_WIDTH) {
+function headerOps(ops, order, title, kw = SUNMI_KITCHEN_WIDTH, sentBy = null) {
   // Head room at the top so the KITCHEN/TABLE header clears the ticket-rail
   // clip — otherwise the clip hides the table number when the ticket is hung.
   ops.push({ op: 'feed', v: 4 });
@@ -72,6 +72,7 @@ function headerOps(ops, order, title, kw = SUNMI_KITCHEN_WIDTH) {
   }
   ops.push({ op: 'size', v: 'h' }, { op: 'text', v: label }, { op: 'size', v: 'n' }, { op: 'bold', v: false }); // big table no.
   if (order && order.id != null) ops.push({ op: 'text', v: 'Order #' + order.id });
+  if (sentBy) ops.push({ op: 'text', v: 'Sent: ' + sentBy }); // SEPOS-SENTBY-001
   // SEPOS-AUDIT-002 F13 — the native ticket printed the heading and item lines
   // ONLY, dropping everything the desktop/server builders include: who the
   // order is for, how to reach them, where it's going and — worst — the
@@ -107,6 +108,7 @@ export function buildKitchenOps(native) {
   // krule width both derive from it so bigger fonts don't wrap.
   const sz = kToken(fontScale);
   const kw = kWidth(fontScale);
+  const sentBy = ((items || []).find(i => i && i.sent_by) || {}).sent_by || null; // SEPOS-SENTBY-001
   const ops = [];
   if (kind === 'fire-notice') {
     headerOps(ops, order, 'FIRE', kw);
@@ -116,12 +118,12 @@ export function buildKitchenOps(native) {
     return ops;
   }
   if (kind === 'bar') {
-    headerOps(ops, order, 'BAR', kw);
+    headerOps(ops, order, 'BAR', kw, sentBy);
     for (const it of (items || []).filter(i => i && !i.voided)) kitchenItemOps(ops, it, bilingual, sz);
     ops.push({ op: 'feed', v: 2 }, { op: 'cut' });
     return ops;
   }
-  headerOps(ops, order, 'KITCHEN', kw);
+  headerOps(ops, order, 'KITCHEN', kw, sentBy);
   const list = (items || []).filter(i => i && !i.voided && (course == null || (Number(i.course) || 1) === Number(course)));
   const byCourse = {};
   for (const it of list) { const c = Number(it.course) || 1; (byCourse[c] = byCourse[c] || []).push(it); }

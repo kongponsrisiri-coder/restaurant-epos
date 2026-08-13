@@ -1542,9 +1542,12 @@ app.post('/api/orders/:id/items', requireValidLicense, async (req, res) => {
       // routing (kitchen/bar + printer) + name + VAT resolve through it. Normal
       // lines leave it null and route via menu_items.category_id as before.
       const destCategoryId = item.category_id != null ? Number(item.category_id) : null;
+      // SEPOS-SENTBY-001 — per-item override (offline replay) beats the
+      // round-level name; NULL when neither is present (legacy clients).
+      const sentBy = (item.sent_by || req.body.sent_by || '').trim().slice(0, 120) || null;
       const ins = await client.query(
-        `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at, item_name, dest_category_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
-        [orderId, item.menu_item_id, item.quantity, unitPrice, item.notes || '', item.course || 1, item.item_note || '', isBar, firedAt, firedAt, itemName, destCategoryId]
+        `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at, item_name, dest_category_id, sent_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+        [orderId, item.menu_item_id, item.quantity, unitPrice, item.notes || '', item.course || 1, item.item_note || '', isBar, firedAt, firedAt, itemName, destCategoryId, sentBy]
       );
       const newRowId = ins.rows[0].id;
       if (isBar) firedBarIds.push(newRowId);

@@ -169,6 +169,7 @@ function initSchema() {
       void_type TEXT,
       discount_type TEXT,
       discount_value REAL,
+      sent_by TEXT,
       resend_reason TEXT,
       dest_category_id INTEGER,
       cloud_id INTEGER
@@ -855,6 +856,8 @@ function runMigrations() {
   addColumnIfMissing('staff', 'can_redeem_deposit', 'INTEGER DEFAULT 0');
   // SEPOS-DISCOUNT-SCOPE-001 — 'food' / 'drink' / NULL (= whole bill)
   addColumnIfMissing('orders', 'discount_scope', 'TEXT');
+  // SEPOS-SENTBY-001 — who pressed Send for this round (name snapshot)
+  addColumnIfMissing('order_items', 'sent_by', 'TEXT');
 }
 
 function seedDefaults() {

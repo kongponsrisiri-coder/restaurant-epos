@@ -7,7 +7,7 @@
 // better-sqlite3) + Noto Sans (SIL OFL, bundled) → 576px-wide bitmap →
 // ESC/POS GS v 0 raster.
 //
-// Off by default. Turns on per-venue with settings.kitchen_ticket_style =
+// ON by default since v1.9.5. Per-venue opt-out with settings.kitchen_ticket_style =
 // 'rendered' — classic path untouched otherwise.
 
 'use strict';
@@ -146,6 +146,9 @@ async function kitchenTicketRaster(order, items, opts = {}) {
   }
   const orderNote = order.notes || order.customer_note;
   if (orderNote) lines.push({ text: String(orderNote), size: 24, bold: true, gap: 4 });
+  // SEPOS-SENTBY-001 — who pressed Send for this round (classic-builder parity)
+  const sentBy = (items.find(i => i && i.sent_by) || {}).sent_by;
+  if (sentBy) lines.push({ text: 'Sent: ' + String(sentBy), size: 22, center: true, gap: 4 });
   lines.push({ rule: true });
 
   const pushItem = (it) => {

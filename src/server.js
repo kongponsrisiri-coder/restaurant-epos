@@ -9699,10 +9699,19 @@ app.put('/api/customers/marketing-consent', requireStaffAuth(['admin', 'manager'
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-BIRTHDAY-001 — full profiles list for the till sync pull (secret
+// carries auth; also readable by signed-in admins).
+app.get('/api/customer-profiles', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
+  try {
+    const r = await pool.query('SELECT contact_key, birthday FROM customer_profiles');
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // SEPOS-BIRTHDAY-001 — set/clear a customer's birthday ('MM-DD', no year).
 // Body: { email?, phone?, birthday } — key derived exactly like the CRM view
 // (lower(email), else 'p:'+phone). birthday '' clears it.
-app.put('/api/customers/birthday', requireStaffAuth(['admin', 'manager', 'supervisor']), async (req, res) => {
+app.put('/api/customers/birthday', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     const email = String(req.body.email || '').trim().toLowerCase();
     const phone = String(req.body.phone || '').trim();
@@ -9711,6 +9720,7 @@ app.put('/api/customers/birthday', requireStaffAuth(['admin', 'manager', 'superv
     const birthday = String(req.body.birthday || '').trim();
     if (birthday === '') {
       await pool.query('DELETE FROM customer_profiles WHERE contact_key = $1', [key]);
+      await offlineQueue.enqueue('set_customer_birthday', { email, phone, birthday: '' });
       return res.json({ success: true, cleared: true });
     }
     const m = birthday.match(/^(\d{2})-(\d{2})$/);
@@ -9724,6 +9734,8 @@ app.put('/api/customers/birthday', requireStaffAuth(['admin', 'manager', 'superv
        ON CONFLICT (contact_key) DO UPDATE SET birthday = $2, updated_at = CURRENT_TIMESTAMP`,
       [key, birthday]
     );
+    // SEPOS-BIRTHDAY-SYNC-001 — mirror to cloud from a local till (no-op on cloud)
+    await offlineQueue.enqueue('set_customer_birthday', { email, phone, birthday });
     res.json({ success: true, birthday });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

@@ -7,7 +7,7 @@
 // better-sqlite3) + Noto Sans (SIL OFL, bundled) → 576px-wide bitmap →
 // ESC/POS GS v 0 raster.
 //
-// Off by default. Turns on per-venue with settings.kitchen_ticket_style =
+// ON by default since v1.9.5. Per-venue opt-out with settings.kitchen_ticket_style =
 // 'rendered' — classic path untouched otherwise.
 
 'use strict';

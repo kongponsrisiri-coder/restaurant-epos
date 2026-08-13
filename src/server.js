@@ -2173,7 +2173,7 @@ app.post('/api/staff/login', async (req, res) => {
     // SEPOS-STAFF-PERMS-001 — per-staff permissions travel with the session so
     // the client can honour "can give discount / can redeem deposit" for a
     // non-manager the owner has trusted.
-    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp, must_change_pin, can_discount: staff.can_discount ? 1 : 0, can_redeem_deposit: staff.can_redeem_deposit ? 1 : 0 });
+    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp, must_change_pin, can_discount: staff.can_discount ? 1 : 0, can_redeem_deposit: staff.can_redeem_deposit ? 1 : 0, can_void: staff.can_void ? 1 : 0, can_close_z: staff.can_close_z ? 1 : 0 });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2683,15 +2683,15 @@ app.post('/api/stripe/webhook', async (req, res) => {
 
 app.get('/api/staff', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, role, is_active, created_at, start_date, notes, employment_status, can_discount, can_redeem_deposit FROM staff ORDER BY name');
+    const result = await pool.query('SELECT id, name, role, is_active, created_at, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z FROM staff ORDER BY name');
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/staff', async (req, res) => {
+app.post('/api/staff', requireStaffAuth(['admin', 'manager']), async (req, res) => {
   if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
-    const { name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit } = req.body;
+    const { name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z } = req.body;
     // SEPOS-047k — PINs are UNIQUE (staff_pin_key / staff.pin UNIQUE). A
     // collision used to surface as a raw 500 "duplicate key value violates
     // unique constraint" → the Staff screen just said "Save failed!" with
@@ -2700,7 +2700,7 @@ app.post('/api/staff', async (req, res) => {
     if (dup.rows[0]) {
       return res.status(409).json({ error: `PIN ${pin} is already used by ${dup.rows[0].name}. Please choose a different 4-digit PIN.` });
     }
-    const result = await pool.query('INSERT INTO staff (name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id', [name, pin, role, start_date || null, notes || null, employment_status || 'active', can_discount ? 1 : 0, can_redeem_deposit ? 1 : 0]);
+    const result = await pool.query('INSERT INTO staff (name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id', [name, pin, role, start_date || null, notes || null, employment_status || 'active', can_discount ? 1 : 0, can_redeem_deposit ? 1 : 0, can_void ? 1 : 0, can_close_z ? 1 : 0]);
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) {
     if (/unique|duplicate/i.test(err.message || '')) {
@@ -2710,11 +2710,11 @@ app.post('/api/staff', async (req, res) => {
   }
 });
 
-app.put('/api/staff/:id', async (req, res) => {
+app.put('/api/staff/:id', requireStaffAuth(['admin', 'manager']), async (req, res) => {
   if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
-    const { name, pin, role, is_active, start_date, notes, employment_status, can_discount, can_redeem_deposit } = req.body;
-    const cd = can_discount ? 1 : 0, crd = can_redeem_deposit ? 1 : 0;
+    const { name, pin, role, is_active, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z } = req.body;
+    const cd = can_discount ? 1 : 0, crd = can_redeem_deposit ? 1 : 0, cv = can_void ? 1 : 0, cz = can_close_z ? 1 : 0;
     // Normalise: when the client doesn't send is_active (or sends an empty
     // string), keep whatever's already in the DB — DON'T null it. The old
     // version would clobber a manager's is_active flag to NULL on every
@@ -2742,9 +2742,11 @@ app.put('/api/staff/:id', async (req, res) => {
            notes = $6,
            employment_status = $7,
            can_discount = $8,
-           can_redeem_deposit = $9
-         WHERE id = $10`,
-        [name, pin, role, activeParam, start_date || null, notes || null, employment_status || 'active', cd, crd, req.params.id]
+           can_redeem_deposit = $9,
+           can_void = $10,
+           can_close_z = $11
+         WHERE id = $12`,
+        [name, pin, role, activeParam, start_date || null, notes || null, employment_status || 'active', cd, crd, cv, cz, req.params.id]
       );
     } else {
       await pool.query(
@@ -2756,9 +2758,11 @@ app.put('/api/staff/:id', async (req, res) => {
            notes = $5,
            employment_status = $6,
            can_discount = $7,
-           can_redeem_deposit = $8
-         WHERE id = $9`,
-        [name, role, activeParam, start_date || null, notes || null, employment_status || 'active', cd, crd, req.params.id]
+           can_redeem_deposit = $8,
+           can_void = $9,
+           can_close_z = $10
+         WHERE id = $11`,
+        [name, role, activeParam, start_date || null, notes || null, employment_status || 'active', cd, crd, cv, cz, req.params.id]
       );
     }
     res.json({ success: true });
@@ -2770,7 +2774,7 @@ app.put('/api/staff/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/staff/:id', async (req, res) => {
+app.delete('/api/staff/:id', requireStaffAuth(['admin', 'manager']), async (req, res) => {
   if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
     await pool.query('DELETE FROM staff WHERE id=$1', [req.params.id]);

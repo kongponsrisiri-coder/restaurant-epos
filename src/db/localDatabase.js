@@ -854,6 +854,8 @@ function runMigrations() {
   addColumnIfMissing('menu_items', 'color', 'TEXT');
   addColumnIfMissing('staff', 'can_discount', 'INTEGER DEFAULT 0');
   addColumnIfMissing('staff', 'can_redeem_deposit', 'INTEGER DEFAULT 0');
+  addColumnIfMissing('staff', 'can_void', 'INTEGER DEFAULT 0');       // SEPOS-HIERARCHY-001
+  addColumnIfMissing('staff', 'can_close_z', 'INTEGER DEFAULT 0');    // SEPOS-HIERARCHY-001
   // SEPOS-DISCOUNT-SCOPE-001 — 'food' / 'drink' / NULL (= whole bill)
   addColumnIfMissing('orders', 'discount_scope', 'TEXT');
   // SEPOS-SENTBY-001 — who pressed Send for this round (name snapshot)

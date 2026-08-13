@@ -464,6 +464,12 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   // window.prompt() is disabled in Electron, so we route this through a
   // React modal (voidPopup) instead of native prompts.
   const handleVoidItem = (item) => {
+    // SEPOS-HIERARCHY-001 — voiding needs supervisor+ OR the per-staff flag
+    // (Admin → Staff → "Can void items"). Comp voids still need a manager PIN.
+    const voidRoles = ['admin', 'manager', 'supervisor'];
+    if (!voidRoles.includes(staff?.role) && !staff?.can_void) {
+      return alert('⛔ You don\'t have permission to void items.\n\nA manager can enable it in Admin → Staff → "Can void items".');
+    }
     // SEPOS-046z — negative id = optimistic row still being confirmed by
     // the server (real id arrives on the next fetchOrder, sub-second).
     if (item.id < 0) return alert('Still sending — try again in a second.');

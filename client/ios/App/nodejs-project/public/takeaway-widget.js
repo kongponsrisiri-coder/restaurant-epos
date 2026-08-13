@@ -1,0 +1,1483 @@
+/*
+ * SiamEPOS Takeaway Widget — SEPOS-034 / SEPOS-040
+ * Public ordering widget for embedding on the restaurant's website.
+ *
+ *   <script src="https://app.siamepos.co.uk/takeaway-widget.js"></script>
+ *   <button data-siamepos-takeaway>Order Takeaway</button>
+ *
+ * Click the button → opens a modal with the full ordering flow:
+ *   1. Pickup time   (ASAP or scheduled)
+ *   2. Menu + cart
+ *   3. Customer details
+ *   4. Payment       (Stripe card input if configured; demo banner otherwise)
+ *   5. Success       (order number + confirmation note)
+ *
+ * SEPOS-040: Each restaurant provides their own STRIPE_PUBLISHABLE_KEY +
+ * STRIPE_SECRET_KEY in Railway env. If not set, widget gracefully falls
+ * back to demo/mock mode — no breakage for clients not yet on Stripe.
+ */
+(function () {
+  'use strict';
+
+  // Locate this widget's own <script> tag — used for both the API origin
+  // and the data-restaurant attribute (SEPOS-LITE-001 multi-tenancy).
+  const SELF_SCRIPT = (function () {
+    try {
+      const scripts = document.getElementsByTagName('script');
+      for (let i = scripts.length - 1; i >= 0; i--) {
+        if ((scripts[i].src || '').indexOf('takeaway-widget.js') !== -1) {
+          return scripts[i];
+        }
+      }
+    } catch (e) {}
+    return null;
+  })();
+
+  const API = (function () {
+    try {
+      if (SELF_SCRIPT && SELF_SCRIPT.src) return new URL(SELF_SCRIPT.src).origin;
+    } catch (e) {}
+    return 'https://restaurant-epos-production.up.railway.app';
+  })();
+
+  // Which restaurant this widget belongs to. Single-tenant installs can
+  // omit data-restaurant — the backend resolves it. The Lite shared
+  // backend uses this to route the order to the right tenant.
+  const RESTAURANT_ID = (SELF_SCRIPT && SELF_SCRIPT.getAttribute('data-restaurant')) || 'siamepos';
+
+  // ── Styles ──────────────────────────────────────────────────────
+  const css = `
+    /* ── FAB ── */
+    .tw-fab {
+      position:fixed; bottom:24px; right:24px;
+      background:#C9A84C; color:#0D1B3E; border:none; border-radius:30px;
+      padding:16px 26px; font-weight:800; font-size:15px; cursor:pointer;
+      box-shadow:0 6px 20px rgba(13,27,62,0.35); z-index:9998;
+      font-family:system-ui,-apple-system,sans-serif; letter-spacing:0.02em;
+    }
+    .tw-fab:hover { background:#d5b85e; }
+
+    /* ── Overlay + modal ── */
+    .tw-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:9999;
+      display:flex; align-items:center; justify-content:center; padding:0;
+      font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
+    }
+    .tw-modal {
+      background:white; border-radius:20px; width:100%; max-width:920px;
+      max-height:92vh; overflow:hidden; display:flex; flex-direction:column;
+      box-shadow:0 20px 60px rgba(0,0,0,0.45);
+    }
+    @media(max-width:760px) {
+      .tw-modal { max-width:100%; max-height:100dvh; border-radius:0; }
+    }
+
+    /* ── Header ── */
+    .tw-header {
+      background:#0D1B3E; color:white; padding:16px 20px;
+      display:flex; align-items:center; justify-content:space-between;
+      flex-shrink:0;
+    }
+    .tw-title { font-family:Georgia,serif; font-size:19px; font-weight:700; color:#C9A84C; }
+    .tw-close {
+      background:rgba(255,255,255,0.12); border:none; color:white; font-size:22px;
+      cursor:pointer; line-height:1; padding:0; width:36px; height:36px;
+      border-radius:50%; display:flex; align-items:center; justify-content:center;
+    }
+    .tw-close:hover { background:rgba(255,255,255,0.2); }
+
+    /* ── Step indicator ── */
+    .tw-steps {
+      display:flex; background:#f4f4f4; border-bottom:1px solid #eaeaea;
+      flex-shrink:0; overflow:hidden;
+    }
+    .tw-step-item {
+      flex:1; display:flex; flex-direction:column; align-items:center;
+      padding:10px 4px 9px; font-size:10px; font-weight:700; color:#bbb;
+      text-transform:uppercase; letter-spacing:0.05em; gap:4px; position:relative;
+    }
+    .tw-step-item::after {
+      content:''; position:absolute; bottom:0; left:0; right:0; height:3px;
+      background:#e0e0e0;
+    }
+    .tw-step-item.active { color:#0D1B3E; }
+    .tw-step-item.active::after { background:#C9A84C; }
+    .tw-step-item.done { color:#22c55e; }
+    .tw-step-item.done::after { background:#22c55e; }
+    .tw-step-num {
+      width:22px; height:22px; border-radius:50%; background:#e0e0e0;
+      display:flex; align-items:center; justify-content:center; font-size:12px;
+      font-weight:800; color:#999;
+    }
+    .tw-step-item.active .tw-step-num { background:#C9A84C; color:#0D1B3E; }
+    .tw-step-item.done .tw-step-num { background:#22c55e; color:white; }
+    @media(max-width:400px) {
+      .tw-step-item { font-size:9px; padding:8px 2px 7px; }
+    }
+
+    /* ── Body ── */
+    .tw-body { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    .tw-body-inner { padding:20px; }
+    @media(max-width:760px) { .tw-body-inner { padding:16px; } }
+
+    .tw-h2 { font-size:18px; font-weight:700; color:#1a1a2e; margin:0 0 8px; }
+    .tw-help { color:#888; font-size:13px; margin-bottom:18px; line-height:1.5; }
+
+    /* ── Buttons ── */
+    .tw-btn {
+      padding:14px 20px; border-radius:12px; border:2px solid transparent;
+      background:white; color:#1a1a2e; font-weight:700; font-size:15px;
+      cursor:pointer; transition:all 0.15s; font-family:inherit;
+      min-height:48px; display:inline-flex; align-items:center; justify-content:center;
+    }
+    .tw-btn-primary { background:#0D1B3E; color:white; border-color:#0D1B3E; }
+    .tw-btn-primary:hover { background:#1a2a55; }
+    .tw-btn-gold { background:#C9A84C; color:#0D1B3E; border-color:#C9A84C; }
+    .tw-btn-gold:hover { background:#d5b85e; }
+    .tw-btn-ghost { background:white; border-color:#ddd; color:#555; }
+    .tw-btn-ghost:hover { background:#f5f5f5; }
+    .tw-btn[disabled] { opacity:0.45; cursor:not-allowed; }
+    .tw-btn.tw-selected { border-color:#C9A84C; background:#fef9eb; color:#1a1a2e; }
+
+    /* ── Inputs ── */
+    .tw-input {
+      width:100%; padding:14px 16px; border-radius:12px;
+      border:1.5px solid #ddd; font-size:16px; box-sizing:border-box;
+      font-family:inherit; -webkit-appearance:none;
+    }
+    .tw-input:focus { outline:none; border-color:#C9A84C; box-shadow:0 0 0 3px rgba(201,168,76,0.15); }
+    .tw-label {
+      display:block; font-size:12px; font-weight:700; color:#888;
+      text-transform:uppercase; letter-spacing:0.06em; margin:16px 0 6px;
+    }
+    .tw-error {
+      background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3);
+      color:#991b1b; padding:12px 14px; border-radius:10px;
+      font-size:13px; margin-top:14px; line-height:1.5;
+    }
+
+    /* ── Step 1: Pickup time ── */
+    .tw-pickup-row { display:flex; gap:10px; margin-bottom:18px; }
+    .tw-pickup-btn {
+      flex:1; padding:18px 14px; border-radius:14px; border:2px solid #e0e0e0;
+      background:white; cursor:pointer; font-family:inherit; text-align:center;
+      transition:all 0.15s;
+    }
+    .tw-pickup-btn:hover { border-color:#C9A84C; }
+    .tw-pickup-btn.active { border-color:#C9A84C; background:#fef9eb; }
+    .tw-pickup-icon { font-size:28px; display:block; margin-bottom:6px; }
+    .tw-pickup-label { font-weight:800; font-size:15px; color:#1a1a2e; display:block; }
+    .tw-pickup-sub { font-size:12px; color:#888; display:block; margin-top:3px; }
+
+    .tw-slots-label { font-size:12px; font-weight:700; color:#888;
+      text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px; }
+    .tw-slots {
+      display:grid; grid-template-columns:repeat(4,1fr); gap:8px;
+    }
+    @media(max-width:480px) { .tw-slots { grid-template-columns:repeat(3,1fr); } }
+    .tw-slot {
+      padding:12px 6px; border-radius:10px; border:1.5px solid #e0e0e0;
+      background:white; cursor:pointer; font-family:inherit;
+      font-size:14px; font-weight:700; color:#444; text-align:center;
+      min-height:44px; transition:all 0.15s;
+    }
+    .tw-slot:hover { border-color:#C9A84C; background:#fef9eb; }
+    .tw-slot.active { border-color:#C9A84C; background:#C9A84C; color:#0D1B3E; }
+
+    /* ── Step 2: Menu ── */
+    .tw-split { display:flex; gap:16px; align-items:flex-start; }
+    .tw-menu-col { flex:1; min-width:0; }
+
+    /* Category tabs — horizontal scroll on mobile */
+    .tw-cats {
+      display:flex; gap:8px; margin-bottom:14px;
+      overflow-x:auto; -webkit-overflow-scrolling:touch;
+      scrollbar-width:none; padding-bottom:4px;
+    }
+    .tw-cats::-webkit-scrollbar { display:none; }
+    .tw-cat {
+      flex-shrink:0; padding:10px 16px; border-radius:22px;
+      border:1.5px solid #e0e0e0; background:white; cursor:pointer;
+      font-size:13px; font-weight:700; color:#555; white-space:nowrap;
+      min-height:40px; display:inline-flex; align-items:center;
+    }
+    .tw-cat.active { background:#0D1B3E; color:white; border-color:#0D1B3E; }
+
+    /* Menu items — 1 col on mobile, 2 col on desktop */
+    .tw-items { display:flex; flex-direction:column; gap:10px; }
+    @media(min-width:600px) {
+      .tw-items { display:grid; grid-template-columns:1fr 1fr; }
+    }
+    .tw-item {
+      background:white; border:1.5px solid #eee; border-radius:14px;
+      padding:14px 14px 12px; cursor:pointer;
+      transition:border-color 0.15s, box-shadow 0.15s;
+      display:flex; flex-direction:column;
+    }
+    .tw-item:active { border-color:#C9A84C; box-shadow:0 2px 8px rgba(201,168,76,0.2); }
+    @media(pointer:fine) { .tw-item:hover { border-color:#C9A84C; box-shadow:0 2px 8px rgba(201,168,76,0.15); } }
+    .tw-item-name { font-weight:700; color:#1a1a2e; font-size:15px; margin-bottom:4px; }
+    .tw-item-desc {
+      font-size:12px; color:#888; margin-bottom:10px; line-height:1.45; flex:1;
+      display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+    }
+    .tw-item-foot { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+    .tw-item-price { font-weight:800; color:#1a1a2e; font-size:16px; }
+    .tw-item-add {
+      background:#0D1B3E; color:#C9A84C; border:none; border-radius:50%;
+      width:40px; height:40px; font-size:22px; font-weight:700; cursor:pointer;
+      flex-shrink:0; display:flex; align-items:center; justify-content:center;
+      line-height:1;
+    }
+    .tw-item-add:active { background:#1a2a55; }
+
+    /* Desktop cart sidebar */
+    .tw-cart-sidebar {
+      width:280px; flex-shrink:0; background:#f8f8f8; border-radius:16px;
+      padding:16px; position:sticky; top:0; max-height:calc(92vh - 180px);
+      overflow-y:auto; display:flex; flex-direction:column;
+    }
+    @media(max-width:760px) { .tw-cart-sidebar { display:none; } }
+
+    .tw-cart-title {
+      font-size:12px; font-weight:700; color:#888;
+      text-transform:uppercase; letter-spacing:0.5px; margin-bottom:12px;
+    }
+    .tw-cart-empty { color:#bbb; text-align:center; padding:30px 0 20px; font-size:13px; }
+    .tw-cart-row {
+      display:flex; align-items:center; gap:8px; padding:9px 0; font-size:13px;
+      border-bottom:1px solid #eee;
+    }
+    .tw-cart-row:last-of-type { border-bottom:none; }
+    .tw-cart-name { flex:1; color:#1a1a2e; font-weight:600; line-height:1.3; }
+    .tw-cart-qtypill {
+      display:flex; align-items:center; background:#0D1B3E;
+      color:#C9A84C; border-radius:16px; height:28px; overflow:hidden; flex-shrink:0;
+    }
+    .tw-cart-qtypill button {
+      background:transparent; color:#C9A84C; border:none;
+      width:28px; height:28px; cursor:pointer; font-weight:800; font-size:16px;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .tw-cart-qtypill span {
+      padding:0 6px; font-weight:800; min-width:16px; text-align:center; font-size:13px;
+    }
+    .tw-cart-price { min-width:50px; text-align:right; color:#555; font-weight:600; }
+    .tw-cart-total {
+      display:flex; justify-content:space-between; font-size:16px; font-weight:800;
+      margin-top:14px; padding-top:14px; border-top:2px solid #ddd;
+    }
+
+    /* Mobile sticky cart bar — shows when cart has items */
+    .tw-cart-bar {
+      display:none; position:sticky; bottom:0; left:0; right:0;
+      background:#0D1B3E; color:white; padding:14px 20px;
+      align-items:center; justify-content:space-between; gap:10px;
+      border-top:2px solid #C9A84C; z-index:10; flex-shrink:0;
+    }
+    @media(max-width:760px) { .tw-cart-bar { display:flex; } }
+    .tw-cart-bar-info { display:flex; flex-direction:column; }
+    .tw-cart-bar-count { font-size:12px; color:#C9A84C; font-weight:700; }
+    .tw-cart-bar-total { font-size:18px; font-weight:800; color:white; }
+    .tw-cart-bar-btn {
+      background:#C9A84C; color:#0D1B3E; border:none; border-radius:12px;
+      padding:12px 20px; font-weight:800; font-size:15px; cursor:pointer;
+      font-family:inherit; white-space:nowrap; flex-shrink:0;
+    }
+    .tw-cart-bar.hidden { display:none !important; }
+
+    /* ── Footer ── */
+    .tw-foot {
+      padding:14px 20px; border-top:1px solid #eee;
+      display:flex; gap:10px; justify-content:flex-end;
+      background:white; flex-shrink:0;
+    }
+    .tw-foot-full { width:100%; }
+    @media(max-width:760px) {
+      .tw-foot { padding:12px 16px; }
+      .tw-foot .tw-btn { flex:1; }
+    }
+
+    /* ── Step 4: Review ── */
+    .tw-review-row {
+      display:flex; justify-content:space-between; align-items:center;
+      font-size:14px; padding:10px 0; border-bottom:1px solid #f0f0f0;
+    }
+    .tw-review-row:last-of-type { border:none; }
+    .tw-review-qty { color:#888; margin-right:6px; }
+    .tw-review-total {
+      display:flex; justify-content:space-between; align-items:center;
+      font-size:18px; font-weight:800; border-top:2px solid #ddd;
+      padding-top:12px; margin-top:4px;
+    }
+
+    /* ── Step 4: Stripe card input ── */
+    #tw-card-element {
+      padding:14px 16px; border-radius:12px; border:1.5px solid #ddd;
+      background:white; margin-top:14px; margin-bottom:6px;
+    }
+    .tw-stripe-badge {
+      font-size:11px; color:#aaa; text-align:right; margin-top:4px; margin-bottom:10px;
+    }
+
+    /* ── SEPOS-TAKEAWAY-OPTIONS + DISCOUNT ── */
+    .tw-cart-mods { display:block; font-size:11px; color:#8a8a97; margin-top:2px; line-height:1.35; font-weight:400; }
+    .tw-discount-chip {
+      background:#f0f7ee; border:1.5px solid #86efac; color:#166534; font-weight:700;
+      border-radius:10px; padding:9px 12px; font-size:13px; margin:0 0 12px;
+    }
+    .tw-opt-group { margin-top:16px; }
+    .tw-opt-title { font-weight:800; font-size:14px; color:#1a1a2e; margin-bottom:8px; }
+    .tw-opt-req { font-size:10px; font-weight:700; color:#b3261e; background:#fdecea; border-radius:8px; padding:2px 8px; margin-left:8px; text-transform:uppercase; letter-spacing:.04em; }
+    .tw-opt-optional { font-size:10px; font-weight:700; color:#888; background:#f0f0f0; border-radius:8px; padding:2px 8px; margin-left:8px; text-transform:uppercase; letter-spacing:.04em; }
+    .tw-opt-list { display:flex; flex-wrap:wrap; gap:8px; }
+    .tw-opt {
+      border:1.5px solid #ddd; background:#fff; color:#1a1a2e; border-radius:999px;
+      padding:9px 14px; font:inherit; font-size:14px; cursor:pointer; min-height:40px;
+    }
+    .tw-opt-on { border-color:#0D1B3E; background:#0D1B3E; color:#fff; font-weight:700; }
+
+    /* ── Success ── */
+    .tw-success { text-align:center; padding:40px 24px 32px; }
+    .tw-success-tick { font-size:72px; margin-bottom:12px; }
+    .tw-success-h { font-size:22px; font-weight:800; color:#1a1a2e; margin-bottom:8px; }
+    .tw-success-num {
+      font-size:36px; font-weight:800; color:#C9A84C;
+      font-family:'SF Mono',Menlo,monospace; letter-spacing:3px;
+      margin:16px 0; background:#fef9eb; display:inline-block;
+      padding:10px 24px; border-radius:12px;
+    }
+  `;
+
+  function injectStyles() {
+    if (document.getElementById('tw-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'tw-styles';
+    s.textContent = css;
+    document.head.appendChild(s);
+  }
+
+  // ── State ────────────────────────────────────────────────────────
+  let state = {
+    step: 1,
+    settings: null,
+    menu: [],
+    activeCategory: null,
+    cart: [],
+    mobileCartOpen: false, // mobile: show the editable cart review before details
+    // SEPOS-047 — kitchen-load-aware wait time. No customer-facing picker.
+    // Populated by loadAvailability() and refreshed on every step transition
+    // so the busy chip stays accurate as the kitchen empties / fills.
+    availability: null, // { tier, wait_minutes, pickup_iso }
+    customer: { name:'', phone:'', email:'', order_subtype:'collection', delivery_postcode:'', delivery_address:'', delivery_notes:'', order_notes:'', marketing_consent:false, delivery_check:null },
+    error: '',
+    orderResult: null,
+    // SEPOS-040 — Stripe state. Populated on widget open by loadStripeConfig().
+    stripeConfigured: false,
+    stripePublishableKey: null,
+  };
+
+  // Module-level Stripe SDK references (persisted across renders so
+  // Elements aren't destroyed + re-created on every re-render).
+  // _elements + _paymentElement live in mountStripeCard's scope below.
+  let _stripe = null;
+
+  function $(id) { return document.getElementById(id); }
+  function fmt(n) { return '£' + Number(n || 0).toFixed(2); }
+  function esc(s) {
+    return String(s || '').replace(/[&<>"']/g, c =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function cartCount() { return state.cart.reduce((s, i) => s + i.quantity, 0); }
+  // SEPOS-TAKEAWAY-DISCOUNT — optional % off online orders, from
+  // /api/takeaway/settings (server clamps identically and re-verifies).
+  function discountPct() { return Math.min(50, Math.max(0, Number(state.settings?.discount_percent) || 0)); }
+  function cartSubtotal() {
+    return state.cart.reduce((s, i) => s + Number(i.unit_price) * Number(i.quantity), 0);
+  }
+  function cartTotal() { // order total after discount (before any handling fee)
+    const gross = cartSubtotal();
+    const pct = discountPct();
+    return pct > 0 ? Math.round(gross * (1 - pct / 100) * 100) / 100 : gross;
+  }
+  // SIAMPAY-002 — flat customer-facing handling fee (SiamPay tenants only).
+  // SIAMPAY-002 (Korakot 21 Jul): the customer pays the menu price only —
+  // the SiamPay fee is deducted from the restaurant's settlement server-side.
+  function payTotal() { return cartTotal(); }
+  // SEPOS-TAKEAWAY-OPTIONS — cart lines are keyed by item + chosen options so
+  // "Pad Thai (Chicken)" and "Pad Thai (Prawn +£2)" are separate lines.
+  function lineKey(itemId, mods) {
+    return itemId + '|' + (mods || []).map(m => m.id).sort((a, b) => a - b).join(',');
+  }
+  function addToCart(item, mods) {
+    mods = mods || [];
+    const extra = mods.reduce((s, m) => s + (Number(m.extra_price) || 0), 0);
+    const key = lineKey(item.id, mods);
+    const existing = state.cart.find(c => c.key === key);
+    if (existing) existing.quantity += 1;
+    else state.cart.push({
+      key,
+      menu_item_id: item.id,
+      name: item.name,
+      unit_price: (Number(item.price || 0) + extra),
+      quantity: 1,
+      modifiers: mods,
+    });
+    applyCartChange();
+  }
+  // Tap on a dish → fetch its option groups (cached); options exist → choose
+  // first, none → straight into the cart. Fetch failure degrades to plain add.
+  async function startAdd(item) {
+    let groups = state.modCache ? state.modCache[item.id] : undefined;
+    if (groups === undefined) {
+      try {
+        const r = await fetch(API + '/api/menu/items/' + item.id + '/modifiers?restaurant_id=' + encodeURIComponent(RESTAURANT_ID));
+        groups = r.ok ? await r.json() : [];
+      } catch { groups = []; }
+      groups = (Array.isArray(groups) ? groups : []).filter(g => Array.isArray(g.modifiers) && g.modifiers.length > 0);
+      (state.modCache = state.modCache || {})[item.id] = groups;
+    }
+    if (!groups.length) return addToCart(item);
+    state.optionsFor = { item, groups, sel: {} };
+    render();
+  }
+  function optionsSelectionValid() {
+    if (!state.optionsFor) return false;
+    return state.optionsFor.groups.every(g =>
+      !Number(g.required) || (state.optionsFor.sel[g.id] || []).length > 0);
+  }
+  function optionsChosenMods() {
+    const out = [];
+    state.optionsFor.groups.forEach(g => {
+      (state.optionsFor.sel[g.id] || []).forEach(id => {
+        const m = g.modifiers.find(x => Number(x.id) === Number(id));
+        if (m) out.push({ id: m.id, name: m.name, extra_price: Number(m.extra_price) || 0 });
+      });
+    });
+    return out;
+  }
+  function changeQty(key, delta) {
+    const it = state.cart.find(c => c.key === key);
+    if (!it) return;
+    it.quantity += delta;
+    if (it.quantity <= 0) state.cart = state.cart.filter(c => c.key !== key);
+    applyCartChange();
+  }
+  // On the menu view, update ONLY the cart UI (bar + sidebar) so the menu list —
+  // and its scroll position — is never rebuilt; tapping a dish no longer jumps
+  // back to the top. Any other view does a normal full render.
+  function applyCartChange() {
+    if (state.step === 2 && !state.mobileCartOpen) updateCartUI();
+    else render();
+  }
+  function updateCartUI() {
+    const count = cartCount();
+    const bar = $('tw-cart-bar');
+    if (bar) {
+      bar.classList.toggle('hidden', count === 0);
+      const c = bar.querySelector('.tw-cart-bar-count'); if (c) c.textContent = count + ' item' + (count !== 1 ? 's' : '');
+      const t = bar.querySelector('.tw-cart-bar-total'); if (t) t.textContent = fmt(cartTotal());
+    }
+    const side = document.querySelector('.tw-cart-sidebar');
+    if (side) {
+      side.innerHTML = '<div class="tw-cart-title">🛒 Your order</div>' + renderCartRows();
+      side.querySelectorAll('[data-inc]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(Number(b.dataset.inc), 1); }));
+      side.querySelectorAll('[data-dec]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(Number(b.dataset.dec), -1); }));
+    }
+    // Keep the desktop footer Checkout button's TOTAL in sync. updateCartUI is a
+    // PARTIAL re-render (used so adding a dish doesn't scroll the menu back to the
+    // top) — without refreshing the label here it stays frozen at its last
+    // full-render value, i.e. "Checkout · £0.00" until you change step.
+    const next = $('tw-next');
+    if (next) { next.disabled = count === 0; next.textContent = `Checkout · ${fmt(cartTotal())}`; }
+  }
+  function computePickupISO() {
+    // SEPOS-047 — pickup is now derived from the server's load-aware
+    // availability quote. If we don't have one yet (first paint), fall
+    // back to now + 20 min so the chip doesn't flash empty.
+    if (state.availability?.pickup_iso) return state.availability.pickup_iso;
+    const d = new Date();
+    d.setMinutes(d.getMinutes() + 20);
+    return d.toISOString();
+  }
+  // SEPOS-046e — allergens beside each menu item so customers don't
+  // have to ask. `allergens` is a JSON-stringified array on the menu_item
+  // row (e.g. '["Fish","Gluten","Soybeans"]'). Defensive parsing — invalid
+  // / empty values fall through to nothing.
+  function renderAllergens(raw) {
+    if (!raw) return '';
+    let list = [];
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      list = Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+    } catch { return ''; }
+    if (list.length === 0) return '';
+    return `
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">
+        ${list.map(a => `
+          <span style="font-size:10px;font-weight:700;color:#7a4a00;background:#fef3c7;border:1px solid #fcd34d;border-radius:4px;padding:1px 6px;text-transform:uppercase;letter-spacing:0.04em;">${esc(a)}</span>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function renderBusyChip() {
+    if (!state.availability) return '';
+    // SEPOS-047 v2 — customer-facing: just the wait time, always green.
+    // Korakot 2026-06-07: don't surface "busy/very busy" framing to the
+    // customer; just commit to a number.
+    const mins = state.availability.wait_minutes;
+    return `
+      <div style="display:flex;align-items:center;gap:10px;background:#f0f7ee;border:1.5px solid #86efac;border-radius:12px;padding:10px 14px;margin-bottom:14px;">
+        <span style="font-size:18px;">🟢</span>
+        <div style="flex:1;">
+          <div style="font-weight:800;color:#166534;font-size:14px;">Ready in ~${mins} min</div>
+          <div style="font-size:11px;color:#666;margin-top:1px;">No need to choose a time — we'll have it ready when you arrive.</div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Step renderers ───────────────────────────────────────────────
+
+  // Postcode check panel (used inside step 1 when delivery is selected)
+  function renderDeliveryPostcodeCheck() {
+    const chk    = state.customer.delivery_check;
+    const radius = Number(state.settings?.delivery_radius_miles) || 0;
+    return `
+      <label class="tw-label">Your delivery postcode</label>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <input class="tw-input" id="tw-delivery-postcode" type="text" inputmode="text"
+          value="${esc(state.customer.delivery_postcode)}" placeholder="e.g. SW1A 1AA"
+          autocomplete="postal-code" style="flex:1;margin:0;text-transform:uppercase;" />
+        <button type="button" id="tw-postcode-check"
+          style="padding:0 18px;border-radius:10px;border:2px solid #0D1B3E;background:#0D1B3E;
+            color:#fff;font:inherit;font-weight:700;cursor:pointer;white-space:nowrap;min-height:48px;">
+          Check
+        </button>
+      </div>
+      ${chk?.checking ? `<div class="tw-help">Checking your postcode…</div>` : ''}
+      ${chk?.deliverable === false ? `
+        <div style="background:#fdecea;border:1px solid #e57373;border-radius:10px;
+          padding:12px 14px;font-size:13px;color:#b71c1c;line-height:1.5;">
+          <strong>Sorry — outside our delivery area.</strong><br>
+          We deliver up to ${radius} miles${chk.distance_miles != null ? ` — you're ${chk.distance_miles} mi away` : ''}.
+        </div>
+        <button type="button" id="tw-switch-collection"
+          style="margin-top:8px;padding:12px 16px;border-radius:10px;border:2px solid #0D1B3E;
+            background:white;color:#0D1B3E;font:inherit;font-weight:700;cursor:pointer;width:100%;">
+          Switch to 🥡 Collection instead
+        </button>
+      ` : ''}
+    `;
+  }
+
+  function renderStep1() {
+    const opening        = state.settings?.opening_time      || '11:00';
+    const closing        = state.settings?.last_booking_time || '21:30';
+    const deliveryEnabled = !!state.settings?.delivery_enabled;
+    if (!deliveryEnabled) state.customer.order_subtype = 'collection';
+    const isDelivery  = deliveryEnabled && state.customer.order_subtype === 'delivery';
+    const postcodeOk  = isDelivery && state.customer.delivery_check?.deliverable === true;
+    const showTime    = !isDelivery || postcodeOk;
+
+    return `
+      <h2 class="tw-h2">How would you like your order?</h2>
+      <div class="tw-help">Choose collection or delivery, then browse our menu.</div>
+
+      <div class="tw-pickup-row">
+        <button class="tw-pickup-btn ${!isDelivery ? 'active' : ''}" data-subtype="collection">
+          <span class="tw-pickup-icon">🥡</span>
+          <span class="tw-pickup-label">Collection</span>
+          <span class="tw-pickup-sub">Pick up at the restaurant</span>
+        </button>
+        <button class="tw-pickup-btn ${isDelivery ? 'active' : ''}" data-subtype="delivery">
+          <span class="tw-pickup-icon">🚗</span>
+          <span class="tw-pickup-label">Delivery</span>
+          <span class="tw-pickup-sub">We bring it to you</span>
+        </button>
+      </div>
+
+      ${isDelivery ? `
+        ${!postcodeOk ? renderDeliveryPostcodeCheck() : `
+          <div style="background:#f0f7ee;border:1.5px solid #86efac;border-radius:12px;
+            padding:12px 16px;display:flex;align-items:center;gap:10px;">
+            <span style="font-size:20px;">✅</span>
+            <div>
+              <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.05em;">Delivering to</div>
+              <div style="font-weight:700;color:#166534;">${esc(state.customer.delivery_postcode)}
+                ${state.customer.delivery_check?.distance_miles != null
+                  ? `<span style="font-weight:400;font-size:12px;color:#888;margin-left:6px;">(${state.customer.delivery_check.distance_miles} mi)</span>`
+                  : ''}
+              </div>
+            </div>
+          </div>
+        `}
+      ` : ''}
+
+      ${state.error ? `<div class="tw-error">${esc(state.error)}</div>` : ''}
+    `;
+  }
+
+  function renderCartRows() {
+    if (state.cart.length === 0) return `<div class="tw-cart-empty">Tap any dish to add it ✨</div>`;
+    const pct = discountPct();
+    const totalsBlock = pct > 0
+      ? `<div class="tw-cart-total" style="font-weight:400;font-size:13px;color:#666;"><span>Subtotal</span><span>${fmt(cartSubtotal())}</span></div>
+         <div class="tw-cart-total" style="font-weight:700;font-size:13px;color:#166534;"><span>🎉 Online discount (${pct}%)</span><span>−${fmt(cartSubtotal() - cartTotal())}</span></div>
+         <div class="tw-cart-total"><span>Total</span><span>${fmt(cartTotal())}</span></div>`
+      : `<div class="tw-cart-total"><span>Total</span><span>${fmt(cartTotal())}</span></div>`;
+    return state.cart.map(c => `
+      <div class="tw-cart-row">
+        <span class="tw-cart-name">${esc(c.name)}${(c.modifiers && c.modifiers.length)
+          ? `<span class="tw-cart-mods">${esc(c.modifiers.map(m => m.name).join(', '))}</span>` : ''}</span>
+        <span class="tw-cart-qtypill">
+          <button data-dec="${esc(c.key)}">−</button>
+          <span>${c.quantity}</span>
+          <button data-inc="${esc(c.key)}">+</button>
+        </span>
+        <span class="tw-cart-price">${fmt(c.unit_price * c.quantity)}</span>
+      </div>
+    `).join('') + totalsBlock;
+  }
+
+  // SEPOS-TAKEAWAY-OPTIONS — full-view option chooser (mobile-first, same
+  // pattern as the mobile cart review). Radio for single-choice groups,
+  // toggles for multi-select; required groups gate the Add button.
+  function renderOptionsSheet() {
+    const o = state.optionsFor;
+    const extra = optionsChosenMods().reduce((s, m) => s + (Number(m.extra_price) || 0), 0);
+    const price = (Number(o.item.price) || 0) + extra;
+    return `
+      <h2 class="tw-h2">${esc(o.item.name)}</h2>
+      ${o.groups.map(g => `
+        <div class="tw-opt-group">
+          <div class="tw-opt-title">${esc(g.name)}
+            ${Number(g.required) ? '<span class="tw-opt-req">required</span>'
+              : '<span class="tw-opt-optional">optional</span>'}
+          </div>
+          <div class="tw-opt-list">
+            ${g.modifiers.map(m => {
+              const on = (o.sel[g.id] || []).some(id => Number(id) === Number(m.id));
+              const priceTag = Number(m.extra_price) > 0 ? ` +${fmt(m.extra_price)}` : '';
+              return `<button class="tw-opt${on ? ' tw-opt-on' : ''}" data-optg="${g.id}" data-optm="${m.id}">${esc(m.name)}${priceTag}</button>`;
+            }).join('')}
+          </div>
+        </div>
+      `).join('')}
+      <div style="display:flex;gap:10px;margin-top:18px;">
+        <button class="tw-btn" id="tw-opt-cancel" style="flex:1;background:#f0f0f0;color:#1a1a2e;">Cancel</button>
+        <button class="tw-btn tw-btn-primary" id="tw-opt-add" style="flex:2;" ${optionsSelectionValid() ? '' : 'disabled'}>Add to order · ${fmt(price)}</button>
+      </div>
+    `;
+  }
+
+  function renderStep2() {
+    if (state.menu.length === 0) {
+      return `<div style="text-align:center;padding:60px 0;color:#888;font-size:15px;">Loading menu…</div>`;
+    }
+    // Option chooser takes over the whole step (like the mobile cart review).
+    if (state.optionsFor) return renderOptionsSheet();
+    // Mobile: "View cart" opens an editable review (add/remove) BEFORE details —
+    // details are only asked at checkout, and the cart stays editable here.
+    if (state.mobileCartOpen) {
+      return `
+        <h2 class="tw-h2">🛒 Your order</h2>
+        <div style="margin-top:8px;">${renderCartRows()}</div>
+        <div style="display:flex;gap:10px;margin-top:18px;">
+          <button class="tw-btn" id="tw-cart-addmore" style="flex:1;background:#f0f0f0;color:#1a1a2e;">← Add more items</button>
+          <button class="tw-btn tw-btn-primary" id="tw-cart-checkout" style="flex:2;" ${state.cart.length === 0 ? 'disabled' : ''}>Checkout · ${fmt(cartTotal())}</button>
+        </div>
+      `;
+    }
+    const active = state.menu.find(c => c.id === state.activeCategory) || state.menu[0];
+    state.activeCategory = active.id;
+    const count = cartCount();
+    return `
+      ${renderBusyChip()}
+      ${discountPct() > 0 ? `<div class="tw-discount-chip">🎉 ${discountPct()}% off — online order discount, applied at checkout</div>` : ''}
+      <div class="tw-split">
+        <div class="tw-menu-col">
+          <div class="tw-cats">
+            ${state.menu.map(c => `
+              <button class="tw-cat ${c.id===active.id ? 'active' : ''}" data-cat="${c.id}">${esc(c.name)}</button>
+            `).join('')}
+          </div>
+          <div class="tw-items">
+            ${(active.items || []).filter(i => i.is_available && i.is_online !== 0).map(i => `
+              <div class="tw-item" data-add="${i.id}">
+                <div class="tw-item-name">${esc(i.name)}</div>
+                ${i.description ? `<div class="tw-item-desc">${esc(i.description)}</div>` : ''}
+                ${renderAllergens(i.allergens)}
+                <div class="tw-item-foot">
+                  <span class="tw-item-price">${fmt(i.price)}</span>
+                  <button class="tw-item-add" aria-label="Add ${esc(i.name)}">+</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Desktop sidebar cart -->
+        <div class="tw-cart-sidebar">
+          <div class="tw-cart-title">🛒 Your order</div>
+          ${renderCartRows()}
+        </div>
+      </div>
+
+      <!-- Mobile sticky cart bar -->
+      <div class="tw-cart-bar ${count === 0 ? 'hidden' : ''}" id="tw-cart-bar">
+        <div class="tw-cart-bar-info">
+          <span class="tw-cart-bar-count">${count} item${count!==1?'s':''}</span>
+          <span class="tw-cart-bar-total">${fmt(cartTotal())}</span>
+        </div>
+        <button class="tw-cart-bar-btn" id="tw-cart-bar-btn">View cart →</button>
+      </div>
+    `;
+  }
+
+  // SEPOS-DELIVERY-002 — the delivery panel: postcode radius check first,
+  // address fields only revealed once the postcode is confirmed in-area.
+  function renderDeliveryPanel() {
+    const chk = state.customer.delivery_check;
+    const radius = Number(state.settings?.delivery_radius_miles) || 0;
+    const okBox = `
+      <div style="background:#e8f5e9;border:1px solid #43a047;border-radius:10px;
+        padding:10px 12px;margin-top:8px;color:#1b5e20;font-size:13px;font-weight:600;">
+        ✓ Great news — we deliver to you${chk && chk.distance_miles != null ? ` (${chk.distance_miles} mi away)` : ''}.
+      </div>
+      <label class="tw-label">Delivery address *</label>
+      <textarea class="tw-input" id="tw-delivery-address" rows="3"
+        placeholder="House/flat number, street" autocomplete="street-address"
+        style="resize:vertical;">${esc(state.customer.delivery_address)}</textarea>
+      <label class="tw-label">Delivery notes (optional)</label>
+      <input class="tw-input" id="tw-delivery-notes" type="text"
+        value="${esc(state.customer.delivery_notes)}" placeholder="e.g. ring buzzer 12, leave at door" />`;
+    const sorryBox = `
+      <div style="background:#fdecea;border:1px solid #e57373;border-radius:10px;
+        padding:10px 12px;margin-top:8px;color:#b71c1c;font-size:13px;">
+        <strong>Sorry — that's outside our delivery area.</strong><br>
+        ${chk && chk.error
+          ? esc(chk.error)
+          : `We deliver up to ${radius} miles from the restaurant${chk && chk.distance_miles != null ? ` — you're ${chk.distance_miles} mi away` : ''}.`}
+        <button type="button" id="tw-switch-collection"
+          style="display:block;margin-top:8px;padding:8px 14px;border-radius:8px;border:none;
+            background:#0D1B3E;color:#fff;font:inherit;font-weight:700;cursor:pointer;">
+          🥡 Order for Collection instead
+        </button>
+      </div>`;
+    return `
+      <label class="tw-label">Delivery postcode *</label>
+      <div style="display:flex;gap:8px;">
+        <input class="tw-input" id="tw-delivery-postcode" type="text" inputmode="text"
+          value="${esc(state.customer.delivery_postcode)}" placeholder="e.g. SW1A 1AA"
+          autocomplete="postal-code" style="flex:1;margin:0;text-transform:uppercase;" />
+        <button type="button" id="tw-postcode-check"
+          style="padding:0 18px;border-radius:10px;border:2px solid #0D1B3E;background:#0D1B3E;
+            color:#fff;font:inherit;font-weight:700;cursor:pointer;white-space:nowrap;">Check</button>
+      </div>
+      ${chk && chk.checking ? `<div class="tw-help">Checking your postcode…</div>` : ''}
+      ${chk && chk.deliverable === true  ? okBox    : ''}
+      ${chk && chk.checking !== true && chk.deliverable === false ? sorryBox : ''}`;
+  }
+
+  function renderStep3() {
+    const isDelivery = state.customer.order_subtype === 'delivery';
+    return `
+      <h2 class="tw-h2">Your details</h2>
+
+      ${isDelivery ? `
+        <div style="background:#f0f7ee;border:1.5px solid #86efac;border-radius:12px;
+          padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;">
+          <span style="font-size:20px;">🚗</span>
+          <div>
+            <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.05em;">Delivering to</div>
+            <div style="font-weight:700;color:#166534;">${esc(state.customer.delivery_postcode)}</div>
+          </div>
+        </div>
+      ` : ''}
+
+      <div class="tw-help">We'll call out your name when your order's ready. Email is optional for a confirmation.</div>
+      <label class="tw-label">Your name *</label>
+      <input class="tw-input" id="tw-name" type="text" inputmode="text"
+        value="${esc(state.customer.name)}" placeholder="e.g. Sarah" autocomplete="name" />
+      <label class="tw-label">Phone number *</label>
+      <input class="tw-input" id="tw-phone" type="tel" inputmode="tel"
+        value="${esc(state.customer.phone)}" placeholder="e.g. 07700 900 123" autocomplete="tel" />
+      <label class="tw-label">Email (optional)</label>
+      <input class="tw-input" id="tw-email" type="email" inputmode="email"
+        value="${esc(state.customer.email)}" placeholder="for order confirmation" autocomplete="email" />
+
+      ${isDelivery ? `
+        <label class="tw-label">Full delivery address *</label>
+        <textarea class="tw-input" id="tw-delivery-address" rows="3"
+          placeholder="House/flat number, street" autocomplete="street-address"
+          style="resize:vertical;">${esc(state.customer.delivery_address)}</textarea>
+        <label class="tw-label">Delivery notes (optional)</label>
+        <input class="tw-input" id="tw-delivery-notes" type="text"
+          value="${esc(state.customer.delivery_notes)}" placeholder="e.g. ring buzzer 12, leave at door" />
+      ` : ''}
+
+      <label class="tw-label">Anything we should know? (optional)</label>
+      <textarea class="tw-input" id="tw-order-notes" rows="2"
+        placeholder="e.g. allergic to peanuts, extra spicy, no coriander"
+        style="resize:vertical;">${esc(state.customer.order_notes || '')}</textarea>
+
+      <label style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;font-size:13px;color:#555;cursor:pointer;">
+        <input type="checkbox" id="tw-consent" ${state.customer.marketing_consent ? 'checked' : ''}
+          style="margin-top:2px;width:16px;height:16px;flex-shrink:0;" />
+        <span>Keep me updated with offers and news. You can unsubscribe any time.</span>
+      </label>
+      ${state.error ? `<div class="tw-error">${esc(state.error)}</div>` : ''}
+    `;
+  }
+
+  function renderStep4() {
+    // SEPOS-047 — show the load-aware quote as a relative time, not a clock,
+    // so the customer reads it as a promise rather than a slot they picked.
+    const mins = state.availability?.wait_minutes ?? 20;
+    const pTime = new Date(computePickupISO()).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+    const payBlock = state.stripeConfigured
+      ? `<div style="margin-top:4px;">
+           <label class="tw-label" style="margin-top:0;">Card details</label>
+           <div id="tw-card-element"></div>
+           <div class="tw-stripe-badge">Secured by Stripe</div>
+         </div>`
+      : `<div style="background:#fef9eb;border:1.5px solid #f0d070;border-radius:12px;padding:14px 16px;font-size:13px;color:#92400e;line-height:1.5;">
+           🧪 <strong>Demo mode</strong> — No card details collected. Clicking Pay sends the order straight to the kitchen.
+         </div>`;
+    return `
+      <h2 class="tw-h2">Review &amp; pay</h2>
+      <div style="background:#f8f8f8;border-radius:14px;padding:16px;margin-bottom:16px;">
+        ${state.cart.map(c => `
+          <div class="tw-review-row">
+            <span><span class="tw-review-qty">${c.quantity}×</span>${esc(c.name)}${(c.modifiers && c.modifiers.length)
+              ? `<span class="tw-cart-mods">${esc(c.modifiers.map(m => m.name).join(', '))}</span>` : ''}</span>
+            <span style="font-weight:700;">${fmt(c.unit_price * c.quantity)}</span>
+          </div>
+        `).join('')}
+        ${discountPct() > 0 ? `
+          <div class="tw-review-row"><span>Subtotal</span><span>${fmt(cartSubtotal())}</span></div>
+          <div class="tw-review-row" style="color:#166534;font-weight:700;"><span>🎉 Online discount (${discountPct()}%)</span><span>−${fmt(cartSubtotal() - cartTotal())}</span></div>` : ''}
+        <div class="tw-review-total">
+          <span>Total</span>
+          <span style="color:#C9A84C;">${fmt(payTotal())}</span>
+        </div>
+      </div>
+      <button id="tw-edit-order" style="background:none;border:none;color:#0D1B3E;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer;margin:-8px 0 16px;padding:0;">✏️ Edit order</button>
+
+      <div style="display:flex;align-items:center;gap:12px;background:#f0f7ee;border:1.5px solid #86efac;border-radius:12px;padding:14px 16px;margin-bottom:16px;">
+        <span style="font-size:24px;">🕐</span>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.05em;">Ready in</div>
+          <div style="font-weight:800;color:#166534;font-size:16px;">~${mins} min · ${pTime}</div>
+        </div>
+      </div>
+
+      ${payBlock}
+      ${state.error ? `<div class="tw-error">${esc(state.error)}</div>` : ''}
+    `;
+  }
+
+  function renderStep5() {
+    const r = state.orderResult || {};
+    // Server returns the canonical pickup_time on submit (SEPOS-047) —
+    // use it if present, fall back to the cached availability quote.
+    const pickupIso = r.pickup_time || computePickupISO();
+    return `
+      <div class="tw-success">
+        <div class="tw-success-tick">🥡</div>
+        <div class="tw-success-h">Order confirmed!</div>
+        <div style="color:#888;font-size:14px;">Your order number is</div>
+        <div class="tw-success-num">${esc(r.order_number || '—')}</div>
+        <p style="color:#555;font-size:14px;line-height:1.6;max-width:300px;margin:0 auto 20px;">
+          Please show this number when you collect.
+          ${state.customer.email ? '<br>A confirmation email is on its way.' : ''}
+        </p>
+        <p style="color:#aaa;font-size:12px;">
+          Ready around: <strong style="color:#1a1a2e;">${new Date(pickupIso).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</strong>
+        </p>
+      </div>
+    `;
+  }
+
+  // ── Step labels ──────────────────────────────────────────────────
+  const STEP_LABELS = ['Time', 'Menu', 'Details', 'Pay'];
+
+  // ── Footer ───────────────────────────────────────────────────────
+  function renderFooter() {
+    if (state.step === 5) {
+      return `<button class="tw-btn tw-btn-primary tw-foot-full" id="tw-done">Close</button>`;
+    }
+    const back = state.step > 1
+      ? `<button class="tw-btn tw-btn-ghost" id="tw-back">← Back</button>`
+      : '';
+    let nextLabel = 'Next →';
+    let nextEnabled = true;
+    if (state.step === 1) {
+      nextLabel = 'Choose dishes →';
+    } else if (state.step === 2) {
+      nextEnabled = state.cart.length > 0;
+      nextLabel = `Checkout · ${fmt(cartTotal())}`;
+    } else if (state.step === 3) {
+      nextLabel = 'Review order →';
+    } else if (state.step === 4) {
+      nextLabel = state.stripeConfigured
+        ? `Pay ${fmt(payTotal())}`
+        : `✓ Place order · ${fmt(cartTotal())}`;
+    }
+    const cls = state.step === 4 ? 'tw-btn-gold' : 'tw-btn-primary';
+    // Step 2: render the footer Next button hidden, then render() un-hides it on
+    // desktop (the mobile cart bar handles checkout on small screens).
+    return `${back}<button ${state.step === 2 ? `class="tw-btn ${cls}" style="display:none"` : `class="tw-btn ${cls}"`} id="tw-next" ${nextEnabled ? '' : 'disabled'}>${nextLabel}</button>`;
+  }
+
+  // ── Master render ─────────────────────────────────────────────────
+  let _lastViewKey = null;
+  function render() {
+    const root = $('tw-root');
+    if (!root) return;
+
+    // Preserve scroll within the SAME view so tapping a dish to add it doesn't
+    // jump the menu back to the top (render() replaces the whole modal HTML).
+    // Reset to top only when the view actually changes (step / cart toggle).
+    const viewKey = state.step + ':' + (state.mobileCartOpen ? 'cart' : '');
+    const prevBody = root.querySelector('.tw-body');
+    const savedScroll = (prevBody && viewKey === _lastViewKey) ? prevBody.scrollTop : 0;
+
+    const stepsHtml = [1,2,3,4].map((n, idx) => {
+      const cls = state.step > n ? 'done' : state.step === n ? 'active' : '';
+      const icon = state.step > n ? '✓' : n;
+      return `
+        <div class="tw-step-item ${cls}">
+          <div class="tw-step-num">${icon}</div>
+          <span>${STEP_LABELS[idx]}</span>
+        </div>`;
+    }).join('');
+
+    const body = state.step === 1 ? renderStep1()
+               : state.step === 2 ? renderStep2()
+               : state.step === 3 ? renderStep3()
+               : state.step === 4 ? renderStep4()
+               : renderStep5();
+
+    root.innerHTML = `
+      <div class="tw-header">
+        <div class="tw-title">🥡 Order Takeaway</div>
+        <button class="tw-close" id="tw-close" aria-label="Close">✕</button>
+      </div>
+      ${state.step <= 4 ? `<div class="tw-steps">${stepsHtml}</div>` : ''}
+      <div class="tw-body">
+        <div class="tw-body-inner">${body}</div>
+      </div>
+      ${state.mobileCartOpen ? '' : `<div class="tw-foot">${renderFooter()}</div>`}
+    `;
+
+    // Restore the scroll position captured above (keeps your place after adding).
+    const newBody = root.querySelector('.tw-body');
+    if (newBody && savedScroll) newBody.scrollTop = savedScroll;
+    _lastViewKey = viewKey;
+
+    // Show the "Next" button on desktop for step 2, hide on mobile (cart bar handles it)
+    if (state.step === 2 && !state.mobileCartOpen) {
+      const nextBtn = $('tw-next');
+      if (nextBtn) {
+        // Show on desktop, hide on mobile via CSS isn't available for dynamic elements —
+        // use a data attr and an injected rule instead
+        nextBtn.style.display = '';
+      }
+    }
+
+    bindHandlers();
+
+    // SEPOS-040 — mount Stripe card element after step-4 DOM is ready.
+    if (state.step === 4 && state.stripeConfigured) {
+      mountStripeCard();
+    }
+  }
+
+  function bindHandlers() {
+    $('tw-close')?.addEventListener('click', closeWidget);
+    // Review & pay → "Edit order" jumps back to the editable cart (add/remove).
+    $('tw-edit-order')?.addEventListener('click', () => { state.step = 2; state.mobileCartOpen = true; render(); });
+
+    if (state.step === 1) {
+      // ASAP only — no schedule picker
+    }
+
+    if (state.step === 2) {
+      document.querySelectorAll('.tw-cat').forEach(b => {
+        b.addEventListener('click', () => {
+          state.activeCategory = Number(b.dataset.cat); render();
+        });
+      });
+      document.querySelectorAll('.tw-item').forEach(el => {
+        el.addEventListener('click', (e) => {
+          if (e.target.classList.contains('tw-item-add') ||
+              e.target.closest('.tw-cart-qtypill')) return;
+          const id = Number(el.dataset.add);
+          const cat = state.menu.find(c => c.id === state.activeCategory);
+          const item = cat?.items.find(i => i.id === id);
+          if (item) startAdd(item);
+        });
+      });
+      document.querySelectorAll('.tw-item-add').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id = Number(btn.closest('.tw-item')?.dataset.add);
+          const cat = state.menu.find(c => c.id === state.activeCategory);
+          const item = cat?.items.find(i => i.id === id);
+          if (item) startAdd(item);
+        });
+      });
+      document.querySelectorAll('[data-inc]').forEach(b => {
+        b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(b.dataset.inc, 1); });
+      });
+      document.querySelectorAll('[data-dec]').forEach(b => {
+        b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(b.dataset.dec, -1); });
+      });
+      // SEPOS-TAKEAWAY-OPTIONS — option chooser events.
+      document.querySelectorAll('[data-optg]').forEach(b => {
+        b.addEventListener('click', () => {
+          const o = state.optionsFor; if (!o) return;
+          const gid = Number(b.dataset.optg), mid = Number(b.dataset.optm);
+          const g = o.groups.find(x => Number(x.id) === gid); if (!g) return;
+          const cur = o.sel[gid] || [];
+          if (Number(g.multi_select)) {
+            o.sel[gid] = cur.some(id => Number(id) === mid) ? cur.filter(id => Number(id) !== mid) : [...cur, mid];
+          } else {
+            // single-choice: tap selects; tapping the selected one clears it
+            // (required groups simply re-disable Add until a choice is made)
+            o.sel[gid] = cur.some(id => Number(id) === mid) ? [] : [mid];
+          }
+          render();
+        });
+      });
+      $('tw-opt-cancel')?.addEventListener('click', () => { state.optionsFor = null; render(); });
+      $('tw-opt-add')?.addEventListener('click', () => {
+        if (!optionsSelectionValid()) return;
+        const o = state.optionsFor;
+        addToCart(o.item, optionsChosenMods());
+        state.optionsFor = null;
+        render();
+      });
+      // Mobile cart bar → open the editable cart review (NOT straight to details).
+      $('tw-cart-bar-btn')?.addEventListener('click', () => {
+        if (state.cart.length > 0) { state.mobileCartOpen = true; render(); }
+      });
+      // Cart review → add more items (back to menu) or checkout (→ details).
+      $('tw-cart-addmore')?.addEventListener('click', () => { state.mobileCartOpen = false; render(); });
+      $('tw-cart-checkout')?.addEventListener('click', () => {
+        if (state.cart.length > 0) { state.mobileCartOpen = false; state.step = 3; render(); }
+      });
+    }
+
+    $('tw-back')?.addEventListener('click', () => { state.step -= 1; state.error = ''; render(); });
+
+    // ── Step 1: collection/delivery toggle + postcode check ──
+    if (state.step === 1) {
+      document.querySelectorAll('[data-subtype]').forEach(b => {
+        b.addEventListener('click', () => {
+          state.customer.order_subtype = b.dataset.subtype;
+          // Reset postcode check when switching mode
+          if (b.dataset.subtype === 'collection') state.customer.delivery_check = null;
+          state.error = '';
+          render();
+        });
+      });
+
+      $('tw-postcode-check')?.addEventListener('click', async () => {
+        const pcInput = $('tw-delivery-postcode');
+        if (pcInput) state.customer.delivery_postcode = pcInput.value.trim().toUpperCase();
+        const pc = state.customer.delivery_postcode;
+        if (!pc) { state.error = 'Please enter your postcode.'; render(); return; }
+        state.error = '';
+        state.customer.delivery_check = { checking: true };
+        render();
+        try {
+          const r = await fetch(API + '/api/takeaway/delivery-check?restaurant_id=' + encodeURIComponent(RESTAURANT_ID) + '&postcode=' + encodeURIComponent(pc));
+          const data = await r.json();
+          state.customer.delivery_check = {
+            deliverable:    !!data.deliverable,
+            distance_miles: data.distance_miles != null ? data.distance_miles : null,
+            error:          data.error || '',
+          };
+        } catch (e) {
+          state.customer.delivery_check = { deliverable: false, error: 'Could not check that postcode — please try again.' };
+        }
+        render();
+      });
+
+      $('tw-switch-collection')?.addEventListener('click', () => {
+        state.customer.order_subtype = 'collection';
+        state.customer.delivery_check = null;
+        state.error = '';
+        render();
+      });
+    }
+
+    $('tw-next')?.addEventListener('click', async () => {
+      state.error = '';
+      if (state.step === 1) {
+        const isDelivery = state.customer.order_subtype === 'delivery';
+        if (isDelivery) {
+          // Save postcode if user typed but didn't hit Check
+          const pcInput = $('tw-delivery-postcode');
+          if (pcInput) state.customer.delivery_postcode = pcInput.value.trim().toUpperCase();
+          const chk = state.customer.delivery_check;
+          if (!chk || chk.deliverable !== true) {
+            state.error = 'Please check your postcode before continuing.'; render(); return;
+          }
+        }
+        state.step = 2;
+        if (state.menu.length === 0) await loadMenu();
+        render();
+      } else if (state.step === 2) {
+        if (state.cart.length === 0) { state.error = 'Add some items first.'; render(); return; }
+        state.step = 3; render();
+      } else if (state.step === 3) {
+        captureStep3();
+        if (!state.customer.name)  { state.error = 'Name is required.';         render(); return; }
+        if (!state.customer.phone) { state.error = 'Phone number is required.'; render(); return; }
+        if (state.customer.order_subtype === 'delivery' && !state.customer.delivery_address) {
+          state.error = 'Please enter your full delivery address.'; render(); return;
+        }
+        state.step = 4; render();
+      } else if (state.step === 4) {
+        await submitOrder();
+      }
+    });
+
+    $('tw-done')?.addEventListener('click', closeWidget);
+  }
+
+  // ── Stripe helpers ───────────────────────────────────────────────
+
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      if (document.querySelector('script[src="' + src + '"]')) { resolve(); return; }
+      const s = document.createElement('script');
+      s.src = src; s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+
+  // Module-level elements ref so PaymentElement survives re-renders.
+  let _elements = null;
+  let _paymentElement = null;
+
+  // Mount Stripe's PaymentElement into #tw-card-element after render.
+  // PaymentElement is the modern unified UI — auto-shows Apple Pay on
+  // iOS Safari, Google Pay on Android Chrome, Link on any supported
+  // device, and falls back to card form everywhere else. To unlock
+  // those non-card methods the elements is initialised in "deferred
+  // intent" mode (mode + amount + currency, no clientSecret yet) —
+  // the PaymentIntent is created server-side just before confirm.
+  async function mountStripeCard() {
+    if (!state.stripeConfigured || !state.stripePublishableKey) return;
+    const container = document.getElementById('tw-card-element');
+    if (!container) return;
+    if (!window.Stripe) {
+      try { await loadScript('https://js.stripe.com/v3/'); }
+      catch (e) { /* fall through to the guard below for one consistent message */ }
+    }
+    // Stripe.js is a very common ad/privacy-blocker target. Even when the <script>
+    // tag "loads" (or a previously-blocked tag is already in the DOM, so loadScript
+    // resolves instantly), window.Stripe can be undefined — calling it would throw
+    // "window.Stripe is not a function" and leave a dead Pay button with no card
+    // field. Guard and tell the customer the real cause.
+    if (typeof window.Stripe !== 'function') {
+      state.error = 'Payment couldn’t load — an ad blocker or privacy extension is likely blocking Stripe. Turn it off for this site (or use a private/incognito window) and try again.';
+      render(); return;
+    }
+    if (!_stripe) {
+      // SIAMPAY-002 — SiamPay tenants confirm on the client's connected
+      // account (direct charge), so Stripe.js needs the account context.
+      _stripe = state.stripeAccount
+        ? window.Stripe(state.stripePublishableKey, { stripeAccount: state.stripeAccount })
+        : window.Stripe(state.stripePublishableKey);
+    }
+    // Recreate elements + PaymentElement when amount changes (e.g. cart
+    // edited between Step 3 and Step 4). PaymentElement caches the
+    // amount internally and won't update the displayed Apple Pay /
+    // Google Pay button if we just mount the same instance again.
+    const amountPence = Math.round(cartTotal() * 100);
+    if (!_elements || _elements._cachedAmount !== amountPence) {
+      _elements = _stripe.elements({
+        mode:     'payment',
+        amount:   amountPence,
+        currency: 'gbp',
+        appearance: {
+          theme: 'stripe',
+          variables: {
+            colorPrimary:    '#C9A84C',
+            colorBackground: '#ffffff',
+            fontFamily:      'system-ui,-apple-system,sans-serif',
+          },
+        },
+      });
+      _elements._cachedAmount = amountPence;
+      _paymentElement = _elements.create('payment', {
+        layout: { type: 'tabs', defaultCollapsed: false },
+      });
+    }
+    _paymentElement.mount('#tw-card-element');
+  }
+
+  // ── Data + submit ────────────────────────────────────────────────
+  async function loadSettings() {
+    try {
+      const r = await fetch(API + '/api/takeaway/settings?restaurant_id=' + encodeURIComponent(RESTAURANT_ID));
+      if (r.ok) state.settings = await r.json();
+    } catch (e) {}
+  }
+
+  // SEPOS-047 — fetch the live wait-time quote. Called on widget open and
+  // re-called whenever the customer transitions steps so the chip stays
+  // current as the kitchen fills/empties during the ordering flow.
+  async function loadAvailability() {
+    try {
+      const r = await fetch(API + '/api/takeaway/availability?restaurant_id=' + encodeURIComponent(RESTAURANT_ID));
+      if (r.ok) {
+        state.availability = await r.json();
+        render();
+      }
+    } catch (e) {}
+  }
+
+  // SEPOS-040 — check whether the server has Stripe configured.
+  // We do this once on widget open and cache the result in state so
+  // renderStep4() can immediately show the right UI.
+  async function loadStripeConfig() {
+    try {
+      const r = await fetch(API + '/api/takeaway/stripe-config');
+      if (r.ok) {
+        const data = await r.json();
+        state.stripeConfigured    = !!data.configured;
+        state.stripePublishableKey = data.publishable_key || null;
+        // SIAMPAY-002 — SiamPay tenants: confirm on the connected account +
+        // show the flat customer-facing handling fee.
+        state.stripeAccount  = data.stripe_account || null;
+      }
+    } catch (e) {
+      // Fail open — stays in mock mode
+      state.stripeConfigured = false;
+    }
+  }
+  async function loadMenu() {
+    try {
+      const r = await fetch(API + '/api/menu/all');
+      if (r.ok) {
+        const data = await r.json();
+        state.menu = Array.isArray(data) ? data : [];
+        if (state.menu.length > 0 && !state.activeCategory) {
+          state.activeCategory = state.menu[0].id;
+        }
+      }
+    } catch (e) {
+      state.error = 'Could not load menu — please try again.';
+    }
+  }
+  // SEPOS-DELIVERY-002 — read every Step-3 field that's currently in the
+  // DOM into state. Called before any re-render (toggle) and before
+  // moving to Step 4, so nothing typed is lost.
+  function captureStep3() {
+    const c = state.customer;
+    if ($('tw-name'))             c.name             = $('tw-name').value.trim();
+    if ($('tw-phone'))            c.phone            = $('tw-phone').value.trim();
+    if ($('tw-email'))            c.email            = $('tw-email').value.trim();
+    if ($('tw-delivery-address')) c.delivery_address = $('tw-delivery-address').value.trim();
+    if ($('tw-delivery-notes'))   c.delivery_notes   = $('tw-delivery-notes').value.trim();
+    if ($('tw-order-notes'))      c.order_notes      = $('tw-order-notes').value.trim();
+    if ($('tw-consent'))          c.marketing_consent = $('tw-consent').checked;
+  }
+
+  async function submitOrder() {
+    const btn = $('tw-next');
+    if (btn) { btn.disabled = true; btn.textContent = state.stripeConfigured ? 'Processing payment…' : 'Placing order…'; }
+    state.error = '';
+
+    // SEPOS-040 — Stripe payment flow (PaymentElement → Apple Pay /
+    // Google Pay / card depending on device).
+    let paymentIntentId = null;
+    if (state.stripeConfigured) {
+      if (!_stripe || !_elements || !_paymentElement) {
+        state.error = 'Payment not ready — please wait a moment and try again.';
+        render(); return;
+      }
+
+      // 1. Validate + submit the PaymentElement first. This catches
+      // missing fields / unsupported chosen method BEFORE we create a
+      // PaymentIntent — saves a wasted Stripe API call.
+      const { error: submitError } = await _elements.submit();
+      if (submitError) {
+        state.error = submitError.message || 'Please check your payment details.';
+        render(); return;
+      }
+
+      // 2. Create a PaymentIntent on the server.
+      let clientSecret;
+      try {
+        const piRes = await fetch(API + '/api/takeaway/payment-intent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount_pence:      Math.round(payTotal() * 100),
+            order_description: 'Takeaway order',
+          }),
+        });
+        const piData = await piRes.json();
+        if (!piRes.ok || !piData.client_secret) {
+          state.error = piData.error || 'Could not start payment — please try again.';
+          render(); return;
+        }
+        clientSecret    = piData.client_secret;
+        paymentIntentId = piData.payment_intent_id;
+      } catch (e) {
+        state.error = 'Connection error — could not start payment.';
+        render(); return;
+      }
+
+      // 3. Confirm — PaymentElement handles Apple Pay / Google Pay /
+      // card internally. `redirect: 'if_required'` keeps the customer
+      // on the page for card (no 3DS) and returns a Promise; for 3DS
+      // / Klarna / similar that need a redirect, the SDK navigates
+      // away and we never reach the next step (Stripe redirects back
+      // to return_url after the customer completes the off-site flow).
+      const { error: stripeError, paymentIntent } = await _stripe.confirmPayment({
+        elements: _elements,
+        clientSecret,
+        redirect: 'if_required',
+        confirmParams: { return_url: window.location.href },
+      });
+      if (stripeError) {
+        state.error = stripeError.message || 'Payment failed — please check your details.';
+        render(); return;
+      }
+      if (!paymentIntent || paymentIntent.status !== 'succeeded') {
+        state.error = 'Payment not completed — please try again.';
+        render(); return;
+      }
+    }
+
+    // 3. Submit the order to the backend (with payment_intent_id when Stripe paid).
+    try {
+      const r = await fetch(API + '/api/takeaway/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          restaurant_id:  RESTAURANT_ID,
+          customer_name:  state.customer.name,
+          customer_phone: state.customer.phone,
+          customer_email: state.customer.email || null,
+          // SEPOS-047 — omit pickup_time so the server recomputes from
+          // the live kitchen backlog at submit time (no stale quote).
+          pickup_time:    null,
+          // SEPOS-DELIVERY-002 — collection/delivery + CRM consent.
+          // Postcode is folded into the address so the kitchen/driver
+          // sees one complete line.
+          order_subtype:     state.customer.order_subtype || 'collection',
+          delivery_address:  state.customer.order_subtype === 'delivery'
+            ? [state.customer.delivery_address, state.customer.delivery_postcode].filter(Boolean).join(', ')
+            : null,
+          delivery_notes:    state.customer.order_subtype === 'delivery'
+            ? (state.customer.delivery_notes || null)
+            : null,
+          // SEPOS-046d — single order-level note for both collection and
+          // delivery. Server stores it on the order; print path renders
+          // it prominently on the kitchen ticket.
+          notes:             state.customer.order_notes || null,
+          marketing_consent: !!state.customer.marketing_consent,
+          // SEPOS-040 — include the verified PI id (null in mock mode).
+          payment_intent_id: paymentIntentId || null,
+          items: state.cart.map(c => ({
+            menu_item_id: c.menu_item_id,
+            quantity:     c.quantity,
+            unit_price:   c.unit_price,
+            name:         c.name,
+            // SEPOS-TAKEAWAY-OPTIONS — chosen options; server re-prices each
+            // by id (anti-tamper) and prints names on the kitchen ticket.
+            modifiers:    (c.modifiers || []).map(m => ({ id: m.id, name: m.name, extra_price: m.extra_price })),
+          })),
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok || data.error) {
+        state.error = data.error || 'Something went wrong — please try again.';
+        render(); return;
+      }
+      // Clean up Stripe refs for next order.
+      _stripe = null;
+      _elements = null;
+      _paymentElement = null;
+      state.orderResult = data;
+      state.step = 5;
+      render();
+    } catch (e) {
+      state.error = 'Connection error — please try again.';
+      render();
+    }
+  }
+
+  // ── Open / close ─────────────────────────────────────────────────
+  function openWidget() {
+    // Preserve stripe config across opens (avoid re-fetching on every open).
+    const prevStripeConfigured    = state.stripeConfigured;
+    const prevStripePublishableKey = state.stripePublishableKey;
+    const prevSettings = state.settings;
+    const prevMenu     = state.menu;
+    state = {
+      step: 1, settings: prevSettings, menu: prevMenu, activeCategory: null,
+      cart: [], pickupKind: 'asap', pickupISO: null,
+      customer: { name:'', phone:'', email:'', order_subtype:'collection', delivery_postcode:'', delivery_address:'', delivery_notes:'', order_notes:'', marketing_consent:false, delivery_check:null },
+      error: '', orderResult: null,
+      stripeConfigured:    prevStripeConfigured,
+      stripePublishableKey: prevStripePublishableKey,
+    };
+    // Reset module-level Stripe refs for a fresh payment each time.
+    _stripe = null;
+    _elements = null;
+    _paymentElement = null;
+    injectStyles();
+    const overlay = document.createElement('div');
+    overlay.className = 'tw-overlay';
+    overlay.id = 'tw-overlay';
+    overlay.innerHTML = '<div class="tw-modal" id="tw-root"></div>';
+    document.body.appendChild(overlay);
+    // Close on backdrop tap
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeWidget(); });
+    if (!state.settings) loadSettings();
+    // SEPOS-040 — fetch Stripe config on first open (subsequent opens reuse cached value).
+    if (!prevStripePublishableKey) loadStripeConfig();
+    // SEPOS-047 — always refresh the wait-time chip on open.
+    loadAvailability();
+    render();
+  }
+  function closeWidget() {
+    document.getElementById('tw-overlay')?.remove();
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────
+  function init() {
+    injectStyles();
+    document.querySelectorAll('[data-siamepos-takeaway]').forEach(b => {
+      b.addEventListener('click', (e) => { e.preventDefault(); openWidget(); });
+    });
+    if (document.querySelectorAll('[data-siamepos-takeaway]').length === 0) {
+      const fab = document.createElement('button');
+      fab.className = 'tw-fab';
+      fab.textContent = '🥡 Order Takeaway';
+      fab.addEventListener('click', openWidget);
+      document.body.appendChild(fab);
+    }
+    // SEPOS-040 — pre-fetch Stripe config so step 4 renders correctly on first open.
+    loadStripeConfig();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  window.SiamEPOSTakeaway = { open: openWidget, close: closeWidget };
+})();

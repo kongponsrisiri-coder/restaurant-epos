@@ -17,6 +17,10 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		6C843F0E40509FEFB807647D /* PrinterPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D64ED2430E7FD29863C9A4A /* PrinterPlugin.swift */; };
 		C93656A84135BB20F7203AD2 /* MyViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EED18173422BA1440B3B2045 /* MyViewController.swift */; };
+		FD8969FBC02EB5867D7F2E4A /* NodeHostPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3894336193A048195CAB252F /* NodeHostPlugin.swift */; };
+		1B11999C7FC42D862ABAD787 /* NodeMobile.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 99D3073AD35514C8FCF20AE6 /* NodeMobile.xcframework */; };
+		928F9A7BB88E39D802735795 /* NodeMobile.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 99D3073AD35514C8FCF20AE6 /* NodeMobile.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		C3736BBDE5628CCF90451B75 /* nodejs-project in Resources */ = {isa = PBXBuildFile; fileRef = 61D191E4BE04B23E194DC21C /* nodejs-project */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +36,9 @@
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		EED18173422BA1440B3B2045 /* MyViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyViewController.swift; sourceTree = "<group>"; };
+		3894336193A048195CAB252F /* NodeHostPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NodeHostPlugin.swift; sourceTree = "<group>"; };
+		99D3073AD35514C8FCF20AE6 /* NodeMobile.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = NodeMobile.xcframework; sourceTree = "<group>"; };
+		61D191E4BE04B23E194DC21C /* nodejs-project */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "nodejs-project"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -40,6 +47,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+				1B11999C7FC42D862ABAD787 /* NodeMobile.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -50,6 +58,8 @@
 			isa = PBXGroup;
 			children = (
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
+				99D3073AD35514C8FCF20AE6 /* NodeMobile.xcframework */,
+				61D191E4BE04B23E194DC21C /* nodejs-project */,
 				504EC3061FED79650016851F /* App */,
 				504EC3051FED79650016851F /* Products */,
 			);
@@ -69,6 +79,7 @@
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				3D64ED2430E7FD29863C9A4A /* PrinterPlugin.swift */,
+				3894336193A048195CAB252F /* NodeHostPlugin.swift */,
 				EED18173422BA1440B3B2045 /* MyViewController.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
@@ -90,6 +101,7 @@
 				504EC3001FED79650016851F /* Sources */,
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
+				3ABE6B01AB29D7A7093F3227 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -140,6 +152,20 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		3ABE6B01AB29D7A7093F3227 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				928F9A7BB88E39D802735795 /* NodeMobile.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXResourcesBuildPhase section */
 		504EC3021FED79650016851F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
@@ -147,6 +173,7 @@
 			files = (
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
+				C3736BBDE5628CCF90451B75 /* nodejs-project in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
@@ -164,6 +191,7 @@
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				6C843F0E40509FEFB807647D /* PrinterPlugin.swift in Sources */,
 				C93656A84135BB20F7203AD2 /* MyViewController.swift in Sources */,
+				FD8969FBC02EB5867D7F2E4A /* NodeHostPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

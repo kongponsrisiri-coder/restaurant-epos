@@ -7,7 +7,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // SEPOS-IOS-HOST-001 — dev hook: `devicectl device process launch
+        // ... uk.co.siamepos.pos --start-host` boots the embedded Node host
+        // without touching the screen (hands-free on-device verification).
+        // Harmless in production: nothing ever passes the argument.
+        if CommandLine.arguments.contains("--start-host") {
+            NodeHostPlugin.startEngine()
+        }
         return true
     }
 

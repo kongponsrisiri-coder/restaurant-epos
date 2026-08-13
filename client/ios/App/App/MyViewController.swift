@@ -21,5 +21,8 @@ import Capacitor
 class MyViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(PrinterPlugin())
+        // SEPOS-IOS-HOST-001 — embedded Node host (makes hostCapable() true,
+        // which legitimately lights the "host till" offer on the setup screen).
+        bridge?.registerPluginInstance(NodeHostPlugin())
     }
 }

@@ -11,6 +11,16 @@ import { isNativeApp } from './printer';
 
 const NodeHost = registerPlugin('NodeHost');
 
+// SEPOS-IOS-001 follow-up — can THIS build actually run the embedded host?
+// The NodeHost native plugin only exists in the Android host APK; the iOS app
+// and plain Android till don't carry the engine, so the "set this device up
+// as the host till" offer must not show there (tapping it dead-ends with a
+// start error — Korakot hit exactly this on the iPad, 13 Aug).
+export function hostCapable() {
+  try { return isNativeApp() && Capacitor.isPluginAvailable('NodeHost'); }
+  catch { return false; }
+}
+
 /**
  * Manually starts the embedded Node host (hostspike3 — node no longer auto-starts
  * on launch). Triggers the native preconditions + crash-handler install + node

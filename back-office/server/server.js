@@ -88,12 +88,14 @@ app.use('/api/finance', financeRoutes);
 app.use('/api/onboard', onboardRoutes);  // BO-ONBOARD-001 — public kiosk signup
 app.use('/api/ai-help', aiHelpRoutes);   // SEPOS-AI-HELP-001 — in-app assistant logs
 app.use('/api/siampay', siampayRoutes);  // SIAMPAY-002 Phase B — Connect Express onboarding
+app.use('/api/reviews', require('./routes/reviews'));  // SEPOS-REVIEWS-001 — Google review snapshots
 
 app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path }));
 
 (async () => {
   try {
     await ensureSchema();
+    require('./services/googleReviews').start();  // SEPOS-REVIEWS-001 — daily sweep
     await ensureBootstrapAdmin();
     await seedTickets();
   } catch (err) {

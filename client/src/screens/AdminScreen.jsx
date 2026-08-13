@@ -94,8 +94,23 @@ function groupContaining(sectionId) {
 // the back-office stay consistent.
 const MOBILE_BREAKPOINT = 768;
 
-export default function AdminScreen({ plan }) {
-  const [section, setSection] = useState('trading');
+// SEPOS-HIERARCHY-001 — which Admin sections each login may open.
+// manager/admin: everything. supervisor: everything EXCEPT Staff (incl. clock/
+// performance), Reports (incl. VAT) and Settings — Trading + Printers stay
+// (Korakot 13 Aug: "Trading is fine, do not hide"; printers = ops not policy).
+// Anyone else only gets in via can_close_z, and then sees ONLY the Z section.
+const SUPERVISOR_HIDDEN = ['staff', 'clock', 'performance', 'reports', 'vat', 'settings'];
+export function adminSectionAllowed(staff, id) {
+  const role = staff?.role;
+  if (role === 'admin' || role === 'manager') return true;
+  if (role === 'supervisor') return !SUPERVISOR_HIDDEN.includes(id);
+  return id === 'zreport' && !!staff?.can_close_z;
+}
+
+export default function AdminScreen({ plan, staff }) {
+  const firstAllowed = ALL_ITEMS.find(i => adminSectionAllowed(staff, i.id))?.id || 'zreport';
+  const [section, setSectionRaw] = useState(firstAllowed);
+  const setSection = (id) => { if (adminSectionAllowed(staff, id)) setSectionRaw(id); };
 
   // Mobile drawer state — desktop layout (>=768px) is unchanged.
   const [isMobile, setIsMobile] = useState(
@@ -240,7 +255,10 @@ export default function AdminScreen({ plan }) {
           )}
         </div>
         <SalesBackupIndicator />{/* SEPOS-ANDROID-003 — native-only: "Sales saved on this device · <time>" */}
-        {GROUPS.map(group => {
+        {GROUPS.map(rawGroup => {
+          // SEPOS-HIERARCHY-001 — only show sections this login may open
+          const group = { ...rawGroup, items: rawGroup.items.filter(i => adminSectionAllowed(staff, i.id)) };
+          if (group.items.length === 0) return null;
           const isOpen = openGroups.has(group.title);
           // Section header — clickable, shows chevron + count of items.
           return (

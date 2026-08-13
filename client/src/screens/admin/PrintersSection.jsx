@@ -936,6 +936,16 @@ export default function PrintersSection() {
           ))}
         </div>
         <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Bigger = easier to read on a busy line, but fewer characters fit per row. Applies to kitchen / bar tickets and the customer receipt on every printer (thermal + built-in).</div>
+        {/* SEPOS-TICKET-FONT-002 — visible picker for the rendered-vs-classic
+            ticket FONT (was a hidden settings key only; Fern asked, 13 Aug). */}
+        <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', marginTop:16, paddingTop:14, borderTop:'1px solid #f0f0f0' }}>
+          <label style={{ fontSize:14, fontWeight:600, color:'#555', minWidth:150 }}>Ticket font style</label>
+          <select value={settings.kitchen_ticket_style || 'rendered'} onChange={e => setSettings({...settings, kitchen_ticket_style: e.target.value})} style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}>
+            <option value="rendered">Modern — clean printed font (recommended)</option>
+            <option value="classic">Classic — the printer's built-in font</option>
+          </select>
+          <span style={{ fontSize:12, color:'#aaa' }}>Kitchen &amp; bar tickets only; receipts are unaffected. Thai text always uses the classic font.</span>
+        </div>
       </div>
 
       {/* SEPOS-DRAWER-001 — open the cash drawer on payment (default ON). */}

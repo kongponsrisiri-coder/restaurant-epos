@@ -172,6 +172,11 @@ export const api = {
 
   siampayStatus: (id) =>
     fetch(`${API}/api/siampay/clients/${id}/status`, { headers: tokenHeader() }).then(handle),
+  // SEPOS-REVIEWS-001
+  reviews: (id) =>
+    fetch(`${API}/api/reviews/clients/${id}`, { headers: tokenHeader() }).then(handle),
+  reviewsRefresh: (id) =>
+    fetch(`${API}/api/reviews/clients/${id}/refresh`, { method: 'POST', headers: tokenHeader() }).then(handle),
 
   siampayEnable: (id) =>
     fetch(`${API}/api/siampay/clients/${id}/enable`, {

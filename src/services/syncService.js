@@ -41,6 +41,9 @@ const PULL_TABLES = [
   { path: '/api/table-combinations',     table: 'table_combinations',     pk: 'id', orphan: true },
   { path: '/api/dining-duration-tiers',  table: 'dining_duration_tiers',  pk: 'id' },
   { path: '/api/reservations',           table: 'reservations',           pk: 'id' },
+  // SEPOS-BIRTHDAY-SYNC-001 — customer birthdays (contact_key = lower(email)
+  // or 'p:'+phone). orphan:true so a cloud-side clear disappears locally too.
+  { path: '/api/customer-profiles',      table: 'customer_profiles',      pk: 'contact_key', orphan: true },
   // SEPOS-049 — reservation/takeaway hours, party limits, wait-time tiers
   // and brand colour all live here. Without pull, desktop saves never see
   // cloud edits (and vice versa via the write-through on the PUT endpoint).
@@ -516,6 +519,15 @@ async function applyToCloud(actionType, payload) {
       });
       if (!r.ok) throw new Error(`apply_discount ${r.status}`);
       return r.json();
+    }
+    case 'set_customer_birthday': {
+      const r = await fetch(url('/api/customers/birthday'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'x-sync-secret': process.env.SYNC_SECRET },
+        body: JSON.stringify({ email: payload.email, phone: payload.phone, birthday: payload.birthday }),
+      });
+      if (!r.ok) throw new Error(`set_customer_birthday ${r.status}`);
+      return;
     }
     case 'apply_item_discount': {
       const cloudItemId = await requireItemCloudId('apply_item_discount', payload.localItemId);

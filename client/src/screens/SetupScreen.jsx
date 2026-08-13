@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { setTenantUrl, markSetupDone } from '../native/tenant';
 import { HOST_MODE_KEY } from '../api';
-import { saveHostConfig, startHost } from '../native/nodeHost';
+import { saveHostConfig, startHost, hostCapable } from '../native/nodeHost';
 import { isNativeApp } from '../native/printer';
 import { CapacitorHttp } from '@capacitor/core';
 
@@ -203,9 +203,10 @@ export default function SetupScreen({ onConfigured }) {
           </div>
         )}
 
-        {/* SEPOS host spike — run THIS device as the host till (native only). Its
-            own embedded server; satellites connect by IP. No cloud URL needed. */}
-        {nativeApp && (
+        {/* SEPOS host spike — run THIS device as the host till. Only offered
+            where the embedded NodeHost engine is actually in the build (the
+            Android host APK) — not on iOS / plain tills, where it dead-ends. */}
+        {hostCapable() && (
           <div style={{ marginTop: 22, borderTop: '1px solid rgba(255,255,255,0.12)', paddingTop: 16 }}>
             {!showHost ? (
               <button onClick={() => { setShowHost(true); setError(''); }} disabled={busy}

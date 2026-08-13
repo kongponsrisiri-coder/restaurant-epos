@@ -414,7 +414,7 @@ function SellVoucherModal({ onClose, onSold }) {
 
           <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6, fontWeight: 700, marginTop: 8 }}>Payment taken at till</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {[{ k: 'cash', label: '💵 Cash' }, { k: 'card', label: '💳 Card' }].map(m => (
+            {[{ k: 'cash', label: '💵 Cash' }, { k: 'card', label: '💳 Card' }, { k: 'comp', label: '🎁 Comp' }].map(m => (
               <button key={m.k} onClick={() => setMethod(m.k)}
                 style={{ padding: '14px', borderRadius: 8, border: `2px solid ${method === m.k ? '#1e3a6e' : '#e0e0e0'}`, background: method === m.k ? '#fdf6ec' : 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
                 {m.label}

@@ -195,6 +195,7 @@ export default function ZReportSection() {
     rows.push(['Covers', reportData.total_covers || 0]);
     rows.push(['Avg per cover £', Number(reportData.avg_per_cover || 0).toFixed(2)]);
     rows.push(['Discounts £', Number(reportData.total_discounts || 0).toFixed(2)]);
+    if (Number(reportData.comp_bills?.count) > 0) rows.push([`Complimentary bills x${reportData.comp_bills.count} £`, Number(reportData.comp_bills.value || 0).toFixed(2)]);
     rows.push(['Void items', reportData.void_count || 0]);
     if (Array.isArray(reportData.vat_breakdown) && reportData.vat_breakdown.length) {
       rows.push([]);
@@ -420,6 +421,9 @@ export default function ZReportSection() {
                 <div key={s.label} style={{ background: '#f8f8f8', borderRadius: 10, padding: 12, textAlign: 'center' }}><div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div><div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{s.label}</div></div>
               ))}
             </div>
+            {Number(reportData.comp_bills?.count) > 0 && (
+              <div style={{ background: '#fdf4ff', borderRadius: 10, padding: 12, border: '1px solid #f5d0fe' }}><div style={{ fontSize: 11, color: '#888' }}>🎁 Complimentary ×{reportData.comp_bills.count}</div><div style={{ fontSize: 18, fontWeight: 800, color: '#a21caf' }}>£{Number(reportData.comp_bills.value || 0).toFixed(2)}</div></div>
+            )}
             {Number(reportData.total_discounts) > 0 && (
               <div style={{ background: '#f0fdf4', borderRadius: 10, padding: 12, border: '1px solid #bbf7d0' }}><div style={{ fontSize: 11, color: '#888' }}>Discounts Given</div><div style={{ fontSize: 18, fontWeight: 800, color: '#22c55e' }}>£{Number(reportData.total_discounts || 0).toFixed(2)}</div></div>
             )}

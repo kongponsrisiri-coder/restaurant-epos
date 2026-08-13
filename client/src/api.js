@@ -248,6 +248,7 @@ async function localAppendItems(lid, items) {
       course: it.course || 1,
       is_bar: it.is_bar ? 1 : 0,
       category_id: it.category_id ?? null,   // SEPOS-MISC-001 — drives kitchen/bar + printer routing for custom (menu_item_id=null) lines
+      sent_by: it.sent_by || null,           // SEPOS-SENTBY-001
       status: it.is_bar ? 'cooking' : 'pending',
       is_fired: it.is_bar ? 1 : 0,
       voided: 0,
@@ -326,15 +327,18 @@ export const createCounterOrder = async (staff_id) => {
     return { id };
   }
 };
-export const addOrderItems = async (orderId, items) => {
+// SEPOS-SENTBY-001 — sentBy = the logged-in staff's name at the moment of
+// Send; stamped on every item of the round (tickets + KDS show it).
+export const addOrderItems = async (orderId, items, sentBy = null) => {
+  const stamped = sentBy ? items.map(i => ({ ...i, sent_by: sentBy })) : items;
   const lid = await localTarget(orderId);
-  if (lid) return localAppendItems(lid, items);
-  try { return await post(`/api/orders/${orderId}/items`, { items }); }
+  if (lid) return localAppendItems(lid, stamped);
+  try { return await post(`/api/orders/${orderId}/items`, { items: stamped, sent_by: sentBy }); }
   catch (e) {
     if (!isNative()) throw e;
     const pid = await promoteOrder(orderId);       // offline edit to a not-yet-promoted cloud table
     if (!pid) throw e;
-    return localAppendItems(pid, items);
+    return localAppendItems(pid, stamped);
   }
 };
 // SEPOS-062 — `tenders` (optional) is an array of {amount, method} for split
@@ -386,7 +390,7 @@ const syncNewLocal = async (doc) => {
   const items = (doc.items || []).filter(i => !i.voided).map(i => ({
     menu_item_id: i.menu_item_id ?? null, name: i.name || i.item_name, name_alt: i.name_alt || '',
     quantity: i.quantity || 1, unit_price: i.unit_price ?? 0,
-    notes: i.notes || '', item_note: i.item_note || '', course: i.course || 1, is_bar: !!i.is_bar, modifiers: i.modifiers || [],
+    notes: i.notes || '', item_note: i.item_note || '', course: i.course || 1, is_bar: !!i.is_bar, sent_by: i.sent_by || null, modifiers: i.modifiers || [],
   }));
   if (items.length) await post(`/api/orders/${cid}/items`, { items });
   const fired = [...new Set((doc.items || []).filter(i => i.is_fired && !i.voided).map(i => Number(i.course) || 1))];
@@ -402,7 +406,7 @@ const syncPromoted = async (doc) => {
   const newItems = (doc.items || []).filter(i => isLocalItemId(i.id) && !i.voided).map(i => ({
     menu_item_id: i.menu_item_id ?? null, name: i.name || i.item_name, name_alt: i.name_alt || '',
     quantity: i.quantity || 1, unit_price: i.unit_price ?? 0,
-    notes: i.notes || '', item_note: i.item_note || '', course: i.course || 1, is_bar: !!i.is_bar, modifiers: i.modifiers || [],
+    notes: i.notes || '', item_note: i.item_note || '', course: i.course || 1, is_bar: !!i.is_bar, sent_by: i.sent_by || null, modifiers: i.modifiers || [],
   }));
   if (newItems.length) await post(`/api/orders/${cid}/items`, { items: newItems });
   // original (cloud-id) items the operator voided while offline

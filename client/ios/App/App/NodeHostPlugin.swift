@@ -25,6 +25,7 @@
 import Foundation
 import Capacitor
 import NodeMobile
+import Network
 import UIKit
 
 @objc(NodeHostPlugin)
@@ -57,9 +58,25 @@ public class NodeHostPlugin: CAPPlugin, CAPBridgedPlugin {
     // Shared engine start — called by the JS plugin method AND by the
     // `--start-host` launch argument (AppDelegate), which lets the dev Mac
     // start the host via devicectl for hands-free on-device verification.
+    // iOS 14+ gates INBOUND connections to our listener behind the Local
+    // Network permission — and the system only raises the consent prompt when
+    // the app itself attempts a local-network operation (quietly listening
+    // never triggers it; satellites just get dropped with no dialog anywhere).
+    // So the host knocks first: one fire-and-forget UDP dgram to the LAN
+    // broadcast at start. The prompt then appears at SETUP time, where the
+    // operator expects a question — not mid-service when till #2 tries to join.
+    static func primeLocalNetworkPermission() {
+        let conn = NWConnection(host: "255.255.255.255", port: 3001, using: .udp)
+        conn.stateUpdateHandler = { _ in }
+        conn.start(queue: .global())
+        conn.send(content: "siamepos-host-hello".data(using: .utf8),
+                  completion: .contentProcessed { _ in conn.cancel() })
+    }
+
     @discardableResult
     static func startEngine() -> [String: Any] {
         if started { return ["started": true, "port": PORT, "alreadyRunning": true] }
+        primeLocalNetworkPermission()
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let data = docs.appendingPathComponent("node-host-data")
         guard let projectDir = Bundle.main.url(forResource: "nodejs-project", withExtension: nil),

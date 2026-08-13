@@ -2,6 +2,7 @@
 /book-demo       /  301
 
 # SIAMPAY-003 — client-facing payment-setup link. Proxies (200) to the ops
-# mint-on-click route so the internal ops domain NEVER appears to a client:
+# API's mint-on-click route so no internal hostname EVER appears to a client:
 # browser stays on siamepos.co.uk, receives the 302, lands on Stripe.
-/pay-setup/*  https://ops.siamepos.co.uk/api/siampay/onboard/:splat  200
+# NB: ops.siamepos.co.uk is the SPA (Netlify) — the API lives on Railway.
+/pay-setup/*  https://restaurant-epos-back-office-production.up.railway.app/api/siampay/onboard/:splat  200

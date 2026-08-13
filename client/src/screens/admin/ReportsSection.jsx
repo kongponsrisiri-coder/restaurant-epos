@@ -208,6 +208,13 @@ export default function ReportsSection() {
                       </div>
                     </div>
                   )}
+                  {/* SEPOS-COMP-001 — bills given away (excluded from all sales figures) */}
+                  {Number(data.comp_bills?.count) > 0 && (
+                    <div style={{ padding: '8px 20px', display: 'flex', justifyContent: 'space-between', background: '#fdf4ff', fontSize: 13, color: '#a21caf', fontWeight: 600 }}>
+                      <span>🎁 Complimentary bills ×{data.comp_bills.count}</span>
+                      <span>£{Number(data.comp_bills.value || 0).toFixed(2)} given away</span>
+                    </div>
+                  )}
                   {/* SEPOS-REPREC-001 — foot to MONEY TAKEN so Reports reconciles
                       with Bills + Trading. When money taken ≠ sale value (a tip or
                       overpayment on card), show both so nothing looks "wrong". */}

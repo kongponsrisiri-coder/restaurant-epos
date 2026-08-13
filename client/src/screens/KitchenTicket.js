@@ -480,12 +480,16 @@ function buildSingleCourseBody({ order, items, course, bilingual = true }) {
   const courseTH    = bilingual ? (COURSE_LABELS_TH[course] || '') : '';
   const now         = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const customer    = order?.customer_name ? `<div class="sub">${esc(order.customer_name)}</div>` : '';
+  // SEPOS-SENTBY-001 — who pressed Send for this round
+  const sentBy      = (items.find(i => i && i.sent_by) || {}).sent_by;
+  const sentLine    = sentBy ? `<div class="sub">Sent: ${esc(sentBy)}</div>` : '';
 
   return `
     <div class="head">${esc(heading)}</div>
     <div class="course-en">${courseEN}</div>
     ${courseTH ? `<div class="course-th">${courseTH}</div>` : ''}
     ${customer}
+    ${sentLine}
     <div class="rule"></div>
     ${itemsHTML(items, bilingual)}
     <div class="rule"></div>
@@ -499,6 +503,9 @@ function buildFullOrderBody({ order, items, bilingual = true }) {
   const now      = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const customer = order?.customer_name ? `<div class="sub">${esc(order.customer_name)}</div>` : '';
   const phone    = order?.customer_phone ? `<div class="sub">${esc(order.customer_phone)}</div>` : '';
+  // SEPOS-SENTBY-001 — who pressed Send
+  const sentBy2  = (items.find(i => i && i.sent_by) || {}).sent_by;
+  const sentLine2 = sentBy2 ? `<div class="sub">Sent: ${esc(sentBy2)}</div>` : '';
   // SEPOS-046c — delivery orders show the address in bold under the customer name.
   const delivery = (order?.order_subtype === 'delivery' && order?.delivery_address)
     ? `<div class="delivery">
@@ -536,6 +543,7 @@ function buildFullOrderBody({ order, items, bilingual = true }) {
     <div class="head">${esc(heading)}</div>
     ${customer}
     ${phone}
+    ${sentLine2}
     ${delivery}
     ${orderNote}
     <div class="rule"></div>

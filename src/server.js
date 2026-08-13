@@ -1542,9 +1542,12 @@ app.post('/api/orders/:id/items', requireValidLicense, async (req, res) => {
       // routing (kitchen/bar + printer) + name + VAT resolve through it. Normal
       // lines leave it null and route via menu_items.category_id as before.
       const destCategoryId = item.category_id != null ? Number(item.category_id) : null;
+      // SEPOS-SENTBY-001 — per-item override (offline replay) beats the
+      // round-level name; NULL when neither is present (legacy clients).
+      const sentBy = (item.sent_by || req.body.sent_by || '').trim().slice(0, 120) || null;
       const ins = await client.query(
-        `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at, item_name, dest_category_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
-        [orderId, item.menu_item_id, item.quantity, unitPrice, item.notes || '', item.course || 1, item.item_note || '', isBar, firedAt, firedAt, itemName, destCategoryId]
+        `INSERT INTO order_items (order_id, menu_item_id, quantity, unit_price, notes, course, item_note, is_fired, fired_at, cooking_started_at, item_name, dest_category_id, sent_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+        [orderId, item.menu_item_id, item.quantity, unitPrice, item.notes || '', item.course || 1, item.item_note || '', isBar, firedAt, firedAt, itemName, destCategoryId, sentBy]
       );
       const newRowId = ins.rows[0].id;
       if (isBar) firedBarIds.push(newRowId);
@@ -1899,10 +1902,13 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
       }
     } else {
       const amt = Number(amount);
-      if (!Number.isFinite(amt) || amt <= 0) {
+      // SEPOS-COMP-001 — a Complimentary settlement records £0 taken: the bill
+      // closes, the value shows on the Z's comp line, takings untouched.
+      const isComp = String(method) === 'Complimentary';
+      if (!isComp && (!Number.isFinite(amt) || amt <= 0)) {
         return res.status(400).json({ error: 'Payment amount must be a positive number' });
       }
-      paymentRows = [{ amount: amt, method }];
+      paymentRows = [{ amount: isComp ? 0 : amt, method }];
     }
   }
   // SEPOS-DBLPAY-001 — transactional, row-locked payment. The old flow only
@@ -2004,6 +2010,7 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
         discOverride = billDiscountAmountFor(order, scopedItems.rows);
       }
       closeServiceCharge = Number(serviceChargeForOrder({ ...order, service_charge: null }, scOn, scPct, discOverride).toFixed(2));
+      if (String(method) === 'Complimentary') closeServiceCharge = 0; // SEPOS-COMP-001 — nothing is charged on a comped bill
     } catch { closeServiceCharge = 0; }
     await client.query(`UPDATE orders SET status='closed', closed_at=NOW(), service_charge=$2, session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`, [orderId, closeServiceCharge]);
     await client.query('COMMIT');
@@ -2170,7 +2177,7 @@ app.post('/api/staff/login', async (req, res) => {
     // SEPOS-STAFF-PERMS-001 — per-staff permissions travel with the session so
     // the client can honour "can give discount / can redeem deposit" for a
     // non-manager the owner has trusted.
-    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp, must_change_pin, can_discount: staff.can_discount ? 1 : 0, can_redeem_deposit: staff.can_redeem_deposit ? 1 : 0 });
+    res.json({ id: staff.id, name: staff.name, role: staff.role, token, expires_at: exp, must_change_pin, can_discount: staff.can_discount ? 1 : 0, can_redeem_deposit: staff.can_redeem_deposit ? 1 : 0, can_void: staff.can_void ? 1 : 0, can_close_z: staff.can_close_z ? 1 : 0 });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2680,15 +2687,15 @@ app.post('/api/stripe/webhook', async (req, res) => {
 
 app.get('/api/staff', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, role, is_active, created_at, start_date, notes, employment_status, can_discount, can_redeem_deposit FROM staff ORDER BY name');
+    const result = await pool.query('SELECT id, name, role, is_active, created_at, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z FROM staff ORDER BY name');
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/staff', async (req, res) => {
+app.post('/api/staff', requireStaffAuth(['admin', 'manager']), async (req, res) => {
   if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
-    const { name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit } = req.body;
+    const { name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z } = req.body;
     // SEPOS-047k — PINs are UNIQUE (staff_pin_key / staff.pin UNIQUE). A
     // collision used to surface as a raw 500 "duplicate key value violates
     // unique constraint" → the Staff screen just said "Save failed!" with
@@ -2697,7 +2704,7 @@ app.post('/api/staff', async (req, res) => {
     if (dup.rows[0]) {
       return res.status(409).json({ error: `PIN ${pin} is already used by ${dup.rows[0].name}. Please choose a different 4-digit PIN.` });
     }
-    const result = await pool.query('INSERT INTO staff (name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id', [name, pin, role, start_date || null, notes || null, employment_status || 'active', can_discount ? 1 : 0, can_redeem_deposit ? 1 : 0]);
+    const result = await pool.query('INSERT INTO staff (name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id', [name, pin, role, start_date || null, notes || null, employment_status || 'active', can_discount ? 1 : 0, can_redeem_deposit ? 1 : 0, can_void ? 1 : 0, can_close_z ? 1 : 0]);
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) {
     if (/unique|duplicate/i.test(err.message || '')) {
@@ -2707,11 +2714,11 @@ app.post('/api/staff', async (req, res) => {
   }
 });
 
-app.put('/api/staff/:id', async (req, res) => {
+app.put('/api/staff/:id', requireStaffAuth(['admin', 'manager']), async (req, res) => {
   if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
-    const { name, pin, role, is_active, start_date, notes, employment_status, can_discount, can_redeem_deposit } = req.body;
-    const cd = can_discount ? 1 : 0, crd = can_redeem_deposit ? 1 : 0;
+    const { name, pin, role, is_active, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z } = req.body;
+    const cd = can_discount ? 1 : 0, crd = can_redeem_deposit ? 1 : 0, cv = can_void ? 1 : 0, cz = can_close_z ? 1 : 0;
     // Normalise: when the client doesn't send is_active (or sends an empty
     // string), keep whatever's already in the DB — DON'T null it. The old
     // version would clobber a manager's is_active flag to NULL on every
@@ -2739,9 +2746,11 @@ app.put('/api/staff/:id', async (req, res) => {
            notes = $6,
            employment_status = $7,
            can_discount = $8,
-           can_redeem_deposit = $9
-         WHERE id = $10`,
-        [name, pin, role, activeParam, start_date || null, notes || null, employment_status || 'active', cd, crd, req.params.id]
+           can_redeem_deposit = $9,
+           can_void = $10,
+           can_close_z = $11
+         WHERE id = $12`,
+        [name, pin, role, activeParam, start_date || null, notes || null, employment_status || 'active', cd, crd, cv, cz, req.params.id]
       );
     } else {
       await pool.query(
@@ -2753,9 +2762,11 @@ app.put('/api/staff/:id', async (req, res) => {
            notes = $5,
            employment_status = $6,
            can_discount = $7,
-           can_redeem_deposit = $8
-         WHERE id = $9`,
-        [name, role, activeParam, start_date || null, notes || null, employment_status || 'active', cd, crd, req.params.id]
+           can_redeem_deposit = $8,
+           can_void = $9,
+           can_close_z = $10
+         WHERE id = $11`,
+        [name, role, activeParam, start_date || null, notes || null, employment_status || 'active', cd, crd, cv, cz, req.params.id]
       );
     }
     res.json({ success: true });
@@ -2767,7 +2778,7 @@ app.put('/api/staff/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/staff/:id', async (req, res) => {
+app.delete('/api/staff/:id', requireStaffAuth(['admin', 'manager']), async (req, res) => {
   if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
     await pool.query('DELETE FROM staff WHERE id=$1', [req.params.id]);
@@ -3145,7 +3156,7 @@ app.get('/api/reports/daily', async (req, res) => {
     // agree to the penny.
     // SEPOS-AUDIT-001 — mirror SEPOS-REPREC-001's cancelled exclusion here too:
     // written-off bills were still counted in daily totals/order_count.
-    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [dayStart.toISOString(), dayEnd.toISOString()]);
+    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') <> 'Complimentary' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [dayStart.toISOString(), dayEnd.toISOString()]);
     const total = result.rows.reduce((sum, r) => sum + Number(r.paid_amount ?? r.total ?? 0), 0);
     // Dedupe order_count by orders.id — LEFT JOIN payments multiplies rows
     // on split-pay orders.
@@ -3198,8 +3209,8 @@ app.get('/api/reports/menu-performance', async (req, res) => {
       LEFT JOIN recipes rec   ON rec.menu_item_id = mi.id
       WHERE o.status = 'closed' AND oi.voided = 0
         AND o.closed_at >= $1::timestamp AND o.closed_at < $2::timestamp
-        AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR COALESCE(p.method,'') LIKE '%(mock)%')))
-             OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))
+        AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR p.method = 'Complimentary' OR COALESCE(p.method,'') LIKE '%(mock)%')))
+             OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') <> 'Complimentary' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))
       GROUP BY COALESCE(mi.id, 0), COALESCE(mi.name, oi.item_name, 'Unknown item'), COALESCE(c.name, 'Other')
       ORDER BY revenue DESC
     `, [mpFrom.toISOString(), mpTo.toISOString()]);
@@ -3223,14 +3234,14 @@ app.get('/api/reports/summary', async (req, res) => {
     const sumTo = zonedMidnightUtc(sumNext, sumTz);
     if (!sumFrom || !sumTo) return res.status(400).json({ error: 'Invalid date range' });
     const sumFromIso = sumFrom.toISOString(), sumToIso = sumTo.toISOString();
-    const [result, foodDrinkRes, voucherSoldRes, voucherRedeemedRes, settingsRes] = await Promise.all([
+    const [result, foodDrinkRes, voucherSoldRes, voucherRedeemedRes, settingsRes, compRes] = await Promise.all([
       // Korakot 2026-06-02: pull payments.amount as paid_amount so the
       // Reports tab can show what was actually collected (incl. service
       // charge) instead of the bare subtotal.
       // (verify pass: orders.service_charge added — without it in the SELECT,
       // serviceChargeForOrder saw undefined and silently fell back to deriving
       // from today's rate, defeating the snapshot.)
-      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.discount_scope, orders.order_type, orders.no_service_charge, orders.service_charge, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [sumFromIso, sumToIso]),
+      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.discount_scope, orders.order_type, orders.no_service_charge, orders.service_charge, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') <> 'Complimentary' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [sumFromIso, sumToIso]),
       // SEPOS-REPREC-001 — a cancelled/void bill closes with a payment row
       // method='cancelled', £0. It collected nothing, so it must NOT count as a
       // sale or an order here — otherwise Trading's "Total Sales" (orders.total)
@@ -3247,6 +3258,7 @@ app.get('/api/reports/summary', async (req, res) => {
       pool.query(`
         SELECT oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value,
                COALESCE(c.is_bar, 0) AS is_bar,
+               c.id AS category_id, c.name AS category_name,
                o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value,
                o.discount_scope AS bill_discount_scope
         FROM order_items oi
@@ -3255,12 +3267,15 @@ app.get('/api/reports/summary', async (req, res) => {
         LEFT JOIN orders      o  ON o.id  = oi.order_id
         WHERE o.status='closed' AND oi.voided=0
           AND o.closed_at >= $1::timestamp AND o.closed_at < $2::timestamp
-          AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))
+          AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR p.method = 'Complimentary' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') <> 'Complimentary' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))
       `, [sumFromIso, sumToIso]),
       // SEPOS-VOUCHER-001 — vouchers sold in the date range, split by method
       pool.query(`SELECT payment_method, COUNT(*)::int AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at::date >= $1::date AND created_at::date <= $2::date GROUP BY payment_method`, [from, to]).catch(() => ({ rows: [] })),
       pool.query(`SELECT COUNT(*)::int AS count, COALESCE(SUM(amount_used), 0) AS total FROM voucher_redemptions WHERE used_at::date >= $1::date AND used_at::date <= $2::date`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
       pool.query(`SELECT key, value FROM settings WHERE key IN ('service_charge_enabled','service_charge_rate','service_charge_percent')`),
+      // SEPOS-COMP-001 — bills settled as Complimentary (excluded from every
+      // sales figure; reported as their own give-away line)
+      pool.query(`SELECT COUNT(DISTINCT o.id)::int AS count, COALESCE(SUM(o.total), 0) AS value FROM orders o JOIN payments p ON p.order_id = o.id AND p.method = 'Complimentary' WHERE o.status='closed' AND o.closed_at >= $1::timestamp AND o.closed_at < $2::timestamp`, [sumFromIso, sumToIso]).catch(() => ({ rows: [{ count: 0, value: 0 }] })),
     ]);
     const rows = result.rows;
     const cfg = {}; for (const r of (settingsRes?.rows || [])) cfg[r.key] = r.value;
@@ -3315,6 +3330,9 @@ app.get('/api/reports/summary', async (req, res) => {
     // discount factor (see the query comment above). SEPOS-DISCOUNT-SCOPE-001:
     // the factor is per-ROW now — out-of-scope items keep factor 1.
     let total_food = 0, total_drink = 0;
+    // SEPOS-CATREPORT-001 — per-category net using the same discount-aware
+    // maths as the food/drink split (client request 13 Aug).
+    const catAgg = new Map();
     for (const r of foodDrinkRes.rows) {
       let net = Number(r.quantity || 0) * Number(r.unit_price || 0);
       if (r.discount_type === 'percent') net *= 1 - (Number(r.discount_value || 0) / 100);
@@ -3322,12 +3340,18 @@ app.get('/api/reports/summary', async (req, res) => {
       net *= rowBillFactor(fdFactors, r);
       if (Number(r.is_bar) === 1) total_drink += net;
       else                        total_food  += net;
+      const catKey = r.category_id != null ? String(r.category_id) : 'other';
+      const cat = catAgg.get(catKey) || { name: r.category_name || 'Other', is_bar: Number(r.is_bar) === 1 ? 1 : 0, net: 0, qty: 0 };
+      cat.net += net; cat.qty += Number(r.quantity || 0);
+      catAgg.set(catKey, cat);
     }
+    const by_category = [...catAgg.values()].sort((a, b) => b.net - a.net);
 
     res.json({
       orders: rows, total_sales, total_paid, total_subtotal, total_service, total_discounts,
       service_charge_rate: scRate, service_charge_enabled: scEnabled,
-      total_food, total_drink,
+      total_food, total_drink, by_category,
+      comp_bills: { count: Number(compRes.rows[0]?.count || 0), value: Number(compRes.rows[0]?.value || 0) },
       order_count: byOrder.size, total_covers, by_method,
       vouchers_sold: {
         count: voucherCount,
@@ -3995,11 +4019,11 @@ app.get('/api/z-report/preview', async (req, res) => {
       from = sessionMeta.opened_at;
       to   = sessionMeta.closed_at || new Date().toISOString(); // open shift → up to now
     }
-    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, foodDrinkRes, vouchersSoldRes, vouchersRedeemedRes, settingsRes, depTakenRes, depRedeemedRes, depForfeitedRes, depHeldRes] = await Promise.all([
+    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, foodDrinkRes, vouchersSoldRes, vouchersRedeemedRes, settingsRes, depTakenRes, depRedeemedRes, depForfeitedRes, depHeldRes, compResZ] = await Promise.all([
       // SEPOS-REPREC-001 — exclude cancelled/void bills (payment method='cancelled', £0)
       // from the Z so its Total Sales + order count reconcile with Trading and Bills.
       // A closed order with no payment row (method NULL) is still kept.
-      pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [from, to]),
+      pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') <> 'Complimentary' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [from, to]),
       pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='open'`),
       // SEPOS-AUDIT-001 — window on WHEN the void happened (voided_at, stamped
       // by the void endpoint since this fix), not on orders.created_at: a void
@@ -4013,7 +4037,7 @@ app.get('/api/z-report/preview', async (req, res) => {
       // SEPOS-AUDIT-001 — exclude bills whose payments were all written off
       // (method='cancelled' via the Bills editor): their items counted in the
       // VAT/food/drink breakdowns while total_sales excluded them.
-      pool.query(`SELECT COALESCE(mi.vat_rate, 20) AS vat_rate, oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value, COALESCE(c.is_bar, 0) AS is_bar, o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value, o.discount_scope AS bill_discount_scope FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id LEFT JOIN categories c ON c.id = COALESCE(mi.category_id, oi.dest_category_id) LEFT JOIN orders o ON o.id = oi.order_id WHERE o.status='closed' AND oi.voided=0 AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))`, [from, to]),
+      pool.query(`SELECT COALESCE(mi.vat_rate, 20) AS vat_rate, oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value, COALESCE(c.is_bar, 0) AS is_bar, o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value, o.discount_scope AS bill_discount_scope FROM order_items oi LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id LEFT JOIN categories c ON c.id = COALESCE(mi.category_id, oi.dest_category_id) LEFT JOIN orders o ON o.id = oi.order_id WHERE o.status='closed' AND oi.voided=0 AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR p.method = 'Complimentary' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') <> 'Complimentary' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))`, [from, to]),
       // Korakot 2026-06-02: food vs drink split via categories.is_bar.
       // SEPOS-AUDIT-001 — per-order rows (aggregated in JS with the bill-level
       // discount factor, like VAT): the flat SUM ignored bill discounts, so a
@@ -4030,7 +4054,7 @@ app.get('/api/z-report/preview', async (req, res) => {
         LEFT JOIN orders      o  ON o.id  = oi.order_id
         WHERE o.status='closed' AND oi.voided=0
           AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
-          AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))
+          AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR p.method = 'Complimentary' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') <> 'Complimentary' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))
       `, [from, to]),
       // SEPOS-VOUCHER-001: vouchers sold in the range (Stripe — off till)
       // SEPOS-DEPOSIT-001: GIFT vouchers only (deposits excluded — reported separately below).
@@ -4050,6 +4074,8 @@ app.get('/api/z-report/preview', async (req, res) => {
       pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(vr.amount_used), 0) AS total FROM voucher_redemptions vr JOIN vouchers v ON v.id = vr.voucher_id WHERE v.type='deposit' AND vr.used_at >= $1::timestamp AND vr.used_at <= $2::timestamp`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
       pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE type='deposit' AND status='forfeited' AND voided_at >= $1::timestamp AND voided_at <= $2::timestamp`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
       pool.query(`SELECT COALESCE(SUM(balance), 0) AS total, COUNT(*) AS count FROM vouchers WHERE type='deposit' AND status='active' AND balance > 0`).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
+      // SEPOS-COMP-001 — complimentary settlements in this window
+      pool.query(`SELECT COUNT(DISTINCT o.id)::int AS count, COALESCE(SUM(o.total), 0) AS value FROM orders o JOIN payments p ON p.order_id = o.id AND p.method = 'Complimentary' WHERE o.status='closed' AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp`, [from, to]).catch(() => ({ rows: [{ count: 0, value: 0 }] })),
     ]);
     const orders = ordersRes.rows;
     const voids = voidsRes.rows[0];
@@ -4149,7 +4175,7 @@ app.get('/api/z-report/preview', async (req, res) => {
     }
     const vouchersSold     = { count: vSoldCount, total: vSoldTotal };
     const vouchersRedeemed = vouchersRedeemedRes.rows[0] || { count: 0, total: 0 };
-    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_paid: totalPaid, total_subtotal: totalSubtotal, total_service: totalService, service_charge_rate: scRate, service_charge_enabled: scEnabled, vat_mode: vatMode, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: totalOrders, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: totalOrders > 0 ? totalSales / totalOrders : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0), by_method: vouchersSoldByMethod, till_cash: vSoldTillCash, till_card: vSoldTillCard }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, deposits_enabled: depositsEnabled, deposits_taken: { count: Number(depTaken.count || 0), total: Number(depTaken.total || 0) }, deposits_redeemed: { count: Number(depRedeemed.count || 0), total: Number(depRedeemed.total || 0) }, deposits_forfeited: { count: Number(depForfeited.count || 0), total: Number(depForfeited.total || 0) }, deposits_held: { count: Number(depHeld.count || 0), total: Number(depHeld.total || 0) }, session: sessionMeta, from, to, ...orderTypeSplit });
+    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_paid: totalPaid, total_subtotal: totalSubtotal, total_service: totalService, service_charge_rate: scRate, service_charge_enabled: scEnabled, vat_mode: vatMode, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: totalOrders, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: totalOrders > 0 ? totalSales / totalOrders : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0), by_method: vouchersSoldByMethod, till_cash: vSoldTillCash, till_card: vSoldTillCard }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, deposits_enabled: depositsEnabled, deposits_taken: { count: Number(depTaken.count || 0), total: Number(depTaken.total || 0) }, deposits_redeemed: { count: Number(depRedeemed.count || 0), total: Number(depRedeemed.total || 0) }, deposits_forfeited: { count: Number(depForfeited.count || 0), total: Number(depForfeited.total || 0) }, deposits_held: { count: Number(depHeld.count || 0), total: Number(depHeld.total || 0) }, comp_bills: { count: Number(compResZ.rows[0]?.count || 0), value: Number(compResZ.rows[0]?.value || 0) }, session: sessionMeta, from, to, ...orderTypeSplit });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -9673,10 +9699,19 @@ app.put('/api/customers/marketing-consent', requireStaffAuth(['admin', 'manager'
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-BIRTHDAY-001 — full profiles list for the till sync pull (secret
+// carries auth; also readable by signed-in admins).
+app.get('/api/customer-profiles', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
+  try {
+    const r = await pool.query('SELECT contact_key, birthday FROM customer_profiles');
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // SEPOS-BIRTHDAY-001 — set/clear a customer's birthday ('MM-DD', no year).
 // Body: { email?, phone?, birthday } — key derived exactly like the CRM view
 // (lower(email), else 'p:'+phone). birthday '' clears it.
-app.put('/api/customers/birthday', requireStaffAuth(['admin', 'manager', 'supervisor']), async (req, res) => {
+app.put('/api/customers/birthday', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     const email = String(req.body.email || '').trim().toLowerCase();
     const phone = String(req.body.phone || '').trim();
@@ -9685,6 +9720,7 @@ app.put('/api/customers/birthday', requireStaffAuth(['admin', 'manager', 'superv
     const birthday = String(req.body.birthday || '').trim();
     if (birthday === '') {
       await pool.query('DELETE FROM customer_profiles WHERE contact_key = $1', [key]);
+      await offlineQueue.enqueue('set_customer_birthday', { email, phone, birthday: '' });
       return res.json({ success: true, cleared: true });
     }
     const m = birthday.match(/^(\d{2})-(\d{2})$/);
@@ -9698,6 +9734,8 @@ app.put('/api/customers/birthday', requireStaffAuth(['admin', 'manager', 'superv
        ON CONFLICT (contact_key) DO UPDATE SET birthday = $2, updated_at = CURRENT_TIMESTAMP`,
       [key, birthday]
     );
+    // SEPOS-BIRTHDAY-SYNC-001 — mirror to cloud from a local till (no-op on cloud)
+    await offlineQueue.enqueue('set_customer_birthday', { email, phone, birthday });
     res.json({ success: true, birthday });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -10226,7 +10264,7 @@ app.get('/api/reports/vat', async (req, res) => {
       LEFT JOIN orders      o  ON o.id  = oi.order_id
       WHERE o.status='closed' AND oi.voided=0
         AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
-        AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))
+        AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR p.method = 'Complimentary' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') <> 'Complimentary' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))
     `, [fromTs, toTs]),
       pool.query(`SELECT value FROM settings WHERE key='vat_mode'`),
     ]);

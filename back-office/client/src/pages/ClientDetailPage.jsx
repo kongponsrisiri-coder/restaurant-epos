@@ -327,6 +327,7 @@ export default function ClientDetailPage() {
           </SectionCard>
 
           <SiamPayCard client={client} />
+          <ReviewsCard client={client} />
 
           {isAdmin && (
             <SectionCard title="Danger zone">
@@ -1318,6 +1319,73 @@ function SetupSection({ metadata, onSave, saving }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// SEPOS-REVIEWS-001 — Google reviews snapshot card. One platform key serves
+// every client (public listing data); daily cron snapshots, manual Refresh
+// discovers the place on first run. Sparkline = rating over the 90-day series.
+function ReviewsCard({ client }) {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = () => api.reviews(client.id).then(setData).catch(e => setError(e.message || 'reviews failed'));
+  useEffect(load, [client.id]);
+
+  const refresh = async () => {
+    setBusy(true); setError('');
+    try { await api.reviewsRefresh(client.id); await load(); }
+    catch (e) { setError(e.message || 'refresh failed'); }
+    setBusy(false);
+  };
+
+  const latest = data?.latest;
+  const series = data?.series || [];
+  const spark = series.length > 1 ? (() => {
+    const w = 160, h = 36, min = 3.0, max = 5.0;
+    const pts = series.map((p, i) => {
+      const x = (i / (series.length - 1)) * w;
+      const y = h - ((Math.min(Math.max(Number(p.rating) || min, min), max) - min) / (max - min)) * h;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    return { w, h, pts };
+  })() : null;
+
+  return (
+    <div style={{ background: 'var(--card, #fff)', borderRadius: 14, padding: 20, marginTop: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800 }}>⭐ Google reviews</h3>
+        <button onClick={refresh} disabled={busy}
+          style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #ddd', background: '#fff', fontSize: 12, fontWeight: 700, cursor: busy ? 'wait' : 'pointer' }}>
+          {busy ? 'Fetching…' : latest ? 'Refresh' : 'Fetch now'}
+        </button>
+      </div>
+      {error && <div style={{ color: '#dc2626', fontSize: 12.5, marginBottom: 8 }}>{error}</div>}
+      {!latest && !error && <div style={{ fontSize: 13, color: '#888' }}>No snapshot yet — Fetch now finds their Google listing and takes the first one; then it updates daily by itself.</div>}
+      {latest && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 32, fontWeight: 800 }}>{Number(latest.rating || 0).toFixed(1)}<span style={{ fontSize: 16, color: '#eab308' }}> ★</span></div>
+            <div style={{ fontSize: 13, color: '#666' }}>{latest.review_count} reviews · updated {new Date(latest.fetched_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
+            {spark && (
+              <svg width={spark.w} height={spark.h} style={{ marginLeft: 'auto' }}>
+                <polyline points={spark.pts} fill="none" stroke="#C9A84C" strokeWidth="2" />
+              </svg>
+            )}
+          </div>
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {(latest.reviews || []).map((rv, i) => (
+              <div key={i} style={{ background: '#fafafa', borderRadius: 8, padding: '8px 12px', fontSize: 12.5 }}>
+                <div style={{ fontWeight: 700 }}>{'★'.repeat(Math.round(rv.rating || 0))}<span style={{ color: '#bbb' }}>{'★'.repeat(5 - Math.round(rv.rating || 0))}</span> {rv.author}
+                  {rv.time && <span style={{ color: '#aaa', fontWeight: 400 }}> · {new Date(rv.time).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}</div>
+                {rv.text && <div style={{ color: '#555', marginTop: 2, lineHeight: 1.45 }}>{rv.text}</div>}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

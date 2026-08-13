@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getBill, markBillPrinted, getVoucher, redeemVoucher, applyDiscount, removeVoucherFromBill, getOrderDeposit, getOrderDepositApplied, assertOk, serverOpenDrawer } from '../api';
+import { getBill, markBillPrinted, getVoucher, redeemVoucher, applyDiscount, removeVoucherFromBill, getOrderDeposit, getOrderDepositApplied, assertOk, serverOpenDrawer, loginStaff } from '../api';
 import { isNativeApp } from '../native/printer';
 import { sunmiAvailable, sunmiKickDrawer } from '../native/sunmiPrinter';
 import { printReceipt } from './ReceiptPrinter';
@@ -79,6 +79,10 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const [voucherErr,     setVoucherErr]     = useState('');
   // SEPOS-VOUCHER-SCAN-001 — camera QR scanner for Apple Wallet passes
   const [scanning,       setScanning]       = useState(false);
+  // SEPOS-COMP-001 — settle-as-complimentary (manager PIN gated)
+  const [compPin,  setCompPin]  = useState('');
+  const [compBusy, setCompBusy] = useState(false);
+  const [compErr,  setCompErr]  = useState('');
   const scannerRef = useRef(null);
   // SEPOS-VOUCHER-REMOVE-001 — remove-voucher button loading state
   const [removingVoucher, setRemovingVoucher] = useState(false);
@@ -1015,12 +1019,13 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                     { m: 'Card',    label: '💳 Card' },
                     { m: 'Deposit', label: '🧾 Deposit' },
                     { m: 'Voucher', label: '🎁 Voucher' },
+                    { m: 'Comp',    label: '🎁 Comp' },   // SEPOS-COMP-001 — whole bill, £0 taken
                   ];
                   return (
                   <>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
                       {methods.map(({ m, label }) => {
-                        const disabled = (m === 'Voucher' && hasVoucher) || (m === 'Deposit' && hasDeposit);
+                        const disabled = (m === 'Voucher' && hasVoucher) || (m === 'Deposit' && hasDeposit) || (m === 'Comp' && (splitTenders.length > 0 || depositPaid > 0));
                         return (
                         <button key={m} disabled={disabled} onClick={() => { setMixMethod(m); setMixVoucherErr(''); if (m === 'Deposit') fetchOrderDeposit(); }} style={{ flex: '1 1 22%', height: 46, borderRadius: 10, cursor: disabled ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 14, border: mixMethod === m ? 'none' : '1.5px solid #ddd', background: disabled ? '#f3f4f6' : mixMethod === m ? 'var(--brand-primary,#0D1B3E)' : '#fff', color: disabled ? '#bbb' : mixMethod === m ? '#fff' : 'var(--brand-primary,#0D1B3E)' }}>{label}</button>
                         );
@@ -1044,6 +1049,36 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                         {mixVoucherErr && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{mixVoucherErr}</div>}
                         <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>A booking deposit in our system applies against its balance. A deposit taken elsewhere (or as cash) is accepted for the amount you enter, with the rest paid by another method. The bill total is unchanged.</div>
                         <button onClick={() => addMixDeposit(mixRemaining)} disabled={mixVoucherBusy || (!mixDepositCode.trim() && !orderDeposit)} style={{ width: '100%', height: 52, borderRadius: 12, border: 'none', cursor: (mixVoucherBusy || (!mixDepositCode.trim() && !orderDeposit)) ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 16, background: (mixVoucherBusy || (!mixDepositCode.trim() && !orderDeposit)) ? '#eee' : 'var(--brand-primary,#0D1B3E)', color: (mixVoucherBusy || (!mixDepositCode.trim() && !orderDeposit)) ? '#aaa' : '#fff', marginBottom: 12 }}>{mixVoucherBusy ? 'Applying…' : `🧾 Apply deposit${orderDeposit ? ` £${Number(orderDeposit.balance).toFixed(2)}` : ''}`}</button>
+                      </>
+                    ) : mixMethod === 'Comp' ? (
+                      <>
+                        {/* SEPOS-COMP-001 — settle the WHOLE bill as complimentary. £0 is
+                            taken; the value shows on the Z's give-away line, never in takings. */}
+                        <div style={{ background: '#fdf4ff', border: '1px solid #f5d0fe', borderRadius: 10, padding: '12px 14px', marginBottom: 10, fontSize: 14, color: '#a21caf' }}>
+                          🎁 Settle this whole bill as <b>complimentary</b> — £{billTotal.toFixed(2)} given away, nothing taken. Needs a manager PIN.
+                        </div>
+                        <input type="password" inputMode="numeric" autoComplete="off" value={compPin}
+                          onChange={e => { setCompPin(e.target.value.replace(/\D/g, '').slice(0, 6)); setCompErr(''); }}
+                          placeholder="Manager PIN"
+                          style={{ width: '100%', height: 48, padding: '0 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 18, letterSpacing: 6, textAlign: 'center', boxSizing: 'border-box', marginBottom: 8 }} />
+                        {compErr && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{compErr}</div>}
+                        <button disabled={compBusy || !compPin}
+                          onClick={async () => {
+                            if (compBusy) return;
+                            setCompBusy(true); setCompErr('');
+                            try {
+                              const mgr = await loginStaff(compPin);
+                              if (!mgr?.id || !['admin', 'manager'].includes(mgr.role)) {
+                                setCompErr('Not a manager PIN.'); setCompBusy(false); return;
+                              }
+                            } catch { setCompErr('PIN check failed — try again.'); setCompBusy(false); return; }
+                            const ok = await onPay(0, 'Complimentary', 0, 0);
+                            setCompBusy(false);
+                            if (ok !== true) setCompErr('Could not settle — the bill is still open.');
+                          }}
+                          style={{ width: '100%', height: 52, borderRadius: 12, border: 'none', cursor: (compBusy || !compPin) ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 16, background: (compBusy || !compPin) ? '#eee' : '#a21caf', color: (compBusy || !compPin) ? '#aaa' : '#fff', marginBottom: 12 }}>
+                          {compBusy ? 'Checking…' : `🎁 Give this bill (£${billTotal.toFixed(2)})`}
+                        </button>
                       </>
                     ) : mixMethod === 'Voucher' ? (
                       <>

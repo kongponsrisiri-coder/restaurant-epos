@@ -858,6 +858,10 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
                     <div style={{ color: 'white', fontWeight: 800, fontSize: 18, flex: 1, minWidth: 0 }}>
                       <OrderHeading order={orderForLabel} />
                     </div>
+                    {/* SEPOS-SENTBY-001 — who sent this round */}
+                    {(() => { const sb = (group.items.find(i => i && i.sent_by) || {}).sent_by; return sb ? (
+                      <div style={{ background: '#374151', color: '#e5e7eb', fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 12, whiteSpace: 'nowrap' }}>👤 {sb}</div>
+                    ) : null; })()}
                     <div style={{ color: '#aaa', fontSize: 13 }}>#{group.order_id}</div>
                   </div>
                   <div style={{ padding: 12 }}>

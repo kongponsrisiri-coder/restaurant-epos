@@ -486,6 +486,7 @@ function buildFireNotice({ order, course, bilingual = true }) {
 // Used for Send-to-Bar and any other case where a full item list is needed.
 
 function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepage = 30, fontScale = 'large' }) {
+  const sentBy = (items.find(i => i && i.sent_by) || {}).sent_by || null; // SEPOS-SENTBY-001
   const itemSize = scaleCmd(fontScale); // SEPOS-PRINT-FONT-001 — per-role text size
   const heading = order.order_type === 'takeaway'
     ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
@@ -505,6 +506,7 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(courseEN), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     order.customer_name ? [txt(order.customer_name), lf()] : [],
+    ...(sentBy ? [txt('Sent: ' + sentBy), lf()] : []),
     rule('='), lf(),
     CMD.ALIGN_LEFT,
     ...items.flatMap(item => {
@@ -541,6 +543,7 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
 // ── Full order ticket (all courses combined) ──────────────────────────────────
 
 function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage = 30, fontScale = 'large' }) {
+  const sentBy = (items.find(i => i && i.sent_by) || {}).sent_by || null; // SEPOS-SENTBY-001
   const itemSize = scaleCmd(fontScale); // SEPOS-PRINT-FONT-001 — per-role text size
   const heading = order.order_type === 'takeaway'
     ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
@@ -560,6 +563,7 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
     // English course header only. Korakot 2026-06-02: don't print
     // Thai on the category — STARTERS / MAINS in English is enough.
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(COURSES_EN[course] || 'ITEMS'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    ...(sentBy ? [txt('Sent: ' + sentBy), lf()] : []),
     rule('-'), lf(),
     ...byCourse[course].flatMap(item => {
       const nameAlt = bilingual ? (item.name_alt || item.name_th || '') : '';

@@ -247,3 +247,15 @@ CREATE TABLE IF NOT EXISTS ai_help_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_ai_help_logs_client ON ai_help_logs (client_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ai_help_logs_time   ON ai_help_logs (created_at DESC);
+
+-- SEPOS-REVIEWS-001 — client Google-review snapshots (daily cron + on-demand).
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS place_id TEXT;
+CREATE TABLE IF NOT EXISTS reviews_snapshots (
+  id           SERIAL PRIMARY KEY,
+  client_id    INTEGER REFERENCES clients(id) ON DELETE CASCADE,
+  rating       NUMERIC(3,2),
+  review_count INTEGER,
+  reviews      JSONB DEFAULT '[]'::jsonb,   -- latest ~5 {author, rating, text, time}
+  fetched_at   TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_reviews_snapshots_client ON reviews_snapshots (client_id, fetched_at DESC);

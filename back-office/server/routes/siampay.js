@@ -20,6 +20,57 @@ const { pool } = require('../db/pool');
 const { authRequired, adminOnly } = require('../middleware/auth');
 
 const router = express.Router();
+
+// Minimal branded page for the public onboarding endpoints (no external assets).
+function pageHtml(title, body) {
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title><body style="margin:0;font-family:Georgia,serif;background:#0D1B3E;color:#fff;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center;padding:24px">
+<div><div style="font-size:34px;margin-bottom:10px">✦</div>
+<h1 style="font-size:22px;color:#C9A84C;margin:0 0 12px">${title}</h1>
+<p style="font-size:16px;line-height:1.6;max-width:420px;margin:0 auto;color:#e8e4d8">${body}</p>
+<p style="margin-top:26px;font-size:12px;color:#8a93ad">SiamEPOS · restaurant management system</p></div></body>`;
+}
+
+// ─── PUBLIC (no auth — MUST stay above authRequired) ─────────────────
+// GET /api/siampay/onboard/:acct — the STABLE onboarding link we hand a
+// client's owner. Stripe account_links are single-use and die after FIVE
+// MINUTES — which is how the Akin Thai onboarding was abandoned (dead link →
+// confusing Stripe error → gave up). This URL is permanent: it mints a fresh
+// link AT CLICK TIME and 302s straight into Stripe's hosted onboarding;
+// refresh_url points back HERE so an expired mid-flow session self-heals.
+// The bearer credential is the acct id itself — Stripe-issued, unguessable,
+// and it must also exist on a client row here to resolve.
+router.get('/onboard/:acct', async (req, res) => {
+  const acct = String(req.params.acct || '');
+  try {
+    if (!/^acct_[A-Za-z0-9]{10,}$/.test(acct)) {
+      return res.status(400).send(pageHtml('SiamPay', 'This onboarding link is not valid.'));
+    }
+    const r = await pool.query('SELECT id FROM clients WHERE siampay_account = $1', [acct]);
+    if (!r.rows[0]) {
+      return res.status(404).send(pageHtml('SiamPay', 'This onboarding link is not valid.'));
+    }
+    // Client-facing URLs live on the BRAND domain (siamepos.co.uk proxies
+    // /pay-setup/* here) — the internal ops domain never reaches an owner's
+    // browser bar, mid-flow refresh included (Korakot, 13 Aug).
+    const link = await siampayStripe().accountLinks.create({
+      account: acct,
+      type: 'account_onboarding',
+      return_url:  'https://siamepos.co.uk/pay-setup-done.html',
+      refresh_url: `https://siamepos.co.uk/pay-setup/${acct}`,
+    });
+    res.redirect(302, link.url);
+  } catch (err) {
+    console.error('[siampay] public onboard:', err.message);
+    res.status(500).send(pageHtml('SiamPay', 'Something went wrong — please open the link again in a minute. เปิดลิงก์อีกครั้งในอีกสักครู่นะครับ'));
+  }
+});
+
+// Where Stripe sends the owner after finishing — a warm, dead-simple close.
+router.get('/onboard-done', (req, res) => {
+  res.send(pageHtml('ตั้งค่าการรับเงินเสร็จแล้ว ✓', 'Your payment setup is complete — you can close this page.<br>ตั้งค่าเรียบร้อยแล้ว ปิดหน้านี้ได้เลยครับ ขอบคุณครับ 🙏'));
+});
+
 router.use(authRequired);
 
 let _sp = null;

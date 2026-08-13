@@ -50,11 +50,14 @@ router.get('/onboard/:acct', async (req, res) => {
     if (!r.rows[0]) {
       return res.status(404).send(pageHtml('SiamPay', 'This onboarding link is not valid.'));
     }
+    // Client-facing URLs live on the BRAND domain (siamepos.co.uk proxies
+    // /pay-setup/* here) — the internal ops domain never reaches an owner's
+    // browser bar, mid-flow refresh included (Korakot, 13 Aug).
     const link = await siampayStripe().accountLinks.create({
       account: acct,
       type: 'account_onboarding',
-      return_url:  `${OPS_URL}/api/siampay/onboard-done`,
-      refresh_url: `${OPS_URL}/api/siampay/onboard/${acct}`,
+      return_url:  'https://siamepos.co.uk/pay-setup-done.html',
+      refresh_url: `https://siamepos.co.uk/pay-setup/${acct}`,
     });
     res.redirect(302, link.url);
   } catch (err) {

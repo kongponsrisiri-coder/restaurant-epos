@@ -7,7 +7,7 @@ export default function StaffSection() {
   const [showForm, setShowForm]     = useState(false);
   const [editStaff, setEditStaff]   = useState(null);
   const [selectedStaff, setSelectedStaff] = useState(null);
-  const [form, setForm]             = useState({ name: '', pin: '', role: 'waiter', start_date: '', notes: '', employment_status: 'active', can_discount: 0, can_redeem_deposit: 0 });
+  const [form, setForm]             = useState({ name: '', pin: '', role: 'waiter', start_date: '', notes: '', employment_status: 'active', can_discount: 0, can_redeem_deposit: 0, can_void: 0, can_close_z: 0 });
   const [filterStatus, setFilterStatus] = useState('active');
 
   useEffect(() => { getStaff().then(setStaff); }, []);
@@ -65,7 +65,7 @@ export default function StaffSection() {
     <div style={{ padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>👥 Staff</h1>
-        <button onClick={() => { setEditStaff(null); setForm({ name: '', pin: '', role: 'waiter', start_date: '', notes: '', employment_status: 'active', can_discount: 0, can_redeem_deposit: 0 }); setShowForm(true); }} style={{ background: '#e94560', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }}>+ Add Staff</button>
+        <button onClick={() => { setEditStaff(null); setForm({ name: '', pin: '', role: 'waiter', start_date: '', notes: '', employment_status: 'active', can_discount: 0, can_redeem_deposit: 0, can_void: 0, can_close_z: 0 }); setShowForm(true); }} style={{ background: '#e94560', color: 'white', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontWeight: 600 }}>+ Add Staff</button>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {[{ key: 'active', label: `Active (${staff.filter(s => s.is_active).length})` }, { key: 'inactive', label: `Inactive (${staff.filter(s => !s.is_active).length})` }, { key: 'all', label: `All (${staff.length})` }].map(f => (
@@ -86,7 +86,7 @@ export default function StaffSection() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button onClick={e => { e.stopPropagation(); setEditStaff(s); setForm({ name: s.name, pin: '', role: s.role, is_active: s.is_active == null ? 1 : (s.is_active ? 1 : 0), start_date: s.start_date || '', notes: s.notes || '', employment_status: s.employment_status || 'active', can_discount: s.can_discount ? 1 : 0, can_redeem_deposit: s.can_redeem_deposit ? 1 : 0 }); setShowForm(true); }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#f0f0f0', fontWeight: 600, fontSize: 12 }}>✏️ Edit</button>
+                <button onClick={e => { e.stopPropagation(); setEditStaff(s); setForm({ name: s.name, pin: '', role: s.role, is_active: s.is_active == null ? 1 : (s.is_active ? 1 : 0), start_date: s.start_date || '', notes: s.notes || '', employment_status: s.employment_status || 'active', can_discount: s.can_discount ? 1 : 0, can_redeem_deposit: s.can_redeem_deposit ? 1 : 0, can_void: s.can_void ? 1 : 0, can_close_z: s.can_close_z ? 1 : 0 }); setShowForm(true); }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#f0f0f0', fontWeight: 600, fontSize: 12 }}>✏️ Edit</button>
                 <button onClick={e => { e.stopPropagation(); toggleActive(s); }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: s.is_active ? '#fff3cd' : '#dcfce7', color: s.is_active ? '#92400e' : '#14532d' }}>{s.is_active ? 'Deactivate' : 'Reactivate'}</button>
                 <span style={{ color: '#ccc' }}>▾</span>
               </div>
@@ -128,9 +128,18 @@ export default function StaffSection() {
                   <input type="checkbox" checked={!!form.can_discount} onChange={e => setForm({ ...form, can_discount: e.target.checked ? 1 : 0 })} style={{ width: 18, height: 18 }} />
                   Can give discount
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, cursor: 'pointer', fontSize: 14 }}>
                   <input type="checkbox" checked={!!form.can_redeem_deposit} onChange={e => setForm({ ...form, can_redeem_deposit: e.target.checked ? 1 : 0 })} style={{ width: 18, height: 18 }} />
                   Can redeem deposit
+                </label>
+                {/* SEPOS-HIERARCHY-001 — per-staff void + close-Z (client request 13 Aug) */}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, cursor: 'pointer', fontSize: 14 }}>
+                  <input type="checkbox" checked={!!form.can_void} onChange={e => setForm({ ...form, can_void: e.target.checked ? 1 : 0 })} style={{ width: 18, height: 18 }} />
+                  Can void items
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14 }}>
+                  <input type="checkbox" checked={!!form.can_close_z} onChange={e => setForm({ ...form, can_close_z: e.target.checked ? 1 : 0 })} style={{ width: 18, height: 18 }} />
+                  Can close the day (Z report)
                 </label>
               </div>
             </div>

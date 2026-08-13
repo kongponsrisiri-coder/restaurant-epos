@@ -165,6 +165,12 @@ Korakot approves posts visually in **Control Room → Social tab → 📋 Approv
 4. **Check engagement weekly** — reply-worthy comments get flagged (Plus tier: draft the replies).
 5. **Log in TEAM-STATUS** what went out + anything the client said.
 
+## ⛔ WHAT WE CANNOT AUTOMATE — FACEBOOK GROUPS (verified 2026-08-13)
+**Never promise a client that we can auto-post or auto-share to Facebook Groups.** Meta deprecated the Groups API in Graph v19.0 and removed it from **all versions on 22 April 2024** — `publish_to_groups` and `groups_access_member_info` no longer exist. Verified on our own token: **no group scopes granted**, `me/groups` returns 0, `me/managed_groups` is not a field. There is no permission left to apply for; this is not an app-review problem.
+- ✅ We DO automate: **Facebook Page** posts + **Instagram** publishing (`instagram_content_publish` granted).
+- ⛔ Refuse the browser-extension workaround (a bot driving a logged-in session): it breaches Meta's automated-behaviour rules and the ban lands on the client's **personal** profile — in a small Thai community that costs more than the reach is worth.
+- ✅ **Sell the SHARE PACK instead:** a second, **group-native** version of each post — no brand frame, no price, no sales CTA, written as a person sharing something useful — plus which groups suit it. Client pastes it in ~30 seconds, ideally from their **personal** account (outperforms a business page in these communities). Group mods delete anything that reads like an advert, so the rewrite IS the work.
+
 ## ⛔ TOPICS WE NEVER POST ABOUT (permanent — check this list BEFORE drafting anything)
 > Korakot has denied these on the board. A denial here is **permanent and topic-wide**, not a "fix and resubmit". Never draft a `-v2`; never let a planning run re-propose them. Append when he denies a topic (as opposed to an execution detail).
 - **Tips & service charge** — any angle, any vertical (Korakot, 2026-08-09: *"we are do not talking about tips and service charge things"*; first denied 2026-07-24 as an "owner interest conflict"). Our readers are the **owners** — content telling them what they must hand over puts us on the wrong side of our own customer. This includes the UK Employment (Allocation of Tips) Act, tronc, and service-charge distribution, even when factually correct.

@@ -487,8 +487,8 @@ export default function App() {
     const navItems = [
       homeItem,
       { key: 'reservations', label: '🗓️ Reservations', locked: !caps.reservations },
-      ...(staff.role === 'admin' || staff.role === 'manager' || staff.role === 'supervisor'
-        ? [{ key: 'admin', label: '⚙️ Admin', locked: false }]
+      ...(staff.role === 'admin' || staff.role === 'manager' || staff.role === 'supervisor' || staff.can_close_z
+        ? [{ key: 'admin', label: staff.role === 'admin' || staff.role === 'manager' || staff.role === 'supervisor' ? '⚙️ Admin' : '🔐 Close Day', locked: false }]
         : []),
       { key: 'kitchen', label: '🍳 Kitchen', locked: !caps.kitchen },
       { key: 'bar',     label: '🍹 Bar',     locked: !caps.fullEPOS },
@@ -610,7 +610,7 @@ export default function App() {
           {screen === 'reservations' && (caps.reservations ? <ReservationsScreen /> : <UpgradeLocked feature="Reservations" />)}
           {screen === 'kitchen'      && (caps.kitchen ? <KitchenScreen /> : <UpgradeLocked feature="Kitchen" />)}
           {screen === 'bar'          && (caps.fullEPOS ? <BarScreen /> : <UpgradeLocked feature="Bar" />)}
-          {screen === 'admin'        && <AdminScreen plan={plan} />}
+          {screen === 'admin'        && <AdminScreen plan={plan} staff={staff} />}
         </main>
       </div>
     );

@@ -239,11 +239,15 @@ async function initDB() {
         void_reason TEXT,
         discount_type VARCHAR(50),
         discount_value DECIMAL(10,2),
-        dest_category_id INTEGER
+        dest_category_id INTEGER,
+        sent_by VARCHAR(120)
       )
     `);
 
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS item_name VARCHAR(255)`);
+    // SEPOS-SENTBY-001 — who pressed Send for this round (name snapshot at send
+    // time; printed on kitchen/bar tickets + shown on KDS cards).
+    await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS sent_by VARCHAR(120)`).catch(() => {});
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS resend_reason TEXT`);  // SEPOS-024
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS void_type VARCHAR(50)`); // SEPOS-023
     // SEPOS-MISC-001 — a Misc/open line has no menu_item_id, so it can't inherit
@@ -795,6 +799,10 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
     // give discounts and/or redeem deposits without being made a manager.
     await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS can_discount INTEGER DEFAULT 0`).catch(() => {});
     await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS can_redeem_deposit INTEGER DEFAULT 0`).catch(() => {});
+    // SEPOS-HIERARCHY-001 — per-staff void + close-Z powers (client request:
+    // waiter powers via flags with buttons in Staff details, Korakot 13 Aug)
+    await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS can_void INTEGER DEFAULT 0`).catch(() => {});
+    await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS can_close_z INTEGER DEFAULT 0`).catch(() => {});
     // SEPOS-DISCOUNT-SCOPE-001 — bill discount limited to 'food' / 'drink'
     // (NULL = whole bill). Drinks = items in categories with is_bar=1.
     await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_scope VARCHAR(10)`).catch(() => {});

@@ -4921,6 +4921,7 @@ app.post('/api/saleschat/message', widgetCors, async (req, res) => {
     }
     await pool.query(`INSERT INTO sales_chats (session_id, messages) VALUES ($1,$2)
       ON CONFLICT (session_id) DO UPDATE SET messages=$2, updated_at=NOW()`, [session_id, JSON.stringify(msgs)]);
+    leadAlert.scan(session_id, 'website chat', text); // SEPOS-LEAD-ALERT-001 — fire-and-forget
     res.json({ reply, handoff: !!(cur && cur.handoff) });
   } catch (e) { console.error('[saleschat] message', e.message); res.status(500).json({ reply: 'Sorry — please try again in a moment.' }); }
 });
@@ -4968,6 +4969,7 @@ app.post('/api/saleschat/admin/conversations/:sid/reply', salesAdminAuth, async 
 // website chat: same persona, same Control Room list, same human takeover.
 // Inert unless the MESSENGER_* env vars are set (main cloud only).
 const messengerSales = require('./services/messengerSales');
+const leadAlert = require('./services/leadAlert'); // SEPOS-LEAD-ALERT-001
 const MESSENGER_ADDENDUM = `
 CHANNEL NOTE — you are replying in Facebook Messenger on the SiamEPOS page:
 - Keep replies SHORT (1-3 sentences, max ~2 short paragraphs). No markdown, no headers, no bullet walls — plain chat text.
@@ -5009,6 +5011,7 @@ app.post('/api/messenger/webhook', async (req, res) => {
       await pool.query(`INSERT INTO sales_chats (session_id, name, messages) VALUES ($1,$2,$3)
         ON CONFLICT (session_id) DO UPDATE SET messages=$3, updated_at=NOW()`,
         [sid, 'Facebook Messenger', JSON.stringify(msgs)]);
+      leadAlert.scan(sid, 'Facebook Messenger', m.text); // SEPOS-LEAD-ALERT-001
       if (reply) await messengerSales.sendText(m.senderId, reply);
     } catch (e) { console.error('[messenger-sales] handle', e.message); }
   }

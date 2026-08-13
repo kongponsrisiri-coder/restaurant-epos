@@ -3254,6 +3254,7 @@ app.get('/api/reports/summary', async (req, res) => {
       pool.query(`
         SELECT oi.order_id, oi.quantity, oi.unit_price, oi.discount_type, oi.discount_value,
                COALESCE(c.is_bar, 0) AS is_bar,
+               c.id AS category_id, c.name AS category_name,
                o.discount_type AS bill_discount_type, o.discount_value AS bill_discount_value,
                o.discount_scope AS bill_discount_scope
         FROM order_items oi
@@ -3322,6 +3323,9 @@ app.get('/api/reports/summary', async (req, res) => {
     // discount factor (see the query comment above). SEPOS-DISCOUNT-SCOPE-001:
     // the factor is per-ROW now — out-of-scope items keep factor 1.
     let total_food = 0, total_drink = 0;
+    // SEPOS-CATREPORT-001 — per-category net using the same discount-aware
+    // maths as the food/drink split (client request 13 Aug).
+    const catAgg = new Map();
     for (const r of foodDrinkRes.rows) {
       let net = Number(r.quantity || 0) * Number(r.unit_price || 0);
       if (r.discount_type === 'percent') net *= 1 - (Number(r.discount_value || 0) / 100);
@@ -3329,12 +3333,17 @@ app.get('/api/reports/summary', async (req, res) => {
       net *= rowBillFactor(fdFactors, r);
       if (Number(r.is_bar) === 1) total_drink += net;
       else                        total_food  += net;
+      const catKey = r.category_id != null ? String(r.category_id) : 'other';
+      const cat = catAgg.get(catKey) || { name: r.category_name || 'Other', is_bar: Number(r.is_bar) === 1 ? 1 : 0, net: 0, qty: 0 };
+      cat.net += net; cat.qty += Number(r.quantity || 0);
+      catAgg.set(catKey, cat);
     }
+    const by_category = [...catAgg.values()].sort((a, b) => b.net - a.net);
 
     res.json({
       orders: rows, total_sales, total_paid, total_subtotal, total_service, total_discounts,
       service_charge_rate: scRate, service_charge_enabled: scEnabled,
-      total_food, total_drink,
+      total_food, total_drink, by_category,
       order_count: byOrder.size, total_covers, by_method,
       vouchers_sold: {
         count: voucherCount,

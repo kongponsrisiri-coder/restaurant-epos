@@ -56,6 +56,10 @@ export default function ReportsSection() {
       rows.push([]);
       rows.push(['', '', '', '', `Food${fdParen(data.total_food, data.total_food, data.total_drink)}`,  Number(data.total_food     || 0).toFixed(2)]);
       rows.push(['', '', '', '', `Drink${fdParen(data.total_drink, data.total_food, data.total_drink)}`, Number(data.total_drink    || 0).toFixed(2)]);
+      // SEPOS-CATREPORT-001 — per-category rows
+      for (const c of (data.by_category || [])) {
+        rows.push(['', '', '', '', `Category: ${c.name} (x${c.qty})`, Number(c.net || 0).toFixed(2)]);
+      }
       rows.push(['', '', '', '', 'Service charge',       Number(data.total_service  || 0).toFixed(2)]);
       const csvTips = Number(data.total_paid ?? data.total_sales ?? 0) - Number(data.total_sales || 0);
       if (Math.abs(csvTips) >= 0.01) {
@@ -189,6 +193,21 @@ export default function ReportsSection() {
                     <div style={{ display:'flex', justifyContent:'space-between', color:'#555' }}><span>🍺 Drink{fdPct(data.total_drink, data.total_food, data.total_drink) && <span style={{ color:'#999', marginLeft:6 }}>({fdPct(data.total_drink, data.total_food, data.total_drink)})</span>}</span><span>£{Number(data.total_drink || 0).toFixed(2)}</span></div>
                     <div style={{ display:'flex', justifyContent:'space-between', color:'var(--brand-primary,#0D1B3E)', fontWeight:600 }}><span>Service charge (12.5%)</span><span>£{Number(data.total_service || 0).toFixed(2)}</span></div>
                   </div>
+                  {/* SEPOS-CATREPORT-001 — sales by menu category (client request 13 Aug).
+                      Same discount-aware maths as the Food/Drink split above. */}
+                  {Array.isArray(data.by_category) && data.by_category.length > 0 && (
+                    <div style={{ padding: '12px 20px', borderTop: '1px solid #eee' }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Sales by category</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+                        {data.by_category.map((c, i) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', color: '#555' }}>
+                            <span>{c.is_bar ? '🍺' : '🍽️'} {c.name} <span style={{ color: '#bbb' }}>×{c.qty}</span></span>
+                            <span style={{ fontWeight: 600 }}>£{Number(c.net || 0).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {/* SEPOS-REPREC-001 — foot to MONEY TAKEN so Reports reconciles
                       with Bills + Trading. When money taken ≠ sale value (a tip or
                       overpayment on card), show both so nothing looks "wrong". */}

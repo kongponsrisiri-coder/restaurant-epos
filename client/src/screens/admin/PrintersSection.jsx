@@ -935,20 +935,24 @@ export default function PrintersSection() {
             </div>
           ))}
         </div>
-        <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Bigger = easier to read on a busy line, but fewer characters fit per row. Applies to kitchen / bar tickets and the customer receipt on every printer (thermal + built-in).</div>
-        {/* SEPOS-TICKET-SIZE-001 — one rendered ticket font, operator picks the
-            SIZE (replaces the Modern/Classic style toggle; Korakot, 16 Aug).
-            The printer's built-in font remains only as an automatic fallback. */}
-        <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', marginTop:16, paddingTop:14, borderTop:'1px solid #f0f0f0' }}>
-          <label style={{ fontSize:14, fontWeight:600, color:'#555', minWidth:150 }}>Ticket font size</label>
-          <select value={settings.kitchen_ticket_size || 'standard'} onChange={e => setSettings({...settings, kitchen_ticket_size: e.target.value})} style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}>
-            <option value="standard">Standard</option>
-            <option value="large">Large</option>
-            <option value="xl">Extra large</option>
-            <option value="xxl">Huge</option>
-          </select>
-          <span style={{ fontSize:12, color:'#aaa' }}>Kitchen &amp; bar tickets only; receipts are unaffected. Bigger sizes fit fewer characters per line before wrapping.</span>
-        </div>
+        <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Bigger = easier to read on a busy line, but fewer characters fit per row. These control the printer's BUILT-IN font — used by handheld tills with their own printer, and as the automatic fallback when the smooth font below can't print (e.g. Thai text).</div>
+        {/* SEPOS-TICKET-SIZE-001 / SEPOS-RECEIPT-FONT-001 — one rendered font,
+            operator picks the SIZE per document (replaces the Modern/Classic
+            style toggle; Korakot, 16 Aug). The printer's built-in font remains
+            only as an automatic fallback. */}
+        {[['Ticket font size', 'kitchen_ticket_size', 'Kitchen & bar tickets.'],
+          ['Receipt font size', 'receipt_ticket_size', 'Customer bills & settled receipts.']].map(([label, key, hint]) => (
+          <div key={key} style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', marginTop:16, paddingTop:14, borderTop:'1px solid #f0f0f0' }}>
+            <label style={{ fontSize:14, fontWeight:600, color:'#555', minWidth:150 }}>{label}</label>
+            <select value={settings[key] || 'standard'} onChange={e => setSettings({...settings, [key]: e.target.value})} style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}>
+              <option value="standard">Standard</option>
+              <option value="large">Large</option>
+              <option value="xl">Extra large</option>
+              <option value="xxl">Huge</option>
+            </select>
+            <span style={{ fontSize:12, color:'#aaa' }}>{hint} Bigger sizes fit fewer characters per line before wrapping.</span>
+          </div>
+        ))}
       </div>
 
       {/* SEPOS-DRAWER-001 — open the cash drawer on payment (default ON). */}

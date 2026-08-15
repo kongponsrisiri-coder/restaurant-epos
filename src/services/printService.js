@@ -1168,7 +1168,11 @@ async function printFireNotice(settings, order, course) {
 // lands (SEPOS-TICKET-FONT-002). Any render/send failure returns false so the
 // caller's classic builder runs — a font problem can never lose a ticket.
 async function tryRenderedTicket(dest, settings, order, items, opts = {}) {
-  if (settings.kitchen_ticket_style === 'classic') return false;
+  // SEPOS-TICKET-SIZE-001 — the rendered font is now the ONLY visible mode
+  // (Korakot, 16 Aug: "remove the built-in font option"). The classic path
+  // survives purely as the automatic fallback below (render failure, Thai
+  // text, bilingual mode) so a font problem can never lose a ticket. Any
+  // legacy kitchen_ticket_style='classic' value is deliberately ignored.
   if (settings.kitchen_language === 'en_th') return false;
   if (!dest.ip && !dest.printerName) return false;
   try {
@@ -1177,7 +1181,7 @@ async function tryRenderedTicket(dest, settings, order, items, opts = {}) {
     const tr = require('./ticketRender');
     // Thai/CJK text in any field → classic (codepage) path so it prints, not blanks.
     if (tr.hasUnrenderableText(order, items)) return false;
-    const buf = await tr.kitchenTicketRaster(order, items, opts);
+    const buf = await tr.kitchenTicketRaster(order, items, { ...opts, size: settings.kitchen_ticket_size });
     for (let c = 0; c < (dest.copies || 1); c++) {
       await sendRaw(dest.ip, dest.port, buf, { printerName: dest.printerName, lprQueue: dest.lprQueue });
     }

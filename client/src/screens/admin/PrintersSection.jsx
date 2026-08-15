@@ -936,15 +936,18 @@ export default function PrintersSection() {
           ))}
         </div>
         <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Bigger = easier to read on a busy line, but fewer characters fit per row. Applies to kitchen / bar tickets and the customer receipt on every printer (thermal + built-in).</div>
-        {/* SEPOS-TICKET-FONT-002 — visible picker for the rendered-vs-classic
-            ticket FONT (was a hidden settings key only; Fern asked, 13 Aug). */}
+        {/* SEPOS-TICKET-SIZE-001 — one rendered ticket font, operator picks the
+            SIZE (replaces the Modern/Classic style toggle; Korakot, 16 Aug).
+            The printer's built-in font remains only as an automatic fallback. */}
         <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', marginTop:16, paddingTop:14, borderTop:'1px solid #f0f0f0' }}>
-          <label style={{ fontSize:14, fontWeight:600, color:'#555', minWidth:150 }}>Ticket font style</label>
-          <select value={settings.kitchen_ticket_style || 'rendered'} onChange={e => setSettings({...settings, kitchen_ticket_style: e.target.value})} style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}>
-            <option value="rendered">Modern — clean printed font (recommended)</option>
-            <option value="classic">Classic — the printer's built-in font</option>
+          <label style={{ fontSize:14, fontWeight:600, color:'#555', minWidth:150 }}>Ticket font size</label>
+          <select value={settings.kitchen_ticket_size || 'standard'} onChange={e => setSettings({...settings, kitchen_ticket_size: e.target.value})} style={{ padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}>
+            <option value="standard">Standard</option>
+            <option value="large">Large</option>
+            <option value="xl">Extra large</option>
+            <option value="xxl">Huge</option>
           </select>
-          <span style={{ fontSize:12, color:'#aaa' }}>Kitchen &amp; bar tickets only; receipts are unaffected. Thai text always uses the classic font.</span>
+          <span style={{ fontSize:12, color:'#aaa' }}>Kitchen &amp; bar tickets only; receipts are unaffected. Bigger sizes fit fewer characters per line before wrapping.</span>
         </div>
       </div>
 

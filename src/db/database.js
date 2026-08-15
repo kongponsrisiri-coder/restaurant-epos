@@ -343,6 +343,11 @@ async function initDB() {
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_webhook_fires_event_entity ON webhook_fires(event_type, entity_key)`);
 
+    // SEPOS-LEAD-ALERT-001 — first captured contact per sales chat + the
+    // once-only alert stamp (SMS to Korakot).
+    await pool.query(`ALTER TABLE sales_chats ADD COLUMN IF NOT EXISTS lead_contact TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE sales_chats ADD COLUMN IF NOT EXISTS lead_notified_at TIMESTAMP`).catch(() => {});
+
     // SEPOS-BIRTHDAY-001 — per-customer extras. The CRM itself stays a
     // DERIVED view (reservations + takeaway orders, keyed by contact_key =
     // lower(email) or 'p:'+phone); this side-table holds the bits a customer
@@ -952,6 +957,11 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS takea
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_stock_movements_ingredient ON stock_movements(ingredient_id)`);
+    // Tables that predate SEPOS-032 lack order_item_id (CREATE IF NOT EXISTS
+    // skips them, and no ALTER existed) — indexing it aborted the whole initDB
+    // on the ORIGINAL cloud DB every boot, silently skipping every migration
+    // below this line. SQLite has had the addColumnIfMissing guard all along.
+    await pool.query(`ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS order_item_id INTEGER`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_stock_movements_order_item ON stock_movements(order_item_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_stock_movements_created    ON stock_movements(created_at DESC)`);
 

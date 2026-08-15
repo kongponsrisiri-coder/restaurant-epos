@@ -1,6 +1,6 @@
 {
   "name": "siamepos-electron",
-  "version": "1.9.8",
+  "version": "1.9.9",
   "description": "SiamEPOS Pro desktop shell \u2014 offline-capable EPOS for Thai restaurants",
   "main": "main.js",
   "private": true,

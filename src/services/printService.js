@@ -1165,7 +1165,8 @@ async function tryRenderedReceipt(dest, settings, order, items, paymentDetails) 
     // Thai/CJK anywhere the receipt prints (incl. venue name/address/footer,
     // which kitchen tickets never carry) → classic codepage path.
     if (tr.hasUnrenderableText(order, items, [model.name, model.addr, model.footer])) return false;
-    const raster = await tr.receiptRaster(order, model, { size: settings.receipt_ticket_size });
+    // One fixed size — Korakot 16 Aug: only ORDER tickets are size-adjustable.
+    const raster = await tr.receiptRaster(order, model);
     const parts = [
       CMD.INIT,
       ...(model.isSettledReceipt ? [] : buildLogoBlock(settings)),

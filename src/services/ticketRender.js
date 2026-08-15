@@ -274,9 +274,11 @@ function receiptLines(order, m, opts = {}) {
     L.push({ text: label, size: 38, bold: true, center: true, gap: 4 });
     L.push({ text: 'Covers', right: String(order.covers || '—'), size: 23, gap: 2 });
   }
+  // No standalone Order # row — Korakot 16 Aug: "i dont want order number on
+  // the bill". (Takeaway keeps the id inside its Type line — staff match the
+  // docket to the customer by it.)
   L.push({ text: 'Date',    right: m.date, size: 23, gap: 2 });
-  L.push({ text: 'Time',    right: m.time, size: 23, gap: 2 });
-  L.push({ text: 'Order #', right: String(order.id), size: 23, gap: 4 });
+  L.push({ text: 'Time',    right: m.time, size: 23, gap: 4 });
   L.push({ rule: true });
 
   // Items by course, no course headers (classic parity). Options print inline
@@ -337,14 +339,17 @@ function receiptLines(order, m, opts = {}) {
 
 // Raster only — no feed/cut. printService wraps this with the logo block
 // before and (customer bill only) the review QR + cut after.
+// ONE fixed size by design — Korakot 16 Aug: "i want the bill have only one
+// size, but order ticket is able to customise". Size options (SIZE_SCALES)
+// apply to kitchen/bar tickets only; deliberately no applyScale here.
 async function receiptRaster(order, model, opts = {}) {
-  const img = await renderLines(applyScale(receiptLines(order, model, opts), opts.size));
+  const img = await renderLines(receiptLines(order, model, opts));
   return toRaster(img);
 }
 
 // Preview for approval — same lines, PNG instead of printer bytes.
 async function previewReceiptPNG(order, model, outPath, opts = {}) {
-  const img = await renderLines(applyScale(receiptLines(order, model, opts), opts.size));
+  const img = await renderLines(receiptLines(order, model, opts));
   await PImage.encodePNGToStream(img, require('fs').createWriteStream(outPath));
   return outPath;
 }

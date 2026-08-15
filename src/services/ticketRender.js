@@ -27,45 +27,66 @@ function loadFonts() {
   return fontsReady;
 }
 
-// lines: [{ text, size, bold, center, gap, rule, indent }]
+// Greedy word-boundary wrap (hard-break a single over-wide word). The caller
+// must have set scratch.font already. Returns the text as 1+ segments.
+function wrapText(scratch, text, maxW) {
+  const words = String(text ?? '').split(/\s+/).filter(Boolean);
+  if (!words.length) return [''];
+  const segs = [];
+  let cur = '';
+  const flush = () => { if (cur) { segs.push(cur); cur = ''; } };
+  for (const word of words) {
+    const cand = cur ? cur + ' ' + word : word;
+    if (scratch.measureText(cand).width <= maxW) { cur = cand; continue; }
+    flush();
+    if (scratch.measureText(word).width <= maxW) { cur = word; continue; }
+    // single word wider than the paper — hard-break it
+    let piece = '';
+    for (const ch of word) {
+      if (scratch.measureText(piece + ch).width > maxW) { segs.push(piece); piece = ch; }
+      else piece += ch;
+    }
+    cur = piece;
+  }
+  flush();
+  return segs.length ? segs : [''];
+}
+
+// lines: [{ text, size, bold, center, gap, rule, heavy, indent, right }]
+//   right — SEPOS-RECEIPT-FONT-001: two-column line (label/name left, value/
+//   price right-aligned at the paper edge). Long left text wraps UNDER itself
+//   with the right value pinned to the first line, so an item name can never
+//   collide with its price.
+//   heavy — thicker rule (the classic receipt's '=' divider around TOTAL).
 async function renderLines(lines) {
   await loadFonts();
-  const PAD = 8, LH = 1.35;
+  const PAD = 8, LH = 1.35, COL_GAP = 16;
 
-  // Measure pass — WRAP long text (greedy, word-boundary; hard-break a single
-  // over-wide word) so "Stir-Fried Cashew Nut with Jasmine Rice" never clips
-  // off the paper's right edge. Uses a 1×1 scratch context for measureText.
+  // Measure pass — wrap long text so nothing clips off the paper's right
+  // edge. Uses a 1×1 scratch context for measureText.
   const scratch = PImage.make(1, 1).getContext('2d');
   const wrapped = [];
   for (const l of lines) {
     if (l.rule) { wrapped.push(l); continue; }
     const size = l.size || 30;
     scratch.font = `${size}pt ${l.bold ? 'TicketSansBold' : 'TicketSans'}`;
-    const maxW = W - PAD * 2 - (l.indent || 0);
-    const words = String(l.text ?? '').split(/\s+/).filter(Boolean);
-    if (!words.length) { wrapped.push({ ...l, text: '' }); continue; }
-    let cur = '';
-    const flush = () => { if (cur) { wrapped.push({ ...l, text: cur, gap: 0 }); cur = ''; } };
-    for (const word of words) {
-      const cand = cur ? cur + ' ' + word : word;
-      if (scratch.measureText(cand).width <= maxW) { cur = cand; continue; }
-      flush();
-      if (scratch.measureText(word).width <= maxW) { cur = word; continue; }
-      // single word wider than the paper — hard-break it
-      let piece = '';
-      for (const ch of word) {
-        if (scratch.measureText(piece + ch).width > maxW) { wrapped.push({ ...l, text: piece, gap: 0 }); piece = ch; }
-        else piece += ch;
-      }
-      cur = piece;
-    }
-    flush();
-    // the last wrapped segment keeps the original gap
-    if (wrapped.length && !wrapped[wrapped.length - 1].rule) wrapped[wrapped.length - 1] = { ...wrapped[wrapped.length - 1], gap: l.gap || 0 };
+    const right = l.right != null && String(l.right) !== '' ? String(l.right) : null;
+    const rightW = right ? scratch.measureText(right).width : 0;
+    const maxW = W - PAD * 2 - (l.indent || 0) - (right ? rightW + COL_GAP : 0);
+    const segs = wrapText(scratch, l.text, maxW);
+    segs.forEach((s, i) => wrapped.push({
+      ...l,
+      text: s,
+      right: i === 0 ? right : null,           // value pins to the first line
+      // continuation lines of a two-col item tuck under the name, not the
+      // margin, so a wrapped dish name reads as one item on the bill
+      indent: (l.indent || 0) + (right && i > 0 ? Math.round(size * 1.1) : 0),
+      gap: i === segs.length - 1 ? (l.gap || 0) : 0,
+    }));
   }
 
   let h = 24;
-  for (const l of wrapped) h += l.rule ? 18 : Math.ceil((l.size || 30) * LH) + (l.gap || 0);
+  for (const l of wrapped) h += l.rule ? (l.heavy ? 22 : 18) : Math.ceil((l.size || 30) * LH) + (l.gap || 0);
   h += 30;
   const img = PImage.make(W, h);
   const ctx = img.getContext('2d');
@@ -74,14 +95,19 @@ async function renderLines(lines) {
   let y = 24;
   for (const l of wrapped) {
     if (l.rule) {
-      ctx.fillRect(PAD, y + 6, W - PAD * 2, 3); y += 18; continue;
+      ctx.fillRect(PAD, y + 6, W - PAD * 2, l.heavy ? 5 : 3); y += l.heavy ? 22 : 18; continue;
     }
     const size = l.size || 30;
     ctx.font = `${size}pt ${l.bold ? 'TicketSansBold' : 'TicketSans'}`;
     const tw = ctx.measureText(l.text).width;
     const x = l.center ? Math.max(PAD, (W - tw) / 2) : PAD + (l.indent || 0);
     y += Math.ceil(size * LH);
-    ctx.fillText(l.text, x, y - Math.ceil(size * 0.28));
+    const baseline = y - Math.ceil(size * 0.28);
+    ctx.fillText(l.text, x, baseline);
+    if (l.right != null) {
+      const rw = ctx.measureText(String(l.right)).width;
+      ctx.fillText(String(l.right), W - PAD - rw, baseline);
+    }
     y += (l.gap || 0);
   }
   return img;
@@ -91,9 +117,11 @@ async function renderLines(lines) {
 // blanks. Callers use this to fall back to the classic codepage path for any
 // ticket that carries such text (e.g. a Thai kitchen note on an English menu).
 const NON_LATIN = /[฀-๿一-鿿぀-ヿ가-힯]/;
-function hasUnrenderableText(order, items) {
+// extra — SEPOS-RECEIPT-FONT-001: receipt callers pass venue strings too
+// (company name / address / footer), which kitchen tickets never print.
+function hasUnrenderableText(order, items, extra = []) {
   const parts = [order?.table_label, order?.notes, order?.customer_note,
-    order?.customer_name, order?.customer_phone, order?.delivery_address];
+    order?.customer_name, order?.customer_phone, order?.delivery_address, ...extra];
   for (const it of items || []) parts.push(it?.name, it?.item_name, it?.notes, it?.item_note);
   return NON_LATIN.test(parts.filter(Boolean).join(' '));
 }
@@ -218,4 +246,112 @@ async function _linesFor(order, items, opts) {
   return lines;
 }
 
-module.exports = { kitchenTicketRaster, previewPNG, hasUnrenderableText, SIZE_SCALES };
+// ── SEPOS-RECEIPT-FONT-001 — customer bill / settled receipt in the rendered
+// typeface. The MONEY MATH lives in printService.computeReceiptModel (shared
+// with the classic builder, so the two paths can never disagree on a total) —
+// this function only turns that model into line specs. Layout mirrors the
+// classic receipt: header → order info → items (name left / price right) →
+// totals → payment → footer. The logo bitmap + review QR are ESC/POS blocks
+// emitted by printService around this raster, not drawn here.
+function receiptLines(order, m, opts = {}) {
+  const L = [];
+  if (m.name) L.push({ text: m.name, size: m.name.length <= 16 ? 42 : 32, bold: true, center: true, gap: 6 });
+  if (m.addr)  L.push({ text: m.addr, size: 21, center: true, gap: 2 });
+  if (m.phone) L.push({ text: 'Tel: ' + m.phone, size: 21, center: true, gap: 2 });
+  if (m.vatNo) L.push({ text: 'VAT: ' + m.vatNo, size: 21, center: true, gap: 2 });
+  if (L.length) L[L.length - 1] = { ...L[L.length - 1], gap: 10 };
+  L.push({ rule: true });
+
+  // Order header — same fields as classic, label-left / value-right
+  if (order.order_type === 'takeaway') {
+    L.push({ text: 'Type', right: order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`), size: 23, gap: 2 });
+    if (order.customer_name) L.push({ text: 'Customer', right: String(order.customer_name), size: 23, gap: 2 });
+    if (order.pickup_time)   L.push({ text: 'Pickup', right: new Date(order.pickup_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' }), size: 23, gap: 2 });
+  } else {
+    const label = (order.table_label && String(order.table_label).trim())
+      ? String(order.table_label).trim().toUpperCase()
+      : `TABLE ${order.table_number || '—'}`;
+    L.push({ text: label, size: 38, bold: true, center: true, gap: 4 });
+    L.push({ text: 'Covers', right: String(order.covers || '—'), size: 23, gap: 2 });
+  }
+  // No standalone Order # row — Korakot 16 Aug: "i dont want order number on
+  // the bill". (Takeaway keeps the id inside its Type line — staff match the
+  // docket to the customer by it.)
+  L.push({ text: 'Date',    right: m.date, size: 23, gap: 2 });
+  L.push({ text: 'Time',    right: m.time, size: 23, gap: 4 });
+  L.push({ rule: true });
+
+  // Items by course, no course headers (classic parity). Options print inline
+  // — the renderer wraps rather than truncates, so a long name+option just
+  // continues on the next line with the price pinned to the first.
+  for (const course of Object.keys(m.byCourse).sort()) {
+    for (const item of m.byCourse[course]) {
+      const p   = item.unit_price * item.quantity;
+      const d   = item._discountAmt != null
+        ? item._discountAmt
+        : (item.discount_value > 0
+            ? (item.discount_type === 'percent' ? p * item.discount_value / 100 : Math.min(item.discount_value, p))
+            : 0);
+      const net = p - d;
+      const opt = item.notes ? String(item.notes).trim() : '';
+      const name = item.name || item.item_name || ('Item #' + item.menu_item_id);
+      L.push({ text: `${item.quantity}x ${name}${opt ? ` (${opt})` : ''}`, right: '£' + net.toFixed(2), size: 27, bold: true, gap: 4 });
+    }
+  }
+  L.push({ rule: true });
+
+  // Totals
+  L.push({ text: 'Subtotal', right: '£' + m.subtotal.toFixed(2), size: 24, gap: 2 });
+  if (m.discountAmt > 0)   L.push({ text: 'Discount' + (m.discountLabel || ''), right: '-£' + m.discountAmt.toFixed(2), size: 24, gap: 2 });
+  if (m.serviceCharge > 0) L.push({ text: `Service (${m.scRate}%)`, right: '£' + m.serviceCharge.toFixed(2), size: 24, gap: 2 });
+  if (m.tip > 0)           L.push({ text: 'Gratuity', right: '£' + m.tip.toFixed(2), size: 24, gap: 2 });
+  L.push({ rule: true, heavy: true });
+  L.push({ text: 'TOTAL', right: '£' + m.billTotal.toFixed(2), size: 38, bold: true, gap: 2 });
+  L.push({ rule: true, heavy: true });
+
+  // SEPOS-DEPOSIT-PRINT — deposit already paid + balance due
+  if (m.depositPaid > 0) {
+    L.push({ text: 'Deposit paid', right: '-£' + m.depositPaid.toFixed(2), size: 24, gap: 2 });
+    L.push({ text: 'Balance due', right: '£' + Math.max(0, m.billTotal - m.depositPaid).toFixed(2), size: 26, bold: true, gap: 2 });
+    L.push({ rule: true, heavy: true });
+  }
+
+  // Payment
+  if (m.method) {
+    L.push({ text: 'Payment', right: m.method, size: 24, gap: 2 });
+    if (m.tenders.length > 1) {
+      m.tenders.forEach((t, i) => L.push({
+        text: `${i + 1}. ${t.method || ''}`, right: '£' + Number(t.amount || 0).toFixed(2), size: 22, indent: 20, gap: 2,
+      }));
+    }
+    if (m.method === 'Cash' && m.amountPaid > 0) {
+      L.push({ text: 'Cash tendered', right: '£' + m.amountPaid.toFixed(2), size: 24, gap: 2 });
+      L.push({ text: 'Change', right: '£' + m.change.toFixed(2), size: 26, bold: true, gap: 2 });
+    }
+    L.push({ rule: true });
+  }
+
+  // Footer. (The classic builder also emits a hardcoded Thai thank-you line,
+  // but txt() strips non-Latin so it has never actually printed — dropped.)
+  L.push({ text: m.footer, size: 23, center: true, gap: 4 });
+  return L;
+}
+
+// Raster only — no feed/cut. printService wraps this with the logo block
+// before and (customer bill only) the review QR + cut after.
+// ONE fixed size by design — Korakot 16 Aug: "i want the bill have only one
+// size, but order ticket is able to customise". Size options (SIZE_SCALES)
+// apply to kitchen/bar tickets only; deliberately no applyScale here.
+async function receiptRaster(order, model, opts = {}) {
+  const img = await renderLines(receiptLines(order, model, opts));
+  return toRaster(img);
+}
+
+// Preview for approval — same lines, PNG instead of printer bytes.
+async function previewReceiptPNG(order, model, outPath, opts = {}) {
+  const img = await renderLines(receiptLines(order, model, opts));
+  await PImage.encodePNGToStream(img, require('fs').createWriteStream(outPath));
+  return outPath;
+}
+
+module.exports = { kitchenTicketRaster, receiptRaster, previewPNG, previewReceiptPNG, hasUnrenderableText, SIZE_SCALES };

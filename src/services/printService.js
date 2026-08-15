@@ -179,7 +179,50 @@ function qrCode(data, { size = 6, ec = 49 } = {}) {
 
 // ── Receipt formatter ─────────────────────────────────────────────────────────
 
-function buildReceipt({ order, items, settings, paymentDetails = {} }) {
+// Optional logo — client-side converts the upload to a monochrome
+// bitmap (1 bit per dot, MSB-first) and stores it in 3 settings:
+//   company_logo_bitmap         — base64 of the raw bytes
+//   company_logo_bitmap_width   — width in BYTES (= dots / 8)
+//   company_logo_bitmap_height  — height in DOTS
+// We wrap the bytes in ESC/POS `GS v 0` (raster image) and emit at
+// the top of the receipt. If any of the three settings is missing
+// or sizes don't match, we skip silently — no error, no blank space.
+// Shared by the classic and rendered receipt paths (SEPOS-RECEIPT-FONT-001).
+function buildLogoBlock(settings) {
+  const logoBlock = [];
+  if (settings.company_logo_bitmap && settings.company_logo_bitmap_width && settings.company_logo_bitmap_height) {
+    try {
+      const data   = Buffer.from(String(settings.company_logo_bitmap), 'base64');
+      const wBytes = parseInt(settings.company_logo_bitmap_width, 10);
+      const hDots  = parseInt(settings.company_logo_bitmap_height, 10);
+      if (data.length === wBytes * hDots) {
+        // Send the whole logo as a single GS v 0 command. ESC/POS spec
+        // allows up to 65535 dots tall via the 2-byte yL/yH field;
+        // cnfujun POS80 happily renders ~300 dots in one go. Chunking
+        // was an earlier defensive measure but produced PARTIAL prints
+        // (some chunks dropped). Single command is more reliable.
+        logoBlock.push(CMD.ALIGN_CENTER);
+        const header = Buffer.from([
+          GS, 0x76, 0x30, 0x00,
+          wBytes & 0xFF, (wBytes >> 8) & 0xFF,
+          hDots  & 0xFF, (hDots  >> 8) & 0xFF,
+        ]);
+        logoBlock.push(header, data, lf());
+      } else {
+        console.warn(`[print] logo bitmap size mismatch — expected ${wBytes * hDots} bytes, got ${data.length} (skipping)`);
+      }
+    } catch (err) {
+      console.warn('[print] logo emit failed (skipping):', err.message);
+    }
+  }
+  return logoBlock;
+}
+
+// SEPOS-RECEIPT-FONT-001 — everything the receipt SAYS (venue strings, dates,
+// money, grouped items) computed ONCE and shared by the classic ESC/POS
+// builder below and the rendered-font raster (ticketRender.receiptLines), so
+// the two paths can never disagree on a number.
+function computeReceiptModel({ order, items, settings, paymentDetails = {} }) {
   // Receipt name — the owner-edited company_name is authoritative: once the
   // key exists, what they typed is what prints, INCLUDING blank (logo-only
   // receipts — Korakot 2026-08-07: blanking the name must not dig up the
@@ -193,11 +236,6 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
   const vatNo   = settings.company_vat     || '';
   const footer  = settings.receipt_footer  || 'Thank you for dining with us!';
   const scRate  = parseFloat(settings.service_charge_rate || 12.5);
-  // SEPOS-PRINT-FONT-001 — receipt body text size. Default 'normal' = today's
-  // output (SIZE_NORMAL, full 42-char columns). Larger scales shrink the
-  // effective column width so the name/price columns still align.
-  const receiptSize  = scaleCmd(settings.receipt_font_scale || 'normal');
-  const receiptWidth = Math.floor(LINE_WIDTH / scaleWidthDivisor(settings.receipt_font_scale || 'normal'));
 
   const now  = new Date();
   const date = now.toLocaleDateString('en-GB',  { day:'2-digit', month:'short', year:'numeric' });
@@ -270,47 +308,33 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
     byCourse[c].push(i);
   });
 
+  return {
+    name, addr, phone, vatNo, footer, scRate, date, time,
+    subtotal, discountAmt, depositPaid, serviceCharge, billTotal,
+    amountPaid, change, tip, method, byCourse,
+    // SEPOS-PAPER-SAVER-001 — the settled RECEIPT (has a payment method) is a
+    // record, not a flyer: skip logo + review QR to save paper. The customer
+    // BILL (no method yet) keeps both.
+    isSettledReceipt: Boolean(method),
+    discountLabel: paymentDetails.discountLabel || '',
+    tenders: Array.isArray(paymentDetails.tenders) ? paymentDetails.tenders : [],
+  };
+}
+
+function buildReceipt({ order, items, settings, paymentDetails = {} }) {
+  const { name, addr, phone, vatNo, footer, scRate, date, time,
+          subtotal, discountAmt, depositPaid, serviceCharge, billTotal,
+          amountPaid, change, tip, method, byCourse, isSettledReceipt }
+    = computeReceiptModel({ order, items, settings, paymentDetails });
+  // SEPOS-PRINT-FONT-001 — receipt body text size. Default 'normal' = today's
+  // output (SIZE_NORMAL, full 42-char columns). Larger scales shrink the
+  // effective column width so the name/price columns still align.
+  const receiptSize  = scaleCmd(settings.receipt_font_scale || 'normal');
+  const receiptWidth = Math.floor(LINE_WIDTH / scaleWidthDivisor(settings.receipt_font_scale || 'normal'));
+
   // Restaurant name: large if short, tall if long
   const nameSize = name.length <= 14 ? [CMD.SIZE_BIG] : [CMD.SIZE_TALL];
-
-  // Optional logo — client-side converts the upload to a monochrome
-  // bitmap (1 bit per dot, MSB-first) and stores it in 3 settings:
-  //   company_logo_bitmap         — base64 of the raw bytes
-  //   company_logo_bitmap_width   — width in BYTES (= dots / 8)
-  //   company_logo_bitmap_height  — height in DOTS
-  // We wrap the bytes in ESC/POS `GS v 0` (raster image) and emit at
-  // the top of the receipt. If any of the three settings is missing
-  // or sizes don't match, we skip silently — no error, no blank space.
-  let logoBlock = [];
-  // SEPOS-PAPER-SAVER-001 — the settled RECEIPT (has a payment method) is a
-  // record, not a flyer: skip logo + review QR to save paper. The customer
-  // BILL (no method yet) keeps both.
-  const isSettledReceipt = Boolean(method);
-  if (!isSettledReceipt && settings.company_logo_bitmap && settings.company_logo_bitmap_width && settings.company_logo_bitmap_height) {
-    try {
-      const data   = Buffer.from(String(settings.company_logo_bitmap), 'base64');
-      const wBytes = parseInt(settings.company_logo_bitmap_width, 10);
-      const hDots  = parseInt(settings.company_logo_bitmap_height, 10);
-      if (data.length === wBytes * hDots) {
-        // Send the whole logo as a single GS v 0 command. ESC/POS spec
-        // allows up to 65535 dots tall via the 2-byte yL/yH field;
-        // cnfujun POS80 happily renders ~300 dots in one go. Chunking
-        // was an earlier defensive measure but produced PARTIAL prints
-        // (some chunks dropped). Single command is more reliable.
-        logoBlock.push(CMD.ALIGN_CENTER);
-        const header = Buffer.from([
-          GS, 0x76, 0x30, 0x00,
-          wBytes & 0xFF, (wBytes >> 8) & 0xFF,
-          hDots  & 0xFF, (hDots  >> 8) & 0xFF,
-        ]);
-        logoBlock.push(header, data, lf());
-      } else {
-        console.warn(`[print] logo bitmap size mismatch — expected ${wBytes * hDots} bytes, got ${data.length} (skipping)`);
-      }
-    } catch (err) {
-      console.warn('[print] logo emit failed (skipping):', err.message);
-    }
-  }
+  const logoBlock = isSettledReceipt ? [] : buildLogoBlock(settings);
 
   const parts = [
     CMD.INIT,
@@ -1121,7 +1145,48 @@ async function printReceipt(settings, order, items, paymentDetails) {
   const printerName = settings.printer_receipt_name || '';
   const lprQueue    = settings.printer_receipt_lpr_queue || 'lp';
   if (!ip && !printerName) throw new Error('NO_IP');
+  // SEPOS-RECEIPT-FONT-001 — rendered typeface first, classic auto-fallback.
+  if (await tryRenderedReceipt({ ip, port, printerName, lprQueue }, settings, order, items, paymentDetails)) return;
   await sendRaw(ip, port, buildReceipt({ order, items, settings, paymentDetails }), { printerName, lprQueue });
+}
+
+// SEPOS-RECEIPT-FONT-001 — the customer bill / settled receipt in the same
+// rendered typeface as kitchen tickets (Korakot, 16 Aug: "the bill font is
+// not nice"). Money math comes from computeReceiptModel — shared with the
+// classic builder — so both paths always print the same numbers. The logo
+// bitmap and review QR stay as native ESC/POS blocks around the text raster
+// (both customer-bill-only per SEPOS-PAPER-SAVER-001). Any failure returns
+// false so the classic builder runs — a font problem can never lose a bill.
+async function tryRenderedReceipt(dest, settings, order, items, paymentDetails) {
+  if (!dest.ip && !dest.printerName) return false;
+  try {
+    const tr = require('./ticketRender');
+    const model = computeReceiptModel({ order, items, settings, paymentDetails });
+    // Thai/CJK anywhere the receipt prints (incl. venue name/address/footer,
+    // which kitchen tickets never carry) → classic codepage path.
+    if (tr.hasUnrenderableText(order, items, [model.name, model.addr, model.footer])) return false;
+    // One fixed size — Korakot 16 Aug: only ORDER tickets are size-adjustable.
+    const raster = await tr.receiptRaster(order, model);
+    const parts = [
+      CMD.INIT,
+      ...(model.isSettledReceipt ? [] : buildLogoBlock(settings)),
+      raster,
+      (settings.google_review_url && !model.isSettledReceipt) ? [
+        lf(),
+        CMD.ALIGN_CENTER,
+        qrCode(settings.google_review_url),
+        lf(),
+        txt(String(settings.receipt_qr_caption || 'Scan to leave us a review').slice(0, 42)), lf(),
+      ] : [],
+      lf(3),
+      CMD.CUT,
+    ];
+    await sendRaw(dest.ip, dest.port, flatten(parts), { printerName: dest.printerName, lprQueue: dest.lprQueue });
+    return true;
+  } catch (e) {
+    console.warn('[print] rendered receipt failed — classic fallback:', e.message);
+    return false;
+  }
 }
 
 // SEPOS-DRAWER-001 — open the cash drawer via the RECEIPT printer's RJ11 kick
@@ -1457,6 +1522,7 @@ module.exports = {
   testPrint,
   findCupsQueueForIp,
   buildReceipt,           // exported for mock-receipt test print
+  computeReceiptModel,    // SEPOS-RECEIPT-FONT-001 — shared with ticketRender + previews
   buildTestPage,          // SEPOS-ANDROID-001 — buffer endpoints for the native app
   buildKitchenTicket,     // SEPOS-ANDROID-001
   buildFullKitchenTicket, // SEPOS-ANDROID-001

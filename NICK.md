@@ -99,11 +99,11 @@ SiamEPOS costs £89/month and sets up in an afternoon.
 | Company | SiamEPOS Ltd |
 | Registered in | England & Wales |
 | SIC code | 62012 — Business and domestic software development |
-| Trademark | UK00004385501 — Filed 11/05/2026 |
+| Trademark | UK00004385501 — **REGISTERED 14/08/2026** (filed 11/05/2026, renewal 11/05/2036) |
 | Trademark type | Figurative mark (lotus badge + SiamEPOS text) |
 | Classes | Class 9 (downloadable software) + Class 42 (SaaS) |
 | Company No. (CRN) | 17215576 — incorporated 12 May 2026 |
-| Owner | Korakot Kongponsrisiri (transfer to SiamEPOS Ltd pending) |
+| Owner | Korakot Kongponsrisiri (personal) — ⚠️ **transfer to SiamEPOS Ltd STILL PENDING: file form TM16, £60.** Register also still shows the OLD W14 9EX address; the TM16 fixes both at once, so do NOT file a separate TM21A. Deed + filing pack: `~/Documents/Claude/Projects/SiamEpos/SiamEPOS-Trademark-Assignment-2026-08.md` (+ .pdf) |
 | Bank | Starling Business Account |
 | ICO Registration | ✅ DONE 2026-06-05 — Tier 1, app no. C1951827, £52/yr (£47 by DD). Awaiting ZB/Z ref. |
 | Corporation Tax | ✅ DONE — registered with HMRC |
@@ -254,7 +254,7 @@ SiamEPOS™ UK00004385501
 |--------|------|---------|
 | SEPOS-043 | Role-based access hierarchy (waiter/supervisor/manager) | 🟡 MEDIUM |
 | Mac reservations push to cloud | Currently pull-only | 🟡 MEDIUM |
-| Trademark transfer to SiamEPOS Ltd | Email information@ipo.gov.uk | 🟡 THIS MONTH |
+| Trademark transfer to SiamEPOS Ltd | **Sign the deed + file TM16 (£60)** — mark is now REGISTERED, so do it promptly (six-month recordal rule affects cost recovery in infringement claims) | 🔴 NOW |
 | Find accountant | R&D Tax Credits — could mean thousands back | 🟡 THIS MONTH |
 | Orders ↔ reservations linkage | orders.reservation_id for accurate revenue | 🟢 LOW |
 

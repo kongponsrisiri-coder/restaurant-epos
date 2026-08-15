@@ -121,6 +121,21 @@ function toRaster(img) {
 // order-level note, and course headers all print. Anything the classic ticket
 // says, this one says.
 const COURSES_EN = { 1: 'STARTERS', 2: 'MAINS', 3: 'DESSERTS', 4: 'EXTRAS' };
+// SEPOS-TICKET-SIZE-001 — one rendered font, operator-chosen SIZE. The whole
+// ticket is spec'd in px on the 576px canvas, so scaling every size/gap/indent
+// by one factor resizes cleanly and the measured word-wrap adapts by itself.
+const SIZE_SCALES = { standard: 1.0, large: 1.15, xl: 1.3, xxl: 1.5 };
+function applyScale(lines, sizeKey) {
+  const k = SIZE_SCALES[sizeKey] || 1.0;
+  if (k === 1.0) return lines;
+  return lines.map((l) => l.rule ? l : {
+    ...l,
+    size:   l.size   ? Math.round(l.size * k)   : l.size,
+    gap:    l.gap    ? Math.round(l.gap * k)    : l.gap,
+    indent: l.indent ? Math.round(l.indent * k) : l.indent,
+  });
+}
+
 async function kitchenTicketRaster(order, items, opts = {}) {
   const tz = 'Europe/London';
   const now = new Date();
@@ -172,7 +187,7 @@ async function kitchenTicketRaster(order, items, opts = {}) {
   }
   lines.push({ rule: true });
   lines.push({ text: `Order #${order.id}${courseLabel ? ' · ' + courseLabel : ''}`, size: 22, center: true });
-  const img = await renderLines(lines);
+  const img = await renderLines(applyScale(lines, opts.size));
   return Buffer.concat([toRaster(img), Buffer.from([0x0a, 0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x00])]); // feed + cut
 }
 
@@ -180,7 +195,7 @@ async function kitchenTicketRaster(order, items, opts = {}) {
 // before any printer sees it.
 async function previewPNG(order, items, outPath, opts = {}) {
   const tzLines = await (async () => null)();
-  const img = await renderLines(await _linesFor(order, items, opts));
+  const img = await renderLines(applyScale(await _linesFor(order, items, opts), opts.size));
   await PImage.encodePNGToStream(img, require('fs').createWriteStream(outPath));
   return outPath;
 }
@@ -203,4 +218,4 @@ async function _linesFor(order, items, opts) {
   return lines;
 }
 
-module.exports = { kitchenTicketRaster, previewPNG, hasUnrenderableText };
+module.exports = { kitchenTicketRaster, previewPNG, hasUnrenderableText, SIZE_SCALES };

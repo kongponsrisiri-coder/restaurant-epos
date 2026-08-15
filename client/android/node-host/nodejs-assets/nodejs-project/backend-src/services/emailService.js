@@ -256,6 +256,34 @@ function toE164Uk(phone) {
   return null;
 }
 
+// SEPOS-LEAD-ALERT-001 — generic one-off SMS on the same Twilio creds.
+// Resolves (never rejects); no-op without creds or an unusable number.
+function sendSms(toRaw, text) {
+  return new Promise((resolve) => {
+    if (!TWILIO_SID || !TWILIO_TOKEN) return resolve();
+    const to = toE164Uk(toRaw);
+    if (!to) return resolve();
+    const body = new URLSearchParams({ To: to, From: TWILIO_FROM, Body: String(text).slice(0, 600) }).toString();
+    const req = https.request({
+      hostname: 'api.twilio.com',
+      path:     '/2010-04-01/Accounts/' + TWILIO_SID + '/Messages.json',
+      method:   'POST',
+      auth:     TWILIO_SID + ':' + TWILIO_TOKEN,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) },
+    }, (res) => {
+      let data = '';
+      res.on('data', c => { data += c; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) console.log('✅ SMS sent to ' + to);
+        else console.warn('⚠️ SMS failed ' + res.statusCode + ': ' + data.slice(0, 160));
+        resolve();
+      });
+    });
+    req.on('error', (e) => { console.warn('⚠️ SMS error: ' + e.message); resolve(); });
+    req.write(body); req.end();
+  });
+}
+
 function sendBookingSms(reservation) {
   return new Promise((resolve) => {
     if (!TWILIO_SID || !TWILIO_TOKEN) return resolve();
@@ -302,4 +330,4 @@ function sendBookingSms(reservation) {
   });
 }
 
-module.exports = { sendBookingConfirmation, sendReminderEmail, sendBookingSms, sendBrevoEmail };
+module.exports = { sendSms, sendBookingConfirmation, sendReminderEmail, sendBookingSms, sendBrevoEmail };

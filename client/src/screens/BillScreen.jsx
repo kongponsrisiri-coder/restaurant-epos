@@ -307,8 +307,15 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const handlePrintBill = () => {
     // SEPOS-DEPOSIT-PRINT — if a booking deposit has been applied, show it on
     // the printed bill (Deposit paid −£X + Balance due) so the customer sees it.
-    const depositPaid = splitTenders.filter(t => t.method === 'Deposit')
+    // BOTH deposit models count: receiptTotals.depositPaid already carries a
+    // deposit redeemed on the Order screen (model A, SEPOS-DEPOSIT-ORDER-001);
+    // tender rows cover the older Mixed-Payment Deposit tender. The old code
+    // OVERRODE the model-A amount with the tender sum — £0 pre-payment — so an
+    // order-applied deposit showed on screen but vanished from the printed
+    // bill (Fern, 17 Aug).
+    const tenderDeposit = splitTenders.filter(t => t.method === 'Deposit')
       .reduce((s, t) => s + Number(t.amount || 0), 0);
+    const depositPaid = (receiptTotals.depositPaid || 0) + tenderDeposit;
     printReceipt({ order: { ...order }, items: billItems, settings: { ...settings }, paymentDetails: { ...receiptTotals, depositPaid } });
   };
 

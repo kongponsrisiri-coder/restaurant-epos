@@ -65,10 +65,56 @@ export default function TradingSection() {
               </div>
             ))}
           </div>
+          {/* SEPOS-MONEY-STORY-001 — the one card a restaurant owner reads first
+              (Korakot at Fern, 17 Aug: "add the sale or something that make the
+              restaurant easy to understand"). Adds bills + till voucher sales
+              into ONE "money into the till" figure, and explains voucher-paid
+              bills with the same day-basis sentence that ended the spa deposit
+              confusion. Methods that aren't real money in (voucher/deposit/
+              external/comp) are excluded from the money figure. */}
+          {(() => {
+            if (!data) return null;
+            const NON_MONEY = new Set(['voucher', 'deposit', 'external', 'complimentary', 'zero', 'mock']);
+            const entries = Object.entries(data.by_method || {});
+            const billMoney = entries.filter(([m]) => !NON_MONEY.has(String(m).toLowerCase()))
+              .reduce((s, [, a]) => s + Number(a || 0), 0);
+            const vs = data.vouchers_sold || {};
+            const vTill  = Number(vs.till_total || 0);
+            const vCard  = Number(vs.by_method?.card?.total || 0);
+            const vCash  = Number(vs.by_method?.cash?.total || 0);
+            const cardBills = Number(data.by_method?.Card ?? data.by_method?.card ?? 0);
+            const cashBills = Number(data.by_method?.Cash ?? data.by_method?.cash ?? 0);
+            const moneyIn = billMoney + vTill;
+            const vRedeemed = Number(data.vouchers_redeemed?.total || 0);
+            if (moneyIn <= 0 && vRedeemed <= 0) return null;
+            const row = (label, val, opts = {}) => (
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: opts.big ? 20 : 14, fontWeight: opts.big ? 800 : (opts.bold ? 700 : 500), color: opts.color || (opts.big ? 'var(--brand-primary,#0D1B3E)' : '#444'), borderTop: opts.rule ? '2px solid var(--brand-primary,#0D1B3E)' : 'none', marginTop: opts.rule ? 6 : 0 }}>
+                <span>{label}</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{val}</span>
+              </div>
+            );
+            return (
+              <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', border: '1.5px solid var(--brand-accent,#C9A84C)' }}>
+                <div style={{ fontWeight: 800, marginBottom: 10, color: 'var(--brand-primary, #1a1a2e)', fontSize: 16 }}>💷 Money into the till</div>
+                {row('Food & drink taken', `£${billMoney.toFixed(2)}`)}
+                {vTill > 0 && row('Gift vouchers sold at the till', `+£${vTill.toFixed(2)}`)}
+                {row('Total money in', `£${moneyIn.toFixed(2)}`, { big: true, rule: true })}
+                <div style={{ fontSize: 13, color: '#666', marginTop: 4 }}>
+                  💳 Card £{(cardBills + vCard).toFixed(2)} &nbsp;·&nbsp; 💵 Cash £{(cashBills + vCash).toFixed(2)}
+                </div>
+                {vRedeemed > 0 && (
+                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 10px', fontSize: 12.5, color: '#1e3a8a', marginTop: 10 }}>
+                    💡 £{vRedeemed.toFixed(2)} of the bills were paid with gift vouchers — that money was counted on the day each voucher was <strong>sold</strong>, so it isn't added again today.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
           {data?.by_method && Object.keys(data.by_method).length > 0 && (
             <div style={{ background: 'white', borderRadius: 12, padding: 20, marginBottom: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
               <div style={{ fontWeight: 700, marginBottom: 12, color: 'var(--brand-primary, #1a1a2e)' }}>Payment Methods</div>
-              {Object.entries(data.by_method).map(([method, amount]) => (
+              {Object.entries(data.by_method)
+                .filter(([, amount]) => Math.abs(Number(amount) || 0) >= 0.005)  /* SEPOS-MONEY-STORY-001 — hide £0.00 noise rows (e.g. 'zero') */
+                .map(([method, amount]) => (
                 <div key={method} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
                   <span style={{ color: '#555' }}>{method}</span>
                   <span style={{ fontWeight: 700 }}>£{Number(amount).toFixed(2)}</span>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getSettings } from '../../api';
 import { dineTableLabel } from '../../utils/orderLabel';
+import { useBackdropDismiss } from '../../utils/backdropGuard';
 import {
   thermalPrint, fullPagePrint, escPosPrint, pageHtml,
   fmt, fmtInt, dateLabel, restaurantName, nowStamp,
@@ -600,6 +601,7 @@ function EditPaymentModal({ bill, items = [], onClose, onDone }) {
 // SEPOS-043: supervisor can unlock (to see UI) but the 🗑️ button is hidden
 // for their role — and the backend rejects the delete too if bypassed.
 function UnlockModal({ onClose, onUnlocked }) {
+  const backdrop = useBackdropDismiss(onClose);
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -624,7 +626,7 @@ function UnlockModal({ onClose, onUnlocked }) {
 
   return (
     <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9000, padding: 20 }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      {...backdrop}>
       <div style={{ background: 'white', borderRadius: 14, padding: 28, width: 'min(380px, 100%)', boxShadow: '0 30px 80px rgba(0,0,0,0.35)' }}>
         <div style={{ fontSize: 30, marginBottom: 6 }}>🔒</div>
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)' }}>Unlock manager actions</h2>

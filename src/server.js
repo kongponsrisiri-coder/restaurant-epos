@@ -2214,7 +2214,35 @@ app.post('/api/staff/change-pin', requireStaffAuth(), async (req, res) => {
 const DEFAULT_AUTH_SECRET = 'siamepos-dev-auth-secret-change-me';
 let AUTH_SECRET = process.env.AUTH_SECRET || DEFAULT_AUTH_SECRET;
 if ((!process.env.AUTH_SECRET || AUTH_SECRET === DEFAULT_AUTH_SECRET) && process.env.NODE_ENV === 'production') {
-  AUTH_SECRET = crypto.randomBytes(32).toString('hex');
+  // SEPOS-061b — a per-BOOT random secret is right for a cloud deploy that
+  // forgot its env var (tokens unforgeable, sessions reset on redeploy), but
+  // on a LOCAL till it meant EVERY app restart silently killed every stored
+  // login on the device: the client kept sending the dead token and every
+  // gated save answered "sign out and sign in again" (Korakot's two-week
+  // Fern/demo-till chase, 17 Aug — proven by replaying the device's stored
+  // token against its own freshly-restarted server: 401). Local installs now
+  // persist a per-install random secret next to the SQLite DB, so staff
+  // sessions survive restarts and updates. Still never the public default,
+  // still random per install; file is 0600.
+  let persisted = null;
+  if (process.env.DB_MODE === 'local' && process.env.SQLITE_PATH) {
+    const fsSync = require('fs');
+    const secretFile = path.join(path.dirname(process.env.SQLITE_PATH), '.auth-secret');
+    try {
+      if (fsSync.existsSync(secretFile)) {
+        const s = fsSync.readFileSync(secretFile, 'utf8').trim();
+        if (s && s !== DEFAULT_AUTH_SECRET && s.length >= 32) persisted = s;
+      }
+      if (!persisted) {
+        persisted = crypto.randomBytes(32).toString('hex');
+        fsSync.writeFileSync(secretFile, persisted, { mode: 0o600 });
+      }
+    } catch (e) {
+      console.warn('[auth] could not persist local auth secret — sessions will reset on restart:', e.message);
+      persisted = null;
+    }
+  }
+  AUTH_SECRET = persisted || crypto.randomBytes(32).toString('hex');
 }
 
 function hashPassword(password) {

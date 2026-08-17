@@ -37,3 +37,4 @@ client/android/node-host/
 # Never commit local Claude chat exports (SEC-2026-07)
 Claude Chat history/
 *.chat-export.json
+scripts/menu-snapshot-*.json

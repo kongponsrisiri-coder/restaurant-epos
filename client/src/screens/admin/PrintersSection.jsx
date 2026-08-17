@@ -951,6 +951,19 @@ export default function PrintersSection() {
           </select>
           <span style={{ fontSize:12, color:'#aaa' }}>Kitchen &amp; bar order tickets. Bigger sizes fit fewer characters per line before wrapping. Customer bills use the same font at one fixed size.</span>
         </div>
+        {/* SEPOS-FERN-POLISH-001 — printer buzzer on kitchen/bar tickets */}
+        {(() => { const on = settings.kitchen_print_beep === '1'; return (
+          <div onClick={() => setSettings(s => ({ ...s, kitchen_print_beep: on ? '0' : '1' }))}
+            style={{ display:'flex', alignItems:'center', gap:12, marginTop:16, paddingTop:14, borderTop:'1px solid #f0f0f0', cursor:'pointer' }}>
+            <div style={{ width:44, height:26, borderRadius:13, background: on ? 'var(--brand-primary,#0D1B3E)' : '#cbd5e1', position:'relative', transition:'background .15s', flexShrink:0 }}>
+              <div style={{ position:'absolute', top:3, left: on ? 21 : 3, width:20, height:20, borderRadius:'50%', background:'#fff', transition:'left .15s' }} />
+            </div>
+            <div>
+              <div style={{ fontSize:14, fontWeight:700, color:'var(--brand-primary,#0D1B3E)' }}>🔔 Beep when kitchen / bar tickets print</div>
+              <div style={{ fontSize:12, color:'#888', marginTop:2 }}>The printer itself sounds two short beeps as each ticket prints, so the kitchen hears new orders land. Works on POS80-class and Epson thermal printers; printers without a buzzer simply stay silent. Receipts never beep.</div>
+            </div>
+          </div>
+        ); })()}
       </div>
 
       {/* SEPOS-DRAWER-001 — open the cash drawer on payment (default ON). */}

@@ -13,6 +13,7 @@ import {
 import CodeScanButton from '../../components/CodeScanButton';
 import { downloadCsv } from '../../utils/csv';
 import { confirm } from '../../utils/confirm';
+import { useBackdropDismiss } from '../../utils/backdropGuard';
 
 const STATUS_PILL = {
   active:   { bg: '#dcfce7', fg: '#15803d', label: '✓ Active' },
@@ -37,6 +38,7 @@ function fmtDateTime(d) {
 }
 
 export default function VouchersSection() {
+  const detailBackdrop = useBackdropDismiss(() => setDetailId(null));
   const [rows,         setRows]         = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [q,            setQ]            = useState('');
@@ -272,7 +274,7 @@ export default function VouchersSection() {
 
       {/* Detail modal */}
       {detailId && (
-        <div onClick={(e) => e.target === e.currentTarget && setDetailId(null)}
+        <div {...detailBackdrop}
           style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
           <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 540, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ padding: '18px 22px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -350,6 +352,7 @@ export default function VouchersSection() {
 }
 
 function SellVoucherModal({ onClose, onSold }) {
+  const backdrop = useBackdropDismiss(onClose);
   const PRESETS = [25, 50, 100, 150];
   const [amount, setAmount]                   = useState(50);
   const [recipientName, setRecipientName]     = useState('');
@@ -381,7 +384,7 @@ function SellVoucherModal({ onClose, onSold }) {
   }
 
   return (
-    <div onClick={(e) => e.target === e.currentTarget && onClose()}
+    <div {...backdrop}
       style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 520, maxHeight: '92vh', overflowY: 'auto' }}>
         <div style={{ padding: '18px 22px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -441,6 +444,7 @@ function SellVoucherModal({ onClose, onSold }) {
 // type='deposit' voucher tied to a reservation; redeemed on the day as a
 // 'Deposit' tender (never a discount). Expiry = reservation date + 7 (server).
 function TakeDepositModal({ onClose, onTaken }) {
+  const backdrop = useBackdropDismiss(onClose);
   const PRESETS = [10, 20, 50, 100];
   const [amount, setAmount]       = useState(20);
   const [method, setMethod]       = useState(null);
@@ -470,7 +474,7 @@ function TakeDepositModal({ onClose, onTaken }) {
   }
 
   return (
-    <div onClick={(e) => e.target === e.currentTarget && onClose()}
+    <div {...backdrop}
       style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 500, maxHeight: '92vh', overflowY: 'auto' }}>
         <div style={{ padding: '18px 22px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -532,8 +536,9 @@ function Field({ label, value, onChange, type = 'text', textarea }) {
 }
 
 function SoldSuccessModal({ voucher, onClose }) {
+  const backdrop = useBackdropDismiss(onClose);
   return (
-    <div onClick={(e) => e.target === e.currentTarget && onClose()}
+    <div {...backdrop}
       style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001, padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 440 }}>
         <div style={{ padding: 26, textAlign: 'center' }}>

@@ -197,6 +197,14 @@ export default function ZReportSection() {
     rows.push(['Discounts £', Number(reportData.total_discounts || 0).toFixed(2)]);
     if (Number(reportData.comp_bills?.count) > 0) rows.push([`Complimentary bills x${reportData.comp_bills.count} £`, Number(reportData.comp_bills.value || 0).toFixed(2)]);
     rows.push(['Void items', reportData.void_count || 0]);
+    if (Number(reportData.vouchers_sold?.count) > 0 || Number(reportData.vouchers_redeemed?.count) > 0) {
+      rows.push([]);
+      rows.push(['Gift vouchers', 'Amount £']);
+      rows.push([`Sold (${reportData.vouchers_sold?.count || 0})`, Number(reportData.vouchers_sold?.total || 0).toFixed(2)]);
+      if (Number(reportData.vouchers_sold?.till_cash) > 0) rows.push(['  paid cash (drawer)', Number(reportData.vouchers_sold.till_cash).toFixed(2)]);
+      if (Number(reportData.vouchers_sold?.till_card) > 0) rows.push(['  paid card', Number(reportData.vouchers_sold.till_card).toFixed(2)]);
+      rows.push([`Redeemed (${reportData.vouchers_redeemed?.count || 0}) non-cash`, Number(reportData.vouchers_redeemed?.total || 0).toFixed(2)]);
+    }
     if (Array.isArray(reportData.vat_breakdown) && reportData.vat_breakdown.length) {
       rows.push([]);
       rows.push(['VAT breakdown', 'Rate %', 'Net £', 'VAT £']);
@@ -646,6 +654,21 @@ function buildZReportBody(r, type, settings, cash, thermal) {
       <tr class="total-row"><td colspan="2">Total VAT</td><td class="right">${fmt(r.vat_total)}</td></tr>
     </table>` : '';
 
+  // SEPOS-FERN-POLISH-001 — gift vouchers on the PRINTED Z (screen had the
+  // block, paper didn't — the drawer held voucher cash the sheet never
+  // explained; Korakot: "that going to confusing the client").
+  const vTillCashZ = Number(r.vouchers_sold?.till_cash || 0);
+  const vTillCardZ = Number(r.vouchers_sold?.till_card || 0);
+  const vActive = Number(r.vouchers_sold?.count) > 0 || Number(r.vouchers_redeemed?.count) > 0;
+  const vouchers = !vActive ? '' : `
+    ${thermal ? '<hr class="divider"/><div class="section-head">Gift Vouchers</div>' : '<h2>Gift Vouchers</h2>'}
+    <table>
+      <tr><td>Sold today (${r.vouchers_sold?.count || 0})</td><td class="right">${fmt(r.vouchers_sold?.total)}</td></tr>
+      ${vTillCashZ > 0 ? `<tr><td>&nbsp;&nbsp;paid cash (in drawer)</td><td class="right">${fmt(vTillCashZ)}</td></tr>` : ''}
+      ${vTillCardZ > 0 ? `<tr><td>&nbsp;&nbsp;paid card</td><td class="right">${fmt(vTillCardZ)}</td></tr>` : ''}
+      <tr><td>Redeemed on bills (${r.vouchers_redeemed?.count || 0}) · non-cash</td><td class="right">${fmt(r.vouchers_redeemed?.total)}</td></tr>
+    </table>`;
+
   // SEPOS-DEPOSIT-001 — booking deposits (only when the tenant uses them).
   const depActive = r.deposits_enabled && (Number(r.deposits_taken?.count) > 0 || Number(r.deposits_redeemed?.count) > 0 || Number(r.deposits_forfeited?.count) > 0 || Number(r.deposits_held?.total) > 0);
   const deposits = !depActive ? '' : `
@@ -661,8 +684,9 @@ function buildZReportBody(r, type, settings, cash, thermal) {
     ${thermal ? '<hr class="divider-solid"/><div class="section-head">Cash Reconciliation</div>' : '<h2>Cash Reconciliation</h2>'}
     <table>
       <tr><td>Cash sales</td><td class="right">${fmt(r.total_cash)}</td></tr>
+      ${vTillCashZ > 0 ? `<tr><td>+ Voucher sales (cash)</td><td class="right">${fmt(vTillCashZ)}</td></tr>` : ''}
       <tr><td>– Petty cash</td><td class="right">${fmt(cash.pettyCash)}</td></tr>
-      <tr><td>Expected in drawer</td><td class="right">${fmt((r.total_cash || 0) - cash.pettyCash)}</td></tr>
+      <tr><td>Expected in drawer</td><td class="right">${fmt((r.total_cash || 0) + vTillCashZ - cash.pettyCash)}</td></tr>
       <tr><td>Actual counted</td><td class="right">${fmt(cash.actualCash)}</td></tr>
       <tr class="total-row"><td>${cash.difference === 0 ? '✅ Exact match' : cash.difference > 0 ? '📈 Over' : '📉 Short'}</td><td class="right">${fmt(Math.abs(cash.difference))}</td></tr>
     </table>`;
@@ -671,11 +695,12 @@ function buildZReportBody(r, type, settings, cash, thermal) {
     ${thermal ? '<hr class="divider"/><div class="section-head">Card Reconciliation</div>' : '<h2>Card Reconciliation</h2>'}
     <table>
       <tr><td>Card sales (system)</td><td class="right">${fmt(r.total_card)}</td></tr>
+      ${vTillCardZ > 0 ? `<tr><td>+ Voucher sales (card)</td><td class="right">${fmt(vTillCardZ)}</td></tr>` : ''}
       <tr><td>Actual takings</td><td class="right">${fmt(cash.actualCard)}</td></tr>
       <tr class="total-row"><td>${cash.cardDifference === 0 ? '✅ Exact match' : cash.cardDifference > 0 ? '📈 Over' : '📉 Short'}</td><td class="right">${fmt(Math.abs(cash.cardDifference || 0))}</td></tr>
     </table>`;
 
-  return head + summary + channels + stats + vat + deposits + recon + cardRecon;
+  return head + summary + channels + stats + vat + vouchers + deposits + recon + cardRecon;
 }
 
 // ── ESC/POS line builder ──────────────────────────────────────────
@@ -723,6 +748,14 @@ function buildZReportLines(r, type, settings, cash) {
   // SEPOS-DEPOSIT-001 — booking deposits (only when used). Redeemed is a non-cash
   // tender NOT in till cash; taken today is future revenue, not today's sales.
   if (r.deposits_enabled && (Number(r.deposits_taken?.count) > 0 || Number(r.deposits_redeemed?.count) > 0 || Number(r.deposits_forfeited?.count) > 0 || Number(r.deposits_held?.total) > 0)) {
+  if (Number(r.vouchers_sold?.count) > 0 || Number(r.vouchers_redeemed?.count) > 0) {
+    lines.push({ kind: 'div' });
+    lines.push({ kind: 'h2', text: 'GIFT VOUCHERS' });
+    lines.push({ kind: 'row', left: `Sold today (${r.vouchers_sold?.count || 0})`, right: fmt(r.vouchers_sold?.total) });
+    if (Number(r.vouchers_sold?.till_cash) > 0) lines.push({ kind: 'row', left: '  paid cash (drawer)', right: fmt(r.vouchers_sold?.till_cash) });
+    if (Number(r.vouchers_sold?.till_card) > 0) lines.push({ kind: 'row', left: '  paid card', right: fmt(r.vouchers_sold?.till_card) });
+    lines.push({ kind: 'row', left: `Redeemed (${r.vouchers_redeemed?.count || 0}) non-cash`, right: fmt(r.vouchers_redeemed?.total) });
+  }
     lines.push({ kind: 'div' });
     lines.push({ kind: 'h2', text: 'BOOKING DEPOSITS' });
     lines.push({ kind: 'row', left: `Taken today (${r.deposits_taken?.count || 0})`,    right: fmt(r.deposits_taken?.total) });
@@ -734,8 +767,9 @@ function buildZReportLines(r, type, settings, cash) {
   lines.push({ kind: 'div-solid' });
   lines.push({ kind: 'h2', text: 'CASH RECONCILIATION' });
   lines.push({ kind: 'row', left: 'Cash sales',       right: fmt(r.total_cash) });
+  if (Number(r.vouchers_sold?.till_cash) > 0) lines.push({ kind: 'row', left: '+ Voucher cash',   right: fmt(r.vouchers_sold?.till_cash) });
   lines.push({ kind: 'row', left: '- Petty cash',     right: fmt(cash.pettyCash) });
-  lines.push({ kind: 'row', left: 'Expected drawer',  right: fmt((r.total_cash || 0) - cash.pettyCash) });
+  lines.push({ kind: 'row', left: 'Expected drawer',  right: fmt((r.total_cash || 0) + Number(r.vouchers_sold?.till_cash || 0) - cash.pettyCash) });
   lines.push({ kind: 'row', left: 'Actual counted',   right: fmt(cash.actualCash) });
   const label = cash.difference === 0 ? 'Exact match' : cash.difference > 0 ? 'Over by' : 'Short by';
   lines.push({ kind: 'total', left: label, right: fmt(Math.abs(cash.difference)) });
@@ -745,6 +779,7 @@ function buildZReportLines(r, type, settings, cash) {
     lines.push({ kind: 'div' });
     lines.push({ kind: 'h2', text: 'CARD RECONCILIATION' });
     lines.push({ kind: 'row', left: 'Card sales (sys)', right: fmt(r.total_card) });
+    if (Number(r.vouchers_sold?.till_card) > 0) lines.push({ kind: 'row', left: '+ Voucher card',  right: fmt(r.vouchers_sold?.till_card) });
     lines.push({ kind: 'row', left: 'Actual takings',   right: fmt(cash.actualCard) });
     const clabel = cash.cardDifference === 0 ? 'Exact match' : cash.cardDifference > 0 ? 'Over by' : 'Short by';
     lines.push({ kind: 'total', left: clabel, right: fmt(Math.abs(cash.cardDifference || 0)) });

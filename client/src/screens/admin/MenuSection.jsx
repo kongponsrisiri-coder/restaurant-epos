@@ -14,6 +14,7 @@ import {
   assertOk,
 } from '../../api';
 import { confirm } from '../../utils/confirm';
+import { useBackdropDismiss } from '../../utils/backdropGuard';
 
 // ── Add-option row (SEPOS-059) ────────────────────────────────────
 // Self-contained so the input's state is LOCAL. Previously the option-name
@@ -168,6 +169,7 @@ export default function MenuSection() {
   const [subcategories, setSubcategories]   = useState([]);
   // SEPOS-MENU-COLOR-001 — order-screen button colour picker
   const [colorPick, setColorPick] = useState(null); // { type, id, current } | null
+  const colorBackdrop = useBackdropDismiss(() => setColorPick(null));
   const MENU_COLORS = ['#dc2626','#fecaca','#f59e0b','#fde68a','#16a34a','#bbf7d0','#2563eb','#bfdbfe','#8b5cf6','#14b8a6','#C9A84C','#6b7280'];
   const applyColor = async (color) => {
     const pick = colorPick; setColorPick(null);
@@ -856,7 +858,7 @@ export default function MenuSection() {
       )}
       {/* SEPOS-MENU-COLOR-001 — swatch picker */}
       {colorPick && (
-        <div onClick={() => setColorPick(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div {...colorBackdrop} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: 'white', borderRadius: 16, padding: 20, width: 320, maxWidth: '92vw' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--brand-primary, #1a1a2e)', marginBottom: 4 }}>Button colour</div>
             <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>Shown on the order screen — text flips black/white automatically.</div>

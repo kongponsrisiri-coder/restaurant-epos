@@ -1205,12 +1205,16 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px' }}>
                 {/* Category buttons — wrap to multiple rows so every category is visible */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: subTabs.length ? 12 : 18 }}>
+                {/* SEPOS-FERN-POLISH-001 — compacted (was 12px/26px @ fs17): after
+                    the Fern menu flatten a venue can carry 25+ top-level
+                    categories, and at the old size the category grid dwarfed
+                    the menu buttons below it. */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: subTabs.length ? 12 : 16 }}>
                   {menu.map(cat => {
                     const active = activeCategory === cat.id;
                     return (
                       <button key={cat.id} onClick={() => selectCategory(cat)} style={{
-                        padding: '12px 26px', borderRadius: 14, cursor: 'pointer', fontWeight: 800, fontSize: 17, whiteSpace: 'nowrap',
+                        padding: '8px 16px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap',
                         border: active ? 'none' : (cat.color ? `1.5px solid ${cat.color}` : '1.5px solid #E7E2D6'),
                         background: cat.color ? (active ? cat.color : cat.color + '33') : (active ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary,#0D1B3E)') : '#fff'),
                         color: cat.color ? (active ? textOn(cat.color) : 'var(--brand-primary, #1a1a2e)') : (active ? '#fff' : 'var(--brand-primary, #1a1a2e)'),

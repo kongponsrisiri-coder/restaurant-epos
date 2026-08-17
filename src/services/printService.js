@@ -177,6 +177,18 @@ function qrCode(data, { size = 6, ec = 49 } = {}) {
   ]);
 }
 
+// ── Printer buzzer (SEPOS-FERN-POLISH-001) ───────────────────────────────────
+// ESC B n t — beep n times, t×100 ms each. Supported by POS80-class printers
+// (cnfujun clones incl.) and Epson TM variants; firmwares without a buzzer
+// ignore the bytes harmlessly. Gated by settings.kitchen_print_beep ('1'/'0',
+// default OFF) so a venue opts in per install: kitchen staff hear the ticket
+// land without watching the printer. Applied to kitchen/bar tickets + fire
+// notices on the server print path (desktop/LAN); receipts stay silent.
+function beepPrefix(settings) {
+  if (String(settings?.kitchen_print_beep) !== '1') return Buffer.alloc(0);
+  return Buffer.from([ESC, 0x42, 0x02, 0x02]); // 2 beeps × 200 ms
+}
+
 // ── Receipt formatter ─────────────────────────────────────────────────────────
 
 // Optional logo — client-side converts the upload to a monochrome
@@ -1213,7 +1225,7 @@ async function printFireNotice(settings, order, course) {
   // glyphs and the bilingual line just renders as garbage.
   const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
-  const buf = buildFireNotice({ order, course, bilingual });
+  const buf = Buffer.concat([beepPrefix(settings), buildFireNotice({ order, course, bilingual })]);
   if (ip) {
     // Network: send each copy as its own job (back-to-back streams can garble
     // some print servers, and _sendTcp already paces them).
@@ -1246,7 +1258,7 @@ async function tryRenderedTicket(dest, settings, order, items, opts = {}) {
     const tr = require('./ticketRender');
     // Thai/CJK text in any field → classic (codepage) path so it prints, not blanks.
     if (tr.hasUnrenderableText(order, items)) return false;
-    const buf = await tr.kitchenTicketRaster(order, items, { ...opts, size: settings.kitchen_ticket_size });
+    const buf = Buffer.concat([beepPrefix(settings), await tr.kitchenTicketRaster(order, items, { ...opts, size: settings.kitchen_ticket_size })]);
     for (let c = 0; c < (dest.copies || 1); c++) {
       await sendRaw(dest.ip, dest.port, buf, { printerName: dest.printerName, lprQueue: dest.lprQueue });
     }
@@ -1271,7 +1283,7 @@ async function printKitchenTicket(settings, order, items, course) {
   const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
   const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
-  const buf = buildKitchenTicket({ order, items, course, bilingual, thaiCodepage, fontScale: settings.kitchen_font_scale });
+  const buf = Buffer.concat([beepPrefix(settings), buildKitchenTicket({ order, items, course, bilingual, thaiCodepage, fontScale: settings.kitchen_font_scale })]);
   if (ip) {
     // Network: send each copy as its own job (back-to-back streams can garble
     // some print servers, and _sendTcp already paces them).
@@ -1299,7 +1311,7 @@ async function printFullKitchenTicket(settings, order, items) {
   const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
   const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
-  const buf = buildFullKitchenTicket({ order, items, bilingual, thaiCodepage, fontScale: settings.kitchen_font_scale });
+  const buf = Buffer.concat([beepPrefix(settings), buildFullKitchenTicket({ order, items, bilingual, thaiCodepage, fontScale: settings.kitchen_font_scale })]);
   if (ip) {
     // Network: send each copy as its own job (back-to-back streams can garble
     // some print servers, and _sendTcp already paces them).
@@ -1326,7 +1338,7 @@ async function printKitchenToPrinter(printer, settings, order, items) {
   if (await tryRenderedTicket({ ip, port, printerName, lprQueue, copies }, settings, order, items)) return;
   const bilingual = settings.kitchen_language === 'en_th';
   const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
-  const buf = buildFullKitchenTicket({ order, items, bilingual, thaiCodepage, fontScale: settings.kitchen_font_scale });
+  const buf = Buffer.concat([beepPrefix(settings), buildFullKitchenTicket({ order, items, bilingual, thaiCodepage, fontScale: settings.kitchen_font_scale })]);
   if (ip) {
     for (let i = 0; i < copies; i++) await sendRaw(ip, port, buf, { printerName, lprQueue });
   } else {
@@ -1348,7 +1360,7 @@ async function printBarTicket(settings, order, items) {
   const bilingual = settings.kitchen_language === 'en_th';
   if (!ip && !printerName) throw new Error('NO_IP');
   const thaiCodepage = parseInt(settings.kitchen_thai_codepage, 10) || 30;
-  await sendRaw(ip, port, buildKitchenTicket({ order, items, course: 4, bilingual, thaiCodepage, fontScale: settings.bar_font_scale }), { printerName, lprQueue });
+  await sendRaw(ip, port, Buffer.concat([beepPrefix(settings), buildKitchenTicket({ order, items, course: 4, bilingual, thaiCodepage, fontScale: settings.bar_font_scale })]), { printerName, lprQueue });
 }
 
 // testPrint accepts an optional printer_name so the admin Test button can

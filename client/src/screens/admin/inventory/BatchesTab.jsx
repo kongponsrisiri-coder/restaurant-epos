@@ -14,6 +14,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { confirm } from '../../../utils/confirm';
+import { useBackdropDismiss } from '../../../utils/backdropGuard';
 import { invAPI, calcLineCost } from '../shared';
 import { downloadCsv } from '../../../utils/csv';
 
@@ -496,8 +497,9 @@ function DiscardModal({ batch, onClose, onDone }) {
 
 // ── shared modal scaffolding ────────────────────────────────────
 function ModalShell({ title, onClose, children }) {
+  const backdrop = useBackdropDismiss(onClose);
   return (
-    <div onClick={(e) => e.target === e.currentTarget && onClose()}
+    <div {...backdrop}
       style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
       <div style={{ background: 'white', borderRadius: 14, width: '100%', maxWidth: 600, maxHeight: '92vh', overflowY: 'auto' }}>
         <div style={{ padding: '16px 22px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

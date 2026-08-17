@@ -506,7 +506,14 @@ async function forwardWriteToCloud(req, res, label, afterPull, opts = {}) {
     const url = `${process.env.CLOUD_API_URL}${req.originalUrl}`;
     // Verify pass — bounded: a wedged cloud (accepts TCP, never answers) used
     // to hang the till's request forever. 8s then fall back to local.
-    const init = { method: req.method, headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8000) };
+    // REG-1b (Fern/demo, 17 Aug) — carry the install's SYNC_SECRET, exactly as
+    // forwardToCloudWith already does (REG-1). Without it, every forwarded
+    // staff/table write hit the cloud's requireStaffAuth gate with NO auth at
+    // all → 401 "sign out and sign in again" relayed onto the operator's
+    // screen and the change never saved ANYWHERE, however freshly they were
+    // signed in (the local Bearer token can't verify on the cloud — different
+    // signing secret — so the shared secret is the only valid relay identity).
+    const init = { method: req.method, headers: { 'Content-Type': 'application/json', ...(process.env.SYNC_SECRET ? { 'x-sync-secret': process.env.SYNC_SECRET } : {}) }, signal: AbortSignal.timeout(8000) };
     if (req.method !== 'GET' && req.method !== 'HEAD' && req.body && Object.keys(req.body).length) {
       init.body = JSON.stringify(req.body);
     }
@@ -2720,7 +2727,7 @@ app.get('/api/staff', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/staff', requireStaffAuth(['admin', 'manager']), async (req, res) => {
+app.post('/api/staff', requireStaffAuthOrSyncSecret(['admin', 'manager']), async (req, res) => {
   if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
     const { name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z } = req.body;
@@ -2742,7 +2749,7 @@ app.post('/api/staff', requireStaffAuth(['admin', 'manager']), async (req, res) 
   }
 });
 
-app.put('/api/staff/:id', requireStaffAuth(['admin', 'manager']), async (req, res) => {
+app.put('/api/staff/:id', requireStaffAuthOrSyncSecret(['admin', 'manager']), async (req, res) => {
   if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
     const { name, pin, role, is_active, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z } = req.body;
@@ -2806,7 +2813,7 @@ app.put('/api/staff/:id', requireStaffAuth(['admin', 'manager']), async (req, re
   }
 });
 
-app.delete('/api/staff/:id', requireStaffAuth(['admin', 'manager']), async (req, res) => {
+app.delete('/api/staff/:id', requireStaffAuthOrSyncSecret(['admin', 'manager']), async (req, res) => {
   if (await maybeForwardStaffWriteToCloud(req, res)) return;
   try {
     await pool.query('DELETE FROM staff WHERE id=$1', [req.params.id]);

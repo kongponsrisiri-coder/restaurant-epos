@@ -122,11 +122,28 @@ export const storePinSession = (r) => {
 // first; cache good responses; on a network failure serve the last cached copy
 // so the till keeps working with no internet. On web/desktop cachePut/cacheGet
 // no-op, so behaviour is unchanged.
+// SEPOS-047a-HEAL — a gated endpoint answering "sign out and sign in again"
+// means the stored session has no usable token (e.g. saved by a pre-token
+// build). Alerting forever helps nobody: clear BOTH session keys and reload,
+// so the app lands on the login screen and the next login stores a real
+// token. Matched on our own server's exact message, so a transient error can
+// never log anyone out.
+const healStaleSession = (json) => {
+  try {
+    if (json && typeof json.error === 'string' && json.error.includes('sign out and sign in again')) {
+      localStorage.removeItem('siamepos_auth');
+      localStorage.removeItem('siamepos_token');
+      window.location.reload();
+    }
+  } catch {}
+  return json;
+};
 const get = async (url) => {
   try {
     const json = useNativeHttp()
       ? await nativeRequest('GET', SERVER_URL + url, { headers: authHeaders() })
       : await (await fetch(SERVER_URL + url, { headers: authHeaders() })).json();
+    healStaleSession(json);
     if (json && !json.error) cachePut(url, json);   // fire-and-forget
     return json;
   } catch (e) {
@@ -135,21 +152,21 @@ const get = async (url) => {
     throw e;
   }
 };
-const post = (url, data) => useNativeHttp()
+const post = (url, data) => (useNativeHttp()
   ? nativeRequest('POST', SERVER_URL + url, { headers: { 'Content-Type': 'application/json', ...authHeaders() }, data })
   : fetch(SERVER_URL + url, {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(data)
-    }).then(r => r.json());
-const put = (url, data) => useNativeHttp()
+    }).then(r => r.json())).then(healStaleSession);
+const put = (url, data) => (useNativeHttp()
   ? nativeRequest('PUT', SERVER_URL + url, { headers: { 'Content-Type': 'application/json', ...authHeaders() }, data })
   : fetch(SERVER_URL + url, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(data)
-    }).then(r => r.json());
-const del = (url) => useNativeHttp()
+    }).then(r => r.json())).then(healStaleSession);
+const del = (url) => (useNativeHttp()
   ? nativeRequest('DELETE', SERVER_URL + url, { headers: authHeaders() })
-  : fetch(SERVER_URL + url, { method: 'DELETE', headers: authHeaders() }).then(r => r.json());
+  : fetch(SERVER_URL + url, { method: 'DELETE', headers: authHeaders() }).then(r => r.json())).then(healStaleSession);
 
 // SEPOS-046y — the helpers above resolve (not reject) on HTTP 4xx/5xx, so a
 // try/catch around them only sees network failures. Optimistic-UI handlers

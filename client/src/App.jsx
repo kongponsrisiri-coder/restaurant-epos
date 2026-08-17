@@ -71,11 +71,17 @@ export default function App() {
   const [staff, setStaff]               = useState(() => {
     // SEPOS-LITE-003 — restore a persisted email-login session (14-day
     // token) so a Lite owner isn't asked to sign in every day.
+    // SEPOS-047a-HEAL — the session must carry a TOKEN to be restorable. A
+    // session saved by a pre-token build (≤1.8.x) has staff + expiry but no
+    // token, and restoring it strands the operator: signed in on screen, 401
+    // "sign out and sign in again" on every gated save, and restarting only
+    // restores the same ghost (Fern, 17 Aug — two visits of it). Discard it
+    // once and the next real login stores a proper token.
     try {
       const raw = localStorage.getItem('siamepos_auth');
       if (raw) {
         const a = JSON.parse(raw);
-        if (a && a.staff && a.expires_at && a.expires_at > Date.now()) return a.staff;
+        if (a && a.staff && a.token && a.expires_at && a.expires_at > Date.now()) return a.staff;
         localStorage.removeItem('siamepos_auth');
       }
     } catch {}

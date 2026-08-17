@@ -3305,7 +3305,12 @@ app.get('/api/reports/summary', async (req, res) => {
           AND ((o.order_type = 'takeaway' AND NOT EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND (p.method = 'cancelled' OR p.method = 'Complimentary' OR COALESCE(p.method,'') LIKE '%(mock)%'))) OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND COALESCE(p.method,'') <> 'cancelled' AND COALESCE(p.method,'') <> 'Complimentary' AND COALESCE(p.method,'') NOT LIKE '%(mock)%'))
       `, [sumFromIso, sumToIso]),
       // SEPOS-VOUCHER-001 — vouchers sold in the date range, split by method
-      pool.query(`SELECT payment_method, COUNT(*)::int AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at::date >= $1::date AND created_at::date <= $2::date GROUP BY payment_method`, [from, to]).catch(() => ({ rows: [] })),
+      // SEPOS-FERN-POLISH-001 — mirror the Z's filters (this query predated
+      // them): mock-paid sales are demo noise, deposits are NOT voucher sales
+      // (they have their own Z block — counting them here made Reports and Z
+      // disagree), and a VOIDED voucher (test/mistake, e.g. Fern's first-day
+      // trials) must drop off the report once voided.
+      pool.query(`SELECT payment_method, COUNT(*)::int AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at::date >= $1::date AND created_at::date <= $2::date AND COALESCE(payment_method,'') != 'mock' AND COALESCE(type,'gift') != 'deposit' AND COALESCE(status,'active') != 'voided' GROUP BY payment_method`, [from, to]).catch(() => ({ rows: [] })),
       pool.query(`SELECT COUNT(*)::int AS count, COALESCE(SUM(amount_used), 0) AS total FROM voucher_redemptions WHERE used_at::date >= $1::date AND used_at::date <= $2::date`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
       pool.query(`SELECT key, value FROM settings WHERE key IN ('service_charge_enabled','service_charge_rate','service_charge_percent')`),
       // SEPOS-COMP-001 — bills settled as Complimentary (excluded from every
@@ -4096,7 +4101,7 @@ app.get('/api/z-report/preview', async (req, res) => {
       // SEPOS-AUDIT-001 — split by payment_method so till cash/card voucher
       // sales reconcile the drawer (a £50 cash voucher sale used to read
       // 'Over £50' at close and was mislabelled as settled to Stripe).
-      pool.query(`SELECT payment_method, COUNT(*) AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at >= $1::timestamp AND created_at <= $2::timestamp AND payment_method != 'mock' AND COALESCE(type,'gift') != 'deposit' GROUP BY payment_method`, [from, to]).catch(() => ({ rows: [] })),
+      pool.query(`SELECT payment_method, COUNT(*) AS count, COALESCE(SUM(original_amount), 0) AS total FROM vouchers WHERE created_at >= $1::timestamp AND created_at <= $2::timestamp AND payment_method != 'mock' AND COALESCE(type,'gift') != 'deposit' AND COALESCE(status,'active') != 'voided' GROUP BY payment_method`, [from, to]).catch(() => ({ rows: [] })),
       // SEPOS-VOUCHER-001: GIFT vouchers redeemed in the range (off till — already paid for at sale time)
       pool.query(`SELECT COUNT(*) AS count, COALESCE(SUM(vr.amount_used), 0) AS total FROM voucher_redemptions vr JOIN vouchers v ON v.id = vr.voucher_id WHERE vr.used_at >= $1::timestamp AND vr.used_at <= $2::timestamp AND COALESCE(v.type,'gift') != 'deposit'`, [from, to]).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
       // Service-charge + VAT + deposits-flag settings.

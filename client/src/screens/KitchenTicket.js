@@ -253,8 +253,15 @@ function resolveKitchenCopies(settings) {
 
 // ── Public: print ALL courses on one ticket (called on Send Order) ────────────
 // popupWin: pre-opened window from the calling code (to beat popup blocker).
-export async function printFullOrderTicket({ order, items, popupWin = null }) {
-  const active = (items || []).filter(i => i && !i.voided && !i.is_bar);
+// SEPOS-SENTBY-002 — the DB rows get sent_by stamped by api.js on send, but
+// the PRINT payload is the caller's own un-stamped copy of the items, so the
+// ticket's "Sent: NAME" line never rendered on live tills (Fern, 17-18 Aug —
+// cloud data stamped, paper blank). Every items-carrying print entry point now
+// stamps from the signed-in staff the caller passes.
+const stampSentBy = (arr, sentBy) => (sentBy ? arr.map(i => ({ ...i, sent_by: i.sent_by || sentBy })) : arr);
+
+export async function printFullOrderTicket({ order, items, popupWin = null, sentBy = null }) {
+  const active = stampSentBy((items || []).filter(i => i && !i.voided && !i.is_bar), sentBy);
   if (active.length === 0) { closeWin(popupWin); return; }
 
   const settings = await getCachedSettings();
@@ -297,8 +304,8 @@ export async function printFullOrderTicket({ order, items, popupWin = null }) {
 
 // ── Public: print a single course (called when a course is fired) ─────────────
 // popupWin must be pre-opened by the caller before any awaits.
-export async function printKitchenTicket({ order, items, course, popupWin = null }) {
-  const active = (items || []).filter(i => i && !i.voided);
+export async function printKitchenTicket({ order, items, course, popupWin = null, sentBy = null }) {
+  const active = stampSentBy((items || []).filter(i => i && !i.voided), sentBy);
   if (active.length === 0) { closeWin(popupWin); return; }
 
   const settings = await getCachedSettings();
@@ -371,8 +378,8 @@ export async function printFireNoticeTicket({ order, course, popupWin = null }) 
 // ── Public: print bar items to bar printer (called on Send Order) ─────────────
 // popupWin: pre-opened window from sendOrder (opened before async work so the
 // browser does not block the popup as an unattended window.open call).
-export async function printBarOrderTicket({ order, items, popupWin = null }) {
-  const barItems = (items || []).filter(i => i && !i.voided && i.is_bar);
+export async function printBarOrderTicket({ order, items, popupWin = null, sentBy = null }) {
+  const barItems = stampSentBy((items || []).filter(i => i && !i.voided && i.is_bar), sentBy);
   if (barItems.length === 0) { closeWin(popupWin); return; }
 
   const settings = await getCachedSettings();

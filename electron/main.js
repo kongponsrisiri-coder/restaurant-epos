@@ -49,7 +49,11 @@ function loadConfig() {
   try {
     const p = getConfigPath();
     if (!fs.existsSync(p)) return null;
-    return JSON.parse(fs.readFileSync(p, 'utf8'));
+    // Strip a UTF-8 BOM — a config.json written by Windows PowerShell's
+    // `-Encoding UTF8` starts with ﻿, JSON.parse throws, and the app
+    // silently falls back to the first-run wizard even though a valid config
+    // exists (Tori Nori install, 18 Aug).
+    return JSON.parse(fs.readFileSync(p, 'utf8').replace(/^﻿/, ''));
   } catch (err) {
     console.warn('[config] load failed:', err.message);
     return null;

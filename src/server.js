@@ -7149,7 +7149,30 @@ app.post('/api/dish-allergens/:menuItemId', async (req, res) => {
   try {
     const { menuItemId } = req.params;
     const { allergens } = req.body;
-    const result = await pool.query(`INSERT INTO dish_allergens (menu_item_id, allergens, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (menu_item_id) DO UPDATE SET allergens = EXCLUDED.allergens, updated_at = EXCLUDED.updated_at RETURNING id`, [menuItemId, allergens || '[]']);
+    // SEPOS-ALLERGEN-LOCAL-001 — on a local install the cloud copy is what the
+    // QR menu chips + other devices read, so replicate there too: forward when
+    // reachable, queue a config_write replay when not. The LOCAL write below
+    // still runs either way so the sheet reads back correctly on this till.
+    try {
+      const archiveService = require('./services/archiveService');
+      if (archiveService.isLocalInstall() && process.env.CLOUD_API_URL) {
+        try {
+          const r = await fetch(`${process.env.CLOUD_API_URL}/api/dish-allergens/${menuItemId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(process.env.SYNC_SECRET ? { 'x-sync-secret': process.env.SYNC_SECRET } : {}) },
+            body: JSON.stringify({ allergens }),
+            signal: AbortSignal.timeout(8000),
+          });
+          if (!r.ok) throw new Error(`cloud ${r.status}`);
+        } catch (fwdErr) {
+          await offlineQueue.enqueue('config_write', { method: 'POST', path: `/api/dish-allergens/${menuItemId}`, body: { allergens } });
+          console.warn('[dish-allergens] cloud replicate queued:', fwdErr.message);
+        }
+      }
+    } catch { /* forward best-effort — local save is the source of truth for this till */ }
+    // CURRENT_TIMESTAMP (not NOW()) — valid on BOTH PostgreSQL and SQLite;
+    // NOW() made every manual tick 500 on local tills.
+    const result = await pool.query(`INSERT INTO dish_allergens (menu_item_id, allergens, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP) ON CONFLICT (menu_item_id) DO UPDATE SET allergens = EXCLUDED.allergens, updated_at = EXCLUDED.updated_at RETURNING id`, [menuItemId, allergens || '[]']);
     res.json({ success: true, id: result.rows[0]?.id });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

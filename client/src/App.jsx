@@ -436,9 +436,12 @@ export default function App() {
   if (!staff) {
     body = <LoginScreen onLogin={setStaff} />;
   } else if (staff.role === 'kitchen') {
-    body = <><Clock fixed /><KitchenScreen /></>;
+    // SEPOS-KDS-LOGOUT-001 — kitchen/bar render full-bleed with no navbar and
+    // are exempt from idle auto sign-out, so without this they can only leave
+    // by restarting the app (Fern, 17 Aug).
+    body = <><Clock fixed /><KitchenScreen onLogout={logout} /></>;
   } else if (staff.role === 'bar') {
-    body = <><Clock fixed /><BarScreen /></>;
+    body = <><Clock fixed /><BarScreen onLogout={logout} /></>;
   } else if (screen === 'order' && activeOrder) {
     body = (
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f5f5f5' }}>

@@ -75,6 +75,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   const [miscPopup, setMiscPopup] = useState(null); // SEPOS-MISC-001 — off-menu / special open item
   const [voidPopup, setVoidPopup] = useState(null);
   const [resendPopup, setResendPopup] = useState(null);
+  // SEPOS-ITEM-NOTE-TAP-001 — tap an unsent basket line to add/edit its note.
+  const [noteModal, setNoteModal] = useState(null);   // { line, text }
+  // SEPOS-RESEND-002 — order-level resend: tick items, default plain Reprint.
+  const [resendAllModal, setResendAllModal] = useState(null); // { items, ticked:Set, reason }
   const [showBill, setShowBill] = useState(false);
   // SEPOS-046z — React modal for discounts. The old flow used
   // window.prompt(), which is disabled in Electron, so discounts
@@ -570,9 +574,62 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
         items: [{ ...item, notes: noteWithReason }],
         course: item.course || 0,
         popupWin,
+        sentBy: staff?.name,
       });
     } catch (e) {
       console.warn('[resend] print failed:', e?.message);
+      try { popupWin?.close(); } catch {}
+    }
+  };
+
+  // SEPOS-ITEM-NOTE-TAP-001 — save the note typed in the tap-a-line modal onto
+  // that exact cart line (object identity — lines live in this state array).
+  const saveLineNote = () => {
+    if (!noteModal) return;
+    const text = (noteModal.text || '').trim().slice(0, 200);
+    setCart(prev => prev.map(l => (l === noteModal.line ? { ...l, item_note: text || undefined } : l)));
+    setNoteModal(null);
+  };
+
+  // SEPOS-RESEND-002 — resend the whole order (or a ticked subset) without the
+  // KDS/course-call flow. Default 'Reprint' = paper only, no DB write, no stock
+  // effect; picking a real reason routes through the existing /resend endpoint
+  // (records reason, Remake depletes stock — SEPOS-024/031/032 unchanged).
+  const openResendAll = () => {
+    const items = existingItems.filter(i => i.is_fired && !i.voided && i.id > 0);
+    if (!items.length) return;
+    setResendAllModal({ items, ticked: new Set(items.map(i => i.id)), reason: 'Reprint' });
+  };
+  const confirmResendAll = async () => {
+    if (!resendAllModal) return;
+    const { items, ticked, reason } = resendAllModal;
+    setResendAllModal(null);
+    const picked = items.filter(i => ticked.has(i.id));
+    if (!picked.length) return;
+    const kitchenPicked = picked.filter(i => !i.is_bar);
+    const barPicked     = picked.filter(i => i.is_bar);
+    const popupWin = (kitchenPicked.length && !settings?.printer_kitchen_ip && !window.siamepos?.isElectron && !isNativeApp())
+      ? window.open('', '_blank', 'width=400,height=600,scrollbars=yes') : null;
+    if (reason !== 'Reprint') {
+      setOrder(prev => prev ? { ...prev, items: (prev.items || []).map(i =>
+        ticked.has(i.id) ? { ...i, status: 'cooking' } : i) } : prev);
+      try {
+        assertOk(await resendToKitchen(orderId, picked.map(i => i.id), reason));
+      } catch (e) {
+        try { popupWin?.close(); } catch {}
+        alert('Resend failed: ' + (e?.message || 'unknown'));
+        fetchOrder();
+        return;
+      }
+      fetchOrder();
+    }
+    const tag = reason === 'Reprint' ? '🔄 RESEND' : `🔄 RESEND [${reason}]`;
+    const mark = (arr) => arr.map(i => ({ ...i, notes: `${tag}${i.notes ? ' | ' + i.notes : ''}` }));
+    try {
+      if (kitchenPicked.length) await printFullOrderTicket({ order: { ...order }, items: mark(kitchenPicked), popupWin, sentBy: staff?.name });
+      if (barPicked.length)     await printBarOrderTicket({ order: { ...order }, items: mark(barPicked), popupWin: null, sentBy: staff?.name });
+    } catch (e) {
+      console.warn('[resend-all] print failed:', e?.message);
       try { popupWin?.close(); } catch {}
     }
   };
@@ -661,8 +718,8 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
       // gap in printService). sendOrder doesn't await these — UI is unblocked.
       const orderSnap = order; // capture before any async state changes
       Promise.resolve()
-        .then(() => hasKitchen ? printFullOrderTicket({ order: orderSnap, items: justAdded, popupWin: null }) : null)
-        .then(() => hasBar     ? printBarOrderTicket({ order: orderSnap, items: justAdded, popupWin: barWin }) : null)
+        .then(() => hasKitchen ? printFullOrderTicket({ order: orderSnap, items: justAdded, popupWin: null, sentBy: staff?.name }) : null)
+        .then(() => hasBar     ? printBarOrderTicket({ order: orderSnap, items: justAdded, popupWin: barWin, sentBy: staff?.name }) : null)
         .catch(e => console.error('[sendOrder] print chain error:', e));
 
       // No success popup — the items are already in the Order Summary and the
@@ -1367,6 +1424,18 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             paddingBottom: isMobile ? 'calc(58px + env(safe-area-inset-bottom, 0px) + 12px)' : '12px'
           }}>
 
+            {/* SEPOS-RESEND-002 — whole-order / tick-to-choose resend, for venues
+                that never touch the KDS or course-call flow. */}
+            {existingItems.some(i => i.is_fired && !i.voided && i.id > 0) && (
+              <button onClick={openResendAll} style={{
+                width: '100%', marginBottom: 10, padding: '9px 12px', borderRadius: 10,
+                border: '1.5px dashed #93c5fd', background: '#eff6ff', color: '#1e40af',
+                cursor: 'pointer', fontWeight: 700, fontSize: 13
+              }}>
+                ↻ Resend order to kitchen…
+              </button>
+            )}
+
             {/* Bar items in cart */}
             {cartBar.length > 0 && (
               <div style={{
@@ -1383,8 +1452,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       display: 'flex', justifyContent: 'space-between',
                       alignItems: 'center', fontSize: 13
                     }}>
-                      <span style={{ flex: 1, color: 'var(--brand-primary, #1a1a2e)', fontWeight: 600 }}>
-                        {item.quantity}× {item.name}
+                      {/* SEPOS-ITEM-NOTE-TAP-001 — tap the line to add/edit a note */}
+                      <span onClick={() => setNoteModal({ line: item, text: item.item_note || '' })}
+                        style={{ flex: 1, color: 'var(--brand-primary, #1a1a2e)', fontWeight: 600, cursor: 'pointer' }}>
+                        {item.quantity}× {item.name} <span style={{ fontSize: 11, color: '#c9c3b4' }}>📝</span>
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
@@ -1399,7 +1470,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       <div style={{ fontSize: 11, color: '#aaa', marginLeft: 16 }}>— {item.notes}</div>
                     )}
                     {item.item_note && (
-                      <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16 }}>📝 {item.item_note}</div>
+                      <div onClick={() => setNoteModal({ line: item, text: item.item_note || '' })} style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16, cursor: 'pointer' }}>📝 {item.item_note}</div>
                     )}
                   </div>
                 ))}
@@ -1470,8 +1541,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       display: 'flex', justifyContent: 'space-between',
                       alignItems: 'center', fontSize: 13
                     }}>
-                      <span style={{ flex: 1, color: 'var(--brand-primary, #1a1a2e)', fontWeight: 600 }}>
-                        {item.quantity}× {item.name}
+                      {/* SEPOS-ITEM-NOTE-TAP-001 — tap the line to add/edit a kitchen note */}
+                      <span onClick={() => setNoteModal({ line: item, text: item.item_note || '' })}
+                        style={{ flex: 1, color: 'var(--brand-primary, #1a1a2e)', fontWeight: 600, cursor: 'pointer' }}>
+                        {item.quantity}× {item.name} <span style={{ fontSize: 11, color: '#c9c3b4' }}>📝</span>
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
@@ -1486,7 +1559,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       <div style={{ fontSize: 11, color: '#aaa', marginLeft: 16 }}>— {item.notes}</div>
                     )}
                     {item.item_note && (
-                      <div style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16 }}>📝 {item.item_note}</div>
+                      <div onClick={() => setNoteModal({ line: item, text: item.item_note || '' })} style={{ fontSize: 11, color: '#3b82f6', marginLeft: 16, cursor: 'pointer' }}>📝 {item.item_note}</div>
                     )}
                   </div>
                 ))}
@@ -2251,6 +2324,74 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
         )}
 
         {/* RESEND POPUP (SEPOS-024) */}
+        {/* SEPOS-ITEM-NOTE-TAP-001 — note modal for a tapped basket line */}
+        {noteModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: 20 }}>
+            <div style={{ background: 'white', borderRadius: 14, padding: 22, width: 'min(420px, 100%)' }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--brand-primary,#0D1B3E)', marginBottom: 4 }}>
+                📝 Note for the kitchen
+              </div>
+              <div style={{ fontSize: 13, color: '#888', marginBottom: 12 }}>
+                {noteModal.line.quantity}× {noteModal.line.name} — prints bold on the ticket, never on the customer bill.
+              </div>
+              <textarea autoFocus value={noteModal.text}
+                onChange={e => setNoteModal(m => ({ ...m, text: e.target.value }))}
+                placeholder="e.g. no peanuts · extra spicy · sauce on the side"
+                style={{ width: '100%', minHeight: 84, padding: 10, borderRadius: 10, border: '1.5px solid #ddd', fontSize: 15, boxSizing: 'border-box', resize: 'vertical' }} />
+              <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                <button onClick={() => setNoteModal(null)} style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700 }}>Cancel</button>
+                {noteModal.line.item_note && (
+                  <button onClick={() => { setNoteModal(m => ({ ...m, text: '' })); setCart(prev => prev.map(l => (l === noteModal.line ? { ...l, item_note: undefined } : l))); setNoteModal(null); }}
+                    style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: '#fee2e2', color: '#ef4444', cursor: 'pointer', fontWeight: 700 }}>Remove note</button>
+                )}
+                <button onClick={saveLineNote} style={{ flex: 2, padding: '11px', borderRadius: 10, border: 'none', background: 'var(--brand-primary,#0D1B3E)', color: 'white', cursor: 'pointer', fontWeight: 700 }}>Save note</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SEPOS-RESEND-002 — whole-order resend with tick-to-choose */}
+        {resendAllModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: 20 }}>
+            <div style={{ background: 'white', borderRadius: 14, padding: 22, width: 'min(460px, 100%)', maxHeight: '86vh', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--brand-primary,#0D1B3E)', marginBottom: 4 }}>↻ Resend to kitchen</div>
+              <div style={{ fontSize: 13, color: '#888', marginBottom: 10 }}>Everything is ticked — untick what the kitchen doesn't need again.</div>
+              <div style={{ overflowY: 'auto', flex: 1, border: '1px solid #f0f0f0', borderRadius: 10, padding: '6px 10px', marginBottom: 12 }}>
+                {resendAllModal.items.map(item => {
+                  const on = resendAllModal.ticked.has(item.id);
+                  return (
+                    <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid #f7f7f7', cursor: 'pointer', fontSize: 14 }}>
+                      <input type="checkbox" checked={on} onChange={() => setResendAllModal(m => {
+                        const t = new Set(m.ticked); on ? t.delete(item.id) : t.add(item.id); return { ...m, ticked: t };
+                      })} style={{ width: 18, height: 18, flexShrink: 0 }} />
+                      <span style={{ flex: 1 }}>{item.quantity}× {item.name}{item.is_bar ? ' 🍹' : ''}{item.notes ? <span style={{ color: '#999', fontSize: 12 }}> — {item.notes}</span> : null}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#888', marginBottom: 6 }}>Reason</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+                {['Reprint', ...RESEND_REASONS].map(r => (
+                  <button key={r} onClick={() => setResendAllModal(m => ({ ...m, reason: r }))} style={{
+                    padding: '8px 14px', borderRadius: 18, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                    background: resendAllModal.reason === r ? 'var(--brand-primary,#0D1B3E)' : '#ECE7DA',
+                    color: resendAllModal.reason === r ? 'white' : '#7C766A'
+                  }}>{r === 'Reprint' ? '🖨 Reprint' : r}</button>
+                ))}
+              </div>
+              {resendAllModal.reason === 'Reprint'
+                ? <div style={{ fontSize: 11.5, color: '#999', marginBottom: 12 }}>Reprint = paper only. Nothing is recorded and stock is untouched — for a lost or unreadable ticket.</div>
+                : <div style={{ fontSize: 11.5, color: '#92400e', marginBottom: 12 }}>“{resendAllModal.reason}” is recorded on each item{resendAllModal.reason === 'Remake' ? ' and the kitchen’s stock is depleted again' : ''}.</div>}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setResendAllModal(null)} style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 700 }}>Cancel</button>
+                <button onClick={confirmResendAll} disabled={resendAllModal.ticked.size === 0} style={{ flex: 2, padding: '12px', borderRadius: 10, border: 'none', background: resendAllModal.ticked.size ? '#1e40af' : '#cbd5e1', color: 'white', cursor: resendAllModal.ticked.size ? 'pointer' : 'default', fontWeight: 700 }}>
+                  ↻ Resend {resendAllModal.ticked.size} item{resendAllModal.ticked.size === 1 ? '' : 's'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {resendPopup && (
           <div style={{
             position:'fixed', top:0, left:0, right:0, bottom:0,

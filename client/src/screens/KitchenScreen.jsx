@@ -225,7 +225,7 @@ function ItemName({ item, showAlt, altLang }) {
   );
 }
 
-export default function KitchenScreen() {
+export default function KitchenScreen({ onLogout }) {
   const [orders, setOrders] = useState([]);
   const [completedItems, setCompletedItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -501,6 +501,13 @@ export default function KitchenScreen() {
           <button onClick={() => { fetchOrders(); fetchCompleted(); }} style={{ background: '#333', color: 'white', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer' }}>
             ↻
           </button>
+          {/* SEPOS-KDS-LOGOUT-001 — kitchen role has no navbar and no idle
+              auto sign-out; this is its only way out besides quitting the app. */}
+          {onLogout && (
+            <button onClick={onLogout} style={{ background: '#333', color: '#f87171', border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+              Log out
+            </button>
+          )}
         </div>
       </div>
 

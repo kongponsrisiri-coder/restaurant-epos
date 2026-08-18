@@ -423,6 +423,17 @@ function initSchema() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- SEPOS-ALLERGEN-LOCAL-001 — manual allergen ticks (Allergen Menu sheet).
+    -- Missing on local installs until 18 Aug 2026: every manual tick 500'd
+    -- with "no such table" on desktop/host tills (Tori Nori install night).
+    -- UNIQUE(menu_item_id) is required for the upsert's ON CONFLICT.
+    CREATE TABLE IF NOT EXISTS dish_allergens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      menu_item_id INTEGER UNIQUE,
+      allergens TEXT,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- SEPOS-LITE-001 Phase 1 — multi-tenancy registry (mirrors cloud schema)
     CREATE TABLE IF NOT EXISTS restaurants (
       restaurant_id TEXT PRIMARY KEY,

@@ -111,13 +111,21 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   // Persist the un-sent cart per order so it survives leaving the table and
   // coming back (was lost on unmount). Cleared automatically once the cart
   // empties — i.e. after a successful Send.
+  // SEPOS-DRAFT-BADGE — alongside the cart itself, keep a tiny per-TABLE
+  // marker so the floor map can show a ✏️ on tables holding an unsent draft
+  // on THIS device (the cart key itself may be order-keyed, which the map
+  // can't resolve — phantom 0-item orders are filtered out of its feed).
   useEffect(() => {
     if (!cartKey) return;
     try {
       if (cart.length) localStorage.setItem(cartKey, JSON.stringify(cart));
       else localStorage.removeItem(cartKey);
+      if (tableId) {
+        if (cart.length) localStorage.setItem(`sepos_draft_table_${tableId}`, '1');
+        else localStorage.removeItem(`sepos_draft_table_${tableId}`);
+      }
     } catch {}
-  }, [cart, cartKey]);
+  }, [cart, cartKey, tableId]);
   const fetchOrder = async () => {
     const seq = ++fetchSeqRef.current;
     const orderData = await getOrder(orderId);
@@ -596,7 +604,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   // effect; picking a real reason routes through the existing /resend endpoint
   // (records reason, Remake depletes stock — SEPOS-024/031/032 unchanged).
   const openResendAll = () => {
-    const items = existingItems.filter(i => i.is_fired && !i.voided && i.id > 0);
+    // SEPOS-RESEND-003 (Korakot 19 Aug): ANY sent item qualifies — the old
+    // is_fired gate meant venues that hadn't called a course yet had no
+    // resend at all ("how they can call if there is not order in the
+    // kitchen"). Sent = it's on a ticket somewhere; that's what reprints.
+    const items = existingItems.filter(i => !i.voided && i.id > 0);
     if (!items.length) return;
     setResendAllModal({ items, ticked: new Set(items.map(i => i.id)), reason: 'Reprint' });
   };
@@ -1424,9 +1436,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             paddingBottom: isMobile ? 'calc(58px + env(safe-area-inset-bottom, 0px) + 12px)' : '12px'
           }}>
 
-            {/* SEPOS-RESEND-002 — whole-order / tick-to-choose resend, for venues
-                that never touch the KDS or course-call flow. */}
-            {existingItems.some(i => i.is_fired && !i.voided && i.id > 0) && (
+            {/* SEPOS-RESEND-002/003 — whole-order / tick-to-choose resend. Shows
+                as soon as ANYTHING has been sent (fired or not) — venues that
+                don't use course calls still need reprints. */}
+            {existingItems.some(i => !i.voided && i.id > 0) && (
               <button onClick={openResendAll} style={{
                 width: '100%', marginBottom: 10, padding: '9px 12px', borderRadius: 10,
                 border: '1.5px dashed #93c5fd', background: '#eff6ff', color: '#1e40af',

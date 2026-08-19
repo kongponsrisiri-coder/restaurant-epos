@@ -493,6 +493,26 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                       ⏱ {time}
                     </div>
                   )}
+                  {/* SEPOS-DRAFT-BADGE — this DEVICE holds typed-but-unsent items
+                      for this table (kept as a draft by the cart persistence).
+                      The map deliberately shows 0-item orders as available, so
+                      without this a draft was invisible until the table was
+                      reopened (Korakot 19 Aug, "Table 2 shows nothing but has an
+                      item"). Device-local by nature — other tills don't see it. */}
+                  {(() => {
+                    try { return !!localStorage.getItem(`sepos_draft_table_${table.id}`); } catch { return false; }
+                  })() && (
+                    <div title="Unsent items typed on this device — open the table to send or clear them" style={{
+                      position: 'absolute', top: -8, right: -8,
+                      background: '#fff', border: '2px solid #f59e0b',
+                      borderRadius: '50%', width: 24, height: 24,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 12, boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+                      pointerEvents: 'none',
+                    }}>
+                      ✏️
+                    </div>
+                  )}
                   {/* SEPOS-044 — reservation pre-claim badge */}
                   {upcoming && (
                     <div title={`${upcoming.customer_name} · ${upcoming.covers} covers · ${upcoming._time}`} style={{

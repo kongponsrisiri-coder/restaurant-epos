@@ -108,6 +108,8 @@ SiamEPOS costs £89/month and sets up in an afternoon.
 | ICO Registration | ✅ DONE 2026-06-05 — Tier 1, app no. C1951827, £52/yr (£47 by DD). Awaiting ZB/Z ref. |
 | Corporation Tax | ✅ DONE — registered with HMRC |
 | Accountant | NOT YET — find one familiar with tech startups |
+| **Start Up Loan (British Business Bank)** | ✅ **£15,000 @ 7.5% over 60 months — submitted 16 June 2026 via BizBritain.** Repayment ≈ **£300/month**. ⚠️ **This is a PERSONAL liability of the director, not the company's.** Do not recommend applying for a Start Up Loan again — this one exists. |
+| ⚠️ **Cash reality (19 Aug 2026)** | MRR **£260** vs loan repayment **~£300/mo** — **the business does not yet cover its own debt service.** Bank £843.02. Korakot has been topping the company up personally. Every spending recommendation must start here. |
 
 **Document footer (use everywhere):**
 ```

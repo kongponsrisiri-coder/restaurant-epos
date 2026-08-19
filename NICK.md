@@ -270,7 +270,16 @@ SiamEPOS™ UK00004385501
 | Counter (proposed) | £29/month | Simple till for grab-and-go, no floor plan/reservations |
 
 ### Additional Revenue
-- Setup fee: £149–299 one-off per new client
+- **Setup / installation fee: £0 — NONE. Deliberate policy (Korakot, 19 Aug 2026).**
+  *Why:* this is a long-run relationship business. A £149–299 barrier costs more in
+  lost signings and goodwill than it earns, and "no setup fee" is already our public
+  position on the bring-your-own-hardware card. Install cost is treated as an
+  **investment in trust**, recovered through retention, referrals and the fact that
+  once trust is established **installs go REMOTE** — Krit's provisioning flow makes
+  that very doable. ⚠️ **The economics depend on that shift actually happening:**
+  free install + near-daily site visits is the single largest cost in the business
+  today. See Forecast v5 §"Remote install is now a commercial milestone".
+  *(Supersedes the old £149–299 setup fee — do NOT quote it.)*
 - **Website Service: £5/month** — website + hosting + the client's own
   domain (registered in THEIR name) + updates. The one-off build is
   **quoted case by case** — never quote a public build price.
@@ -287,7 +296,20 @@ SiamEPOS™ UK00004385501
 
 ---
 
-## FINANCIAL PROJECTIONS (Business Plan v4)
+## FINANCIAL PROJECTIONS — ⚠️ v4 SUPERSEDED (see Forecast v5, 19 Aug 2026)
+
+> **The v4 numbers below are NO LONGER the plan.** v4 forecast 24 clients by Month 3; actual at Month 3 = **6**. Rebuilt honestly in
+> `~/Documents/Claude/Projects/SiamEpos/SiamEPOS-Client-Forecast-v5-2026-08.md` (+ .pdf).
+> **Key reframe (Korakot, 19 Aug 2026): May–July 2026 was the PROTOTYPE phase; the system came off prototype when FERN signed up.**
+> The commercial clock therefore starts **August 2026**.
+>
+> **Forecast v5, Aug 2026 → Aug 2027:** conservative 22 clients / £1,540 MRR · **realistic 33 clients / £2,475 MRR (~£29,700 ARR)** · good year 50 clients / £4,000 MRR.
+> **12-month turnover: ~£18.5k conservative · ~£30.4k realistic · ~£49.8k good year.**
+> ⚠️ **The "£50,000 Year 1 turnover for bank" figure below is the GOOD-YEAR case, not the expected one — the honest expected figure is ~£30,000. Revise it anywhere it has been stated.**
+> **Raise framing:** £300k post-money vs ~£30k forward ARR ≈ **10× forward ARR** — defensible; do NOT quote a multiple of today's MRR.
+> **Bottleneck is founder time, not demand.** Support hire triggers at 12–15 clients.
+
+### (historic) Business Plan v4 projections
 
 | Period | Active Clients | MRR | Net Profit |
 |--------|--------------|-----|-----------|

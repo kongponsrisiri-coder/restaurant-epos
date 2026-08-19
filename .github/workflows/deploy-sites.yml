@@ -51,6 +51,12 @@ jobs:
           - label: Chart Thai POS
             site_id: 36096015-d948-45d5-a350-0722591591ef
             api_url: https://chart-thai.siamepos.co.uk
+          - label: Tori Nori POS (torinori.siamepos.co.uk)
+            site_id: d035187a-4c55-4a7e-8162-fa5226708d2a
+            api_url: https://restaurant-epos-production-0d8d.up.railway.app
+          - label: Baan Rao POS
+            site_id: d51210fc-3d7b-4821-8b64-ebb2b4605e4e
+            api_url: https://siamepos-baanrao-production.up.railway.app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { loginStaff, clockToggle, emailLogin, storePinSession, getStaff, getRestaurant, getSettings, changeStaffPin } from '../api';
+import { loginStaff, clockToggle, emailLogin, requestLoginLink, consumeLoginLink, storePinSession, getStaff, getRestaurant, getSettings, changeStaffPin } from '../api';
 import { resetDevice, currentTillTarget, canSwitchClient } from '../utils/deviceReset';
 import { NAVY, GOLD, RED, GREEN } from '../theme'; // SEPOS-BRAND-001 — per-client brand colours
 
@@ -70,7 +70,12 @@ export default function LoginScreen({ onLogin }) {
   // alarming "Staff list unavailable / no restaurant" flash. Web resolves on
   // the first try, so this is visible only for the ~1s the local server boots.
   const [booting, setBooting] = useState(true);
-  const [mode, setMode]         = useState('pin');   // 'pin' | 'email'
+  // SEPOS-OFFICE-001 — <till-url>/#office is the owner Back Office front
+  // door: straight to email sign-in (no staff PIN grid), plus a one-tap
+  // emailed sign-in link. Hash-based so it works on every host (Netlify
+  // till sites, custom domains) with zero redirect config.
+  const isOffice = typeof window !== 'undefined' && String(window.location.hash || '').startsWith('#office');
+  const [mode, setMode]         = useState(isOffice ? 'email' : 'pin');   // 'pin' | 'email'
   // SEPOS-CLOCK-002 — "clock mode": tap Clock in/out FIRST, then enter your
   // code. (The old flow — type PIN then tap Clock — was unreachable because a
   // 4-digit PIN auto-logs-in.) In clock mode the same numpad clocks you in or
@@ -218,6 +223,17 @@ export default function LoginScreen({ onLogin }) {
     } finally { setLoading(false); }
   }
 
+  // Shared landing for email/link sign-ins: store the session and, for
+  // manager-grade roles, flag the app to open on Admin — the owner came
+  // for the Back Office, not the floor map.
+  function finishEmailSession(r) {
+    try { localStorage.setItem('siamepos_auth', JSON.stringify({ token: r.token, staff: r.staff, expires_at: r.expires_at })); } catch {}
+    if (['admin', 'manager', 'supervisor'].includes(r.staff?.role)) {
+      try { localStorage.setItem('sepos_land_admin', '1'); } catch {}
+    }
+    onLogin(r.staff);
+  }
+
   async function handleEmailLogin() {
     if (!email || !password) return;
     setLoading(true); setError(''); setSuccess('');
@@ -226,13 +242,44 @@ export default function LoginScreen({ onLogin }) {
       if (r?.error || !r?.token || !r?.staff) {
         setError(r?.error || 'Invalid email or password.');
       } else {
-        try { localStorage.setItem('siamepos_auth', JSON.stringify({ token: r.token, staff: r.staff, expires_at: r.expires_at })); } catch {}
-        onLogin(r.staff);
+        finishEmailSession(r);
       }
     } catch {
       setError('Connection error. Check your network.');
     } finally { setLoading(false); }
   }
+
+  // SEPOS-OFFICE-001 — emailed one-tap sign-in link.
+  async function handleRequestLink() {
+    if (!email) { setError('Type your email first, then tap the link button.'); return; }
+    setLoading(true); setError(''); setSuccess('');
+    try {
+      const r = await requestLoginLink(email.trim());
+      if (r?.error) setError(r.error);
+      else setSuccess(r?.message || 'Check your email for the sign-in link.');
+    } catch {
+      setError('Connection error. Check your network.');
+    } finally { setLoading(false); }
+  }
+
+  // Arriving from the emailed link: #office?login_token=… — consume it once,
+  // sign in, and scrub the token from the address bar.
+  useEffect(() => {
+    const m = String(window.location.hash || '').match(/login_token=([a-f0-9]{64})/);
+    if (!m) return;
+    (async () => {
+      setLoading(true); setError('');
+      try {
+        const r = await consumeLoginLink(m[1]);
+        try { window.history.replaceState(null, '', window.location.pathname + '#office'); } catch {}
+        if (r?.error || !r?.token || !r?.staff) setError(r?.error || 'This sign-in link has expired — request a new one.');
+        else finishEmailSession(r);
+      } catch {
+        setError('Connection error. Check your network.');
+      } finally { setLoading(false); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function pressDigit(d) {
     if (loading) return;
@@ -319,16 +366,33 @@ export default function LoginScreen({ onLogin }) {
   } else if (mode === 'email') {
     panelContent = (
       <div style={{ maxWidth: 380, margin: '0 auto', width: '100%' }}>
+        {isOffice && (
+          <div style={{ display: 'inline-block', fontSize: 11, fontWeight: 800, letterSpacing: '1.2px', textTransform: 'uppercase',
+            color: GOLD_ON_LIGHT, background: GOLD_TINT, borderRadius: 20, padding: '5px 14px', marginBottom: 12 }}>
+            Back Office
+          </div>
+        )}
         <div style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: INK }}>Owner sign in</div>
-        <div style={{ color: MUTED, fontSize: 14, marginTop: 6, marginBottom: 22 }}>Sign in with your email and password.</div>
+        <div style={{ color: MUTED, fontSize: 14, marginTop: 6, marginBottom: 22 }}>
+          {isOffice
+            ? 'Your reports, bills and settings — from anywhere. Sign in with your email.'
+            : 'Sign in with your email and password.'}
+        </div>
         <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)}
           style={inputStyle} />
         <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleEmailLogin()} style={{ ...inputStyle, marginTop: 12 }} />
         <button onClick={handleEmailLogin} disabled={loading}
           style={{ ...primaryBtn, marginTop: 18 }}>{loading ? 'Signing in…' : 'Sign in'}</button>
+        {isOffice && (
+          <button onClick={handleRequestLink} disabled={loading}
+            title="No password needed — we email you a link that signs you in with one tap. Links work once and expire after 15 minutes."
+            style={{ ...outlineBtn, width: '100%', marginTop: 10 }}>
+            📧 Email me a sign-in link instead
+          </button>
+        )}
         {msg}
-        <button onClick={() => { setMode('pin'); setError(''); }} style={linkBtn}>‹ Back to staff PIN</button>
+        {!isOffice && <button onClick={() => { setMode('pin'); setError(''); }} style={linkBtn}>‹ Back to staff PIN</button>}
       </div>
     );
   } else if (clockMode) {

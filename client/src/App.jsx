@@ -297,6 +297,17 @@ export default function App() {
     setStaff(null);
   };
 
+  // SEPOS-OFFICE-001 — an owner who signed in via email / a Back Office
+  // sign-in link came for reports and settings, not the floor map: land
+  // them straight on Admin. One-shot flag set by LoginScreen; roles below
+  // manager never get the flag, so the floor experience is untouched.
+  useEffect(() => {
+    if (!staff) return;
+    let land = null;
+    try { land = localStorage.getItem('sepos_land_admin'); localStorage.removeItem('sepos_land_admin'); } catch {}
+    if (land === '1' && ['admin', 'manager', 'supervisor'].includes(staff.role)) setScreen('admin');
+  }, [staff]);
+
   // Load the till-security settings on each sign-in (so Settings edits take
   // effect from the next login, no reload needed).
   useEffect(() => {

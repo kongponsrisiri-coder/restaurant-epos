@@ -314,6 +314,18 @@ function initSchema() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- SEPOS-OFFICE-001 — one-time Back Office sign-in links (see database.js).
+    -- Exists locally only so the shared server code never hits a missing
+    -- table; owners use the CLOUD address, not the till on the LAN.
+    CREATE TABLE IF NOT EXISTS login_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash TEXT UNIQUE NOT NULL,
+      staff_id INTEGER NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      used_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS reservations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       restaurant_id TEXT DEFAULT 'siamepos',

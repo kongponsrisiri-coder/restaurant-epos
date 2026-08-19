@@ -490,6 +490,9 @@ export const loginStaff = async (pin) => {
 export const changeStaffPin = (new_pin) => post('/api/staff/change-pin', { new_pin });
 // SEPOS-LITE-003 — email + password login (Lite restaurant owners).
 export const emailLogin = (email, password) => post('/api/auth/email-login', { email, password });
+// SEPOS-OFFICE-001 — owner Back Office magic link (request + one-time consume).
+export const requestLoginLink = (email) => post('/api/auth/request-login-link', { email });
+export const consumeLoginLink = (token) => post('/api/auth/consume-login-link', { token });
 export const getDailyReport = (date) => get(`/api/reports/daily${date ? `?date=${date}` : ''}`);
 export const getItemModifiers = async (itemId) => {
   if (!isNative()) return get(`/api/menu/items/${itemId}/modifiers`);   // web/desktop: unchanged

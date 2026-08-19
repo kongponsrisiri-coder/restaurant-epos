@@ -2386,14 +2386,27 @@ app.post('/api/auth/email-login', async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
+    // SEPOS-OFFICE-001 — this endpoint is the Back Office front door on a
+    // public URL; give it the same brute-force treatment as the PIN login
+    // (shared counter: guessing either way slows both).
+    const ip = 'ip:' + (req.ip || '');
+    const fails = _loginFailCount(ip);
+    if (fails >= _FAIL_HARD) {
+      return res.status(429).json({ error: 'Too many failed attempts from this connection. Please wait a few minutes.' });
+    }
+    if (fails >= _FAIL_MAX) {
+      await new Promise(r2 => setTimeout(r2, Math.min(4000, 250 * (fails - _FAIL_MAX + 1))));
+    }
     const r = await pool.query(
       `SELECT * FROM staff WHERE LOWER(email) = LOWER($1) AND is_active = 1`,
       [String(email).trim()]
     );
     const staff = r.rows[0];
     if (!staff || !staff.password_hash || !verifyPassword(password, staff.password_hash)) {
+      _recordLoginFail(ip);
       return res.status(401).json({ error: 'Invalid email or password' });
     }
+    _loginFails.delete(ip);
     const exp = Date.now() + 14 * 24 * 60 * 60 * 1000; // 14-day session
     const token = signToken({ sid: staff.id, name: staff.name, role: staff.role, exp });
     res.json({
@@ -2442,6 +2455,121 @@ app.post('/api/auth/set-credentials', async (req, res) => {
     );
     res.json({ id: ins.rows[0].id, created: true, pin: ownerPin });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── SEPOS-OFFICE-001 — owner Back Office magic-link sign-in ────────────────
+// The owner types their email on <till-url>/#office; we email a one-time link
+// that signs them straight in (15-min link, 14-day session). Only the SHA-256
+// of the token is stored, and consuming is an atomic UPDATE so a link can
+// never be used twice. Password login stays as the fallback (and the only
+// option until the tenant has BREVO_API_KEY).
+const _linkReqs = new Map();   // ip+email → timestamps (5 per 15 min)
+function _linkReqAllowed(key) {
+  const now = Date.now();
+  const arr = (_linkReqs.get(key) || []).filter((t) => now - t < 15 * 60 * 1000);
+  if (_linkReqs.size > 5000) _linkReqs.clear();
+  if (arr.length >= 5) { _linkReqs.set(key, arr); return false; }
+  arr.push(now); _linkReqs.set(key, arr); return true;
+}
+
+app.post('/api/auth/request-login-link', async (req, res) => {
+  try {
+    const email = String((req.body || {}).email || '').trim();
+    if (!email || !email.includes('@')) return res.status(400).json({ error: 'Email is required' });
+    const ip = 'ip:' + (req.ip || '');
+    if (!_linkReqAllowed(ip + '|' + email.toLowerCase())) {
+      return res.status(429).json({ error: 'Too many link requests — check your inbox (and spam), or wait a few minutes.' });
+    }
+    if (!process.env.BREVO_API_KEY) {
+      return res.status(400).json({ error: 'Email sign-in links are not set up for this restaurant yet — sign in with your password below.' });
+    }
+    // Same reply whether or not the email exists — no account enumeration.
+    const ok = { ok: true, message: 'If that email has Back Office access, a sign-in link is on its way.' };
+    const r = await pool.query(
+      `SELECT id, name, email, role FROM staff WHERE LOWER(email) = LOWER($1) AND is_active = 1`,
+      [email]
+    );
+    const staff = r.rows[0];
+    if (!staff || !['admin', 'manager', 'supervisor'].includes(staff.role)) return res.json(ok);
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    await pool.query(
+      `INSERT INTO login_links (token_hash, staff_id, expires_at) VALUES ($1, $2, $3)`,
+      [tokenHash, staff.id, expiresAt]
+    );
+
+    // The link points back at the page the owner is standing on (the tenant's
+    // own till/office URL), falling back to the configured public address.
+    const base = (req.get('origin') || process.env.PUBLIC_API_URL || '').replace(/\/$/, '');
+    const link = `${base}/#office?login_token=${token}`;
+    const spaName = process.env.RESTAURANT_NAME || 'SiamEPOS';
+    const { sendBrevoEmail } = require('./services/emailService');
+    const isProd = process.env.NODE_ENV === 'production';
+    try {
+    await sendBrevoEmail(
+      staff.email,
+      `Your ${spaName} Back Office sign-in link`,
+      `<div style="font-family:Georgia,serif;max-width:480px;margin:0 auto;padding:24px;color:#0D1B3E;">
+        <h2 style="color:#0D1B3E;">Sign in to ${spaName}</h2>
+        <p style="font-family:system-ui,sans-serif;font-size:15px;line-height:1.5;color:#334155;">
+          Tap the button to open your Back Office on this device. The link works once and expires in 15 minutes.
+        </p>
+        <p style="text-align:center;margin:28px 0;">
+          <a href="${link}" style="background:#C9A84C;color:#0D1B3E;font-family:system-ui,sans-serif;font-weight:700;text-decoration:none;padding:14px 28px;border-radius:10px;display:inline-block;">Open Back Office</a>
+        </p>
+        <p style="font-family:system-ui,sans-serif;font-size:12px;color:#94a3b8;">
+          If you didn't request this, ignore this email — no one can sign in without the link.
+        </p>
+      </div>`
+    );
+    } catch (mailErr) {
+      // In production the owner must know the email never left; in dev the
+      // echoed link below is the whole point, so a failed send is tolerable.
+      if (isProd) throw mailErr;
+      console.error('[office] dev: mail send failed (link still echoed):', mailErr.message);
+    }
+    // Outside production the link is echoed so the flow can be wire-tested
+    // without a mailbox.
+    if (!isProd) return res.json({ ...ok, dev_link: link });
+    res.json(ok);
+  } catch (err) {
+    console.error('[office] request-login-link', err.message);
+    res.status(500).json({ error: 'Could not send the link — try password sign-in.' });
+  }
+});
+
+app.post('/api/auth/consume-login-link', async (req, res) => {
+  try {
+    const token = String((req.body || {}).token || '').trim();
+    if (!token) return res.status(400).json({ error: 'token required' });
+    const ip = 'ip:' + (req.ip || '');
+    if (_loginFailCount(ip) >= _FAIL_HARD) {
+      return res.status(429).json({ error: 'Too many attempts from this connection.' });
+    }
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const nowIso = new Date().toISOString();
+    const r = await pool.query(
+      `UPDATE login_links SET used_at = CURRENT_TIMESTAMP
+        WHERE token_hash = $1 AND used_at IS NULL AND expires_at > $2
+        RETURNING staff_id`,
+      [tokenHash, nowIso]
+    );
+    if (!r.rows[0]) {
+      _recordLoginFail(ip);
+      return res.status(401).json({ error: 'This sign-in link has expired or was already used — request a new one.' });
+    }
+    const sr = await pool.query(`SELECT id, name, role FROM staff WHERE id = $1 AND is_active = 1`, [r.rows[0].staff_id]);
+    const staff = sr.rows[0];
+    if (!staff) return res.status(401).json({ error: 'This account is no longer active.' });
+    const exp = Date.now() + 14 * 24 * 60 * 60 * 1000;
+    const token2 = signToken({ sid: staff.id, name: staff.name, role: staff.role, exp });
+    res.json({ token: token2, expires_at: exp, staff: { id: staff.id, name: staff.name, role: staff.role } });
+  } catch (err) {
+    console.error('[office] consume-login-link', err.message);
+    res.status(500).json({ error: 'server error' });
+  }
 });
 
 // Seed the restaurants registry row for a new client deployment.

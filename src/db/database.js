@@ -577,6 +577,20 @@ async function initDB() {
       )
     `);
 
+    // SEPOS-OFFICE-001 — one-time sign-in links for the owner Back Office.
+    // Only the SHA-256 of the token is stored; consume is an atomic
+    // UPDATE … RETURNING so a link can never be used twice.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS login_links (
+        id SERIAL PRIMARY KEY,
+        token_hash TEXT UNIQUE NOT NULL,
+        staff_id INTEGER NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS reservations (
         id SERIAL PRIMARY KEY,

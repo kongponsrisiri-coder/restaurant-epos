@@ -573,6 +573,9 @@ export const getBillAmendments    = (orderId) => get(`/api/bills/${orderId}/amen
 // body: { payments: [{ id, amount, method, remove }], reason, pin }
 export const editBillPayment      = (orderId, body) => put(`/api/bills/${orderId}/edit-payment`, body);
 export const getSettings = () => get('/api/settings');
+// SEPOS-CFD-001 — customer-facing display relay (till pushes, second screen polls)
+export const pushCfdState = (state) => post('/api/cfd/state', state);
+export const getCfdState = (station = 'main') => get(`/api/cfd/state?station=${encodeURIComponent(station)}`);
 export const updateSettings = (settings) => put('/api/settings', settings);
 // SEPOS-060 phase 2 — desktop offline license lock state + manual re-check
 // (used by the lock screen after a client pays so they unlock without waiting).

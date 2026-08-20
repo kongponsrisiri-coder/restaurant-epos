@@ -23,6 +23,7 @@ import Clock from './components/Clock';
 import AiHelpAssistant from './components/AiHelpAssistant'; // SEPOS-AI-HELP-001 — Admin-only, now in the top bar
 import PrintAlertBanner from './components/PrintAlertBanner'; // SEPOS-PRINT-ALERT-001 — loud printer-down alerts
 import LockScreen from './screens/LockScreen';
+import CustomerDisplayScreen from './screens/CustomerDisplayScreen'; // SEPOS-CFD-001
 import OpenDayModal from './components/OpenDayModal'; // SEPOS-OPENDAY-001
 import OnScreenKeyboard from './components/OnScreenKeyboard'; // SEPOS-OSK-001 — touch-till keyboard
 import './App.css';
@@ -68,6 +69,12 @@ function readCounterMode() {
 }
 
 export default function App() {
+  // SEPOS-CFD-001 — this browser window IS the customer-facing display
+  // (opened at <till-url>/#display on the second screen or a tablet). Render
+  // only the display and nothing else — no login, no till chrome.
+  if (typeof window !== 'undefined' && String(window.location.hash || '').startsWith('#display')) {
+    return <CustomerDisplayScreen />;
+  }
   const [staff, setStaff]               = useState(() => {
     // SEPOS-LITE-003 — restore a persisted email-login session (14-day
     // token) so a Lite owner isn't asked to sign in every day.

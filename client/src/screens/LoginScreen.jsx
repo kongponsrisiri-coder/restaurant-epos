@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { loginStaff, clockToggle, emailLogin, requestLoginLink, consumeLoginLink, storePinSession, getStaff, getRestaurant, getSettings, changeStaffPin } from '../api';
+import { loginStaff, clockToggle, emailLogin, requestLoginLink, consumeLoginLink, storePinSession, getStaff, getRestaurant, getSettings, changeStaffPin, pushCfdState } from '../api';
 import { resetDevice, currentTillTarget, canSwitchClient } from '../utils/deviceReset';
 import { NAVY, GOLD, RED, GREEN } from '../theme'; // SEPOS-BRAND-001 — per-client brand colours
 
@@ -160,6 +160,9 @@ export default function LoginScreen({ onLogin }) {
       if (settings && settings.brand_logo) setBrandLogo(settings.brand_logo); // SEPOS-BRAND-001
       if (settings && settings.brand_logo_size) setLogoSize(settings.brand_logo_size); // SEPOS-BRAND-001
       setPinOnly(settings && String(settings.login_pin_only) === '1'); // SEPOS-PINONLY-001
+      // SEPOS-CFD-001 — while the till is at the login/idle screen, show branding
+      // on the customer-facing display. Fire-and-forget.
+      pushCfdState({ mode: 'idle', restaurant_name: name, logo: (settings && (settings.brand_logo || settings.company_logo)) || '' }).catch(() => {});
     };
     load();
     return () => { cancelled = true; };

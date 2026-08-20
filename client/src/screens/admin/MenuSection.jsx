@@ -406,6 +406,21 @@ export default function MenuSection() {
     setLocalItems(newItems); setDragIndex(null); setDragOverIndex(null); saveSortOrder(newItems);
   }
   function handleDragEnd() { setDragIndex(null); setDragOverIndex(null); }
+  // SEPOS-ARRANGE-TOUCH-001 — HTML5 drag never fires on a touchscreen till, so
+  // the item reorder was mouse-only (categories + sub-cats already use ◀▶ tap).
+  // ▲▼ swaps an item with its visible neighbour — touch + mouse, filter-safe.
+  function moveItem(item, delta) {
+    const di = displayItems.findIndex(i => i.id === item.id);
+    const dj = di + delta;
+    if (dj < 0 || dj >= displayItems.length) return;
+    const neighbourId = displayItems[dj].id;
+    const newItems = [...localItems];
+    const a = newItems.findIndex(i => i.id === item.id);
+    const b = newItems.findIndex(i => i.id === neighbourId);
+    if (a < 0 || b < 0) return;
+    [newItems[a], newItems[b]] = [newItems[b], newItems[a]];
+    setLocalItems(newItems); saveSortOrder(newItems);
+  }
   async function saveSortOrder(items) {
     // Use the api.js helper (native-safe) — a raw fetch from the Sunmi WebView
     // silently fails, so the drag reorder never persisted and reverted on reload.
@@ -700,13 +715,18 @@ export default function MenuSection() {
       )}
       {displayItems.length === 0 ? <div style={{ textAlign: 'center', color: '#bbb', marginTop: 60 }}>{subFilter == null ? 'No items yet — click "+ Add Item" or use 🤖 AI Scanner' : 'No dishes in this sub-category.'}</div> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {displayItems.map((item) => {
+          {displayItems.map((item, di) => {
             const subcat = subcategories.find(s => s.id === item.subcategory_id);
             const isDragging = dragIndex === item.id; const isOver = dragOverIndex === item.id;
+            const upDownBtn = { width: 38, height: 26, borderRadius: 7, border: '1.5px solid #C9A84C', background: '#FBF4DF', color: '#9A7B1F', fontSize: 13, fontWeight: 800, cursor: 'pointer', lineHeight: 1, touchAction: 'manipulation' };
             return (
               <div key={item.id} draggable onDragStart={e => handleDragStart(e, item)} onDragOver={e => handleDragOver(e, item)} onDrop={e => handleDrop(e, item)} onDragEnd={handleDragEnd}
                 style={{ background: 'white', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.15)' : '0 1px 4px rgba(0,0,0,0.08)', opacity: isDragging ? 0.5 : 1, border: isOver ? '2px solid #3b82f6' : '2px solid transparent', cursor: 'grab' }}>
-                <div style={{ color: '#ccc', fontSize: 18, cursor: 'grab', userSelect: 'none', flexShrink: 0 }}><div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{[0,1,2].map(r => <div key={r} style={{ display: 'flex', gap: 3 }}><div style={{ width: 4, height: 4, borderRadius: '50%', background: '#ccc' }} /><div style={{ width: 4, height: 4, borderRadius: '50%', background: '#ccc' }} /></div>)}</div></div>
+                {/* SEPOS-ARRANGE-TOUCH-001 — tap ▲▼ to reorder (works on the touchscreen; drag still works with a mouse) */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }} onMouseDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+                  <button onClick={e => { e.stopPropagation(); moveItem(item, -1); }} disabled={di === 0} title="Move up" style={{ ...upDownBtn, opacity: di === 0 ? 0.3 : 1, cursor: di === 0 ? 'default' : 'pointer' }}>▲</button>
+                  <button onClick={e => { e.stopPropagation(); moveItem(item, 1); }} disabled={di === displayItems.length - 1} title="Move down" style={{ ...upDownBtn, opacity: di === displayItems.length - 1 ? 0.3 : 1, cursor: di === displayItems.length - 1 ? 'default' : 'pointer' }}>▼</button>
+                </div>
                 <div style={{ flex: 1, opacity: item.is_available ? 1 : 0.5 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--brand-primary, #1a1a2e)' }}>{item.name}</div>
                   {item.name_alt && <div style={{ fontSize: 12, color: 'var(--brand-accent,#C9A84C)', marginTop: 1 }}>{item.name_alt}</div>}

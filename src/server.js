@@ -1277,6 +1277,40 @@ app.get('/api/orders', async (req, res) => {
 // last redeployed (ops verification — no build-version marker existed before).
 const SERVER_STARTED_AT = new Date().toISOString();
 const SERVER_COMMIT = process.env.RAILWAY_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT || process.env.GIT_COMMIT || null;
+
+// ─── SEPOS-CFD-001 — Customer-Facing Display ────────────────────────────────
+// The cashier's till PUSHES what the customer should see (idle branding, or the
+// live order + total) to this ephemeral in-memory relay; the second screen
+// (a browser on <till-url>/#display, on this PC or a separate tablet) POLLS it.
+// Server-brokered on purpose so it works cross-process/cross-device without
+// Electron dual-window plumbing. State is per `station` (default 'main') so
+// multiple tills never cross-show; it's display-only (item names + prices that
+// are already on the customer's screen — no customer PII, no persistence).
+const _cfdState = new Map();
+const _CFD_IDLE = () => ({ mode: 'idle', updated_at: Date.now() });
+app.post('/api/cfd/state', (req, res) => {
+  const station = String((req.body && req.body.station) || 'main').slice(0, 40);
+  const body = req.body || {};
+  const state = {
+    mode: body.mode === 'order' ? 'order' : 'idle',
+    restaurant_name: typeof body.restaurant_name === 'string' ? body.restaurant_name.slice(0, 80) : undefined,
+    logo: typeof body.logo === 'string' && body.logo.length < 300000 ? body.logo : undefined,
+    order: body.mode === 'order' && body.order && typeof body.order === 'object' ? body.order : undefined,
+    qr: body.qr && typeof body.qr === 'object' ? body.qr : undefined,
+    updated_at: Date.now(),
+  };
+  _cfdState.set(station, state);
+  if (_cfdState.size > 50) _cfdState.clear();   // never grows unbounded
+  res.json({ ok: true });
+});
+app.get('/api/cfd/state', (req, res) => {
+  const station = String(req.query.station || 'main').slice(0, 40);
+  const s = _cfdState.get(station);
+  // Stale push (till closed/crashed) falls back to idle after 30s of silence.
+  if (!s || Date.now() - s.updated_at > 30000) return res.json(_CFD_IDLE());
+  res.json(s);
+});
+
 app.get('/api/health', async (req, res) => {
   try {
     const result = await pool.query(`

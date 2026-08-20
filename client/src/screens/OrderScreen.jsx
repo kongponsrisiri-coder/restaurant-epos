@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote, getVoucher, redeemVoucher, getOrderDeposit, getOrderDepositApplied, createDeposit } from '../api';
 import AmountInput from '../components/AmountInput';
-import { unapplyOrderDeposit } from '../api';
+import { unapplyOrderDeposit, pushCfdState } from '../api';
 import CodeScanButton from '../components/CodeScanButton';
 
 // SEPOS-MENU-COLOR-001 — auto black/white text on a coloured button.
@@ -880,6 +880,39 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   const activeSubs = menu.find(c => c.id === activeCategory)?.subcategories || [];
   const activeCatIsBar = !!menu.find(c => c.id === activeCategory)?.is_bar;
   const existingItems = order?.items || [];
+
+  // SEPOS-CFD-001 — push the live order to the customer-facing display relay
+  // whenever it changes (sent items + unsent cart, running total). Fire-and-
+  // forget — a failed push never affects the till. The second screen (a browser
+  // on <till-url>/#display) polls this. Idle/branding is pushed by LoginScreen
+  // and on unmount below.
+  useEffect(() => {
+    const cfdItems = [
+      ...existingItems.filter(i => !i.voided).map(i => ({ name: i.name, qty: Number(i.quantity) || 1, price: Number(i.unit_price) || 0 })),
+      ...cart.map(c => ({ name: c.name, qty: Number(c.quantity) || 1, price: Number(c.price ?? c.unit_price) || 0 })),
+    ];
+    const table = order?.table_name || (order?.table_number != null ? `Table ${order.table_number}` : '');
+    if (cfdItems.length === 0) {
+      pushCfdState({ mode: 'idle', restaurant_name: settings.company_name || settings.restaurant_name, logo: settings.brand_logo || settings.company_logo }).catch(() => {});
+      return;
+    }
+    pushCfdState({
+      mode: 'order',
+      restaurant_name: settings.company_name || settings.restaurant_name,
+      logo: settings.brand_logo || settings.company_logo,
+      order: {
+        table,
+        items: cfdItems,
+        subtotal,
+        discount: discountAmount || 0,
+        service: serviceChargeAmount || 0,
+        total: orderTotal,
+      },
+    }).catch(() => {});
+  }, [subtotal, orderTotal, serviceChargeAmount, discountAmount, existingItems, cart, order, settings]);
+
+  // Clear the customer display back to branding when the cashier leaves the order.
+  useEffect(() => () => { pushCfdState({ mode: 'idle', restaurant_name: settings.company_name || settings.restaurant_name, logo: settings.brand_logo || settings.company_logo }).catch(() => {}); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Menu navigation (redesign): category buttons → sub-category tabs ──────────
   // Categories are big wrapping buttons; a category with sub-cats shows a tab

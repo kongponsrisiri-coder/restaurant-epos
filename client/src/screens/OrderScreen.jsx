@@ -964,6 +964,19 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
     setArrangeItems(prev => { const a = [...prev]; const [m] = a.splice(arrangeDrag, 1); a.splice(dropIdx, 0, m); return a; });
     setArrangeDrag(null);
   };
+  // SEPOS-ARRANGE-TOUCH-001 — HTML5 drag-and-drop never fires on a touchscreen
+  // (a till IS a touchscreen), so dragging to reorder was mouse-only. Tap ◀ / ▶
+  // moves an item one slot — works on touch AND mouse (drag kept for desktop).
+  const moveArrangeItem = (idx, delta) => {
+    setArrangeItems(prev => {
+      const j = idx + delta;
+      if (j < 0 || j >= prev.length) return prev;
+      const a = [...prev];
+      const [m] = a.splice(idx, 1);
+      a.splice(j, 0, m);
+      return a;
+    });
+  };
   const saveArrange = async () => {
     if (arrangeSaving) return;
     setArrangeSaving(true);
@@ -1351,7 +1364,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                 {/* SEPOS-ORDER-ARRANGE — reorder the menu right here (manager-gated). */}
                 {!searchQ && (arrangeMode ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '10px 14px', background: '#FBF7EC', border: '1.5px solid #C9A84C', borderRadius: 12 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#9A7B1F' }}>⇅ Drag dishes to reorder {menu.find(c => c.id === activeCategory)?.name}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#9A7B1F' }}>Tap ◀ ▶ to move dishes in {menu.find(c => c.id === activeCategory)?.name}</span>
                     <div style={{ flex: 1 }} />
                     <button onClick={cancelArrange} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #ddd', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>Cancel</button>
                     <button onClick={saveArrange} disabled={arrangeSaving} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--brand-primary,#0D1B3E)', color: '#fff', cursor: arrangeSaving ? 'wait' : 'pointer', fontWeight: 800, fontSize: 13 }}>{arrangeSaving ? 'Saving…' : '✓ Done'}</button>
@@ -1380,7 +1393,20 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', flex: 'none' }}>
                           {arrangeMode ? (
-                            <span style={{ color: '#C9A84C', fontSize: 20, fontWeight: 800, cursor: 'grab' }} title="Drag to reorder">⣿</span>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); moveArrangeItem(gridIdx, -1); }}
+                                disabled={gridIdx === 0}
+                                title="Move earlier"
+                                style={{ width: 44, height: 44, borderRadius: 10, border: '1.5px solid #C9A84C', background: gridIdx === 0 ? '#F4F1EA' : '#FBF4DF', color: '#9A7B1F', fontSize: 20, fontWeight: 800, cursor: gridIdx === 0 ? 'default' : 'pointer', opacity: gridIdx === 0 ? 0.35 : 1, touchAction: 'manipulation' }}
+                              >◀</button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); moveArrangeItem(gridIdx, 1); }}
+                                disabled={gridIdx === arrangeItems.length - 1}
+                                title="Move later"
+                                style={{ width: 44, height: 44, borderRadius: 10, border: '1.5px solid #C9A84C', background: gridIdx === arrangeItems.length - 1 ? '#F4F1EA' : '#FBF4DF', color: '#9A7B1F', fontSize: 20, fontWeight: 800, cursor: gridIdx === arrangeItems.length - 1 ? 'default' : 'pointer', opacity: gridIdx === arrangeItems.length - 1 ? 0.35 : 1, touchAction: 'manipulation' }}
+                              >▶</button>
+                            </div>
                           ) : totalQty > 0 ? (
                             <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', background: 'var(--brand-primary,#0D1B3E)', color: 'var(--brand-accent,#C9A84C)', borderRadius: 10, height: 32 }}>
                               <button onClick={e => { e.stopPropagation(); decrementInCart(item); }} style={{ background: 'transparent', border: 'none', color: 'var(--brand-accent,#C9A84C)', cursor: 'pointer', width: 30, height: 32, fontWeight: 800, fontSize: 18 }}>−</button>

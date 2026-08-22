@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { SERVER_URL, authHeaders } from '../../../api';
-import { invAPI, today } from '../shared';
+import { invAPI, todayStr } from '../shared';
 
 // ── Invoice History (embedded — Sandy design) ─────────────────────
 function currentMonthStr() {
@@ -196,7 +196,7 @@ export default function InvoiceScannerTab() {
   const [file, setFile]               = useState(null);
   const [fileData, setFileData]       = useState(null);
   const [invoiceData, setInvoiceData] = useState({ supplier_name: '', invoice_date: '', invoice_number: '', total_amount: '' });
-  const [expenseData, setExpenseData] = useState({ vendor: '', date: today, description: '', category: 'overhead', total_amount: '' });
+  const [expenseData, setExpenseData] = useState({ vendor: '', date: todayStr(), description: '', category: 'overhead', total_amount: '' });
   const [lineItems, setLineItems]     = useState([]);
   const [expLines, setExpLines]       = useState([]);
   const [ingredients, setIngredients] = useState([]);
@@ -236,7 +236,7 @@ export default function InvoiceScannerTab() {
     setStage('upload'); setFile(null); setFileData(null); setError('');
     setLineItems([]); setExpLines([]); setEditingLine(null); setConfirmResult(null);
     setInvoiceData({ supplier_name: '', invoice_date: '', invoice_number: '', total_amount: '' });
-    setExpenseData({ vendor: '', date: today, description: '', category: 'overhead', total_amount: '' });
+    setExpenseData({ vendor: '', date: todayStr(), description: '', category: 'overhead', total_amount: '' });
   };
 
   const handleFile = (f) => { if (!f) return; setFile(f); const reader = new FileReader(); reader.onload = e => setFileData(e.target.result); reader.readAsDataURL(f); };
@@ -259,7 +259,7 @@ export default function InvoiceScannerTab() {
         setLineItems((inv.line_items || []).map(item => ({ name_extracted: item.name || '', quantity: item.quantity || 0, unit: (item.unit && item.unit !== 'each') ? item.unit : detectUnit(item.name), unit_price: item.unit_price || 0, line_total: item.line_total || (item.quantity * item.unit_price) || 0, matched_ingredient_id: fuzzyMatch(item.name), pack_size: item.pack_size || null, pack_unit: item.pack_unit || null })));
       } else {
         const exp = data.expense;
-        setExpenseData({ vendor: exp.vendor || '', date: exp.date || today, description: exp.description || '', category: exp.category || 'overhead', total_amount: exp.total_amount || 0 });
+        setExpenseData({ vendor: exp.vendor || '', date: exp.date || todayStr(), description: exp.description || '', category: exp.category || 'overhead', total_amount: exp.total_amount || 0 });
         setExpLines(exp.line_items || []);
       }
       setStage('review');

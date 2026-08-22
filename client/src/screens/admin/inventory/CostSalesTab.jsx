@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react';
 import { getSummaryReport, getWastageReport, getMenuPerformance, getSettings } from '../../../api';
-import { invAPI, today } from '../shared';
+import { invAPI, todayStr, fmtLocalDate } from '../shared';
 import { downloadCsv } from '../../../utils/csv';
 import { fullPagePrint, pageHtml, restaurantName, dateLabel } from '../../../utils/reportPrinter';
 
 export default function CostSalesTab() {
-  const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+  const firstOfMonth = fmtLocalDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [from, setFrom]             = useState(firstOfMonth);
-  const [to, setTo]                 = useState(today);
+  const [to, setTo]                 = useState(todayStr);
   const [revenue, setRevenue]       = useState(null);
   const [movements, setMovements]   = useState([]);
   const [expenses, setExpenses]     = useState([]);
   const [wastage, setWastage]       = useState(null);
   const [loading, setLoading]       = useState(true);
-  const [expForm, setExpForm]       = useState({ category: 'overhead', description: '', amount: '', date: today });
+  const [expForm, setExpForm]       = useState({ category: 'overhead', description: '', amount: '', date: todayStr() });
   const [savingExp, setSavingExp]   = useState(false);
   const [activeExpSection, setActiveExpSection] = useState(true);
 
@@ -52,7 +52,7 @@ export default function CostSalesTab() {
   const addExpense = async () => {
     if (!expForm.description || !expForm.amount) return alert('Description and amount are required');
     setSavingExp(true);
-    try { await invAPI.addExpense(expForm); setExpForm({ category: 'overhead', description: '', amount: '', date: today }); loadData(); }
+    try { await invAPI.addExpense(expForm); setExpForm({ category: 'overhead', description: '', amount: '', date: todayStr() }); loadData(); }
     catch { alert('Save failed — check backend is running'); }
     finally { setSavingExp(false); }
   };
@@ -199,7 +199,7 @@ export default function CostSalesTab() {
         <button onClick={exportCsv} disabled={loading} style={{ padding: '10px 18px', borderRadius: 8, border: '1px solid var(--brand-primary, #1a1a2e)', background: 'white', color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, fontSize: 13, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.5 : 1 }}>⬇ Export CSV</button>
         <button onClick={printA4} disabled={loading || printing} style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: 'var(--brand-accent, #C9A84C)', color: 'var(--brand-primary, #0D1B3E)', fontWeight: 800, fontSize: 13, cursor: (loading || printing) ? 'not-allowed' : 'pointer', opacity: (loading || printing) ? 0.5 : 1 }}>{printing ? 'Building…' : '🖨️ Print A4 — Menu Performance'}</button>
         <div style={{ display: 'flex', gap: 6 }}>
-          {[{ label: 'This Month', from: firstOfMonth, to: today }, { label: 'Last 7 Days', from: new Date(Date.now() - 7 * 864e5).toISOString().split('T')[0], to: today }, { label: 'Today', from: today, to: today }].map(p => (
+          {[{ label: 'This Month', from: firstOfMonth, to: todayStr() }, { label: 'Last 7 Days', from: fmtLocalDate(new Date(Date.now() - 7 * 864e5)), to: todayStr() }, { label: 'Today', from: todayStr(), to: todayStr() }].map(p => (
             <button key={p.label} onClick={() => { setFrom(p.from); setTo(p.to); }} style={{ padding: '6px 12px', borderRadius: 20, border: 'none', background: '#f0f0f0', cursor: 'pointer', fontWeight: 600, fontSize: 12, color: '#555' }}>{p.label}</button>
           ))}
         </div>

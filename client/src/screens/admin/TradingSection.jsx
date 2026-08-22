@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { getSummaryReport } from '../../api';
-import { today, getDateRange } from './shared';
+import { todayStr, getDateRange } from './shared';
 import { dineTableLabel } from '../../utils/orderLabel';
 
 export default function TradingSection() {
   const [period, setPeriod] = useState('today');
-  const [customFrom, setCustomFrom] = useState(today);
-  const [customTo, setCustomTo] = useState(today);
+  const [customFrom, setCustomFrom] = useState(todayStr);
+  const [customTo, setCustomTo] = useState(todayStr);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -38,11 +38,11 @@ export default function TradingSection() {
             Picking a date jumps straight to the custom range (no need to hit
             "Custom" first). A single day = set both boxes to the same date. */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 6, flexShrink: 0 }}>
-          <input type="date" value={customFrom} max={customTo || today}
+          <input type="date" value={customFrom} max={customTo || todayStr()}
             onChange={e => { setCustomFrom(e.target.value); setPeriod('custom'); }}
             style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
           <span style={{ color: '#666', fontSize: 13 }}>→</span>
-          <input type="date" value={customTo} min={customFrom} max={today}
+          <input type="date" value={customTo} min={customFrom} max={todayStr()}
             onChange={e => { setCustomTo(e.target.value); setPeriod('custom'); }}
             style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
         </div>

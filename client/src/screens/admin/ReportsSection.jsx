@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getSummaryReport, getItemSalesReport, getSettings } from '../../api';
-import { today, getDateRange } from './shared';
+import { todayStr, getDateRange } from './shared';
 import { downloadCsv } from '../../utils/csv';
 import { dineTableLabel } from '../../utils/orderLabel';
 import {
@@ -19,8 +19,8 @@ const fdParen = (part, food, drink) => { const p = fdPct(part, food, drink); ret
 export default function ReportsSection() {
   const [tab, setTab] = useState('sales');
   const [period, setPeriod] = useState('today');
-  const [customFrom, setCustomFrom] = useState(today);
-  const [customTo, setCustomTo] = useState(today);
+  const [customFrom, setCustomFrom] = useState(todayStr);
+  const [customTo, setCustomTo] = useState(todayStr);
   const [data, setData] = useState(null);
   const [itemData, setItemData] = useState([]);
   const [settings, setSettings] = useState({});
@@ -132,11 +132,11 @@ export default function ReportsSection() {
         {/* Date-range picker — always visible so any specific day is one tap
             away; picking a date jumps straight to the custom range. */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 6 }}>
-          <input type="date" value={customFrom} max={customTo || today}
+          <input type="date" value={customFrom} max={customTo || todayStr()}
             onChange={e => { setCustomFrom(e.target.value); setPeriod('custom'); }}
             style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
           <span style={{ color: '#666', fontSize: 13 }}>→</span>
-          <input type="date" value={customTo} min={customFrom} max={today}
+          <input type="date" value={customTo} min={customFrom} max={todayStr()}
             onChange={e => { setCustomTo(e.target.value); setPeriod('custom'); }}
             style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #bbb', fontSize: 13 }} />
         </div>

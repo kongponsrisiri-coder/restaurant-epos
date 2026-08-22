@@ -260,6 +260,33 @@ function resolveRestaurantId(req) {
 // so a shift can span midnight / two nights free of the timezone day boundary.
 const OPEN_SESSION_SUBQ = "(SELECT ts.id FROM till_sessions ts WHERE ts.status='open' AND ts.restaurant_id = orders.restaurant_id ORDER BY ts.opened_at DESC LIMIT 1)";
 
+// SEPOS-AUTO-SESSION-001 — open a till session automatically at the day's
+// first sale if none is open. A shift the staff open late (or not at all)
+// leaves paid bills outside every Z's session window — the money is in the
+// reports but the printed Z under-counts, which reads as missing takings.
+// Called from every order-create path and from bill close; mirrors the
+// offline branch of POST /api/till-sessions/open (queued cloud replay, and
+// the unique open-session index turns a two-terminal race into a no-op).
+async function ensureOpenSession(rid) {
+  const restaurantId = rid || process.env.RESTAURANT_ID || 'siamepos';
+  try {
+    const existing = await pool.query(
+      "SELECT id FROM till_sessions WHERE status='open' AND restaurant_id=$1 LIMIT 1", [restaurantId]);
+    if (existing.rows[0]) return existing.rows[0].id;
+    const r = await pool.query(
+      `INSERT INTO till_sessions (status, opened_at, opened_by, float_amount, restaurant_id)
+       VALUES ('open', NOW(), NULL, 0, $1) RETURNING id`, [restaurantId]);
+    try { await offlineQueue.enqueue('session_open', { staff_id: null, float_amount: 0 }); } catch {}
+    console.log(`[auto-session] no shift was open — opened one for ${restaurantId}`);
+    return r.rows[0] ? r.rows[0].id : null;
+  } catch (err) {
+    if (!(String(err.code) === '23505' || /idx_till_sessions_open|UNIQUE/i.test(err.message))) {
+      console.error('[auto-session] open failed:', err.message);
+    }
+    return null;
+  }
+}
+
 // ── SEPOS-LITE-002 — backend plan gate ───────────────────────────────
 // Server-side backstop for the in-app feature gating: blocks Pro-only
 // API routes on a lite-plan deployment. Under "Lite as Pro" each
@@ -1434,6 +1461,7 @@ async function openDineInOrderDeduped({ tableId, covers, staffId }) {
       const full = await pool.query('SELECT * FROM orders WHERE id = $1', [existing.rows[0].id]);
       return { order: full.rows[0], reused: true };
     }
+    await ensureOpenSession(); // SEPOS-AUTO-SESSION-001 — first sale opens the shift
     const ins = await pool.query(
       `INSERT INTO orders (table_id, staff_id, status, covers, opened_at)
        VALUES ($1, $2, 'open', $3, NOW()) RETURNING *`,
@@ -1454,6 +1482,8 @@ app.post('/api/orders', requireActiveSubscription, requireValidLicense, async (r
     // status flip and don't enforce covers.
     const type = order_type === 'counter' || order_type === 'takeaway'
       ? order_type : 'dine_in';
+
+    await ensureOpenSession(resolveRestaurantId(req)); // SEPOS-AUTO-SESSION-001
 
     // SEPOS-GHOST-001 — de-duplicate a double-tapped table-open. A dine-in table
     // is single-bill by nature, so a second create on a table that already has an
@@ -1920,6 +1950,9 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
   const { amount, method } = req.body;
   const orderId = req.params.id;
   const isCancel = String(method).toLowerCase() === 'cancelled' && Number(amount) === 0;
+  // SEPOS-AUTO-SESSION-001 — belt-and-braces: a bill must never close outside
+  // a shift window (covers orders created before this build shipped).
+  if (!isCancel) await ensureOpenSession(resolveRestaurantId(req));
   // SEPOS-062 — split payments. When the bill is settled with more than one
   // tender (e.g. £50 cash + £50 card), the client sends `payments: [{amount,
   // method}, …]` and we record ONE payments row per tender with its REAL
@@ -7562,6 +7595,7 @@ app.get('/api/takeaway/delivery-check', widgetCors, async (req, res) => {
 
 // Submit a takeaway order from the public widget.
 app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireValidLicense, async (req, res) => {
+  await ensureOpenSession(resolveRestaurantId(req)); // SEPOS-AUTO-SESSION-001
   const client = await pool.connect();
   try {
     const {
@@ -8510,6 +8544,7 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     if (items.length === 0) return res.status(400).json({ error: 'Cart is empty' });
     if (items.length > 40) return res.status(400).json({ error: 'Too many items in one order' });
+    await ensureOpenSession(resolveRestaurantId(req)); // SEPOS-AUTO-SESSION-001
 
     // Server-side pricing — the client's numbers are display only. Chosen
     // modifiers are re-looked-up by id: name + surcharge come from OUR rows
@@ -9768,6 +9803,7 @@ app.post('/api/deliveroo/webhook', async (req, res) => {
       return;
     }
     console.log(`[deliveroo] order.placed: Deliveroo #${parsed.displayId} (${parsed.customerName})`);
+    await ensureOpenSession(); // SEPOS-AUTO-SESSION-001 — delivery orders count in the shift too
 
     // Deduplicate — ignore if this Deliveroo order ID already exists.
     const exists = await pool.query(

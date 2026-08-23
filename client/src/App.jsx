@@ -143,8 +143,21 @@ export default function App() {
 
   // SEPOS-BRAND-001 — apply the tenant's brand colours app-wide at load. Safe
   // if it fails / is unset (falls back to the default SiamEPOS navy+gold).
+  // SEPOS-BRAND-BOOT-001 (Yum Yum, 23 Aug) — on a desktop till this single
+  // fetch RACES the embedded server's cold start, failed silently, and the
+  // brand only appeared after a manual Settings save. Retry until settings
+  // actually load, then keep the applied theme.
   useEffect(() => {
-    getSettings().then(s => { if (s && !s.error) applyBrandTheme(s); }).catch(() => {});
+    let stopped = false;
+    const tryTheme = (attempt) => {
+      getSettings().then(s => {
+        if (stopped) return;
+        if (s && !s.error) applyBrandTheme(s);
+        else if (attempt < 20) setTimeout(() => tryTheme(attempt + 1), 1500);
+      }).catch(() => { if (!stopped && attempt < 20) setTimeout(() => tryTheme(attempt + 1), 1500); });
+    };
+    tryTheme(0);
+    return () => { stopped = true; };
   }, []);
 
   // SEPOS-ANDROID-002 — push offline-created orders to the cloud whenever we're

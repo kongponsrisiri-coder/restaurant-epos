@@ -194,6 +194,7 @@ export default function ZReportSection() {
     rows.push(['Orders', reportData.total_orders || 0]);
     rows.push(['Covers', reportData.total_covers || 0]);
     rows.push(['Avg per cover £', Number(reportData.avg_per_cover || 0).toFixed(2)]);
+    rows.push(['Avg per order £', Number(reportData.avg_per_order || 0).toFixed(2)]);
     rows.push(['Discounts £', Number(reportData.total_discounts || 0).toFixed(2)]);
     if (Number(reportData.comp_bills?.count) > 0) rows.push([`Complimentary bills x${reportData.comp_bills.count} £`, Number(reportData.comp_bills.value || 0).toFixed(2)]);
     rows.push(['Void items', reportData.void_count || 0]);
@@ -643,6 +644,8 @@ function buildZReportBody(r, type, settings, cash, thermal) {
     <table>
       <tr><td>Orders</td><td class="right">${fmtInt(r.total_orders)}</td></tr>
       <tr><td>Covers</td><td class="right">${fmtInt(r.total_covers)}</td></tr>
+      <tr><td>Avg per order</td><td class="right">${fmt(r.avg_per_order)}</td></tr>
+      <tr><td>Avg per cover</td><td class="right">${fmt(r.avg_per_cover)}</td></tr>
     </table>`;
 
   const vatOnTop = r.vat_mode === 'exclusive';
@@ -734,6 +737,9 @@ function buildZReportLines(r, type, settings, cash) {
   lines.push({ kind: 'div' });
   lines.push({ kind: 'row', left: 'Orders',         right: fmtInt(r.total_orders) });
   lines.push({ kind: 'row', left: 'Covers',         right: fmtInt(r.total_covers) });
+  // Korakot 2026-08-23 (Fern's ask): average spend printed with the counts.
+  lines.push({ kind: 'row', left: 'Avg per order',  right: fmt(r.avg_per_order) });
+  lines.push({ kind: 'row', left: 'Avg per cover',  right: fmt(r.avg_per_cover) });
 
   if (Array.isArray(r.vat_breakdown) && r.vat_breakdown.length) {
     lines.push({ kind: 'div' });

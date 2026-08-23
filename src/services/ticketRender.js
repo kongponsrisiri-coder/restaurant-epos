@@ -354,7 +354,9 @@ function receiptLines(order, m, opts = {}) {
 
   // Footer. (The classic builder also emits a hardcoded Thai thank-you line,
   // but txt() strips non-Latin so it has never actually printed — dropped.)
-  L.push({ text: m.footer, size: 23, center: true, gap: 4 });
+  // Korakot 2026-08-23: the footer often carries money-relevant notices
+  // ("Service is not included.") — print it bigger and bold so it reads.
+  L.push({ text: m.footer, size: 28, bold: true, center: true, gap: 4 });
   return L;
 }
 

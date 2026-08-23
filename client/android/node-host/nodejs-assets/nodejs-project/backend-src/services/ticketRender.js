@@ -22,7 +22,13 @@ function loadFonts() {
   if (!fontsReady) {
     const reg = PImage.registerFont(path.join(FONT_DIR, 'NotoSans-Regular.ttf'), 'TicketSans');
     const bold = PImage.registerFont(path.join(FONT_DIR, 'NotoSans-Bold.ttf'), 'TicketSansBold');
-    fontsReady = Promise.all([reg.load ? reg.load() : reg, bold.load ? bold.load() : bold]);
+    // SEPOS-THAI-TICKET-001 — Thai faces (Sarabun, SIL OFL: full Thai + full
+    // Latin in one face, so a mixed Thai/English line renders whole). Lines
+    // containing any Thai switch family wholesale; pure-Latin lines keep the
+    // original Noto Sans look.
+    const thai = PImage.registerFont(path.join(FONT_DIR, 'Sarabun-Regular.ttf'), 'TicketThai');
+    const thaiBold = PImage.registerFont(path.join(FONT_DIR, 'Sarabun-Bold.ttf'), 'TicketThaiBold');
+    fontsReady = Promise.all([reg, bold, thai, thaiBold].map((f) => (f.load ? f.load() : f)));
   }
   return fontsReady;
 }
@@ -61,6 +67,13 @@ function wrapText(scratch, text, maxW) {
 async function renderLines(lines) {
   await loadFonts();
   const PAD = 8, LH = 1.35, COL_GAP = 16;
+  // SEPOS-THAI-TICKET-001 — pick the family per line: any Thai character puts
+  // the whole line (and its right column) on the Thai face.
+  const famFor = (l) => {
+    const t = `${l.text || ''} ${l.right != null ? l.right : ''}`;
+    const thai = /[\u0E00-\u0E7F]/.test(t);
+    return l.bold ? (thai ? 'TicketThaiBold' : 'TicketSansBold') : (thai ? 'TicketThai' : 'TicketSans');
+  };
 
   // Measure pass — wrap long text so nothing clips off the paper's right
   // edge. Uses a 1×1 scratch context for measureText.
@@ -69,7 +82,7 @@ async function renderLines(lines) {
   for (const l of lines) {
     if (l.rule) { wrapped.push(l); continue; }
     const size = l.size || 30;
-    scratch.font = `${size}pt ${l.bold ? 'TicketSansBold' : 'TicketSans'}`;
+    scratch.font = `${size}pt ${famFor(l)}`;
     const right = l.right != null && String(l.right) !== '' ? String(l.right) : null;
     const rightW = right ? scratch.measureText(right).width : 0;
     const maxW = W - PAD * 2 - (l.indent || 0) - (right ? rightW + COL_GAP : 0);
@@ -98,7 +111,7 @@ async function renderLines(lines) {
       ctx.fillRect(PAD, y + 6, W - PAD * 2, l.heavy ? 5 : 3); y += l.heavy ? 22 : 18; continue;
     }
     const size = l.size || 30;
-    ctx.font = `${size}pt ${l.bold ? 'TicketSansBold' : 'TicketSans'}`;
+    ctx.font = `${size}pt ${famFor(l)}`;
     const tw = ctx.measureText(l.text).width;
     const x = l.center ? Math.max(PAD, (W - tw) / 2) : PAD + (l.indent || 0);
     y += Math.ceil(size * LH);
@@ -116,7 +129,8 @@ async function renderLines(lines) {
 // The bundled font covers Latin — text outside it (Thai, CJK) would render as
 // blanks. Callers use this to fall back to the classic codepage path for any
 // ticket that carries such text (e.g. a Thai kitchen note on an English menu).
-const NON_LATIN = /[฀-๿一-鿿぀-ヿ가-힯]/;
+// SEPOS-THAI-TICKET-001 — Thai left this list (bundled Noto Sans Thai covers it).
+const NON_LATIN = /[一-鿿぀-ヿ가-힯]/;
 // extra — SEPOS-RECEIPT-FONT-001: receipt callers pass venue strings too
 // (company name / address / footer), which kitchen tickets never print.
 function hasUnrenderableText(order, items, extra = []) {
@@ -196,6 +210,10 @@ async function kitchenTicketRaster(order, items, opts = {}) {
 
   const pushItem = (it) => {
     lines.push({ text: `${it.quantity || 1} × ${it.name || it.item_name || ''}`, size: 32, gap: 2 });
+    // SEPOS-THAI-TICKET-001 — classic-builder parity: the Thai name line the
+    // chef actually reads (classic prints name_alt when bilingual, default on).
+    const nameAlt = it.name_alt || it.name_th || '';
+    if (nameAlt) lines.push({ text: String(nameAlt), size: 28, indent: 34, gap: 2 });
     // SEPOS-024b parity — the free-text special request ("Mild", "ALLERGY — no
     // peanuts") is the line a kitchen must never miss.
     if (it.item_note) lines.push({ text: `** ${it.item_note} **`, size: 26, bold: true, indent: 34, gap: 2 });
@@ -239,6 +257,9 @@ async function _linesFor(order, items, opts) {
   ];
   for (const it of items || []) {
     lines.push({ text: `${it.quantity} × ${it.name}`, size: 32, gap: 2 });
+    const alt = it.name_alt || it.name_th || '';   // SEPOS-THAI-TICKET-001 — preview matches the real ticket
+    if (alt) lines.push({ text: String(alt), size: 28, indent: 34, gap: 2 });
+    if (it.item_note) lines.push({ text: `** ${it.item_note} **`, size: 26, bold: true, indent: 34, gap: 2 });
     if (it.notes) lines.push({ text: it.notes, size: 26, bold: true, indent: 34, gap: 4 });
   }
   lines.push({ rule: true });
@@ -333,7 +354,9 @@ function receiptLines(order, m, opts = {}) {
 
   // Footer. (The classic builder also emits a hardcoded Thai thank-you line,
   // but txt() strips non-Latin so it has never actually printed — dropped.)
-  L.push({ text: m.footer, size: 23, center: true, gap: 4 });
+  // Korakot 2026-08-23: the footer often carries money-relevant notices
+  // ("Service is not included.") — print it bigger and bold so it reads.
+  L.push({ text: m.footer, size: 28, bold: true, center: true, gap: 4 });
   return L;
 }
 

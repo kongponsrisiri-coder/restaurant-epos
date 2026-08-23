@@ -572,16 +572,20 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           ════════════════════════════════════════ */}
       {viewMode === 'grid' && (
         <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? 14 : 24, background: '#F4F1EA' }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile
-              ? 'repeat(2, 1fr)'
-              : 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: 16
-          }}>
-            {tables
-              .sort((a, b) => String(a.table_number).localeCompare(String(b.table_number), undefined, { numeric: true }))
-              .map(table => {
+          {(() => {
+            // Korakot 2026-08-23 (Baanrai install): dine-in tables and takeaway
+            // slots interleaved by number in ONE grid — unreadable once a venue
+            // runs many takeaway slots. Split into two labelled sections.
+            const sorted = [...tables].sort((a, b) => String(a.table_number).localeCompare(String(b.table_number), undefined, { numeric: true }));
+            const dineIn = sorted.filter(t => !t.is_takeaway);
+            const takeaways = sorted.filter(t => t.is_takeaway);
+            const gridStyle = {
+              display: 'grid',
+              gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(200px, 1fr))',
+              gap: 16,
+            };
+            const sectionHead = { fontSize: 13, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: '#8A8272', margin: '4px 2px 12px' };
+            const gridCard = (table) => {
                 const colours = getTableColour(table);
                 const order = orderForTable(openOrders, table.id);
                 const time = getTableTime(table.id);
@@ -654,8 +658,20 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
                     )}
                   </div>
                 );
-              })}
-          </div>
+              };
+            return (
+              <>
+                {takeaways.length > 0 && <div style={sectionHead}>🍽️ Tables</div>}
+                <div style={gridStyle}>{dineIn.map(gridCard)}</div>
+                {takeaways.length > 0 && (
+                  <>
+                    <div style={{ ...sectionHead, marginTop: 26 }}>🥡 Takeaway</div>
+                    <div style={gridStyle}>{takeaways.map(gridCard)}</div>
+                  </>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 

@@ -53,7 +53,12 @@ export default function CustomerDisplayScreen() {
   }, [state.mode, state.qr && state.qr.url]);
 
   const name = state.restaurant_name || 'SiamEPOS';
-  const wrap = { position: 'fixed', inset: 0, background: NAVY, color: '#fff', fontFamily: SERIF, overflow: 'hidden' };
+  // SEPOS-CFD-002 — the display wears the RESTAURANT's colours when the state
+  // carries them (server injects settings.brand_primary/brand_accent); the
+  // SiamEPOS navy/gold stays as the fallback for unbranded installs.
+  const navy = (typeof state.brand_primary === 'string' && state.brand_primary) || NAVY;
+  const gold = (typeof state.brand_accent === 'string' && state.brand_accent) || GOLD;
+  const wrap = { position: 'fixed', inset: 0, background: navy, color: '#fff', fontFamily: SERIF, overflow: 'hidden' };
 
   // ── IDLE ──────────────────────────────────────────────────────────────────
   if (state.mode !== 'order') {
@@ -63,7 +68,7 @@ export default function CustomerDisplayScreen() {
           ? <img src={state.logo} alt="" style={{ maxWidth: '46vw', maxHeight: '34vh', objectFit: 'contain' }} />
           : <Lotus size={170} />}
         <div style={{ fontSize: 'clamp(40px, 7vw, 92px)', fontWeight: 700, letterSpacing: '-1px', lineHeight: 1.02, padding: '0 24px' }}>{name}</div>
-        <div style={{ fontFamily: 'system-ui, sans-serif', fontSize: 'clamp(15px,1.8vw,22px)', color: GOLD, letterSpacing: '.28em', textTransform: 'uppercase' }}>Welcome</div>
+        <div style={{ fontFamily: 'system-ui, sans-serif', fontSize: 'clamp(15px,1.8vw,22px)', color: gold, letterSpacing: '.28em', textTransform: 'uppercase' }}>Welcome</div>
         {qrImg && (
           <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
             <img src={qrImg} alt="" style={{ width: 'clamp(150px,15vw,220px)', borderRadius: 14, background: '#fff', padding: 10 }} />
@@ -87,7 +92,7 @@ export default function CustomerDisplayScreen() {
           ? <img src={state.logo} alt="" style={{ maxWidth: '20vw', maxHeight: '26vh', objectFit: 'contain' }} />
           : <Lotus size={120} />}
         <div style={{ fontSize: 'clamp(22px,2.4vw,40px)', fontWeight: 700, lineHeight: 1.05 }}>{name}</div>
-        {o.table && <div style={{ fontFamily: 'system-ui, sans-serif', fontSize: 'clamp(14px,1.6vw,22px)', color: GOLD, letterSpacing: '.14em', textTransform: 'uppercase' }}>{o.table}</div>}
+        {o.table && <div style={{ fontFamily: 'system-ui, sans-serif', fontSize: 'clamp(14px,1.6vw,22px)', color: gold, letterSpacing: '.14em', textTransform: 'uppercase' }}>{o.table}</div>}
       </div>
 
       {/* order + totals */}
@@ -108,7 +113,7 @@ export default function CustomerDisplayScreen() {
                 animation: isNew ? 'cfd-in .35s ease' : 'none',
               }}>
                 <span style={{ fontSize: 'clamp(19px,2.1vw,30px)', fontWeight: 600 }}>
-                  <span style={{ color: GOLD, fontWeight: 800 }}>{it.qty || 1}×</span>&nbsp; {it.name}
+                  <span style={{ color: gold, fontWeight: 800 }}>{it.qty || 1}×</span>&nbsp; {it.name}
                 </span>
                 <span style={{ fontSize: 'clamp(18px,2vw,28px)', fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                   {money((it.price || 0) * (it.qty || 1))}
@@ -118,7 +123,7 @@ export default function CustomerDisplayScreen() {
           })}
         </div>
         {/* totals */}
-        <div style={{ background: NAVY, color: '#fff', padding: 'clamp(16px,2.4vw,34px) clamp(20px,3vw,44px)' }}>
+        <div style={{ background: navy, color: '#fff', padding: 'clamp(16px,2.4vw,34px) clamp(20px,3vw,44px)' }}>
           {o.subtotal != null && (
             <Row label="Subtotal" value={money(o.subtotal)} sub />
           )}
@@ -126,7 +131,7 @@ export default function CustomerDisplayScreen() {
           {o.discount ? <Row label="Discount" value={`−${money(o.discount)}`} sub /> : null}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 10 }}>
             <span style={{ fontSize: 'clamp(24px,3vw,44px)', fontWeight: 800 }}>TOTAL</span>
-            <span style={{ fontSize: 'clamp(30px,4.4vw,64px)', fontWeight: 800, color: GOLD, fontVariantNumeric: 'tabular-nums' }}>{money(o.total)}</span>
+            <span style={{ fontSize: 'clamp(30px,4.4vw,64px)', fontWeight: 800, color: gold, fontVariantNumeric: 'tabular-nums' }}>{money(o.total)}</span>
           </div>
         </div>
       </div>

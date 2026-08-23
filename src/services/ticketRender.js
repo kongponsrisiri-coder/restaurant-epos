@@ -257,6 +257,9 @@ async function _linesFor(order, items, opts) {
   ];
   for (const it of items || []) {
     lines.push({ text: `${it.quantity} × ${it.name}`, size: 32, gap: 2 });
+    const alt = it.name_alt || it.name_th || '';   // SEPOS-THAI-TICKET-001 — preview matches the real ticket
+    if (alt) lines.push({ text: String(alt), size: 28, indent: 34, gap: 2 });
+    if (it.item_note) lines.push({ text: `** ${it.item_note} **`, size: 26, bold: true, indent: 34, gap: 2 });
     if (it.notes) lines.push({ text: it.notes, size: 26, bold: true, indent: 34, gap: 4 });
   }
   lines.push({ rule: true });

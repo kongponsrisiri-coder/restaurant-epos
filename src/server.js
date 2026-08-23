@@ -1315,6 +1315,25 @@ const SERVER_COMMIT = process.env.RAILWAY_GIT_COMMIT_SHA || process.env.RAILWAY_
 // are already on the customer's screen — no customer PII, no persistence).
 const _cfdState = new Map();
 const _CFD_IDLE = () => ({ mode: 'idle', updated_at: Date.now() });
+// SEPOS-CFD-002 — every served state (including the 30s-stale idle fallback)
+// carries the RESTAURANT's branding, read from settings with a 60s cache.
+// Before this, 30 quiet seconds reverted the customer display to the bare
+// SiamEPOS mark and colours (first noticed on the Yum Yum install, 23 Aug).
+let _cfdBrandCache = { at: 0, val: {} };
+async function _cfdBrand() {
+  if (Date.now() - _cfdBrandCache.at < 60000) return _cfdBrandCache.val;
+  try {
+    const r = await pool.query(`SELECT key, value FROM settings WHERE key IN ('restaurant_name','company_name','brand_logo','company_logo','brand_primary','brand_accent')`);
+    const cfg = {}; for (const row of r.rows) cfg[row.key] = row.value;
+    _cfdBrandCache = { at: Date.now(), val: {
+      restaurant_name: cfg.company_name || cfg.restaurant_name || undefined,
+      logo: cfg.brand_logo || cfg.company_logo || undefined,
+      brand_primary: cfg.brand_primary || undefined,
+      brand_accent: cfg.brand_accent || undefined,
+    } };
+  } catch { /* keep the last good cache — worst case the display stays generic */ }
+  return _cfdBrandCache.val;
+}
 app.post('/api/cfd/state', (req, res) => {
   const station = String((req.body && req.body.station) || 'main').slice(0, 40);
   const body = req.body || {};
@@ -1330,12 +1349,15 @@ app.post('/api/cfd/state', (req, res) => {
   if (_cfdState.size > 50) _cfdState.clear();   // never grows unbounded
   res.json({ ok: true });
 });
-app.get('/api/cfd/state', (req, res) => {
+app.get('/api/cfd/state', async (req, res) => {
   const station = String(req.query.station || 'main').slice(0, 40);
   const s = _cfdState.get(station);
+  const brand = await _cfdBrand();  // SEPOS-CFD-002
   // Stale push (till closed/crashed) falls back to idle after 30s of silence.
-  if (!s || Date.now() - s.updated_at > 30000) return res.json(_CFD_IDLE());
-  res.json(s);
+  if (!s || Date.now() - s.updated_at > 30000) return res.json({ ..._CFD_IDLE(), ...brand });
+  // Pushed state wins where it carries a value; settings fill the gaps, and
+  // the brand colours always ride along (pushes never include them).
+  res.json({ ...brand, ...s, logo: s.logo || brand.logo, restaurant_name: s.restaurant_name || brand.restaurant_name });
 });
 
 app.get('/api/health', async (req, res) => {
@@ -3058,6 +3080,7 @@ app.put('/api/settings', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supe
     for (const [key, value] of Object.entries(updates)) {
       await pool.query('INSERT INTO settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', [key, value]);
     }
+    _cfdBrandCache.at = 0; // SEPOS-CFD-002 — logo/colour edits reach the customer display immediately
 
     // SEPOS-049 part-2 — same write-through pattern for the KV settings
     // table. Without this, desktop saves to e.g. printer_kitchen_ip,

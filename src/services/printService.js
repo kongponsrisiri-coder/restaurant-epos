@@ -460,7 +460,7 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
     // Footer
     lf(),
     CMD.ALIGN_CENTER,
-    txt(footer),                       lf(),
+    CMD.BOLD_ON, CMD.SIZE_TALL, txt(footer), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     txt('ขอบคุณที่มาใช้บริการ'), lf(3),
 
     // SEPOS-REVIEW-QR — Google-review QR on the thermal receipt (was browser-

@@ -86,6 +86,11 @@ Index of what's in there is in `~/Documents/SiamEPOS-Docs/README.md`. Read it be
   a release contains UI changes you need iPads to pick up immediately;
   otherwise they hold the previous cache for days.
 - Always commit with a clear message referencing the ticket number
+- **Every release ships with a client-facing patch note** (standing rule,
+  Korakot 2026-08-22): English + Thai, plain benefit language, no ticket IDs,
+  never name the client who hit the bug, end with "What you need to do"
+  (usually: restart the app once; tablets/browser refresh). Deliver paste-ready
+  in chat with the release report — Korakot forwards it to owners.
 
 ## Critical Coding Rules
 - **OS-AGNOSTIC by default — SiamEPOS Pro runs on Mac DMG AND Windows EXE.** Every customer-facing string, error message, system prompt (LINE bot), email template, manual, web page copy, and admin UI label MUST work for both platforms. Specifically:

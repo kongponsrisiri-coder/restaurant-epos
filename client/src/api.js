@@ -603,6 +603,8 @@ export const setPrinterDefault  = (role, printer_id) => post('/api/printers/set-
 export const scanPrinters       = () => get('/api/printers/scan');
 // SEPOS-DRAWER-001 — open the cash drawer (kick via the receipt printer) on payment
 export const serverOpenDrawer   = (printer_name) => post('/api/print/drawer', printer_name ? { printer_name } : {});
+// SEPOS-DRAWER-002 — navbar 💵 no-sale open; bypasses the on-payment toggle, stamped with who pressed it.
+export const manualOpenDrawer   = (staff_name) => post('/api/print/drawer', { manual: true, staff_name: staff_name || null });
 
 // SIAMPAY-QR-001 — dine-in QR pay-by-link.
 export const createQrPay  = (orderId, amount)     => post(`/api/orders/${orderId}/qr-pay`, { amount });

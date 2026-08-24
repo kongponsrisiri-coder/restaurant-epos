@@ -11424,7 +11424,10 @@ app.post('/api/print/receipt', async (req, res) => {
 // (default ON — only '0' disables). No printer / unreachable → silent skip;
 // never blocks the payment. printer_name overrides the receipt device.
 app.post('/api/print/drawer', async (req, res) => {
-  const { printer_name } = req.body || {};
+  // SEPOS-DRAWER-002 — manual:true is the navbar 💵 button (no-sale open:
+  // change-making, float). It bypasses the open_drawer_on_payment toggle
+  // (that governs only the automatic on-payment kick) and stamps who did it.
+  const { printer_name, manual, staff_name } = req.body || {};
   // The drawer kicks a printer on the LAN — only reachable from a local-server
   // till (desktop/Sunmi, DB_MODE=local). On the cloud backend the printer is
   // unreachable and the RAW→LPR→CUPS fallback would burn ~15s per payment, so
@@ -11434,10 +11437,11 @@ app.post('/api/print/drawer', async (req, res) => {
   }
   try {
     const settings = await loadSettings();
-    if (settings.open_drawer_on_payment === '0') return res.json({ success: false, skipped: 'disabled' });
+    if (!manual && settings.open_drawer_on_payment === '0') return res.json({ success: false, skipped: 'disabled' });
     await applyPrinterRouting(settings);
     if (printer_name) { settings.printer_receipt_name = printer_name; settings.printer_receipt_ip = ''; }
     if (!settings.printer_receipt_ip && !settings.printer_receipt_name) return res.json({ success: false, reason: 'no_printer' });
+    if (manual) console.log(`[drawer] manual open by ${staff_name || 'unknown'} at ${new Date().toISOString()}`);
     await printService.openCashDrawer(settings);
     res.json({ success: true });
   } catch (err) {

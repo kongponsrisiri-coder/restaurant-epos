@@ -1390,7 +1390,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     <button onClick={openArrange} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #E7E2D6', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13, color: '#7C766A' }}>⇅ Arrange menu</button>
                   </div>
                 ))}
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 10 }}>
+                {/* Korakot 24 Aug: denser dish grid — auto-fit ~172px columns gives
+                    ~6 per row on a till screen (was a fixed 4), so big menus need far
+                    less scrolling. Cards shrink a step but stay clearly bigger than
+                    the category chips; phones keep 2-up. */}
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(172px, 1fr))', gap: 8 }}>
                   {(arrangeMode ? arrangeItems : dishesToShow).map((item, gridIdx) => {
                     const inCart = cart.filter(c => c.menu_item_id === item.id);
                     const totalQty = inCart.reduce((s, c) => s + c.quantity, 0);
@@ -1401,10 +1405,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                         onDragStart={arrangeMode ? () => setArrangeDrag(gridIdx) : undefined}
                         onDragOver={arrangeMode ? (e) => e.preventDefault() : undefined}
                         onDrop={arrangeMode ? (e) => { e.preventDefault(); onArrangeDrop(gridIdx); } : undefined}
-                        style={{ background: item.color || '#fff', borderRadius: 12, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : (item.color ? item.color : '#E7E2D6')}`, padding: '10px 12px', cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 56, display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
+                        style={{ background: item.color || '#fff', borderRadius: 12, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : (item.color ? item.color : '#E7E2D6')}`, padding: '8px 10px', cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 48, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
                         {/* SEPOS-MENU-COMPACT-001 — no price on the card, half-height row layout */}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 15, fontWeight: 700, color: item.color ? textOn(item.color) : 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: item.color ? textOn(item.color) : 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
                           <AllergenChips list={allergensByItemId[item.id]} />
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', flex: 'none' }}>

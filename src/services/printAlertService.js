@@ -129,6 +129,18 @@ async function loadSettingsKV() {
         s[`printer_${role}_lpr_queue`] = p.lpr_queue || s[`printer_${role}_lpr_queue`] || 'lp';
         if (role === 'kitchen' && p.copies) s.printer_kitchen_copies = String(p.copies);
       }
+      // SEPOS-PRINT-ORPHAN-001 — same self-clean as applyPrinterRouting: a
+      // role ip matching no active row (and no row carrying the role) is a
+      // deleted printer's ghost. Clear it so pingAll stops alerting on it.
+      for (const role of ['receipt', 'kitchen', 'bar']) {
+        const hasRoleRow = printers.some(x => Number(x['role_' + role]) === 1 && (x.ip || x.name));
+        if (hasRoleRow) continue;
+        const kvIp = s['printer_' + role + '_ip'];
+        if (kvIp && !printers.some(x => x.ip === kvIp)) {
+          s['printer_' + role + '_ip'] = '';
+          s['printer_' + role + '_name'] = '';
+        }
+      }
     }
   } catch { /* no printers table — legacy keys stand */ }
   return s;

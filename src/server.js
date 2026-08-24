@@ -818,6 +818,19 @@ async function applyPrinterRouting(settings) {
     settings[`printer_${role}_lpr_queue`] = p.lpr_queue || settings[`printer_${role}_lpr_queue`] || 'lp';
     if (role === 'kitchen' && p.copies) settings.printer_kitchen_copies = String(p.copies);
   }
+  // SEPOS-PRINT-ORPHAN-001 (Yum Yum, 24 Aug) — self-clean orphaned role IPs.
+  // A role whose KV ip matches NO active printer row, with no row carrying the
+  // role, is a ghost of a deleted printer (the bench-printer banner that
+  // survived every clear). Tombstone it so pings and prints stop chasing it.
+  for (const role of ['receipt', 'kitchen', 'bar']) {
+    const hasRoleRow = printers.some(x => Number(x['role_' + role]) === 1 && (x.ip || x.name));
+    if (hasRoleRow) continue;
+    const kvIp = settings['printer_' + role + '_ip'];
+    if (kvIp && !printers.some(x => x.ip === kvIp)) {
+      settings['printer_' + role + '_ip'] = '';
+      settings['printer_' + role + '_name'] = '';
+    }
+  }
   return settings;
 }
 

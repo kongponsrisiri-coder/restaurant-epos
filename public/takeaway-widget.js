@@ -843,11 +843,11 @@
            <div id="tw-card-element"></div>
            <div class="tw-stripe-badge">Secured by Stripe</div>
          </div>`
-      : `<div style="background:#fef9eb;border:1.5px solid #f0d070;border-radius:12px;padding:14px 16px;font-size:13px;color:#92400e;line-height:1.5;">
-           🧪 <strong>Demo mode</strong> — No card details collected. Clicking Pay sends the order straight to the kitchen.
+      : `<div style="background:#f0f7ee;border:1.5px solid #86efac;border-radius:12px;padding:14px 16px;font-size:13px;color:#166534;line-height:1.5;">
+           💷 <strong>Pay on collection</strong> — nothing to pay online now. Pay by cash or card when you collect your order.
          </div>`;
     return `
-      <h2 class="tw-h2">Review &amp; pay</h2>
+      <h2 class="tw-h2">${state.stripeConfigured ? 'Review &amp; pay' : 'Review your order'}</h2>
       <div style="background:#f8f8f8;border-radius:14px;padding:16px;margin-bottom:16px;">
         ${state.cart.map(c => `
           <div class="tw-review-row">
@@ -892,6 +892,7 @@
         <div class="tw-success-num">${esc(r.order_number || '—')}</div>
         <p style="color:#555;font-size:14px;line-height:1.6;max-width:300px;margin:0 auto 20px;">
           Please show this number when you collect.
+          ${state.stripeConfigured ? '' : '<br><strong>Pay when you collect</strong> — cash or card.'}
           ${state.customer.email ? '<br>A confirmation email is on its way.' : ''}
         </p>
         <p style="color:#aaa;font-size:12px;">

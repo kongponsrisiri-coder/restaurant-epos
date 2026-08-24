@@ -7673,7 +7673,13 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
     // SEPOS-040 — if a payment_intent_id was submitted, verify with Stripe
     // before touching the DB. This prevents orders being created for failed
     // or tampered payments.
-    let paymentStatus = 'mock';
+    // SEPOS-TA-COLLECT-001 (Baanrai, 25 Aug) — a no-Stripe takeaway order is
+    // PAY ON COLLECTION, not a demo: it lands 'unpaid' so the till's bill
+    // shows the balance due and staff record the real cash/card tender at
+    // the counter (Z + drawer stay honest). The old 'mock' made the bill
+    // say "PAID ONLINE (demo) — do not charge", which is only right for the
+    // QR demo flow — that keeps its own 'mock' (prepaid semantics) below.
+    let paymentStatus = 'unpaid';
     let verifiedPaymentIntentId = null;
     let verifiedPaymentPence = null;
     if (payment_intent_id) {
@@ -8022,6 +8028,7 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
         order_id: orderId,
         customer_name, customer_email,
         pickup_time, items, total,
+        paid: paymentStatus === 'paid',
       }).catch(err => console.error('[takeaway] email error:', err.message));
     }
 
@@ -9619,6 +9626,31 @@ app.put('/api/orders/:id/takeaway-status', async (req, res) => {
     const { status } = req.body;
     const allowed = ['pending', 'accepted', 'preparing', 'ready', 'collected'];
     if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    // SEPOS-TA-COLLECT-001 — 'collected' CLOSES the bill, so an unpaid
+    // pay-on-collection order must be refused until staff record the tender
+    // (Cash/Card on the payment screen). Without this, one tap could close a
+    // real order with no money ever entering the Z. Prepaid (Stripe 'paid' /
+    // demo 'mock') and fully-tendered orders pass as before.
+    if (status === 'collected') {
+      const cover = await pool.query(
+        `SELECT o.payment_status,
+                COALESCE((SELECT SUM(amount) FROM payments
+                           WHERE order_id = o.id AND COALESCE(method,'') <> 'cancelled'), 0) AS paid,
+                COALESCE((SELECT ${ORDER_TOTAL_EXPR} FROM order_items
+                           WHERE order_id = o.id AND voided = 0), 0) AS total
+           FROM orders o WHERE o.id = $1 AND o.order_type = 'takeaway'`,
+        [req.params.id]);
+      const c = cover.rows[0];
+      if (!c) return res.status(404).json({ error: 'Order not found' });
+      const prepaid = c.payment_status === 'paid' || c.payment_status === 'mock';
+      const covered = Number(c.paid) + 0.005 >= Number(c.total);
+      if (!prepaid && !covered) {
+        return res.status(402).json({
+          error: 'Take payment first — this order is pay-on-collection. Open its bill and record cash or card.',
+          needs_payment: true,
+        });
+      }
+    }
     await pool.query('UPDATE orders SET takeaway_status=$1 WHERE id=$2 AND order_type=\'takeaway\'', [status, req.params.id]);
     if (status === 'collected') {
       // (service_charge=0 — takeaway never carries service; stamps the snapshot)
@@ -9758,6 +9790,24 @@ async function applyCourierWebhook(providerLabel, parsed) {
     [status, parsed.trackingUrl || null, parsed.eta || null, order.id]
   );
   if (svc && svc.DELIVERED_STATUSES.includes(status) && order.status === 'open') {
+    // SEPOS-TA-COLLECT-001 — same money guard as the Collected tap: a
+    // delivered-but-UNPAID order (pay-on-collection tenant) must stay open
+    // for staff to record the tender; only prepaid/fully-tendered auto-close.
+    const cover = await pool.query(
+      `SELECT o.payment_status,
+              COALESCE((SELECT SUM(amount) FROM payments
+                         WHERE order_id = o.id AND COALESCE(method,'') <> 'cancelled'), 0) AS paid,
+              COALESCE((SELECT ${ORDER_TOTAL_EXPR} FROM order_items
+                         WHERE order_id = o.id AND voided = 0), 0) AS total
+         FROM orders o WHERE o.id = $1`, [order.id]);
+    const c = cover.rows[0] || {};
+    const settled = c.payment_status === 'paid' || c.payment_status === 'mock'
+      || Number(c.paid || 0) + 0.005 >= Number(c.total || 0);
+    if (!settled) {
+      console.warn(`[courier] order #${order.id} delivered but NOT paid — left open for staff to record the tender`);
+      io.emit('takeaway_status', { order_id: order.id, status: 'delivered_unpaid' });
+      return;
+    }
     await pool.query(
       `UPDATE orders SET status='closed', closed_at=NOW(), takeaway_status='collected', session_id=${OPEN_SESSION_SUBQ} WHERE id=$1`,
       [order.id]
@@ -9933,7 +9983,7 @@ app.post('/api/deliveroo/ready/:orderId', async (req, res) => {
 });
 
 // Brevo confirmation email — same template flavour as booking confirmation.
-async function sendTakeawayConfirmation({ order_id, customer_name, customer_email, pickup_time, items, total }) {
+async function sendTakeawayConfirmation({ order_id, customer_name, customer_email, pickup_time, items, total, paid }) {
   const { sendBrevoEmail } = require('./services/emailService');
   if (!process.env.BREVO_API_KEY) return;
   const restaurantName = process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant';
@@ -9964,7 +10014,7 @@ async function sendTakeawayConfirmation({ order_id, customer_name, customer_emai
           <tr><td style="padding:10px 0 6px;border-top:2px solid #eee;font-weight:800;">Total</td>
               <td style="padding:10px 0 6px;border-top:2px solid #eee;text-align:right;font-weight:800;">£${Number(total).toFixed(2)}</td></tr>
         </table>
-        <p style="color:#888;font-size:13px;">Payment on collection. Cash or card accepted.</p>
+        <p style="color:#888;font-size:13px;">${paid ? '✅ Paid online — nothing to pay when you collect.' : 'Payment on collection. Cash or card accepted.'}</p>
       </td></tr>
       <tr><td style="padding:20px 30px;background:#fafafa;border-top:1px solid #eee;font-size:11px;color:#888;">
         ${restaurantName} — see you soon!

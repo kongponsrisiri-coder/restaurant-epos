@@ -401,7 +401,7 @@ function SellVoucherModal({ onClose, onSold }) {
               </button>
             ))}
           </div>
-          <input type="number" min="0.01" max="500" step="0.01" value={amount}
+          <input type="text" inputMode="decimal" min="0.01" max="500" step="0.01" value={amount}
             onChange={(e) => setAmount(Math.round((parseFloat(e.target.value) || 0) * 100) / 100)}
             placeholder="Custom amount"
             style={{ width: '100%', padding: '12px', border: '1px solid #ccc', borderRadius: 8, fontSize: 16, fontWeight: 700, marginBottom: 16, boxSizing: 'border-box' }}/>
@@ -491,7 +491,7 @@ function TakeDepositModal({ onClose, onTaken }) {
               </button>
             ))}
           </div>
-          <input type="number" min="0.01" max="500" step="0.01" value={amount}
+          <input type="text" inputMode="decimal" min="0.01" max="500" step="0.01" value={amount}
             onChange={(e) => setAmount(Math.round((parseFloat(e.target.value) || 0) * 100) / 100)}
             placeholder="Custom amount"
             style={{ width: '100%', padding: '12px', border: '1px solid #ccc', borderRadius: 8, fontSize: 16, fontWeight: 700, marginBottom: 16, boxSizing: 'border-box' }}/>

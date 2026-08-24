@@ -37,7 +37,7 @@ function OptionAdder({ onAdd }) {
   return (
     <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
       <input autoFocus value={name} onChange={e => setName(e.target.value)} onKeyDown={onKey} placeholder="Option name" style={{ flex: '2 1 160px', minWidth: 0, padding: '13px 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16 }} />
-      <input value={price} onChange={e => setPrice(e.target.value)} onKeyDown={onKey} placeholder="+£ extra" type="number" step="0.01" style={{ flex: '1 1 90px', minWidth: 0, padding: '13px 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16 }} />
+      <input value={price} onChange={e => setPrice(e.target.value)} onKeyDown={onKey} placeholder="+£ extra" type="text" inputMode="decimal" step="0.01" style={{ flex: '1 1 90px', minWidth: 0, padding: '13px 14px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16 }} />
       <button onClick={submit} style={{ padding: '13px 20px', borderRadius: 10, border: 'none', background: '#e94560', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>Add</button>
     </div>
   );
@@ -811,7 +811,7 @@ export default function MenuSection() {
                   </div>
                 )}
               </div>
-              <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Price (£) *</label><input value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} type="number" step="0.01" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
+              <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Price (£) *</label><input value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} type="text" inputMode="decimal" step="0.01" style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} /></div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>VAT rate</label><select value={form.vat_rate ?? 20} onChange={e => setForm({ ...form, vat_rate: Number(e.target.value) })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}><option value={20}>20% (standard)</option><option value={5}>5% (reduced)</option><option value={0}>0% (zero rated)</option></select><div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>Prices are VAT-inclusive — this affects the VAT breakdown on bills + reports.</div></div>
               <div><label style={{ fontSize: 13, fontWeight: 600, color: '#555', display: 'block', marginBottom: 6 }}>Kitchen course</label><select value={form.default_course ?? ''} onChange={e => setForm({ ...form, default_course: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}><option value="">Inherit from category</option><option value={1}>Starter</option><option value={2}>Main</option><option value={3}>Dessert</option><option value={4}>Extra</option></select><div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>Set this for a mixed category (e.g. a Lunch menu) so this dish always prints on the right course — otherwise it follows the category.</div></div>
               {/* SEPOS-STATION-003 — per-dish printer station override. Same

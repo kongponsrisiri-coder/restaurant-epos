@@ -732,7 +732,7 @@ export default function TablePlanSection() {
                 </div>
                 <div>
                   <label style={lbl}>Capacity (seats)</label>
-                  <input type="number" defaultValue={selectedTable.capacity} key={selectedTable.id + '_c'} onChange={e => { if (e.target.value !== '') updateSelectedTable({ capacity: parseInt(e.target.value) || 1 }); }} style={inp} />
+                  <input type="text" inputMode="decimal" defaultValue={selectedTable.capacity} key={selectedTable.id + '_c'} onChange={e => { if (e.target.value !== '') updateSelectedTable({ capacity: parseInt(e.target.value) || 1 }); }} style={inp} />
                 </div>
                 <div>
                   <label style={lbl}>Shape</label>
@@ -889,7 +889,7 @@ export default function TablePlanSection() {
                 {tiers.map((tier, i) => (
                   <div key={tier.id || i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                     <span style={{ fontSize: 13, color: '#555', flex: 1, fontWeight: 500 }}>{tier.covers_min}{tier.covers_max ? `–${tier.covers_max}` : '+'} covers</span>
-                    <input type="number" value={tier.duration_mins} min="30" max="360" step="15"
+                    <input type="text" inputMode="decimal" value={tier.duration_mins} min="30" max="360" step="15"
                       onChange={e => setTiers(prev => prev.map((t, idx) => idx === i ? { ...t, duration_mins: parseInt(e.target.value) || 90 } : t))}
                       onBlur={e => handleUpdateTier(tier, parseInt(e.target.value) || 90)}
                       style={{ width: 60, padding: '6px 8px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, textAlign: 'center', fontFamily: 'inherit' }}

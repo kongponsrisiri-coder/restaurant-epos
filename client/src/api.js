@@ -66,8 +66,18 @@ const getServerURL = () => {
     try { return (localStorage.getItem('siamepos_tenant_url') || '').replace(/\/+$/, ''); } catch { return ''; }
   }
 
+  // Per-client Netlify deploy: the site declares its restaurant's backend via
+  // the VITE_API_URL build env var. Explicit config BEATS the local-IP
+  // heuristic below — a bundle that names its backend should never have the
+  // guess override it (no shipped artifact combines a baked URL with a
+  // local-IP host: Netlify sites live on public domains, Electron/native
+  // return above, and LAN tablets load the desktop dist, built without one).
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
   const host = window.location.hostname;
-  // If running on localhost or local IP (192.168.x.x or 10.x.x.x)
+  // If running on localhost or local IP (192.168.x.x or 10.x.x.x): assume
+  // this is a LAN tablet browsing to the host till — its backend is :3001.
   if (
     host === 'localhost' ||
     host === '127.0.0.1' ||
@@ -76,11 +86,6 @@ const getServerURL = () => {
     host.startsWith('172.')
   ) {
     return `http://${host}:3001`;
-  }
-  // Per-client Netlify deploy: the site declares its restaurant's backend via
-  // the VITE_API_URL build env var.
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
   }
   // No VITE_API_URL on a public host. Only the shared MAIN site may use the main
   // cloud without one; ANY other public host here is a per-tenant site built

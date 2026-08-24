@@ -130,7 +130,7 @@ function KitchenTemplatesCard({ cardStyle }) {
               </label>
               <label style={{ fontSize:12, fontWeight:700, color:'#555' }}>
                 Sort order (lower = appears first)
-                <input value={editing.sort_order || 100} type="number"
+                <input value={editing.sort_order || 100} type="text" inputMode="decimal"
                   onChange={e => setEditing({ ...editing, sort_order: Number(e.target.value) || 100 })}
                   style={{ marginTop:5, width:120, padding:10, borderRadius:8, border:'1px solid #ddd', fontSize:14, boxSizing:'border-box' }} />
               </label>
@@ -1328,11 +1328,13 @@ export default function SettingsSection() {
       <div style={cardStyle}>
         <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:6 }}>⌨️ On-screen keyboard</h2>
         <p style={{ fontSize:13, color:'#777', marginBottom:14 }}>
-          Shows a keyboard on screen for typing names, notes and searches when this
-          device has no physical keyboard. This setting is for <strong>this device only</strong>.
+          Shows a keyboard on screen for typing names, notes, searches and prices when
+          this device has no physical keyboard — with English and ไทย layouts (🌐 key),
+          and a number pad on price / quantity boxes. On the desktop till app it is
+          available out of the box. This setting is for <strong>this device only</strong>.
         </p>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          {[['auto','Auto (touch screens)'], ['on','Always on'], ['off','Off']].map(([val, lbl]) => (
+          {[['auto','Auto (till app / touch screens)'], ['on','Always on'], ['off','Off']].map(([val, lbl]) => (
             <button key={val} onClick={() => { try { localStorage.setItem('onscreen_keyboard_mode', val); } catch {} setOskMode(val); }}
               style={{ padding:'10px 16px', borderRadius:10, fontSize:14, fontWeight:700, cursor:'pointer',
                 border: oskMode===val ? '2px solid var(--brand-primary,#0D1B3E)' : '1px solid #ddd',
@@ -1397,7 +1399,7 @@ export default function SettingsSection() {
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
           <label style={{ fontSize:14, fontWeight:600, color:'#555' }}>Service charge %</label>
-          <input value={settings.service_charge_rate||'12.5'} onChange={e => setSettings({...settings, service_charge_rate:e.target.value})} type="number" step="0.5" min="0" max="30" style={{ width:100, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }} />
+          <input value={settings.service_charge_rate||'12.5'} onChange={e => setSettings({...settings, service_charge_rate:e.target.value})} type="text" inputMode="decimal" step="0.5" min="0" max="30" style={{ width:100, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }} />
         </div>
         <div style={{ fontSize:12, color:'#aaa', marginTop:8 }}>Standard UK rate is 12.5%. This is optional and always shown separately on the bill.</div>
       </div>
@@ -1448,7 +1450,7 @@ export default function SettingsSection() {
             <input
               value={settings.delivery_radius_miles || ''}
               onChange={e => setSettings({ ...settings, delivery_radius_miles: e.target.value })}
-              type="number" step="0.5" min="0" max="20"
+              type="text" inputMode="decimal" step="0.5" min="0" max="20"
               placeholder="e.g. 3"
               style={{ width:120, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}
             />
@@ -1470,7 +1472,7 @@ export default function SettingsSection() {
           <input
             value={settings.takeaway_discount_percent || ''}
             onChange={e => setSettings({ ...settings, takeaway_discount_percent: e.target.value })}
-            type="number" step="1" min="0" max="50"
+            type="text" inputMode="decimal" step="1" min="0" max="50"
             placeholder="e.g. 10"
             style={{ width:120, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}
           />

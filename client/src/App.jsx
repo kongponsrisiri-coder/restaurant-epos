@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { startMonitoring, onStatusChange, getServerStatus } from './utils/serverDetect';
-import { getRestaurant, getLicenseState, syncLocalOrders, getSettings, TENANT_MISCONFIGURED, getCurrentSession, isHostMode } from './api';
+import { getRestaurant, getLicenseState, syncLocalOrders, getSettings, TENANT_MISCONFIGURED, getCurrentSession, isHostMode, manualOpenDrawer } from './api';
 import { startHost } from './native/nodeHost';        // SEPOS host spike — no-op unless host mode
 import { applyBrandTheme } from './theme'; // SEPOS-BRAND-001 — per-client theme
 import { backupSalesToDevice } from './native/salesBackup'; // SEPOS-ANDROID-003
@@ -20,7 +20,9 @@ import CounterScreen from './screens/CounterScreen';
 import SyncQueuePill from './components/SyncQueuePill';
 import OfflineBanner from './components/OfflineBanner';
 import Clock from './components/Clock';
-import AiHelpAssistant from './components/AiHelpAssistant'; // SEPOS-AI-HELP-001 — Admin-only, now in the top bar
+// SEPOS-AI-HELP-001 retired from the UI (Korakot, 25 Aug — "no one going to
+// use it, they still come to me directly"). Component + server endpoints kept
+// dormant; re-import AiHelpAssistant here to revive.
 import PrintAlertBanner from './components/PrintAlertBanner'; // SEPOS-PRINT-ALERT-001 — loud printer-down alerts
 import LockScreen from './screens/LockScreen';
 import CustomerDisplayScreen from './screens/CustomerDisplayScreen'; // SEPOS-CFD-001
@@ -591,9 +593,30 @@ export default function App() {
 
           <div className="navbar-user">
             <Clock />
-            {/* SEPOS-AI-HELP-001 — Ask AI sits in the top bar next to the clock
-                (Admin only), so it no longer floats over page content. */}
-            {screen === 'admin' && <AiHelpAssistant variant="topbar" />}
+            {/* SEPOS-DRAWER-002 — one-tap no-sale drawer open (Baanrai's ask),
+                floor/counter only: change-making happens BETWEEN orders, so it
+                must work without opening a table. Stamped with the staff name
+                server-side. Alerts only when the kick can't fire (cloud-only
+                browser till or no receipt printer). */}
+            {(screen === 'tables' || screen === 'counter') && (
+              <button
+                onClick={async () => {
+                  try {
+                    const r = await manualOpenDrawer(staff?.name);
+                    if (!r?.success) window.alert(r?.skipped === 'not a local till'
+                      ? 'The drawer can only be opened from the till itself.'
+                      : 'Could not open the drawer — check the receipt printer.');
+                  } catch { window.alert('Could not open the drawer — check the receipt printer.'); }
+                }}
+                title="Open cash drawer"
+                style={{ background: 'rgba(255,255,255,0.12)', color: 'white',
+                  border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6,
+                  padding: isMobile ? '5px 9px' : '6px 12px', fontSize: isMobile ? 11 : 12,
+                  fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                💵{isMobile ? '' : ' Drawer'}
+              </button>
+            )}
             <StatusBadge />
             {/* SEPOS-044 — always-visible pill when anything is queued. */}
             <SyncQueuePill compact={isMobile} />

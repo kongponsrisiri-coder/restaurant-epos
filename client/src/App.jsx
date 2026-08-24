@@ -299,6 +299,11 @@ export default function App() {
   const logout = () => {
     try { localStorage.removeItem('siamepos_auth'); } catch {}
     setStaff(null);
+    // SEPOS-LOGOUT-HOME-001 (Korakot, 24 Aug) — the selected screen survived
+    // sign-out, so whoever signed in next landed wherever the LAST person was
+    // (e.g. the Kitchen tab). Every fresh sign-in now starts from home.
+    setScreen(readCounterMode() ? 'counter' : 'tables');
+    setActiveOrder(null);
   };
 
   // ── SEPOS-TILL-LOCK-001 — till security ─────────────────────────────

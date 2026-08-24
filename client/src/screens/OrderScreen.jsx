@@ -1338,13 +1338,22 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     const active = activeCategory === cat.id;
                     return (
                       <button key={cat.id} onClick={() => selectCategory(cat)} title={cat.name} style={{
-                        padding: '8px 10px', minHeight: 40, borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
-                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center',
+                        padding: '6px 10px', minHeight: 40, borderRadius: 10, cursor: 'pointer', fontWeight: active ? 800 : 700, fontSize: 13,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
                         border: active ? 'none' : (cat.color ? `1.5px solid ${cat.color}` : '1.5px solid #E7E2D6'),
                         background: cat.color ? (active ? cat.color : cat.color + '33') : (active ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary,#0D1B3E)') : '#fff'),
                         color: cat.color ? (active ? textOn(cat.color) : 'var(--brand-primary, #1a1a2e)') : (active ? '#fff' : 'var(--brand-primary, #1a1a2e)'),
-                        boxShadow: cat.color && active ? '0 0 0 3px rgba(13,27,62,.35)' : 'none' }}>
-                        {cat.name}{cat.is_bar ? ' 🍹' : ''}
+                        /* Korakot 24 Aug: the selected ring was 35%-alpha navy — read as a faint
+                           grey smudge on coloured buttons. Full-strength navy ring now; navy-filled
+                           (uncoloured) actives get the gold accent ring so they pop off their own bg. */
+                        boxShadow: active ? (cat.color ? '0 0 0 3px var(--brand-primary,#0D1B3E)' : '0 0 0 3px var(--brand-accent,#C9A84C)') : 'none' }}>
+                        {/* Korakot 24 Aug: wrap long names to a 2nd line instead of "…" —
+                            clamp lives on an inner span so the flex button still centres
+                            one-line names vertically. Same-row buttons share height (grid). */}
+                        <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden', textAlign: 'center', wordBreak: 'break-word', lineHeight: 1.25 }}>
+                          {cat.name}{cat.is_bar ? ' 🍹' : ''}
+                        </span>
                       </button>
                     );
                   })}
@@ -1359,11 +1368,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       const active = activeSubcat === sub.id;
                       return (
                         <button key={sub.id} onClick={() => setActiveSubcat(sub.id)} style={{
-                          padding: '9px 18px', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: 14,
+                          padding: '9px 18px', borderRadius: 20, cursor: 'pointer', fontWeight: active ? 800 : 700, fontSize: 14,
                           border: active ? 'none' : (sub.color ? `1px solid ${sub.color}` : '1px solid #E7E2D6'),
                           background: sub.color ? (active ? sub.color : sub.color + '33') : (active ? 'var(--brand-accent,#C9A84C)' : '#fff'),
                           color: sub.color ? (active ? textOn(sub.color) : 'var(--brand-primary, #1a1a2e)') : (active ? '#fff' : '#7C766A'),
-                          boxShadow: sub.color && active ? '0 0 0 3px rgba(13,27,62,.35)' : 'none' }}>
+                          boxShadow: active ? '0 0 0 3px var(--brand-primary,#0D1B3E)' : 'none' }}>
                           {sub.name}
                         </button>
                       );
@@ -1384,7 +1393,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     <button onClick={openArrange} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #E7E2D6', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13, color: '#7C766A' }}>⇅ Arrange menu</button>
                   </div>
                 ))}
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 10 }}>
+                {/* Korakot 24 Aug: denser dish grid — auto-fit ~172px columns gives
+                    ~6 per row on a till screen (was a fixed 4), so big menus need far
+                    less scrolling. Cards shrink a step but stay clearly bigger than
+                    the category chips; phones keep 2-up. */}
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fill, minmax(172px, 1fr))', gap: 8 }}>
                   {(arrangeMode ? arrangeItems : dishesToShow).map((item, gridIdx) => {
                     const inCart = cart.filter(c => c.menu_item_id === item.id);
                     const totalQty = inCart.reduce((s, c) => s + c.quantity, 0);
@@ -1395,10 +1408,10 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                         onDragStart={arrangeMode ? () => setArrangeDrag(gridIdx) : undefined}
                         onDragOver={arrangeMode ? (e) => e.preventDefault() : undefined}
                         onDrop={arrangeMode ? (e) => { e.preventDefault(); onArrangeDrop(gridIdx); } : undefined}
-                        style={{ background: item.color || '#fff', borderRadius: 12, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : (item.color ? item.color : '#E7E2D6')}`, padding: '10px 12px', cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 56, display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
+                        style={{ background: item.color || '#fff', borderRadius: 12, border: arrangeMode ? '1.5px dashed #C9A84C' : `1px solid ${totalQty > 0 ? 'var(--brand-primary,#0D1B3E)' : (item.color ? item.color : '#E7E2D6')}`, padding: '8px 10px', cursor: arrangeMode ? 'grab' : 'pointer', minHeight: 48, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 1px 2px rgba(13,27,62,.05)', opacity: arrangeDrag === gridIdx ? 0.4 : 1 }}>
                         {/* SEPOS-MENU-COMPACT-001 — no price on the card, half-height row layout */}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 15, fontWeight: 700, color: item.color ? textOn(item.color) : 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: item.color ? textOn(item.color) : 'var(--brand-primary, #1a1a2e)', lineHeight: 1.25 }}>{item.name}</div>
                           <AllergenChips list={allergensByItemId[item.id]} />
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', flex: 'none' }}>

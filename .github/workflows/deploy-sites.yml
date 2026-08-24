@@ -57,6 +57,15 @@ jobs:
           - label: Baan Rao POS
             site_id: d51210fc-3d7b-4821-8b64-ebb2b4605e4e
             api_url: https://siamepos-baanrao-production.up.railway.app
+          - label: Yum Yum POS
+            site_id: 498bb392-eb40-4f3a-a4f9-262511e5d82a
+            api_url: https://restaurant-epos-production-4b43.up.railway.app
+          - label: Baanrai POS
+            site_id: 6b2485be-f362-4432-b58d-430fea00be6c
+            api_url: https://restaurant-epos-production-50a0.up.railway.app
+          - label: Fern POS
+            site_id: baee3149-41a5-4e3f-98ca-8eb04d51c6af
+            api_url: https://fern.siamepos.co.uk
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

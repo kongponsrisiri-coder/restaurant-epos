@@ -103,8 +103,8 @@ export default function IngredientsTab() {
                 <div><label style={labelStyle}>Recipe / Stock Unit</label><select value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} style={inputStyle}>{UNITS.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div><label style={labelStyle}>Cost per Unit (£) *</label><input type="number" step="0.01" value={form.cost_per_unit} onChange={e => setForm({ ...form, cost_per_unit: e.target.value })} placeholder="e.g. 6.00" style={inputStyle} /></div>
-                <div><label style={labelStyle}>Yield % (post-prep)</label><input type="number" step="1" min="1" max="100" value={form.yield_percentage} onChange={e => setForm({ ...form, yield_percentage: e.target.value })} placeholder="e.g. 78" style={inputStyle} /></div>
+                <div><label style={labelStyle}>Cost per Unit (£) *</label><input type="text" inputMode="decimal" step="0.01" value={form.cost_per_unit} onChange={e => setForm({ ...form, cost_per_unit: e.target.value })} placeholder="e.g. 6.00" style={inputStyle} /></div>
+                <div><label style={labelStyle}>Yield % (post-prep)</label><input type="text" inputMode="decimal" step="1" min="1" max="100" value={form.yield_percentage} onChange={e => setForm({ ...form, yield_percentage: e.target.value })} placeholder="e.g. 78" style={inputStyle} /></div>
               </div>
               <div style={{ background: '#f0f7ff', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#1e40af' }}>💡 Yield = usable amount after prep. Chicken breast = 78%. Fish sauce = 100%.</div>
               {/* SEPOS-INV-UNITS-001 — purchase↔usage bridge. Invoices often
@@ -116,13 +116,13 @@ export default function IngredientsTab() {
                   {['each','bottle','case','bag','tin','kg','L'].map(u => <option key={u} value={u}>{u}</option>)}
                 </select></div>
                 {form.purchase_unit && (
-                  <div><label style={labelStyle}>1 {form.purchase_unit} = ? {form.unit}</label><input type="number" step="0.001" value={form.purchase_to_usage || ''} onChange={e => setForm({ ...form, purchase_to_usage: e.target.value })} placeholder={`e.g. 1 ${form.purchase_unit} = 1000 ${form.unit}`} style={inputStyle} /></div>
+                  <div><label style={labelStyle}>1 {form.purchase_unit} = ? {form.unit}</label><input type="text" inputMode="decimal" step="0.001" value={form.purchase_to_usage || ''} onChange={e => setForm({ ...form, purchase_to_usage: e.target.value })} placeholder={`e.g. 1 ${form.purchase_unit} = 1000 ${form.unit}`} style={inputStyle} /></div>
                 )}
               </div>
               {form.purchase_unit && <div style={{ background: '#fefce8', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#854d0e' }}>📦 e.g. soy sauce priced per <b>ml</b>, bought as <b>bottle</b>: 1 bottle = 1000 ml. Duck priced per <b>kg</b>, bought <b>each</b>: 1 each = 2.1 kg. The invoice scanner then converts each/bottle lines automatically — without this, mismatched lines are skipped (never guessed).</div>}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div><label style={labelStyle}>Current Stock ({form.unit})</label><input type="number" step="0.1" value={form.current_stock} onChange={e => setForm({ ...form, current_stock: e.target.value })} style={inputStyle} /></div>
-                <div><label style={labelStyle}>PAR Level ({form.unit})</label><input type="number" step="0.1" value={form.par_level} onChange={e => setForm({ ...form, par_level: e.target.value })} placeholder="Min before reorder" style={inputStyle} /></div>
+                <div><label style={labelStyle}>Current Stock ({form.unit})</label><input type="text" inputMode="decimal" step="0.1" value={form.current_stock} onChange={e => setForm({ ...form, current_stock: e.target.value })} style={inputStyle} /></div>
+                <div><label style={labelStyle}>PAR Level ({form.unit})</label><input type="text" inputMode="decimal" step="0.1" value={form.par_level} onChange={e => setForm({ ...form, par_level: e.target.value })} placeholder="Min before reorder" style={inputStyle} /></div>
               </div>
               <div><label style={labelStyle}>Supplier</label><input value={form.supplier_name} onChange={e => setForm({ ...form, supplier_name: e.target.value })} placeholder="e.g. Wing Yip, Brakes" style={inputStyle} /></div>
               <div>

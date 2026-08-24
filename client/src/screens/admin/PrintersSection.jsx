@@ -204,7 +204,7 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
               onChange={e => setSettings(s => ({ ...s, [portKey]: e.target.value }))}
               placeholder="9100"
               style={portStyle}
-              type="number"
+              type="text" inputMode="decimal"
             />
           </div>
           <div>
@@ -337,7 +337,7 @@ function NetworkPrinterCard({ cardStyle, settings, setSettings }) {
           </p>
           <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
             <input
-              type="number"
+              type="text" inputMode="decimal"
               value={settings.kitchen_thai_codepage || ''}
               onChange={e => setSettings(s => ({ ...s, kitchen_thai_codepage: e.target.value }))}
               placeholder="30 (default)"
@@ -741,7 +741,7 @@ function StationsCard({ cardStyle, bare }) {
             <input value={p.name || ''} onChange={e => patch(p.id, 'name', e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveRow(p); }} placeholder="Name" style={{ ...inp, flex: '1 1 120px' }} />
             <input value={p.ip || ''} onChange={e => patch(p.id, 'ip', e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveRow(p); }} placeholder="IP (blank = by name)" style={{ ...inp, flex: '1 1 110px' }} />
             <input value={p.port || 9100} onChange={e => patch(p.id, 'port', e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveRow(p); }} placeholder="Port" style={{ ...inp, width: 70 }} />
-            <input value={p.copies || 1} onChange={e => patch(p.id, 'copies', e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveRow(p); }} type="number" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
+            <input value={p.copies || 1} onChange={e => patch(p.id, 'copies', e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveRow(p); }} type="text" inputMode="decimal" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
             <button onClick={() => saveRow(p)} disabled={sState[p.id] === 'saving'} style={{ ...inp, border: 'none',
               background: sState[p.id] === 'ok' ? '#16a34a' : sState[p.id] === 'fail' ? '#dc2626' : dirty[p.id] ? '#C9A84C' : 'var(--brand-primary,#0D1B3E)',
               color: dirty[p.id] && !sState[p.id] ? '#0D1B3E' : '#fff', fontWeight: 700, cursor: 'pointer', minWidth: 84 }}>
@@ -824,7 +824,7 @@ function StationsCard({ cardStyle, bare }) {
           <input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') add(); }} placeholder="New printer name" style={{ ...inp, flex: '1 1 120px' }} />
           <input value={draft.ip} onChange={e => setDraft({ ...draft, ip: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') add(); }} placeholder="IP" style={{ ...inp, flex: '1 1 110px' }} />
           <input value={draft.port} onChange={e => setDraft({ ...draft, port: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') add(); }} placeholder="Port" style={{ ...inp, width: 70 }} />
-          <input value={draft.copies} onChange={e => setDraft({ ...draft, copies: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') add(); }} type="number" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
+          <input value={draft.copies} onChange={e => setDraft({ ...draft, copies: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') add(); }} type="text" inputMode="decimal" min="1" max="5" title="Copies" style={{ ...inp, width: 56 }} />
           <button onClick={add} disabled={busy || !draft.name.trim()} style={{ ...inp, border: 'none', background: draft.name.trim() ? 'var(--brand-accent,#C9A84C)' : '#eee', color: draft.name.trim() ? '#fff' : '#aaa', fontWeight: 800, cursor: draft.name.trim() ? 'pointer' : 'not-allowed' }}>+ Add printer</button>
         </div>
         <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>

@@ -1250,7 +1250,12 @@ async function tryRenderedTicket(dest, settings, order, items, opts = {}) {
   // survives purely as the automatic fallback below (render failure, Thai
   // text, bilingual mode) so a font problem can never lose a ticket. Any
   // legacy kitchen_ticket_style='classic' value is deliberately ignored.
-  if (settings.kitchen_language === 'en_th') return false;
+  // SEPOS-THAI-TICKET-001 follow-up (Yum Yum, 24 Aug): the en_th bypass is
+  // RETIRED. It predates the Sarabun renderer — its only job was to reach the
+  // classic codepage path for Thai, which prints garbage on most UK printers.
+  // The renderer handles Thai natively and always prints name_alt, so the old
+  // toggle must never disable it again (it was re-enabled twice on site today
+  // by people reasonably assuming it was the fix).
   if (!dest.ip && !dest.printerName) return false;
   try {
     // Inside the try (review M2): if ticketRender/pureimage ever fails to LOAD,

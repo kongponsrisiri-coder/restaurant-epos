@@ -248,11 +248,11 @@ export default function ReservationSettingsSection() {
       {/* Capacity */}
       <Card title="Capacity & Availability" emoji="👥">
         <Field label="Maximum covers per slot" hint="Total restaurant capacity — how many covers can be seated across all tables at the same time">
-          <input type="number" min={1} max={500} value={settings.max_covers_per_slot}
+          <input type="text" inputMode="decimal" min={1} max={500} value={settings.max_covers_per_slot}
             onChange={e => set('max_covers_per_slot', parseInt(e.target.value) || 1)} style={inp} />
         </Field>
         <Field label="Maximum party size for online booking" hint="Largest party the booking widget will accept. Bigger groups are asked to phone the restaurant instead — set this to the largest party your tables (single or linked) can comfortably seat.">
-          <input type="number" min={1} max={100} value={settings.max_party_size}
+          <input type="text" inputMode="decimal" min={1} max={100} value={settings.max_party_size}
             onChange={e => set('max_party_size', parseInt(e.target.value) || 1)} style={inp} />
         </Field>
         <div style={{ background: '#f8f8f8', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: '#555', lineHeight: 1.7 }}>
@@ -270,11 +270,11 @@ export default function ReservationSettingsSection() {
       <Card title="Booking Rules" emoji="📋">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <Field label="Booking lead time (hours)" hint="Min notice required — e.g. 2 = can't book less than 2hrs ahead">
-            <input type="number" min={0} max={72} value={settings.booking_lead_hours}
+            <input type="text" inputMode="decimal" min={0} max={72} value={settings.booking_lead_hours}
               onChange={e => set('booking_lead_hours', parseInt(e.target.value) || 0)} style={inp} />
           </Field>
           <Field label="Advance booking (days)" hint="How far ahead customers can book — e.g. 60 = 2 months">
-            <input type="number" min={1} max={365} value={settings.booking_advance_days}
+            <input type="text" inputMode="decimal" min={1} max={365} value={settings.booking_advance_days}
               onChange={e => set('booking_advance_days', parseInt(e.target.value) || 1)} style={inp} />
           </Field>
         </div>
@@ -318,23 +318,23 @@ export default function ReservationSettingsSection() {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <Field label="🟢 Quiet wait (min)" hint="Shown when fewer open orders than the Busy threshold">
-            <input type="number" min={1} max={180} value={settings.takeaway_wait_quiet}
+            <input type="text" inputMode="decimal" min={1} max={180} value={settings.takeaway_wait_quiet}
               onChange={e => set('takeaway_wait_quiet', parseInt(e.target.value) || 1)} style={inp} />
           </Field>
           <Field label="Busy threshold" hint="Open orders ≥ this → flips to Busy">
-            <input type="number" min={1} max={100} value={settings.takeaway_busy_threshold}
+            <input type="text" inputMode="decimal" min={1} max={100} value={settings.takeaway_busy_threshold}
               onChange={e => set('takeaway_busy_threshold', parseInt(e.target.value) || 1)} style={inp} />
           </Field>
           <Field label="🟡 Busy wait (min)" hint="Quoted when in the Busy tier">
-            <input type="number" min={1} max={180} value={settings.takeaway_wait_busy}
+            <input type="text" inputMode="decimal" min={1} max={180} value={settings.takeaway_wait_busy}
               onChange={e => set('takeaway_wait_busy', parseInt(e.target.value) || 1)} style={inp} />
           </Field>
           <Field label="Very busy threshold" hint="Open orders ≥ this → flips to Very busy">
-            <input type="number" min={1} max={100} value={settings.takeaway_very_busy_threshold}
+            <input type="text" inputMode="decimal" min={1} max={100} value={settings.takeaway_very_busy_threshold}
               onChange={e => set('takeaway_very_busy_threshold', parseInt(e.target.value) || 1)} style={inp} />
           </Field>
           <Field label="🔴 Very busy wait (min)" hint="Quoted when in the Very busy tier">
-            <input type="number" min={1} max={180} value={settings.takeaway_wait_very_busy}
+            <input type="text" inputMode="decimal" min={1} max={180} value={settings.takeaway_wait_very_busy}
               onChange={e => set('takeaway_wait_very_busy', parseInt(e.target.value) || 1)} style={inp} />
           </Field>
         </div>

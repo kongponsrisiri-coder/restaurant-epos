@@ -332,13 +332,13 @@ function BatchRecipeModal({ recipe, ingredients, onClose, onSaved }) {
       </Field>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px', gap: 10 }}>
         <Field label="Output qty">
-          <input type="number" min="0.001" step="0.001" value={outQ} onChange={(e) => setOutQ(parseFloat(e.target.value) || 0)} style={modalInput}/>
+          <input type="text" inputMode="decimal" min="0.001" step="0.001" value={outQ} onChange={(e) => setOutQ(parseFloat(e.target.value) || 0)} style={modalInput}/>
         </Field>
         <Field label="Unit">
           <input value={outU} onChange={(e) => setOutU(e.target.value)} style={modalInput} placeholder="kg / l / portion"/>
         </Field>
         <Field label="Shelf (days)">
-          <input type="number" min="1" max="30" value={shelf} onChange={(e) => setShelf(parseInt(e.target.value, 10) || 1)} style={modalInput}/>
+          <input type="text" inputMode="decimal" min="1" max="30" value={shelf} onChange={(e) => setShelf(parseInt(e.target.value, 10) || 1)} style={modalInput}/>
         </Field>
       </div>
 
@@ -352,7 +352,7 @@ function BatchRecipeModal({ recipe, ingredients, onClose, onSaved }) {
                 <option key={ing.id} value={ing.id}>{ing.name_en} ({fmtMoney(ing.cost_per_unit)}/{ing.unit})</option>
               ))}
             </select>
-            <input type="number" min="0" step="0.001" value={l.quantity_used}
+            <input type="text" inputMode="decimal" min="0" step="0.001" value={l.quantity_used}
               onChange={(e) => onQtyChange(i, parseFloat(e.target.value) || 0)} style={modalInput}/>
             <span style={{ fontSize: 13, color: '#555' }}>{l.unit}</span>
             <span style={{ fontSize: 13, color: 'var(--brand-primary, #1a1a2e)', fontWeight: 700, textAlign: 'right' }}>{fmtMoney(l.line_cost)}</span>
@@ -466,7 +466,7 @@ function DiscardModal({ batch, onClose, onDone }) {
         Removes from stock and logs to the wastage report. How much was left when discarded?
       </p>
       <Field label={`Quantity (${batch.unit || ''})`}>
-        <input type="number" min="0" step="0.001" value={qty}
+        <input type="text" inputMode="decimal" min="0" step="0.001" value={qty}
           onChange={(e) => setQty(e.target.value)} style={modalInput}/>
       </Field>
       <Field label="Reason (optional)">

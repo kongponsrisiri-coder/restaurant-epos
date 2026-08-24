@@ -656,6 +656,21 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
     assertOk(await saveOrderNote(orderId, note));
   };
 
+  // SEPOS-BACK-EVERYWHERE-001 (Korakot, 24 Aug) — shared "← Back" handler.
+  // Used by the menu pane AND the mobile Order tab: sending auto-switches a
+  // narrow screen to the Order tab, whose header had no Back — staff were
+  // stranded after every send unless they knew to tap the Menu tab first.
+  const backToFloor = async () => {
+    // SEPOS-046z — don't auto-cancel while a send is in flight:
+    // the items it would judge "empty" may be landing right now.
+    if (!sendBusy) {
+      const allVoided = existingItems.length > 0 && existingItems.every(i => i.voided);
+      const isEmpty = existingItems.length === 0 && cart.length === 0;
+      if (allVoided || isEmpty) await payOrder(orderId, 0, 'cancelled');
+    }
+    onClose();
+  };
+
   const sendOrder = async () => {
     if (cart.length === 0) return alert('No items to send!');
 
@@ -1077,16 +1092,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             background: 'white', padding: '14px 20px', borderBottom: '1px solid #eee',
             display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0
           }}>
-            <button onClick={async () => {
-              // SEPOS-046z — don't auto-cancel while a send is in flight:
-              // the items it would judge "empty" may be landing right now.
-              if (!sendBusy) {
-                const allVoided = existingItems.length > 0 && existingItems.every(i => i.voided);
-                const isEmpty = existingItems.length === 0 && cart.length === 0;
-                if (allVoided || isEmpty) await payOrder(orderId, 0, 'cancelled');
-              }
-              onClose();
-            }} style={{
+            <button onClick={backToFloor} style={{
               background: '#f0f0f0', border: 'none', borderRadius: 10,
               padding: '10px 18px', cursor: 'pointer', fontWeight: 700, fontSize: 15
             }}>
@@ -1324,12 +1330,16 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     the Fern menu flatten a venue can carry 25+ top-level
                     categories, and at the old size the category grid dwarfed
                     the menu buttons below it. */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: subTabs.length ? 12 : 16 }}>
+                {/* SEPOS-CAT-GRID-001 (Fern, 24 Aug) — uniform grid, not ragged
+                    per-name widths: every button the same size, slightly smaller,
+                    so 20+ categories read as tidy rows. Long names ellipsise. */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(118px, 1fr))', gap: 8, marginBottom: subTabs.length ? 12 : 16 }}>
                   {menu.map(cat => {
                     const active = activeCategory === cat.id;
                     return (
-                      <button key={cat.id} onClick={() => selectCategory(cat)} style={{
-                        padding: '8px 16px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap',
+                      <button key={cat.id} onClick={() => selectCategory(cat)} title={cat.name} style={{
+                        padding: '8px 10px', minHeight: 40, borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center',
                         border: active ? 'none' : (cat.color ? `1.5px solid ${cat.color}` : '1.5px solid #E7E2D6'),
                         background: cat.color ? (active ? cat.color : cat.color + '33') : (active ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary,#0D1B3E)') : '#fff'),
                         color: cat.color ? (active ? textOn(cat.color) : 'var(--brand-primary, #1a1a2e)') : (active ? '#fff' : 'var(--brand-primary, #1a1a2e)'),
@@ -1449,9 +1459,17 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
             padding: '14px 20px', borderBottom: '1px solid #eee', flexShrink: 0
           }}>
             {isMobile ? (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* SEPOS-BACK-EVERYWHERE-001 — sending auto-switches to this tab;
+                    without its own Back, staff were stranded here after every send. */}
+                <button onClick={backToFloor} style={{
+                  background: '#f0f0f0', border: 'none', borderRadius: 10,
+                  padding: '9px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 14, flexShrink: 0
+                }}>
+                  ← Back
+                </button>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-primary, #1a1a2e)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {dineTableLabel(order)}
                   </div>
                   <div style={{ fontSize: 12, color: '#888', marginTop: 1 }}>
@@ -2164,7 +2182,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                   <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>Price</label>
                   <div style={{ position: 'relative' }}>
                     <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
-                    <input type="number" step="0.01" min="0" value={miscPopup.price} onChange={e => setMiscPopup(p => ({ ...p, price: e.target.value }))}
+                    <input type="text" inputMode="decimal" step="0.01" min="0" value={miscPopup.price} onChange={e => setMiscPopup(p => ({ ...p, price: e.target.value }))}
                       placeholder="0.00" style={{ width: '100%', height: 48, padding: '0 12px 0 24px', borderRadius: 10, border: '1.5px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
                   </div>
                 </div>
@@ -2172,7 +2190,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                   <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>Qty</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <button onClick={() => setMiscPopup(p => ({ ...p, quantity: Math.max(1, (Number(p.quantity) || 1) - 1) }))} style={{ width: 40, height: 48, borderRadius: 10, border: '1.5px solid #ddd', background: '#f7f7f7', cursor: 'pointer', fontSize: 20, fontWeight: 700 }}>−</button>
-                    <input type="number" min="1" value={miscPopup.quantity} onChange={e => setMiscPopup(p => ({ ...p, quantity: e.target.value }))}
+                    <input type="text" inputMode="decimal" min="1" value={miscPopup.quantity} onChange={e => setMiscPopup(p => ({ ...p, quantity: e.target.value }))}
                       style={{ width: 44, height: 48, textAlign: 'center', borderRadius: 10, border: '1.5px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
                     <button onClick={() => setMiscPopup(p => ({ ...p, quantity: (Number(p.quantity) || 1) + 1 }))} style={{ width: 40, height: 48, borderRadius: 10, border: '1.5px solid #ddd', background: '#f7f7f7', cursor: 'pointer', fontSize: 20, fontWeight: 700 }}>+</button>
                   </div>
@@ -2561,7 +2579,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                   {discountPopup.type === 'percent' ? 'Discount %' : 'Discount £'}
                 </label>
                 <input
-                  type="number" min="0" step={discountPopup.type === 'percent' ? '1' : '0.01'}
+                  type="text" inputMode="decimal" min="0" step={discountPopup.type === 'percent' ? '1' : '0.01'}
                   autoFocus
                   value={discountPopup.value}
                   onChange={(e) => setDiscountPopup({ ...discountPopup, value: e.target.value })}
@@ -2731,7 +2749,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                         background: '#f0f0f0', cursor: 'pointer', fontWeight: 800, fontSize: 18
                       }}>−</button>
                     <input
-                      type="number"
+                      type="text" inputMode="decimal"
                       min="1"
                       max={voidPopup.item.quantity}
                       value={voidPopup.qty}

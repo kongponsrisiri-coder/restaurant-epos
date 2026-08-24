@@ -1338,12 +1338,15 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                     const active = activeCategory === cat.id;
                     return (
                       <button key={cat.id} onClick={() => selectCategory(cat)} title={cat.name} style={{
-                        padding: '6px 10px', minHeight: 40, borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                        padding: '6px 10px', minHeight: 40, borderRadius: 10, cursor: 'pointer', fontWeight: active ? 800 : 700, fontSize: 13,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         border: active ? 'none' : (cat.color ? `1.5px solid ${cat.color}` : '1.5px solid #E7E2D6'),
                         background: cat.color ? (active ? cat.color : cat.color + '33') : (active ? (cat.is_bar ? '#1e40af' : 'var(--brand-primary,#0D1B3E)') : '#fff'),
                         color: cat.color ? (active ? textOn(cat.color) : 'var(--brand-primary, #1a1a2e)') : (active ? '#fff' : 'var(--brand-primary, #1a1a2e)'),
-                        boxShadow: cat.color && active ? '0 0 0 3px rgba(13,27,62,.35)' : 'none' }}>
+                        /* Korakot 24 Aug: the selected ring was 35%-alpha navy — read as a faint
+                           grey smudge on coloured buttons. Full-strength navy ring now; navy-filled
+                           (uncoloured) actives get the gold accent ring so they pop off their own bg. */
+                        boxShadow: active ? (cat.color ? '0 0 0 3px var(--brand-primary,#0D1B3E)' : '0 0 0 3px var(--brand-accent,#C9A84C)') : 'none' }}>
                         {/* Korakot 24 Aug: wrap long names to a 2nd line instead of "…" —
                             clamp lives on an inner span so the flex button still centres
                             one-line names vertically. Same-row buttons share height (grid). */}
@@ -1365,11 +1368,11 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       const active = activeSubcat === sub.id;
                       return (
                         <button key={sub.id} onClick={() => setActiveSubcat(sub.id)} style={{
-                          padding: '9px 18px', borderRadius: 20, cursor: 'pointer', fontWeight: 700, fontSize: 14,
+                          padding: '9px 18px', borderRadius: 20, cursor: 'pointer', fontWeight: active ? 800 : 700, fontSize: 14,
                           border: active ? 'none' : (sub.color ? `1px solid ${sub.color}` : '1px solid #E7E2D6'),
                           background: sub.color ? (active ? sub.color : sub.color + '33') : (active ? 'var(--brand-accent,#C9A84C)' : '#fff'),
                           color: sub.color ? (active ? textOn(sub.color) : 'var(--brand-primary, #1a1a2e)') : (active ? '#fff' : '#7C766A'),
-                          boxShadow: sub.color && active ? '0 0 0 3px rgba(13,27,62,.35)' : 'none' }}>
+                          boxShadow: active ? '0 0 0 3px var(--brand-primary,#0D1B3E)' : 'none' }}>
                           {sub.name}
                         </button>
                       );

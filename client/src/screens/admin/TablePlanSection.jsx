@@ -335,6 +335,33 @@ export default function TablePlanSection() {
     updateSelectedTable({ width: selectedTable.height, height: selectedTable.width });
   };
 
+  // SEPOS-RENAME-SETTLE-001 — one debounced commit for the number/name box.
+  // Draft lives in a ref so the commit survives deselect/unmount races; the
+  // update targets the drafted table id explicitly, not `selected`.
+  const renameDraftRef = useRef(null);
+  const renameTimerRef = useRef(null);
+  const commitRenameDraft = useCallback(async () => {
+    clearTimeout(renameTimerRef.current);
+    const draft = renameDraftRef.current;
+    if (!draft || draft.value === '') return;
+    renameDraftRef.current = null;
+    const t = tablesRef.current.find(tbl => tbl.id === draft.id);
+    if (!t) return;
+    const changes = /^\d+$/.test(draft.value)
+      ? { table_number: Number(draft.value), name: null }
+      : { name: draft.value };
+    const u = { ...t, ...changes };
+    tablesRef.current = tablesRef.current.map(tbl => tbl.id === u.id ? u : tbl);
+    setTables(prev => prev.map(tbl => tbl.id === u.id ? u : tbl));
+    const r = await updateTablePlan(u.id, {
+      pos_x: u.pos_x, pos_y: u.pos_y, shape: u.shape, width: u.width, height: u.height,
+      name: u.name, capacity: u.capacity, table_number: u.table_number,
+      is_takeaway: u.is_takeaway ? 1 : 0,
+    });
+    if (r && r.error) showToast(`⚠ Not saved — ${r.error}`, 'error');
+  }, []);
+  useEffect(() => () => { commitRenameDraft(); }, [commitRenameDraft]);
+
   // ── Wall operations — optimistic, no fetchAll ──────────────────
   const handleAddWall = async (direction = 'vertical') => {
     const dims = direction === 'horizontal' ? { width: 100, height: 12 } : { width: 12, height: 100 };
@@ -680,20 +707,26 @@ export default function TablePlanSection() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div>
                   <label style={lbl}>Table Number / Name</label>
-                  {/* Save on CHANGE (like Capacity), not blur — blur fires in the same
-                      instant as deselect/Save-Layout clicks and the typed name was
-                      silently dropped (deselect nulls `selected` → the blur save
-                      no-ops; or the input unmounts and blur never fires at all).
+                  {/* SEPOS-RENAME-SETTLE-001 (Korakot on-site, 24 Aug) — saving on
+                      EVERY keystroke meant typing "12" first saved "1", which the
+                      new duplicate-number guard rightly rejects → error toasts
+                      mid-typing and a fight with the operator. The box now saves
+                      when typing SETTLES (600ms pause), on Enter, and on blur —
+                      one save, with the finished value. The old blur-races
+                      (deselect/Save-Layout in the same instant) stay covered
+                      because the settle timer commits from a ref even if the
+                      input unmounts first.
                       SEPOS-TABLE-NAME — digits go to table_number (an INTEGER
-                      column; text used to 500 "invalid input syntax" SILENTLY);
-                      anything else is a display label saved to `name` ("Bar 1"). */}
+                      column); anything else is a display label saved to `name`. */}
                   <input defaultValue={String(tableLabel(selectedTable) ?? '')} key={selectedTable.id + '_n'}
                     onChange={e => {
                       const v = e.target.value.trim();
-                      if (v === '') return;
-                      if (/^\d+$/.test(v)) updateSelectedTable({ table_number: Number(v), name: null });
-                      else updateSelectedTable({ name: v });
+                      renameDraftRef.current = { id: selectedTable.id, value: v };
+                      clearTimeout(renameTimerRef.current);
+                      renameTimerRef.current = setTimeout(commitRenameDraft, 600);
                     }}
+                    onBlur={commitRenameDraft}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitRenameDraft(); } }}
                     style={inp} />
                   <div style={{ fontSize: 10, color: '#aaa', marginTop: 3 }}>A number, or a label like “Bar 1”</div>
                 </div>

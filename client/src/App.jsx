@@ -373,7 +373,10 @@ export default function App() {
         warnStart.current = 0; setIdleWarn(false);
       }
     };
-    const evs = ['pointerdown', 'keydown', 'touchstart', 'wheel'];
+    // SEPOS-IDLE-DRAG-001 (Korakot on-site, 24 Aug) — dragging tables around
+    // the plan editor fired no pointerdown for minutes at a time and the idle
+    // timer signed the operator out mid-setup. Moves now count as activity.
+    const evs = ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'touchmove', 'wheel'];
     evs.forEach((e) => window.addEventListener(e, bump, { capture: true, passive: true }));
     const t = setInterval(() => {
       if (!warnStart.current) {

@@ -563,7 +563,7 @@ function EditPaymentModal({ bill, items = [], onClose, onDone }) {
             </select>
             <div style={{ position:'relative', flex:1 }}>
               <span style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:'#888' }}>£</span>
-              <input type="number" step="0.01" value={r.amount} disabled={r.remove || r.id == null} onChange={e => setRow(i, { amount:e.target.value })} style={{ ...box, paddingLeft:22, textDecoration: r.remove ? 'line-through' : 'none' }} />
+              <input type="text" inputMode="decimal" step="0.01" value={r.amount} disabled={r.remove || r.id == null} onChange={e => setRow(i, { amount:e.target.value })} style={{ ...box, paddingLeft:22, textDecoration: r.remove ? 'line-through' : 'none' }} />
             </div>
             {r.id != null && (
               <button onClick={() => setRow(i, { remove: !r.remove })} title={r.remove ? 'Keep this payment' : 'Remove this payment'}

@@ -115,7 +115,7 @@ export default function DiningDurationSettings() {
               {/* Duration input */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <input
-                  type="number"
+                  type="text" inputMode="decimal"
                   value={tier.duration_mins}
                   min={30}
                   max={360}

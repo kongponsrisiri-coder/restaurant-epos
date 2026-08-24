@@ -757,6 +757,7 @@ export default function SettingsSection() {
     service_charge_enabled:  '1',
     till_send_lock:          '1',   // SEPOS-TILL-LOCK-001 — back to sign-in after sending an order
     login_pin_only:          '0',   // SEPOS-PINONLY-001 — skip the name grid; PIN identifies the staff
+    kitchen_bar_as_waiters:  '1',   // SEPOS-KB-WAITER-001 — DEFAULT ON; KDS venues (Fern) untick
     till_idle_minutes:       '2',   // SEPOS-TILL-LOCK-001 — auto sign-out after idle ('0' = off)
     kitchen_print_mode:      'print',   // 'print' | 'kds' | 'both'
     kitchen_language:        'en_th',  // 'en_th' | 'en'
@@ -1360,6 +1361,12 @@ export default function SettingsSection() {
           <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:14 }}>
             <input type="checkbox" checked={settings.login_pin_only==='1'} onChange={e => setSettings({...settings, login_pin_only:e.target.checked?'1':'0'})} />
             PIN-only sign-in <span style={{ fontSize:12, color:'#888', fontWeight:400 }}>— skip the name list; staff just type their PIN and the till knows who they are (each PIN must be unique)</span>
+          </label>
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display:'flex', alignItems:'center', gap:10, fontSize:15, fontWeight:600, cursor:'pointer' }}>
+            <input type="checkbox" checked={(settings.kitchen_bar_as_waiters ?? '1') !== '0'} onChange={e => setSettings({...settings, kitchen_bar_as_waiters:e.target.checked?'1':'0'})} />
+            Kitchen &amp; bar staff sign in as waiters <span style={{ fontSize:12, color:'#888', fontWeight:400 }}>— for venues without a kitchen/bar display: those roles land on the floor like waiters (Admin stays locked for them). Leave off if you use the Kitchen or Bar screens.</span>
           </label>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:8 }}>

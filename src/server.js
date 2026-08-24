@@ -335,7 +335,7 @@ try {
 
 app.get('/api/tables', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM tables ORDER BY table_number');
+    const result = await pool.query('SELECT * FROM tables ORDER BY table_number, id'); // SEPOS-TABLE-IDENT-001 — stable order when numbers ever tie
     // BUG-003 — tables created via the Table Plan editor never get a
     // `name` set, so the column is NULL and clients rendered "null".
     // Fall back to "Table {number}" so the API always returns a usable
@@ -370,6 +370,13 @@ app.put('/api/tables/:id/plan', async (req, res) => {
     };
     // COALESCE keeps the existing is_takeaway flag when a partial plan update
     // (e.g. drag/resize) doesn't include it — only an explicit toggle changes it.
+    // SEPOS-TABLE-IDENT-001 — refuse a table_number another table already holds.
+    // Two tables sharing a number makes the editor re-bind to the wrong twin
+    // after every save (Fern 11 Aug, Baanrai 23 Aug) — fail loud instead.
+    const dupe = await pool.query(
+      'SELECT id FROM tables WHERE table_number = $1 AND id != $2 LIMIT 1',
+      [int(table_number), req.params.id]);
+    if (dupe.rows[0]) return res.status(409).json({ error: `Table number ${int(table_number)} is already in use — pick a different number (labels like "Bar 1" can repeat, numbers cannot).` });
     await pool.query(
       'UPDATE tables SET pos_x=$1, pos_y=$2, shape=$3, width=$4, height=$5, name=$6, capacity=$7, table_number=$8, is_takeaway=COALESCE($9, is_takeaway) WHERE id=$10',
       [int(pos_x, 0), int(pos_y, 0), shape, int(width, 80), int(height, 80), name, int(capacity, 4), int(table_number), (is_takeaway == null ? null : (is_takeaway ? 1 : 0)), req.params.id]
@@ -383,6 +390,11 @@ app.post('/api/tables', async (req, res) => {
   try {
     const { table_number, capacity, pos_x, pos_y, shape, is_takeaway } = req.body;
     const int = (v, fb) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n) : fb; };
+    // SEPOS-TABLE-IDENT-001 — a new table must not reuse an existing number.
+    if (int(table_number, null) != null) {
+      const dupe = await pool.query('SELECT id FROM tables WHERE table_number = $1 LIMIT 1', [int(table_number, null)]);
+      if (dupe.rows[0]) return res.status(409).json({ error: `Table number ${int(table_number, null)} is already in use — pick a different number.` });
+    }
     const result = await pool.query(
       'INSERT INTO tables (table_number, capacity, pos_x, pos_y, shape, is_takeaway) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
       [int(table_number, null), int(capacity, 4), int(pos_x, 0), int(pos_y, 0), shape || 'square', is_takeaway ? 1 : 0]

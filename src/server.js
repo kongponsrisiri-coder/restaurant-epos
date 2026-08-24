@@ -370,21 +370,11 @@ app.put('/api/tables/:id/plan', async (req, res) => {
     };
     // COALESCE keeps the existing is_takeaway flag when a partial plan update
     // (e.g. drag/resize) doesn't include it — only an explicit toggle changes it.
-    // SEPOS-TABLE-IDENT-001 — refuse a table_number another table already holds.
-    // GRANDFATHER CLAUSE (Korakot 24 Aug, hotfix): venues carry LEGACY
-    // duplicates from before the guard existed — a table KEEPING its own
-    // current number must always save (drag/rename/capacity edits were
-    // getting 409'd on those rows). The check only runs when the number is
-    // actually CHANGING, so no NEW collision can be created and legacy twins
-    // stay editable (and fixable by renumbering one of them).
-    const cur = await pool.query('SELECT table_number FROM tables WHERE id = $1', [req.params.id]);
-    const numChanging = cur.rows[0] && int(table_number) !== Number(cur.rows[0].table_number);
-    if (numChanging) {
-      const dupe = await pool.query(
-        'SELECT id FROM tables WHERE table_number = $1 AND id != $2 LIMIT 1',
-        [int(table_number), req.params.id]);
-      if (dupe.rows[0]) return res.status(409).json({ error: `Table number ${int(table_number)} is already in use — pick a different number (labels like "Bar 1" can repeat, numbers cannot).` });
-    }
+    // SEPOS-TABLE-IDENT-001 REVERTED (Korakot, 24 Aug): table setup is
+    // FREEFORM by his decision — clients may reuse numbers/names on purpose.
+    // The editor no longer needs the guard: rows bind by id, the list orders
+    // by (table_number, id) so twins are stable, and the rename box commits
+    // once on settle. Do not re-add a duplicate restriction.
     await pool.query(
       'UPDATE tables SET pos_x=$1, pos_y=$2, shape=$3, width=$4, height=$5, name=$6, capacity=$7, table_number=$8, is_takeaway=COALESCE($9, is_takeaway) WHERE id=$10',
       [int(pos_x, 0), int(pos_y, 0), shape, int(width, 80), int(height, 80), name, int(capacity, 4), int(table_number), (is_takeaway == null ? null : (is_takeaway ? 1 : 0)), req.params.id]
@@ -398,11 +388,6 @@ app.post('/api/tables', async (req, res) => {
   try {
     const { table_number, capacity, pos_x, pos_y, shape, is_takeaway } = req.body;
     const int = (v, fb) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n) : fb; };
-    // SEPOS-TABLE-IDENT-001 — a new table must not reuse an existing number.
-    if (int(table_number, null) != null) {
-      const dupe = await pool.query('SELECT id FROM tables WHERE table_number = $1 LIMIT 1', [int(table_number, null)]);
-      if (dupe.rows[0]) return res.status(409).json({ error: `Table number ${int(table_number, null)} is already in use — pick a different number.` });
-    }
     const result = await pool.query(
       'INSERT INTO tables (table_number, capacity, pos_x, pos_y, shape, is_takeaway) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
       [int(table_number, null), int(capacity, 4), int(pos_x, 0), int(pos_y, 0), shape || 'square', is_takeaway ? 1 : 0]

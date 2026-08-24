@@ -147,12 +147,19 @@ export default function App() {
   // fetch RACES the embedded server's cold start, failed silently, and the
   // brand only appeared after a manual Settings save. Retry until settings
   // actually load, then keep the applied theme.
+  // SEPOS-KB-WAITER-001 — venues without a kitchen/bar display can make those
+  // roles sign in as waiters (land on the floor, normal navbar, idle sign-out).
+  // Their role hierarchy is untouched — Admin stays out of reach.
+  const [kbAsWaiters, setKbAsWaiters] = useState(true); // default ON — KDS venues opt out
   useEffect(() => {
     let stopped = false;
     const tryTheme = (attempt) => {
       getSettings().then(s => {
         if (stopped) return;
-        if (s && !s.error) applyBrandTheme(s);
+        if (s && !s.error) {
+          applyBrandTheme(s);
+          setKbAsWaiters(String(s.kitchen_bar_as_waiters ?? '1') !== '0'); // SEPOS-KB-WAITER-001 — default ON unless explicitly '0'
+        }
         else if (attempt < 20) setTimeout(() => tryTheme(attempt + 1), 1500);
       }).catch(() => { if (!stopped && attempt < 20) setTimeout(() => tryTheme(attempt + 1), 1500); });
     };
@@ -347,7 +354,7 @@ export default function App() {
   // unsent basket state lives in OrderScreen and is intentionally kept on the
   // table as a draft (items not sent are re-shown when the table reopens).
   useEffect(() => {
-    if (!staff || staff.role === 'kitchen' || staff.role === 'bar' || !tillSec.idleMin) return;
+    if (!staff || (!kbAsWaiters && (staff.role === 'kitchen' || staff.role === 'bar')) || !tillSec.idleMin) return;
     lastActivity.current = Date.now();
     const bump = (ev) => {
       lastActivity.current = Date.now();
@@ -466,12 +473,14 @@ export default function App() {
 
   if (!staff) {
     body = <LoginScreen onLogin={setStaff} />;
-  } else if (staff.role === 'kitchen') {
+  } else if (staff.role === 'kitchen' && !kbAsWaiters) {
     // SEPOS-KDS-LOGOUT-001 — kitchen/bar render full-bleed with no navbar and
     // are exempt from idle auto sign-out, so without this they can only leave
-    // by restarting the app (Fern, 17 Aug).
+    // by restarting the app (Fern, 17 Aug). SEPOS-KB-WAITER-001: when the
+    // venue has no kitchen/bar display, both roles fall through to the normal
+    // waiter shell instead.
     body = <><Clock fixed /><KitchenScreen onLogout={logout} /></>;
-  } else if (staff.role === 'bar') {
+  } else if (staff.role === 'bar' && !kbAsWaiters) {
     body = <><Clock fixed /><BarScreen onLogout={logout} /></>;
   } else if (screen === 'order' && activeOrder) {
     body = (

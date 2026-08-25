@@ -769,7 +769,21 @@ app.put('/api/categories/:id/default-course', async (req, res) => {
   if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     const { default_course } = req.body;
+    // SEPOS-COURSE-CASCADE-001 (Korakot, 25 Aug — "i change the category
+    // course but inside didnt change along it"): changing a category's course
+    // must carry its dishes with it. Menu imports stamped an explicit course
+    // on every dish, so nothing ever inherited and this chip looked dead.
+    // Any dish whose per-item course EQUALS the category's OLD course was a
+    // de-facto follower — reset it to NULL (inherit) so it moves with the
+    // category now and forever. A dish with a DIFFERENT override is a
+    // deliberate exception (mixed Lunch menu) and keeps it.
+    const prev = await pool.query('SELECT default_course FROM categories WHERE id = $1', [req.params.id]);
+    const oldCourse = Number(prev.rows[0]?.default_course || 1);
     await pool.query('UPDATE categories SET default_course = $1 WHERE id = $2', [default_course, req.params.id]);
+    await pool.query(
+      'UPDATE menu_items SET default_course = NULL WHERE category_id = $1 AND default_course = $2',
+      [req.params.id, oldCourse]
+    );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1293,7 +1307,7 @@ app.delete('/api/menu/items/:id', async (req, res) => {
 
 app.get('/api/orders', async (req, res) => {
   try {
-    const result = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label,
+    const result = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway,
         (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = orders.id AND oi.voided = 0) AS item_count
       FROM orders LEFT JOIN tables ON orders.table_id = tables.id
       WHERE orders.status = 'open' ORDER BY orders.created_at DESC`);
@@ -1439,7 +1453,7 @@ app.post('/api/device/heartbeat', async (req, res) => {
 
 app.get('/api/orders/bar', async (req, res) => {
   try {
-    const ordersRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status = 'open' ORDER BY orders.created_at DESC`);
+    const ordersRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status = 'open' ORDER BY orders.created_at DESC`);
     const orders = ordersRes.rows;
     if (!orders.length) return res.json([]);
     const orderIds = orders.map(o => o.id);
@@ -1453,7 +1467,7 @@ app.get('/api/orders/bar', async (req, res) => {
 
 app.get('/api/orders/:id', async (req, res) => {
   try {
-    const orderRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [req.params.id]);
+    const orderRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [req.params.id]);
     const order = orderRes.rows[0];
     if (!order) return res.status(404).json({ error: 'Order not found' });
     const itemsRes = await pool.query(
@@ -1702,7 +1716,7 @@ app.put('/api/orders/:id/fire-course/:course', async (req, res) => {
       [now, now, id, course]
     );
     await depleteStockForItems(firedIds, 'sale');
-    const orderRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [id]);
+    const orderRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [id]);
     const itemsRes = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id = $1 AND order_items.course = $2 AND order_items.is_fired = 1`, [id, course]);
     io.emit('course_fired', { order: orderRes.rows[0], course: Number(course), items: itemsRes.rows });
     await offlineQueue.enqueue('fire_course', { localOrderId: Number(id), course: Number(course) });
@@ -2208,7 +2222,7 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
 app.get('/api/orders/:id/bill', async (req, res) => {
   try {
     const [orderRes, itemsRes, settingsRes] = await Promise.all([
-      pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id=$1`, [req.params.id]),
+      pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id=$1`, [req.params.id]),
       pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt, menu_items.vat_rate FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.order_id=$1 AND order_items.voided=0`, [req.params.id]),
       pool.query('SELECT * FROM settings')
     ]);
@@ -3308,7 +3322,7 @@ app.post('/api/print/kitchen-message', async (req, res) => {
     // server-side, and a client-sent bare number must not skip it.
     if (order_id) {
       const r = await pool.query(
-        `SELECT o.id, o.order_type, o.customer_name, t.table_number, t.name AS table_label
+        `SELECT o.id, o.order_type, o.customer_name, t.table_number, t.name AS table_label, t.is_takeaway AS table_is_takeaway
          FROM orders o LEFT JOIN tables t ON t.id = o.table_id
          WHERE o.id = $1`, [order_id]
       ).catch(() => ({ rows: [] }));
@@ -3427,7 +3441,7 @@ app.get('/api/reports/daily', async (req, res) => {
     // agree to the penny.
     // SEPOS-AUDIT-001 — mirror SEPOS-REPREC-001's cancelled exclusion here too:
     // written-off bills were still counted in daily totals/order_count.
-    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') <> 'Complimentary' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [dayStart.toISOString(), dayEnd.toISOString()]);
+    const result = await pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.order_type, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') <> 'Complimentary' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [dayStart.toISOString(), dayEnd.toISOString()]);
     const total = result.rows.reduce((sum, r) => sum + Number(r.paid_amount ?? r.total ?? 0), 0);
     // Dedupe order_count by orders.id — LEFT JOIN payments multiplies rows
     // on split-pay orders.
@@ -3512,7 +3526,7 @@ app.get('/api/reports/summary', async (req, res) => {
       // (verify pass: orders.service_charge added — without it in the SELECT,
       // serviceChargeForOrder saw undefined and silently fell back to deriving
       // from today's rate, defeating the snapshot.)
-      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.discount_scope, orders.order_type, orders.no_service_charge, orders.service_charge, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') <> 'Complimentary' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [sumFromIso, sumToIso]),
+      pool.query(`SELECT orders.id, orders.total, orders.closed_at, orders.covers, orders.discount_value, orders.discount_type, orders.discount_scope, orders.order_type, orders.no_service_charge, orders.service_charge, orders.customer_name, payments.method, payments.amount AS paid_amount, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway FROM orders LEFT JOIN payments ON orders.id = payments.order_id LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at < $2::timestamp AND (payments.method IS NOT NULL OR orders.order_type = 'takeaway') AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') <> 'Complimentary' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [sumFromIso, sumToIso]),
       // SEPOS-REPREC-001 — a cancelled/void bill closes with a payment row
       // method='cancelled', £0. It collected nothing, so it must NOT count as a
       // sale or an order here — otherwise Trading's "Total Sales" (orders.total)
@@ -3666,7 +3680,7 @@ app.get('/api/reports/items', async (req, res) => {
 
 app.get('/api/kitchen/completed', async (req, res) => {
   try {
-    const result = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt, orders.covers, orders.id as order_id, tables.table_number, tables.name AS table_label, order_items.fired_at, order_items.served_at, orders.order_type, orders.customer_name, orders.pickup_time, orders.order_subtype, orders.delivery_address, orders.takeaway_status FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON menu_items.category_id = categories.id LEFT JOIN orders ON order_items.order_id = orders.id LEFT JOIN tables ON orders.table_id = tables.id WHERE order_items.status='served' AND order_items.voided=0 AND (categories.is_bar=0 OR categories.is_bar IS NULL) AND order_items.served_at::date = CURRENT_DATE ORDER BY order_items.order_id ASC`);
+    const result = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt, orders.covers, orders.id as order_id, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway, order_items.fired_at, order_items.served_at, orders.order_type, orders.customer_name, orders.pickup_time, orders.order_subtype, orders.delivery_address, orders.takeaway_status FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON menu_items.category_id = categories.id LEFT JOIN orders ON order_items.order_id = orders.id LEFT JOIN tables ON orders.table_id = tables.id WHERE order_items.status='served' AND order_items.voided=0 AND (categories.is_bar=0 OR categories.is_bar IS NULL) AND order_items.served_at::date = CURRENT_DATE ORDER BY order_items.order_id ASC`);
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -3731,7 +3745,7 @@ app.get('/api/tables/status', async (req, res) => {
 
 app.get('/api/bar/completed', async (req, res) => {
   try {
-    const result = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt, orders.covers, orders.id as order_id, tables.table_number, tables.name AS table_label, order_items.fired_at, order_items.served_at, orders.order_type, orders.customer_name, orders.pickup_time FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON menu_items.category_id = categories.id LEFT JOIN orders ON order_items.order_id = orders.id LEFT JOIN tables ON orders.table_id = tables.id WHERE order_items.status='served' AND order_items.voided=0 AND categories.is_bar=1 AND order_items.served_at::date = CURRENT_DATE ORDER BY order_items.order_id ASC`);
+    const result = await pool.query(`SELECT order_items.*, menu_items.name, menu_items.name_alt, orders.covers, orders.id as order_id, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway, order_items.fired_at, order_items.served_at, orders.order_type, orders.customer_name, orders.pickup_time FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id LEFT JOIN categories ON menu_items.category_id = categories.id LEFT JOIN orders ON order_items.order_id = orders.id LEFT JOIN tables ON orders.table_id = tables.id WHERE order_items.status='served' AND order_items.voided=0 AND categories.is_bar=1 AND order_items.served_at::date = CURRENT_DATE ORDER BY order_items.order_id ASC`);
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -4299,8 +4313,8 @@ app.get('/api/z-report/preview', async (req, res) => {
       // SEPOS-REPREC-001 — exclude cancelled/void bills (payment method='cancelled', £0)
       // from the Z so its Total Sales + order count reconcile with Trading and Bills.
       // A closed order with no payment row (method NULL) is still kept.
-      pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') <> 'Complimentary' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [from, to]),
-      pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='open'`),
+      pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway, payments.method, payments.amount as paid_amount FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.closed_at >= $1::timestamp AND orders.closed_at <= $2::timestamp AND (payments.method IS NULL OR payments.method != 'cancelled' AND COALESCE(payments.method,'') <> 'Complimentary' AND COALESCE(payments.method,'') NOT LIKE '%(mock)%') ORDER BY orders.closed_at DESC`, [from, to]),
+      pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.status='open'`),
       // SEPOS-AUDIT-001 — window on WHEN the void happened (voided_at, stamped
       // by the void endpoint since this fix), not on orders.created_at: a void
       // during the shift on a table seated BEFORE the shift used to vanish
@@ -4729,7 +4743,7 @@ app.get('/api/bills', async (req, res) => {
     // vanish from Admin -> Bills, which is exactly the symptom Korakot
     // reported tonight (from a different cause).
     const _localBills = require('./services/archiveService').isLocalInstall();
-    let query = `SELECT orders.id, ${_localBills ? 'orders.cloud_id,' : ''} orders.total, orders.covers, orders.closed_at, orders.discount_type, orders.discount_value, orders.discount_reason, orders.order_type, orders.no_service_charge, orders.service_charge, tables.table_number, tables.name AS table_label, payments.method, payments.amount as paid_amount, payments.id AS payment_id FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.total > 0 AND payments.method IS NOT NULL AND payments.method != 'cancelled'`;
+    let query = `SELECT orders.id, ${_localBills ? 'orders.cloud_id,' : ''} orders.total, orders.covers, orders.closed_at, orders.discount_type, orders.discount_value, orders.discount_reason, orders.order_type, orders.no_service_charge, orders.service_charge, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway, payments.method, payments.amount as paid_amount, payments.id AS payment_id FROM orders LEFT JOIN tables ON orders.table_id = tables.id LEFT JOIN payments ON orders.id = payments.order_id WHERE orders.status='closed' AND orders.total > 0 AND payments.method IS NOT NULL AND payments.method != 'cancelled'`;
     const params = [];
     let n = 1;
     if (from) { query += ` AND orders.closed_at::date >= $${n}::date`; params.push(from); n++; }
@@ -5045,7 +5059,7 @@ app.post('/api/orders/:id/resend', async (req, res) => {
     await offlineQueue.enqueue('resend_items', {
       localOrderId: Number(req.params.id), localItemIds: item_ids, reason: reason || null,
     });
-    const orderRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [req.params.id]);
+    const orderRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [req.params.id]);
     const itemsRes = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.id = ANY($1::int[])`, [item_ids]);
     io.emit('course_fired', { order: orderRes.rows[0], course: 0, items: itemsRes.rows });
     res.json({ success: true });
@@ -8409,12 +8423,12 @@ app.get('/api/qr/receipt/:token', widgetCors, async (req, res) => {
     //    directly, which is always the right one.
     const oRes = await pool.query(
       payId
-        ? `SELECT o.*, t.name AS table_label, t.table_number
+        ? `SELECT o.*, t.name AS table_label, t.is_takeaway AS table_is_takeaway, t.table_number
              FROM orders o LEFT JOIN tables t ON t.id = o.table_id
             WHERE o.table_id = $1 AND o.source = 'qr'
               AND EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.id = $2)
             LIMIT 1`
-        : `SELECT o.*, t.name AS table_label, t.table_number
+        : `SELECT o.*, t.name AS table_label, t.is_takeaway AS table_is_takeaway, t.table_number
              FROM orders o LEFT JOIN tables t ON t.id = o.table_id
             WHERE o.table_id = $1 AND o.source = 'qr'
               ${orderId ? 'AND o.id = $2' : ''}
@@ -8473,7 +8487,7 @@ app.post('/api/qr/receipt/:token/email', widgetCors, async (req, res) => {
     const orderId = Number(req.body?.order_id) || null;
     const payId = Number(req.body?.payment_id) || null;
     const oRes = await pool.query(
-      `SELECT o.*, t.name AS table_label, t.table_number FROM orders o LEFT JOIN tables t ON t.id = o.table_id
+      `SELECT o.*, t.name AS table_label, t.is_takeaway AS table_is_takeaway, t.table_number FROM orders o LEFT JOIN tables t ON t.id = o.table_id
         WHERE o.table_id = $1 AND o.source = 'qr' ${orderId ? 'AND o.id = $2' : ''} ORDER BY o.id DESC LIMIT 1`,
       orderId ? [tableId, orderId] : [tableId]);
     const order = oRes.rows[0];
@@ -8736,7 +8750,7 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
       return { orderId, firedIds, paymentId: roundPaymentId };
     });
 
-    const orderRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [out.orderId]);
+    const orderRes = await pool.query(`SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway FROM orders LEFT JOIN tables ON orders.table_id = tables.id WHERE orders.id = $1`, [out.orderId]);
     const newItemsRes = await pool.query(`SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id WHERE order_items.id = ANY($1::int[])`, [out.firedIds]);
     io.emit('new_order_items', { order: orderRes.rows[0], items: newItemsRes.rows });
     res.json({ success: true, order_id: out.orderId, payment_status: paymentStatus, payment_id: out.paymentId });
@@ -11301,7 +11315,7 @@ app.post('/api/print/buffers/receipt', async (req, res) => {
   try {
     const settings = await loadSettings();
     const orderRes = await pool.query(
-      `SELECT orders.*, tables.table_number, tables.name AS table_label
+      `SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ ok: false, error: 'Order not found' });
@@ -11326,7 +11340,7 @@ app.post('/api/print/buffers/kitchen', async (req, res) => {
   try {
     const settings = await loadSettings();
     const orderRes = await pool.query(
-      `SELECT orders.*, tables.table_number, tables.name AS table_label
+      `SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ ok: false, error: 'Order not found' });
@@ -11357,7 +11371,7 @@ app.post('/api/print/buffers/kitchen-ticket', async (req, res) => {
   try {
     const settings = await loadSettings();
     const orderRes = await pool.query(
-      `SELECT orders.*, tables.table_number, tables.name AS table_label
+      `SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ ok: false, error: 'Order not found' });
@@ -11400,7 +11414,7 @@ app.post('/api/print/buffers/kitchen-message', async (req, res) => {
     // server-side, and a client-sent bare number must not skip it.
     if (order_id) {
       const r = await pool.query(
-        `SELECT o.order_type, o.customer_name, t.table_number, t.name AS table_label
+        `SELECT o.order_type, o.customer_name, t.table_number, t.name AS table_label, t.is_takeaway AS table_is_takeaway
          FROM orders o LEFT JOIN tables t ON t.id = o.table_id WHERE o.id = $1`, [order_id]
       ).catch(() => ({ rows: [] }));
       const o = r.rows[0];
@@ -11447,7 +11461,7 @@ app.post('/api/print/receipt', async (req, res) => {
     if (printer_name) { settings.printer_receipt_name = printer_name; settings.printer_receipt_ip = ''; }
     if (!settings.printer_receipt_ip && !settings.printer_receipt_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
-      `SELECT orders.*, tables.table_number, tables.name AS table_label
+      `SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
@@ -11585,7 +11599,7 @@ app.post('/api/print/kitchen', async (req, res) => {
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
     if (copies) settings.printer_kitchen_copies = String(copies); // client-resolved copies (per-device or system)
     const orderRes = await pool.query(
-      `SELECT orders.*, tables.table_number, tables.name AS table_label
+      `SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
@@ -11626,7 +11640,7 @@ app.post('/api/print/bar', async (req, res) => {
     await applyPrinterRouting(settings);   // SEPOS-PRINT-UNIFY-001 — unified list → role default (legacy fallback)
     if (printer_name) { settings.printer_bar_name = printer_name; settings.printer_bar_ip = ''; }
     const orderRes = await pool.query(
-      `SELECT orders.*, tables.table_number, tables.name AS table_label
+      `SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
@@ -11664,7 +11678,7 @@ app.post('/api/print/kitchen-fire', async (req, res) => {
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
     if (!settings.printer_kitchen_ip && !settings.printer_kitchen_name) return res.json({ success: false, reason: 'no_printer' });
     const orderRes = await pool.query(
-      `SELECT orders.*, tables.table_number, tables.name AS table_label
+      `SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });
@@ -11688,7 +11702,7 @@ app.post('/api/print/kitchen-full', async (req, res) => {
     if (printer_name) { settings.printer_kitchen_name = printer_name; settings.printer_kitchen_ip = ''; }
     if (copies) settings.printer_kitchen_copies = String(copies); // client-resolved copies (per-device or system)
     const orderRes = await pool.query(
-      `SELECT orders.*, tables.table_number, tables.name AS table_label
+      `SELECT orders.*, tables.table_number, tables.name AS table_label, tables.is_takeaway AS table_is_takeaway
        FROM orders LEFT JOIN tables ON orders.table_id = tables.id
        WHERE orders.id = $1`, [order_id]);
     if (!orderRes.rows.length) return res.status(404).json({ success: false, error: 'Order not found' });

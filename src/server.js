@@ -7762,8 +7762,14 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
       const waitMinutes = backlog < busyN ? waitQ : backlog < veryBusyN ? waitB : waitV;
       pickup_time = new Date(Date.now() + waitMinutes * 60000).toISOString();
     }
-    const settings = settingsRes.rows[0];
-    if (settings) {
+    // SEPOS-TA-HOURS-001 (Korakot, 25 Aug — "why can I order when the
+    // restaurant is closed?"): the hours guard was gated on a
+    // restaurant_settings ROW existing, so freshly-provisioned tenants
+    // (no row) accepted orders around the clock — FAIL-OPEN on a money
+    // path. Validate ALWAYS: with no row, the per-field defaults below
+    // (11:00–21:30, Europe/London) apply until the venue sets real hours.
+    const settings = settingsRes.rows[0] || {};
+    {
       const pickupDate = new Date(pickup_time);
       if (isNaN(pickupDate.getTime())) return res.status(400).json({ error: 'Invalid pickup time' });
       // SEPOS-048 — compare pickup against opening hours in the RESTAURANT's

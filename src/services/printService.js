@@ -374,7 +374,7 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
       order.pickup_time   ? [col2('Pickup', new Date(order.pickup_time).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/London' })), lf()] : [],
     ] : [
       // Table number BIG + bold + centred so it's obvious at a glance.
-      CMD.ALIGN_CENTER, CMD.BOLD_ON, CMD.SIZE_BIG, txt((order.table_label && String(order.table_label).trim()) ? String(order.table_label).trim().toUpperCase() : `TABLE ${order.table_number || '—'}`), CMD.SIZE_NORMAL, CMD.BOLD_OFF, CMD.ALIGN_CENTER, lf(),
+      CMD.ALIGN_CENTER, CMD.BOLD_ON, CMD.SIZE_BIG, txt(ticketTableLabel(order)), CMD.SIZE_NORMAL, CMD.BOLD_OFF, CMD.ALIGN_CENTER, lf(),
       col2('Covers', String(order.covers       || '—')), lf(),
     ]),
     col2('Date',    date),  lf(),
@@ -488,9 +488,7 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
 // passes order.table_label, the heading uses it verbatim; otherwise the
 // numeric fallback is byte-identical to the old behaviour.
 function tableHeading(order) {
-  const label = order && order.table_label && String(order.table_label).trim();
-  if (label) return label.toUpperCase();
-  return `TABLE ${order && order.table_number != null ? order.table_number : '?'}`;
+  return ticketTableLabel(order);
 }
 
 function buildFireNotice({ order, course, bilingual = true }) {
@@ -674,12 +672,12 @@ function wrapDeliveryAddress(address) {
 // Distinctive layout (📢 banner, large heading, big-text message body)
 // so the chef notices immediately. Different from a regular kitchen
 // ticket — no items, no course header, just the waiter's message.
-function buildKitchenMessage({ order_id, table_number, table_label, order_type, customer_name, message, waiter_name }) {
+function buildKitchenMessage({ order_id, table_number, table_label, table_is_takeaway, order_type, customer_name, message, waiter_name }) {
   // Table NAME wins over the raw number ("Bar 2" is table_number 2 — the
-  // chef knows the name, not the internal number). Same rule as tableHeading.
+  // chef knows the name, not the internal number). Same rule as tableHeading —
+  // and SEPOS-TA-LABEL-001: a takeaway SLOT heading gets the TAKEAWAY prefix.
   const label = table_label && String(table_label).trim();
-  const heading = label ? label.toUpperCase()
-                : table_number ? `TABLE ${table_number}`
+  const heading = (label || table_number) ? ticketTableLabel({ table_label, table_number, table_is_takeaway })
                 : order_type === 'takeaway' ? `TAKEAWAY${order_id ? ' #' + order_id : ''}`
                 : 'KITCHEN MESSAGE';
   const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });

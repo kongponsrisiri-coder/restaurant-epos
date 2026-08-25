@@ -18,6 +18,21 @@ const PImage = require('pureimage');
 const W = 576; // POS80 printable width @ 203dpi
 const FONT_DIR = path.join(__dirname, '..', 'assets', 'fonts');
 let fontsReady = null;
+// SEPOS-TA-LABEL-001 (Baanrai, 25 Aug) — ONE resolver for every ticket heading.
+// A takeaway-slot order must never read as a dine-in table: the floor brands
+// those slots "Takeaway", but a slot ROW named 'Table 2' (names are freeform)
+// printed as TABLE 2 — and the chef walked to the dine-in twin. If the order's
+// table carries is_takeaway and the label doesn't already say so, prefix it.
+function ticketTableLabel(order) {
+  const raw = order && order.table_label && String(order.table_label).trim();
+  const takeawaySlot = order && Number(order.table_is_takeaway ?? 0) === 1;
+  let label = raw ? raw.toUpperCase() : `TABLE ${order && order.table_number != null ? order.table_number : '\u2014'}`;
+  if (takeawaySlot && !/TAKE\s*AWAY/i.test(label)) {
+    label = `TAKEAWAY ${raw ? raw.toUpperCase() : (order && order.table_number != null ? order.table_number : '')}`.trim();
+  }
+  return label;
+}
+
 function loadFonts() {
   if (!fontsReady) {
     const reg = PImage.registerFont(path.join(FONT_DIR, 'NotoSans-Regular.ttf'), 'TicketSans');
@@ -186,7 +201,7 @@ async function kitchenTicketRaster(order, items, opts = {}) {
     : (order.order_type === 'takeaway'
         ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}`
            : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
-        : `TABLE ${order.table_number ?? ''}`.trim());
+        : ticketTableLabel(order));
   const lines = [
     { text: now.toLocaleString('en-GB', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: tz }), size: 22, center: true, gap: 4 },
     { rule: true },
@@ -248,7 +263,7 @@ async function previewPNG(order, items, outPath, opts = {}) {
 async function _linesFor(order, items, opts) {
   // shared with kitchenTicketRaster — rebuilt small to avoid refactor risk
   const now = new Date();
-  const label = (order.table_label && String(order.table_label).trim()) ? String(order.table_label).trim().toUpperCase() : `TABLE ${order.table_number ?? ''}`;
+  const label = ticketTableLabel(order);
   const lines = [
     { text: now.toLocaleString('en-GB', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' }), size: 22, center: true, gap: 4 },
     { rule: true },
@@ -291,7 +306,7 @@ function receiptLines(order, m, opts = {}) {
   } else {
     const label = (order.table_label && String(order.table_label).trim())
       ? String(order.table_label).trim().toUpperCase()
-      : `TABLE ${order.table_number || '—'}`;
+      : ticketTableLabel(order);
     L.push({ text: label, size: 38, bold: true, center: true, gap: 4 });
     L.push({ text: 'Covers', right: String(order.covers || '—'), size: 23, gap: 2 });
   }
@@ -377,4 +392,5 @@ async function previewReceiptPNG(order, model, outPath, opts = {}) {
   return outPath;
 }
 
-module.exports = { kitchenTicketRaster, receiptRaster, previewPNG, previewReceiptPNG, hasUnrenderableText, SIZE_SCALES };
+module.exports = {
+  ticketTableLabel, kitchenTicketRaster, receiptRaster, previewPNG, previewReceiptPNG, hasUnrenderableText, SIZE_SCALES };

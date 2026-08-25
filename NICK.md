@@ -108,8 +108,8 @@ SiamEPOS costs £89/month and sets up in an afternoon.
 | ICO Registration | ✅ DONE 2026-06-05 — Tier 1, app no. C1951827, £52/yr (£47 by DD). Awaiting ZB/Z ref. |
 | Corporation Tax | ✅ DONE — registered with HMRC |
 | Accountant | NOT YET — find one familiar with tech startups |
-| **Start Up Loan (British Business Bank)** | ✅ **£15,000 @ 7.5% over 60 months — submitted 16 June 2026 via BizBritain.** Repayment ≈ **£300/month**. ⚠️ **This is a PERSONAL liability of the director, not the company's.** Do not recommend applying for a Start Up Loan again — this one exists. |
-| ⚠️ **Cash reality (19 Aug 2026)** | MRR **£260** vs loan repayment **~£300/mo** — **the business does not yet cover its own debt service.** Bank £843.02. Korakot has been topping the company up personally. Every spending recommendation must start here. |
+| **Start Up Loan (British Business Bank)** | ✅ **£15,000 approved in TWO TRANCHES @ 7.5% / 60 months** — arranged via **BizBritain (Karl)**, funded by **GC Business Finance** (FCA regulated · 0161 245 4977 · bfsul@growthco.uk). **Tranche A = £10,000 (DRAWN) → repayment ≈ £200/month.** **Tranche B = £5,000, NOT yet drawn** — available on application after 3 full on-time Tranche-A repayments + financial declaration + possible 3 months personal bank statements + credit check; **not guaranteed, provider's sole discretion.** ⚠️ **PERSONAL liability of the director, not the company's.** Do not recommend applying for a new Start Up Loan — this facility already exists. |
+| ⚠️ **Cash reality (25 Aug 2026)** | MRR **£260** vs loan repayment **~£200/mo** (Tranche A only — earlier £300 figure was WRONG, it assumed all £15k drawn). Revenue **does** now cover debt service. Bank £843.02; Korakot has been topping the company up personally. Baan Rao + Yum Yum Thai signing adds ~£118/mo. Every spending recommendation still starts here. |
 
 **Document footer (use everywhere):**
 ```

@@ -890,7 +890,14 @@ async function pullMenuTree() {
     const nSub   = await upsertRows('subcategories', 'id', subList);
     // menu_items.printer_id (SEPOS-STATION-003 per-dish override) also
     // null-syncs, so switching a dish back to "Inherit" clears on desktop.
-    const nItems = await upsertRows('menu_items', 'id', itemList, ['printer_id']);
+    // SEPOS-COURSE-CASCADE-001 — default_course joins it (setting a dish's
+    // kitchen course back to "Inherit from category" never cleared on local
+    // tills, so the category chip looked dead — Korakot on the Phakoon demo,
+    // 25 Aug), plus the other explicitly-clearable editor fields of the same
+    // class: name_alt (clear the 2nd-language name), subcategory_id (move a
+    // dish out of its sub-category), image_url (the Remove-photo button).
+    const nItems = await upsertRows('menu_items', 'id', itemList,
+      ['printer_id', 'default_course', 'name_alt', 'subcategory_id', 'image_url']);
 
     // SEPOS-046p — propagate cloud-side deletions. Pull was upsert-only
     // before, so deleting an item / subcategory / category on the web

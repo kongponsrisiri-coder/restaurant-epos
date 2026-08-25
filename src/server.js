@@ -769,7 +769,21 @@ app.put('/api/categories/:id/default-course', async (req, res) => {
   if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
     const { default_course } = req.body;
+    // SEPOS-COURSE-CASCADE-001 (Korakot, 25 Aug — "i change the category
+    // course but inside didnt change along it"): changing a category's course
+    // must carry its dishes with it. Menu imports stamped an explicit course
+    // on every dish, so nothing ever inherited and this chip looked dead.
+    // Any dish whose per-item course EQUALS the category's OLD course was a
+    // de-facto follower — reset it to NULL (inherit) so it moves with the
+    // category now and forever. A dish with a DIFFERENT override is a
+    // deliberate exception (mixed Lunch menu) and keeps it.
+    const prev = await pool.query('SELECT default_course FROM categories WHERE id = $1', [req.params.id]);
+    const oldCourse = Number(prev.rows[0]?.default_course || 1);
     await pool.query('UPDATE categories SET default_course = $1 WHERE id = $2', [default_course, req.params.id]);
+    await pool.query(
+      'UPDATE menu_items SET default_course = NULL WHERE category_id = $1 AND default_course = $2',
+      [req.params.id, oldCourse]
+    );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

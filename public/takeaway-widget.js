@@ -457,7 +457,12 @@
     return out;
   }
   function changeQty(key, delta) {
-    const it = state.cart.find(c => c.key === key);
+    // SEPOS-TA-CART-001 (Yum Yum live, 25 Aug) — cart keys are STRINGS
+    // ("431|12" = item|modifiers). One binding site Number()-coerced them to
+    // NaN, which killed +/− on the desktop cart panel for every line.
+    // Normalise here so no call site can break the lookup again.
+    const k = String(key);
+    const it = state.cart.find(c => String(c.key) === k);
     if (!it) return;
     it.quantity += delta;
     if (it.quantity <= 0) state.cart = state.cart.filter(c => c.key !== key);
@@ -481,8 +486,8 @@
     const side = document.querySelector('.tw-cart-sidebar');
     if (side) {
       side.innerHTML = '<div class="tw-cart-title">🛒 Your order</div>' + renderCartRows();
-      side.querySelectorAll('[data-inc]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(Number(b.dataset.inc), 1); }));
-      side.querySelectorAll('[data-dec]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(Number(b.dataset.dec), -1); }));
+      side.querySelectorAll('[data-inc]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(b.dataset.inc, 1); }));
+      side.querySelectorAll('[data-dec]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); changeQty(b.dataset.dec, -1); }));
     }
     // Keep the desktop footer Checkout button's TOTAL in sync. updateCartUI is a
     // PARTIAL re-render (used so adding a dish doesn't scroll the menu back to the

@@ -175,6 +175,7 @@ async function initDB() {
     // link row); an allergen group's selections print with ⚠️ emphasis + are free.
     await pool.query(`ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_global INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_allergen INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS modifiers (

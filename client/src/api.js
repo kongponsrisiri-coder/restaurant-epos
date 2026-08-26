@@ -107,15 +107,21 @@ export const TENANT_MISCONFIGURED = tenantMisconfigured;
 // PIN sessions live under 'siamepos_token' (NOT 'siamepos_auth', which
 // App.jsx auto-restores on load — PIN users must still log in per shift).
 export const authHeaders = () => {
+  const h = {};
+  try {
+    // SEPOS-DEVICE-AUTH-001 — this browser's device authorisation, if any.
+    const dev = localStorage.getItem('siamepos_device_token');
+    if (dev) h['x-device-token'] = dev;
+  } catch {}
   try {
     const raw = localStorage.getItem('siamepos_token') || localStorage.getItem('siamepos_auth');
-    if (!raw) return {};
+    if (!raw) return h;
     const a = JSON.parse(raw);
     if (a?.token && (!a.expires_at || a.expires_at > Date.now())) {
-      return { Authorization: `Bearer ${a.token}` };
+      return { ...h, Authorization: `Bearer ${a.token}` };
     }
   } catch {}
-  return {};
+  return h;
 };
 export const storePinSession = (r) => {
   try {
@@ -475,6 +481,10 @@ async function hashPin(pin) {
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
   } catch { return 'p:' + pin; }
 }
+// SEPOS-DEVICE-AUTH-001 — authorise this browser for a gated cloud till.
+export const requestDeviceAuth = (email) => post('/api/device/request-auth', { email });
+export const consumeDeviceAuth = (token) => post('/api/device/consume-auth', { token });
+
 export const loginStaff = async (pin) => {
   try {
     const json = useNativeHttp()

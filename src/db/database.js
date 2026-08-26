@@ -591,6 +591,30 @@ async function initDB() {
       )
     `);
 
+    // SEPOS-DEVICE-AUTH-001 — email-authorised browser devices for public
+    // till URLs. device_links = pending 15-min email links; trusted_devices =
+    // long-lived device tokens (sha256 only, like login_links).
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS device_links (
+        id SERIAL PRIMARY KEY,
+        token_hash TEXT UNIQUE NOT NULL,
+        email TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS trusted_devices (
+        id SERIAL PRIMARY KEY,
+        token_hash TEXT UNIQUE NOT NULL,
+        email TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        last_seen TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS reservations (
         id SERIAL PRIMARY KEY,

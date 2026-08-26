@@ -261,13 +261,15 @@
       '<input id="c-name" placeholder="Your name *" value="' + esc(contact.name) + '">' +
       '<input id="c-phone" placeholder="Mobile number *" inputmode="tel" value="' + esc(contact.phone) + '">' +
       '<input id="c-email" placeholder="Email (for confirmation — optional)" inputmode="email" value="' + esc(contact.email) + '"></div>';
-    h += '<div class="sp-bar"><span class="sp-name">Siam<b>Pay</b></span><span class="sp-sub">🔒 Secure checkout · powered by <b>Stripe</b></span></div>';
+    // SiamPay bar only when a real payment happens here — on pay-on-collection
+    // tenants a "secure checkout" badge with nothing to pay reads as fake.
+    if (stripeCfg && stripeCfg.configured) h += '<div class="sp-bar"><span class="sp-name">Siam<b>Pay</b></span><span class="sp-sub">🔒 Secure checkout · powered by <b>Stripe</b></span></div>';
     h += '<div id="payel"></div>';
     // Same fix as the QR page (a568bbb): the Stripe element mounts async, so
     // the button holds until its 'ready' — else a fast first tap confirms an
     // empty form.
-    h += '<button class="paybtn" id="paybtn"' + (stripeCfg && stripeCfg.configured ? ' disabled' : '') + '>' + (stripeCfg && stripeCfg.configured ? 'Loading secure payment…' : 'Place order (demo — no payment)') + '</button>';
-    h += '<div class="muted">' + (stripeCfg && stripeCfg.configured ? 'Paid securely by card · Apple Pay · Google Pay' : 'Demo mode — payment is simulated') + '</div>';
+    h += '<button class="paybtn" id="paybtn"' + (stripeCfg && stripeCfg.configured ? ' disabled' : '') + '>' + (stripeCfg && stripeCfg.configured ? 'Loading secure payment…' : ('Place order — pay on ' + (isDeliv() ? 'delivery' : 'collection'))) + '</button>';
+    h += '<div class="muted">' + (stripeCfg && stripeCfg.configured ? 'Paid securely by card · Apple Pay · Google Pay' : ('💷 Nothing to pay online — pay ' + (isDeliv() ? 'the driver' : 'when you collect') + ', cash or card.')) + '</div>';
     h += '<button class="morebtn" id="closecart">← Back to menu</button>';
     h += '</div></div>';
     return h;
@@ -280,6 +282,7 @@
       ? '<div class="bigsub">Your order is with the kitchen.<br>Delivering to <b>' + esc(done.address || '') + '</b>.</div>'
       : '<div class="bigsub">Your order is with the kitchen.<br>Ready for collection around <b>' + (done.pickup_time ? ukTime(done.pickup_time) : 'soon') + '</b>.</div>';
     h += '<div class="refbox"><div style="font-size:11.5px;color:#777;font-weight:700">' + (done.delivery ? 'YOUR ORDER REFERENCE' : 'QUOTE THIS WHEN COLLECTING') + '</div><div class="ref">' + esc(done.order_number || '') + '</div></div>';
+    if (!(stripeCfg && stripeCfg.configured)) h += '<div class="bigsub">💷 Pay ' + (done.delivery ? 'the driver' : 'when you collect') + ' — cash or card accepted.</div>';
     h += '<button class="morebtn" id="again">Start another order</button>';
     h += '</div>';
     $('#app').innerHTML = h;

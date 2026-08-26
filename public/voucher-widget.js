@@ -357,8 +357,14 @@
   }
 
   async function onPay() {
+    if (state.submitting) return;
     state.err = '';
-    state.submitting = true; render();
+    state.submitting = true;
+    // Surgical button update ONLY — calling render() here rebuilds the modal
+    // DOM, which destroys the mounted Payment Element (and the card details
+    // the customer just typed) while confirmPayment is about to read it.
+    const payBtn = modalEl.querySelector('#vw-pay');
+    if (payBtn) { payBtn.disabled = true; payBtn.textContent = 'Processing…'; }
     try {
       if (state.pi.mode === 'stripe') {
         if (!stripe || !elements) throw new Error('Payment not ready — please wait a moment');

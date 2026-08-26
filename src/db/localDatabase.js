@@ -836,6 +836,7 @@ function runMigrations() {
   // SEPOS-ALLERGEN-OPT-001 — global (applies to every item) + allergen (⚠️ + free) modifier groups.
   addColumnIfMissing('modifier_groups', 'is_global', 'INTEGER DEFAULT 0');
   addColumnIfMissing('modifier_groups', 'is_allergen', 'INTEGER DEFAULT 0');
+  addColumnIfMissing('modifier_groups', 'sort_order', 'INTEGER DEFAULT 0');
 
   // SEPOS-STATION-001 — category -> printer routing (NULL = today's is_bar rule).
   addColumnIfMissing('categories', 'printer_id', 'INTEGER');

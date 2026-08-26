@@ -37,11 +37,16 @@ const EN_ROWS = [
 // keyboard (q→ๆ, a→ฟ, …), extended with the ;'[],./ characters so the common
 // letters (ว ง บ ล ม ใ ฝ) are all reachable without shift.
 const TH_ROWS = [
+  // SEPOS-OSK-005 — the Kedmanee NUMBER row types LETTERS in Thai; it was
+  // missing entirely, so ภ ถ ค ต จ ข ช and the ุ/ึ vowels could not be typed
+  // at all (Korakot/Yum Yum). Exact physical key mapping, 12 keys.
+  ['ๅ', '/', '-', 'ภ', 'ถ', 'ุ', 'ึ', 'ค', 'ต', 'จ', 'ข', 'ช'],
   ['ๆ', 'ไ', 'ำ', 'พ', 'ะ', 'ั', 'ี', 'ร', 'น', 'ย', 'บ', 'ล'],
   ['ฟ', 'ห', 'ก', 'ด', 'เ', '้', '่', 'า', 'ส', 'ว', 'ง'],
   ['ผ', 'ป', 'แ', 'อ', 'ิ', 'ื', 'ท', 'ม', 'ใ', 'ฝ'],
 ];
 const TH_SHIFT_ROWS = [
+  ['+', '๑', '๒', '๓', '๔', 'ู', '฿', '๕', '๖', '๗', '๘', '๙'],
   ['๐', '"', 'ฎ', 'ฑ', 'ธ', 'ํ', '๊', 'ณ', 'ฯ', 'ญ', 'ฐ', 'ฅ'],
   ['ฤ', 'ฆ', 'ฏ', 'โ', 'ฌ', '็', '๋', 'ษ', 'ศ', 'ซ', '.'],
   ['(', ')', 'ฉ', 'ฮ', 'ฺ', '์', '?', 'ฒ', 'ฬ', 'ฦ'],
@@ -245,13 +250,14 @@ export default function OnScreenKeyboard() {
   return (
     <div onPointerDown={(e) => e.preventDefault()} style={sheet}>
       <div style={row}>{DIGITS.map(c => <Key key={c} label={c} act={() => insert(c)} />)}</div>
-      <div style={row}>{letters[0].map(c => <Key key={c} label={cap(c)} act={() => typed(cap(c))} />)}</div>
-      <div style={row}>{letters[1].map(c => <Key key={c} label={cap(c)} act={() => typed(cap(c))} />)}</div>
+      {letters.slice(0, -1).map((r, i) => (
+        <div key={i} style={row}>{r.map(c => <Key key={c} label={cap(c)} act={() => typed(cap(c))} />)}</div>
+      ))}
       <div style={row}>
         {view !== 'sym'
           ? <Key label="⇧" act={() => setShift(s => !s)} flex={1.5} bg={shift ? '#0D1B3E' : '#cbd5e1'} color={shift ? '#fff' : '#0f172a'} />
           : <div style={{ flex: 1.5, margin: 3 }} />}
-        {letters[2].map(c => <Key key={c} label={cap(c)} act={() => typed(cap(c))} />)}
+        {letters[letters.length - 1].map(c => <Key key={c} label={cap(c)} act={() => typed(cap(c))} />)}
         <Key label="⌫" act={backspace} flex={1.5} bg="#cbd5e1" />
       </div>
       <div style={row}>

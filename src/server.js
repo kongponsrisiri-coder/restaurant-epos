@@ -1156,7 +1156,7 @@ app.get('/api/menu/items/:id/modifiers', async (req, res) => {
         WHERE menu_item_id = $1
            OR id IN (SELECT group_id FROM menu_item_modifier_groups WHERE menu_item_id = $1)
            OR COALESCE(is_global, 0) = 1
-        ORDER BY COALESCE(is_global, 0), id`, [req.params.id]);
+        ORDER BY COALESCE(is_global, 0), COALESCE(sort_order, 0), id`, [req.params.id]);
     if (groupRes.rows.length === 0) return res.json([]);
     const groupsWithMods = await Promise.all(groupRes.rows.map(async group => {
       const modRes = await pool.query('SELECT * FROM modifiers WHERE group_id = $1 AND is_available = 1', [group.id]);
@@ -1246,6 +1246,24 @@ app.get('/api/modifier-library', async (req, res) => {
 });
 
 // Create a shared (library) group — menu_item_id stays NULL.
+// SEPOS-060 — edit a library group's flags/order (sort_order drives the
+// display order of option groups on the till + customer pages).
+app.put('/api/modifier-library/:id', async (req, res) => {
+  if (await maybeForwardModifierWriteToCloud(req, res)) return;
+  try {
+    const { name, required, multi_select, sort_order } = req.body || {};
+    await pool.query(
+      `UPDATE modifier_groups SET
+         name = COALESCE($1, name),
+         required = COALESCE($2, required),
+         multi_select = COALESCE($3, multi_select),
+         sort_order = COALESCE($4, sort_order)
+       WHERE id = $5`,
+      [name ?? null, required ?? null, multi_select ?? null, sort_order ?? null, req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/modifier-library', async (req, res) => {
   if (await maybeForwardModifierWriteToCloud(req, res)) return;
   try {

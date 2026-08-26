@@ -3094,7 +3094,7 @@ app.post('/api/stripe/webhook', async (req, res) => {
 
 app.get('/api/staff', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, role, is_active, created_at, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z FROM staff ORDER BY name');
+    const result = await pool.query('SELECT id, name, role, is_active, created_at, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z, email FROM staff ORDER BY name');
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -3111,7 +3111,7 @@ app.post('/api/staff', requireStaffAuthOrSyncSecret(['admin', 'manager']), async
     if (dup.rows[0]) {
       return res.status(409).json({ error: `PIN ${pin} is already used by ${dup.rows[0].name}. Please choose a different 4-digit PIN.` });
     }
-    const result = await pool.query('INSERT INTO staff (name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id', [name, pin, role, start_date || null, notes || null, employment_status || 'active', can_discount ? 1 : 0, can_redeem_deposit ? 1 : 0, can_void ? 1 : 0, can_close_z ? 1 : 0]);
+    const result = await pool.query('INSERT INTO staff (name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z, email) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id', [name, pin, role, start_date || null, notes || null, employment_status || 'active', can_discount ? 1 : 0, can_redeem_deposit ? 1 : 0, can_void ? 1 : 0, can_close_z ? 1 : 0, (String(req.body.email || '').trim().toLowerCase() || null)]);
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) {
     if (/unique|duplicate/i.test(err.message || '')) {
@@ -3175,6 +3175,12 @@ app.put('/api/staff/:id', requireStaffAuthOrSyncSecret(['admin', 'manager']), as
          WHERE id = $11`,
         [name, role, activeParam, start_date || null, notes || null, employment_status || 'active', cd, crd, cv, cz, req.params.id]
       );
+    }
+    // Email updates separately so tills that don't send the field can never
+    // clobber it (owner sign-in links + device authorisation match on it).
+    if (Object.prototype.hasOwnProperty.call(req.body, 'email')) {
+      const emailParam = String(req.body.email || '').trim().toLowerCase() || null;
+      await pool.query('UPDATE staff SET email = $1 WHERE id = $2', [emailParam, req.params.id]);
     }
     res.json({ success: true });
   } catch (err) {

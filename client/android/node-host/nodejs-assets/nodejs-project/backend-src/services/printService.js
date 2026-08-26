@@ -1261,7 +1261,7 @@ async function tryRenderedTicket(dest, settings, order, items, opts = {}) {
     const tr = require('./ticketRender');
     // Thai/CJK text in any field → classic (codepage) path so it prints, not blanks.
     if (tr.hasUnrenderableText(order, items)) return false;
-    const buf = Buffer.concat([beepPrefix(settings), await tr.kitchenTicketRaster(order, items, { ...opts, size: settings.kitchen_ticket_size })]);
+    const buf = Buffer.concat([beepPrefix(settings), await tr.kitchenTicketRaster(order, items, { ...opts, size: settings.kitchen_ticket_size, bilingual: settings.kitchen_language === 'en_th' })]);
     for (let c = 0; c < (dest.copies || 1); c++) {
       await sendRaw(dest.ip, dest.port, buf, { printerName: dest.printerName, lprQueue: dest.lprQueue });
     }

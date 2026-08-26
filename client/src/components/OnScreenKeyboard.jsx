@@ -75,6 +75,11 @@ function fieldKind(el) {
   const t = String(el.type || 'text').toLowerCase();
   if (t === 'number') return 'decimal';   // legacy — swept to text+inputMode, but stay safe
   if (t === 'tel') return 'tel';
+  // SEPOS-OSK-004 — password boxes fell through to null, so a keyboard-less
+  // touchscreen could not type in them AT ALL (Yum Yum: the Add-Staff PIN box,
+  // Back Office password, host sync-secret). Short ones are PINs → number pad;
+  // anything longer gets the full keyboard.
+  if (t === 'password') return (Number(el.maxLength) > 0 && Number(el.maxLength) <= 6) ? 'numeric' : 'text';
   return ['text', 'search', 'email', 'url', ''].includes(t) ? 'text' : null;
 }
 

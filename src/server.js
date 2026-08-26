@@ -8245,8 +8245,14 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
   // still reaches the till + sends the confirmation email, just no card charge —
   // regardless of ad blockers that block Stripe.js. Per-restaurant: real client
   // deployments (no flag) keep real Stripe untouched.
-  let mock = false;
-  try { const s = await loadSettings(); mock = String(s.takeaway_mock_pay || '') === '1'; } catch {}
+  let mock = false, payMode = '';
+  try { const s = await loadSettings(); mock = String(s.takeaway_mock_pay || '') === '1'; payMode = String(s.takeaway_pay_mode || ''); } catch {}
+  // SEPOS-VOUCHER-KEYS-001 — a tenant can hold live Stripe keys for VOUCHER
+  // sales while takeaway stays pay-on-collection: takeaway_pay_mode='collection'
+  // forces the no-payment takeaway flow without hiding the keys from
+  // voucherService. Orders then land 'unpaid' and the till's Collected guard
+  // (SEPOS-TA-COLLECT-001) makes staff take payment — same as a keyless tenant.
+  if (payMode === 'collection') return res.json({ configured: false, publishable_key: null });
   const sp = siampayCfg();
   if (!mock && sp) {
     // SIAMPAY-002 — widget must init Stripe.js WITH the connected account so

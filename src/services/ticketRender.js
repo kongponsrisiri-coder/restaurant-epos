@@ -227,7 +227,10 @@ async function kitchenTicketRaster(order, items, opts = {}) {
     lines.push({ text: `${it.quantity || 1} × ${it.name || it.item_name || ''}`, size: 32, gap: 2 });
     // SEPOS-THAI-TICKET-001 — classic-builder parity: the Thai name line the
     // chef actually reads (classic prints name_alt when bilingual, default on).
-    const nameAlt = it.name_alt || it.name_th || '';
+    // SEPOS-LANG-001 (Korakot, 26 Aug) — the rendered path must RESPECT the
+    // kitchen-language setting like the classic path always did: 1st-only
+    // venues stopped getting their choice when rendered became the default.
+    const nameAlt = (opts.bilingual !== false) ? (it.name_alt || it.name_th || '') : '';
     if (nameAlt) lines.push({ text: String(nameAlt), size: 28, indent: 34, gap: 2 });
     // SEPOS-024b parity — the free-text special request ("Mild", "ALLERGY — no
     // peanuts") is the line a kitchen must never miss.
@@ -272,7 +275,7 @@ async function _linesFor(order, items, opts) {
   ];
   for (const it of items || []) {
     lines.push({ text: `${it.quantity} × ${it.name}`, size: 32, gap: 2 });
-    const alt = it.name_alt || it.name_th || '';   // SEPOS-THAI-TICKET-001 — preview matches the real ticket
+    const alt = (opts.bilingual !== false) ? (it.name_alt || it.name_th || '') : '';   // SEPOS-LANG-001 — preview matches the real ticket
     if (alt) lines.push({ text: String(alt), size: 28, indent: 34, gap: 2 });
     if (it.item_note) lines.push({ text: `** ${it.item_note} **`, size: 26, bold: true, indent: 34, gap: 2 });
     if (it.notes) lines.push({ text: it.notes, size: 26, bold: true, indent: 34, gap: 4 });

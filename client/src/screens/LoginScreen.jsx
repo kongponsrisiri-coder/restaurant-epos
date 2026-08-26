@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { loginStaff, clockToggle, emailLogin, requestLoginLink, consumeLoginLink, storePinSession, getStaff, getRestaurant, getSettings, changeStaffPin, pushCfdState } from '../api';
+import { loginStaff, clockToggle, emailLogin, requestLoginLink, consumeLoginLink, storePinSession, getStaff, getRestaurant, getSettings, changeStaffPin, pushCfdState, requestDeviceAuth, consumeDeviceAuth } from '../api';
 import { resetDevice, currentTillTarget, canSwitchClient } from '../utils/deviceReset';
 import { NAVY, GOLD, RED, GREEN } from '../theme'; // SEPOS-BRAND-001 — per-client brand colours
 
@@ -63,6 +63,11 @@ const isManagerRole = (role) => role === 'admin' || role === 'manager';
 export default function LoginScreen({ onLogin }) {
   const [pin, setPin]         = useState('');
   const [error, setError]     = useState('');
+  // SEPOS-DEVICE-AUTH-001 — public cloud till gated behind email device auth.
+  const [deviceAuthNeeded, setDeviceAuthNeeded] = useState(false);
+  const [deviceEmail, setDeviceEmail] = useState('');
+  const [deviceMsg, setDeviceMsg] = useState('');
+  const [deviceBusy, setDeviceBusy] = useState(false);
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   // True from mount until the first data-load either succeeds or exhausts its
@@ -168,13 +173,49 @@ export default function LoginScreen({ onLogin }) {
     return () => { cancelled = true; };
   }, []);
 
+  // SEPOS-DEVICE-AUTH-001 — arriving from the authorisation email:
+  // /?device_token=… — consume once, store the long-lived device token,
+  // clean the URL, and carry on to the normal sign-in.
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const t = q.get('device_token');
+      if (!t) return;
+      (async () => {
+        const r = await consumeDeviceAuth(t);
+        if (r?.device_token) {
+          try { localStorage.setItem('siamepos_device_token', r.device_token); } catch {}
+          setDeviceAuthNeeded(false);
+          setSuccess('Device authorised — sign in below.');
+        } else {
+          setDeviceAuthNeeded(true);
+          setDeviceMsg(r?.error || 'That link expired — request a new one.');
+        }
+        try { window.history.replaceState(null, '', window.location.pathname + window.location.hash); } catch {}
+      })();
+    } catch {}
+  }, []);
+
+  async function requestDeviceLink() {
+    if (!deviceEmail.includes('@') || deviceBusy) return;
+    setDeviceBusy(true); setDeviceMsg('');
+    try {
+      const r = await requestDeviceAuth(deviceEmail.trim());
+      setDeviceMsg(r?.error || 'Link sent if that email has access — open the email ON THIS DEVICE and tap Authorise.');
+    } catch {
+      setDeviceMsg('Could not request the link — check the connection.');
+    } finally { setDeviceBusy(false); }
+  }
+
   async function handleLogin(pinToUse) {
     const p = pinToUse ?? pin;
     if (!p) return;
     setLoading(true); setError(''); setSuccess('');
     try {
       const staff = await loginStaff(p);
-      if (staff?.error || !staff?.id) {
+      if (staff?.device_auth_required) {
+        setDeviceAuthNeeded(true); setPin('');
+      } else if (staff?.error || !staff?.id) {
         setError('Incorrect PIN. Please try again.'); setPin('');
       } else if (selectedStaff && staff.id !== selectedStaff.id) {
         setError(`That PIN isn't ${selectedStaff.name}'s. Check your name and PIN.`); setPin('');
@@ -346,7 +387,41 @@ export default function LoginScreen({ onLogin }) {
 
   // ── right content (staff grid / PIN / email) ───────────────────────────────
   let panelContent;
-  if (mustChange) {
+  if (deviceAuthNeeded) {
+    // SEPOS-DEVICE-AUTH-001 — this browser has not been authorised for the
+    // till. Email gate before the PIN pad ever works.
+    panelContent = (
+      <div style={{ maxWidth: 380, margin: '0 auto', width: '100%', textAlign: 'center' }}>
+        <div style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: INK }}>Authorise this device</div>
+        <p style={{ fontSize: 14, color: '#7C766A', margin: '10px 0 22px', lineHeight: 1.5 }}>
+          This till link needs a one-time email check before staff can sign in on this
+          device. Enter the owner or manager email — we'll send a link to tap
+          <b> on this device</b>.
+        </p>
+        <input
+          type="email"
+          value={deviceEmail}
+          onChange={(e) => setDeviceEmail(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') requestDeviceLink(); }}
+          placeholder="name@example.com"
+          style={{ width: '100%', boxSizing: 'border-box', padding: '14px 16px', borderRadius: 12,
+            border: `1.5px solid ${CARD_BORDER}`, fontSize: 16, textAlign: 'center', marginBottom: 12 }}
+        />
+        <button
+          onClick={requestDeviceLink}
+          disabled={deviceBusy || !deviceEmail.includes('@')}
+          style={{ width: '100%', padding: '14px 16px', borderRadius: 12, border: 'none',
+            background: deviceBusy || !deviceEmail.includes('@') ? '#cbd5e1' : NAVY, color: 'white',
+            fontSize: 16, fontWeight: 700, cursor: deviceBusy ? 'wait' : 'pointer' }}
+        >
+          {deviceBusy ? 'Sending…' : '📧 Send authorisation link'}
+        </button>
+        {deviceMsg && (
+          <p style={{ fontSize: 13, color: GOLD_ON_LIGHT, marginTop: 14, lineHeight: 1.5 }}>{deviceMsg}</p>
+        )}
+      </div>
+    );
+  } else if (mustChange) {
     // SEPOS-SEC-LOGIN — mandatory PIN change after signing in with the default.
     panelContent = (
       <div style={{ maxWidth: 340, margin: '0 auto', width: '100%', textAlign: 'center' }}>

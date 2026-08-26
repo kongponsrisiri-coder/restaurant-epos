@@ -2270,6 +2270,14 @@ function _isWeakPin(p) { return _WEAK_PINS.has(String(p || '')); }
 
 app.post('/api/staff/login', async (req, res) => {
   try {
+    // SEPOS-DEVICE-AUTH-001 — on cloud tills with the gate switched on, only
+    // email-authorised devices may reach the PIN check at all. Local/Electron
+    // installs never enforce (deviceAuthRequired is false in local mode).
+    if (await deviceAuthRequired()) {
+      if (!await deviceTokenValid(req.get('x-device-token'))) {
+        return res.status(401).json({ error: 'This device needs authorisation before staff can sign in.', device_auth_required: true });
+      }
+    }
     const { pin } = req.body;
     // F16 — with trust proxy set this is the venue's real address, but every
     // till in a restaurant shares it, so a HARD lockout would still take the
@@ -2576,6 +2584,121 @@ app.post('/api/auth/set-credentials', async (req, res) => {
     );
     res.json({ id: ins.rows[0].id, created: true, pin: ownerPin });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── SEPOS-DEVICE-AUTH-001 — email-authorised devices for public till URLs ──
+// A cloud till URL guarded only by 4-digit PINs is too thin once the link is
+// public. When settings.require_device_auth='1' (per tenant, default OFF) and
+// this is a CLOUD instance, /api/staff/login demands an x-device-token from a
+// device that verified by email: an active admin/manager/supervisor staff
+// email, or the SiamEPOS support allowlist (SUPPORT_ACCESS_EMAILS env).
+// Local/Electron installs and LAN tablets talk to local servers and are never
+// gated. Reuses the magic-link pattern: sha256-stored, single-use links,
+// 180-day device tokens.
+const SUPPORT_ACCESS_EMAILS = String(process.env.SUPPORT_ACCESS_EMAILS || 'kongponsrisiri@gmail.com,info@siamepos.co.uk')
+  .split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+
+async function deviceAuthRequired() {
+  if (process.env.FORCE_DEVICE_AUTH === '1') return true;   // test hook
+  if (String(process.env.DB_MODE || '').toLowerCase() === 'local') return false;
+  try {
+    const r = await pool.query(`SELECT value FROM settings WHERE key = 'require_device_auth'`);
+    return String(r.rows[0]?.value || '') === '1';
+  } catch { return false; }
+}
+
+async function deviceTokenValid(raw) {
+  if (!raw) return false;
+  const hash = crypto.createHash('sha256').update(String(raw)).digest('hex');
+  const r = await pool.query(
+    `SELECT id, expires_at FROM trusted_devices WHERE token_hash = $1`, [hash]);
+  const row = r.rows[0];
+  if (!row) return false;
+  if (new Date(row.expires_at).getTime() < Date.now()) return false;
+  pool.query(`UPDATE trusted_devices SET last_seen = NOW() WHERE id = $1`, [row.id]).catch(() => {});
+  return true;
+}
+
+app.post('/api/device/request-auth', async (req, res) => {
+  try {
+    if (!await deviceAuthRequired()) return res.json({ ok: true, not_required: true });
+    const email = String((req.body || {}).email || '').trim();
+    if (!email || !email.includes('@')) return res.status(400).json({ error: 'Email is required' });
+    if (!_linkReqAllowed('dev:' + (req.ip || '') + '|' + email.toLowerCase())) {
+      return res.status(429).json({ error: 'Too many requests — check your inbox (and spam), or wait a few minutes.' });
+    }
+    const ok = { ok: true, message: 'If that email can authorise this till, a link is on its way.' };
+    let allowed = SUPPORT_ACCESS_EMAILS.includes(email.toLowerCase());
+    if (!allowed) {
+      const r = await pool.query(
+        `SELECT id, role FROM staff WHERE LOWER(email) = LOWER($1) AND is_active = 1`, [email]);
+      allowed = !!(r.rows[0] && ['admin', 'manager', 'supervisor'].includes(r.rows[0].role));
+    }
+    if (!allowed) return res.json(ok);   // same reply — no enumeration
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    await pool.query(
+      `INSERT INTO device_links (token_hash, email, expires_at) VALUES ($1, $2, $3)`,
+      [tokenHash, email.toLowerCase(), expiresAt]);
+
+    const base = (req.get('origin') || process.env.PUBLIC_API_URL || '').replace(/\/$/, '');
+    const link = `${base}/?device_token=${token}`;
+    const name = process.env.RESTAURANT_NAME || 'SiamEPOS';
+    const { sendBrevoEmail } = require('./services/emailService');
+    const isProd = process.env.NODE_ENV === 'production';
+    try {
+      await sendBrevoEmail(email, `Authorise this device for ${name}`,
+        `<div style="font-family:Georgia,serif;max-width:480px;margin:0 auto;padding:24px;color:#0D1B3E;">
+          <h2 style="color:#0D1B3E;">Authorise a till device</h2>
+          <p style="font-family:system-ui,sans-serif;font-size:15px;line-height:1.5;color:#334155;">
+            Someone (hopefully you) asked to use the ${name} till on a new device.
+            Tap the button ON THAT DEVICE to authorise it. The link works once and expires in 15 minutes.
+          </p>
+          <p style="text-align:center;margin:28px 0;">
+            <a href="${link}" style="background:#C9A84C;color:#0D1B3E;font-family:system-ui,sans-serif;font-weight:700;text-decoration:none;padding:14px 28px;border-radius:10px;display:inline-block;">Authorise this device</a>
+          </p>
+          <p style="font-family:system-ui,sans-serif;font-size:12px;color:#94a3b8;">
+            If this wasn't you, ignore this email — the device stays locked out.
+          </p>
+        </div>`);
+    } catch (mailErr) {
+      if (isProd) throw mailErr;
+      console.error('[device-auth] dev: mail send failed (link still echoed):', mailErr.message);
+    }
+    if (!isProd) return res.json({ ...ok, dev_link: link });
+    res.json(ok);
+  } catch (err) {
+    console.error('[device-auth] request', err.message);
+    res.status(500).json({ error: 'Could not send the authorisation link.' });
+  }
+});
+
+app.post('/api/device/consume-auth', async (req, res) => {
+  try {
+    const token = String((req.body || {}).token || '').trim();
+    if (!token) return res.status(400).json({ error: 'Token required' });
+    const hash = crypto.createHash('sha256').update(token).digest('hex');
+    // Atomic single-use consume, same pattern as login_links.
+    const r = await pool.query(
+      `UPDATE device_links SET used_at = NOW()
+        WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
+        RETURNING email`, [hash]);
+    const row = r.rows[0];
+    if (!row) return res.status(400).json({ error: 'This link has expired or was already used — request a new one.' });
+    const deviceToken = crypto.randomBytes(48).toString('hex');
+    const deviceHash = crypto.createHash('sha256').update(deviceToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
+    await pool.query(
+      `INSERT INTO trusted_devices (token_hash, email, expires_at) VALUES ($1, $2, $3)`,
+      [deviceHash, row.email, expiresAt]);
+    console.log(`[device-auth] device authorised for ${row.email}`);
+    res.json({ ok: true, device_token: deviceToken, expires_at: expiresAt });
+  } catch (err) {
+    console.error('[device-auth] consume', err.message);
+    res.status(500).json({ error: 'Could not authorise this device.' });
+  }
 });
 
 // ─── SEPOS-OFFICE-001 — owner Back Office magic-link sign-in ────────────────

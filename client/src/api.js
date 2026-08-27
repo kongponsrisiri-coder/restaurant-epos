@@ -517,6 +517,11 @@ export const getItemModifiers = async (itemId) => {
 export const addModifierGroup = (itemId, group) => post(`/api/menu/items/${itemId}/modifiers`, group);
 // SEPOS-ALLERGEN-OPT-001 — one-tap create of the global dietary/allergen group (idempotent server-side).
 export const createDietaryPreset = () => post('/api/menu/dietary-preset', {});
+// SEPOS-ALLERGEN-SYNC-001 — manual allergen ticks through the helpers (raw
+// fetch silently fails on native tills — the MenuSection lesson). allergens
+// is the JSON-string form the endpoint stores verbatim.
+export const getDishAllergens  = () => get('/api/dish-allergens');
+export const saveDishAllergens = (menuItemId, allergens) => post(`/api/dish-allergens/${menuItemId}`, { allergens });
 export const addModifierOption = (groupId, option) => post(`/api/modifier-groups/${groupId}/options`, option);
 export const deleteModifierGroup = (groupId) => del(`/api/modifier-groups/${groupId}`);
 export const deleteModifier = (modifierId) => del(`/api/modifiers/${modifierId}`);

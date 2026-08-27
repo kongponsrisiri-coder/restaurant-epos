@@ -3256,6 +3256,21 @@ app.get('/api/settings', async (req, res) => {
 app.put('/api/settings', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     const updates = req.body;
+    // SEPOS-NAV-HIDE-001 — home guard, server-side: the till always needs
+    // Tables or Counter to land on. The Settings UI refuses this too, but a
+    // stale client (or a raw API call) must not be able to strand every till
+    // with no home tab. Checked against the EFFECTIVE result (payload value
+    // if present, stored value otherwise — a payload may carry one key only).
+    if ('nav_show_tables' in updates || 'nav_show_counter' in updates) {
+      const effective = async (key) => {
+        if (key in updates) return String(updates[key]);
+        const r = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
+        return String(r.rows[0]?.value ?? '1');
+      };
+      if ((await effective('nav_show_tables')) === '0' && (await effective('nav_show_counter')) === '0') {
+        return res.status(400).json({ error: 'The till needs at least one home screen — Tables and Counter cannot both be hidden.' });
+      }
+    }
     for (const [key, value] of Object.entries(updates)) {
       await pool.query('INSERT INTO settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', [key, value]);
     }

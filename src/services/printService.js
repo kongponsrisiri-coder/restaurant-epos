@@ -487,6 +487,28 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
 // got "TABLE 9" and looked at the wrong side of the room). When the caller
 // passes order.table_label, the heading uses it verbatim; otherwise the
 // numeric fallback is byte-identical to the old behaviour.
+//
+// SEPOS-FIRE-PRINT-001 (27 Aug) — v1.9.39's SEPOS-TA-LABEL-001 pointed every
+// classic-path heading at ticketRender's shared ticketTableLabel() but never
+// imported it into THIS file: the fire notice (classic-only, no rendered
+// path), the kitchen message ticket, and the classic receipt fallback all
+// threw ReferenceError on dine-in calls — the fire card died server-side and
+// desktop tills fell into a stuck browser-print window, fleet-wide as tills
+// restarted onto ≥v1.9.39. Lazy require (ticketRender's load is deliberately
+// guarded at every other call site) with a never-throw fallback that mirrors
+// the shared resolver's semantics exactly.
+function ticketTableLabel(order) {
+  try { return require('./ticketRender').ticketTableLabel(order); }
+  catch {
+    const raw = order && order.table_label && String(order.table_label).trim();
+    const takeawaySlot = order && Number(order.table_is_takeaway ?? 0) === 1;
+    let label = raw ? raw.toUpperCase() : `TABLE ${order && order.table_number != null ? order.table_number : '—'}`;
+    if (takeawaySlot && !/TAKE\s*AWAY/i.test(label)) {
+      label = `TAKEAWAY ${raw ? raw.toUpperCase() : (order && order.table_number != null ? order.table_number : '')}`.trim();
+    }
+    return label;
+  }
+}
 function tableHeading(order) {
   return ticketTableLabel(order);
 }

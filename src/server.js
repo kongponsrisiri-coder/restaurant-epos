@@ -11686,7 +11686,28 @@ app.post('/api/print/receipt', async (req, res) => {
       `SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt
        FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
        WHERE order_items.order_id = $1`, [order_id]);
-    await printService.printReceipt(settings, order, itemsRes.rows, payment_details || {});
+    // SEPOS-SPLIT-PRINT-001 — Split-by-Item: the client names the person's
+    // exact lines; print ONLY those (previously every split receipt carried
+    // the whole order's items under one person's total). Quantity + line
+    // discount come from the client's split (a person can take 2 of a line's
+    // 3 units). Unknown ids (stale client) → full list, never a blank receipt.
+    let receiptItems = itemsRes.rows;
+    const splitLines = Array.isArray(payment_details?.split_items) ? payment_details.split_items : null;
+    if (splitLines && splitLines.length) {
+      const byId = new Map(splitLines.map(s => [Number(s.id), s]));
+      const filtered = receiptItems
+        .filter(r => byId.has(Number(r.id)))
+        .map(r => {
+          const s = byId.get(Number(r.id));
+          return {
+            ...r,
+            quantity: Number(s.quantity) > 0 ? Number(s.quantity) : r.quantity,
+            ...(s.discount_value != null ? { discount_value: s.discount_value } : {}),
+          };
+        });
+      if (filtered.length) receiptItems = filtered;
+    }
+    await printService.printReceipt(settings, order, receiptItems, payment_details || {});
     res.json({ success: true });
   } catch (err) {
     console.error('[print/receipt]', err.message);

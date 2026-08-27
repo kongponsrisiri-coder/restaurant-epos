@@ -715,6 +715,12 @@ export default function BillScreen({ orderId, onClose, onPay }) {
         billTotal: p.total,
         method: 'Split by Item',
         amountPaid: p.total,
+        // SEPOS-SPLIT-PRINT-001 — the thermal path sends only order_id +
+        // totals, so the server printed the WHOLE order's items under this
+        // person's total. Name the person's exact lines: their share of a
+        // line's quantity and their scaled line discount travel too (a person
+        // can take 2 of a line's 3 units).
+        split_items: p.items.map(i => ({ id: i.id, quantity: i.quantity, discount_value: i.discount_value })),
       }
     });
     // SEPOS-062 — print only; staff taps 💵 Cash / 💳 Card to settle this person.

@@ -437,6 +437,30 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 📊 DELIVERED 2026-08-27 evening — Williamson Consulting site analysis + SEO report (Maya; Korakot dropped the URL)
+NOT a restaurant — property design/planning consultancy, Addlestone Surrey (Wix, 3 pages) — so analysis + SEO report only, no mockup rebuild yet (awaiting Korakot's word on the connection/next step). **Headline finding: the site is half-branded as another company** — every Google-facing page title says "Stedman Consulting", homepage H1 says "Stedman property consultants", About says "Williamson Property Consultants Ltd", logo/domain say Williamson. Plus: portfolio = image-only gallery (zero text for Google, camera-filename titles), no services page, no LocalBusiness schema, hidden abandoned "Get free evaluation" page, "reply within three business days" form promise. Deliverables: `~/Documents/SiamEPOS-Docs/client-sites/williamson-consulting/seo-analysis.md` + branded `seo-analysis.pdf` (+ archived HTML + screenshots). Internal sales intel per rule #4 — nothing cold-sent.
+
+### ⛔ PARKED 2026-08-27 — ghost-occupied table fix NOT built (Korakot's call: "no need to fix, it will make more problem")
+Fern's T 4 stuck "occupied" with no open order — root-caused as a two-device race: main till's close wrote "available", a second device's near-simultaneous tap wrote "occupied" after it; no order remained behind the flag. Released by hand (PUT /api/tables/16 status=available, Korakot ran it). **DECIDED: no code change** — the proposed occupied-with-no-open-order-shows-free floor-map rule is parked (risk of touching every till's floor logic > one rare stuck flag). Client coaching instead: don't open/tap a table on a second device while the main till is closing it. **Trigger to un-park: recurring stuck tables across venues.** Do not re-propose before the trigger. Table-status flips also have no audit trail — noted as a cheap add when SEPOS-VOIDLOG-001 builds its log.
+
+### 🔥 ROOT-CAUSED + FIXED 2026-08-27 evening — fire-card popup fleet-wide = missing import since v1.9.39 (Krit; commit `26d3a24`, ships tonight)
+Korakot + Thann Thai + Yum Yum all hit a stuck "siamepos-electron" window on Fire. **Root cause:** SEPOS-TA-LABEL-001 (v1.9.39, 25 Aug) pointed every classic-path ticket heading at ticketRender's shared `ticketTableLabel()` but **never imported it into printService.js** — fire notice (classic-only path), 📢 kitchen message, and the classic receipt fallback all threw `ReferenceError` on dine-in calls; the till then fell into the browser-print window, which on Electron can never close itself. Fleet-wide "worked earlier, broke by evening" = tills landing ≥v1.9.39 on staggered morning double-restarts, tonight = first full service. **Takeaway-shaped orders dodge the broken line — which made my first probe (order 183, takeaway) return success and I wrongly told Korakot "no code fix needed". Lesson: probe with the FAILING shape, not whatever order is lying around.** Fixed with a lazy-require + never-throw local resolver (mirrors shared semantics, heals all 3 sites); verified: the exact ReferenceError repro now passes 4 table shapes. Thann Thai's July binary predates the bug — their popup is separate; their owed restart lands them ON the broken version, so tonight's tag matters for them doubly. **ALSO FIXED same commit — SEPOS-SPLIT-PRINT-001** (board row above, Korakot's go): BillScreen sends `split_items` [{id, quantity, discount_value}]; `/api/print/receipt` filters + overrides (2-of-3-units case covered; unknown ids → full list, never blank). **Verified end-to-end**: scratch rig + byte-capture printer + decoded raster PNGs — split receipt = 2x Pad Thai + Tom Yum £33.95, no Rice; full receipt intact.
+
+### 🔨 BUILT 2026-08-27 evening — tonight's cut committed, PUSH HELD for after service: SEPOS-ALLERGEN-SYNC-001 + SEPOS-NAV-HIDE-001 (Krit; commit `ddd1dd7`)
+**① SEPOS-ALLERGEN-SYNC-001 (Den's Yum Yum report, "very old issue" root-caused):** `dish_allergens` existed ONLY in SQLite — no cloud tenant ever had the table (broke the three-edits rule), so every cloud-side allergen save 500'd and till edits queued cloud replications into a black hole; devices could never agree. Fixed: PG table in database.js (self-migrates on deploy), sync pull entry (pk `menu_item_id`, cloud `id` stripped — sequences grew independently), **diff-based backfill** pushes marooned local rows up (non-empty only), AllergenSection off raw fetch → api.js helpers + assertOk. **RUN on a two-instance rig** (scratch PG16 cloud + fresh SQLite till): table auto-creates ✓ pull down ✓ cloud-edit propagates ✓ backfill pushed exactly the non-empty diff ✓ till edit forwards up ✓. **Post-deploy for Yum Yum:** till auto-backfills Den's latest work; then merge the 94 pre-reset rows recovered from the .bak (`scripts/.secrets-yumyum-allergens-from-bak-2026-08-27.json`), newest-wins per dish. **② SEPOS-NAV-HIDE-001 (Korakot, Phakoon visit):** five `nav_show_*` settings (default shown = zero fleet change) hide Reservations/Kitchen/Bar/Tables/Counter tabs; hidden beats plan-locked; home-tab guard (never both Tables+Counter) in Settings UI AND server-side (4 cases verified incl. stored-state); all home landings via `homeScreenKey()`; Settings → Navigation card. Vite build green. **Still before ship tonight:** Chrome UI walk on a fresh till (nav filtering + bounce), version bumps (electron 1.9.44, sw, APP_VERSION), tag, 8/8 assets, APK pair, canary, EN+TH patch note.
+
+### 🐛 CONFIRMED 2026-08-27 — SEPOS-SPLIT-PRINT-001: Split-by-Item thermal receipts print the WHOLE order's items with one person's total (Krit; Yum Yum live receipts, day 2)
+Korakot's photo: two OUT5 receipts, same 4 item lines, totals £27.39 vs £22.99. Money is CORRECT (splits sum to the full £45.80+10% = £50.38); the defect is presentation. Root cause: `BillScreen.handleSplitItemPrint` builds the person's item list (`p.items`) but the thermal path (`ReceiptPrinter.printReceipt` → `serverPrintReceipt(order.id, paymentDetails)`) sends only order_id + totals — `/api/print/receipt` (server.js ~11633) refetches ALL order_items from the DB and prints them with the split subtotal from payment_details. Browser-print fallback is unaffected (uses the passed items). Split-EQUAL receipts also print all items with a 1/N total — that one is arguably intended (whole bill, your share). Fix direction: pass the person's line selection through payment_details and have the print route honour it (both print paths — server.js AND cloudRelay per [[project_two_print_paths]]). NOT YET FIXED — awaiting Korakot's go.
+
+### ✅ DONE 2026-08-27 — task #43: Yum Yum lost staff hours RECOVERED from the .bak (Krit)
+Korakot had downloaded the till's pre-reset DB (`~/Downloads/siamepos-local.db*.bak`) on the 26th — read-only extraction done on a scratch copy (WAL re-paired so nothing in the log was missed). All 20 clock events 24–26 Aug recovered, paired into shifts, UTC→UK times converted: **`~/Documents/SiamEPOS-Docs/client-sites/yum-yum-thai-bath/clock-records-recovered-24-26-Aug-2026.csv`**. Reading: Mon–Tue rows are mostly practice (23:00 clock-ins, 10-second in/outs); Den + Jack Mon→Tue are forgotten overnight clock-outs (19–25h — flag for the owner); Wed 26 morning rows are the real go-live shifts, several still open when the file was taken (~16:45). Reminder stands: clock records are LOCAL-ONLY — the fresh post-reset DB only has events from the reset onward.
+
+### 🏗️ IN PROGRESS 2026-08-27 — PHAKOON till install prep: clean tenant (Krit + Korakot; heading restored after a concurrent-edit clobber — re-read before editing, everyone)
+Korakot is installing the till at Phakoon — cloud tenant being cleaned first. **Backed up** all test data (7 open orders + 1 closed bill w/ items+payments, via the sync feeds) → `scripts/.secrets-phakoon-testdata-backup-2026-08-27.json`. **Wipe script ready:** `node scripts/phakoon-golive-wipe.js <ADMIN_PIN>` (deletes the 8 test orders via the standard cascade; keeps menu 95 items / 16 cats, 10 tables, settings, staff; verifies clean after; tenant-name sanity check before deleting). Korakot runs it himself — this session's permission classifier blocks PIN-bearing calls. Till config for the install wizard: `scripts/.secrets-phakoon-config.txt`. **⚠️ OPEN DECISIONS before doors:** ① `takeaway_mock_pay=1` + QR ordering ON + SiamPay TEST keys still on the Railway — real card money is still blocked on AUDIT-002 wave 1, so live options are pay-on-collection (clear mock_pay) or QR off; Korakot's call. ② Walk `~/Documents/SiamEPOS-Docs/manuals/SiamEPOS-GoLive-Checklist.md` on their till (takeaway slots, menu spot-check, hours, PIN off 1234, printers). ③ `settings.restaurant_name` still says "SiamEPOS" (company_name is right — login falls back correctly, cosmetic).
+
+### 📱 QUEUED 2026-08-27 — Yum Yum Thai welcome post → approval board (Mint; Korakot asked to review)
+`siamepos-2026-08-yumyum-welcome-01` PENDING on Control Room → Social → siamepos tab, proposed **today 17:00**. Card = the go-live photo of both owners with the Yum Yum till (from `client-sites/yum-yum-thai-bath/photos/golive-2026-08-25/`), brand-framed, Thai caption signed — กต + hashtags. Assets filed to `social/siamepos/2026-08/post-yumyum-welcome-*`. ⚠️ Caption says "วันนี้ระบบเปิดใช้งาน" but go-live was Mon 25 Aug — fine if it posts today-ish; amend the line if it slips. Reboot health-check same session: Control Room + meta-handoff + weekly-report all clean after the 13:08 restart; Fri 28 Aug 11:00 kn-staff post verified still in Meta's scheduler.
+
 ### 🎉 GO-LIVE 2026-08-25 — BAANRAI THAI CAFÉ IS LIVE TRADING · Yum Yum Thai goes live TOMORROW 26 Aug (Korakot)
 **Baanrai (Wetherby): LIVE as of today — 21 orders on day one**, Windows till v1.9.38, cloud current. **NOT PAYING until their VDIT contract ends** (hook-first, Korakot's strategy) — ops card **SE-0015 → status live, founder plan, billing note set**. Day-one fixes shipped same day: takeaway slots renamed (TAKEAWAY n on tickets — was TABLE n), Thai Time menu rebuilt from their update PDF (2-course, protein-priced, starter choice). ⚠️ Open for Baanrai: dine-in table-plan duplicate cleanup (25 rows for 12 tables — five No.1s, six No.2s) with Korakot on TeamViewer; WordPress ordering-widget snippet with their site person; website build (Maya).
 **Yum Yum (Bath): GO-LIVE TOMORROW 26 Aug** — ops SE-0014 stamped go_live_planned. Today's prep all done: ordering + booking widgets live on their real Wix site (GloriaFood takeaway retired), 4 menus loaded (Lunch w/ same-price protein · Desserts · Kids · full BAR incl. wine/spirit ladders — bar is dine-in only per Korakot), cart +/− hotfix, cloud test data wiped. **⚠️ MUST-DO before doors tomorrow: local-till fresh-DB step** (quit app → delete `%APPDATA%\siamepos-electron\siamepos-local.db*` → relaunch; closed orders re-pull from cloud, weekend local test sales vanish) + **change admin PIN off 1234** + supervised test order + booking. Their 16 orders this evening = staff practice/early use — they sync to cloud so the DB step doesn't lose them.
@@ -1400,6 +1424,7 @@ Korakot explored Namecheap's affiliate program; verdict = not worth it at our sc
 
 | Date | From | To | Message |
 |------|------|----|---------|
+| 2026-08-27 | Mint | Korakot | **🌅 Daily maintenance run — amended 0 · posted 0 (never my job) · drafted 0 (weekly = Sunday run) · all clear, nothing needed from you.** **Queue:** 🛒 retail pricing published Wed 26 11:00 on the minute, reconciled `posted` ✓. Final two wk5 posts re-verified live on Facebook's native scheduler (`GET /scheduled_posts`, both IDs present): **today Thu 27 💬 fast replies · Fri 28 👥 staff — both 11:00**, board honest, no double-post risk. **Denies:** none new; `kn-retailstock` stays DROPPED (duplicate rule), no v2s due. **Page health:** siamepos GREEN (posted Mon–Wed daily, covered to Fri; wk5 then complete). Duangwannee excluded (discontinued). **Photo inbox** empty across all folders (Tue's Yum Yum shots already filed). **Blocker unchanged:** Jinta page-admin access still not shared (no token in `.infra-keys`) — pilot batch #1 stays frozen. Next drafting = Sunday 30 Aug run (Sept wk1). |
 | 2026-08-26 | Mint | Korakot | **🌅 Daily maintenance run — amended 0 · posted 0 (never my job) · drafted 0 (weekly = Sunday run) · filed 5 photos.** **📸 Photo inbox: NEW `yum-yum-thai` folder** with 5 go-live shots (RAW / CORRECTED / SAFE / SOCIAL-1080×1350 / BEFORE-AFTER, dropped Tue evening) — filed into `~/Documents/SiamEPOS-Docs/client-sites/yum-yum-thai-bath/photos/golive-2026-08-25/`, inbox cleared. Note: Yum Yum isn't a social client yet — no `social/yum-yum-thai-bath/BRAND.md` kit, no page token; if you want their page on the social service, the onboarding runbook applies (they add you as page admin first). If those shots were prepped for a specific post, tell me which and I'll draft it for the board. **Queue:** 💆 spa add-ons published Tue 25 11:00 on the minute, reconciled `posted` ✓. Remaining wk5 re-verified live on Facebook's scheduler (`GET /scheduled_posts`, all 3 IDs present): **today Wed 26 🛒 pricing · Thu 27 💬 fast replies · Fri 28 👥 staff — all 11:00**, board honest, no double-post risk. **Denies:** none new; `kn-retailstock` stays DROPPED (duplicate rule). **Page health:** siamepos GREEN (posted Mon + Tue, covered to Fri). **Blocker unchanged:** Jinta page-admin access still not shared (no token in `.infra-keys`) — pilot batch #1 stays frozen. |
 | 2026-08-25 | Mint | Korakot | **🌅 Daily maintenance run — amended 0 · posted 0 (never my job) · drafted 0 (weekly = Sunday run).** **💆 spa add-ons published today 11:00 on the minute** via Facebook's scheduler. One fix applied: its queue JSON was still `approved` because the 09:16 handoff run hit a transient Meta API error (`could not read scheduled_posts` — failed safe, logged SKIP) and launchd hadn't re-fired since (Mac asleep) — I ran `meta-handoff.py` once manually, reconcile CLOSED it to `posted`, board honest again. Remaining wk5 re-verified live on Facebook's scheduler: Wed 26 🛒 pricing · Thu 27 💬 fast replies · Fri 28 👥 staff — all 11:00, no double-post risk. **Denies:** none new; `kn-retailstock` stays DROPPED (duplicate rule). **Page health:** siamepos GREEN (posted today, covered to Fri). **Photo inbox** empty. **Blocker unchanged:** Jinta page-admin access still not shared — pilot batch #1 frozen. |
 | 2026-08-24 | Mint | Korakot | **🌅 Daily maintenance run — queue clean, nothing needed from you.** Amended 0 · posted 0 (never my job) · drafted 0 (weekly drafting = Sunday run; wk5 already fully handed over). **wk5 pipeline re-verified live on Facebook's native scheduler** (`GET /scheduled_posts`, all 5 present with correct slots): Mon 24 11:00 🍽 bank-holiday prep (fires later this morning) · Tue 25 💆 spa add-ons · Wed 26 🛒 import pricing · Thu 27 💬 fast replies · Fri 28 👥 staff retention — all 11:00, all with `native_scheduled_id` stamped, board honest, no double-post risk. **Denies:** none new; `kn-retailstock` stays DROPPED (duplicate rule), no v2s due anywhere. **Page health:** siamepos GREEN — last live post Sat 22 16:00 UTC (ad-costtool), next lands today 11:00, wk5 covered Mon–Fri. Duangwannee quiet but DISCONTINUED — intentionally excluded. **Photo inbox** empty across all 5 folders. **Blocker unchanged:** Jinta page-admin access still not shared — pilot batch #1 stays frozen. Tomorrow's run verifies today's 11:00 fire + reconcile. |
@@ -1543,6 +1568,11 @@ Korakot explored Namecheap's affiliate program; verdict = not worth it at our sc
 
 | # | Ticket | Description | Assigned |
 |---|--------|-------------|----------|
+| 2 | **SEPOS-ORDER-CHIME-001** | **Sound alert for new online orders** — chime on the staff tills, repeats every ~25s until the order is viewed ("sometimes no one at the till" — client via Korakot 27 Aug); hooks the socket events already relayed everywhere; default ON with a Settings toggle; never on the customer display. NEXT CUT with VOIDLOG + ITEM-MOVE (Korakot: build both). Spec: `~/Documents/Claude/Projects/SiamEpos/SEPOS-ORDER-CHIME-001-Krit-Ticket.md`. ~½ day. | Krit |
+| 2 | **SEPOS-VOIDLOG-001** | **Void & Discount log** — capture WHO/WHEN on every void (voided_by/at on order_items) + append-only discount_log; Admin → Reports "Voids & Discounts" tab + CSV; syncs to cloud so owners read it on their phone. Client comment via Korakot 27 Aug. NEXT CUT. Spec: `~/Documents/Claude/Projects/SiamEpos/SEPOS-VOIDLOG-001-Krit-Ticket.md`. 1–2 days. | Krit |
+| 2 | **SEPOS-ITEM-MOVE-001** | **Move individual items table→table** — re-parent order_items with money guards (refuse on paid/QR orders), both totals recomputed, KDS re-home via new relayed `item_moved` event, offline-queue op, audit row (writes into VOIDLOG's log — build that first). Client comment via Korakot 27 Aug. NEXT CUT, after VOIDLOG. Spec: `~/Documents/Claude/Projects/SiamEpos/SEPOS-ITEM-MOVE-001-Krit-Ticket.md`. 2–3 days. | Krit |
+| 1 | **SEPOS-NARROW-TILL-001** | **UI polish for square-ish POS screens (5:4/4:3)** — Phakoon's till (Korakot's visit 27 Aug): desktop layout assumes 16:9 width; audit + narrow-desktop CSS tier at 1280×1024 + 1024×768, verify on Phakoon's real hardware. Scoped+pending per Korakot — batch with next update. Spec: `~/Documents/Claude/Projects/SiamEpos/SEPOS-NARROW-TILL-001-Krit-Ticket.md`. 1–2 days. | Krit |
+| 1 | **SEPOS-NAV-HIDE-001** | **Hide Reservations/Kitchen/Bar/Tables/Counter tabs per restaurant** — five settings toggles (default shown, no fleet change on ship), single `navItems` filter in App.jsx + Settings block; handles role-landing fallbacks, hidden-beats-locked, bounce-off-hidden-screen, and a HOME-TAB GUARD (Tables/Counter: hide either, never both — UI + server refuse; every setScreen fallback routes to the effective home). Scoped+pending per Korakot (27 Aug, Phakoon visit; Tables/Counter added same day) — batch with SEPOS-NARROW-TILL-001. Spec: `~/Documents/Claude/Projects/SiamEpos/SEPOS-NAV-HIDE-001-Krit-Ticket.md`. ~1 day. | Krit |
 | 0 | **BO-ONBOARD-001** | **Client signup kiosk mode — `/onboard` route on ops.siamepos.co.uk.** Korakot opens this URL on his tablet when with a client. No sidebar, no nav, just the SiamEPOS logo + clean wizard form. Steps: product choice → restaurant details → address → plan cards → Stripe payment → confirmation. On completion: client record created in back office (`status: in_setup`) + Korakot gets email notification. Full spec: `~/Documents/Claude/Projects/SiamEpos/BO-ONBOARD-001-Pose-Ticket.md`. Pose only — 3–4 days. | Pose |
 | 0 | **SEPOS-SUPPORT-LINE-001** | **LINE AI Support Bot — Claude-powered first-line support for SiamEPOS clients.** Client messages SiamEPOS LINE Official Account → Claude tries to fix it → if can't resolve after 2 attempts, pings Korakot via LINE DM with full conversation summary. Handles: printer issues, login problems, menu/cache fixes, booking widget, desktop app sync, Z-report questions. Claude replies in Thai if client writes in Thai. Reply messages are free on LINE. Cost: ~£0–2/month. **Korakot setup (30 min, no code):** create LINE Official Account at account.line.biz → enable Messaging API → send Krit the Channel Secret + Channel Access Token. **Krit builds:** `POST /api/line/webhook` endpoint + Claude API call with knowledge base system prompt + escalation DM to Korakot. `npm install @line/bot-sdk`. No DB changes. Full spec: `~/Documents/Claude/Projects/SiamEpos/SEPOS-SUPPORT-LINE-001-Krit-Ticket.md`. Estimated: 3–5 days. | Krit |
 | 0 | **SEPOS-LOCAL-001** | **Device-First Architecture — SQLite primary, Railway 30-day relay.** 5 phases: (1) Nightly local archive — bills CSV + Z-report PDF auto-saved to `~/Documents/SiamEPOS-Records/YYYY/MM/` at 2 AM for HMRC 6-year compliance. (2) Stop circular closed-order pull — Mac already has orders it created, stop re-pulling them from Railway. (3) One-time data migration — import all existing Railway history into SQLite on first boot (with progress bar). (4) Railway slimming — daily cleanup deletes closed orders older than 30 days on Railway; ~70% Postgres cost reduction per client. (5) Admin UI — Data Storage card showing local vs cloud record counts, last sync time, archive folder link. **Full spec:** `~/Documents/Claude/Projects/SiamEpos/SEPOS-LOCAL-001-Krit-Ticket.md`. Timeline: 2–3 weeks. Ship Phase 1 (nightly archive) first — most important for HMRC compliance and fully independent. | Krit |
@@ -1694,3 +1724,96 @@ wp-mail-smtp still deprecate silently, Site Health shows "11 items should be
 improved" → stable today, fragile underneath. Open thread: WHO flipped the
 switch (owner? IONOS support? a still-active web person?) — Korakot
 confirming; affects how Sam frames the Lane-B pitch. Pitch window is NOW.
+
+**✅ SAM — SPA-TILL-TENANT-LEAK-001 fix COMMITTED (2026-08-27, commit
+`04a5aa2`).** Krit's 2026-08-20 incident fix (removing the build command +
+demo `VITE_API_BASE` from `client/.netlify/netlify.toml`) had been sitting
+UNCOMMITTED in the spa working tree since the incident — a fresh checkout would have
+restored the demo-leak behaviour. Now committed + pushed so it can't regress.
+Reminder stands: per-tenant deploys = build with the tenant's base,
+grep-verify the base in `dist`, deploy `--no-build`, verify the live bundle.
+
+**🔨 SAM — CLIENT FEEDBACK BATCH CONFIRMED (2026-08-27, Korakot's go).** Three
+till asks from the spa client, scoped + confirmed: ① SPA-BLOCK-EASY-001
+one-tap diary Block button (no treatment/client/form — duration chips +
+optional reason; blocks already silent + slot-holding since 7bea883, this
+removes the form friction). ② SPA-VOUCHER-UPGRADE-001 — session-voucher
+redemption becomes value-aware: 60-min session on a 90-min bill credits the
+per-session value, leaves the difference DUE (till prompt + server-side
+refuse-to-close guard so stale tills can't silently close); smaller-treatment
+direction = allow with warning (option b, Korakot). ③ folded into ② — split
+already has monetary vouchers; the session-voucher path IS the missing
+"voucher + pay difference" route. Starting with ① per Korakot. Deploys to all
+3 tenants + rides desktop v0.2.50 when tagged.
+
+**🚀 SAM — SPA-BLOCK-EASY-001 SHIPPED (2026-08-27, commit `7ca48dd`) — ⚠️
+DEPLOY PARTIAL, 3 surfaces waiting on Korakot.** One-tap 🚫 Block button on
+the diary (mini modal: therapist + from-time + duration chips + optional
+reason — no treatment, no client), "just block this time" escape hatch in
+the New Appointment form, grey Blocked strips with 🗑 Remove as the only
+action, server accepts treatment-less blocks (duration_minutes), skips rota
+check for blocks, refuses to bill them, keeps length on move. Smoke-tested
+on throwaway PG16 + local SQLite (7 cases each, all green). **LIVE:** demo
+backend + jinta-api (git auto, both SUCCESS on 7ca48dd) + spa.siamepos.co.uk
+(bundle verified serving the feature). **NOT YET LIVE:** highbury-api
+(`railway up` needed), highbury + jinta Netlify tills — this session's
+permission classifier blocks deploy commands; exact commands handed to
+Korakot in-chat. Highbury dist is pre-built + grep-verified (railway.app
+base ✓) in client/dist. NB for future deploys: jinta till's REAL base is
+`jinta-api-production.up.railway.app` (the jinta-api.siamepos.co.uk custom
+domain is dead TLS — setup doc is stale). Voucher work (SPA-VOUCHER-
+UPGRADE-001) starts next.
+
+**🔧 SAM — SPA-BLOCK-EASY-001 ROLLOUT PREP (2026-08-27, session 2 after Mac
+restart).** Restart lost nothing (repo clean at `7ca48dd`, fsck clean, demo +
+jinta already live on `7ca48dd`). Remaining 3 surfaces still blocked by the
+permission classifier (`railway up` + `netlify deploy` both denied again), so
+prepped instead: jinta till bundle built to `client/dist-jinta` with base
+`jinta-api-production.up.railway.app` (grep-verified ✓, 3 hits, spa-api refs
+are the EmbedCodes fallback only — same as the approved highbury dist);
+highbury dist untouched + re-verified in `client/dist`. Railway CLI confirmed
+linked to Highbury Spa project. Exact `!`-prefix commands handed to Korakot;
+offered a settings permission rule so future deploys don't need him.
+
+**✅ SAM — SPA-BLOCK-EASY-001 ROLLOUT COMPLETE (2026-08-27 ~12:30 UTC, all 3
+remaining surfaces).** Korakot ran the `!`-prefix commands; Sam verified each:
+highbury-api (`railway up`, fresh boot clean — schema ready, tills
+reconnected; health shows `cli-deploy` by design, no RAILWAY_GIT_COMMIT_SHA
+on CLI uploads), highbury.siamepos.co.uk till (live bundle
+`index-46Mp9fT5.js` → highbury-api-production base ✓), jinta.siamepos.co.uk
+till (live bundle `index-DA4H-go0.js` → jinta-api-production base ✓). With
+demo + jinta-api + spa.siamepos.co.uk already live earlier today, `7ca48dd`
+is now on ALL tenants. Still pending: desktop till build v0.2.50 (Krit,
+build-only, when tagged). Next: SPA-VOUCHER-UPGRADE-001.
+
+**🚀 SAM — SPA-VOUCHER-UPGRADE-001 SHIPPED (2026-08-27, commit `e2e146e`) —
+⚠ same 3 surfaces waiting on Korakot's terminal.** Session vouchers are now
+value-aware (client asks 2+3, option b): longer treatment → operator confirms,
+1 session credits its £ value (initial/total) as a discount, difference stays
+DUE; shorter → warn, full session, closes. New `voucher_redemptions.covers_bill`
+(PG+SQLite) + server refuse-to-close guard on pay method=voucher (no redemption
+→ 400; only value-credits → 409 with £ still due) so stale tills can't silently
+close the difference — stale tills never send `accept_difference` so they keep
+the old refusal. Monetary partials now stamp covers_bill=FALSE (guard catches
+those too); external-voucher closes unaffected; legacy NULL = old behaviour.
+Electron bumped v0.2.50. **Tested:** 28 smoke checks green on BOTH throwaway
+PG16 and SQLite local mode (synced pair — pull carries covers_bill fine).
+Also `d28ce83`: dist-jinta accidentally committed, now untracked + gitignored.
+**LIVE via git auto:** demo backend, jinta-api, spa.siamepos.co.uk. **WAITING
+(classifier blocks Sam again):** highbury-api `railway up`, highbury + jinta
+Netlify tills — both dists rebuilt at `d28ce83` + grep-verified (bases ✓,
+accept_difference present), commands handed to Korakot in-chat.
+**🎫 KRIT: build-only — spa desktop v0.2.50** (mac+win) when Korakot tags.
+
+**✅ SAM — SPA-VOUCHER-UPGRADE-001 ROLLOUT COMPLETE (2026-08-27 ~12:47 UTC,
+all tenants).** Korakot ran the 3 blocked commands; Sam verified each:
+highbury-api (`railway up` — fresh boot, `[db] schema ready` ran the
+covers_bill migration, health ok), highbury.siamepos.co.uk till
+(`index-DLx7dpqG.js`, highbury base ✓, accept_difference present ✓),
+jinta.siamepos.co.uk till (`index-palvcPYD.js`, jinta base ✓, feature ✓).
+Earlier git-auto surfaces confirmed on `d28ce83` (demo API, jinta-api,
+spa.siamepos.co.uk). Value-aware session vouchers now LIVE everywhere.
+Remaining: Krit's desktop v0.2.50 build (ticket above).
+**📝 SAM — Thai patch notes added (2026-08-27, `e2b4489`).** `PATCH-NOTES-TH.md`
+in the spa repo (v0.2.50 + brief history) + shareable client-facing page
+published (Korakot has the link in-chat; private until he shares it).

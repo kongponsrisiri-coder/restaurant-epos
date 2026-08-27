@@ -1,7 +1,7 @@
-// Single source for the app build version, printed on kitchen tickets + receipts
-// so you can tell at a glance which build produced a given printout (removes the
-// "did the update actually land on this till?" guesswork).
+// Native (APK) app version — shown on the login screen + Settings → App so a
+// screenshot instantly tells us which build a Sunmi till is running. Matches
+// android/app/build.gradle versionName.
 //
 // ⚠️ Bump this in the SAME commit as android/app/build.gradle versionName on
 // every release.
-export const APP_VERSION = '1.5.29';
+export const APP_VERSION = '1.5.32';

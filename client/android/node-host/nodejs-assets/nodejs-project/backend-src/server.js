@@ -1156,7 +1156,7 @@ app.get('/api/menu/items/:id/modifiers', async (req, res) => {
         WHERE menu_item_id = $1
            OR id IN (SELECT group_id FROM menu_item_modifier_groups WHERE menu_item_id = $1)
            OR COALESCE(is_global, 0) = 1
-        ORDER BY COALESCE(is_global, 0), id`, [req.params.id]);
+        ORDER BY COALESCE(is_global, 0), COALESCE(sort_order, 0), id`, [req.params.id]);
     if (groupRes.rows.length === 0) return res.json([]);
     const groupsWithMods = await Promise.all(groupRes.rows.map(async group => {
       const modRes = await pool.query('SELECT * FROM modifiers WHERE group_id = $1 AND is_available = 1', [group.id]);
@@ -1246,6 +1246,24 @@ app.get('/api/modifier-library', async (req, res) => {
 });
 
 // Create a shared (library) group — menu_item_id stays NULL.
+// SEPOS-060 — edit a library group's flags/order (sort_order drives the
+// display order of option groups on the till + customer pages).
+app.put('/api/modifier-library/:id', async (req, res) => {
+  if (await maybeForwardModifierWriteToCloud(req, res)) return;
+  try {
+    const { name, required, multi_select, sort_order } = req.body || {};
+    await pool.query(
+      `UPDATE modifier_groups SET
+         name = COALESCE($1, name),
+         required = COALESCE($2, required),
+         multi_select = COALESCE($3, multi_select),
+         sort_order = COALESCE($4, sort_order)
+       WHERE id = $5`,
+      [name ?? null, required ?? null, multi_select ?? null, sort_order ?? null, req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/modifier-library', async (req, res) => {
   if (await maybeForwardModifierWriteToCloud(req, res)) return;
   try {
@@ -2270,6 +2288,14 @@ function _isWeakPin(p) { return _WEAK_PINS.has(String(p || '')); }
 
 app.post('/api/staff/login', async (req, res) => {
   try {
+    // SEPOS-DEVICE-AUTH-001 — on cloud tills with the gate switched on, only
+    // email-authorised devices may reach the PIN check at all. Local/Electron
+    // installs never enforce (deviceAuthRequired is false in local mode).
+    if (await deviceAuthRequired()) {
+      if (!await deviceTokenValid(req.get('x-device-token'))) {
+        return res.status(401).json({ error: 'This device needs authorisation before staff can sign in.', device_auth_required: true });
+      }
+    }
     const { pin } = req.body;
     // F16 — with trust proxy set this is the venue's real address, but every
     // till in a restaurant shares it, so a HARD lockout would still take the
@@ -2576,6 +2602,121 @@ app.post('/api/auth/set-credentials', async (req, res) => {
     );
     res.json({ id: ins.rows[0].id, created: true, pin: ownerPin });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── SEPOS-DEVICE-AUTH-001 — email-authorised devices for public till URLs ──
+// A cloud till URL guarded only by 4-digit PINs is too thin once the link is
+// public. When settings.require_device_auth='1' (per tenant, default OFF) and
+// this is a CLOUD instance, /api/staff/login demands an x-device-token from a
+// device that verified by email: an active admin/manager/supervisor staff
+// email, or the SiamEPOS support allowlist (SUPPORT_ACCESS_EMAILS env).
+// Local/Electron installs and LAN tablets talk to local servers and are never
+// gated. Reuses the magic-link pattern: sha256-stored, single-use links,
+// 180-day device tokens.
+const SUPPORT_ACCESS_EMAILS = String(process.env.SUPPORT_ACCESS_EMAILS || 'kongponsrisiri@gmail.com,info@siamepos.co.uk')
+  .split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+
+async function deviceAuthRequired() {
+  if (process.env.FORCE_DEVICE_AUTH === '1') return true;   // test hook
+  if (String(process.env.DB_MODE || '').toLowerCase() === 'local') return false;
+  try {
+    const r = await pool.query(`SELECT value FROM settings WHERE key = 'require_device_auth'`);
+    return String(r.rows[0]?.value || '') === '1';
+  } catch { return false; }
+}
+
+async function deviceTokenValid(raw) {
+  if (!raw) return false;
+  const hash = crypto.createHash('sha256').update(String(raw)).digest('hex');
+  const r = await pool.query(
+    `SELECT id, expires_at FROM trusted_devices WHERE token_hash = $1`, [hash]);
+  const row = r.rows[0];
+  if (!row) return false;
+  if (new Date(row.expires_at).getTime() < Date.now()) return false;
+  pool.query(`UPDATE trusted_devices SET last_seen = NOW() WHERE id = $1`, [row.id]).catch(() => {});
+  return true;
+}
+
+app.post('/api/device/request-auth', async (req, res) => {
+  try {
+    if (!await deviceAuthRequired()) return res.json({ ok: true, not_required: true });
+    const email = String((req.body || {}).email || '').trim();
+    if (!email || !email.includes('@')) return res.status(400).json({ error: 'Email is required' });
+    if (!_linkReqAllowed('dev:' + (req.ip || '') + '|' + email.toLowerCase())) {
+      return res.status(429).json({ error: 'Too many requests — check your inbox (and spam), or wait a few minutes.' });
+    }
+    const ok = { ok: true, message: 'If that email can authorise this till, a link is on its way.' };
+    let allowed = SUPPORT_ACCESS_EMAILS.includes(email.toLowerCase());
+    if (!allowed) {
+      const r = await pool.query(
+        `SELECT id, role FROM staff WHERE LOWER(email) = LOWER($1) AND is_active = 1`, [email]);
+      allowed = !!(r.rows[0] && ['admin', 'manager', 'supervisor'].includes(r.rows[0].role));
+    }
+    if (!allowed) return res.json(ok);   // same reply — no enumeration
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    await pool.query(
+      `INSERT INTO device_links (token_hash, email, expires_at) VALUES ($1, $2, $3)`,
+      [tokenHash, email.toLowerCase(), expiresAt]);
+
+    const base = (req.get('origin') || process.env.PUBLIC_API_URL || '').replace(/\/$/, '');
+    const link = `${base}/?device_token=${token}`;
+    const name = process.env.RESTAURANT_NAME || 'SiamEPOS';
+    const { sendBrevoEmail } = require('./services/emailService');
+    const isProd = process.env.NODE_ENV === 'production';
+    try {
+      await sendBrevoEmail(email, `Authorise this device for ${name}`,
+        `<div style="font-family:Georgia,serif;max-width:480px;margin:0 auto;padding:24px;color:#0D1B3E;">
+          <h2 style="color:#0D1B3E;">Authorise a till device</h2>
+          <p style="font-family:system-ui,sans-serif;font-size:15px;line-height:1.5;color:#334155;">
+            Someone (hopefully you) asked to use the ${name} till on a new device.
+            Tap the button ON THAT DEVICE to authorise it. The link works once and expires in 15 minutes.
+          </p>
+          <p style="text-align:center;margin:28px 0;">
+            <a href="${link}" style="background:#C9A84C;color:#0D1B3E;font-family:system-ui,sans-serif;font-weight:700;text-decoration:none;padding:14px 28px;border-radius:10px;display:inline-block;">Authorise this device</a>
+          </p>
+          <p style="font-family:system-ui,sans-serif;font-size:12px;color:#94a3b8;">
+            If this wasn't you, ignore this email — the device stays locked out.
+          </p>
+        </div>`);
+    } catch (mailErr) {
+      if (isProd) throw mailErr;
+      console.error('[device-auth] dev: mail send failed (link still echoed):', mailErr.message);
+    }
+    if (!isProd) return res.json({ ...ok, dev_link: link });
+    res.json(ok);
+  } catch (err) {
+    console.error('[device-auth] request', err.message);
+    res.status(500).json({ error: 'Could not send the authorisation link.' });
+  }
+});
+
+app.post('/api/device/consume-auth', async (req, res) => {
+  try {
+    const token = String((req.body || {}).token || '').trim();
+    if (!token) return res.status(400).json({ error: 'Token required' });
+    const hash = crypto.createHash('sha256').update(token).digest('hex');
+    // Atomic single-use consume, same pattern as login_links.
+    const r = await pool.query(
+      `UPDATE device_links SET used_at = NOW()
+        WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
+        RETURNING email`, [hash]);
+    const row = r.rows[0];
+    if (!row) return res.status(400).json({ error: 'This link has expired or was already used — request a new one.' });
+    const deviceToken = crypto.randomBytes(48).toString('hex');
+    const deviceHash = crypto.createHash('sha256').update(deviceToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
+    await pool.query(
+      `INSERT INTO trusted_devices (token_hash, email, expires_at) VALUES ($1, $2, $3)`,
+      [deviceHash, row.email, expiresAt]);
+    console.log(`[device-auth] device authorised for ${row.email}`);
+    res.json({ ok: true, device_token: deviceToken, expires_at: expiresAt });
+  } catch (err) {
+    console.error('[device-auth] consume', err.message);
+    res.status(500).json({ error: 'Could not authorise this device.' });
+  }
 });
 
 // ─── SEPOS-OFFICE-001 — owner Back Office magic-link sign-in ────────────────
@@ -2971,7 +3112,7 @@ app.post('/api/stripe/webhook', async (req, res) => {
 
 app.get('/api/staff', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, role, is_active, created_at, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z FROM staff ORDER BY name');
+    const result = await pool.query('SELECT id, name, role, is_active, created_at, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z, email FROM staff ORDER BY name');
     res.json(result.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -2988,7 +3129,7 @@ app.post('/api/staff', requireStaffAuthOrSyncSecret(['admin', 'manager']), async
     if (dup.rows[0]) {
       return res.status(409).json({ error: `PIN ${pin} is already used by ${dup.rows[0].name}. Please choose a different 4-digit PIN.` });
     }
-    const result = await pool.query('INSERT INTO staff (name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id', [name, pin, role, start_date || null, notes || null, employment_status || 'active', can_discount ? 1 : 0, can_redeem_deposit ? 1 : 0, can_void ? 1 : 0, can_close_z ? 1 : 0]);
+    const result = await pool.query('INSERT INTO staff (name, pin, role, start_date, notes, employment_status, can_discount, can_redeem_deposit, can_void, can_close_z, email) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id', [name, pin, role, start_date || null, notes || null, employment_status || 'active', can_discount ? 1 : 0, can_redeem_deposit ? 1 : 0, can_void ? 1 : 0, can_close_z ? 1 : 0, (String(req.body.email || '').trim().toLowerCase() || null)]);
     res.json({ id: result.rows[0].id, success: true });
   } catch (err) {
     if (/unique|duplicate/i.test(err.message || '')) {
@@ -3053,6 +3194,12 @@ app.put('/api/staff/:id', requireStaffAuthOrSyncSecret(['admin', 'manager']), as
         [name, role, activeParam, start_date || null, notes || null, employment_status || 'active', cd, crd, cv, cz, req.params.id]
       );
     }
+    // Email updates separately so tills that don't send the field can never
+    // clobber it (owner sign-in links + device authorisation match on it).
+    if (Object.prototype.hasOwnProperty.call(req.body, 'email')) {
+      const emailParam = String(req.body.email || '').trim().toLowerCase() || null;
+      await pool.query('UPDATE staff SET email = $1 WHERE id = $2', [emailParam, req.params.id]);
+    }
     res.json({ success: true });
   } catch (err) {
     if (/unique|duplicate/i.test(err.message || '')) {
@@ -3109,6 +3256,21 @@ app.get('/api/settings', async (req, res) => {
 app.put('/api/settings', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     const updates = req.body;
+    // SEPOS-NAV-HIDE-001 — home guard, server-side: the till always needs
+    // Tables or Counter to land on. The Settings UI refuses this too, but a
+    // stale client (or a raw API call) must not be able to strand every till
+    // with no home tab. Checked against the EFFECTIVE result (payload value
+    // if present, stored value otherwise — a payload may carry one key only).
+    if ('nav_show_tables' in updates || 'nav_show_counter' in updates) {
+      const effective = async (key) => {
+        if (key in updates) return String(updates[key]);
+        const r = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
+        return String(r.rows[0]?.value ?? '1');
+      };
+      if ((await effective('nav_show_tables')) === '0' && (await effective('nav_show_counter')) === '0') {
+        return res.status(400).json({ error: 'The till needs at least one home screen — Tables and Counter cannot both be hidden.' });
+      }
+    }
     for (const [key, value] of Object.entries(updates)) {
       await pool.query('INSERT INTO settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', [key, value]);
     }
@@ -5745,6 +5907,14 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
     }
     io.emit('new_reservation', { ...reservation, reservation_date: String(reservation.reservation_date).split('T')[0], reservation_time: String(reservation.reservation_time).slice(0, 5) });
     if (customer_email) sendBookingConfirmation(reservation).catch(err => console.error('❌ Email error:', err.message));
+    // SEPOS-OWNER-ALERT-001 — backup email to the restaurant (fire-and-forget)
+    sendRestaurantAlert(
+      `New booking · ${String(reservation.reservation_date).split('T')[0]} ${String(reservation.reservation_time).slice(0, 5)} · ${reservation.covers} guests`,
+      `<p><b>New booking</b></p>
+       <p>${String(reservation.customer_name || '').replace(/[<>]/g,'')} · ${String(reservation.customer_phone || '').replace(/[<>]/g,'')}</p>
+       <p style="font-size:18px;"><b>${String(reservation.reservation_date).split('T')[0]} at ${String(reservation.reservation_time).slice(0, 5)}</b> · ${reservation.covers} guests</p>
+       ${reservation.notes ? `<p>Notes: ${String(reservation.notes).replace(/[<>]/g,'')}</p>` : ''}`
+    ).catch(() => {});
     if (customer_phone) sendBookingSms(reservation).catch(() => {});
     console.log(`📅 New booking [${source}]: ${customer_name} ×${coversNum} on ${reservation_date} at ${reservation_time}`);
     if (process.env.MAKE_BOOKING_WEBHOOK) {
@@ -8053,6 +8223,14 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
     }
 
     console.log(`🥡 New takeaway #${orderId} · ${customer_name} · £${total.toFixed(2)} · pickup ${pickup_time}`);
+    // SEPOS-OWNER-ALERT-001 — backup email to the restaurant (fire-and-forget)
+    sendRestaurantAlert(
+      `New online order \u00b7 \u00a3${total.toFixed(2)} \u00b7 ${subtype === 'delivery' ? 'DELIVERY' : 'collection ' + new Date(pickup_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' })}`,
+      `<p><b>New online ${subtype === 'delivery' ? 'DELIVERY' : 'collection'} order</b> \u2014 ${paymentStatus === 'paid' ? '\u2705 PAID ONLINE' : '\u{1F4B7} PAY ON COLLECTION'}</p>
+       <p>${String(customer_name).replace(/[<>]/g,'')} \u00b7 ${String(customer_phone).replace(/[<>]/g,'')}</p>
+       <p>${items.map(i => `${i.quantity}\u00d7 ${String(i.name || '').replace(/[<>]/g,'')}`).join('<br>')}</p>
+       <p style="font-size:18px;"><b>Total \u00a3${total.toFixed(2)}</b> \u00b7 ready for ${new Date(pickup_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' })}</p>`
+    ).catch(() => {});
     res.status(201).json({
       success: true,
       order_id: orderId,
@@ -8100,8 +8278,14 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
   // still reaches the till + sends the confirmation email, just no card charge —
   // regardless of ad blockers that block Stripe.js. Per-restaurant: real client
   // deployments (no flag) keep real Stripe untouched.
-  let mock = false;
-  try { const s = await loadSettings(); mock = String(s.takeaway_mock_pay || '') === '1'; } catch {}
+  let mock = false, payMode = '';
+  try { const s = await loadSettings(); mock = String(s.takeaway_mock_pay || '') === '1'; payMode = String(s.takeaway_pay_mode || ''); } catch {}
+  // SEPOS-VOUCHER-KEYS-001 — a tenant can hold live Stripe keys for VOUCHER
+  // sales while takeaway stays pay-on-collection: takeaway_pay_mode='collection'
+  // forces the no-payment takeaway flow without hiding the keys from
+  // voucherService. Orders then land 'unpaid' and the till's Collected guard
+  // (SEPOS-TA-COLLECT-001) makes staff take payment — same as a keyless tenant.
+  if (payMode === 'collection') return res.json({ configured: false, publishable_key: null });
   const sp = siampayCfg();
   if (!mock && sp) {
     // SIAMPAY-002 — widget must init Stripe.js WITH the connected account so
@@ -10003,6 +10187,30 @@ app.post('/api/deliveroo/ready/:orderId', async (req, res) => {
 });
 
 // Brevo confirmation email — same template flavour as booking confirmation.
+// SEPOS-OWNER-ALERT-001 (Korakot, 26 Aug) — email the RESTAURANT when an
+// online order/booking lands. The till strip + print is the primary channel;
+// this is the safety net for the till being off, a printer down, or staff
+// missing the screen (a £99.70 online order sat unseen the night before a
+// go-live). Recipient: settings.restaurant_notify_email, falling back to the
+// tenant's RESTAURANT_EMAIL env. Silently skipped when neither is set.
+async function sendRestaurantAlert(subject, bodyHtml) {
+  try {
+    const r = await pool.query(`SELECT value FROM settings WHERE key = 'restaurant_notify_email'`);
+    const to = (r.rows[0] && String(r.rows[0].value || '').trim()) || process.env.RESTAURANT_EMAIL || '';
+    if (!to || !to.includes('@')) return;
+    const th = await require('./services/brandTheme').getBrandTheme();
+    const name = process.env.RESTAURANT_NAME || 'SiamEPOS Restaurant';
+    const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f5f5f5;font-family:system-ui,sans-serif;color:#1a1a2e;">
+    <table cellpadding="0" cellspacing="0" width="100%" style="background:#f5f5f5;padding:24px 0;"><tr><td align="center">
+      <table cellpadding="0" cellspacing="0" width="600" style="max-width:600px;background:white;border-radius:12px;overflow:hidden;">
+        <tr><td style="background:${th.primaryHex};padding:18px 26px;color:${th.accentHex};font-family:Georgia,serif;font-size:20px;font-weight:700;">${name} — staff alert</td></tr>
+        <tr><td style="padding:24px 26px;font-size:15px;line-height:1.6;">${bodyHtml}</td></tr>
+        <tr><td style="padding:14px 26px;background:#fafafa;border-top:1px solid #eee;font-size:11px;color:#888;">Also on your till as usual — this email is the backup channel.</td></tr>
+      </table></td></tr></table></body></html>`;
+    await sendBrevoEmail(to, subject, html);
+  } catch (err) { console.error('[owner-alert]', err.message); }
+}
+
 async function sendTakeawayConfirmation({ order_id, customer_name, customer_email, pickup_time, items, total, paid }) {
   const { sendBrevoEmail } = require('./services/emailService');
   if (!process.env.BREVO_API_KEY) return;
@@ -11478,7 +11686,28 @@ app.post('/api/print/receipt', async (req, res) => {
       `SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt
        FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
        WHERE order_items.order_id = $1`, [order_id]);
-    await printService.printReceipt(settings, order, itemsRes.rows, payment_details || {});
+    // SEPOS-SPLIT-PRINT-001 — Split-by-Item: the client names the person's
+    // exact lines; print ONLY those (previously every split receipt carried
+    // the whole order's items under one person's total). Quantity + line
+    // discount come from the client's split (a person can take 2 of a line's
+    // 3 units). Unknown ids (stale client) → full list, never a blank receipt.
+    let receiptItems = itemsRes.rows;
+    const splitLines = Array.isArray(payment_details?.split_items) ? payment_details.split_items : null;
+    if (splitLines && splitLines.length) {
+      const byId = new Map(splitLines.map(s => [Number(s.id), s]));
+      const filtered = receiptItems
+        .filter(r => byId.has(Number(r.id)))
+        .map(r => {
+          const s = byId.get(Number(r.id));
+          return {
+            ...r,
+            quantity: Number(s.quantity) > 0 ? Number(s.quantity) : r.quantity,
+            ...(s.discount_value != null ? { discount_value: s.discount_value } : {}),
+          };
+        });
+      if (filtered.length) receiptItems = filtered;
+    }
+    await printService.printReceipt(settings, order, receiptItems, payment_details || {});
     res.json({ success: true });
   } catch (err) {
     console.error('[print/receipt]', err.message);

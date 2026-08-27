@@ -1,6 +1,5 @@
 import { useState, useEffect, Fragment } from 'react';
-import { SERVER_URL } from '../../api';
-import { getAllMenu as getMenu } from '../../api';
+import { getAllMenu as getMenu, getDishAllergens, saveDishAllergens, assertOk } from '../../api';
 import { invAPI } from './shared';
 import { downloadCsv } from '../../utils/csv';
 import { confirm } from '../../utils/confirm';
@@ -49,7 +48,7 @@ export default function AllergenSection() {
       getMenu(),
       invAPI.getRecipes(),
       invAPI.getIngredients(),
-      fetch(`${SERVER_URL}/api/dish-allergens`).then(r => r.ok ? r.json() : []).catch(() => []),
+      getDishAllergens().then(d => (Array.isArray(d) ? d : [])).catch(() => []),
     ]).then(([m, r, i, d]) => {
       setMenu(Array.isArray(m) ? m : []);
       setRecipes(Array.isArray(r) ? r : []);
@@ -121,11 +120,10 @@ export default function AllergenSection() {
     setManualMap(prev => ({ ...prev, [menuItemId]: current }));
     setSaving(prev => ({ ...prev, [menuItemId]: true }));
     try {
-      const res = await fetch(`${SERVER_URL}/api/dish-allergens/${menuItemId}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ allergens: JSON.stringify([...current]) }),
-      });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+      // SEPOS-ALLERGEN-SYNC-001 — through the api helper (raw fetch is a
+      // silent no-op on native tills) + assertOk so a server {error} rolls
+      // the tick back like a network failure does.
+      assertOk(await saveDishAllergens(menuItemId, JSON.stringify([...current])));
     } catch (e) {
       console.error('Allergen save failed', e);
       alert('Allergen change did NOT save — check connection and try again.');
@@ -157,17 +155,17 @@ export default function AllergenSection() {
 
     setSyncing(true);
     try {
+      // SEPOS-ALLERGEN-SYNC-001 — through the api helper; helpers resolve
+      // {error} on HTTP failure, so "ok" means no error key in the body.
       const results = await Promise.all(toSync.map(({ id, allergens }) =>
-        fetch(`${SERVER_URL}/api/dish-allergens/${id}`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ allergens: JSON.stringify([...allergens]) }),
-        })
+        saveDishAllergens(id, JSON.stringify([...allergens]))
+          .then(r => !r?.error).catch(() => false)
       ));
-      const failed = results.filter(r => !r.ok).length;
+      const failed = results.filter(ok => !ok).length;
       if (failed > 0) alert(`${failed} of ${toSync.length} items failed to save — re-run Confirm AI Allergens to retry.`);
       // Update local manualMap for the ones that saved
       const newMap = { ...manualMap };
-      toSync.forEach(({ id, allergens }, i) => { if (results[i].ok) newMap[id] = allergens; });
+      toSync.forEach(({ id, allergens }, i) => { if (results[i]) newMap[id] = allergens; });
       setManualMap(newMap);
     } catch (e) {
       console.error('Sync failed', e);

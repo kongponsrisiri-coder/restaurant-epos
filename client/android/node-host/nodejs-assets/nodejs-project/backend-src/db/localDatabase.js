@@ -326,6 +326,24 @@ function initSchema() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS device_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash TEXT UNIQUE NOT NULL,
+      email TEXT NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      used_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS trusted_devices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash TEXT UNIQUE NOT NULL,
+      email TEXT NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      last_seen TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS reservations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       restaurant_id TEXT DEFAULT 'siamepos',
@@ -818,6 +836,7 @@ function runMigrations() {
   // SEPOS-ALLERGEN-OPT-001 — global (applies to every item) + allergen (⚠️ + free) modifier groups.
   addColumnIfMissing('modifier_groups', 'is_global', 'INTEGER DEFAULT 0');
   addColumnIfMissing('modifier_groups', 'is_allergen', 'INTEGER DEFAULT 0');
+  addColumnIfMissing('modifier_groups', 'sort_order', 'INTEGER DEFAULT 0');
 
   // SEPOS-STATION-001 — category -> printer routing (NULL = today's is_bar rule).
   addColumnIfMissing('categories', 'printer_id', 'INTEGER');

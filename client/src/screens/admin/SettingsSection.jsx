@@ -759,6 +759,11 @@ export default function SettingsSection() {
     login_pin_only:          '0',   // SEPOS-PINONLY-001 — skip the name grid; PIN identifies the staff
     kitchen_bar_as_waiters:  '1',   // SEPOS-KB-WAITER-001 — DEFAULT ON; KDS venues (Fern) untick
     till_idle_minutes:       '2',   // SEPOS-TILL-LOCK-001 — auto sign-out after idle ('0' = off)
+    nav_show_reservations:   '1',   // SEPOS-NAV-HIDE-001 — navbar tab visibility, default all shown
+    nav_show_kitchen:        '1',
+    nav_show_bar:            '1',
+    nav_show_tables:         '1',   // home guard: tables + counter can never BOTH be hidden
+    nav_show_counter:        '1',
     kitchen_print_mode:      'print',   // 'print' | 'kds' | 'both'
     kitchen_language:        'en_th',  // 'en_th' | 'en'
     brand_logo:              '',   // SEPOS-BRAND-001 — on-screen logo (separate from receipt logo)
@@ -1386,6 +1391,44 @@ export default function SettingsSection() {
           Staff sign back in with their PIN in seconds. Unsent basket items are kept on the table.
           Kitchen and Bar displays are never signed out automatically.
         </div>
+      </div>
+
+      {/* ── SEPOS-NAV-HIDE-001 — Navigation tabs ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:8 }}>🧭 Navigation</h2>
+        <div style={{ fontSize:12, color:'#888', lineHeight:1.5, marginBottom:14 }}>
+          Untick a screen your venue doesn't use to remove its button from the top bar on every till.
+          Hiding a screen does NOT switch the feature off — online bookings still arrive with Reservations hidden,
+          and kitchen printing/routing carries on with Kitchen hidden. Takes effect from each till's next sign-in.
+        </div>
+        {[
+          ['nav_show_tables',       '🗺️ Tables (floor map)'],
+          ['nav_show_counter',      '🛒 Counter'],
+          ['nav_show_reservations', '🗓️ Reservations'],
+          ['nav_show_kitchen',      '🍳 Kitchen'],
+          ['nav_show_bar',          '🍹 Bar'],
+        ].map(([key, label]) => (
+          <div key={key} style={{ marginBottom:10 }}>
+            <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:14 }}>
+              <input
+                type="checkbox"
+                checked={(settings[key] ?? '1') !== '0'}
+                onChange={e => {
+                  const on = e.target.checked;
+                  // Home guard — the till always needs Tables or Counter to land on.
+                  if (!on && key === 'nav_show_tables' && (settings.nav_show_counter ?? '1') === '0') {
+                    alert('The till needs at least one home screen — show Counter before hiding Tables.'); return;
+                  }
+                  if (!on && key === 'nav_show_counter' && (settings.nav_show_tables ?? '1') === '0') {
+                    alert('The till needs at least one home screen — show Tables before hiding Counter.'); return;
+                  }
+                  setSettings({ ...settings, [key]: on ? '1' : '0' });
+                }}
+              />
+              {label}
+            </label>
+          </div>
+        ))}
       </div>
 
       {/* ── Service Charge ── */}

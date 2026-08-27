@@ -153,6 +153,26 @@ export default function App() {
   // roles sign in as waiters (land on the floor, normal navbar, idle sign-out).
   // Their role hierarchy is untouched — Admin stays out of reach.
   const [kbAsWaiters, setKbAsWaiters] = useState(true); // default ON — KDS venues opt out
+  // SEPOS-NAV-HIDE-001 — per-restaurant nav tab visibility. Default ALL shown
+  // (a missing key means shown), so shipping this changes nothing until a
+  // venue opts out in Settings → Navigation. Tables/Counter are special: one
+  // of them is always the till's home; Settings + the server refuse to hide
+  // both.
+  const [navVis, setNavVis] = useState({ reservations: true, kitchen: true, bar: true, tables: true, counter: true });
+  const readNavVis = (s) => ({
+    reservations: String(s.nav_show_reservations ?? '1') !== '0',
+    kitchen:      String(s.nav_show_kitchen      ?? '1') !== '0',
+    bar:          String(s.nav_show_bar          ?? '1') !== '0',
+    tables:       String(s.nav_show_tables       ?? '1') !== '0',
+    counter:      String(s.nav_show_counter      ?? '1') !== '0',
+  });
+  // The till's effective home: Tables hidden → the venue is counter-led and
+  // every landing goes to Counter, whatever the device's counter-mode flag;
+  // Counter hidden → always the floor. Otherwise the per-device flag decides.
+  const homeScreenKey = () =>
+    !navVis.tables ? 'counter'
+      : (readCounterMode() && navVis.counter) ? 'counter'
+      : 'tables';
   useEffect(() => {
     let stopped = false;
     const tryTheme = (attempt) => {
@@ -161,6 +181,7 @@ export default function App() {
         if (s && !s.error) {
           applyBrandTheme(s);
           setKbAsWaiters(String(s.kitchen_bar_as_waiters ?? '1') !== '0'); // SEPOS-KB-WAITER-001 — default ON unless explicitly '0'
+          setNavVis(readNavVis(s)); // SEPOS-NAV-HIDE-001
         }
         else if (attempt < 20) setTimeout(() => tryTheme(attempt + 1), 1500);
       }).catch(() => { if (!stopped && attempt < 20) setTimeout(() => tryTheme(attempt + 1), 1500); });
@@ -304,7 +325,7 @@ export default function App() {
     // SEPOS-LOGOUT-HOME-001 (Korakot, 24 Aug) — the selected screen survived
     // sign-out, so whoever signed in next landed wherever the LAST person was
     // (e.g. the Kitchen tab). Every fresh sign-in now starts from home.
-    setScreen(readCounterMode() ? 'counter' : 'tables');
+    setScreen(homeScreenKey()); // SEPOS-NAV-HIDE-001 — home respects hidden tabs
     setActiveOrder(null);
   };
 
@@ -327,7 +348,7 @@ export default function App() {
     warnStart.current = 0;
     setIdleWarn(false);
     setActiveOrder(null);
-    setScreen(readCounterMode() ? 'counter' : 'tables'); // counter tills come back to counter
+    setScreen(homeScreenKey()); // counter tills come back to counter; SEPOS-NAV-HIDE-001 — respects hidden tabs
     setStaff(null);
   };
 
@@ -342,6 +363,14 @@ export default function App() {
     if (land === '1' && ['admin', 'manager', 'supervisor'].includes(staff.role)) setScreen('admin');
   }, [staff]);
 
+  // SEPOS-NAV-HIDE-001 — if the screen someone is ON becomes hidden (admin
+  // toggled it; settings refreshed at sign-in or boot), bounce to home rather
+  // than stranding them on an unreachable tab. Admin and order flow are never
+  // hidden, so this only ever fires for the five toggleable tabs.
+  useEffect(() => {
+    if (navVis[screen] === false) setScreen(homeScreenKey());
+  }, [navVis, screen]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Load the till-security settings on each sign-in (so Settings edits take
   // effect from the next login, no reload needed).
   useEffect(() => {
@@ -352,6 +381,7 @@ export default function App() {
           sendLock: s.till_send_lock !== '0',
           idleMin:  parseInt(s.till_idle_minutes ?? '2', 10) || 0,
         });
+        setNavVis(readNavVis(s)); // SEPOS-NAV-HIDE-001 — Settings edits take effect from the next sign-in
       }
     }).catch(() => {});
   }, [staff]);
@@ -512,7 +542,7 @@ export default function App() {
               staff={staff}
               onClose={() => {
                 setActiveOrder(null);
-                setScreen('tables');
+                setScreen(homeScreenKey()); // SEPOS-NAV-HIDE-001 — back to the venue's home, not hard-coded tables
               }}
               /* SEPOS-TILL-LOCK-001 — after a successful send, OrderScreen
                  flashes "✓ sent" then calls this to return to the PIN screen.
@@ -537,20 +567,24 @@ export default function App() {
       fullEPOS:     canAccessFullEPOS(plan),       // dine-in ordering/billing, Counter, Bar
     };
     // Counter mode is a dine-in (full EPOS) feature.
-    const effectiveCounter = counterMode && caps.fullEPOS;
+    // SEPOS-NAV-HIDE-001 — Tables hidden forces counter as home regardless of
+    // the per-device flag; Counter hidden pins home to the floor.
+    const effectiveCounter = caps.fullEPOS && (!navVis.tables || (counterMode && navVis.counter));
     const homeItem = effectiveCounter
       ? { key: 'counter', label: '🛒 Counter', locked: false }
       : { key: 'tables',  label: '🗺️ Tables',  locked: !(caps.reservations || caps.fullEPOS) };
     // Every tab still shows; tabs the plan doesn't include are marked
     // locked and open a friendly "upgrade" panel when clicked.
+    // SEPOS-NAV-HIDE-001 — tabs the VENUE hid are gone entirely (hidden beats
+    // plan-locked: no greyed ghost of a hidden tab).
     const navItems = [
       homeItem,
-      { key: 'reservations', label: '🗓️ Reservations', locked: !caps.reservations },
+      ...(navVis.reservations ? [{ key: 'reservations', label: '🗓️ Reservations', locked: !caps.reservations }] : []),
       ...(staff.role === 'admin' || staff.role === 'manager' || staff.role === 'supervisor' || staff.can_close_z
         ? [{ key: 'admin', label: staff.role === 'admin' || staff.role === 'manager' || staff.role === 'supervisor' ? '⚙️ Admin' : '🔐 Close Day', locked: false }]
         : []),
-      { key: 'kitchen', label: '🍳 Kitchen', locked: !caps.kitchen },
-      { key: 'bar',     label: '🍹 Bar',     locked: !caps.fullEPOS },
+      ...(navVis.kitchen ? [{ key: 'kitchen', label: '🍳 Kitchen', locked: !caps.kitchen }] : []),
+      ...(navVis.bar     ? [{ key: 'bar',     label: '🍹 Bar',     locked: !caps.fullEPOS }] : []),
     ];
 
     const toggleCounterMode = () => {
@@ -621,8 +655,10 @@ export default function App() {
             {/* SEPOS-044 — always-visible pill when anything is queued. */}
             <SyncQueuePill compact={isMobile} />
             {/* SEPOS-045 — counter/floor mode toggle. Per-device flag.
-                SEPOS-LITE-002 — dine-in only, hidden for lite plans. */}
-            {caps.fullEPOS && (
+                SEPOS-LITE-002 — dine-in only, hidden for lite plans.
+                SEPOS-NAV-HIDE-001 — pointless when either home tab is hidden
+                (the venue has already picked its one home). */}
+            {caps.fullEPOS && navVis.tables && navVis.counter && (
               <button
                 onClick={toggleCounterMode}
                 title={counterMode ? 'Switch to floor (dine-in) mode' : 'Switch to counter (till) mode'}

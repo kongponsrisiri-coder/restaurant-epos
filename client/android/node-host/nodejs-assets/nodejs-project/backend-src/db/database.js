@@ -175,6 +175,7 @@ async function initDB() {
     // link row); an allergen group's selections print with ⚠️ emphasis + are free.
     await pool.query(`ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_global INTEGER DEFAULT 0`);
     await pool.query(`ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_allergen INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS modifiers (
@@ -468,6 +469,20 @@ async function initDB() {
       )
     `);
 
+    // SEPOS-ALLERGEN-SYNC-001 — manual allergen ticks (Allergen Menu sheet).
+    // This table existed ONLY in SQLite since SEPOS-ALLERGEN-LOCAL-001: every
+    // cloud save 500'd with "relation does not exist" and till-side edits
+    // queued cloud replications that could never land. UNIQUE(menu_item_id)
+    // is required for the upsert's ON CONFLICT.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS dish_allergens (
+        id SERIAL PRIMARY KEY,
+        menu_item_id INTEGER UNIQUE,
+        allergens TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // SEPOS-KITCHEN-MSG-001 — pre-canned messages waiters can one-tap to
     // send to the kitchen (allergies, holds, VIP, birthday, etc.). Admin
     // can add/edit/delete in Settings → Kitchen Templates.
@@ -587,6 +602,30 @@ async function initDB() {
         staff_id INTEGER NOT NULL,
         expires_at TIMESTAMP NOT NULL,
         used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // SEPOS-DEVICE-AUTH-001 — email-authorised browser devices for public
+    // till URLs. device_links = pending 15-min email links; trusted_devices =
+    // long-lived device tokens (sha256 only, like login_links).
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS device_links (
+        id SERIAL PRIMARY KEY,
+        token_hash TEXT UNIQUE NOT NULL,
+        email TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS trusted_devices (
+        id SERIAL PRIMARY KEY,
+        token_hash TEXT UNIQUE NOT NULL,
+        email TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        last_seen TIMESTAMP,
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);

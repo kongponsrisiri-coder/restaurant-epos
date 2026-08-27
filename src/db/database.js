@@ -469,6 +469,20 @@ async function initDB() {
       )
     `);
 
+    // SEPOS-ALLERGEN-SYNC-001 — manual allergen ticks (Allergen Menu sheet).
+    // This table existed ONLY in SQLite since SEPOS-ALLERGEN-LOCAL-001: every
+    // cloud save 500'd with "relation does not exist" and till-side edits
+    // queued cloud replications that could never land. UNIQUE(menu_item_id)
+    // is required for the upsert's ON CONFLICT.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS dish_allergens (
+        id SERIAL PRIMARY KEY,
+        menu_item_id INTEGER UNIQUE,
+        allergens TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // SEPOS-KITCHEN-MSG-001 — pre-canned messages waiters can one-tap to
     // send to the kitchen (allergies, holds, VIP, birthday, etc.). Admin
     // can add/edit/delete in Settings → Kitchen Templates.

@@ -67,6 +67,13 @@ const PULL_TABLES = [
   // cloud-wins tables so the till resolves item modifiers identically to the
   // cloud. Replaces the old per-item modifier pull (which lost a shared group
   // on all but the last dish it was attached to).
+  // SEPOS-ALLERGEN-SYNC-001 — manual allergen ticks finally sync down. pk is
+  // menu_item_id (UNIQUE): local and cloud row ids grew independently for
+  // months, so the cloud's id column is STRIPPED (dropCols) — upserting it
+  // would collide with unrelated local rows. Rows are never deleted (clearing
+  // writes '[]'), so no orphan flag. The config_write pending guard above
+  // keeps a till's fresh edit from being reverted mid-replication.
+  { path: '/api/dish-allergens',             table: 'dish_allergens',            pk: 'menu_item_id', dropCols: ['id'] },
   { path: '/api/modifier-groups-all',        table: 'modifier_groups',           pk: 'id', orphan: true },
   { path: '/api/modifiers-all',              table: 'modifiers',                 pk: 'id', orphan: true },
   { path: '/api/menu-item-modifier-groups',  table: 'menu_item_modifier_groups', pk: 'id', orphan: true },
@@ -708,6 +715,9 @@ const CONFIG_WRITE_PATHS = {
   modifier_groups:     /^\/api\/(?:modifier-groups|menu\/items\/\d+\/modifiers)\/(\d+)$/,
   modifiers:           /^\/api\/modifiers\/(\d+)$/,
   staff:               /^\/api\/staff\/(\d+)$/,
+  // SEPOS-ALLERGEN-SYNC-001 — the captured number is the MENU ITEM id (the
+  // table's pull pk), not a dish_allergens row id.
+  dish_allergens:      /^\/api\/dish-allergens\/(\d+)$/,
 };
 async function pendingConfigWriteIds(table) {
   const re = CONFIG_WRITE_PATHS[table];
@@ -1003,12 +1013,53 @@ async function pullFromCloud() {
         }
         list = filtered;
       }
+      // SEPOS-ALLERGEN-SYNC-001 — drop columns whose values are meaningless
+      // across installs (dish_allergens.id: local and cloud sequences grew
+      // independently, so the cloud's id would collide with unrelated rows).
+      if (ep.dropCols) {
+        list = list.map((row) => {
+          const copy = { ...row };
+          for (const c of ep.dropCols) delete copy[c];
+          return copy;
+        });
+      }
+      // SEPOS-ALLERGEN-SYNC-001 — backfill: the cloud table shipped months
+      // after tills started collecting rows locally, so this till may hold
+      // allergen work the cloud has never seen (Den's Yum Yum sweep). Push up
+      // every local row whose menu_item_id the cloud list lacks — covers both
+      // the empty-cloud first tick and a second till at the venue holding
+      // different rows. Self-limiting: once replicated, the diff is empty.
+      // Non-empty allergens only: an empty '[]' local row must not beat a
+      // real cloud row from another device.
+      if (ep.table === 'dish_allergens') {
+        try {
+          const cloudItems = new Set(list.map((row) => Number(row.menu_item_id)));
+          const loc = await pool.query(`SELECT menu_item_id, allergens FROM dish_allergens`);
+          const missing = loc.rows.filter((row) =>
+            !cloudItems.has(Number(row.menu_item_id)) &&
+            row.allergens && row.allergens !== '[]');
+          for (const row of missing) {
+            const up = await fetch(`${CLOUD_API_URL}/api/dish-allergens/${row.menu_item_id}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...(process.env.SYNC_SECRET ? { 'x-sync-secret': process.env.SYNC_SECRET } : {}) },
+              body: JSON.stringify({ allergens: row.allergens }),
+              signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+            });
+            if (!up.ok) throw new Error(`cloud ${up.status}`);
+          }
+          if (missing.length > 0) console.log(`[sync] dish_allergens backfill: pushed ${missing.length} local rows to cloud`);
+        } catch (bfErr) {
+          console.warn('[sync] dish_allergens backfill failed (will retry next tick):', bfErr.message);
+        }
+        if (list.length === 0) continue; // nothing to upsert from an empty cloud list
+      }
       // SEPOS-CONFIG-QUEUE — rows the host edited while offline (unfinished
       // config_write in the queue) are host-authoritative: don't let the
       // cloud's stale copy revert them, and don't orphan-delete them either.
+      // Keyed on the entry's pk (dish_allergens' guard ids are menu_item_ids).
       const pendingIds = await pendingConfigWriteIds(ep.table);
       if (pendingIds.size > 0) {
-        list = list.filter((row) => !pendingIds.has(Number(row?.id)));
+        list = list.filter((row) => !pendingIds.has(Number(row?.[ep.pk])));
         console.log(`[sync] pull ${ep.table}: skipping ${pendingIds.size} row(s) with pending config_write`);
       }
       const n = await upsertRows(ep.table, ep.pk, list);

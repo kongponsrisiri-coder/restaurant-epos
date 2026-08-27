@@ -3256,6 +3256,21 @@ app.get('/api/settings', async (req, res) => {
 app.put('/api/settings', requireStaffAuthOrSyncSecret(['admin', 'manager', 'supervisor']), async (req, res) => {
   try {
     const updates = req.body;
+    // SEPOS-NAV-HIDE-001 — home guard, server-side: the till always needs
+    // Tables or Counter to land on. The Settings UI refuses this too, but a
+    // stale client (or a raw API call) must not be able to strand every till
+    // with no home tab. Checked against the EFFECTIVE result (payload value
+    // if present, stored value otherwise — a payload may carry one key only).
+    if ('nav_show_tables' in updates || 'nav_show_counter' in updates) {
+      const effective = async (key) => {
+        if (key in updates) return String(updates[key]);
+        const r = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
+        return String(r.rows[0]?.value ?? '1');
+      };
+      if ((await effective('nav_show_tables')) === '0' && (await effective('nav_show_counter')) === '0') {
+        return res.status(400).json({ error: 'The till needs at least one home screen — Tables and Counter cannot both be hidden.' });
+      }
+    }
     for (const [key, value] of Object.entries(updates)) {
       await pool.query('INSERT INTO settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', [key, value]);
     }
@@ -11671,7 +11686,28 @@ app.post('/api/print/receipt', async (req, res) => {
       `SELECT order_items.*, COALESCE(menu_items.name, order_items.item_name) AS name, menu_items.name_alt
        FROM order_items LEFT JOIN menu_items ON order_items.menu_item_id = menu_items.id
        WHERE order_items.order_id = $1`, [order_id]);
-    await printService.printReceipt(settings, order, itemsRes.rows, payment_details || {});
+    // SEPOS-SPLIT-PRINT-001 — Split-by-Item: the client names the person's
+    // exact lines; print ONLY those (previously every split receipt carried
+    // the whole order's items under one person's total). Quantity + line
+    // discount come from the client's split (a person can take 2 of a line's
+    // 3 units). Unknown ids (stale client) → full list, never a blank receipt.
+    let receiptItems = itemsRes.rows;
+    const splitLines = Array.isArray(payment_details?.split_items) ? payment_details.split_items : null;
+    if (splitLines && splitLines.length) {
+      const byId = new Map(splitLines.map(s => [Number(s.id), s]));
+      const filtered = receiptItems
+        .filter(r => byId.has(Number(r.id)))
+        .map(r => {
+          const s = byId.get(Number(r.id));
+          return {
+            ...r,
+            quantity: Number(s.quantity) > 0 ? Number(s.quantity) : r.quantity,
+            ...(s.discount_value != null ? { discount_value: s.discount_value } : {}),
+          };
+        });
+      if (filtered.length) receiptItems = filtered;
+    }
+    await printService.printReceipt(settings, order, receiptItems, payment_details || {});
     res.json({ success: true });
   } catch (err) {
     console.error('[print/receipt]', err.message);

@@ -10150,6 +10150,22 @@ app.post('/api/deliveroo/webhook', async (req, res) => {
 
     // Notify kitchen via socket.
     io.emit('new_order_items', { order_id: orderId });
+    // SEPOS-ORDER-CHIME-001 — Deliveroo arrivals only emitted the generic
+    // items event, so everything keyed on new_takeaway_order (kitchen popup,
+    // takeaway strip refresh, native auto-print, the new arrival chime)
+    // treated them as invisible. Same event shape as the widget path; the
+    // relay already forwards it to local tills.
+    io.emit('new_takeaway_order', {
+      id: orderId,
+      customer_name: parsed.customerName,
+      customer_phone: parsed.customerPhone,
+      pickup_time: parsed.pickupTime,
+      total: null,
+      item_count: parsed.items.length,
+      order_subtype: 'delivery',
+      delivery_address: null,
+      source: 'deliveroo',
+    });
     console.log(`🛵 Deliveroo order #${parsed.displayId} → SiamEPOS #${orderId}`);
   } catch (err) {
     console.error('[deliveroo] webhook processing error:', err.message);

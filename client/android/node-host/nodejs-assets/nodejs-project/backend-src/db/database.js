@@ -407,6 +407,10 @@ async function initDB() {
     await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS cloud_id INTEGER`);
     // SEPOS-ITEM-MOVE-001 — audit stamp: which bill a line was moved off.
     await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS moved_from_order_id INTEGER`);
+    // SEPOS-MENU-CHANNELS-001 — per-channel availability: is_qr NULL means
+    // "same as is_online" (live-linked); explicit 0/1 overrides for the QR
+    // table menu only (alcohol at the table but not on the collection page).
+    await pool.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS is_qr INTEGER`);
     // SEPOS-QR-PAY-REDO — the Stripe PaymentIntent that settled THIS tender. A
     // QR table order is paid round by round, so one order legitimately carries
     // several PIs and orders.payment_intent_id (SEPOS-047b: one PI per takeaway

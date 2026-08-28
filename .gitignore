@@ -7,7 +7,7 @@ restaurant-local.db-shm
 .env
 
 # Client provisioning secrets — never commit
-scripts/.secrets-*.txt
+scripts/.secrets-*
 
 # Apple Developer ID signing cert + private key — never commit (used for
 # notarization via GitHub Actions secrets, not from the working tree).

@@ -111,7 +111,7 @@ export function buildKitchenOps(native) {
   const sentBy = ((items || []).find(i => i && i.sent_by) || {}).sent_by || null; // SEPOS-SENTBY-001
   const ops = [];
   if (kind === 'fire-notice') {
-    headerOps(ops, order, 'FIRE', kw);
+    headerOps(ops, order, 'CALL', kw);   // SEPOS-WORDING-001 — 'CALL' not 'FIRE'
     ops.push({ op: 'feed', v: 1 }, { op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' },
              { op: 'text', v: COURSE[course] || ('COURSE ' + course) }, { op: 'size', v: 'n' }, { op: 'bold', v: false },
              { op: 'align', v: 0 }, { op: 'feed', v: 2 }, { op: 'cut' });

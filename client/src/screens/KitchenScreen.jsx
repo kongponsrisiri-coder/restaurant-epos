@@ -324,7 +324,7 @@ export default function KitchenScreen({ onLogout }) {
         else if (courseNum === 2) playSound('mains');
         else if (courseNum === 3) playSound('desserts');
         else playSound('default');
-        setNotification(`🔥 ${orderShortLabelPlain(data.order)} — ${courseLabel} fired!`);
+        setNotification(`🔥 ${orderShortLabelPlain(data.order)} — ${courseLabel} called!`);
         setTimeout(() => setNotification(null), 6000);
       }
     });
@@ -717,7 +717,7 @@ const allReadyForOff = directMode && ready.length > 0 && cooking.length === 0 &&
         letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 8
       }}>
         <span style={{ background: '#f59e0b', color: '#111', padding: '3px 10px', borderRadius: 20, fontSize: 11 }}>
-          ⏳ PENDING — WAITING TO FIRE
+          ⏳ PENDING — WAITING TO CALL
         </span>
         <span style={{ color: '#6b7280', fontSize: 11 }}>{upcoming.length} item{upcoming.length > 1 ? 's' : ''}</span>
       </div>

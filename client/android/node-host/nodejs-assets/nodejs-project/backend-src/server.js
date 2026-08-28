@@ -2105,7 +2105,7 @@ app.post('/api/orders/:id/close-zero', async (req, res) => {
 });
 
 app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
-  const { amount, method } = req.body;
+  const { amount, method, tip } = req.body;
   const orderId = req.params.id;
   const isCancel = String(method).toLowerCase() === 'cancelled' && Number(amount) === 0;
   // SEPOS-AUTO-SESSION-001 — belt-and-braces: a bill must never close outside
@@ -2141,6 +2141,16 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
         return res.status(400).json({ error: 'Payment amount must be a positive number' });
       }
       paymentRows = [{ amount: isComp ? 0 : amt, method }];
+    }
+    // SEPOS-TIPS-001 — gratuity recorded with the tender. The client sends ONE
+    // order-level tip (card over-tender + the explicit tip box); it is stamped
+    // on the first non-Cash tender (cash over-tender is change, never a tip).
+    // The tender amounts already INCLUDE the tip, so takings stay reconciled
+    // with the PDQ settlement — `tip` only says how much of it was gratuity.
+    const tipAmt = Number(tip);
+    if (Number.isFinite(tipAmt) && tipAmt > 0 && paymentRows.length) {
+      const target = paymentRows.find(p => String(p.method) !== 'Cash') || paymentRows[0];
+      target.tip = Math.round(tipAmt * 100) / 100;
     }
   }
   // SEPOS-DBLPAY-001 — transactional, row-locked payment. The old flow only
@@ -2213,7 +2223,7 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
 
     if (!suppressTender) {
       for (const p of paymentRows) {
-        await client.query('INSERT INTO payments (order_id, amount, method) VALUES ($1,$2,$3)', [orderId, p.amount, p.method]);
+        await client.query('INSERT INTO payments (order_id, amount, method, tip) VALUES ($1,$2,$3,$4)', [orderId, p.amount, p.method, p.tip || 0]);
       }
     }
     // SEPOS-AUDIT-001 — snapshot the service charge AT CLOSE with the rate in
@@ -2313,7 +2323,7 @@ app.post('/api/orders/:id/pay', requireValidLicense, async (req, res) => {
       }
     }
     io.emit('order_closed', { order_id: orderId });
-    await offlineQueue.enqueue('pay_order', { localOrderId: Number(orderId), amount, method, payments: tenders || undefined });
+    await offlineQueue.enqueue('pay_order', { localOrderId: Number(orderId), amount, method, tip: tip || undefined, payments: tenders || undefined });
     res.json({ success: true });
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch {}
@@ -4557,7 +4567,7 @@ app.get('/api/z-report/preview', async (req, res) => {
       from = sessionMeta.opened_at;
       to   = sessionMeta.closed_at || new Date().toISOString(); // open shift → up to now
     }
-    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, foodDrinkRes, vouchersSoldRes, vouchersRedeemedRes, settingsRes, depTakenRes, depRedeemedRes, depForfeitedRes, depHeldRes, compResZ] = await Promise.all([
+    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, foodDrinkRes, vouchersSoldRes, vouchersRedeemedRes, settingsRes, depTakenRes, depRedeemedRes, depForfeitedRes, depHeldRes, compResZ, tipsResZ] = await Promise.all([
       // SEPOS-REPREC-001 — exclude cancelled/void bills (payment method='cancelled', £0)
       // from the Z so its Total Sales + order count reconcile with Trading and Bills.
       // A closed order with no payment row (method NULL) is still kept.
@@ -4614,6 +4624,10 @@ app.get('/api/z-report/preview', async (req, res) => {
       pool.query(`SELECT COALESCE(SUM(balance), 0) AS total, COUNT(*) AS count FROM vouchers WHERE type='deposit' AND status='active' AND balance > 0`).catch(() => ({ rows: [{ count: 0, total: 0 }] })),
       // SEPOS-COMP-001 — complimentary settlements in this window
       pool.query(`SELECT COUNT(DISTINCT o.id)::int AS count, COALESCE(SUM(o.total), 0) AS value FROM orders o JOIN payments p ON p.order_id = o.id AND p.method = 'Complimentary' WHERE o.status='closed' AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp`, [from, to]).catch(() => ({ rows: [{ count: 0, value: 0 }] })),
+      // SEPOS-TIPS-001 — gratuities recorded with card tenders in this window.
+      // Already INSIDE total_card/total_other (tender amounts include the tip),
+      // so this is an "of which" line — never added to takings again.
+      pool.query(`SELECT COUNT(*)::int AS count, COALESCE(SUM(p.tip), 0) AS value FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.status='closed' AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp AND COALESCE(p.method,'') <> 'cancelled' AND p.tip > 0`, [from, to]).catch(() => ({ rows: [{ count: 0, value: 0 }] })),
     ]);
     const orders = ordersRes.rows;
     const voids = voidsRes.rows[0];
@@ -4713,7 +4727,7 @@ app.get('/api/z-report/preview', async (req, res) => {
     }
     const vouchersSold     = { count: vSoldCount, total: vSoldTotal };
     const vouchersRedeemed = vouchersRedeemedRes.rows[0] || { count: 0, total: 0 };
-    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_paid: totalPaid, total_subtotal: totalSubtotal, total_service: totalService, service_charge_rate: scRate, service_charge_enabled: scEnabled, vat_mode: vatMode, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: totalOrders, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: totalOrders > 0 ? totalSales / totalOrders : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0), by_method: vouchersSoldByMethod, till_cash: vSoldTillCash, till_card: vSoldTillCard }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, deposits_enabled: depositsEnabled, deposits_taken: { count: Number(depTaken.count || 0), total: Number(depTaken.total || 0) }, deposits_redeemed: { count: Number(depRedeemed.count || 0), total: Number(depRedeemed.total || 0) }, deposits_forfeited: { count: Number(depForfeited.count || 0), total: Number(depForfeited.total || 0) }, deposits_held: { count: Number(depHeld.count || 0), total: Number(depHeld.total || 0) }, comp_bills: { count: Number(compResZ.rows[0]?.count || 0), value: Number(compResZ.rows[0]?.value || 0) }, session: sessionMeta, from, to, ...orderTypeSplit });
+    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_paid: totalPaid, total_subtotal: totalSubtotal, total_service: totalService, service_charge_rate: scRate, service_charge_enabled: scEnabled, vat_mode: vatMode, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: totalOrders, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: totalOrders > 0 ? totalSales / totalOrders : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0), by_method: vouchersSoldByMethod, till_cash: vSoldTillCash, till_card: vSoldTillCard }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, deposits_enabled: depositsEnabled, deposits_taken: { count: Number(depTaken.count || 0), total: Number(depTaken.total || 0) }, deposits_redeemed: { count: Number(depRedeemed.count || 0), total: Number(depRedeemed.total || 0) }, deposits_forfeited: { count: Number(depForfeited.count || 0), total: Number(depForfeited.total || 0) }, deposits_held: { count: Number(depHeld.count || 0), total: Number(depHeld.total || 0) }, comp_bills: { count: Number(compResZ.rows[0]?.count || 0), value: Number(compResZ.rows[0]?.value || 0) }, total_tips: Number(tipsResZ.rows[0]?.value || 0), tips_count: Number(tipsResZ.rows[0]?.count || 0), session: sessionMeta, from, to, ...orderTypeSplit });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

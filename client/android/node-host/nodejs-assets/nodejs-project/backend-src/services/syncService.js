@@ -385,9 +385,10 @@ async function applyToCloud(actionType, payload) {
       const r = await fetch(url(`/api/orders/${cloudId}/pay`), {
         // SEPOS-062 — forward the per-tender split breakdown when present so the
         // cloud records the same Cash/Card rows the till did.
+        // SEPOS-TIPS-001 — forward the tip so the cloud row carries it too.
         method: 'POST', ...json(payload.payments
-          ? { payments: payload.payments }
-          : { amount: payload.amount, method: payload.method }),
+          ? { payments: payload.payments, tip: payload.tip }
+          : { amount: payload.amount, method: payload.method, tip: payload.tip }),
       });
       if (!r.ok) throw new Error(`pay_order ${r.status}`);
       return r.json();

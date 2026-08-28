@@ -1914,6 +1914,89 @@ app.put('/api/order-items/:id/void', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SEPOS-ITEM-MOVE-001 — move ONE line to another table (item rung on the
+// wrong table; a guest moves taking their drink). Whole lines only in v1.
+// Money guards: refuses when the source bill has ANY payment (part-paid split
+// chaos), when either order is QR (prepaid, staff-read-only — same rule as
+// every other mutation), and voided lines. The item's state travels
+// untouched — a served item stays served, a fired course stays fired; the
+// kitchen gets NO new ticket (nothing new to cook), the KDS card re-homes
+// via the item_moved socket event.
+app.put('/api/order-items/:id/move', async (req, res) => {
+  try {
+    const targetTableId = Number(req.body?.target_table_id);
+    if (!targetTableId) return res.status(400).json({ error: 'target_table_id required' });
+
+    const itemRes = await pool.query('SELECT * FROM order_items WHERE id = $1', [req.params.id]);
+    const item = itemRes.rows[0];
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (Number(item.voided) === 1) return res.status(400).json({ error: 'Voided items can\'t move.' });
+
+    const srcRes = await pool.query('SELECT * FROM orders WHERE id = $1', [item.order_id]);
+    const src = srcRes.rows[0];
+    if (!src) return res.status(404).json({ error: 'Order not found' });
+    if (src.status !== 'open') return res.status(409).json({ error: 'This bill is closed.' });
+    if (await refuseQrMutation(src.id, res)) return;   // prepaid QR bills stay intact
+    if (Number(src.table_id) === targetTableId) return res.status(400).json({ error: 'That is the same table.' });
+    const payRes = await pool.query('SELECT COUNT(*) AS n FROM payments WHERE order_id = $1', [src.id]);
+    if (Number(payRes.rows[0]?.n || 0) > 0) {
+      return res.status(409).json({ error: 'This bill already has a payment on it — settle or amend it before moving items.' });
+    }
+
+    const tblRes = await pool.query('SELECT id, is_takeaway FROM tables WHERE id = $1', [targetTableId]);
+    if (!tblRes.rows[0]) return res.status(404).json({ error: 'Target table not found' });
+
+    // Existing open order on the target — same selection rule as seating:
+    // never a QR order (a table can hold a waiter bill AND a prepaid QR bill).
+    const tgtRes = await pool.query(
+      `SELECT o.* FROM orders o
+        WHERE o.table_id = $1 AND o.status = 'open' AND COALESCE(o.source,'') <> 'qr'
+        ORDER BY CASE WHEN EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id) THEN 1 ELSE 0 END DESC,
+                 o.id DESC
+        LIMIT 1`, [targetTableId]);
+    let target = tgtRes.rows[0] || null;
+    let createdTarget = false;
+    if (target) {
+      const tPay = await pool.query('SELECT COUNT(*) AS n FROM payments WHERE order_id = $1', [target.id]);
+      if (Number(tPay.rows[0]?.n || 0) > 0) {
+        return res.status(409).json({ error: 'The bill on that table already has a payment on it — settle it first.' });
+      }
+    } else {
+      const ins = await pool.query(
+        `INSERT INTO orders (table_id, staff_id, status, covers, order_type, opened_at)
+         VALUES ($1, $2, 'open', 1, 'dine_in', NOW()) RETURNING *`,
+        [targetTableId, src.staff_id || null]);
+      target = ins.rows[0];
+      createdTarget = true;
+      await pool.query(`UPDATE tables SET status = 'occupied' WHERE id = $1`, [targetTableId]);
+    }
+
+    await pool.query('UPDATE order_items SET order_id = $1, moved_from_order_id = $2 WHERE id = $3',
+      [target.id, src.id, item.id]);
+
+    // SEPOS-047c — BOTH totals through the shared expression, never a raw sum.
+    for (const oid of [src.id, target.id]) {
+      const t = await pool.query(`SELECT ${ORDER_TOTAL_EXPR} as total FROM order_items WHERE order_id=$1 AND voided=0`, [oid]);
+      await pool.query('UPDATE orders SET total=$1 WHERE id=$2', [t.rows[0].total || 0, oid]);
+    }
+
+    // Local till → replicate to cloud (translated by cloud ids on replay).
+    await offlineQueue.enqueue('move_item', {
+      localItemId: Number(item.id),
+      target_table_id: targetTableId,
+      localTargetOrderId: Number(target.id),
+    });
+
+    io.emit('item_moved', {
+      item_id: Number(item.id), from_order_id: src.id, to_order_id: target.id,
+      from_table_id: src.table_id, to_table_id: targetTableId,
+    });
+    io.emit('new_order_items', { order_id: target.id });   // KDS/strip refreshers
+
+    res.json({ success: true, target_order_id: target.id, created_target: createdTarget });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.put('/api/orders/:id/discount', async (req, res) => {
   try {
     if (await refuseQrMutation(req.params.id, res)) return;

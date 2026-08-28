@@ -353,6 +353,18 @@ export default function MenuSection() {
     try { assertOk(await updateMenuItem(item.id, { ...item, is_online: next })); }
     catch (err) { alert('Could not update — check connection.'); fetchMenu(); }
   };
+  // SEPOS-MENU-CHANNELS-001 — QR-table channel: is_qr NULL follows Online,
+  // explicit 0/1 overrides (alcohol at the table but off the collection page).
+  const toggleQr = async (item) => {
+    const eff = (item.is_qr ?? item.is_online ?? 1) ? 1 : 0;
+    const next = eff ? 0 : 1;
+    setMenu(prev => prev.map(cat => ({
+      ...cat,
+      items: (cat.items || []).map(it => it.id === item.id ? { ...it, is_qr: next } : it),
+    })));
+    try { assertOk(await updateMenuItem(item.id, { ...item, is_qr: next })); }
+    catch (err) { alert('Could not update — check connection.'); fetchMenu(); }
+  };
   const openModifiers   = async (item) => { setModifierItem(item); setActiveGroup(null); const [data, lib] = await Promise.all([getItemModifiers(item.id), getModifierLibrary()]); setModifiers(data); setLibrary(Array.isArray(lib) ? lib : []); };
   const refreshModifiers = async () => { const [data, lib] = await Promise.all([getItemModifiers(modifierItem.id), getModifierLibrary()]); setModifiers(data); setLibrary(Array.isArray(lib) ? lib : []); };
   // SEPOS-059 — create a reusable (library) group and auto-attach to this dish,
@@ -737,6 +749,9 @@ export default function MenuSection() {
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }} onMouseDown={e => e.stopPropagation()}>
                   <button onClick={e => { e.stopPropagation(); toggleAvailable(item); }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: item.is_available ? '#dcfce7' : '#fee2e2', color: item.is_available ? '#14532d' : '#991b1b' }}>{item.is_available ? 'Available' : 'Off menu'}</button>
                   <button onClick={e => { e.stopPropagation(); toggleOnline(item); }} title={item.is_online === 0 ? 'Hidden from online ordering' : 'Visible on online ordering'} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: item.is_online === 0 ? '#e5e7eb' : '#dbeafe', color: item.is_online === 0 ? '#374151' : '#1e40af' }}>{item.is_online === 0 ? '🌐 Hidden' : '🌐 Online'}</button>
+                  {(() => { const qeff = (item.is_qr ?? item.is_online ?? 1) ? 1 : 0; return (
+                  <button onClick={e => { e.stopPropagation(); toggleQr(item); }} title={qeff ? 'Visible on QR table ordering' : 'Hidden from QR table ordering'} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 12, background: qeff ? '#f3e8ff' : '#e5e7eb', color: qeff ? '#7e22ce' : '#374151' }}>{qeff ? '📱 QR' : '📱 QR hidden'}</button>
+                  ); })()}
                   <button onClick={e => { e.stopPropagation(); openModifiers(item); }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#fef9c3', color: '#713f12', fontWeight: 600, fontSize: 12 }}>Options</button>
                   <button onClick={e => { e.stopPropagation(); openEditForm(item); }} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: '#f0f0f0', fontWeight: 600, fontSize: 12 }}>Edit</button>
                   <button onClick={e => { e.stopPropagation(); setColorPick({ type: 'item', id: item.id, current: item.color }); }} title="Card colour on the order screen" style={{ padding: '6px 10px', borderRadius: 8, border: item.color ? 'none' : '1px solid #ddd', cursor: 'pointer', background: item.color || '#fff', fontWeight: 600, fontSize: 12 }}>🎨</button>

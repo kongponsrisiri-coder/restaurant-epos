@@ -1125,7 +1125,7 @@ app.put('/api/menu/items/sort-order', async (req, res) => {
 app.put('/api/menu/items/:id', async (req, res) => {
   if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
-    const { name, name_alt, description, price, is_available, is_online, subcategory_id, category_id, vat_rate, default_course, printer_id, image_url, dietary } = req.body;
+    const { name, name_alt, description, price, is_available, is_online, is_qr, subcategory_id, category_id, vat_rate, default_course, printer_id, image_url, dietary } = req.body;   // SEPOS-MENU-CHANNELS-001 — is_qr
     // NULL / '' → inherit the category course; 1-4 → per-item override.
     const dc = (default_course == null || default_course === '') ? null : (Number(default_course) || null);
     // SEPOS-STATION-003 — per-dish station override. '' / null → inherit the
@@ -1139,8 +1139,8 @@ app.put('/api/menu/items/:id', async (req, res) => {
       diet = Array.isArray(dietary) ? JSON.stringify(dietary) : (dietary ? JSON.stringify([dietary]) : '');
     }
     await pool.query(
-      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, is_online=COALESCE($6, is_online), subcategory_id=$7, category_id=$8, vat_rate=COALESCE($9, vat_rate), default_course=$10, printer_id=$11, image_url=COALESCE($12, image_url), dietary=COALESCE($13, dietary) WHERE id=$14',
-      [name, name_alt || null, description, price, is_available, is_online ?? null, subcategory_id || null, category_id, vat_rate ?? null, dc, pid, img, diet, req.params.id]
+      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, is_online=COALESCE($6, is_online), is_qr=COALESCE($7, is_qr), subcategory_id=$8, category_id=$9, vat_rate=COALESCE($10, vat_rate), default_course=$11, printer_id=$12, image_url=COALESCE($13, image_url), dietary=COALESCE($14, dietary) WHERE id=$15',
+      [name, name_alt || null, description, price, is_available, is_online ?? null, is_qr ?? null, subcategory_id || null, category_id, vat_rate ?? null, dc, pid, img, diet, req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -8944,7 +8944,7 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
     let totalPence = 0;
     for (const it of items) {
       const qty = Math.max(1, Math.min(20, Number(it.quantity) || 1));
-      const row = (await pool.query(`SELECT id, name, price, is_available, COALESCE(is_online,1) AS is_online FROM menu_items WHERE id = $1`, [it.menu_item_id])).rows[0];
+      const row = (await pool.query(`SELECT id, name, price, is_available, COALESCE(is_qr, is_online, 1) AS is_online FROM menu_items WHERE id = $1`, [it.menu_item_id])).rows[0];   // SEPOS-MENU-CHANNELS-001 — QR channel: is_qr overrides, NULL follows is_online
       if (!row) return res.status(400).json({ error: 'An item in your cart is no longer on the menu — please refresh.' });
       if (!Number(row.is_available) || !Number(row.is_online)) {
         return res.status(409).json({ error: `Sorry — "${row.name}" has just sold out. Please remove it and try again.` });

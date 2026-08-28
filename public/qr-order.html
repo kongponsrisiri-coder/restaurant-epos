@@ -114,7 +114,7 @@
       if (S.pay_later) S.stripe_ready = false;
       document.documentElement.style.setProperty('--brand', s.brand || '#1E4038');
       const m = await fetch('/api/menu').then((r) => r.json());
-      MENU = (Array.isArray(m) ? m : []).filter((c) => (c.items || []).some((i) => Number(i.is_online ?? 1)));
+      MENU = (Array.isArray(m) ? m : []).filter((c) => (c.items || []).some((i) => Number(i.is_qr ?? i.is_online ?? 1)));
       activeCat = MENU[0] ? MENU[0].id : null;
       if (s.order && s.order.items && s.order.items.length && (s.order.payment_status === 'paid' || s.order.payment_status === 'mock' || s.order.payment_status === 'unpaid')) view = 'status';
       render();
@@ -147,7 +147,7 @@
       const loose = subs.length ? (cat.items || []).filter((i) => !i.subcategory_id) : [];
       if (loose.length) groups.push({ name: 'More', items: loose });
       for (const g of groups) {
-        const items = g.items.filter((i) => Number(i.is_online ?? 1) && Number(i.is_available ?? 1));
+        const items = g.items.filter((i) => Number(i.is_qr ?? i.is_online ?? 1) && Number(i.is_available ?? 1));
         if (!items.length) continue;
         if (g.name) h += '<div class="sec-title">' + esc(g.name) + '</div>';
         for (const i of items) h += itemCard(i);

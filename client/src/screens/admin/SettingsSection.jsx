@@ -766,6 +766,8 @@ export default function SettingsSection() {
     nav_show_counter:        '1',
     online_order_chime:      '1',   // SEPOS-ORDER-CHIME-001 — repeat-until-ack arrival sound, default ON
     qr_payment_policy:       'pay_first',   // SEPOS-QR-PAYLATER-001 — QR table ordering: pay_first | pay_later
+    takeaway_pay_mode:       '',            // SEPOS-TA-CHOICE-001 — '' auto | 'collection' | 'choice'
+    takeaway_discount_min_total: '',        // SEPOS-TA-PROMO-001 — promo spend threshold (£)
     kitchen_print_mode:      'print',   // 'print' | 'kds' | 'both'
     kitchen_language:        'en_th',  // 'en_th' | 'en'
     brand_logo:              '',   // SEPOS-BRAND-001 — on-screen logo (separate from receipt logo)
@@ -1554,8 +1556,44 @@ export default function SettingsSection() {
             style={{ width:120, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}
           />
         </div>
+        <div style={{ marginTop:14 }}>
+          <label style={{ fontSize:14, fontWeight:600, color:'#555', display:'block', marginBottom:6 }}>Only on orders over (£) <span style={{ fontWeight:400, color:'#999' }}>— leave empty for every order</span></label>
+          <input
+            value={settings.takeaway_discount_min_total || ''}
+            onChange={e => setSettings({ ...settings, takeaway_discount_min_total: e.target.value })}
+            type="text" inputMode="decimal" step="1" min="0"
+            placeholder="e.g. 30"
+            style={{ width:120, padding:'8px 12px', borderRadius:8, border:'1px solid #ddd', fontSize:14 }}
+          />
+        </div>
         <div style={{ fontSize:12, color:'#aaa', marginTop:10 }}>
-          Applies to online takeaway &amp; delivery orders only — never to dine-in bills. Capped at 50%.
+          Applies to online takeaway &amp; delivery orders only — never to dine-in bills. Capped at 50%. The ordering page advertises the offer automatically and the discount is applied at checkout — including inside the card charge.
+        </div>
+      </div>
+
+      {/* ── SEPOS-TA-CHOICE-001 — Online order payment ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:8 }}>💳 Online Order Payment</h2>
+        <div style={{ fontSize:12, color:'#888', lineHeight:1.5, marginBottom:12 }}>
+          How customers pay on your online ordering page and widget. QR table ordering has its own setting above; vouchers always pay online.
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, maxWidth:640 }}>
+          {[['', '⚙️ Automatic', 'Pay online when card keys are set up, otherwise pay on collection (today\'s behaviour)'],
+            ['collection', '🏪 Pay on collection', 'Never ask for a card online — staff take payment at handover'],
+            ['choice', '🤝 Customer chooses', 'Checkout shows both: pay now online, or pay at the restaurant']].map(([val, label, hint]) => (
+            <button key={val || 'auto'} onClick={() => setSettings({ ...settings, takeaway_pay_mode: val })} style={{
+              padding:'12px', borderRadius:10, textAlign:'left', cursor:'pointer',
+              border:'2px solid ' + (((settings.takeaway_pay_mode ?? '') === val) ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0'),
+              background:((settings.takeaway_pay_mode ?? '') === val) ? 'var(--brand-primary, #1a1a2e)' : 'white',
+              color:((settings.takeaway_pay_mode ?? '') === val) ? 'white' : '#555',
+            }}>
+              <div style={{ fontWeight:800, fontSize:13 }}>{label}</div>
+              <div style={{ fontSize:11, opacity:0.85, marginTop:4 }}>{hint}</div>
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize:12, color:'#aaa', marginTop:10 }}>
+          Unpaid orders can no-show — choosing "pay on collection" or "customer chooses" accepts that risk. The till blocks closing an unpaid order until staff record the payment.
         </div>
       </div>
 

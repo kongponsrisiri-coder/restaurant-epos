@@ -7812,7 +7812,7 @@ app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
     // set both a restaurant postcode and a radius. The widget uses this
     // flag to decide whether to show the Delivery toggle at all.
     const dr = await pool.query(
-      `SELECT key, value FROM settings WHERE key IN ('restaurant_postcode','delivery_radius_miles','takeaway_discount_percent')`
+      `SELECT key, value FROM settings WHERE key IN ('restaurant_postcode','delivery_radius_miles','takeaway_discount_percent','takeaway_discount_min_total')`
     );
     const cfg = {};
     dr.rows.forEach(row => { cfg[row.key] = row.value; });
@@ -7821,11 +7821,16 @@ app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
     // Thai ask, 2026-07-21). 0 = off. Clamped 0–50 as a fat-finger guard; the
     // order endpoint clamps identically so widget and server always agree.
     const discountPercent = Math.min(50, Math.max(0, Number(cfg.takeaway_discount_percent) || 0));
+    // SEPOS-TA-PROMO-001 (Yum Yum, 28 Aug) — optional spend threshold: the
+    // discount applies only when the pre-discount total reaches this. 0/unset
+    // = unconditional (Chart Thai's existing behaviour, untouched).
+    const discountMinTotal = Math.max(0, Number(cfg.takeaway_discount_min_total) || 0);
     res.json({
       ...(r.rows[0] || {}),
       delivery_enabled: deliveryEnabled,
       delivery_radius_miles: deliveryEnabled ? Number(cfg.delivery_radius_miles) : 0,
       discount_percent: discountPercent,
+      discount_min_total: discountMinTotal,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -8113,11 +8118,15 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
     // tampered widget can't claim a bigger discount than the setting allows;
     // clamped identically to /api/takeaway/settings so both sides agree.
     let discountPercent = 0;
+    let discountMinTotal = 0;
     try {
-      const dset = await client.query(`SELECT value FROM settings WHERE key = 'takeaway_discount_percent'`);
-      discountPercent = Math.min(50, Math.max(0, Number(dset.rows[0]?.value) || 0));
+      const dset = await client.query(`SELECT key, value FROM settings WHERE key IN ('takeaway_discount_percent','takeaway_discount_min_total')`);
+      const dm = {}; dset.rows.forEach(r => { dm[r.key] = r.value; });
+      discountPercent = Math.min(50, Math.max(0, Number(dm.takeaway_discount_percent) || 0));
+      // SEPOS-TA-PROMO-001 — spend threshold; 0/unset = unconditional.
+      discountMinTotal = Math.max(0, Number(dm.takeaway_discount_min_total) || 0);
     } catch { /* setting absent → no discount */ }
-    if (discountPercent > 0) {
+    if (discountPercent > 0 && total >= discountMinTotal) {
       total = Math.round(total * (1 - discountPercent / 100) * 100) / 100;
     }
 
@@ -8382,6 +8391,11 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
   // voucherService. Orders then land 'unpaid' and the till's Collected guard
   // (SEPOS-TA-COLLECT-001) makes staff take payment — same as a keyless tenant.
   if (payMode === 'collection') return res.json({ configured: false, publishable_key: null });
+  // SEPOS-TA-CHOICE-001 (Yum Yum, 28 Aug) — 'choice' lets the CUSTOMER pick:
+  // pay online now (Stripe) or pay at the restaurant on collection. The pages
+  // render both buttons; the orders endpoint already accepts both (verified
+  // PI → 'paid', none → 'unpaid' + the till's Collected guard).
+  const payChoice = payMode === 'choice';
   const sp = siampayCfg();
   if (!mock && sp) {
     // SIAMPAY-002 — widget must init Stripe.js WITH the connected account so
@@ -8390,6 +8404,7 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
       configured: true,
       publishable_key: sp.pk,
       stripe_account: sp.account,
+      pay_choice: payChoice,   // SEPOS-TA-CHOICE-001
       // No fee_pence: the SiamPay fee comes out of the client's settlement
       // (application_fee_amount), the customer just pays the menu price.
     });
@@ -8398,6 +8413,7 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
   res.json({
     configured,
     publishable_key: configured ? (process.env.STRIPE_PUBLISHABLE_KEY || null) : null,
+    pay_choice: configured ? payChoice : false,   // SEPOS-TA-CHOICE-001
   });
 });
 

@@ -405,6 +405,8 @@ async function initDB() {
     // method) would silently merge two genuine identical tenders, so they are
     // keyed on the cloud id.
     await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS cloud_id INTEGER`);
+    // SEPOS-ITEM-MOVE-001 — audit stamp: which bill a line was moved off.
+    await pool.query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS moved_from_order_id INTEGER`);
     // SEPOS-QR-PAY-REDO — the Stripe PaymentIntent that settled THIS tender. A
     // QR table order is paid round by round, so one order legitimately carries
     // several PIs and orders.payment_intent_id (SEPOS-047b: one PI per takeaway

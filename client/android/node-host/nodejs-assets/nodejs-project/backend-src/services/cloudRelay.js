@@ -241,6 +241,7 @@ const RELAY_EVENTS = [
   'course_fired',
   'item_status_changed',
   'item_voided',
+  'item_moved',   // SEPOS-ITEM-MOVE-001 — line moved table→table; KDS/floor re-home
   'order_closed',
   'table_moved',
   'table_merged',

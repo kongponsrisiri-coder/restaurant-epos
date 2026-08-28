@@ -131,7 +131,11 @@
   function render() {
     if (done) return renderDone();
     const cat = MENU.find((c) => c.id === activeCat) || MENU[0];
-    let h = '<header><h1>' + esc(S.name) + '</h1><div class="tbl">' + (deliveryOn() ? '🥡 Collection · 🛵 Delivery — 0% commission, direct to the kitchen' : '🥡 Order for collection · 0% commission — direct to the kitchen') + '</div></header>';
+    // SEPOS-WORDING-002 (Korakot, 28 Aug) — "0% commission" is OUR pitch to
+    // owners, not customer language; it read oddly under the restaurant's own
+    // name. Customer-facing line sells the food. (The promo batch will make
+    // this line settings-driven — e.g. "10% off orders over £30".)
+    let h = '<header><h1>' + esc(S.name) + '</h1><div class="tbl">' + (deliveryOn() ? '🥡 Collection · 🛵 Delivery — freshly cooked to order' : '🥡 Order for collection — freshly cooked to order') + '</div></header>';
     h += '<div class="cats">' + MENU.map((c) => '<button class="cat' + (cat && c.id === cat.id ? ' on' : '') + '" data-cat="' + c.id + '">' + esc(c.name) + '</button>').join('') + '</div>';
     if (cat) {
       const subs = (cat.subcategories || []);

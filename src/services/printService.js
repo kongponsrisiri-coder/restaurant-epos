@@ -369,7 +369,7 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
 
     // Order header
     ...(order.order_type === 'takeaway' ? [
-      col2('Type', order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`)), lf(),
+      col2('Type', orderHeading({ ...order, order_type: 'takeaway' })), lf(),   // SEPOS-TA-LABEL-002 — 'TAKEAWAY 2', never the raw slot number
       order.customer_name ? [col2('Customer', order.customer_name), lf()] : [],
       order.pickup_time   ? [col2('Pickup', new Date(order.pickup_time).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', timeZone:'Europe/London' })), lf()] : [],
     ] : [
@@ -512,11 +512,23 @@ function ticketTableLabel(order) {
 function tableHeading(order) {
   return ticketTableLabel(order);
 }
+// SEPOS-TA-LABEL-002 — one heading for a whole ORDER (takeaway label-first,
+// delivery id, dine-in table). Lazy require + never-throw, same pattern as
+// ticketTableLabel above.
+function orderHeading(order) {
+  try { return require('./ticketRender').ticketOrderHeading(order); }
+  catch {
+    if (order && order.order_type === 'takeaway') {
+      if (order.order_subtype === 'delivery') return `DELIVERY #${order.id}`;
+      if (order.table_label || order.table_number != null) return ticketTableLabel({ ...order, table_is_takeaway: 1 });
+      return `TAKEAWAY #${order.id}`;
+    }
+    return ticketTableLabel(order);
+  }
+}
 
 function buildFireNotice({ order, course, bilingual = true }) {
-  const heading  = order.order_type === 'takeaway'
-    ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
-    : tableHeading(order);
+  const heading  = orderHeading(order);   // SEPOS-TA-LABEL-002 — label-first, all order types
   const courseEN = COURSES_EN[course] || 'ITEMS';
   // Korakot 2026-06-02: no Thai on the category — English label only.
   const now      = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
@@ -531,7 +543,10 @@ function buildFireNotice({ order, course, bilingual = true }) {
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(courseEN), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     rule('='), lf(),
     CMD.ALIGN_CENTER,
-    txt(`${now}  ·  Order #${order.id}`), lf(2),
+    // SEPOS-TA-LABEL-002 — the footer names the table too, so even a torn
+    // card identifies its order. '-' not '·': the middle dot mangles to 'À'
+    // on Thai-codepage printers (Thann Thai photo, 28 Aug).
+    txt(`${now} - ${heading} - Order #${order.id}`), lf(2),
     CMD.CUT,
   ];
 
@@ -544,9 +559,7 @@ function buildFireNotice({ order, course, bilingual = true }) {
 function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepage = 30, fontScale = 'large' }) {
   const sentBy = (items.find(i => i && i.sent_by) || {}).sent_by || null; // SEPOS-SENTBY-001
   const itemSize = scaleCmd(fontScale); // SEPOS-PRINT-FONT-001 — per-role text size
-  const heading = order.order_type === 'takeaway'
-    ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
-    : tableHeading(order);
+  const heading = orderHeading(order);   // SEPOS-TA-LABEL-002 — label-first, all order types
   const courseEN = COURSES_EN[course] || 'ITEMS';
   // Korakot 2026-06-02: don't print Thai on the category (course)
   // header — STARTERS/MAINS in English is enough. Thai stays only on
@@ -576,7 +589,7 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
         // = SIZE_BIG, i.e. today's output). Korakot 2026-06-02: "letters need
         // to be a little bit wider" — now operator-configurable per SEPOS-PRINT-FONT-001.
         CMD.BOLD_ON, itemSize,
-        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}${item.notes ? ' / ' + item.notes : ''}`),
+        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}${item.notes ? ' — ' + item.notes : ''}`),   // SEPOS-TICKET-LAYOUT-001 — dash joiner
         CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
         // Thai item name — same scale as the English line above.
         nameAlt    ? [CMD.BOLD_ON, itemSize, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
@@ -589,7 +602,7 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
     }),
     rule('='), lf(),
     CMD.ALIGN_CENTER,
-    txt(`${now}  ·  Order #${order.id}`), lf(2),
+    txt(`${now} - Order #${order.id}`), lf(2),
     CMD.CUT,
   ];
 
@@ -601,9 +614,7 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
 function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage = 30, fontScale = 'large' }) {
   const sentBy = (items.find(i => i && i.sent_by) || {}).sent_by || null; // SEPOS-SENTBY-001
   const itemSize = scaleCmd(fontScale); // SEPOS-PRINT-FONT-001 — per-role text size
-  const heading = order.order_type === 'takeaway'
-    ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
-    : tableHeading(order);
+  const heading = orderHeading(order);   // SEPOS-TA-LABEL-002 — label-first, all order types
   const now = new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
   const headSize = heading.length <= 10 ? CMD.SIZE_BIG : CMD.SIZE_TALL;
 
@@ -627,7 +638,7 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
         // Item line — sized by the tenant's kitchen/bar font scale (default
         // 'large' = SIZE_BIG = today's output). SEPOS-PRINT-FONT-001.
         CMD.BOLD_ON, itemSize,
-        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}${item.notes ? ' / ' + item.notes : ''}`),
+        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}${item.notes ? ' — ' + item.notes : ''}`),
         CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
         // Thai item name — same scale as the English line above.
         nameAlt    ? [CMD.BOLD_ON, itemSize, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
@@ -668,7 +679,7 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
     ...courseBlocks,
     rule('='), lf(),
     CMD.ALIGN_CENTER,
-    txt(`${now}  ·  Order #${order.id}`), lf(2),
+    txt(`${now} - Order #${order.id}`), lf(2),
     CMD.CUT,
   ];
 
@@ -731,7 +742,7 @@ function buildKitchenMessage({ order_id, table_number, table_label, table_is_tak
     ...wrapped.flatMap(line => [txt(line), lf()]),
     CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     rule('='), lf(),
-    txt(`${now}${waiter_name ? '  ·  ' + waiter_name : ''}${order_id ? '  ·  Order #' + order_id : ''}`), lf(2),
+    txt(`${now}${waiter_name ? ' - ' + waiter_name : ''}${order_id ? ' - Order #' + order_id : ''}`), lf(2),
     CMD.CUT,
   ];
   return flatten(parts);

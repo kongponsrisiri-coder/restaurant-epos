@@ -77,8 +77,11 @@ app.use(express.static(path.join(__dirname, '../public')));
 // didn't). Refunds/changes to a prepaid order go through the payment provider,
 // not the till. Returns true (and answers 409) when the order is a QR order.
 async function refuseQrMutation(orderId, res) {
-  const r = await pool.query('SELECT source FROM orders WHERE id = $1', [orderId]);
-  if (r.rows[0] && r.rows[0].source === 'qr') {
+  // SEPOS-QR-PAYLATER-001 — the rule protects PREPAID money. A pay-later QR
+  // order carries no customer payment, so staff mutate/tender it like any
+  // bill; only paid/mock QR orders stay read-only.
+  const r = await pool.query('SELECT source, payment_status FROM orders WHERE id = $1', [orderId]);
+  if (r.rows[0] && r.rows[0].source === 'qr' && ['paid', 'mock'].includes(String(r.rows[0].payment_status || ''))) {
     res.status(409).json({ error: 'This is a customer prepaid QR order — it can\'t be changed on the till. Refund or adjust it through the payment provider.', qrReadOnly: true });
     return true;
   }
@@ -1122,7 +1125,7 @@ app.put('/api/menu/items/sort-order', async (req, res) => {
 app.put('/api/menu/items/:id', async (req, res) => {
   if (await maybeForwardMenuWriteToCloud(req, res)) return;
   try {
-    const { name, name_alt, description, price, is_available, is_online, subcategory_id, category_id, vat_rate, default_course, printer_id, image_url, dietary } = req.body;
+    const { name, name_alt, description, price, is_available, is_online, is_qr, subcategory_id, category_id, vat_rate, default_course, printer_id, image_url, dietary } = req.body;   // SEPOS-MENU-CHANNELS-001 — is_qr
     // NULL / '' → inherit the category course; 1-4 → per-item override.
     const dc = (default_course == null || default_course === '') ? null : (Number(default_course) || null);
     // SEPOS-STATION-003 — per-dish station override. '' / null → inherit the
@@ -1136,8 +1139,8 @@ app.put('/api/menu/items/:id', async (req, res) => {
       diet = Array.isArray(dietary) ? JSON.stringify(dietary) : (dietary ? JSON.stringify([dietary]) : '');
     }
     await pool.query(
-      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, is_online=COALESCE($6, is_online), subcategory_id=$7, category_id=$8, vat_rate=COALESCE($9, vat_rate), default_course=$10, printer_id=$11, image_url=COALESCE($12, image_url), dietary=COALESCE($13, dietary) WHERE id=$14',
-      [name, name_alt || null, description, price, is_available, is_online ?? null, subcategory_id || null, category_id, vat_rate ?? null, dc, pid, img, diet, req.params.id]
+      'UPDATE menu_items SET name=$1, name_alt=$2, description=$3, price=$4, is_available=$5, is_online=COALESCE($6, is_online), is_qr=COALESCE($7, is_qr), subcategory_id=$8, category_id=$9, vat_rate=COALESCE($10, vat_rate), default_course=$11, printer_id=$12, image_url=COALESCE($13, image_url), dietary=COALESCE($14, dietary) WHERE id=$15',
+      [name, name_alt || null, description, price, is_available, is_online ?? null, is_qr ?? null, subcategory_id || null, category_id, vat_rate ?? null, dc, pid, img, diet, req.params.id]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1639,7 +1642,7 @@ app.post('/api/orders/:id/items', requireValidLicense, async (req, res) => {
     // to add to that table open their own bill. The QR flow itself does not use
     // this endpoint — it inserts items inside its own locked transaction — so
     // this only blocks the staff/floor path.
-    if (orderCheck.rows[0].source === 'qr') {
+    if (orderCheck.rows[0].source === 'qr' && ['paid', 'mock'].includes(String(orderCheck.rows[0].payment_status || ''))) {   // SEPOS-QR-PAYLATER-001 — unpaid QR bills accept staff items
       await client.query('ROLLBACK');
       return res.status(409).json({ error: 'This is a customer prepaid QR order — start a separate bill to add items to this table.', qrReadOnly: true });
     }
@@ -4026,8 +4029,8 @@ app.put('/api/orders/:id/merge', async (req, res) => {
     // the guest paid it twice. Refusing the merge is consistent with the
     // read-only rule and removes the double-charge at the root.
     const srcTgt = await pool.query(
-      "SELECT id, source FROM orders WHERE id = ANY($1::int[])", [[Number(merge_order_id), Number(targetOrderId)]]);
-    if (srcTgt.rows.some(o => o.source === 'qr')) {
+      "SELECT id, source, payment_status FROM orders WHERE id = ANY($1::int[])", [[Number(merge_order_id), Number(targetOrderId)]]);
+    if (srcTgt.rows.some(o => o.source === 'qr' && ['paid', 'mock'].includes(String(o.payment_status || '')))) {   // SEPOS-QR-PAYLATER-001 — only PREPAID QR bills refuse merging
       return res.status(409).json({ error: 'A customer QR order cannot be merged — settle it on its own.', qrReadOnly: true });
     }
     // SEPOS-AUDIT-001 (verify pass) — capture the moving item ids BEFORE the
@@ -7809,7 +7812,7 @@ app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
     // set both a restaurant postcode and a radius. The widget uses this
     // flag to decide whether to show the Delivery toggle at all.
     const dr = await pool.query(
-      `SELECT key, value FROM settings WHERE key IN ('restaurant_postcode','delivery_radius_miles','takeaway_discount_percent')`
+      `SELECT key, value FROM settings WHERE key IN ('restaurant_postcode','delivery_radius_miles','takeaway_discount_percent','takeaway_discount_min_total')`
     );
     const cfg = {};
     dr.rows.forEach(row => { cfg[row.key] = row.value; });
@@ -7818,11 +7821,16 @@ app.get('/api/takeaway/settings', widgetCors, async (req, res) => {
     // Thai ask, 2026-07-21). 0 = off. Clamped 0–50 as a fat-finger guard; the
     // order endpoint clamps identically so widget and server always agree.
     const discountPercent = Math.min(50, Math.max(0, Number(cfg.takeaway_discount_percent) || 0));
+    // SEPOS-TA-PROMO-001 (Yum Yum, 28 Aug) — optional spend threshold: the
+    // discount applies only when the pre-discount total reaches this. 0/unset
+    // = unconditional (Chart Thai's existing behaviour, untouched).
+    const discountMinTotal = Math.max(0, Number(cfg.takeaway_discount_min_total) || 0);
     res.json({
       ...(r.rows[0] || {}),
       delivery_enabled: deliveryEnabled,
       delivery_radius_miles: deliveryEnabled ? Number(cfg.delivery_radius_miles) : 0,
       discount_percent: discountPercent,
+      discount_min_total: discountMinTotal,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -8110,11 +8118,15 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
     // tampered widget can't claim a bigger discount than the setting allows;
     // clamped identically to /api/takeaway/settings so both sides agree.
     let discountPercent = 0;
+    let discountMinTotal = 0;
     try {
-      const dset = await client.query(`SELECT value FROM settings WHERE key = 'takeaway_discount_percent'`);
-      discountPercent = Math.min(50, Math.max(0, Number(dset.rows[0]?.value) || 0));
+      const dset = await client.query(`SELECT key, value FROM settings WHERE key IN ('takeaway_discount_percent','takeaway_discount_min_total')`);
+      const dm = {}; dset.rows.forEach(r => { dm[r.key] = r.value; });
+      discountPercent = Math.min(50, Math.max(0, Number(dm.takeaway_discount_percent) || 0));
+      // SEPOS-TA-PROMO-001 — spend threshold; 0/unset = unconditional.
+      discountMinTotal = Math.max(0, Number(dm.takeaway_discount_min_total) || 0);
     } catch { /* setting absent → no discount */ }
-    if (discountPercent > 0) {
+    if (discountPercent > 0 && total >= discountMinTotal) {
       total = Math.round(total * (1 - discountPercent / 100) * 100) / 100;
     }
 
@@ -8379,6 +8391,11 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
   // voucherService. Orders then land 'unpaid' and the till's Collected guard
   // (SEPOS-TA-COLLECT-001) makes staff take payment — same as a keyless tenant.
   if (payMode === 'collection') return res.json({ configured: false, publishable_key: null });
+  // SEPOS-TA-CHOICE-001 (Yum Yum, 28 Aug) — 'choice' lets the CUSTOMER pick:
+  // pay online now (Stripe) or pay at the restaurant on collection. The pages
+  // render both buttons; the orders endpoint already accepts both (verified
+  // PI → 'paid', none → 'unpaid' + the till's Collected guard).
+  const payChoice = payMode === 'choice';
   const sp = siampayCfg();
   if (!mock && sp) {
     // SIAMPAY-002 — widget must init Stripe.js WITH the connected account so
@@ -8387,6 +8404,7 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
       configured: true,
       publishable_key: sp.pk,
       stripe_account: sp.account,
+      pay_choice: payChoice,   // SEPOS-TA-CHOICE-001
       // No fee_pence: the SiamPay fee comes out of the client's settlement
       // (application_fee_amount), the customer just pays the menu price.
     });
@@ -8395,6 +8413,7 @@ app.get('/api/takeaway/stripe-config', widgetCors, async (req, res) => {
   res.json({
     configured,
     publishable_key: configured ? (process.env.STRIPE_PUBLISHABLE_KEY || null) : null,
+    pay_choice: configured ? payChoice : false,   // SEPOS-TA-CHOICE-001
   });
 });
 
@@ -8543,6 +8562,18 @@ async function qrEnabled() {
 // off — the SAME rule /api/takeaway/stripe-config applies, or the page would
 // try to mount Stripe with a null publishable key on the demo tenant
 // (found live on Baan Siam: takeaway_mock_pay=1 but secret key present).
+// SEPOS-QR-PAYLATER-001 (Yum Yum, 28 Aug) — per-restaurant policy: 'pay_later'
+// lets customers ORDER from the QR page with staff taking payment at the till
+// (the order lands 'unpaid'; the prepaid read-only protections key on
+// paid/mock so they simply don't engage). Default 'pay_first' — no venue
+// changes behaviour without choosing it in Settings.
+async function qrPayLater() {
+  try {
+    const s = await loadSettings();
+    return String(s.qr_payment_policy ?? 'pay_first') === 'pay_later';
+  } catch { return false; }
+}
+
 async function qrStripeReady() {
   try {
     const s = await loadSettings();
@@ -8868,6 +8899,7 @@ app.get('/api/qr/session/:token', widgetCors, async (req, res) => {
       brand: cfg.brand_primary || '#1E4038',
       table: { id: t.id, label: (t.name && String(t.name).trim()) ? t.name : `Table ${t.table_number}` },
       stripe_ready: stripeReady,
+      pay_later: await qrPayLater(),   // SEPOS-QR-PAYLATER-001
       order,
     });
   } catch (err) {
@@ -8889,6 +8921,35 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     if (items.length === 0) return res.status(400).json({ error: 'Cart is empty' });
     if (items.length > 40) return res.status(400).json({ error: 'Too many items in one order' });
+
+    // SEPOS-QR-HOURS-001 (Korakot, 28 Aug — "if the customer takes the link
+    // home, nothing can deny them?"): the sticker's link works from anywhere
+    // and pay-later removed the prepayment shield, so QR ordering is gated to
+    // the venue's service hours — the same guard the takeaway widget has had
+    // since SEPOS-TA-HOURS-001, with the same fail-CLOSED defaults (no hours
+    // row → 11:00–21:30 Europe/London). Applies to pay-first too: an order
+    // fired at 3am helps nobody whoever paid for it.
+    {
+      const hrsRes = await pool.query(
+        `SELECT service_type, opening_time, last_booking_time,
+                lunch_service_start, lunch_service_end,
+                dinner_service_start, dinner_service_end, timezone
+           FROM restaurant_settings WHERE restaurant_id = $1`,
+        [resolveRestaurantId(req)]);
+      const hrs = hrsRes.rows[0] || {};
+      const tz = hrs.timezone || 'Europe/London';
+      const nowMins = minutesInZone(new Date(), tz);
+      const inWindow = (start, end) => {
+        const s = toMins(start); const e = toMins(end);
+        if (e >= s) return nowMins >= s && nowMins <= e;
+        return nowMins >= s || nowMins <= e;   // window wraps past midnight
+      };
+      const open = hrs.service_type === 'split'
+        ? (inWindow(hrs.lunch_service_start || '11:00', hrs.lunch_service_end || '14:30')
+           || inWindow(hrs.dinner_service_start || '17:30', hrs.dinner_service_end || '21:30'))
+        : inWindow(hrs.opening_time || '11:00', hrs.last_booking_time || '21:30');
+      if (!open) return res.status(409).json({ error: 'Ordering is closed right now — please order during opening hours, or ask a member of staff.' });
+    }
     await ensureOpenSession(resolveRestaurantId(req)); // SEPOS-AUTO-SESSION-001
 
     // Server-side pricing — the client's numbers are display only. Chosen
@@ -8899,7 +8960,7 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
     let totalPence = 0;
     for (const it of items) {
       const qty = Math.max(1, Math.min(20, Number(it.quantity) || 1));
-      const row = (await pool.query(`SELECT id, name, price, is_available, COALESCE(is_online,1) AS is_online FROM menu_items WHERE id = $1`, [it.menu_item_id])).rows[0];
+      const row = (await pool.query(`SELECT id, name, price, is_available, COALESCE(is_qr, is_online, 1) AS is_online FROM menu_items WHERE id = $1`, [it.menu_item_id])).rows[0];   // SEPOS-MENU-CHANNELS-001 — QR channel: is_qr overrides, NULL follows is_online
       if (!row) return res.status(400).json({ error: 'An item in your cart is no longer on the menu — please refresh.' });
       if (!Number(row.is_available) || !Number(row.is_online)) {
         return res.status(409).json({ error: `Sorry — "${row.name}" has just sold out. Please remove it and try again.` });
@@ -8922,8 +8983,13 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
 
     // Pay-first verification (identical hardening to the takeaway widget).
     const sp = siampayCfg();
-    const stripeReady = await qrStripeReady();
-    let paymentStatus = 'mock';
+    // SEPOS-QR-PAYLATER-001 — venue policy beats key presence: in pay-later
+    // mode no payment is required OR recorded here; the order lands 'unpaid'
+    // and staff tender it at the till like any bill (same machinery as
+    // pay-on-collection takeaway).
+    const payLater = await qrPayLater();
+    const stripeReady = !payLater && await qrStripeReady();
+    let paymentStatus = payLater ? 'unpaid' : 'mock';
     let paidPence = null;
     let verifiedPiId = null;
     if (stripeReady) {
@@ -8976,10 +9042,17 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
       // and the auto-close needs no reconciliation. A table can now hold a
       // waiter's bill AND a QR bill at once — which is honest, because two
       // separate payments really did happen.
+      // SEPOS-QR-PAYLATER-001 — a round may only join an order of ITS OWN
+      // payment mode. A pay-later round appending onto a prepaid order would
+      // overwrite payment_status and strip the read-only protection off money
+      // already taken (and a prepaid round landing on an unpaid order would
+      // stamp 'paid' over rounds nobody paid for). Mode-mismatch → new order;
+      // a table honestly holding both is the same rule as waiter + QR bills.
       const existing = await pool.query(
         `SELECT o.id FROM orders o
           WHERE o.table_id = $1 AND o.status = 'open' AND o.source = 'qr'
             AND (o.order_type IS NULL OR o.order_type = 'dine_in')
+            AND COALESCE(o.payment_status,'') ${payLater ? `= 'unpaid'` : `IN ('paid','mock')`}
           ORDER BY o.id DESC LIMIT 1`, [tableId]);
       // Re-check inside the lock: two concurrent replays of the same PI would
       // both have passed the friendly pre-check above.
@@ -9020,13 +9093,18 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
       // possible on a shared table: four friends each paying their own round
       // each get a receipt for what they actually paid, and none of them sees a
       // total nobody paid.
-      const payIns = await pool.query(
-        `INSERT INTO payments (order_id, amount, method, payment_intent_id) VALUES ($1,$2,$3,$4) RETURNING id`,
-        [orderId, (paidPence != null ? paidPence / 100 : totalPence / 100),
-         paymentStatus === 'paid' ? 'QR Online' : 'QR Online (mock)', verifiedPiId]);
-      roundPaymentId = payIns.rows[0].id;
-      if (firedIds.length) {
-        await pool.query(`UPDATE order_items SET payment_id = $1 WHERE id = ANY($2::int[])`, [roundPaymentId, firedIds]);
+      // SEPOS-QR-PAYLATER-001 — an unpaid round has NO tender to record;
+      // staff's payment at the till writes the real one. Recording a phantom
+      // row here would double-count the bill the moment staff settle it.
+      if (paymentStatus !== 'unpaid') {
+        const payIns = await pool.query(
+          `INSERT INTO payments (order_id, amount, method, payment_intent_id) VALUES ($1,$2,$3,$4) RETURNING id`,
+          [orderId, (paidPence != null ? paidPence / 100 : totalPence / 100),
+           paymentStatus === 'paid' ? 'QR Online' : 'QR Online (mock)', verifiedPiId]);
+        roundPaymentId = payIns.rows[0].id;
+        if (firedIds.length) {
+          await pool.query(`UPDATE order_items SET payment_id = $1 WHERE id = ANY($2::int[])`, [roundPaymentId, firedIds]);
+        }
       }
       await offlineQueue.enqueue('add_items', { localOrderId: Number(orderId), items: priced.map(p => ({ ...p, is_bar: 0 })) });
       await depleteStockForItems(firedIds, 'sale');

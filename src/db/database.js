@@ -417,6 +417,12 @@ async function initDB() {
     // order) cannot dedupe them. The unique index is the race backstop behind
     // the endpoint's own check: one succeeded PI settles exactly one round.
     await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR(255)`);
+    // SEPOS-TIPS-001 — card tip recorded WITH the tender. The tender's amount
+    // ALWAYS includes the tip (both entry routes normalise to this), so
+    // card-takings reconcile against the PDQ settlement, which settles tips
+    // too; `tip` says how much of that amount was gratuity, for the Z line and
+    // the Employment (Allocation of Tips) Act paper trail.
+    await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS tip DECIMAL(10,2) DEFAULT 0`);
 
     // SEPOS-042: audit log for manager-authorised order deletions.
     // The order itself disappears but this row is the paper trail —

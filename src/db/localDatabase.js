@@ -212,6 +212,7 @@ function initSchema() {
       order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
       amount REAL,
       method TEXT,
+      tip REAL DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -861,6 +862,7 @@ function runMigrations() {
   addColumnIfMissing('order_items', 'payment_id', 'INTEGER');
   // SEPOS-SYNC-TENDERS-001 — cloud id of a mirrored tender (see syncService).
   addColumnIfMissing('payments', 'cloud_id', 'INTEGER');
+  addColumnIfMissing('payments', 'tip', 'REAL DEFAULT 0');            // SEPOS-TIPS-001
   addColumnIfMissing('payments', 'payment_intent_id', 'TEXT');   // SEPOS-QR-PAY-REDO
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_cloud_id      ON orders(cloud_id)      WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] orders.cloud_id index:', err.message); }
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_order_items_cloud_id ON order_items(cloud_id) WHERE cloud_id IS NOT NULL'); } catch (err) { console.warn('[db:local] order_items.cloud_id index:', err.message); }

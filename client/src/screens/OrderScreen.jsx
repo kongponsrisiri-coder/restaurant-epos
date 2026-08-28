@@ -2930,7 +2930,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                 alert('⚠️ Payment NOT taken — items in the cart were never sent to the kitchen.\n\nClose the bill, tap "Send to kitchen", then pay.');
                 return false;
               }
-              const payRes = await payOrder(orderId, total, method, tenders);
+              const payRes = await payOrder(orderId, total, method, tenders, tip);
               // SEPOS-DBLPAY-001 — the server rejects a second payment on an
               // already-closed bill (409 alreadyPaid). That means the payment
               // is ALREADY recorded (a double-tap or another device beat us),

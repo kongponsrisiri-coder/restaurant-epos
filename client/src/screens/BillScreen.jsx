@@ -55,6 +55,9 @@ export default function BillScreen({ orderId, onClose, onPay }) {
   const [mixMethod, setMixMethod]           = useState('Cash');
   const [showQrPay, setShowQrPay]           = useState(false); // SIAMPAY-QR-001
   const [mixInput,  setMixInput]            = useState('');
+  // SEPOS-TIPS-001 — optional explicit tip (£) typed at confirm time, for
+  // venues that ring the BILL amount and add the tip on the card machine.
+  const [mixTipBox, setMixTipBox]           = useState('');
   // SEPOS-VOUCHER-SPLIT-001 — voucher as one tender inside a mixed payment.
   const [mixVoucherCode, setMixVoucherCode] = useState('');
   const [mixVoucherAmt,  setMixVoucherAmt]  = useState('');
@@ -577,7 +580,7 @@ export default function BillScreen({ orderId, onClose, onPay }) {
       }
     }
     setSplitTenders([]); setMixVoucherCode(''); setMixVoucherAmt(''); setMixVoucherErr('');
-    setMixDepositCode(''); setMixDepositAmt('');
+    setMixDepositCode(''); setMixDepositAmt(''); setMixTipBox('');
     setStage('bill');
   };
 
@@ -1152,13 +1155,19 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                   // card is gone from this path.
                   const doConfirm = async (printAfter) => {
                     if (paying) return;
-                    const paid = splitTenders.reduce((s, t) => s + t.amount, 0);
+                    let paid = splitTenders.reduce((s, t) => s + t.amount, 0);
+                    // SEPOS-TIPS-001 — the explicit tip box (venue rings the
+                    // bill amount, tip added on the card machine). The machine
+                    // DID take bill+tip on card, so the tip is folded into the
+                    // recorded card tender: card takings keep matching the PDQ
+                    // settlement, and `tip` marks the gratuity share.
+                    const boxTip = Math.max(0, Number(mixTipBox) || 0);
                     // SEPOS-CASHCHANGE-001 — cash change is handed BACK, so it must not be
                     // recorded as money taken. Reduce the cash tender(s) by the change so the
                     // RECORDED tenders foot to the BILL, not the over-tender. (Card over-tender
                     // is a genuine tip — mixTip — and is left intact.)
                     let toDrop = mixChange;
-                    const recTenders = splitTenders.map(t => {
+                    let recTenders = splitTenders.map(t => {
                       if (toDrop > 0.001 && t.method === 'Cash') {
                         const cut = Math.min(toDrop, t.amount);
                         toDrop = Number((toDrop - cut).toFixed(2));
@@ -1166,8 +1175,19 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                       }
                       return t;
                     }).filter(t => t.amount > 0.001);
+                    // SEPOS-TIPS-001 — add the box tip onto the first non-Cash
+                    // tender (the box only renders when one exists).
+                    let appliedTip = 0;
+                    if (boxTip > 0.001) {
+                      let applied = false;
+                      recTenders = recTenders.map(t => {
+                        if (!applied && t.method !== 'Cash') { applied = true; return { ...t, amount: Number((t.amount + boxTip).toFixed(2)) }; }
+                        return t;
+                      });
+                      if (applied) { paid = Number((paid + boxTip).toFixed(2)); appliedTip = boxTip; }
+                    }
                     let method = recTenders.length === 1 ? recTenders[0].method : 'Split';
-                    let pd = { method, amountPaid: paid, tip: mixTip, change: mixChange, tenders: recTenders };
+                    let pd = { method, amountPaid: paid, tip: Number((mixTip + appliedTip).toFixed(2)), change: mixChange, tenders: recTenders };
                     // F2 — deposit fully covered the bill: nothing left to tender,
                     // but /pay rejects £0. Record the deposit AS the tender so the
                     // bill closes covered (same rows a pay-screen deposit writes).
@@ -1189,9 +1209,21 @@ export default function BillScreen({ orderId, onClose, onPay }) {
                       alert('Payment could not be recorded: ' + (e?.message || 'unknown') + '\nThe bill is still open — try again.');
                     } finally { setPaying(false); }
                   };
-                  const suffix = mixChange > 0 ? ` (£${mixChange.toFixed(2)} change)` : mixTip > 0 ? ` (£${mixTip.toFixed(2)} tip)` : '';
+                  // SEPOS-TIPS-001 — live tip total: card over-tender + the box.
+                  const cardTenderPresent = splitTenders.some(t => t.method !== 'Cash');
+                  const liveTip = Number((mixTip + (cardTenderPresent ? Math.max(0, Number(mixTipBox) || 0) : 0)).toFixed(2));
+                  const suffix = mixChange > 0 ? ` (£${mixChange.toFixed(2)} change)` : liveTip > 0 ? ` (£${liveTip.toFixed(2)} tip)` : '';
                   return (
                     <>
+                      {cardTenderPresent && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: '#8b5cf6', whiteSpace: 'nowrap' }}>💜 Tip on card machine</span>
+                          <div style={{ position: 'relative', flex: 1 }}>
+                            <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#888' }}>£</span>
+                            <AmountInput value={mixTipBox} onChange={setMixTipBox} placeholder="0.00" style={{ width: '100%', height: 44, padding: '0 10px 0 22px', borderRadius: 10, border: '1px solid #ddd', fontSize: 16, boxSizing: 'border-box' }} />
+                          </div>
+                        </div>
+                      )}
                       <button onClick={() => doConfirm(false)} disabled={paying} style={{ width: '100%', height: 56, borderRadius: 12, border: 'none', background: paying ? '#9ca3af' : '#22c55e', color: '#fff', fontWeight: 800, fontSize: 17, cursor: paying ? 'wait' : 'pointer', marginBottom: 10 }}>{paying ? 'Recording…' : <>✓ Confirm — £{billTotal.toFixed(2)}{suffix}</>}</button>
                       <button onClick={() => doConfirm(true)} disabled={paying} style={{ width: '100%', height: 50, borderRadius: 12, border: '2px solid #22c55e', background: '#fff', color: '#15803d', fontWeight: 800, fontSize: 15, cursor: paying ? 'wait' : 'pointer', marginBottom: 12 }}>🖨 Confirm &amp; Print receipt</button>
                     </>

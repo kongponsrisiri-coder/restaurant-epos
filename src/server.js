@@ -8905,6 +8905,35 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     if (items.length === 0) return res.status(400).json({ error: 'Cart is empty' });
     if (items.length > 40) return res.status(400).json({ error: 'Too many items in one order' });
+
+    // SEPOS-QR-HOURS-001 (Korakot, 28 Aug — "if the customer takes the link
+    // home, nothing can deny them?"): the sticker's link works from anywhere
+    // and pay-later removed the prepayment shield, so QR ordering is gated to
+    // the venue's service hours — the same guard the takeaway widget has had
+    // since SEPOS-TA-HOURS-001, with the same fail-CLOSED defaults (no hours
+    // row → 11:00–21:30 Europe/London). Applies to pay-first too: an order
+    // fired at 3am helps nobody whoever paid for it.
+    {
+      const hrsRes = await pool.query(
+        `SELECT service_type, opening_time, last_booking_time,
+                lunch_service_start, lunch_service_end,
+                dinner_service_start, dinner_service_end, timezone
+           FROM restaurant_settings WHERE restaurant_id = $1`,
+        [resolveRestaurantId(req)]);
+      const hrs = hrsRes.rows[0] || {};
+      const tz = hrs.timezone || 'Europe/London';
+      const nowMins = minutesInZone(new Date(), tz);
+      const inWindow = (start, end) => {
+        const s = toMins(start); const e = toMins(end);
+        if (e >= s) return nowMins >= s && nowMins <= e;
+        return nowMins >= s || nowMins <= e;   // window wraps past midnight
+      };
+      const open = hrs.service_type === 'split'
+        ? (inWindow(hrs.lunch_service_start || '11:00', hrs.lunch_service_end || '14:30')
+           || inWindow(hrs.dinner_service_start || '17:30', hrs.dinner_service_end || '21:30'))
+        : inWindow(hrs.opening_time || '11:00', hrs.last_booking_time || '21:30');
+      if (!open) return res.status(409).json({ error: 'Ordering is closed right now — please order during opening hours, or ask a member of staff.' });
+    }
     await ensureOpenSession(resolveRestaurantId(req)); // SEPOS-AUTO-SESSION-001
 
     // Server-side pricing — the client's numbers are display only. Chosen

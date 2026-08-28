@@ -1737,7 +1737,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                           border: 'none', borderRadius: 8, padding: '6px 14px',
                           cursor: 'pointer', fontWeight: 700, fontSize: 12
                         }}>
-                        {firingCourse === Number(course) ? '...' : `🔥 Fire ${COURSE_LABELS[course]}`}
+                        {firingCourse === Number(course) ? '...' : `🔥 Call ${COURSE_LABELS[course]}`}
                       </button>
                     )}
                   </div>

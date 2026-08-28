@@ -527,7 +527,7 @@ function buildFireNotice({ order, course, bilingual = true }) {
     CMD.ALIGN_CENTER,
     CMD.BOLD_ON, headSize, txt(heading), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     rule('='), lf(),
-    CMD.BOLD_ON, CMD.SIZE_BIG, txt('FIRE'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
+    CMD.BOLD_ON, CMD.SIZE_BIG, txt('CALL'), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),   // SEPOS-WORDING-001 — 'CALL' not 'FIRE' (Korakot, 28 Aug)
     CMD.BOLD_ON, CMD.SIZE_TALL, txt(courseEN), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
     rule('='), lf(),
     CMD.ALIGN_CENTER,

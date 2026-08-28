@@ -770,6 +770,8 @@ function runMigrations() {
   addColumnIfMissing('order_items', 'voided_at', 'TIMESTAMP');
   // SEPOS-ITEM-MOVE-001 — audit stamp: which bill a line was moved off.
   addColumnIfMissing('order_items', 'moved_from_order_id', 'INTEGER');
+  // SEPOS-MENU-CHANNELS-001 — QR-channel availability (NULL = follow is_online).
+  addColumnIfMissing('menu_items', 'is_qr', 'INTEGER');
   // SEPOS-PRO-008: link a bill to its booking for accurate per-customer spend
   addColumnIfMissing('orders', 'reservation_id', 'INTEGER');
   // SEPOS-021: VAT rate per menu item

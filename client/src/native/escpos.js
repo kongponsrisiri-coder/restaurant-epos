@@ -92,13 +92,20 @@ function headerOps(ops, order, title, kw = SUNMI_KITCHEN_WIDTH, sentBy = null) {
   ops.push({ op: 'align', v: 0 }, { op: 'krule', w: Math.min(kw, SUNMI_KITCHEN_WIDTH) });
 }
 
-function kitchenItemOps(ops, it, bilingual = true, sz = 'b') {
+function kitchenItemOps(ops, it, bilingual = true, sz = 'b', kw = 26) {
   // SEPOS-PRINT-FONT-001 — item + option/2nd-lang/note lines all print at the
   // configured kitchen size `sz` (default 'b' = today). Bold for emphasis.
-  ops.push({ op: 'bold', v: true }, { op: 'size', v: sz }, { op: 'text', v: `${it.quantity || 1} x ${it.name || it.item_name || ''}` }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
+  // SEPOS-TICKET-LAYOUT-001 (Korakot, 28 Aug) — option choices join the dish
+  // line ("1 x Pad Thai — Beef") when the whole line fits the printer's char
+  // width for this size (kw); overflow keeps its own line. item_note (allergy)
+  // ALWAYS keeps its own bold line.
+  const qtyName = `${it.quantity || 1} x ${it.name || it.item_name || ''}`;
+  const merged = it.notes ? `${qtyName} — ${it.notes}` : qtyName;
+  const inline = it.notes && merged.length <= kw;
+  ops.push({ op: 'bold', v: true }, { op: 'size', v: sz }, { op: 'text', v: inline ? merged : qtyName }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
   if (bilingual && it.name_alt)  ops.push({ op: 'size', v: sz }, { op: 'text', v: '  ' + it.name_alt }, { op: 'size', v: 'n' });
   if (it.item_note) ops.push({ op: 'bold', v: true }, { op: 'size', v: sz }, { op: 'text', v: '  ** ' + it.item_note + ' **' }, { op: 'size', v: 'n' }, { op: 'bold', v: false });
-  if (it.notes)     ops.push({ op: 'size', v: sz }, { op: 'text', v: '  ' + it.notes }, { op: 'size', v: 'n' });
+  if (it.notes && !inline) ops.push({ op: 'size', v: sz }, { op: 'text', v: '  ' + it.notes }, { op: 'size', v: 'n' });
 }
 
 // ── Kitchen / bar / fire-notice layout → ops ──────────────────────────────────
@@ -119,7 +126,7 @@ export function buildKitchenOps(native) {
   }
   if (kind === 'bar') {
     headerOps(ops, order, 'BAR', kw, sentBy);
-    for (const it of (items || []).filter(i => i && !i.voided)) kitchenItemOps(ops, it, bilingual, sz);
+    for (const it of (items || []).filter(i => i && !i.voided)) kitchenItemOps(ops, it, bilingual, sz, kw);
     ops.push({ op: 'feed', v: 2 }, { op: 'cut' });
     return ops;
   }
@@ -133,7 +140,7 @@ export function buildKitchenOps(native) {
     // and the next begins (matches the HTML/desktop ticket's rule between courses).
     if (idx > 0) ops.push({ op: 'krule', w: Math.min(kw, SUNMI_KITCHEN_WIDTH) });
     ops.push({ op: 'bold', v: true }, { op: 'text', v: COURSE[c] || ('COURSE ' + c) }, { op: 'bold', v: false });
-    for (const it of byCourse[c]) kitchenItemOps(ops, it, bilingual, sz);
+    for (const it of byCourse[c]) kitchenItemOps(ops, it, bilingual, sz, kw);
     ops.push({ op: 'feed', v: 1 });
   });
   ops.push({ op: 'feed', v: 1 }, { op: 'cut' });

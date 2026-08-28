@@ -892,6 +892,7 @@ async function pullMenuTree() {
         // stale rate forever. is_online (takeaway-widget visibility) had the
         // same drop — the toggle reverted on the next local refetch.
         vat_rate: i.vat_rate, is_online: i.is_online,
+        is_qr: i.is_qr,   // SEPOS-MENU-CHANNELS-001 — NULL must reach tills (means follow is_online)
         // Same bug class as vat_rate above: the per-item kitchen course
         // override (7437041, v1.6.115) never reached local-mode tills, so
         // offline ordering dropped every item into the course-bar selection.
@@ -928,7 +929,7 @@ async function pullMenuTree() {
     // class: name_alt (clear the 2nd-language name), subcategory_id (move a
     // dish out of its sub-category), image_url (the Remove-photo button).
     const nItems = await upsertRows('menu_items', 'id', itemList,
-      ['printer_id', 'default_course', 'name_alt', 'subcategory_id', 'image_url']);
+      ['printer_id', 'default_course', 'name_alt', 'subcategory_id', 'image_url', 'is_qr']);   // SEPOS-MENU-CHANNELS-001 — reset-to-follow (null) propagates
 
     // SEPOS-046p — propagate cloud-side deletions. Pull was upsert-only
     // before, so deleting an item / subcategory / category on the web

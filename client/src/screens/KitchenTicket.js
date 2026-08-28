@@ -472,10 +472,9 @@ function itemsHTML(items, bilingual = false) {
     return `
     <div class="item">
       <span class="qty">${Number(i.quantity) || 1}×</span>
-      <span class="name">${esc(i.name || i.item_name || 'Item')}</span>
+      <span class="name">${esc(i.name || i.item_name || 'Item')}${i.notes ? ' — ' + esc(i.notes) : ''}</span>
     </div>
     ${nameAlt ? `<div class="note-alt">${esc(nameAlt)}</div>` : ''}
-    ${i.notes ? `<div class="note">▸ ${esc(i.notes)}</div>` : ''}
   `;
   }).join('');
 }

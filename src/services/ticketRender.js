@@ -23,6 +23,22 @@ let fontsReady = null;
 // those slots "Takeaway", but a slot ROW named 'Table 2' (names are freeform)
 // printed as TABLE 2 — and the chef walked to the dine-in twin. If the order's
 // table carries is_takeaway and the label doesn't already say so, prefix it.
+// SEPOS-TA-LABEL-002 (Korakot, 28 Aug — "TAKEAWAY 103" on Thann Thai's
+// receipt, THIRD strike of this class) — ONE heading resolver for a whole
+// ORDER, takeaway/delivery included, so no surface can ever fall back to the
+// raw slot number again. Delivery keeps its id form; a takeaway with a table
+// row goes through the label-first resolver; no table at all → order id.
+function ticketOrderHeading(order) {
+  if (order && order.order_type === 'takeaway') {
+    if (order.order_subtype === 'delivery') return `DELIVERY #${order.id}`;
+    if (order.table_label || order.table_number != null) {
+      return ticketTableLabel({ ...order, table_is_takeaway: 1 });
+    }
+    return `TAKEAWAY #${order.id}`;
+  }
+  return ticketTableLabel(order);
+}
+
 function ticketTableLabel(order) {
   const raw = order && order.table_label && String(order.table_label).trim();
   const takeawaySlot = order && Number(order.table_is_takeaway ?? 0) === 1;
@@ -196,12 +212,7 @@ function applyScale(lines, sizeKey) {
 async function kitchenTicketRaster(order, items, opts = {}) {
   const tz = 'Europe/London';
   const now = new Date();
-  const label = (order.table_label && String(order.table_label).trim())
-    ? String(order.table_label).trim().toUpperCase()
-    : (order.order_type === 'takeaway'
-        ? (order.order_subtype === 'delivery' ? `DELIVERY #${order.id}`
-           : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`))
-        : ticketTableLabel(order));
+  const label = ticketOrderHeading(order);   // SEPOS-TA-LABEL-002 — one resolver, label-first everywhere
   const lines = [
     { text: now.toLocaleString('en-GB', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: tz }), size: 22, center: true, gap: 4 },
     { rule: true },
@@ -223,8 +234,26 @@ async function kitchenTicketRaster(order, items, opts = {}) {
   if (sentBy) lines.push({ text: 'Sent: ' + String(sentBy), size: 22, center: true, gap: 4 });
   lines.push({ rule: true });
 
+  // SEPOS-TICKET-LAYOUT-001 (Korakot, 28 Aug) — option choices join the dish
+  // line ("1 × Pad Thai — Beef") WHEN the whole line fits the paper at the
+  // printed size; overflow keeps today's own bold indented line — never
+  // shrunk, never clipped. Measured with the same fonts the renderer uses.
+  await loadFonts();
+  const scratchFit = PImage.make(1, 1).getContext('2d');
+  const scaleK = SIZE_SCALES[opts.size] || 1.0;
+  const fitsOneLine = (text, baseSize) => {
+    const thai = /[฀-๿]/.test(text);
+    scratchFit.font = `${Math.round(baseSize * scaleK)}pt ${thai ? 'TicketThai' : 'TicketSans'}`;
+    return scratchFit.measureText(text).width <= (W - 8 * 2);
+  };
   const pushItem = (it) => {
-    lines.push({ text: `${it.quantity || 1} × ${it.name || it.item_name || ''}`, size: 32, gap: 2 });
+    const qtyName = `${it.quantity || 1} × ${it.name || it.item_name || ''}`;
+    const optText = it.notes ? String(it.notes) : '';
+    if (optText && fitsOneLine(`${qtyName} — ${optText}`, 32)) {
+      lines.push({ text: `${qtyName} — ${optText}`, size: 32, gap: 2 });
+    } else {
+      lines.push({ text: qtyName, size: 32, gap: 2 });
+    }
     // SEPOS-THAI-TICKET-001 — classic-builder parity: the Thai name line the
     // chef actually reads (classic prints name_alt when bilingual, default on).
     // SEPOS-LANG-001 (Korakot, 26 Aug) — the rendered path must RESPECT the
@@ -233,21 +262,27 @@ async function kitchenTicketRaster(order, items, opts = {}) {
     const nameAlt = (opts.bilingual !== false) ? (it.name_alt || it.name_th || '') : '';
     if (nameAlt) lines.push({ text: String(nameAlt), size: 28, indent: 34, gap: 2 });
     // SEPOS-024b parity — the free-text special request ("Mild", "ALLERGY — no
-    // peanuts") is the line a kitchen must never miss.
+    // peanuts") is the line a kitchen must never miss. ALWAYS its own line —
+    // an allergy note must never blend into a dish line.
     if (it.item_note) lines.push({ text: `** ${it.item_note} **`, size: 26, bold: true, indent: 34, gap: 2 });
-    if (it.notes) lines.push({ text: String(it.notes), size: 26, bold: true, indent: 34, gap: 4 });
+    if (optText && !fitsOneLine(`${qtyName} — ${optText}`, 32)) {
+      lines.push({ text: optText, size: 26, bold: true, indent: 34, gap: 4 });
+    }
   };
   if (courseLabel) {
     for (const it of items || []) pushItem(it);
   } else {
     // Full ticket — group by course with headers, classic-style.
+    // SEPOS-TICKET-LAYOUT-001 — a rule line separates course blocks (not
+    // before the first) so STARTERS/MAINS read as blocks at a glance.
     const byCourse = {};
     for (const it of items || []) { const c = it.course || 1; (byCourse[c] = byCourse[c] || []).push(it); }
     const courses = Object.keys(byCourse).sort((a, b) => Number(a) - Number(b));
-    for (const c of courses) {
+    courses.forEach((c, idx) => {
+      if (idx > 0 && courses.length > 1) lines.push({ rule: true });
       if (courses.length > 1) lines.push({ text: COURSES_EN[c] || 'ITEMS', size: 28, bold: true, gap: 2 });
       for (const it of byCourse[c]) pushItem(it);
-    }
+    });
   }
   lines.push({ rule: true });
   lines.push({ text: `Order #${order.id}${courseLabel ? ' · ' + courseLabel : ''}`, size: 22, center: true });
@@ -303,7 +338,7 @@ function receiptLines(order, m, opts = {}) {
 
   // Order header — same fields as classic, label-left / value-right
   if (order.order_type === 'takeaway') {
-    L.push({ text: 'Type', right: order.order_subtype === 'delivery' ? `DELIVERY #${order.id}` : (order.table_number != null ? `TAKEAWAY ${order.table_number}` : `TAKEAWAY #${order.id}`), size: 23, gap: 2 });
+    L.push({ text: 'Type', right: ticketOrderHeading({ ...order, order_type: 'takeaway' }), size: 23, gap: 2 });   // SEPOS-TA-LABEL-002 — 'TAKEAWAY 2', never the raw slot number
     if (order.customer_name) L.push({ text: 'Customer', right: String(order.customer_name), size: 23, gap: 2 });
     if (order.pickup_time)   L.push({ text: 'Pickup', right: new Date(order.pickup_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' }), size: 23, gap: 2 });
   } else {
@@ -396,4 +431,4 @@ async function previewReceiptPNG(order, model, outPath, opts = {}) {
 }
 
 module.exports = {
-  ticketTableLabel, kitchenTicketRaster, receiptRaster, previewPNG, previewReceiptPNG, hasUnrenderableText, SIZE_SCALES };
+  ticketTableLabel, ticketOrderHeading, kitchenTicketRaster, receiptRaster, previewPNG, previewReceiptPNG, hasUnrenderableText, SIZE_SCALES };

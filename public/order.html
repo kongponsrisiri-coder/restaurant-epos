@@ -101,6 +101,13 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[<>&"]/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
   const cartCount = () => cart.reduce((a, c) => a + c.quantity, 0);
   const cartTotal = () => cart.reduce((a, c) => a + c.quantity * c.unit, 0);
+  // SEPOS-TA-PROMO-001 — threshold promo, mirrored server-side (the order
+  // endpoint recomputes and the PI amount must match, so the page can never
+  // give a discount the till doesn't).
+  const promoPct  = () => Math.min(50, Math.max(0, Number(twSet && twSet.discount_percent) || 0));
+  const promoMin  = () => Math.max(0, Number(twSet && twSet.discount_min_total) || 0);
+  const promoOff  = () => { const t = cartTotal(); return (promoPct() > 0 && t >= promoMin()) ? Math.round(t * (promoPct() / 100) * 100) / 100 : 0; };
+  const payTotal  = () => Math.round((cartTotal() - promoOff()) * 100) / 100;
   const itemQty = (id) => cart.filter((c) => c.menu_item_id === id).reduce((a, c) => a + c.quantity, 0);
   const ukTime = (iso) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' });
 
@@ -131,7 +138,11 @@
   function render() {
     if (done) return renderDone();
     const cat = MENU.find((c) => c.id === activeCat) || MENU[0];
-    let h = '<header><h1>' + esc(S.name) + '</h1><div class="tbl">' + (deliveryOn() ? '🥡 Collection · 🛵 Delivery — 0% commission, direct to the kitchen' : '🥡 Order for collection · 0% commission — direct to the kitchen') + '</div></header>';
+    // SEPOS-WORDING-002 (Korakot, 28 Aug) — "0% commission" is OUR pitch to
+    // owners, not customer language; it read oddly under the restaurant's own
+    // name. Customer-facing line sells the food. (The promo batch will make
+    // this line settings-driven — e.g. "10% off orders over £30".)
+    let h = '<header><h1>' + esc(S.name) + '</h1><div class="tbl">' + (deliveryOn() ? '🥡 Collection · 🛵 Delivery — freshly cooked to order' : '🥡 Order for collection — freshly cooked to order') + (promoPct() > 0 ? '</div><div class="tbl" style="font-weight:800;opacity:1">💚 ' + promoPct() + '% discount' + (promoMin() > 0 ? ' when you order over ' + fmt(promoMin()) : ' on every order') : '') + '</div></header>';
     h += '<div class="cats">' + MENU.map((c) => '<button class="cat' + (cat && c.id === cat.id ? ' on' : '') + '" data-cat="' + c.id + '">' + esc(c.name) + '</button>').join('') + '</div>';
     if (cat) {
       const subs = (cat.subcategories || []);
@@ -145,7 +156,7 @@
         for (const i of items) h += itemCard(i);
       }
     }
-    if (cartCount() > 0) h += '<div class="cartbar" id="cartbar"><span>🧺 ' + cartCount() + ' item' + (cartCount() > 1 ? 's' : '') + '</span><span>Checkout · ' + fmt(cartTotal()) + '</span></div>';
+    if (cartCount() > 0) h += '<div class="cartbar" id="cartbar"><span>🧺 ' + cartCount() + ' item' + (cartCount() > 1 ? 's' : '') + '</span><span>Checkout · ' + fmt(payTotal()) + '</span></div>';
     if (view === 'cart') h += cartSheet();
     if (optItem) h += optionsSheet();
     $('#app').innerHTML = h;
@@ -234,7 +245,13 @@
         '<div style="text-align:right"><div class="pr">' + fmt(c.quantity * c.unit) + '</div>' +
         '<span class="step" style="margin-top:6px"><button data-dec="' + c.uid + '">−</button><span>' + c.quantity + '</span><button data-inc="' + c.uid + '">＋</button></span></div></div>';
     }
-    h += '<div class="totrow"><span>Total</span><span>' + fmt(cartTotal()) + '</span></div>';
+    if (promoOff() > 0) {
+      h += '<div class="totrow" style="font-size:13px;font-weight:600;color:#555;padding:6px 0 0"><span>Subtotal</span><span>' + fmt(cartTotal()) + '</span></div>';
+      h += '<div class="totrow" style="font-size:13px;font-weight:700;color:#256b34;padding:2px 0 0"><span>💚 ' + promoPct() + '% discount' + (promoMin() > 0 ? ' (orders over ' + fmt(promoMin()) + ')' : '') + '</span><span>−' + fmt(promoOff()) + '</span></div>';
+    } else if (promoPct() > 0 && promoMin() > 0) {
+      h += '<div class="totrow" style="font-size:12px;font-weight:600;color:#888;padding:6px 0 0"><span>💚 Spend ' + fmt(promoMin()) + ' for ' + promoPct() + '% off</span><span>' + fmt(Math.max(0, promoMin() - cartTotal())) + ' to go</span></div>';
+    }
+    h += '<div class="totrow"><span>Total</span><span>' + fmt(payTotal()) + '</span></div>';
     // SEPOS-DELIVERY-003 — collection / delivery choice (only when the
     // operator has delivery configured; otherwise the page is unchanged).
     if (deliveryOn()) {
@@ -269,6 +286,12 @@
     // the button holds until its 'ready' — else a fast first tap confirms an
     // empty form.
     h += '<button class="paybtn" id="paybtn"' + (stripeCfg && stripeCfg.configured ? ' disabled' : '') + '>' + (stripeCfg && stripeCfg.configured ? 'Loading secure payment…' : ('Place order — pay on ' + (isDeliv() ? 'delivery' : 'collection'))) + '</button>';
+    // SEPOS-TA-CHOICE-001 — venue policy 'choice': the customer picks. The
+    // second button submits WITHOUT payment; the order lands unpaid and the
+    // till's Collected guard makes staff take payment at handover.
+    if (stripeCfg && stripeCfg.configured && stripeCfg.pay_choice) {
+      h += '<button class="paybtn" id="paycollect" style="background:#fff;color:var(--brand);border:2px solid var(--brand)">🏪 Order now — pay at the restaurant</button>';
+    }
     h += '<div class="muted">' + (stripeCfg && stripeCfg.configured ? 'Paid securely by card · Apple Pay · Google Pay' : ('💷 Nothing to pay online — pay ' + (isDeliv() ? 'the driver' : 'when you collect') + ', cash or card.')) + '</div>';
     h += '<button class="morebtn" id="closecart">← Back to menu</button>';
     h += '</div></div>';
@@ -313,7 +336,8 @@
     const oc = $('#optcancel'); if (oc) oc.onclick = () => { optItem = null; optGroups = null; optSel = {}; render(); };
     const cb = $('#cartbar'); if (cb) cb.onclick = () => { if (view !== 'cart') { view = 'cart'; render(); openPayment(); } };
     const cc = $('#closecart'); if (cc) cc.onclick = () => { view = 'menu'; render(); };
-    const pb = $('#paybtn'); if (pb) pb.onclick = submit;
+    const pb = $('#paybtn'); if (pb) pb.onclick = () => submit(false);
+    const pc = $('#paycollect'); if (pc) pc.onclick = () => submit(true);   // SEPOS-TA-CHOICE-001
     // SEPOS-DELIVERY-003 — fulfilment handlers
     const fc = $('#ful-col'); if (fc) fc.onclick = () => { fulfil.mode = 'collection'; render(); openPayment(); };
     const fd = $('#ful-del'); if (fd) fd.onclick = () => { fulfil.mode = 'delivery'; render(); openPayment(); };
@@ -344,7 +368,7 @@
     try {
       if (!window.Stripe) await new Promise((ok, bad) => { const s = document.createElement('script'); s.src = 'https://js.stripe.com/v3/'; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
       stripe = stripeCfg.stripe_account ? window.Stripe(stripeCfg.publishable_key, { stripeAccount: stripeCfg.stripe_account }) : window.Stripe(stripeCfg.publishable_key);
-      const pi = await fetch('/api/takeaway/payment-intent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount_pence: Math.round(cartTotal() * 100), order_description: 'Online order — ' + S.name }) }).then((r) => r.json());
+      const pi = await fetch('/api/takeaway/payment-intent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount_pence: Math.round(payTotal() * 100), order_description: 'Online order — ' + S.name }) }).then((r) => r.json());
       if (pi.error) { $('#payel').innerHTML = '<div class="err">' + esc(pi.error) + '</div>'; return; }
       window.__ord_pi = pi;
       elements = stripe.elements({ clientSecret: pi.client_secret });
@@ -352,12 +376,12 @@
       payEl.mount('#payel');
       payEl.on('ready', () => {
         const pb = $('#paybtn');
-        if (pb && !payBusy) { pb.disabled = false; pb.textContent = 'Pay ' + fmt(cartTotal()) + ' & place order'; }
+        if (pb && !payBusy) { pb.disabled = false; pb.textContent = 'Pay ' + fmt(payTotal()) + ' & place order'; }
       });
     } catch (e) { $('#payel').innerHTML = '<div class="err">Card form failed to load — please try again.</div>'; }
   }
 
-  async function submit() {
+  async function submit(skipPay) {
     if (payBusy || !cart.length) return;
     if (!contact.name.trim()) { alert('Please add your name'); return; }
     if (!contact.phone.trim()) { alert('Please add your mobile number'); return; }
@@ -369,7 +393,7 @@
     payBusy = true; const pb = $('#paybtn'); pb.disabled = true; pb.textContent = 'Placing order…';
     try {
       let piId = null;
-      if (stripeCfg && stripeCfg.configured) {
+      if (stripeCfg && stripeCfg.configured && !skipPay) {   // SEPOS-TA-CHOICE-001 — pay-at-restaurant skips the card
         if (!elements) throw new Error('The card form is still loading — one moment.');
         const { error } = await stripe.confirmPayment({ elements, redirect: 'if_required' });
         if (error) throw new Error(error.message || 'Payment failed');

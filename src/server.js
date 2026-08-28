@@ -77,8 +77,11 @@ app.use(express.static(path.join(__dirname, '../public')));
 // didn't). Refunds/changes to a prepaid order go through the payment provider,
 // not the till. Returns true (and answers 409) when the order is a QR order.
 async function refuseQrMutation(orderId, res) {
-  const r = await pool.query('SELECT source FROM orders WHERE id = $1', [orderId]);
-  if (r.rows[0] && r.rows[0].source === 'qr') {
+  // SEPOS-QR-PAYLATER-001 — the rule protects PREPAID money. A pay-later QR
+  // order carries no customer payment, so staff mutate/tender it like any
+  // bill; only paid/mock QR orders stay read-only.
+  const r = await pool.query('SELECT source, payment_status FROM orders WHERE id = $1', [orderId]);
+  if (r.rows[0] && r.rows[0].source === 'qr' && ['paid', 'mock'].includes(String(r.rows[0].payment_status || ''))) {
     res.status(409).json({ error: 'This is a customer prepaid QR order — it can\'t be changed on the till. Refund or adjust it through the payment provider.', qrReadOnly: true });
     return true;
   }
@@ -1639,7 +1642,7 @@ app.post('/api/orders/:id/items', requireValidLicense, async (req, res) => {
     // to add to that table open their own bill. The QR flow itself does not use
     // this endpoint — it inserts items inside its own locked transaction — so
     // this only blocks the staff/floor path.
-    if (orderCheck.rows[0].source === 'qr') {
+    if (orderCheck.rows[0].source === 'qr' && ['paid', 'mock'].includes(String(orderCheck.rows[0].payment_status || ''))) {   // SEPOS-QR-PAYLATER-001 — unpaid QR bills accept staff items
       await client.query('ROLLBACK');
       return res.status(409).json({ error: 'This is a customer prepaid QR order — start a separate bill to add items to this table.', qrReadOnly: true });
     }
@@ -4026,8 +4029,8 @@ app.put('/api/orders/:id/merge', async (req, res) => {
     // the guest paid it twice. Refusing the merge is consistent with the
     // read-only rule and removes the double-charge at the root.
     const srcTgt = await pool.query(
-      "SELECT id, source FROM orders WHERE id = ANY($1::int[])", [[Number(merge_order_id), Number(targetOrderId)]]);
-    if (srcTgt.rows.some(o => o.source === 'qr')) {
+      "SELECT id, source, payment_status FROM orders WHERE id = ANY($1::int[])", [[Number(merge_order_id), Number(targetOrderId)]]);
+    if (srcTgt.rows.some(o => o.source === 'qr' && ['paid', 'mock'].includes(String(o.payment_status || '')))) {   // SEPOS-QR-PAYLATER-001 — only PREPAID QR bills refuse merging
       return res.status(409).json({ error: 'A customer QR order cannot be merged — settle it on its own.', qrReadOnly: true });
     }
     // SEPOS-AUDIT-001 (verify pass) — capture the moving item ids BEFORE the
@@ -8543,6 +8546,18 @@ async function qrEnabled() {
 // off — the SAME rule /api/takeaway/stripe-config applies, or the page would
 // try to mount Stripe with a null publishable key on the demo tenant
 // (found live on Baan Siam: takeaway_mock_pay=1 but secret key present).
+// SEPOS-QR-PAYLATER-001 (Yum Yum, 28 Aug) — per-restaurant policy: 'pay_later'
+// lets customers ORDER from the QR page with staff taking payment at the till
+// (the order lands 'unpaid'; the prepaid read-only protections key on
+// paid/mock so they simply don't engage). Default 'pay_first' — no venue
+// changes behaviour without choosing it in Settings.
+async function qrPayLater() {
+  try {
+    const s = await loadSettings();
+    return String(s.qr_payment_policy ?? 'pay_first') === 'pay_later';
+  } catch { return false; }
+}
+
 async function qrStripeReady() {
   try {
     const s = await loadSettings();
@@ -8868,6 +8883,7 @@ app.get('/api/qr/session/:token', widgetCors, async (req, res) => {
       brand: cfg.brand_primary || '#1E4038',
       table: { id: t.id, label: (t.name && String(t.name).trim()) ? t.name : `Table ${t.table_number}` },
       stripe_ready: stripeReady,
+      pay_later: await qrPayLater(),   // SEPOS-QR-PAYLATER-001
       order,
     });
   } catch (err) {
@@ -8922,8 +8938,13 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
 
     // Pay-first verification (identical hardening to the takeaway widget).
     const sp = siampayCfg();
-    const stripeReady = await qrStripeReady();
-    let paymentStatus = 'mock';
+    // SEPOS-QR-PAYLATER-001 — venue policy beats key presence: in pay-later
+    // mode no payment is required OR recorded here; the order lands 'unpaid'
+    // and staff tender it at the till like any bill (same machinery as
+    // pay-on-collection takeaway).
+    const payLater = await qrPayLater();
+    const stripeReady = !payLater && await qrStripeReady();
+    let paymentStatus = payLater ? 'unpaid' : 'mock';
     let paidPence = null;
     let verifiedPiId = null;
     if (stripeReady) {
@@ -8976,10 +8997,17 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
       // and the auto-close needs no reconciliation. A table can now hold a
       // waiter's bill AND a QR bill at once — which is honest, because two
       // separate payments really did happen.
+      // SEPOS-QR-PAYLATER-001 — a round may only join an order of ITS OWN
+      // payment mode. A pay-later round appending onto a prepaid order would
+      // overwrite payment_status and strip the read-only protection off money
+      // already taken (and a prepaid round landing on an unpaid order would
+      // stamp 'paid' over rounds nobody paid for). Mode-mismatch → new order;
+      // a table honestly holding both is the same rule as waiter + QR bills.
       const existing = await pool.query(
         `SELECT o.id FROM orders o
           WHERE o.table_id = $1 AND o.status = 'open' AND o.source = 'qr'
             AND (o.order_type IS NULL OR o.order_type = 'dine_in')
+            AND COALESCE(o.payment_status,'') ${payLater ? `= 'unpaid'` : `IN ('paid','mock')`}
           ORDER BY o.id DESC LIMIT 1`, [tableId]);
       // Re-check inside the lock: two concurrent replays of the same PI would
       // both have passed the friendly pre-check above.
@@ -9020,13 +9048,18 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
       // possible on a shared table: four friends each paying their own round
       // each get a receipt for what they actually paid, and none of them sees a
       // total nobody paid.
-      const payIns = await pool.query(
-        `INSERT INTO payments (order_id, amount, method, payment_intent_id) VALUES ($1,$2,$3,$4) RETURNING id`,
-        [orderId, (paidPence != null ? paidPence / 100 : totalPence / 100),
-         paymentStatus === 'paid' ? 'QR Online' : 'QR Online (mock)', verifiedPiId]);
-      roundPaymentId = payIns.rows[0].id;
-      if (firedIds.length) {
-        await pool.query(`UPDATE order_items SET payment_id = $1 WHERE id = ANY($2::int[])`, [roundPaymentId, firedIds]);
+      // SEPOS-QR-PAYLATER-001 — an unpaid round has NO tender to record;
+      // staff's payment at the till writes the real one. Recording a phantom
+      // row here would double-count the bill the moment staff settle it.
+      if (paymentStatus !== 'unpaid') {
+        const payIns = await pool.query(
+          `INSERT INTO payments (order_id, amount, method, payment_intent_id) VALUES ($1,$2,$3,$4) RETURNING id`,
+          [orderId, (paidPence != null ? paidPence / 100 : totalPence / 100),
+           paymentStatus === 'paid' ? 'QR Online' : 'QR Online (mock)', verifiedPiId]);
+        roundPaymentId = payIns.rows[0].id;
+        if (firedIds.length) {
+          await pool.query(`UPDATE order_items SET payment_id = $1 WHERE id = ANY($2::int[])`, [roundPaymentId, firedIds]);
+        }
       }
       await offlineQueue.enqueue('add_items', { localOrderId: Number(orderId), items: priced.map(p => ({ ...p, is_bar: 0 })) });
       await depleteStockForItems(firedIds, 'sale');

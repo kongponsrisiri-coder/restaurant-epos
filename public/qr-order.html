@@ -109,11 +109,14 @@
       const s = await fetch('/api/qr/session/' + token).then((r) => r.json());
       if (s.error) return renderFatal(s.error);
       S = s;
+      // SEPOS-QR-PAYLATER-001 — venue policy: order now, staff take payment.
+      // Reuse the whole no-payment flow; only the words differ (below).
+      if (S.pay_later) S.stripe_ready = false;
       document.documentElement.style.setProperty('--brand', s.brand || '#1E4038');
       const m = await fetch('/api/menu').then((r) => r.json());
       MENU = (Array.isArray(m) ? m : []).filter((c) => (c.items || []).some((i) => Number(i.is_online ?? 1)));
       activeCat = MENU[0] ? MENU[0].id : null;
-      if (s.order && s.order.items && s.order.items.length && (s.order.payment_status === 'paid' || s.order.payment_status === 'mock')) view = 'status';
+      if (s.order && s.order.items && s.order.items.length && (s.order.payment_status === 'paid' || s.order.payment_status === 'mock' || s.order.payment_status === 'unpaid')) view = 'status';
       render();
       setInterval(refreshStatus, 10000);
     } catch (e) { renderFatal('Could not load the menu — please check your connection and rescan the code.'); }
@@ -136,7 +139,7 @@
   function render() {
     if (view === 'status') return renderStatus();
     const cat = MENU.find((c) => c.id === activeCat) || MENU[0];
-    let h = '<header><h1>' + esc(S.restaurant_name) + '</h1><div class="tbl">📍 ' + esc(S.table.label) + ' · order &amp; pay from your seat</div></header>';
+    let h = '<header><h1>' + esc(S.restaurant_name) + '</h1><div class="tbl">📍 ' + esc(S.table.label) + (S.pay_later ? ' · order from your seat' : ' · order &amp; pay from your seat') + '</div></header>';
     h += '<div class="cats">' + MENU.map((c) => '<button class="cat' + (cat && c.id === cat.id ? ' on' : '') + '" data-cat="' + c.id + '">' + esc(c.name) + '</button>').join('') + '</div>';
     if (cat) {
       const subs = (cat.subcategories || []);
@@ -250,8 +253,8 @@
     // payment-intent → mount). Until its 'ready' fires the button stays disabled,
     // or a fast first tap confirms an empty form ("card number is incomplete"
     // with no card form on screen — found in the P2 E2E test).
-    h += '<button class="paybtn" id="paybtn"' + (S.stripe_ready ? ' disabled' : '') + '>' + (S.stripe_ready ? 'Loading secure payment…' : 'Send to kitchen (demo — no payment)') + '</button>';
-    h += '<div class="muted">' + (S.stripe_ready ? 'Paid securely by card · Apple Pay · Google Pay' : 'Demo mode — payment is simulated') + '</div>';
+    h += '<button class="paybtn" id="paybtn"' + (S.stripe_ready ? ' disabled' : '') + '>' + (S.stripe_ready ? 'Loading secure payment…' : (S.pay_later ? 'Send order — pay at the till' : 'Send to kitchen (demo — no payment)')) + '</button>';
+    h += '<div class="muted">' + (S.stripe_ready ? 'Paid securely by card · Apple Pay · Google Pay' : (S.pay_later ? 'Order now — a member of staff takes payment at the end.' : 'Demo mode — payment is simulated')) + '</div>';
     h += '<button class="morebtn" id="closecart">← Back to menu</button>';
     h += '</div></div>';
     return h;

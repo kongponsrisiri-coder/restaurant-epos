@@ -765,6 +765,7 @@ export default function SettingsSection() {
     nav_show_tables:         '1',   // home guard: tables + counter can never BOTH be hidden
     nav_show_counter:        '1',
     online_order_chime:      '1',   // SEPOS-ORDER-CHIME-001 — repeat-until-ack arrival sound, default ON
+    qr_payment_policy:       'pay_first',   // SEPOS-QR-PAYLATER-001 — QR table ordering: pay_first | pay_later
     kitchen_print_mode:      'print',   // 'print' | 'kds' | 'both'
     kitchen_language:        'en_th',  // 'en_th' | 'en'
     brand_logo:              '',   // SEPOS-BRAND-001 — on-screen logo (separate from receipt logo)
@@ -1430,6 +1431,28 @@ export default function SettingsSection() {
             </label>
           </div>
         ))}
+      </div>
+
+      {/* ── SEPOS-QR-PAYLATER-001 — QR table ordering payment policy ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:8 }}>📱 QR Table Ordering — Payment</h2>
+        <div style={{ fontSize:12, color:'#888', lineHeight:1.5, marginBottom:12 }}>
+          How customers pay when they order from the QR code at the table. Online takeaway ordering and vouchers are separate and unaffected.
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, maxWidth:520 }}>
+          {[['pay_first','💳 Pay now','Customer pays on their phone when ordering (card / Apple Pay / Google Pay)'],
+            ['pay_later','🧾 Pay at the till','Customer just orders — staff take payment at the table or till, like a normal bill']].map(([val, label, hint]) => (
+            <button key={val} onClick={() => setSettings({ ...settings, qr_payment_policy: val })} style={{
+              padding:'12px', borderRadius:10, textAlign:'left', cursor:'pointer',
+              border:'2px solid ' + (((settings.qr_payment_policy ?? 'pay_first') === val) ? 'var(--brand-primary, #1a1a2e)' : '#e0e0e0'),
+              background:((settings.qr_payment_policy ?? 'pay_first') === val) ? 'var(--brand-primary, #1a1a2e)' : 'white',
+              color:((settings.qr_payment_policy ?? 'pay_first') === val) ? 'white' : '#555',
+            }}>
+              <div style={{ fontWeight:800, fontSize:14 }}>{label}</div>
+              <div style={{ fontSize:11, opacity:0.85, marginTop:4 }}>{hint}</div>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── SEPOS-ORDER-CHIME-001 — Online order alert ── */}

@@ -5898,7 +5898,13 @@ app.get('/api/reservations', async (req, res) => {
 
 app.post('/api/reservations', widgetCors, async (req, res) => {
   try {
-    const { customer_name, customer_phone, customer_email, covers, reservation_date, reservation_time, notes, source = 'widget', table_id = null, status = 'pending', marketing_consent = 0 } = req.body;
+    const { customer_name, customer_phone, customer_email, covers, reservation_date, reservation_time, notes, source = 'widget', table_id = null, status: statusInput, marketing_consent = 0 } = req.body;
+    // SEPOS-WORDING-001 (Korakot, 28 Aug) — an online booking already emailed
+    // the customer a CONFIRMATION, so the till showing it as "pending"
+    // contradicted what the customer was told. Online arrivals land
+    // 'confirmed'; a booking that names its status (the staff form) is
+    // honoured unchanged.
+    const status = statusInput || ((source === 'widget' || source === 'online') ? 'confirmed' : 'pending');
     const restaurant_id = req.body.restaurant_id || process.env.RESTAURANT_ID || 'siamepos';
     if (!customer_name?.trim()) return res.status(400).json({ error: 'Guest name is required' });
     if (!customer_phone?.trim()) return res.status(400).json({ error: 'Phone number is required' });
@@ -5968,7 +5974,11 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
       } catch (e) { console.warn('[reservations] table allocation skipped:', e.message); }
     }
 
-    const insertStatus = source === 'widget' ? 'pending' : (status || 'pending');
+    // SEPOS-WORDING-001 (Korakot, 28 Aug) — this line used to FORCE widget
+    // bookings to 'pending', contradicting the confirmation email the guest
+    // had already been sent. `status` above resolves widget/online → 'confirmed',
+    // explicit staff-form values unchanged, anything else → 'pending'.
+    const insertStatus = status;
     const result = await pool.query(
       `INSERT INTO reservations (restaurant_id, table_id, table_ids, customer_name, customer_phone, customer_email, covers, reservation_date, reservation_time, status, notes, source, marketing_consent) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [restaurant_id, assignTableId, assignTableIds, customer_name.trim(), customer_phone.trim(), customer_email?.trim() || null, coversNum, reservation_date, reservation_time, insertStatus, notes?.trim() || null, source, marketing_consent ? 1 : 0]

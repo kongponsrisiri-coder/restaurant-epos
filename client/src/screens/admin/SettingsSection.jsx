@@ -764,6 +764,7 @@ export default function SettingsSection() {
     nav_show_bar:            '1',
     nav_show_tables:         '1',   // home guard: tables + counter can never BOTH be hidden
     nav_show_counter:        '1',
+    online_order_chime:      '1',   // SEPOS-ORDER-CHIME-001 — repeat-until-ack arrival sound, default ON
     kitchen_print_mode:      'print',   // 'print' | 'kds' | 'both'
     kitchen_language:        'en_th',  // 'en_th' | 'en'
     brand_logo:              '',   // SEPOS-BRAND-001 — on-screen logo (separate from receipt logo)
@@ -1429,6 +1430,16 @@ export default function SettingsSection() {
             </label>
           </div>
         ))}
+      </div>
+
+      {/* ── SEPOS-ORDER-CHIME-001 — Online order alert ── */}
+      <div style={cardStyle}>
+        <h2 style={{ fontSize:16, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:8 }}>🔔 Online Order Alert</h2>
+        <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:14 }}>
+          <input type="checkbox" checked={(settings.online_order_chime ?? '1') !== '0'} onChange={e => setSettings({...settings, online_order_chime:e.target.checked?'1':'0'})} />
+          Play a repeating chime on every till when an online order arrives
+          <span style={{ fontSize:12, color:'#888', fontWeight:400 }}>— rings every ~25 seconds until someone taps the alert banner. Covers the ordering widget, QR table orders and Deliveroo. Never plays on the customer display.</span>
+        </label>
       </div>
 
       {/* ── Service Charge ── */}

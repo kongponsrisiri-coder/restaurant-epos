@@ -223,8 +223,26 @@ async function kitchenTicketRaster(order, items, opts = {}) {
   if (sentBy) lines.push({ text: 'Sent: ' + String(sentBy), size: 22, center: true, gap: 4 });
   lines.push({ rule: true });
 
+  // SEPOS-TICKET-LAYOUT-001 (Korakot, 28 Aug) — option choices join the dish
+  // line ("1 × Pad Thai — Beef") WHEN the whole line fits the paper at the
+  // printed size; overflow keeps today's own bold indented line — never
+  // shrunk, never clipped. Measured with the same fonts the renderer uses.
+  await loadFonts();
+  const scratchFit = PImage.make(1, 1).getContext('2d');
+  const scaleK = SIZE_SCALES[opts.size] || 1.0;
+  const fitsOneLine = (text, baseSize) => {
+    const thai = /[฀-๿]/.test(text);
+    scratchFit.font = `${Math.round(baseSize * scaleK)}pt ${thai ? 'TicketThai' : 'TicketSans'}`;
+    return scratchFit.measureText(text).width <= (W - 8 * 2);
+  };
   const pushItem = (it) => {
-    lines.push({ text: `${it.quantity || 1} × ${it.name || it.item_name || ''}`, size: 32, gap: 2 });
+    const qtyName = `${it.quantity || 1} × ${it.name || it.item_name || ''}`;
+    const optText = it.notes ? String(it.notes) : '';
+    if (optText && fitsOneLine(`${qtyName} — ${optText}`, 32)) {
+      lines.push({ text: `${qtyName} — ${optText}`, size: 32, gap: 2 });
+    } else {
+      lines.push({ text: qtyName, size: 32, gap: 2 });
+    }
     // SEPOS-THAI-TICKET-001 — classic-builder parity: the Thai name line the
     // chef actually reads (classic prints name_alt when bilingual, default on).
     // SEPOS-LANG-001 (Korakot, 26 Aug) — the rendered path must RESPECT the
@@ -233,21 +251,27 @@ async function kitchenTicketRaster(order, items, opts = {}) {
     const nameAlt = (opts.bilingual !== false) ? (it.name_alt || it.name_th || '') : '';
     if (nameAlt) lines.push({ text: String(nameAlt), size: 28, indent: 34, gap: 2 });
     // SEPOS-024b parity — the free-text special request ("Mild", "ALLERGY — no
-    // peanuts") is the line a kitchen must never miss.
+    // peanuts") is the line a kitchen must never miss. ALWAYS its own line —
+    // an allergy note must never blend into a dish line.
     if (it.item_note) lines.push({ text: `** ${it.item_note} **`, size: 26, bold: true, indent: 34, gap: 2 });
-    if (it.notes) lines.push({ text: String(it.notes), size: 26, bold: true, indent: 34, gap: 4 });
+    if (optText && !fitsOneLine(`${qtyName} — ${optText}`, 32)) {
+      lines.push({ text: optText, size: 26, bold: true, indent: 34, gap: 4 });
+    }
   };
   if (courseLabel) {
     for (const it of items || []) pushItem(it);
   } else {
     // Full ticket — group by course with headers, classic-style.
+    // SEPOS-TICKET-LAYOUT-001 — a rule line separates course blocks (not
+    // before the first) so STARTERS/MAINS read as blocks at a glance.
     const byCourse = {};
     for (const it of items || []) { const c = it.course || 1; (byCourse[c] = byCourse[c] || []).push(it); }
     const courses = Object.keys(byCourse).sort((a, b) => Number(a) - Number(b));
-    for (const c of courses) {
+    courses.forEach((c, idx) => {
+      if (idx > 0 && courses.length > 1) lines.push({ rule: true });
       if (courses.length > 1) lines.push({ text: COURSES_EN[c] || 'ITEMS', size: 28, bold: true, gap: 2 });
       for (const it of byCourse[c]) pushItem(it);
-    }
+    });
   }
   lines.push({ rule: true });
   lines.push({ text: `Order #${order.id}${courseLabel ? ' · ' + courseLabel : ''}`, size: 22, center: true });

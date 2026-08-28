@@ -576,7 +576,7 @@ function buildKitchenTicket({ order, items, course, bilingual = true, thaiCodepa
         // = SIZE_BIG, i.e. today's output). Korakot 2026-06-02: "letters need
         // to be a little bit wider" — now operator-configurable per SEPOS-PRINT-FONT-001.
         CMD.BOLD_ON, itemSize,
-        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}${item.notes ? ' / ' + item.notes : ''}`),
+        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}${item.notes ? ' — ' + item.notes : ''}`),   // SEPOS-TICKET-LAYOUT-001 — dash joiner
         CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
         // Thai item name — same scale as the English line above.
         nameAlt    ? [CMD.BOLD_ON, itemSize, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],
@@ -627,7 +627,7 @@ function buildFullKitchenTicket({ order, items, bilingual = true, thaiCodepage =
         // Item line — sized by the tenant's kitchen/bar font scale (default
         // 'large' = SIZE_BIG = today's output). SEPOS-PRINT-FONT-001.
         CMD.BOLD_ON, itemSize,
-        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}${item.notes ? ' / ' + item.notes : ''}`),
+        txt(`${item.quantity || 1}x  ${item.name || item.item_name || 'Item'}${item.notes ? ' — ' + item.notes : ''}`),
         CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
         // Thai item name — same scale as the English line above.
         nameAlt    ? [CMD.BOLD_ON, itemSize, txtTh('  ' + nameAlt, thaiCodepage), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf()] : [],

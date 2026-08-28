@@ -182,6 +182,7 @@ export default function ZReportSection() {
     rows.push(['Cash', Number(reportData.total_cash || 0).toFixed(2)]);
     rows.push(['Card', Number(reportData.total_card || 0).toFixed(2)]);
     rows.push(['Other', Number(reportData.total_other || 0).toFixed(2)]);
+    if (Number(reportData.total_tips || 0) > 0) rows.push(['of which Card tips', Number(reportData.total_tips).toFixed(2)]);
     rows.push(['Food',           Number(reportData.total_food     || 0).toFixed(2)]);
     rows.push(['Drink',          Number(reportData.total_drink    || 0).toFixed(2)]);
     rows.push(['Service charge', Number(reportData.total_service  || 0).toFixed(2)]);
@@ -394,6 +395,12 @@ export default function ZReportSection() {
               {[{ label: '💵 Cash Sales', value: reportData.total_cash || 0, color: '#22c55e' }, { label: '💳 Card Sales', value: reportData.total_card || 0, color: '#3b82f6' }, { label: '🔄 Other', value: reportData.total_other || 0, color: '#8b5cf6' }].map(p => (
                 <div key={p.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0f0f0', fontSize: 15 }}><span>{p.label}</span><span style={{ fontWeight: 700, color: p.color }}>£{Number(p.value).toFixed(2)}</span></div>
               ))}
+              {/* SEPOS-TIPS-001 — gratuities recorded with card tenders. Already
+                  INSIDE Card Sales (the card machine settled them), so this is
+                  an "of which" line, not extra money. */}
+              {Number(reportData.total_tips || 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 10px 16px', borderBottom: '1px solid #f0f0f0', fontSize: 13, color: '#8b5cf6' }}><span>💷 of which Card tips ({reportData.tips_count})</span><span style={{ fontWeight: 700 }}>£{Number(reportData.total_tips).toFixed(2)}</span></div>
+              )}
               {/* Korakot 2026-06-02: split out Food / Drink / Service
                   charge so the day's £ break-down by kitchen vs bar vs
                   optional service is obvious on the Z Report. */}
@@ -549,7 +556,7 @@ export default function ZReportSection() {
           </div>
           <div style={{ background: 'white', borderRadius: 16, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: 20 }}>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 20, color: 'var(--brand-primary, #1a1a2e)' }}>💳 Card Reconciliation</div>
-            <div style={{ background: '#eff6ff', borderRadius: 10, padding: 14, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 14, color: '#555' }}>Card Sales from System</span><span style={{ fontSize: 20, fontWeight: 800, color: '#3b82f6' }}>£{Number(reportData.total_card || 0).toFixed(2)}</span></div>
+            <div style={{ background: '#eff6ff', borderRadius: 10, padding: 14, marginBottom: 20 }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 14, color: '#555' }}>Card Sales from System</span><span style={{ fontSize: 20, fontWeight: 800, color: '#3b82f6' }}>£{Number(reportData.total_card || 0).toFixed(2)}</span></div>{Number(reportData.total_tips || 0) > 0 && <div style={{ fontSize: 12, color: '#8b5cf6', marginTop: 4 }}>includes £{Number(reportData.total_tips).toFixed(2)} card tips — the card machine total should match as-is</div>}</div>
             <div><label style={{ fontSize: 13, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>💳 Actual Card Takings <span style={{ fontWeight: 400, color: '#aaa' }}>(from the card machine)</span></label><div style={{ position: 'relative' }}><span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#555', fontSize: 15 }}>£</span><input type="text" inputMode="decimal" step="0.01" value={actualCard} onChange={e => setActualCard(e.target.value)} placeholder="0.00" style={{ ...inputStyle, paddingLeft: 28 }} /></div></div>
             {actualCard !== '' && (
               <div style={{ marginTop: 20, background: '#f8f8f8', borderRadius: 12, padding: 16 }}>
@@ -624,6 +631,7 @@ function buildZReportBody(r, type, settings, cash, thermal) {
     <table>
       <tr><td>💵 Cash</td><td class="right">${fmt(r.total_cash)}</td></tr>
       <tr><td>💳 Card</td><td class="right">${fmt(r.total_card)}</td></tr>
+      ${Number(r.total_tips) > 0 ? `<tr><td style="padding-left:14px">💷 of which Card tips</td><td class="right">${fmt(r.total_tips)}</td></tr>` : ''}
       ${Number(r.total_other) > 0 ? `<tr><td>🔄 Other</td><td class="right">${fmt(r.total_other)}</td></tr>` : ''}
       <tr><td>🍽️ Food</td><td class="right">${fmt(r.total_food)}</td></tr>
       <tr><td>🍺 Drink</td><td class="right">${fmt(r.total_drink)}</td></tr>
@@ -722,6 +730,7 @@ function buildZReportLines(r, type, settings, cash) {
   lines.push({ kind: 'row', left: 'Cash',                    right: fmt(r.total_cash) });
   lines.push({ kind: 'row', left: 'Card',                    right: fmt(r.total_card) });
   if (Number(r.total_other) > 0) lines.push({ kind: 'row', left: 'Other', right: fmt(r.total_other) });
+  if (Number(r.total_tips)  > 0) lines.push({ kind: 'row', left: ' of which Card tips', right: fmt(r.total_tips) });
   lines.push({ kind: 'div' });
   lines.push({ kind: 'h2', text: 'SALES' });
   lines.push({ kind: 'row', left: 'Food',                    right: fmt(r.total_food) });

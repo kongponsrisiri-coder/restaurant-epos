@@ -375,26 +375,29 @@ export const addOrderItems = async (orderId, items, sentBy = null) => {
 // SEPOS-062 — `tenders` (optional) is an array of {amount, method} for split
 // bills, so each tender is recorded as its own payment row with its real method
 // (Cash/Card) instead of one lumped 'Split' row. Single payments omit it.
-const localPay = async (lid, amount, method, tenders) => {
+const localPay = async (lid, amount, method, tenders, tip) => {
   const doc = await localOrderGet(lid);
   if (!doc) return { error: 'Order not found' };
   doc.status = 'closed';
   doc.payment_method = method;
   doc.amount_paid = amount;
+  if (Number(tip) > 0) doc.tip = Number(tip);            // SEPOS-TIPS-001
   if (tenders && tenders.length) doc.tenders = tenders;
   doc.closed_at = new Date().toISOString();
   await localOrderUpdate(lid, doc);
   return { success: true };
 };
-export const payOrder = async (orderId, amount, method, tenders) => {
+// SEPOS-TIPS-001 — `tip` (optional, £) is the gratuity inside the tender
+// amounts (card over-tender + explicit tip box); stored on the payment row.
+export const payOrder = async (orderId, amount, method, tenders, tip) => {
   const lid = await localTarget(orderId);
-  if (lid) return localPay(lid, amount, method, tenders);
-  try { return await post(`/api/orders/${orderId}/pay`, tenders && tenders.length ? { payments: tenders } : { amount, method }); }
+  if (lid) return localPay(lid, amount, method, tenders, tip);
+  try { return await post(`/api/orders/${orderId}/pay`, tenders && tenders.length ? { payments: tenders, tip } : { amount, method, tip }); }
   catch (e) {
     if (!isNative()) throw e;
     const pid = await promoteOrder(orderId);
     if (!pid) throw e;
-    return localPay(pid, amount, method, tenders);
+    return localPay(pid, amount, method, tenders, tip);
   }
 };
 

@@ -107,7 +107,6 @@ function headerOps(ops, order, title, kw = SUNMI_KITCHEN_WIDTH, sentBy = null) {
   ops.push({ op: 'align', v: 0 }, { op: 'krule', w: Math.min(kw, SUNMI_KITCHEN_WIDTH) });
 }
 
-<<<<<<< HEAD
 // HH:MM in the DEVICE's local time — the Sunmi sits at the restaurant, so its
 // clock is the restaurant's timezone (correct even for a non-UK client).
 function fmtTime(t) {
@@ -115,10 +114,7 @@ function fmtTime(t) {
   catch { return String(t); }
 }
 
-function kitchenItemOps(ops, it, bilingual = true, sz = 'b') {
-=======
 function kitchenItemOps(ops, it, bilingual = true, sz = 'b', kw = 26) {
->>>>>>> main
   // SEPOS-PRINT-FONT-001 — item + option/2nd-lang/note lines all print at the
   // configured kitchen size `sz` (default 'b' = today). Bold for emphasis.
   // SEPOS-TICKET-LAYOUT-001 (Korakot, 28 Aug) — option choices join the dish

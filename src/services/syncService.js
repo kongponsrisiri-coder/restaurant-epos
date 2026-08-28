@@ -213,7 +213,8 @@ async function itemsWithPendingPush() {
     const r = await pool.query(
       `SELECT payload FROM sync_queue WHERE synced = 0
        AND action_type IN ('add_items','void_item','update_item_status',
-                           'apply_item_discount','resend_items','merge_orders')`
+                           'apply_item_discount','resend_items','merge_orders',
+                           'move_item')`
     );
     const itemIds = new Set();
     for (const row of r.rows) {
@@ -417,6 +418,26 @@ async function applyToCloud(actionType, payload) {
       // (which would double-count the voided quantity locally).
       if (payload.ghostLocalId && j?.ghost_item_id) {
         await setItemCloudId(payload.ghostLocalId, j.ghost_item_id);
+      }
+      return j;
+    }
+    case 'move_item': {
+      // SEPOS-ITEM-MOVE-001 — replay a table-to-table line move on the cloud.
+      // Table ids are shared cloud<->local (flat pull, pk id); the ITEM needs
+      // its cloud id. The cloud answers with ITS target order id — bind it to
+      // the local target order so the next pullActiveOrders UPDATEs that
+      // order instead of INSERTing a duplicate (same pattern as the void
+      // ghost bind). If the cloud reused a different open order on that
+      // table, binding to it is still right: the pull then merges both
+      // sides onto the one real bill.
+      const cloudItemId = await requireItemCloudId('move_item', payload.localItemId);
+      const r = await fetch(url(`/api/order-items/${cloudItemId}/move`), {
+        method: 'PUT', ...json({ target_table_id: payload.target_table_id }),
+      });
+      if (!r.ok) throw new Error(`move_item ${r.status}`);
+      const j = await r.json();
+      if (payload.localTargetOrderId && j?.target_order_id) {
+        await setOrderCloudId(payload.localTargetOrderId, j.target_order_id);
       }
       return j;
     }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { getMenu, getOrder, addOrderItems, payOrder, getItemModifiers, voidItem, applyDiscount, fireCourse, resendToKitchen, applyItemDiscount, loginStaff, removeVoucherFromBill, closeOrderZero, setOrderServiceCharge, assertOk, getSettings, SERVER_URL, updateMenuItemsSortOrder, saveOrderNote, getVoucher, redeemVoucher, getOrderDeposit, getOrderDepositApplied, createDeposit } from '../api';
 import AmountInput from '../components/AmountInput';
-import { unapplyOrderDeposit, pushCfdState } from '../api';
+import { unapplyOrderDeposit, pushCfdState, moveOrderItem, getTables } from '../api';
 import CodeScanButton from '../components/CodeScanButton';
 
 // SEPOS-MENU-COLOR-001 — auto black/white text on a coloured button.
@@ -75,6 +75,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   const [miscPopup, setMiscPopup] = useState(null); // SEPOS-MISC-001 — off-menu / special open item
   const [voidPopup, setVoidPopup] = useState(null);
   const [resendPopup, setResendPopup] = useState(null);
+  const [movePopup, setMovePopup] = useState(null);   // SEPOS-ITEM-MOVE-001 — {item, tables}
   // SEPOS-ITEM-NOTE-TAP-001 — tap an unsent basket line to add/edit its note.
   const [noteModal, setNoteModal] = useState(null);   // { line, text }
   // SEPOS-RESEND-002 — order-level resend: tick items, default plain Reprint.
@@ -1023,6 +1024,42 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
   const badgeCount = cart.reduce((sum, i) => sum + i.quantity, 0) +
     existingItems.filter(i => !i.voided).reduce((sum, i) => sum + i.quantity, 0);
 
+  // SEPOS-ITEM-MOVE-001 — move one sent line to another table. The server
+  // holds the money guards (no payments on the bill, never QR, never voided);
+  // this UI just picks the destination and confirms.
+  const handleMoveItem = async (item) => {
+    try {
+      const t = await getTables();
+      const tables = (Array.isArray(t) ? t : [])
+        .filter(x => !x.is_takeaway && Number(x.id) !== Number(order?.table_id));
+      if (tables.length === 0) { alert('No other table to move to.'); return; }
+      setMovePopup({ item, tables });
+    } catch { alert('Could not load the table list — check connection.'); }
+  };
+  const confirmMoveItem = async (table) => {
+    const item = movePopup?.item;
+    if (!item) return;
+    const label = (table.name && String(table.name).trim()) || `Table ${table.table_number}`;
+    const discWarn = order?.discount_type
+      ? '\n\nThis bill has a discount — the item joins the other table at full price.' : '';
+    if (!window.confirm(`Move ${item.quantity}× ${item.name} to ${label}?${discWarn}`)) return;
+    setMovePopup(null);
+    try {
+      assertOk(await moveOrderItem(item.id, table.id));
+      fetchOrder();
+    } catch (e) {
+      alert('Move failed: ' + (e?.message || 'unknown'));
+      fetchOrder();
+    }
+  };
+  const MoveButton = ({ item }) => (
+    <button onClick={() => handleMoveItem(item)} style={{
+      background: '#e0e7ff', border: 'none', borderRadius: 4,
+      padding: '2px 6px', cursor: 'pointer', color: '#4338ca',
+      fontSize: 10, fontWeight: 700
+    }}>⇄ MOVE</button>
+  );
+
   // Reusable DISC button
   const DiscButton = ({ item }) => (
     <button onClick={() => handleItemDiscount(item)} style={{
@@ -1598,7 +1635,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                       </span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
-                        <DiscButton item={item} />
+                        <DiscButton item={item} /><MoveButton item={item} />
                         <button onClick={() => handleVoidItem(item)} style={{
                           background: '#fee2e2', border: 'none', borderRadius: 4,
                           padding: '2px 6px', cursor: 'pointer', color: '#ef4444',
@@ -1731,7 +1768,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                           <span style={{ color: '#92400e', fontWeight: 600 }}>
                             £{(item.unit_price * item.quantity).toFixed(2)}
                           </span>
-                          <DiscButton item={item} />
+                          <DiscButton item={item} /><MoveButton item={item} />
                           <button onClick={() => handleVoidItem(item)} style={{
                             background: '#fee2e2', border: 'none', borderRadius: 4,
                             padding: '2px 6px', cursor: 'pointer', color: '#ef4444',
@@ -1769,7 +1806,7 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                         </span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           <span>£{(item.unit_price * item.quantity).toFixed(2)}</span>
-                          <DiscButton item={item} />
+                          <DiscButton item={item} /><MoveButton item={item} />
                           <button onClick={() => handleVoidItem(item)} style={{
                             background: '#fee2e2', border: 'none', borderRadius: 4,
                             padding: '2px 6px', cursor: 'pointer', color: '#ef4444',
@@ -2521,6 +2558,44 @@ export default function OrderScreen({ orderId, tableId, staff, onClose, onSent }
                 ))}
               </div>
               <button onClick={() => setResendPopup(null)} style={{
+                width:'100%', marginTop:14, padding:'12px', borderRadius:10, border:'none',
+                background:'#f0f0f0', cursor:'pointer', fontWeight:700, fontSize:14
+              }}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* SEPOS-ITEM-MOVE-001 — MOVE-TO-TABLE POPUP */}
+        {movePopup && (
+          <div style={{
+            position:'fixed', top:0, right:0, bottom:0, left:0, zIndex:100002,
+            background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center',
+          }}>
+            <div style={{ background:'white', borderRadius:16, padding:24, width:440, maxWidth:'92vw', maxHeight:'85vh', overflowY:'auto' }}>
+              <h2 style={{ fontSize:18, fontWeight:700, color:'var(--brand-primary, #1a1a2e)', marginBottom:6 }}>
+                ⇄ Move to table
+              </h2>
+              <div style={{ fontSize:14, color:'#555', marginBottom:18 }}>
+                {movePopup.item.quantity}× {movePopup.item.name} — which table is it going to?
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(96px, 1fr))', gap:8 }}>
+                {movePopup.tables.map(t => {
+                  const label = (t.name && String(t.name).trim()) || `Table ${t.table_number}`;
+                  const occupied = t.status === 'occupied';
+                  return (
+                    <button key={t.id} onClick={() => confirmMoveItem(t)} style={{
+                      padding:'14px 6px', borderRadius:10,
+                      border:'2px solid ' + (occupied ? '#fecaca' : '#bbf7d0'),
+                      background:'white', color: occupied ? '#b91c1c' : '#15803d',
+                      cursor:'pointer', fontWeight:700, fontSize:14,
+                    }}>
+                      {label}
+                      <div style={{ fontSize:10, fontWeight:600, opacity:0.75 }}>{occupied ? 'joins their bill' : 'opens new bill'}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={() => setMovePopup(null)} style={{
                 width:'100%', marginTop:14, padding:'12px', borderRadius:10, border:'none',
                 background:'#f0f0f0', cursor:'pointer', fontWeight:700, fontSize:14
               }}>Cancel</button>

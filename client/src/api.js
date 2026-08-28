@@ -189,6 +189,9 @@ export const assertOk = (res) => {
 };
 
 export const getTables = () => get('/api/tables');
+// SEPOS-ITEM-MOVE-001 — move one line to another table (server guards: no
+// payments on the source bill, never QR orders, never voided lines).
+export const moveOrderItem = (itemId, target_table_id) => put(`/api/order-items/${itemId}/move`, { target_table_id });
 export const updateTableStatus = (id, status) => put(`/api/tables/${id}`, { status });
 // SEPOS-ANDROID-002 — when online, warm EVERY item's modifiers into the cache
 // (once) so offline taps still show modifier choices. Background, best-effort.

@@ -28,6 +28,7 @@ import LockScreen from './screens/LockScreen';
 import CustomerDisplayScreen from './screens/CustomerDisplayScreen'; // SEPOS-CFD-001
 import OpenDayModal from './components/OpenDayModal'; // SEPOS-OPENDAY-001
 import OnScreenKeyboard from './components/OnScreenKeyboard'; // SEPOS-OSK-001 — touch-till keyboard
+import OrderChime from './components/OrderChime'; // SEPOS-ORDER-CHIME-001 — online-order arrival sound
 import './App.css';
 
 // ── Sandy: Lotus badge logo mark — replaces SVG flags ─────────────
@@ -747,6 +748,14 @@ export default function App() {
       <OfflineBanner />{/* SEPOS-ANDROID-002 — only visible when internet drops */}
       {body}
       <OnScreenKeyboard />{/* SEPOS-OSK-001 — pops for text fields on touch tills */}
+      {/* SEPOS-ORDER-CHIME-001 — rings + banners on every new online order
+          (widget/Deliveroo/QR) until acknowledged. Tap jumps to the Kitchen
+          tab when the venue shows it (takeaway orders live there), else home;
+          on the login screen it just silences (nobody to navigate). Never on
+          the customer display — that route early-returns above. */}
+      <OrderChime onOpen={() => {
+        if (staff) setScreen(navVis.kitchen ? 'kitchen' : homeScreenKey());
+      }} />
       {/* SEPOS-OPENDAY-001 — first-login-of-the-day "Open the day" prompt. Only
           renders on a positive {session:null}; fail-open + Skip keep it from ever
           bricking the floor. Sits after {body}; the licenseLock / tenant-setup

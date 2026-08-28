@@ -170,7 +170,7 @@ export default function MenuSection() {
   // SEPOS-MENU-COLOR-001 — order-screen button colour picker
   const [colorPick, setColorPick] = useState(null); // { type, id, current } | null
   const colorBackdrop = useBackdropDismiss(() => setColorPick(null));
-  const MENU_COLORS = ['#dc2626','#fecaca','#f59e0b','#fde68a','#16a34a','#bbf7d0','#2563eb','#bfdbfe','#8b5cf6','#14b8a6','#C9A84C','#6b7280'];
+  const MENU_COLORS = ['#dc2626','#fecaca','#f59e0b','#fde68a','#16a34a','#bbf7d0','#2563eb','#bfdbfe','#8b5cf6','#14b8a6','#C9A84C','#6b7280','#ec4899','#fbcfe8','#ea580c','#fed7aa','#0ea5e9','#bae6fd','#84cc16','#d9f99d','#7c3aed','#ddd6fe','#0D1B3E','#a16207'];   // SEPOS-MENU-COLORS-002 (Korakot, 28 Aug) — doubled the palette
   const applyColor = async (color) => {
     const pick = colorPick; setColorPick(null);
     if (!pick) return;

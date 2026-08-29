@@ -280,7 +280,11 @@
       '<input id="c-email" placeholder="Email (for confirmation — optional)" inputmode="email" value="' + esc(contact.email) + '"></div>';
     // SiamPay bar only when a real payment happens here — on pay-on-collection
     // tenants a "secure checkout" badge with nothing to pay reads as fake.
-    if (stripeCfg && stripeCfg.configured) h += '<div class="sp-bar"><span class="sp-name">Siam<b>Pay</b></span><span class="sp-sub">🔒 Secure checkout · powered by <b>Stripe</b></span></div>';
+    // SIAMPAY-BRAND-001 (Korakot, 29 Aug) — the SiamPay wordmark only for
+    // actual SiamPay (platform) tenants; a venue on its OWN Stripe keys isn't
+    // paying through SiamPay, so branding it as such misrepresents. Own-keys
+    // tenants keep the neutral secure-checkout badge.
+    if (stripeCfg && stripeCfg.configured) h += '<div class="sp-bar">' + (stripeCfg.stripe_account ? '<span class="sp-name">Siam<b>Pay</b></span>' : '') + '<span class="sp-sub">🔒 Secure checkout · powered by <b>Stripe</b></span></div>';
     h += '<div id="payel"></div>';
     // Same fix as the QR page (a568bbb): the Stripe element mounts async, so
     // the button holds until its 'ready' — else a fast first tap confirms an

@@ -90,7 +90,7 @@
   const $ = (s) => document.querySelector(s);
   let S = null, MENU = [], cart = [], view = 'menu', activeCat = null;
   let optItem = null, optGroups = null, optSel = {};          // options sheet state
-  let stripePk = null, stripe = null, elements = null, payBusy = false, uidSeq = 1;
+  let stripePk = null, stripe = null, elements = null, payBusy = false, uidSeq = 1; let qrAcct = null;
   // Tenders this phone has paid on this table (survives a refresh, dies with
   // the tab — we never identify the customer, we just remember our own).
   let myPayments = [];
@@ -247,7 +247,12 @@
         '<span class="step" style="margin-top:6px"><button data-dec="' + c.uid + '">−</button><span>' + c.quantity + '</span><button data-inc="' + c.uid + '">＋</button></span></div></div>';
     }
     h += '<div class="totrow"><span>Total</span><span>' + fmt(cartTotal()) + '</span></div>';
-    h += '<div class="sp-bar"><span class="sp-name">Siam<b>Pay</b></span><span class="sp-sub">🔒 Secure checkout · powered by <b>Stripe</b></span></div>';
+    // SIAMPAY-BRAND-001 (Korakot, 29 Aug) — bar only when a REAL payment
+    // happens here (pay-later/demo have nothing to pay, so a "secure checkout"
+    // badge reads as fake), and the SiamPay wordmark only for actual SiamPay
+    // platform tenants (unhidden by openPayment once the config confirms it —
+    // a venue on its own Stripe keys isn't paying through SiamPay).
+    if (S.stripe_ready) h += '<div class="sp-bar"><span class="sp-name" id="spname" style="display:none">Siam<b>Pay</b></span><span class="sp-sub">🔒 Secure checkout · powered by <b>Stripe</b></span></div>';
     h += '<div id="payel"></div>';
     // Real-card mode: the Stripe element mounts ASYNC (config → js.stripe.com →
     // payment-intent → mount). Until its 'ready' fires the button stays disabled,
@@ -324,14 +329,16 @@
   async function openPayment() {
     if (!S.stripe_ready || !cart.length) return;
     try {
-      let acct = null;
       if (!stripePk) {
         const cfg = await fetch('/api/takeaway/stripe-config').then((r) => r.json());
         stripePk = cfg.publishable_key || cfg.publishableKey;
-        acct = cfg.stripe_account || null;
+        qrAcct = cfg.stripe_account || null;
         if (!window.Stripe) await new Promise((ok, bad) => { const s = document.createElement('script'); s.src = 'https://js.stripe.com/v3/'; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
-        stripe = acct ? window.Stripe(stripePk, { stripeAccount: acct }) : window.Stripe(stripePk);
+        stripe = qrAcct ? window.Stripe(stripePk, { stripeAccount: qrAcct }) : window.Stripe(stripePk);
       }
+      // SIAMPAY-BRAND-001 — wordmark for platform tenants only; re-applied on
+      // every cart re-render (the bar is rebuilt hidden each time).
+      if (qrAcct) { const n = document.getElementById('spname'); if (n) n.style.display = ''; }
       const pi = await fetch('/api/qr/payment-intent/' + token, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: cart.map((c) => ({ menu_item_id: c.menu_item_id, quantity: c.quantity, modifiers: c.modifiers })) }) }).then((r) => r.json());
       if (pi.error) { $('#payel').innerHTML = '<div class="err">' + esc(pi.error) + '</div>'; return; }
       window.__qr_pi = pi;

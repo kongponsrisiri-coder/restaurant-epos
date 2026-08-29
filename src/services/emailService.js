@@ -19,8 +19,18 @@ function escapeHtml(v) {
 
 function formatDate(dateStr) {
   try {
-    const str   = dateStr instanceof Date ? dateStr.toISOString() : String(dateStr);
-    const clean = str.split('T')[0];
+    // SEPOS-MAIL-DATE-001 — pg returns DATE columns as a JS Date at SERVER-
+    // LOCAL midnight; toISOString() shifted London midnight to 23:00 UTC the
+    // previous day, so during BST every booking email was dated one day early
+    // (till correct, email wrong — 29 Aug 2026). A full timestamp (Date or
+    // ISO string) now resolves its CALENDAR date in the venue's timezone;
+    // a plain 'YYYY-MM-DD' string is trusted as-is.
+    let clean;
+    if (dateStr instanceof Date || /T\d{2}:\d{2}/.test(String(dateStr))) {
+      clean = new Date(dateStr).toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+    } else {
+      clean = String(dateStr).split('T')[0];
+    }
     return new Date(clean + 'T12:00:00').toLocaleDateString('en-GB', {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
     });

@@ -12,6 +12,7 @@ const orderForTable = (orders, tid) =>
  // SEPOS-TABLE-NAME
 import { roomSize } from '../utils/floorRoom';    // SEPOS-FLOOR-FIT shared room
 import TakeawayStrip    from '../components/TakeawayStrip';
+import ReprintBillsModal from '../components/ReprintBillsModal';
 import BillPeek         from '../components/BillPeek';
 import SyncHealthBanner from '../components/SyncHealthBanner';
 
@@ -36,6 +37,9 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
   const [openOrders, setOpenOrders] = useState([]);
   const [reservations, setReservations] = useState([]);
   const [billPeekOrderId, setBillPeekOrderId] = useState(null);
+  // SEPOS-REPRINT-TABLE-001 — today's-bills reprint modal, opened from the
+  // floating 🖨 button (Korakot: reprint without the trip to Admin → Bills).
+  const [showReprint, setShowReprint] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showCoversPopup, setShowCoversPopup] = useState(null);
   const [coversInput, setCoversInput] = useState('');
@@ -845,6 +849,19 @@ export default function TableMapScreen({ staff, onOpenOrder }) {
           </div>
         </div>
       ), document.body)}
+
+      {/* SEPOS-REPRINT-TABLE-001 — floating re-print button, bottom-left
+          (mirrors the zoom stack bottom-right); shows on every view of the
+          table screen. */}
+      <button title="Re-print a bill" onClick={() => setShowReprint(true)} style={{
+        position: 'fixed', left: 14, bottom: 14, zIndex: 5,
+        height: 44, borderRadius: 10, padding: '0 14px',
+        border: '1px solid #d6d3cb', background: 'rgba(255,255,255,0.95)',
+        color: 'var(--brand-primary, #1a1a2e)', fontSize: 14, fontWeight: 800,
+        cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>🖨 <span>Bills</span></button>
+      {showReprint && <ReprintBillsModal onClose={() => setShowReprint(false)} />}
 
       {/* SEPOS-044 — BillPeek modal (shared by takeaway strip + tap menu). */}
       {billPeekOrderId && (

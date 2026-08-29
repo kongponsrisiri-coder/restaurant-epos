@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Book a table</title>
+<!-- SEPOS-BOOK-PAGE-001 — standalone hosted booking page, so a venue has a
+     REAL URL to hand to Google Business Profile / Instagram bio / anywhere a
+     link is needed. Same booking widget client sites embed; auto-opened. -->
+<style>
+  :root { --brand:#1E4038; --bg:#f6f4ef; }
+  * { box-sizing:border-box; margin:0; }
+  body { font-family:-apple-system,system-ui,'Segoe UI',sans-serif; background:var(--bg); color:#1a1a2e; min-height:100vh; }
+  header { background:var(--brand); color:#fff; padding:18px 16px; text-align:center; }
+  header h1 { font-size:19px; font-weight:800; }
+  header .sub { font-size:13px; opacity:.85; margin-top:3px; }
+  .wrap { max-width:480px; margin:0 auto; padding:26px 16px 60px; text-align:center; }
+  .note { color:#777; font-size:13.5px; margin-top:18px; line-height:1.6; }
+  /* The widget renders its own floating button; give it a home-page look. */
+  #sw-open-btn { display:inline-block; margin-top:22px; }
+</style>
+</head>
+<body>
+<header><h1 id="rn">Book a table</h1><div class="sub" id="rs"></div></header>
+<div class="wrap">
+  <div class="note" id="hint">Loading the booking form…</div>
+</div>
+<script>
+(function () {
+  fetch('/api/settings').then(function (r) { return r.json(); }).catch(function () { return {}; })
+    .then(function (st) {
+      var name = st.company_name || st.restaurant_name || '';
+      if (name) {
+        document.getElementById('rn').textContent = name;
+        document.getElementById('rs').textContent = 'Book a table';
+        document.title = name + ' — book a table';
+      }
+      if (st.brand_primary) document.documentElement.style.setProperty('--brand', st.brand_primary);
+      document.getElementById('hint').textContent = 'Tap "Book a Table" if the form doesn’t open by itself.';
+      var s = document.createElement('script');
+      s.src = '/widget.js';
+      s.setAttribute('data-restaurant', st.restaurant_id || 'siamepos');
+      s.setAttribute('data-auto-open', '1');
+      if (st.brand_primary) s.setAttribute('data-color', st.brand_primary);
+      document.querySelector('.wrap').appendChild(s);
+    });
+})();
+</script>
+</body>
+</html>

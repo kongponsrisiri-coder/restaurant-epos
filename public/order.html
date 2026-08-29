@@ -61,6 +61,8 @@
   .paybtn { width:100%; background:var(--brand); color:#fff; border:none; border-radius:13px; font-weight:800; font-size:16px; padding:15px; margin-top:12px; }
   .paybtn:disabled { opacity:.5; }
   .muted { color:#888; font-size:12px; text-align:center; margin-top:8px; }
+  .ordiv { display:flex; align-items:center; gap:12px; color:#9aa0a6; font-size:12.5px; font-weight:700; margin:14px 0 2px; text-transform:uppercase; letter-spacing:.6px; }
+  .ordiv::before, .ordiv::after { content:''; flex:1; height:1px; background:#e3e1da; }
   .bigok { text-align:center; font-size:46px; margin:26px 0 6px; }
   .bigmsg { text-align:center; font-weight:800; font-size:18px; }
   .bigsub { text-align:center; color:#777; font-size:13.5px; margin-top:6px; line-height:1.6; }
@@ -293,10 +295,17 @@
     // SEPOS-TA-CHOICE-001 — venue policy 'choice': the customer picks. The
     // second button submits WITHOUT payment; the order lands unpaid and the
     // till's Collected guard makes staff take payment at handover.
+    // SEPOS-TA-CHOICE-002 (Korakot, 29 Aug) — each button carries ITS OWN
+    // caption and an "or" divider separates the two paths: the shared caption
+    // used to sit under the pay-at-restaurant button, implying the card gets
+    // charged either way.
+    if (stripeCfg && stripeCfg.configured) h += '<div class="muted">Paid securely by card · Apple Pay · Google Pay</div>';
     if (stripeCfg && stripeCfg.configured && stripeCfg.pay_choice) {
-      h += '<button class="paybtn" id="paycollect" style="background:#fff;color:var(--brand);border:2px solid var(--brand)">🏪 Order now — pay at the restaurant</button>';
+      h += '<div class="ordiv">or</div>';
+      h += '<button class="paybtn" id="paycollect" style="background:#fff;color:var(--brand);border:2px solid var(--brand);margin-top:0">🏪 Order now — pay at the restaurant</button>';
+      h += '<div class="muted">💷 Nothing to pay now — pay ' + (isDeliv() ? 'the driver' : 'when you collect') + ', cash or card.</div>';
     }
-    h += '<div class="muted">' + (stripeCfg && stripeCfg.configured ? 'Paid securely by card · Apple Pay · Google Pay' : ('💷 Nothing to pay online — pay ' + (isDeliv() ? 'the driver' : 'when you collect') + ', cash or card.')) + '</div>';
+    if (!(stripeCfg && stripeCfg.configured)) h += '<div class="muted">💷 Nothing to pay online — pay ' + (isDeliv() ? 'the driver' : 'when you collect') + ', cash or card.</div>';
     h += '<button class="morebtn" id="closecart">← Back to menu</button>';
     h += '</div></div>';
     return h;

@@ -440,7 +440,7 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 ## 🟢 Active Work
 
 ### 🔧 SIAMPAY-BRAND-001 shipped (Krit, 29 Aug ~08:45, cloud-only) — SiamPay wordmark only for actual SiamPay platform tenants
-Korakot (Yum Yum screenshot): "they don't use our siampay, remove it — on the qr scan to order as well." /order: wordmark keys on `stripe_account` (own-keys venues keep the neutral 🔒 powered-by-Stripe badge). qr-order: the whole bar now renders only when a REAL payment happens (`S.stripe_ready` — pay-later/demo showed a secure-checkout badge with nothing to pay), wordmark unhidden by openPayment for platform tenants. Widget untouched (no visible wordmark). Pushed to main → all tenant backends; no till update needed. **+ SEPOS-TA-CHOICE-002 (same morning):** on the choice checkout, 'Paid securely by card' sat under the pay-at-restaurant button (implied the card gets charged either way — Korakot's phone test); each button now carries its own caption + ruled OR divider between the two paths. Widget already uses choose-first toggles — untouched. **+ SEPOS-BOOK-PAGE-001 (same morning):** hosted `/book` page on every tenant cloud — a REAL booking URL for Google Business Profile (booking was embed-only; Yum Yum asked for a link to put on Google). Branded from /api/settings, widget gains `data-auto-open=1` (embeds unaffected). Yum Yum's link: https://restaurant-epos-production-4b43.up.railway.app/book
+Korakot (Yum Yum screenshot): "they don't use our siampay, remove it — on the qr scan to order as well." /order: wordmark keys on `stripe_account` (own-keys venues keep the neutral 🔒 powered-by-Stripe badge). qr-order: the whole bar now renders only when a REAL payment happens (`S.stripe_ready` — pay-later/demo showed a secure-checkout badge with nothing to pay), wordmark unhidden by openPayment for platform tenants. Widget untouched (no visible wordmark). Pushed to main → all tenant backends; no till update needed. **+ SEPOS-TA-CHOICE-002 (same morning):** on the choice checkout, 'Paid securely by card' sat under the pay-at-restaurant button (implied the card gets charged either way — Korakot's phone test); each button now carries its own caption + ruled OR divider between the two paths. Widget already uses choose-first toggles — untouched. **+ SEPOS-BOOK-PAGE-001 (same morning):** hosted `/book` page on every tenant cloud — a REAL booking URL for Google Business Profile (booking was embed-only; Yum Yum asked for a link to put on Google). Branded from /api/settings, widget gains `data-auto-open=1` (embeds unaffected). Yum Yum's link: https://restaurant-epos-production-4b43.up.railway.app/book **+ SEPOS-MAIL-DATE-001 (same day ~17:10):** booking emails were dated ONE DAY EARLY during BST (pg DATE → server-local-midnight JS Date → formatDate's toISOString() slid to 23:00 UTC the day before; Korakot's Yum Yum test booking #28 — till right, email 'Friday' for a Saturday). Shared formatDate now resolves timestamps' calendar date in Europe/London; 10-case shape×TZ matrix green. Cloud emails fixed on push; the local-till relay path renders the same file, so tills pick it up in the next desktop cut (v1.9.49).
 
 ### ⚠️ OPEN — SiamEPOS Lite crashed on Railway (found 28 Aug ~23:45, NOT tonight's code)
 lite-api.siamepos.co.uk down: lite server crash-loops in runMigrations with pg ECONNRESET. Root cause: the main Siam EPOS project's Postgres has NO TCP proxy any more (its public endpoint vanished — Postgres was redeployed 20 Aug), and Lite's LITE_DATABASE_URL points at that public endpoint cross-project. Likely broken since 20 Aug, unnoticed (no live Lite clients). Classifier blocks Krit from Railway writes AND browser control for this — Korakot to do 2 steps: (1) Siam EPOS → Postgres → Settings → Networking → Enable TCP Proxy (5432); (2) copy new DATABASE_PUBLIC_URL → paste into SiamEPOS Lite service var LITE_DATABASE_URL (auto-redeploys). Krit verifies after. NB the proxy enable briefly restarts the LIVE main Postgres — do outside service hours or accept a few seconds' blip.
@@ -1885,3 +1885,47 @@ backend deploy needed. spa.siamepos.co.uk = git auto; highbury + jinta tills:
 dists rebuilt + base-verified, the 2 netlify commands handed to Korakot
 (classifier still blocks Sam). Rides desktop v0.2.50 (not yet built by Krit —
 no extra bump needed).
+
+**🚨→🚀 SAM — SPA-TREATWELL-UNPAID-001 SHIPPED (2026-08-29, `6bba6c1`) —
+money-loss bug found LIVE.** Korakot asked how Treatwell payment shows in the
+booking emails; reading Highbury's two latest (Gmail) revealed Treatwell sends
+REPEAT-customer bookings "Status Unpaid" (commission-free, venue collects the
+full price) — but ingest stamped every email booking 'full', so the till's
+one-tap £0 Treatwell close would silently lose the money (live example: ref
+T2191604836, £98, bernardine, 26 Aug). Fix: parser detects unpaid explicitly
+(never !prepaid — unknown stays full to avoid over-collecting), payment type
+'unpaid' end to end (ingest, Connect API, POST/PUT whitelists, Edit-modal +
+booking-form red Unpaid option), server 409 guard on treatwell/fresha close
+(stale-till-proof; flip-to-full = escape hatch), red collect-£X checkout
+banner. 14 smoke checks green on PG16 incl. real-email-wording end-to-end;
+voucher suite re-ran 28 green. **DEPLOYS:** demo+jinta-api+spa frontend git
+auto; highbury-api + both Netlify tills → commands handed to Korakot (bundles
+rebuilt at `6bba6c1`, bases ✓, carry BOTH this fix and the 15-min block chip
+`6f56d47` that was still waiting on the tenant tills). NB: shop guidance
+meanwhile — unpaid-status Treatwell bookings: take cash/card at till.
+
+**✅ SAM — SPA-TREATWELL-UNPAID-001 + 15-min block ROLLOUT COMPLETE
+(2026-08-29, all tenants).** Korakot ran all 3 commands in one paste; verified:
+highbury + jinta tills live (both features in bundle, bases ✓), highbury-api
+fresh boot clean, demo API + jinta-api on `6bba6c1`, demo till serving the
+unpaid feature. Repeat-customer Treatwell bookings can no longer be closed at
+£0. Desktop v0.2.50 build (Krit) now carries voucher upgrade + 15-min chip +
+this fix.
+
+**🚀 SAM — SPA-CHAT-NOTIFY-002 SHIPPED (2026-08-29, `3132692`) — website AI
+chats finally notify the shop (Korakot ask).** Krit's SPA-CHAT-NOTIFY-001 was
+SMS-only (Twilio — configured nowhere) with a settings key no UI writes, so
+alerts never fired. Now: owner EMAIL (spa_email/SPA_EMAIL via Brevo, same as
+new-booking emails) on chat start + on ≥6h-quiet wake-up (one per chat, never
+per message); till browser pop-up via 'webchat_message' socket event on every
+visitor message (tag-per-session dedupe, rides the existing 🔔 bell
+permission); alerts gated on the message actually landing in a conversation
+(dormant no-ANTHROPIC_API_KEY tenants stay silent); Twilio SMS kept dormant
+as bonus. Smoke 7 green + dormant run silent. Deploys: git autos rolling;
+highbury-api + 2 Netlify tills handed to Korakot (bundles at `3132692`,
+bases ✓). NB tills must have the 🔔 bell enabled to see pop-ups.
+**✅ SAM — SPA-CHAT-NOTIFY-002 ROLLOUT COMPLETE (2026-08-29).** All 3 backends
+on `3132692` (highbury via Korakot's `railway up`, demo + jinta git auto),
+both tills serving the pop-up listener. Live E2E test on demo webchat: AI
+replied, new-chat email fired to the demo's spa_email. Shops get email per
+new chat + till pop-ups (🔔 bell permission required once per till).

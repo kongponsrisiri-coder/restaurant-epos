@@ -72,6 +72,16 @@ function Card({ order, onPeek }) {
     </span>
   );
 
+  // SEPOS-TA-PAIDBADGE-001 (Korakot, 29 Aug) — staff must see WITHOUT opening
+  // the order whether money is still owed at handover (pay-choice venues take
+  // both kinds all day). paid/mock = money already taken online.
+  const isPaid = ['paid', 'mock'].includes(String(order.payment_status || ''));
+  const payBadge = (
+    <span style={{ ...statusChip, background: isPaid ? '#16a34a' : '#d97706', marginLeft: 'auto' }}>
+      {isPaid ? '💳 PAID' : '💷 TO PAY'}
+    </span>
+  );
+
   return (
     <button onClick={() => onPeek?.(order.id)} style={card}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -79,6 +89,7 @@ function Card({ order, onPeek }) {
           {order.customer_name || 'Takeaway'}
         </span>
         {statusBadge}
+        {payBadge}
       </div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 4 }}>
         <span style={{ fontSize: 13, fontWeight: 800, color: urgency }}>{pickupLabel}</span>

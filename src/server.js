@@ -4244,7 +4244,7 @@ app.post('/api/sync/edit-payment', async (req, res) => {
       if (seen.rows[0]) return res.json({ ok: true, applied: 0, skipped: edits.length, alreadyApplied: true });
     }
     const cur = await pool.query(
-      `SELECT id, method, amount FROM payments WHERE order_id = $1 AND COALESCE(method,'') != 'cancelled' ORDER BY id ASC`,
+      `SELECT id, method, amount, tip FROM payments WHERE order_id = $1 AND COALESCE(method,'') != 'cancelled' ORDER BY id ASC`,
       [orderId]
     );
     const rows = [...cur.rows];
@@ -4268,11 +4268,19 @@ app.post('/api/sync/edit-payment', async (req, res) => {
          VALUES ($1,$2,$3,$4,$5,NULL)`,
         [row.id, orderId, row.method, newMethod, [reason, note].filter(Boolean).join(' — ')]
       );
+      // SEPOS-TIPS-002 — the tender amount INCLUDES the tip (v1.9.48
+      // invariant), so an amount correction moves the tip with it: fixing a
+      // £333.96 keying error back to £163.96 must also take the phantom £170
+      // tip off the Z. tip' = max(0, tip + (newAmt − oldAmt)); removals clear.
+      // Computed in JS — bare-param SQL arithmetic is untyped on PG and
+      // GREATEST/boolean params diverge on SQLite.
+      const newTip = remove ? 0
+        : Math.max(0, Math.round(((Number(row.tip) || 0) + (newAmt - Number(row.amount))) * 100) / 100);
       await pool.query(
         `UPDATE payments SET amount = $1, method = $2, amended_at = CURRENT_TIMESTAMP,
-             amend_reason = $3, amended_from = COALESCE(amended_from, $4)
+             amend_reason = $3, amended_from = COALESCE(amended_from, $4), tip = $6
          WHERE id = $5`,
-        [newAmt, newMethod, [reason, note].filter(Boolean).join(' — '), row.method, row.id]
+        [newAmt, newMethod, [reason, note].filter(Boolean).join(' — '), row.method, row.id, newTip]
       );
       applied++;
     }
@@ -5205,7 +5213,7 @@ app.put('/api/bills/:id/edit-payment', async (req, res) => {
 
     // Snapshot current non-cancelled payment rows for this order.
     const curRes = await client.query(
-      `SELECT id, method, amount FROM payments WHERE order_id = $1 AND COALESCE(method,'') != 'cancelled'`,
+      `SELECT id, method, amount, tip FROM payments WHERE order_id = $1 AND COALESCE(method,'') != 'cancelled'`,
       [orderId]
     );
     const current = new Map(curRes.rows.map(p => [Number(p.id), p]));
@@ -5240,11 +5248,16 @@ app.put('/api/bills/:id/edit-payment', async (req, res) => {
          VALUES ($1,$2,$3,$4,$5,$6)`,
         [pid, orderId, oldMethod, newMethod, [reason, note].filter(Boolean).join(' — '), staff.id]
       );
+      // SEPOS-TIPS-002 — see the sync-replay twin above: amount corrections
+      // move the recorded tip with them; removals clear it. Computed in JS
+      // (portable across PG + SQLite).
+      const newTip = remove ? 0
+        : Math.max(0, Math.round(((Number(row.tip) || 0) + (newAmt - oldAmt)) * 100) / 100);
       await client.query(
         `UPDATE payments SET amount = $1, method = $2, amended_at = CURRENT_TIMESTAMP,
-             amended_by = $3, amend_reason = $4, amended_from = COALESCE(amended_from, $5)
+             amended_by = $3, amend_reason = $4, amended_from = COALESCE(amended_from, $5), tip = $7
          WHERE id = $6`,
-        [newAmt, newMethod, staff.id, [reason, note].filter(Boolean).join(' — '), oldMethod, pid]
+        [newAmt, newMethod, staff.id, [reason, note].filter(Boolean).join(' — '), oldMethod, pid, newTip]
       );
       changed++;
       semanticEdits.push({
@@ -5269,7 +5282,7 @@ app.put('/api/bills/:id/edit-payment', async (req, res) => {
     });
     io.emit('payment_amended', { order_id: orderId, by: staff.name });
     const after = await pool.query(
-      `SELECT id, method, amount FROM payments WHERE order_id = $1 AND COALESCE(method,'') != 'cancelled' ORDER BY id ASC`,
+      `SELECT id, method, amount, tip FROM payments WHERE order_id = $1 AND COALESCE(method,'') != 'cancelled' ORDER BY id ASC`,
       [orderId]
     );
     res.json({ ok: true, order_id: orderId, changed, tenders: after.rows, amended_by: staff.name });
@@ -9304,7 +9317,8 @@ app.get('/api/takeaway/orders/active', async (req, res) => {
   try {
     const r = await pool.query(`
       SELECT o.id, o.customer_name, o.customer_phone, o.customer_email,
-             o.pickup_time, o.takeaway_status, o.total, o.opened_at
+             o.pickup_time, o.takeaway_status, o.total, o.opened_at,
+             o.payment_status
       FROM orders o
       WHERE o.order_type = 'takeaway'
         AND COALESCE(o.takeaway_status, 'pending') <> 'collected'

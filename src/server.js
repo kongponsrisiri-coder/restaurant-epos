@@ -8875,6 +8875,12 @@ app.get('/order', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'order.html'));
 });
 
+// SEPOS-BOOK-PAGE-001 — hosted booking page: a real URL for Google Business
+// Profile / social bios (the widget alone needs a website to live on).
+app.get('/book', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'book.html'));
+});
+
 // Session bootstrap for the order page: table identity + restaurant + payment
 // availability + the table's open QR/dine-in order (running bill + statuses).
 app.get('/api/qr/session/:token', widgetCors, async (req, res) => {

@@ -5905,7 +5905,7 @@ app.get('/api/reservations/settings', async (req, res) => {
               booking_lead_hours, booking_advance_days, is_active,
               takeaway_busy_threshold, takeaway_very_busy_threshold,
               takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
-              timezone, closed_days
+              timezone, closed_days, weekly_hours
        FROM restaurant_settings WHERE restaurant_id = $1`, [rid]
     );
     const s = result.rows[0] || { restaurant_id: rid, is_active: true };
@@ -5930,7 +5930,7 @@ app.get('/api/reservations/settings/:restaurantId', widgetCors, async (req, res)
               booking_lead_hours, booking_advance_days, is_active,
               takeaway_busy_threshold, takeaway_very_busy_threshold,
               takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
-              timezone, closed_days
+              timezone, closed_days, weekly_hours
        FROM restaurant_settings WHERE restaurant_id = $1`,
       [req.params.restaurantId]
     );

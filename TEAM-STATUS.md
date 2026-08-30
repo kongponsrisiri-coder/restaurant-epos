@@ -439,7 +439,7 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
-### 🔍 ROOT-CAUSED (Krit, 30 Aug ~01:00) — the recurring "our keyboard doesn't work" class (Baanrai 24 Aug, Yum Yum "always on" mystery, third venue 29 Aug)
+### 🚢 v1.9.50 SHIPPED (Krit, 30 Aug ~01:35, Korakot's "we cut it now") — OSK-006 fleet keyboard fix. Rail: 8/8 assets both repos · canary Mac till 1.9.50 · APKs SiamEPOS-v1.5.38.apk (vc104) + SiamEPOS-HOST-v1.73.apk (vc79) staged, branches pushed · sw v169 / APP_VERSION 1.5.38. NO per-venue Windows changes needed once tills restart. Was: 🔍 ROOT-CAUSED (Krit, 30 Aug ~01:00) — the recurring "our keyboard doesn't work" class (Baanrai 24 Aug, Yum Yum "always on" mystery, third venue 29 Aug)
 NOT our keyboard: POS Windows images ship with **TabletInputService** (Touch Keyboard and Handwriting Panel Service) disabled; without it Chromium never turns a touchscreen TAP into field focus → no focusin → our OSK (focus-driven) never cues. Yum Yum's "open the Windows keyboard first" trick worked because launching TabTip STARTS the service. Old till apps = native mouse-click handling, hence "only SiamEPOS affected". **Ops fix per venue (remote, 60s): services.msc → Touch Keyboard and Handwriting Panel Service → Startup Automatic → Start** (check: `sc query TabletInputService`). **App fix shipped to main — SEPOS-OSK-006:** pointerdown on any keyboard-worthy field now takes focus ourselves (no OS dependence); browser tills live now, desktop tills ride the NEXT cut (v1.9.50). Do the service fix proactively on tomorrow's Akin Thai install. OSK auto-detect backlog item RESOLVED by this.
 
 

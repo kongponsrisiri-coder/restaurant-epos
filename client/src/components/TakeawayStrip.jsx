@@ -77,7 +77,7 @@ function Card({ order, onPeek }) {
   // both kinds all day). paid/mock = money already taken online.
   const isPaid = ['paid', 'mock'].includes(String(order.payment_status || ''));
   const payBadge = (
-    <span style={{ ...statusChip, background: isPaid ? '#16a34a' : '#d97706', marginLeft: 'auto' }}>
+    <span style={{ ...statusChip, background: isPaid ? '#16a34a' : '#d97706', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
       {isPaid ? '💳 PAID' : '💷 TO PAY'}
     </span>
   );

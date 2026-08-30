@@ -1499,6 +1499,9 @@
     }
     // SEPOS-040 — pre-fetch Stripe config so step 4 renders correctly on first open.
     loadStripeConfig();
+    // SEPOS-ORDER-UNIFY-001 — the hosted /order page opens the flow instantly
+    // (no button hunt); site embeds are unaffected.
+    if (SELF_SCRIPT && SELF_SCRIPT.getAttribute('data-auto-open') === '1') openWidget();
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

@@ -5598,6 +5598,39 @@ function toMins(t) {
 // (Railway defaults to UTC, so was off by 1h in BST). All restaurant
 // time-of-day checks must use this so the cloud server's locale
 // can't poison restaurant-local validation.
+// SEPOS-HOURS-PERDAY-001 — per-day ordering hours. weekly_hours JSON
+// ({"mon":[], "tue":[["12:00","15:00"],["17:00","22:00"]], ...}) beats the
+// one-pattern service_type model for ONLINE ORDERING; [] or a missing day =
+// closed. Falls back to closed_days (SEPOS-051) when weekly_hours is unset,
+// then to null (caller keeps its legacy window logic). A window that wraps
+// past midnight belongs to the day it STARTS; minutes after midnight fall on
+// the next day's windows — UK venues, acceptable.
+function weekdayInZone(date, timeZone) {
+  try {
+    return new Intl.DateTimeFormat('en-GB', { timeZone, weekday: 'short' })
+      .format(date).toLowerCase().slice(0, 3);
+  } catch { return new Intl.DateTimeFormat('en-GB', { weekday: 'short' }).format(date).toLowerCase().slice(0, 3); }
+}
+// Returns: { closed: true } | { windows: [[start,end],...] } | null (no per-day config)
+function perDayOrderingHours(hrs, date, tz) {
+  if (hrs && hrs.weekly_hours) {
+    let w = null;
+    try { w = typeof hrs.weekly_hours === 'string' ? JSON.parse(hrs.weekly_hours) : hrs.weekly_hours; } catch {}
+    if (w && typeof w === 'object') {
+      const day = w[weekdayInZone(date, tz)];
+      if (!Array.isArray(day) || day.length === 0) return { closed: true };
+      const windows = day.filter(x => Array.isArray(x) && x.length === 2);
+      return windows.length ? { windows } : { closed: true };
+    }
+  }
+  if (hrs && hrs.closed_days) {
+    let cd = null;
+    try { cd = typeof hrs.closed_days === 'string' ? JSON.parse(hrs.closed_days) : hrs.closed_days; } catch {}
+    if (Array.isArray(cd) && cd.includes(weekdayInZone(date, tz))) return { closed: true };
+  }
+  return null;
+}
+
 function minutesInZone(date, timeZone) {
   try {
     const parts = new Intl.DateTimeFormat('en-GB', {
@@ -6227,7 +6260,22 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
       timezone,
       // SEPOS-051 — weekly closed days, array of 'mon'..'sun'
       closed_days,
+      // SEPOS-HOURS-PERDAY-001 — per-day ordering hours JSON
+      weekly_hours,
     } = req.body;
+    let weeklyHoursJson = null;
+    if (weekly_hours != null) {
+      try {
+        const w = typeof weekly_hours === 'string' ? JSON.parse(weekly_hours) : weekly_hours;
+        const cleaned = {};
+        for (const d of ['mon','tue','wed','thu','fri','sat','sun']) {
+          const day = Array.isArray(w[d]) ? w[d].filter(x => Array.isArray(x) && x.length === 2
+            && /^\d{2}:\d{2}$/.test(String(x[0])) && /^\d{2}:\d{2}$/.test(String(x[1]))) : [];
+          cleaned[d] = day;
+        }
+        weeklyHoursJson = JSON.stringify(cleaned);
+      } catch { return res.status(400).json({ error: 'weekly_hours must be valid JSON like {"mon":[],"tue":[["12:00","15:00"]]}' }); }
+    }
     const VALID_DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
     const closedDaysJson = Array.isArray(closed_days)
       ? JSON.stringify(closed_days.filter(d => VALID_DAYS.includes(String(d).toLowerCase())))
@@ -6240,8 +6288,9 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
           slot_interval_mins, max_covers_per_slot, max_party_size, restaurant_phone,
           booking_lead_hours, booking_advance_days, is_active,
           takeaway_busy_threshold, takeaway_very_busy_threshold,
-          takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy, timezone, closed_days)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+          takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy, timezone, closed_days,
+          weekly_hours)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
        ON CONFLICT (restaurant_id) DO UPDATE SET
          restaurant_name      = EXCLUDED.restaurant_name,
          brand_colour         = EXCLUDED.brand_colour,
@@ -6265,7 +6314,8 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
          takeaway_wait_busy           = EXCLUDED.takeaway_wait_busy,
          takeaway_wait_very_busy      = EXCLUDED.takeaway_wait_very_busy,
          timezone                     = EXCLUDED.timezone,
-         closed_days                  = EXCLUDED.closed_days`,
+         closed_days                  = EXCLUDED.closed_days,
+         weekly_hours                 = COALESCE(EXCLUDED.weekly_hours, restaurant_settings.weekly_hours)`,
       [req.params.restaurantId, restaurant_name, brand_colour, opening_time, last_booking_time,
        service_type || 'all_day', lunch_service_start || '11:00', lunch_service_end || '14:30',
        dinner_service_start || '17:30', dinner_service_end || '21:30',
@@ -6280,7 +6330,7 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
        takeaway_wait_quiet          ?? 20,
        takeaway_wait_busy           ?? 35,
        takeaway_wait_very_busy      ?? 50,
-       timezone || 'Europe/London', closedDaysJson]
+       timezone || 'Europe/London', closedDaysJson, weeklyHoursJson]
     );
 
     // SEPOS-049 + SEPOS-050 — durable write-through to cloud. On a desktop
@@ -8035,7 +8085,7 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
               dinner_service_start, dinner_service_end,
               takeaway_busy_threshold, takeaway_very_busy_threshold,
               takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
-              timezone
+              timezone, weekly_hours, closed_days
          FROM restaurant_settings WHERE restaurant_id = $1`,
       [restaurantId]
     );
@@ -8086,7 +8136,19 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
         if (e >= s) return mins >= s && mins <= e;
         return mins >= s || mins <= e;
       };
-      if (settings.service_type === 'split') {
+      // SEPOS-HOURS-PERDAY-001 — per-day hours win when configured; [] or a
+      // missing day = closed that day (Akin: Mondays closed, Sunday 17-21).
+      const daily = perDayOrderingHours(settings, pickupDate, tz);
+      if (daily && daily.closed) {
+        return res.status(400).json({ error: 'Sorry — we are closed that day. Please pick a time during our opening hours.' });
+      }
+      if (daily && daily.windows) {
+        const ok = daily.windows.some(([ws, we]) => inWindow(ws, we));
+        if (!ok) {
+          const list = daily.windows.map(([ws, we]) => `${hhmm(ws)}\u2013${hhmm(we)}`).join(' or ');
+          return res.status(400).json({ error: `Pickup time must be ${list}.` });
+        }
+      } else if (settings.service_type === 'split') {
         const okLunch  = inWindow(settings.lunch_service_start  || '11:00', settings.lunch_service_end  || '14:30');
         const okDinner = inWindow(settings.dinner_service_start || '17:30', settings.dinner_service_end || '21:30');
         if (!okLunch && !okDinner) {
@@ -8894,6 +8956,12 @@ app.get('/book', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'book.html'));
 });
 
+// SEPOS-ORDER-UNIFY-001 — the previous standalone /order UI, kept for
+// comparison and instant rollback while the widget-hosted page beds in.
+app.get('/order-legacy', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'order-legacy.html'));
+});
+
 // Session bootstrap for the order page: table identity + restaurant + payment
 // availability + the table's open QR/dine-in order (running bill + statuses).
 app.get('/api/qr/session/:token', widgetCors, async (req, res) => {
@@ -8966,7 +9034,8 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
       const hrsRes = await pool.query(
         `SELECT service_type, opening_time, last_booking_time,
                 lunch_service_start, lunch_service_end,
-                dinner_service_start, dinner_service_end, timezone
+                dinner_service_start, dinner_service_end, timezone,
+                weekly_hours, closed_days
            FROM restaurant_settings WHERE restaurant_id = $1`,
         [resolveRestaurantId(req)]);
       const hrs = hrsRes.rows[0] || {};
@@ -8977,10 +9046,14 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
         if (e >= s) return nowMins >= s && nowMins <= e;
         return nowMins >= s || nowMins <= e;   // window wraps past midnight
       };
-      const open = hrs.service_type === 'split'
-        ? (inWindow(hrs.lunch_service_start || '11:00', hrs.lunch_service_end || '14:30')
-           || inWindow(hrs.dinner_service_start || '17:30', hrs.dinner_service_end || '21:30'))
-        : inWindow(hrs.opening_time || '11:00', hrs.last_booking_time || '21:30');
+      // SEPOS-HOURS-PERDAY-001 — per-day hours win when configured.
+      const dailyQr = perDayOrderingHours(hrs, new Date(), tz);
+      const open = dailyQr
+        ? (!dailyQr.closed && dailyQr.windows.some(([ws, we]) => inWindow(ws, we)))
+        : (hrs.service_type === 'split'
+            ? (inWindow(hrs.lunch_service_start || '11:00', hrs.lunch_service_end || '14:30')
+               || inWindow(hrs.dinner_service_start || '17:30', hrs.dinner_service_end || '21:30'))
+            : inWindow(hrs.opening_time || '11:00', hrs.last_booking_time || '21:30'));
       if (!open) return res.status(409).json({ error: 'Ordering is closed right now — please order during opening hours, or ask a member of staff.' });
     }
     await ensureOpenSession(resolveRestaurantId(req)); // SEPOS-AUTO-SESSION-001

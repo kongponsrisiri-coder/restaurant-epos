@@ -156,11 +156,29 @@ export default function OnScreenKeyboard() {
         if (!fieldKind(document.activeElement)) { targetRef.current = null; setKind(null); }
       }, 120);
     };
+    // SEPOS-OSK-006 — some POS Windows images ship with TabletInputService
+    // (Touch Keyboard and Handwriting Panel Service) disabled, and without it
+    // Chromium never turns a touchscreen TAP into field focus: no caret, no
+    // focusin, no keyboard — staff read it as "the SiamEPOS keyboard is
+    // broken" (three venues; Yum Yum's "open the Windows keyboard first"
+    // trick worked because launching it STARTS that service). Don't depend on
+    // the OS: when a tap lands on a keyboard-worthy field, take focus
+    // ourselves — focusin then shows the keyboard exactly as normal.
+    const onPointerDownField = (e) => {
+      const t = e.target;
+      if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA')) return;
+      if (!enabled() || !fieldKind(t)) return;
+      setTimeout(() => {
+        if (document.activeElement !== t) { try { t.focus(); } catch {} }
+      }, 60);
+    };
     document.addEventListener('focusin', onFocusIn);
     document.addEventListener('focusout', onFocusOut);
+    document.addEventListener('pointerdown', onPointerDownField, true);
     return () => {
       document.removeEventListener('focusin', onFocusIn);
       document.removeEventListener('focusout', onFocusOut);
+      document.removeEventListener('pointerdown', onPointerDownField, true);
     };
   }, []);
 

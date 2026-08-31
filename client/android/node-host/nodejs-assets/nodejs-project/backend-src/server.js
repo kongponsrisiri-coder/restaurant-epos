@@ -2444,6 +2444,55 @@ app.post('/api/staff/change-pin', requireStaffAuth(), async (req, res) => {
     const dup = await pool.query('SELECT id FROM staff WHERE pin=$1 AND id<>$2', [newPin, myId]);
     if (dup.rows[0]) return res.status(409).json({ error: 'That PIN is already in use — choose another' });
     await pool.query('UPDATE staff SET pin=$1 WHERE id=$2', [newPin, myId]);
+    // SEPOS-PIN-SYNC-001 (Fern, 31 Aug — "the system doesn't remember their
+    // PIN"): on a LOCAL till this write was local-only while the staff pull is
+    // cloud-wins, so the new PIN survived seconds and REVERTED — staff who set
+    // a PIN at the SEC-LOGIN wall were locked into 'Incorrect PIN' with their
+    // new one and the wall with their old one. Push it to the cloud like every
+    // other staff write; queue a config_write when the cloud is unreachable
+    // (pendingConfigWriteIds guards the row from revert meanwhile).
+    try {
+      const archiveService = require('./services/archiveService');
+      if (archiveService.isLocalInstall() && process.env.CLOUD_API_URL) {
+        const relayPath = `/api/staff/change-pin/${myId}`;
+        const init = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(process.env.SYNC_SECRET ? { 'x-sync-secret': process.env.SYNC_SECRET } : {}) },
+          body: JSON.stringify({ new_pin: newPin }),
+          signal: AbortSignal.timeout(8000),
+        };
+        try {
+          const r = await fetch(`${process.env.CLOUD_API_URL}${relayPath}`, init);
+          if (!r.ok) throw new Error(`cloud ${r.status}`);
+          console.log(`[change-pin] forwarded to cloud for staff ${myId}`);
+        } catch (fwdErr) {
+          const offlineQueue = require('./services/offlineQueue');
+          await offlineQueue.enqueue('config_write', { method: 'POST', path: relayPath, body: { new_pin: newPin } });
+          console.warn(`[change-pin] cloud unreachable (${fwdErr.message}) — queued config_write for staff ${myId}`);
+        }
+      }
+    } catch { /* cloud installs: nothing to forward */ }
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-PIN-SYNC-001 — relay target for the till's change-pin forward. The
+// till's Bearer token can't verify on the cloud (different signing secret),
+// so, exactly like the staff/table write relays (REG-1b), the install's
+// SYNC_SECRET is the relay identity. Same validation + dup rules as above.
+app.post('/api/staff/change-pin/:staffId', async (req, res) => {
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected) return res.status(503).json({ error: 'SYNC_SECRET not set on this server' });
+  if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+  try {
+    const newPin = String((req.body || {}).new_pin || '').trim();
+    const staffId = parseInt(req.params.staffId, 10);
+    if (!/^\d{4,6}$/.test(newPin)) return res.status(400).json({ error: 'PIN must be 4–6 digits' });
+    if (!staffId) return res.status(400).json({ error: 'staff id required' });
+    const dup = await pool.query('SELECT id FROM staff WHERE pin=$1 AND id<>$2', [newPin, staffId]);
+    if (dup.rows[0]) return res.status(409).json({ error: 'That PIN is already in use — choose another' });
+    await pool.query('UPDATE staff SET pin=$1 WHERE id=$2', [newPin, staffId]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -5598,6 +5647,39 @@ function toMins(t) {
 // (Railway defaults to UTC, so was off by 1h in BST). All restaurant
 // time-of-day checks must use this so the cloud server's locale
 // can't poison restaurant-local validation.
+// SEPOS-HOURS-PERDAY-001 — per-day ordering hours. weekly_hours JSON
+// ({"mon":[], "tue":[["12:00","15:00"],["17:00","22:00"]], ...}) beats the
+// one-pattern service_type model for ONLINE ORDERING; [] or a missing day =
+// closed. Falls back to closed_days (SEPOS-051) when weekly_hours is unset,
+// then to null (caller keeps its legacy window logic). A window that wraps
+// past midnight belongs to the day it STARTS; minutes after midnight fall on
+// the next day's windows — UK venues, acceptable.
+function weekdayInZone(date, timeZone) {
+  try {
+    return new Intl.DateTimeFormat('en-GB', { timeZone, weekday: 'short' })
+      .format(date).toLowerCase().slice(0, 3);
+  } catch { return new Intl.DateTimeFormat('en-GB', { weekday: 'short' }).format(date).toLowerCase().slice(0, 3); }
+}
+// Returns: { closed: true } | { windows: [[start,end],...] } | null (no per-day config)
+function perDayOrderingHours(hrs, date, tz) {
+  if (hrs && hrs.weekly_hours) {
+    let w = null;
+    try { w = typeof hrs.weekly_hours === 'string' ? JSON.parse(hrs.weekly_hours) : hrs.weekly_hours; } catch {}
+    if (w && typeof w === 'object') {
+      const day = w[weekdayInZone(date, tz)];
+      if (!Array.isArray(day) || day.length === 0) return { closed: true };
+      const windows = day.filter(x => Array.isArray(x) && x.length === 2);
+      return windows.length ? { windows } : { closed: true };
+    }
+  }
+  if (hrs && hrs.closed_days) {
+    let cd = null;
+    try { cd = typeof hrs.closed_days === 'string' ? JSON.parse(hrs.closed_days) : hrs.closed_days; } catch {}
+    if (Array.isArray(cd) && cd.includes(weekdayInZone(date, tz))) return { closed: true };
+  }
+  return null;
+}
+
 function minutesInZone(date, timeZone) {
   try {
     const parts = new Intl.DateTimeFormat('en-GB', {
@@ -5872,7 +5954,7 @@ app.get('/api/reservations/settings', async (req, res) => {
               booking_lead_hours, booking_advance_days, is_active,
               takeaway_busy_threshold, takeaway_very_busy_threshold,
               takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
-              timezone, closed_days
+              timezone, closed_days, weekly_hours
        FROM restaurant_settings WHERE restaurant_id = $1`, [rid]
     );
     const s = result.rows[0] || { restaurant_id: rid, is_active: true };
@@ -5897,7 +5979,7 @@ app.get('/api/reservations/settings/:restaurantId', widgetCors, async (req, res)
               booking_lead_hours, booking_advance_days, is_active,
               takeaway_busy_threshold, takeaway_very_busy_threshold,
               takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
-              timezone, closed_days
+              timezone, closed_days, weekly_hours
        FROM restaurant_settings WHERE restaurant_id = $1`,
       [req.params.restaurantId]
     );
@@ -6227,7 +6309,22 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
       timezone,
       // SEPOS-051 — weekly closed days, array of 'mon'..'sun'
       closed_days,
+      // SEPOS-HOURS-PERDAY-001 — per-day ordering hours JSON
+      weekly_hours,
     } = req.body;
+    let weeklyHoursJson = null;
+    if (weekly_hours != null) {
+      try {
+        const w = typeof weekly_hours === 'string' ? JSON.parse(weekly_hours) : weekly_hours;
+        const cleaned = {};
+        for (const d of ['mon','tue','wed','thu','fri','sat','sun']) {
+          const day = Array.isArray(w[d]) ? w[d].filter(x => Array.isArray(x) && x.length === 2
+            && /^\d{2}:\d{2}$/.test(String(x[0])) && /^\d{2}:\d{2}$/.test(String(x[1]))) : [];
+          cleaned[d] = day;
+        }
+        weeklyHoursJson = JSON.stringify(cleaned);
+      } catch { return res.status(400).json({ error: 'weekly_hours must be valid JSON like {"mon":[],"tue":[["12:00","15:00"]]}' }); }
+    }
     const VALID_DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
     const closedDaysJson = Array.isArray(closed_days)
       ? JSON.stringify(closed_days.filter(d => VALID_DAYS.includes(String(d).toLowerCase())))
@@ -6240,8 +6337,9 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
           slot_interval_mins, max_covers_per_slot, max_party_size, restaurant_phone,
           booking_lead_hours, booking_advance_days, is_active,
           takeaway_busy_threshold, takeaway_very_busy_threshold,
-          takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy, timezone, closed_days)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+          takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy, timezone, closed_days,
+          weekly_hours)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
        ON CONFLICT (restaurant_id) DO UPDATE SET
          restaurant_name      = EXCLUDED.restaurant_name,
          brand_colour         = EXCLUDED.brand_colour,
@@ -6265,7 +6363,8 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
          takeaway_wait_busy           = EXCLUDED.takeaway_wait_busy,
          takeaway_wait_very_busy      = EXCLUDED.takeaway_wait_very_busy,
          timezone                     = EXCLUDED.timezone,
-         closed_days                  = EXCLUDED.closed_days`,
+         closed_days                  = EXCLUDED.closed_days,
+         weekly_hours                 = COALESCE(EXCLUDED.weekly_hours, restaurant_settings.weekly_hours)`,
       [req.params.restaurantId, restaurant_name, brand_colour, opening_time, last_booking_time,
        service_type || 'all_day', lunch_service_start || '11:00', lunch_service_end || '14:30',
        dinner_service_start || '17:30', dinner_service_end || '21:30',
@@ -6280,7 +6379,7 @@ app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
        takeaway_wait_quiet          ?? 20,
        takeaway_wait_busy           ?? 35,
        takeaway_wait_very_busy      ?? 50,
-       timezone || 'Europe/London', closedDaysJson]
+       timezone || 'Europe/London', closedDaysJson, weeklyHoursJson]
     );
 
     // SEPOS-049 + SEPOS-050 — durable write-through to cloud. On a desktop
@@ -8035,7 +8134,7 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
               dinner_service_start, dinner_service_end,
               takeaway_busy_threshold, takeaway_very_busy_threshold,
               takeaway_wait_quiet, takeaway_wait_busy, takeaway_wait_very_busy,
-              timezone
+              timezone, weekly_hours, closed_days
          FROM restaurant_settings WHERE restaurant_id = $1`,
       [restaurantId]
     );
@@ -8086,7 +8185,19 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
         if (e >= s) return mins >= s && mins <= e;
         return mins >= s || mins <= e;
       };
-      if (settings.service_type === 'split') {
+      // SEPOS-HOURS-PERDAY-001 — per-day hours win when configured; [] or a
+      // missing day = closed that day (Akin: Mondays closed, Sunday 17-21).
+      const daily = perDayOrderingHours(settings, pickupDate, tz);
+      if (daily && daily.closed) {
+        return res.status(400).json({ error: 'Sorry — we are closed that day. Please pick a time during our opening hours.' });
+      }
+      if (daily && daily.windows) {
+        const ok = daily.windows.some(([ws, we]) => inWindow(ws, we));
+        if (!ok) {
+          const list = daily.windows.map(([ws, we]) => `${hhmm(ws)}\u2013${hhmm(we)}`).join(' or ');
+          return res.status(400).json({ error: `Pickup time must be ${list}.` });
+        }
+      } else if (settings.service_type === 'split') {
         const okLunch  = inWindow(settings.lunch_service_start  || '11:00', settings.lunch_service_end  || '14:30');
         const okDinner = inWindow(settings.dinner_service_start || '17:30', settings.dinner_service_end || '21:30');
         if (!okLunch && !okDinner) {
@@ -8894,6 +9005,12 @@ app.get('/book', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'book.html'));
 });
 
+// SEPOS-ORDER-UNIFY-001 — the previous standalone /order UI, kept for
+// comparison and instant rollback while the widget-hosted page beds in.
+app.get('/order-legacy', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'order-legacy.html'));
+});
+
 // Session bootstrap for the order page: table identity + restaurant + payment
 // availability + the table's open QR/dine-in order (running bill + statuses).
 app.get('/api/qr/session/:token', widgetCors, async (req, res) => {
@@ -8966,7 +9083,8 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
       const hrsRes = await pool.query(
         `SELECT service_type, opening_time, last_booking_time,
                 lunch_service_start, lunch_service_end,
-                dinner_service_start, dinner_service_end, timezone
+                dinner_service_start, dinner_service_end, timezone,
+                weekly_hours, closed_days
            FROM restaurant_settings WHERE restaurant_id = $1`,
         [resolveRestaurantId(req)]);
       const hrs = hrsRes.rows[0] || {};
@@ -8977,10 +9095,14 @@ app.post('/api/qr/orders/:token', widgetCors, requireActiveSubscription, require
         if (e >= s) return nowMins >= s && nowMins <= e;
         return nowMins >= s || nowMins <= e;   // window wraps past midnight
       };
-      const open = hrs.service_type === 'split'
-        ? (inWindow(hrs.lunch_service_start || '11:00', hrs.lunch_service_end || '14:30')
-           || inWindow(hrs.dinner_service_start || '17:30', hrs.dinner_service_end || '21:30'))
-        : inWindow(hrs.opening_time || '11:00', hrs.last_booking_time || '21:30');
+      // SEPOS-HOURS-PERDAY-001 — per-day hours win when configured.
+      const dailyQr = perDayOrderingHours(hrs, new Date(), tz);
+      const open = dailyQr
+        ? (!dailyQr.closed && dailyQr.windows.some(([ws, we]) => inWindow(ws, we)))
+        : (hrs.service_type === 'split'
+            ? (inWindow(hrs.lunch_service_start || '11:00', hrs.lunch_service_end || '14:30')
+               || inWindow(hrs.dinner_service_start || '17:30', hrs.dinner_service_end || '21:30'))
+            : inWindow(hrs.opening_time || '11:00', hrs.last_booking_time || '21:30'));
       if (!open) return res.status(409).json({ error: 'Ordering is closed right now — please order during opening hours, or ask a member of staff.' });
     }
     await ensureOpenSession(resolveRestaurantId(req)); // SEPOS-AUTO-SESSION-001
@@ -11197,6 +11319,27 @@ app.post('/api/clock/out', (req, res) => recordClockEvent(req, res, 'out'));
 // The till can't know whether the staff member is currently in or out, so the
 // server looks at their LAST event and records the opposite. Returns which
 // action was taken so the screen can confirm "Clocked IN/OUT at HH:MM".
+// SEPOS-PIN-AUDIT-001 (Korakot, 31 Aug — Fern: "a few staff have clock
+// in/out issues... some PINs take them to set new pin"). Read-only audit:
+// WHICH active staff hold a weak/default PIN, and which of those also hit
+// the mandatory set-PIN wall on login (admin/manager/supervisor only —
+// SEPOS-SEC-LOGIN). Returns names + roles ONLY — never PIN values.
+// Gated by the sync secret so it is operator-only.
+app.get('/api/staff/weak-pin-audit', async (req, res) => {
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected) return res.status(503).json({ error: 'SYNC_SECRET not set on this server' });
+  if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+  try {
+    const r = await pool.query('SELECT name, role, pin FROM staff WHERE is_active = 1 ORDER BY name');
+    const weak = r.rows.filter((s2) => _isWeakPin(s2.pin)).map((s2) => ({
+      name: s2.name, role: s2.role,
+      hits_setpin_wall: ['admin', 'manager', 'supervisor'].includes(String(s2.role || '').toLowerCase()),
+    }));
+    res.json({ active_staff: r.rows.length, weak_pin_staff: weak });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/clock/toggle', async (req, res) => {
   try {
     const { pin } = req.body;

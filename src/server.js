@@ -2444,6 +2444,55 @@ app.post('/api/staff/change-pin', requireStaffAuth(), async (req, res) => {
     const dup = await pool.query('SELECT id FROM staff WHERE pin=$1 AND id<>$2', [newPin, myId]);
     if (dup.rows[0]) return res.status(409).json({ error: 'That PIN is already in use — choose another' });
     await pool.query('UPDATE staff SET pin=$1 WHERE id=$2', [newPin, myId]);
+    // SEPOS-PIN-SYNC-001 (Fern, 31 Aug — "the system doesn't remember their
+    // PIN"): on a LOCAL till this write was local-only while the staff pull is
+    // cloud-wins, so the new PIN survived seconds and REVERTED — staff who set
+    // a PIN at the SEC-LOGIN wall were locked into 'Incorrect PIN' with their
+    // new one and the wall with their old one. Push it to the cloud like every
+    // other staff write; queue a config_write when the cloud is unreachable
+    // (pendingConfigWriteIds guards the row from revert meanwhile).
+    try {
+      const archiveService = require('./services/archiveService');
+      if (archiveService.isLocalInstall() && process.env.CLOUD_API_URL) {
+        const relayPath = `/api/staff/change-pin/${myId}`;
+        const init = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(process.env.SYNC_SECRET ? { 'x-sync-secret': process.env.SYNC_SECRET } : {}) },
+          body: JSON.stringify({ new_pin: newPin }),
+          signal: AbortSignal.timeout(8000),
+        };
+        try {
+          const r = await fetch(`${process.env.CLOUD_API_URL}${relayPath}`, init);
+          if (!r.ok) throw new Error(`cloud ${r.status}`);
+          console.log(`[change-pin] forwarded to cloud for staff ${myId}`);
+        } catch (fwdErr) {
+          const offlineQueue = require('./services/offlineQueue');
+          await offlineQueue.enqueue('config_write', { method: 'POST', path: relayPath, body: { new_pin: newPin } });
+          console.warn(`[change-pin] cloud unreachable (${fwdErr.message}) — queued config_write for staff ${myId}`);
+        }
+      }
+    } catch { /* cloud installs: nothing to forward */ }
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// SEPOS-PIN-SYNC-001 — relay target for the till's change-pin forward. The
+// till's Bearer token can't verify on the cloud (different signing secret),
+// so, exactly like the staff/table write relays (REG-1b), the install's
+// SYNC_SECRET is the relay identity. Same validation + dup rules as above.
+app.post('/api/staff/change-pin/:staffId', async (req, res) => {
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected) return res.status(503).json({ error: 'SYNC_SECRET not set on this server' });
+  if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+  try {
+    const newPin = String((req.body || {}).new_pin || '').trim();
+    const staffId = parseInt(req.params.staffId, 10);
+    if (!/^\d{4,6}$/.test(newPin)) return res.status(400).json({ error: 'PIN must be 4–6 digits' });
+    if (!staffId) return res.status(400).json({ error: 'staff id required' });
+    const dup = await pool.query('SELECT id FROM staff WHERE pin=$1 AND id<>$2', [newPin, staffId]);
+    if (dup.rows[0]) return res.status(409).json({ error: 'That PIN is already in use — choose another' });
+    await pool.query('UPDATE staff SET pin=$1 WHERE id=$2', [newPin, staffId]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

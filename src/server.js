@@ -11270,6 +11270,27 @@ app.post('/api/clock/out', (req, res) => recordClockEvent(req, res, 'out'));
 // The till can't know whether the staff member is currently in or out, so the
 // server looks at their LAST event and records the opposite. Returns which
 // action was taken so the screen can confirm "Clocked IN/OUT at HH:MM".
+// SEPOS-PIN-AUDIT-001 (Korakot, 31 Aug — Fern: "a few staff have clock
+// in/out issues... some PINs take them to set new pin"). Read-only audit:
+// WHICH active staff hold a weak/default PIN, and which of those also hit
+// the mandatory set-PIN wall on login (admin/manager/supervisor only —
+// SEPOS-SEC-LOGIN). Returns names + roles ONLY — never PIN values.
+// Gated by the sync secret so it is operator-only.
+app.get('/api/staff/weak-pin-audit', async (req, res) => {
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected) return res.status(503).json({ error: 'SYNC_SECRET not set on this server' });
+  if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+  try {
+    const r = await pool.query('SELECT name, role, pin FROM staff WHERE is_active = 1 ORDER BY name');
+    const weak = r.rows.filter((s2) => _isWeakPin(s2.pin)).map((s2) => ({
+      name: s2.name, role: s2.role,
+      hits_setpin_wall: ['admin', 'manager', 'supervisor'].includes(String(s2.role || '').toLowerCase()),
+    }));
+    res.json({ active_staff: r.rows.length, weak_pin_staff: weak });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/clock/toggle', async (req, res) => {
   try {
     const { pin } = req.body;

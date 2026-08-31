@@ -748,6 +748,11 @@ await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS lunch
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS dinner_service_start TIME DEFAULT '17:30'`);
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS dinner_service_end TIME DEFAULT '21:30'`);
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS max_party_size INTEGER DEFAULT 8`);
+// SEPOS-HOURS-PERDAY-001 — real per-day service hours for ONLINE ORDERING
+// (takeaway page/widget + QR). JSON: {"mon":[],"tue":[["12:00","15:00"],
+// ["17:00","22:00"]],...} — [] or a missing day = closed that day. When set it
+// supersedes service_type windows for ordering; bookings keep their model.
+await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS weekly_hours TEXT`);
 await pool.query(`ALTER TABLE restaurant_settings ADD COLUMN IF NOT EXISTS restaurant_phone VARCHAR(30)`);
 // SEPOS-048 — per-restaurant timezone so cloud validators don't depend on Railway's
 // process TZ (defaults to Europe/London since current customers are UK).

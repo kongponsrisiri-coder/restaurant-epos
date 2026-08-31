@@ -736,7 +736,8 @@ const CONFIG_WRITE_PATHS = {
   menu_items:          /^\/api\/menu\/items\/(\d+)$/,
   modifier_groups:     /^\/api\/(?:modifier-groups|menu\/items\/\d+\/modifiers)\/(\d+)$/,
   modifiers:           /^\/api\/modifiers\/(\d+)$/,
-  staff:               /^\/api\/staff\/(\d+)$/,
+  // SEPOS-PIN-SYNC-001 — a queued change-pin relay also pins its staff row.
+  staff:               /^\/api\/staff\/(?:change-pin\/)?(\d+)$/,
   // SEPOS-ALLERGEN-SYNC-001 — the captured number is the MENU ITEM id (the
   // table's pull pk), not a dish_allergens row id.
   dish_allergens:      /^\/api\/dish-allergens\/(\d+)$/,

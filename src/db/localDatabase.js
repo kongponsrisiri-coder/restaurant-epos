@@ -789,6 +789,7 @@ function runMigrations() {
   addColumnIfMissing('reservations', 'table_ids', 'TEXT'); // multi-table join
   // SEPOS-050: per-restaurant online-booking party-size cap + contact phone
   addColumnIfMissing('restaurant_settings', 'max_party_size', 'INTEGER DEFAULT 8');
+  addColumnIfMissing('restaurant_settings', 'weekly_hours', 'TEXT');   // SEPOS-HOURS-PERDAY-001
   addColumnIfMissing('restaurant_settings', 'restaurant_phone', 'TEXT');
   addColumnIfMissing('tables', 'is_takeaway', 'INTEGER DEFAULT 0'); // SEPOS-TAKEAWAY-TABLE
   addColumnIfMissing('restaurant_settings', 'timezone',                     "TEXT DEFAULT 'Europe/London'");

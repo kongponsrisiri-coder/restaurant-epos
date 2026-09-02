@@ -8275,9 +8275,21 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
     // The flat SiamPay fee is application_fee_amount — deducted from the
     // client's settlement by Stripe, never added on top for the customer.
     const expectedPence = Math.round(total * 100);
+    // SEPOS-TA-PENNY-001 — the widget prices the PI client-side with float
+    // arithmetic; on promo orders its rounding can land 1p either side of the
+    // server's recompute (seen live: a real customer bounced over 2731p vs
+    // 2732p, Yum Yum 2 Sep). A 1p difference is float noise, not tampering —
+    // accept it and adopt the pence Stripe ACTUALLY captured as the order
+    // total, so Card Sales reconciles against the Stripe settlement to the
+    // penny. Anything beyond 1p still rejects as before.
     if (verifiedPaymentIntentId !== null && verifiedPaymentPence !== expectedPence) {
-      console.warn(`[takeaway] PI ${verifiedPaymentIntentId} amount ${verifiedPaymentPence}p != expected ${expectedPence}p — rejected`);
-      return res.status(402).json({ error: 'Payment amount does not match the order total — please refresh and try again' });
+      if (Math.abs(verifiedPaymentPence - expectedPence) <= 1) {
+        console.warn(`[takeaway] PI ${verifiedPaymentIntentId} amount ${verifiedPaymentPence}p vs expected ${expectedPence}p — 1p float drift, accepted; order total set to the captured amount`);
+        total = verifiedPaymentPence / 100;
+      } else {
+        console.warn(`[takeaway] PI ${verifiedPaymentIntentId} amount ${verifiedPaymentPence}p != expected ${expectedPence}p — rejected`);
+        return res.status(402).json({ error: 'Payment amount does not match the order total — please refresh and try again' });
+      }
     }
 
     await client.query('BEGIN');
@@ -10538,6 +10550,10 @@ app.post('/api/deliveroo/ready/:orderId', async (req, res) => {
 // tenant's RESTAURANT_EMAIL env. Silently skipped when neither is set.
 async function sendRestaurantAlert(subject, bodyHtml) {
   try {
+    // SEPOS-OWNER-ALERT-002 — sendBrevoEmail was never imported in this scope,
+    // so EVERY owner alert died with "sendBrevoEmail is not defined" (caught +
+    // logged below, invisible to operators). Found in Yum Yum's Railway logs.
+    const { sendBrevoEmail } = require('./services/emailService');
     const r = await pool.query(`SELECT value FROM settings WHERE key = 'restaurant_notify_email'`);
     const to = (r.rows[0] && String(r.rows[0].value || '').trim()) || process.env.RESTAURANT_EMAIL || '';
     if (!to || !to.includes('@')) return;

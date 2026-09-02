@@ -621,7 +621,7 @@ function SiamPayCard({ client }) {
     api.siampayConfig().then(setCfg).catch(() => setCfg({ configured: false }));
     api.siampayStatus(client.id).then(setStatus).catch(e => setError(e.message || 'status failed'));
   };
-  useEffect(refresh, [client.id]);
+  useEffect(() => { refresh(); }, [client.id]); // async fn must not BE the effect — its Promise became the "cleanup" and crashed every tab switch
 
   const enable = async () => {
     setBusy('enable'); setError('');
@@ -1332,7 +1332,7 @@ function ReviewsCard({ client }) {
   const [error, setError] = useState('');
 
   const load = () => api.reviews(client.id).then(setData).catch(e => setError(e.message || 'reviews failed'));
-  useEffect(load, [client.id]);
+  useEffect(() => { load(); }, [client.id]); // same async-effect crash
 
   const refresh = async () => {
     setBusy(true); setError('');

@@ -441,6 +441,9 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 🐛 FERN "till won't open" 3 Sep evening — window closed, headless server kept trading; icon-click had no recreate branch. WORKAROUND GIVEN + FIX COMMITTED for v1.9.52 (Krit)
+Fern showed Korakot the app icon doing nothing. Cloud showed the truth: till process ALIVE (heartbeat seconds old, 66 orders today — tablets fine via the LAN server). Someone X-closed the WINDOW; `window-all-closed` is a deliberate no-op (keeps LAN server for tablets/printers), `second-instance` only restored minimized/hidden windows — a CLOSED window = icon does nothing. **Workaround relayed: Task Manager → End SiamEPOS → relaunch (or reboot).** Code fix committed (`second-instance` now recreates the window) — rides the weekend v1.9.52 cut with EGRESS ETag + telemetry + allergen desktop. Class note: same trap exists on EVERY desktop till; until 1.9.52, "icon won't open" = kill the process and relaunch.
+
 ### 🚢 SPA-VOUCHER-PAY-001 DEPLOYED 3 Sep ~14:1x — Highbury voucher sales now take REAL Stripe payments (Korakot ran both deploys; Krit verified live)
 Highbury API serves `/api/widget/voucher-payment-intent` (probe 400 value-required ✓, stripe-config configured:true, live pk ✓); highbury-sandy asset live with ZERO mock references + confirmPayment + 3DS resume ✓. **LAST GATE OPEN: payment checkpoint — Korakot buys the £35 voucher on highburythaimassage.com with a real card, Krit confirms the voucher row carries the stripe_payment_intent_id, then refund in Stripe.** Until that test passes, don't announce to the owner. Damage-check also still owed: vouchers admin for pre-Stripe mock rows.
 ### 🟡 was: SPA-VOUCHER-PAY-001 BUILT — both halves done (Sam half A pushed `a4dba0a`, half B widget reviewed+adopted by Krit); ⏳ BLOCKED on Korakot's 2 deploy commands + live payment test (3 Sep ~14:0x)

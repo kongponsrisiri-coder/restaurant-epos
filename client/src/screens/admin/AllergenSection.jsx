@@ -69,7 +69,10 @@ export default function AllergenSection() {
   allCategories.forEach(cat => { (cat.items || []).forEach(item => { menuItemMap[item.id] = item; }); });
 
   // ── Allergen source priority: recipe > manual > ai-scanned > none ──
-  const getDishAllergens = (menuItemId) => {
+  // SEPOS-ALLERGEN-SHADOW-001 — this local helper used to be NAMED getDishAllergens,
+  // shadowing the api import above: the loader effect then called the LOCAL fn,
+  // got a plain object, and `.then` crashed the whole screen on every surface.
+  const allergensFor = (menuItemId) => {
     // 1. Auto from recipe lines → ingredients
     const recipe = recipes.find(r => r.menu_item_id === menuItemId);
     if (recipe && recipe.lines && recipe.lines.length > 0) {
@@ -107,7 +110,7 @@ export default function AllergenSection() {
     if (recipe && recipe.lines && recipe.lines.length > 0) return; // locked by recipe
 
     // Start from current allergens (manual or scanned), then toggle
-    const { allergens: currentSet } = getDishAllergens(menuItemId);
+    const { allergens: currentSet } = allergensFor(menuItemId);
     const current = new Set(currentSet);
     if (current.has(allergenName)) current.delete(allergenName);
     else current.add(allergenName);
@@ -142,7 +145,7 @@ export default function AllergenSection() {
     const toSync = [];
     allCategories.forEach(cat => {
       (cat.items || []).forEach(item => {
-        const { source } = getDishAllergens(item.id);
+        const { source } = allergensFor(item.id);
         // Only sync items that have scanned data but no manual/recipe yet
         if (source === 'scanned') {
           const scanned = parseAllergens(item.allergens);
@@ -180,7 +183,7 @@ export default function AllergenSection() {
     const rows = [headers];
     allCategories.forEach(cat => {
       (cat.items || []).forEach(item => {
-        const { allergens: set, source } = getDishAllergens(item.id);
+        const { allergens: set, source } = allergensFor(item.id);
         const row = [cat.name, item.name];
         UK14.forEach(a => row.push(set.has(a.name) ? 'Y' : ''));
         row.push(source);
@@ -192,9 +195,9 @@ export default function AllergenSection() {
 
   // ── Stats ──────────────────────────────────────────────────────
   const totalDishes  = allCategories.reduce((s, c) => s + (c.items || []).length, 0);
-  const withRecipe   = allCategories.reduce((s, c) => s + (c.items || []).filter(i => getDishAllergens(i.id).source === 'recipe').length, 0);
-  const withManual   = allCategories.reduce((s, c) => s + (c.items || []).filter(i => getDishAllergens(i.id).source === 'manual').length, 0);
-  const withScanned  = allCategories.reduce((s, c) => s + (c.items || []).filter(i => getDishAllergens(i.id).source === 'scanned').length, 0);
+  const withRecipe   = allCategories.reduce((s, c) => s + (c.items || []).filter(i => allergensFor(i.id).source === 'recipe').length, 0);
+  const withManual   = allCategories.reduce((s, c) => s + (c.items || []).filter(i => allergensFor(i.id).source === 'manual').length, 0);
+  const withScanned  = allCategories.reduce((s, c) => s + (c.items || []).filter(i => allergensFor(i.id).source === 'scanned').length, 0);
   const notSet       = totalDishes - withRecipe - withManual - withScanned;
 
   return (
@@ -311,7 +314,7 @@ export default function AllergenSection() {
                       </td>
                     </tr>
                     {items.map((item, rowIndex) => {
-                      const { allergens: allergenSet, source } = getDishAllergens(item.id);
+                      const { allergens: allergenSet, source } = allergensFor(item.id);
                       const fromRecipe  = source === 'recipe';
                       const fromScanned = source === 'scanned';
                       const isEditable  = !fromRecipe;

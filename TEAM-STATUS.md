@@ -441,6 +441,9 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 📌 DECIDED (Korakot, 3 Sep) — v1.9.52 cuts AT THE WEEKEND; hold till-side fixes until then
+Scope agreed for the cut: ① SEPOS-SYNC-EGRESS-001 ETag/304 (spec ready — build before tagging) ② SEPOS-SYNC-TELEMETRY-001 (queue depth in heartbeat) ③ SEPOS-ALLERGEN-SHADOW-001 desktop side (browser tills already fixed + verified live 3 Sep). Until the tag: Allergen screen is broken on EVERY desktop + Sunmi till (error boundary + Reload, one screen only, no data risk) — if Yum Yum needs allergen edits before the weekend, do it from a browser. Standard rules apply at cut time: canary on Korakot's Mac first, no service-hours release, APK pair rides along, client patch note EN+TH.
+
 ### 🐛→🚢 FIXED 2026-09-03 ~12:2x — Allergen screen crashed on open, EVERY surface, since it shipped (Krit; Korakot hit it on his Mac till)
 `AllergenSection.jsx:72` declared a LOCAL `const getDishAllergens = (id) => {allergens, source}` shadowing the api import of the same name → the loader effect called the local helper and `.then`-ed a plain object → error boundary ("B(...).then is not a function"). Broken on browser + desktop + Sunmi since the allergen batch — nobody had opened the screen till now. Fix: local renamed `allergensFor` (7 call sites), sw cache bumped. **Delivery: browser tills on this push (deploy-sites) + tablet refresh cycle; DESKTOP tills stay broken on that one screen until the next cut (v1.9.52 — queue: EGRESS-001 ETag, SYNC-TELEMETRY-001, this). Sunmi rides the next APK.** Root-cause was found by slicing the minified bundle inside SiamEPOS.app — same-symbol B() used two ways = shadowing, textbook.
 

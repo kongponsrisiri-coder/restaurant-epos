@@ -441,7 +441,9 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
-### 🟡 SPA-VOUCHER-PAY-001 BUILT — both halves done (Sam half A pushed `a4dba0a`, half B widget reviewed+adopted by Krit); ⏳ BLOCKED on Korakot's 2 deploy commands + live payment test (3 Sep ~14:0x)
+### 🚢 SPA-VOUCHER-PAY-001 DEPLOYED 3 Sep ~14:1x — Highbury voucher sales now take REAL Stripe payments (Korakot ran both deploys; Krit verified live)
+Highbury API serves `/api/widget/voucher-payment-intent` (probe 400 value-required ✓, stripe-config configured:true, live pk ✓); highbury-sandy asset live with ZERO mock references + confirmPayment + 3DS resume ✓. **LAST GATE OPEN: payment checkpoint — Korakot buys the £35 voucher on highburythaimassage.com with a real card, Krit confirms the voucher row carries the stripe_payment_intent_id, then refund in Stripe.** Until that test passes, don't announce to the owner. Damage-check also still owed: vouchers admin for pre-Stripe mock rows.
+### 🟡 was: SPA-VOUCHER-PAY-001 BUILT — both halves done (Sam half A pushed `a4dba0a`, half B widget reviewed+adopted by Krit); ⏳ BLOCKED on Korakot's 2 deploy commands + live payment test (3 Sep ~14:0x)
 Clean cross-session handover (Krit⇄Sam messages, no collision). Server endpoint live on demo+Jinta via git; **Highbury API = NOT deployed yet** (railway up classifier-blocked for both agents — Korakot runs it), widget asset ready on disk with mock-pay fully removed (demo-mode only when stripe-config says unconfigured; honest "quote payment ref" on post-charge failure; 3DS redirect resume). **Korakot's two commands are in chat.** After deploys: Krit re-probes voucher-payment-intent (expect 400 value-required), then Korakot does the LIVE small card payment + refund per the payment checkpoint before announcing to the owner.
 
 ### 🏗️ IN PROGRESS 3 Sep — RUM WONG (Guildford) prospect pipeline (Maya; Korakot dropped rumwong.co.uk: "you know what to do, i want the best design")

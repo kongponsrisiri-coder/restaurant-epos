@@ -35,6 +35,13 @@ const io = new Server(httpServer, {
 // (no-ops entirely unless DB_MODE=local, i.e. a desktop till).
 printAlerts.init({ pool, io, printService });
 
+// SEPOS-SYNC-EGRESS-001 (cloud half) — gzip every response at the origin.
+// Railway meters CONTAINER egress, so origin-side compression cuts the metered
+// bytes (~26% on the base64-logo settings payload) while the till-side
+// ETag/304 fix waits for the next cut. Does not touch response content.
+const compression = require('compression');
+app.use(compression());
+
 app.use(cors({
   origin: '*',
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',

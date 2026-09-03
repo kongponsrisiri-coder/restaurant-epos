@@ -24,6 +24,12 @@ if (!gotSingleInstanceLock) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       if (!mainWindow.isVisible()) mainWindow.show();
       mainWindow.focus();
+    } else if (app.isReady()) {
+      // SEPOS-FERN-WINDOW-001 — the window was CLOSED (X button) while the
+      // headless server kept running for tablets/printers (window-all-closed
+      // is deliberately a no-op). Clicking the app icon then did NOTHING —
+      // "the icon is there but it's not open" (Fern, 3 Sep). Recreate it.
+      createWindow();
     }
   });
 }

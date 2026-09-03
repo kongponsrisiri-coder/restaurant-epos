@@ -441,6 +441,9 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 🔴 DIAGNOSED 3 Sep — Highbury website voucher sales FAIL at pay step (mock-pay demo widget vs Stripe-armed server) · 📨 SAM: SPA-VOUCHER-PAY-001 · Korakot: "we need a proper one"
+Live WP loads our voucher widget (highbury-sandy asset) pointed at Highbury's OWN cloud — but the widget is the demo copy with hardcoded "Mock payment" Step 3, while the server (SPA-SEC-001) + Highbury's live Stripe keys REJECT unpaid vouchers (probe-verified: 400 "payment_intent_id required"). **So: no free vouchers minted, but every customer purchase dies at the last step.** Fix spec: `~/Documents/Claude/Projects/SiamEpos/SPA-VOUCHER-PAY-001-Highbury-Real-Voucher-Payment.md` — ① Sam: `POST /api/widget/voucher-payment-intent` (~25 lines, mirror booking PI + piFee) ② widget Step 3 → real Stripe Elements (booking-widget pattern) ③ damage-check vouchers admin for pre-keys mock rows ④ Highbury deploy = Korakot's `railway up` + highbury-sandy Netlify push. ⚠️ Stripe is LIVE mode — test = small real payment + refund (payment checkpoint applies).
+
 ### 📌 DECIDED (Korakot, 3 Sep) — v1.9.52 cuts AT THE WEEKEND; hold till-side fixes until then
 Scope agreed for the cut: ① SEPOS-SYNC-EGRESS-001 ETag/304 (spec ready — build before tagging) ② SEPOS-SYNC-TELEMETRY-001 (queue depth in heartbeat) ③ SEPOS-ALLERGEN-SHADOW-001 desktop side (browser tills already fixed + verified live 3 Sep). Until the tag: Allergen screen is broken on EVERY desktop + Sunmi till (error boundary + Reload, one screen only, no data risk) — if Yum Yum needs allergen edits before the weekend, do it from a browser. Standard rules apply at cut time: canary on Korakot's Mac first, no service-hours release, APK pair rides along, client patch note EN+TH.
 

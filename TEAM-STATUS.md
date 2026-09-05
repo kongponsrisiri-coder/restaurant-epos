@@ -441,6 +441,9 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 🅿️ PARKED 5 Sep — SEPOS-PICKUP-BOARD-001: customer-facing order-number board (Krit; Korakot: "write the ticket and park it")
+Promised on Maya's Juicery mockup ("we call your number on the counter screen") — parity-checked with Korakot before any pitch commitment. All plumbing exists (order numbers via orderLabel.js, takeaway/served events, CFD kiosk recipe); build ≈ 1 day: read-only `#board` screen, PREPARING/READY columns, reconnect-safe. Spec: `~/Documents/Claude/Projects/SiamEpos/SEPOS-PICKUP-BOARD-001-Order-Number-Board.md` (+.pdf). **Unpark: The Juicery signs, or any counter-service prospect needs it** — then it becomes a sellable differentiator for every juice/boba/coffee pitch. Numbers only on the public screen, never names (PII).
+
 ### 📌 DECIDED (Korakot, 5 Sep) — client-site hosting STAYS ON NETLIFY for now; Cloudflare Pages plan formally PARKED
 Reviewed the dormant SEPOS-HOSTING-001 Phase 2 (14 Jul "client sites → CF Pages"): pilot stalled at the nameserver/apex-SSL snag, cost pressure vanished with the Actions build fix, recipes all point at Netlify. Korakot's call: **keep Netlify as the standing recipe** — do NOT deploy new client sites to Cloudflare, do NOT migrate existing ones. Revisit trigger: Netlify hosting costs rise, or client-site count makes £0/site matter — then the clean path is nameservers→Cloudflare at domain purchase (we register client domains). akinthai.pages.dev stays the inert parallel copy — do not confuse it with the live Netlify site.
 

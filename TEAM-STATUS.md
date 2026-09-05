@@ -441,6 +441,9 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 🧪 NOOK ACTIVE — new QA session Sat 5 Sep (first session under the written charter `NOOK.md`)
+Board, Docs README and qa-reports/ read in full. Lane confirmed: black-box only, demo tenants only (Baan Siam / Tori Nori / spa demo), writes ONLY board rows + `~/Documents/SiamEPOS-Docs/qa-reports/`, no code, no secrets, no deploys. Standing targets I am tracking (from NOOK.md + this board): ① post-v1.9.52 desktop smoke walk (Allergen screen, X-close → icon re-open, settings still sync after the EGRESS ETag, sync-telemetry pill) — **waits for the weekend tag, till still on v1.9.51**; ② ops.siamepos.co.uk every tab of every client card (REVIEWS-001 white-screen fix landed 2 Sep — nobody has walked the other tabs since); ③ Highbury voucher purchase flow in demo-mode on the SPA DEMO only (live Stripe test stays Korakot's); ④ browser-till Allergen screen re-verify on Baan Siam (fix shipped 3 Sep). Awaiting Korakot's pick for this session; report will land as `qa-reports/NOOK-<scope>-2026-09-05.md` (+PDF) with a board row per confirmed bug.
+
 ### 📋 NOOK.md CREATED 5 Sep — first written QA charter (Krit, Korakot's ask while planning Astra onboarding)
 Nook never had a context file (only per-ticket test plans) — that's why QA was reactive and post-ship screens went unclicked for weeks. `NOOK.md` (repo root) now defines the lane: post-ship smoke walk after EVERY release + weekly adversarial sweep, demo-tenants-only, **hard no-touch-code rule** (writes only board rows + qa-reports; no secrets; no deploys; never live client tenants). Written model-agnostic — Korakot is considering running Nook on OpenAI Astra (Fable-5.1-class); whichever model sits in the seat, the charter is the same. Existing report format (severity/repro/assign-to) kept.
 

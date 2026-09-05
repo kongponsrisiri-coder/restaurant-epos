@@ -8255,8 +8255,15 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
           }
         }
       }
-      total += it.server_price * (Number(it.quantity) || 1);
+      // SEPOS-TA-VALID-001 (Nook, 5 Sep) — quantity was trusted raw: a negative
+      // qty minted a NEGATIVE order (−£3.95 accepted) and a huge qty a £3.35M
+      // one; the £500 cap only guarded the card path. Clamp to a sane integer.
+      const qty = Math.min(50, Math.max(1, Math.round(Number(it.quantity)) || 1));
+      it.quantity = qty;
+      total += it.server_price * qty;
     }
+    if (!(total > 0)) return res.status(400).json({ error: 'Order total must be greater than zero' });
+    if (total > 1000) return res.status(400).json({ error: 'Order too large for online ordering — please call the restaurant to arrange it' });
 
     // SEPOS-TAKEAWAY-DISCOUNT — optional % off online orders (Chart Thai,
     // 2026-07-21). Applied server-side BEFORE the paid-amount check so a

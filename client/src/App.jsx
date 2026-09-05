@@ -56,7 +56,7 @@ const LogoBrand = () => (
       </g>
     </svg>
     {/* Wordmark */}
-    <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, letterSpacing: '-0.5px' }}>
+    <span className="brand-wordmark" style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 20, fontWeight: 700, letterSpacing: '-0.5px' }}>
       <span style={{ color: 'white' }}>Siam</span><span style={{ color: 'var(--brand-accent,#C9A84C)' }}>EPOS</span>
     </span>
   </span>
@@ -531,7 +531,7 @@ export default function App() {
           <div className="navbar-user">
             <Clock />
             <StatusBadge />
-            <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
+            <span className="nav-staff-name" style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
             <button className="logout-btn" onClick={logout}>Log out</button>
           </div>
         </nav>
@@ -675,7 +675,7 @@ export default function App() {
                 {counterMode ? '🛒 Counter' : '🏠 Floor'}
               </button>
             )}
-            <span style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
+            <span className="nav-staff-name" style={{ fontSize: isMobile ? 12 : 14 }}>{staff.name}</span>
             <button className="logout-btn" onClick={logout}>Log out</button>
           </div>
         </nav>

@@ -13,9 +13,9 @@ export default function Clock({ fixed = false }) {
   const date = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 
   const body = (
-    <div style={{ textAlign: 'right', lineHeight: 1.05 }}>
-      <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: fixed ? 22 : 16, color: 'var(--brand-accent,#C9A84C)' }}>{time}</div>
-      <div style={{ fontSize: fixed ? 11 : 10, color: 'rgba(255,255,255,0.6)' }}>{date}</div>
+    <div className={fixed ? undefined : 'nav-clock'} style={{ textAlign: 'right', lineHeight: 1.05 }}>
+      <div className="nav-clock-time" style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: fixed ? 22 : 16, color: 'var(--brand-accent,#C9A84C)' }}>{time}</div>
+      <div className="nav-clock-date" style={{ fontSize: fixed ? 11 : 10, color: 'rgba(255,255,255,0.6)' }}>{date}</div>
     </div>
   );
   return fixed

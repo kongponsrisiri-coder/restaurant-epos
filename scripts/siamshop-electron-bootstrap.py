@@ -59,6 +59,11 @@ def put_secret(name, value):
                {'encrypted_value': enc, 'key_id': pk['key_id']})
     print(f'{"✓" if st in (201, 204) else "✗"} {name}  {r.get("message", "")}')
 
+if not sys.stdin.isatty():
+    sys.exit('\n✗ No terminal for the hidden password prompt (the `!` runner has no TTY).\n'
+             '  Open Terminal.app and run:\n'
+             '    cd ~/Desktop/restaurant-epos && python3 scripts/siamshop-electron-bootstrap.py\n'
+             '  (repo step above is already done — safe to re-run)')
 if not os.path.exists(P12_PATH): sys.exit(f'✗ cert not found at {P12_PATH}')
 p12_b64 = base64.b64encode(open(P12_PATH, 'rb').read()).decode()
 print('\nTwo passwords needed (typed here only, sent encrypted to GitHub, never stored):')

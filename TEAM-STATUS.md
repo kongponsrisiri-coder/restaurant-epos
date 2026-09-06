@@ -441,6 +441,9 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 🔴 v1.9.52 RELEASE BUILD — build-mac FAILED (notarize/sign step), Windows OK, release published EMPTY (Krit, 6 Sep ~21:40)
+Run 34058298809: verify-version ✅ · build-windows ✅ · **build-mac ❌ at "Build Mac DMG" (exit 1)** · release ✅ but **0 assets attached**. Cert import step SUCCEEDED (step 7) → failure is the electron-builder sign/notarize. **CLIENT IMPACT: NONE** — empty release has no latest-mac.yml/latest.yml, so electron-updater offers nothing; all tills stay safely on v1.9.51; browser tills already have the code (deploy-sites ran). **Diagnosis: likely TRANSIENT Apple notary hiccup** — same pipeline built v1.9.51 fine 6 days ago (creds valid last week), and Windows built the identical code. **FIX (Korakot): click "Re-run failed jobs" on that run.** If it fails again identically → it's the Apple app-specific password (yearly-renewal item) → needs Korakot's Apple account, together, not tonight. Canary can't happen until the DMG exists. Tag v1.9.52 stays (re-run reuses it).
+
 ### 🏁 v1.9.52 TAGGED 6 Sep ~21:40 (Korakot's go) — Release build running; canary on Korakot's Mac next
 All on main (electron/package.json = 1.9.52, sw v173, client builds clean, local server smoke-boots clean, orphan rig PASS):
 - `8657c37` SEPOS-SYNC-ORPHAN-001 — self-heal quarantined orders (clears Fern's ⚠️31 on restart; rig-verified)

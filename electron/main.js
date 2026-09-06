@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, shell, clipboard, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, shell, clipboard, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -74,6 +74,31 @@ function saveConfig(data) {
 
 // IPC handler registered once at module load — setup window invokes it.
 // SEPOS-REMOTE-INSTALL-001 — clipboard read for the wizard's 📋 Paste buttons.
+// SEPOS-WIZARD-INPUT-001 — the first-run wizard's typed/paste input was
+// unreliable over some remote sessions (Akin install). Belt-and-braces: let the
+// operator pick a config.json file (VDIT/TeamViewer file transfer → the till)
+// and the wizard fills every field from it. Returns the parsed fields or null.
+ipcMain.handle('pick-config-file', async () => {
+  try {
+    const r = await dialog.showOpenDialog({
+      title: 'Load SiamEPOS config.json',
+      properties: ['openFile'],
+      filters: [{ name: 'Config', extensions: ['json', 'txt'] }],
+    });
+    if (r.canceled || !r.filePaths || !r.filePaths[0]) return null;
+    const raw = fs.readFileSync(r.filePaths[0], 'utf8').replace(/^\uFEFF/, '');
+    const d = JSON.parse(raw);
+    return {
+      restaurant_name: d.restaurant_name || '',
+      cloud_api_url:   d.cloud_api_url || '',
+      restaurant_id:   d.restaurant_id || '',
+      sync_secret:     d.sync_secret || '',
+    };
+  } catch (e) {
+    return { error: e.message };
+  }
+});
+
 ipcMain.handle('read-clipboard', () => {
   try { return clipboard.readText() || ''; } catch { return ''; }
 });
@@ -309,6 +334,7 @@ async function runSetupWizard() {
 
   <div id="error"></div>
 
+  <button id="loadfile" type="button" style="background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.25);margin-bottom:10px;">📁 Load from config.json file</button>
   <button id="save">Save &amp; Launch SiamEPOS</button>
 
 <script>
@@ -331,6 +357,21 @@ async function runSetupWizard() {
         clearError();
       } catch (e) { showError('Could not read the clipboard: ' + e); }
     });
+  });
+
+  // SEPOS-WIZARD-INPUT-001 — load every field from a config.json file.
+  const loadBtn = $('loadfile');
+  if (loadBtn) loadBtn.addEventListener('click', async () => {
+    clearError();
+    try {
+      const d = await window.siamepos.pickConfigFile();
+      if (!d) return;
+      if (d.error) { showError('Could not read that file: ' + d.error); return; }
+      if (d.restaurant_name) $('name').value = d.restaurant_name;
+      if (d.cloud_api_url)   $('url').value  = d.cloud_api_url;
+      if (d.restaurant_id)   $('rid').value  = d.restaurant_id;
+      if (d.sync_secret)     $('secret').value = d.sync_secret;
+    } catch (e) { showError('Could not load the file: ' + e); }
   });
 
   btn.addEventListener('click', async () => {

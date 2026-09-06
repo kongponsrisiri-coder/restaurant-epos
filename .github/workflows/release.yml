@@ -37,7 +37,7 @@ jobs:
   # ── Mac ────────────────────────────────────────────────────────────
   build-mac:
     needs: verify-version
-    runs-on: macos-latest
+    runs-on: macos-14
     # 60 min (up from 30). Apple's notary service round-trip takes
     # ~20-30 minutes per build (verified on the v1.6.4 attempt where
     # notarization itself took 29 of 30 allotted minutes, leaving

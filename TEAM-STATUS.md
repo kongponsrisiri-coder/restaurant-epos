@@ -441,6 +441,9 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 🧪 NOOK ACTIVE 6 Sep — RESTAURANT ROLE HIERARCHY QA (SEPOS-043) — Baan Siam demo till, black-box per role
+Scope from my plan `~/Documents/SiamEPOS-Docs/qa-reports/NOOK-SEPOS-043-TEST-PLAN.md`: login routing per role (kitchen→Kitchen, bar→Bar, waiter→floor no Admin), Admin-tab visibility per role, the supervisor gate (full Admin BUT cannot delete a CLOSED bill — UI 🗑️ hidden + backend 403; CAN delete OPEN orders), and the API twins `DELETE /api/orders/:id` + `/api/sync/delete-order` rejecting a supervisor-on-closed. Report → `NOOK-ROLE-HIERARCHY-2026-09-06.md` (+PDF). IN PROGRESS.
+
 ### ✅ v1.9.52 RELEASE BUILT + PUBLISHED 6 Sep ~21:56 — 8/8 assets (Krit)
 Root cause of the 2 earlier failures: GitHub rolled `macos-latest`→macos-15/Xcode16, breaking electron-builder 25 (build-mac died in 6s at startup — NOT Apple/creds/code; Windows fine). Fix: pinned Mac runner to `macos-14` (`.github/workflows/release.yml`) → build-mac ran 179s (real sign+notarize) → SUCCESS. Release v1.9.52 has dmg+exe+zip+blockmaps+latest-mac.yml+latest.yml. **NEXT: canary on Korakot's Mac** (auto-updates; ring a real order + print), verify, THEN clients restart. Patch note EN+TH ready (scanner line dropped). Fern's ⚠️31 self-heals on its update+restart. APK pair still to cut (worktree). ⚠️ Lesson: pin the Mac release runner — don't use macos-latest.
 

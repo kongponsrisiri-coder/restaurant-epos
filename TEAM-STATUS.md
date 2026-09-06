@@ -441,6 +441,15 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 🏁 v1.9.52 BUILT + PUSHED, READY TO TAG (Krit, 6 Sep ~21:35) — awaiting Korakot's tag go
+All on main (electron/package.json = 1.9.52, sw v173, client builds clean, local server smoke-boots clean, orphan rig PASS):
+- `8657c37` SEPOS-SYNC-ORPHAN-001 — self-heal quarantined orders (clears Fern's ⚠️31 on restart; rig-verified)
+- `6715bd3` SEPOS-SYNC-EGRESS-001 ETag/304 + SYNC-TELEMETRY-001 (queue depth→ops) + GHOST-001 restamp + FERN-BOOT-001 watchdog/no_cloud
+- `12b8572` SEPOS-WIZARD-INPUT-001 load-config-from-file
+- already committed earlier: allergen desktop `6e31920`, Fern window `1910156`, nav-mobile `64704c4`
+- cloud batch (`62f9a60`) already LIVE (voucher/deposit auth, Yum Yum unblock, bookings hours)
+**TAG STEP (Korakot):** `git tag v1.9.52 && git push origin v1.9.52` → release workflow builds Mac DMG + Win EXE → OTA. Canary on Korakot's Mac first, verify, then clients restart. Patch note EN+TH ready (scanner line dropped per Korakot). ⚠️ APK pair rides separately (worktree). Fern's ⚠️31 clears when its till updates + restarts (orphan self-heal runs 12s after boot).
+
 ### ✅ SYNC CRISIS RESOLVED 6 Sep ~21:05 — Yum Yum + Fern both drained; residue = orphaned-parent create_orders (Krit)
 **Yum Yum:** SEPOS-SYNC-UNBLOCK-001 (`62f9a60`) unblocked it live — week-old backlog drained on the cloud, closed-orders 122→**341** (plateaued = done), orders_today 487. No till visit needed. **Fern:** clean restart (Task Manager end-all → relaunch) drained its 1000+; cloud orders_today **240**, sync pill "Queue is empty", status Cloud green. **Root cause proven on Fern's pill:** a create_order that failed earlier (FK vs deleted table, now fixed going forward) left ~15 orders with **31 quarantined CHILD actions** (add_items/pay/merge/flags on local orders 1972–1981) that correctly refuse to target a raw local id with no cloud_id. **⚠️ Korakot told NOT to Dismiss them** (Dismiss = permanent drop → those orders' cloud copy lost; local Z is correct so venue unaffected). **📌 TODO SEPOS-SYNC-ORPHAN-001 (Krit, tonight/cut):** recovery that re-pushes the missing parent create_order per orphan so the chain reconnects — one-time run against Fern + a self-heal step in syncService. Same class as [[Yum Yum]]. Telemetry (in tonight's cut) makes this whole family visible on ops in 5 min next time.
 

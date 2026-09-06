@@ -35,11 +35,31 @@ function deviceId() {
   return id;
 }
 
+// SEPOS-SYNC-TELEMETRY-001 — read pending + oldest-pending straight from the
+// local sync_queue so ops can show "N unsynced, oldest X" and catch a stalled
+// push within minutes instead of days (Yum Yum went a week; Fern 3 days).
+async function queueStats() {
+  try {
+    const pool = require('../db/dbAdapter');
+    const r = await pool.query(
+      `SELECT COUNT(*) AS n, MIN(created_at) AS oldest,
+              SUM(CASE WHEN synced = 2 THEN 1 ELSE 0 END) AS quarantined
+         FROM sync_queue WHERE synced IN (0, 2)`);
+    const row = r.rows[0] || {};
+    return {
+      queue_depth: parseInt(row.n, 10) || 0,
+      queue_quarantined: parseInt(row.quarantined, 10) || 0,
+      queue_oldest_at: row.oldest || null,
+    };
+  } catch { return {}; }
+}
+
 async function beat() {
   if (!ID_PATH || !CLOUD_API_URL) return; // not a desktop till, or no cloud target
   const id = deviceId();
   if (!id) return;
   try {
+    const stats = await queueStats();
     await fetch(CLOUD_API_URL.replace(/\/+$/, '') + '/api/device/heartbeat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -48,6 +68,7 @@ async function beat() {
         restaurant_id: process.env.RESTAURANT_ID || null,
         app_version: process.env.APP_VERSION || null,   // injected by electron/main.js
         platform: process.platform,                     // darwin | win32 | linux
+        ...stats,                                        // SEPOS-SYNC-TELEMETRY-001
       }),
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });

@@ -697,6 +697,11 @@ async function initDB() {
         last_seen     TIMESTAMP DEFAULT NOW()
       )
     `);
+    // SEPOS-SYNC-TELEMETRY-001 — per-till sync-queue depth reported in the
+    // heartbeat so ops flags a stalled push in minutes, not days.
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS queue_depth INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS queue_quarantined INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS queue_oldest_at TIMESTAMP`);
 
     // SEPOS-PRINT-ALERT-001 — held tickets from failed kitchen/bar/station
     // prints (local tills only; cloud rows never created). See printAlertService.

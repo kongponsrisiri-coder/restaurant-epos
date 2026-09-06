@@ -8,16 +8,21 @@
 const offlineQueue = require('./offlineQueue');
 const pool = require('../db/dbAdapter');
 
-const CLOUD_API_URL = process.env.CLOUD_API_URL || '';
+let CLOUD_API_URL = process.env.CLOUD_API_URL || ''; // SEPOS-FERN-BOOT-001 — watchdog may re-point
 // Default 5s — feels real-time for Mac↔Chrome floor-map flows. Override
 // per install via SYNC_PING_MS env var if you need to dial back (e.g.
 // multi-tenant deployments approaching Railway's egress quota).
 const PING_INTERVAL_MS = parseInt(process.env.SYNC_PING_MS || '5000', 10);
 const PING_TIMEOUT_MS = 5000;
 
+const _pullEtags = new Map(); // SEPOS-SYNC-EGRESS-001
 let status = 'local'; // 'cloud' | 'local' | 'syncing'
 let intervalHandle = null;
 let inProgress = false;
+// SEPOS-SYNC-EGRESS-001 — remember the ETag per pull path; send If-None-Match
+// each tick so an unchanged body (esp. /api/settings, which carries the base64
+// logo) returns 304 with no payload. In-memory is enough: a restart just
+// re-primes on the first tick. ~95% egress cut on logo-heavy tenants.
 const subscribers = new Set();
 
 // Flat-shape endpoints pulled directly into a single local table.
@@ -997,14 +1002,21 @@ async function pullFromCloud() {
       // REG-1 (Nook) — send the install's SYNC_SECRET on every pull: the
       // voucher endpoints are now auth-gated on the cloud (they were leaking
       // codes/balances publicly), and the header is harmless on open ones.
+      const pullHeaders = process.env.SYNC_SECRET ? { 'x-sync-secret': process.env.SYNC_SECRET } : {};
+      const knownEtag = _pullEtags.get(ep.path);
+      if (knownEtag) pullHeaders['If-None-Match'] = knownEtag;
       const r = await fetch(CLOUD_API_URL + ep.path, {
-        headers: process.env.SYNC_SECRET ? { 'x-sync-secret': process.env.SYNC_SECRET } : {},
+        headers: pullHeaders,
         signal: AbortSignal.timeout(PING_TIMEOUT_MS),
       });
+      // SEPOS-SYNC-EGRESS-001 — 304 = body unchanged since last tick: skip the
+      // download AND the local upsert. NOT an empty table — do nothing.
+      if (r.status === 304) continue;
       if (!r.ok) {
         console.warn(`[sync] pull ${ep.path} ${r.status}`);
         continue;
       }
+      { const et = r.headers && r.headers.get && r.headers.get('etag'); if (et) _pullEtags.set(ep.path, et); }
       const rows = await r.json();
       // SEPOS-060 fix — GET /api/settings returns an OBJECT {key:value}, not an
       // array, so the old `Array.isArray ? rows : rows?.data || []` discarded it
@@ -1872,7 +1884,15 @@ function start() {
     return;
   }
   if (!CLOUD_API_URL) {
-    console.log('[sync] local mode but CLOUD_API_URL unset — staying offline');
+    // SEPOS-FERN-BOOT-001 — this is a real MISCONFIG on a local till (the
+    // config had no cloud_api_url, or it didn't reach the spawned server), not
+    // a benign state: the till trades but NOTHING reaches the cloud and it used
+    // to be silent (Fern, 4 Sep — 3 days invisible). Make it a loud, visible
+    // status the UI surfaces, and keep a watchdog trying in case the env
+    // arrives late (dev overrides, delayed config).
+    console.error('[sync] ⚠️ local mode but CLOUD_API_URL unset — this till is NOT syncing to the cloud. Check config.json cloud_api_url.');
+    setStatus('no_cloud');
+    startWatchdog();
     return;
   }
   console.log('[sync] local mode, target=', CLOUD_API_URL, 'interval=', PING_INTERVAL_MS, 'ms');
@@ -1885,6 +1905,32 @@ function start() {
   intervalHandle = setInterval(() => {
     tick().catch((err) => console.error('[sync] tick failed:', err.message));
   }, PING_INTERVAL_MS);
+  startWatchdog();
+}
+
+// SEPOS-FERN-BOOT-001 — a once-a-minute watchdog: if we're a local till with a
+// cloud URL but the tick loop somehow isn't running, restart it. Cheap
+// insurance against the engine silently never starting (or a crashed interval)
+// leaving a till trading cloud-blind for days.
+let watchdogHandle = null;
+function startWatchdog() {
+  if (watchdogHandle) return;
+  watchdogHandle = setInterval(() => {
+    try {
+      if (!offlineQueue.isLocal) return;
+      const cloud = process.env.CLOUD_API_URL || CLOUD_API_URL;
+      if (cloud && !intervalHandle) {
+        console.error('[sync] ⚠️ watchdog: tick loop not running on a local till with a cloud URL — restarting sync engine');
+        // Re-point the module's cloud target (env may have arrived after boot).
+        if (process.env.CLOUD_API_URL) CLOUD_API_URL = process.env.CLOUD_API_URL;
+        intervalHandle = setInterval(() => {
+          tick().catch((err) => console.error('[sync] tick failed:', err.message));
+        }, PING_INTERVAL_MS);
+        tick().catch(() => {});
+      }
+    } catch {}
+  }, 60000);
+  if (watchdogHandle && watchdogHandle.unref) watchdogHandle.unref();
 }
 
 function stop() {

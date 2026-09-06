@@ -1432,12 +1432,15 @@ app.get('/api/health', async (req, res) => {
     // Wrapped separately so a missing devices table (older deploy) never breaks health.
     let tills = [];
     try {
-      const d = await pool.query(`SELECT device_id, app_version, platform, last_seen FROM devices ORDER BY last_seen DESC`);
+      const d = await pool.query(`SELECT device_id, app_version, platform, last_seen, queue_depth, queue_quarantined, queue_oldest_at FROM devices ORDER BY last_seen DESC`);
       tills = d.rows.map(r => ({
         device_id: r.device_id,
         app_version: r.app_version,
         platform: r.platform,
         last_seen: r.last_seen,
+        queue_depth: r.queue_depth ?? 0,               // SEPOS-SYNC-TELEMETRY-001
+        queue_quarantined: r.queue_quarantined ?? 0,
+        queue_oldest_at: r.queue_oldest_at ?? null,
       }));
     } catch (_) { /* devices table not present yet */ }
     res.json({
@@ -1462,16 +1465,24 @@ app.post('/api/device/heartbeat', async (req, res) => {
     const { device_id, app_version, platform } = req.body || {};
     if (!device_id) return res.status(400).json({ error: 'device_id required' });
     const rid = (req.body && req.body.restaurant_id) || resolveRestaurantId(req) || null;
+    // SEPOS-SYNC-TELEMETRY-001 — optional sync-queue stats (older tills omit them).
+    const qDepth = Number.isFinite(+req.body?.queue_depth) ? Math.max(0, Math.min(1e9, +req.body.queue_depth)) : 0;
+    const qQuar  = Number.isFinite(+req.body?.queue_quarantined) ? Math.max(0, Math.min(1e9, +req.body.queue_quarantined)) : 0;
+    const qOldest = req.body?.queue_oldest_at || null;
     await pool.query(
-      `INSERT INTO devices (device_id, restaurant_id, app_version, platform, last_seen)
-       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+      `INSERT INTO devices (device_id, restaurant_id, app_version, platform, last_seen, queue_depth, queue_quarantined, queue_oldest_at)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6, $7)
        ON CONFLICT(device_id) DO UPDATE SET
          restaurant_id = EXCLUDED.restaurant_id,
          app_version   = EXCLUDED.app_version,
          platform      = EXCLUDED.platform,
-         last_seen     = CURRENT_TIMESTAMP`,
+         last_seen     = CURRENT_TIMESTAMP,
+         queue_depth       = EXCLUDED.queue_depth,
+         queue_quarantined = EXCLUDED.queue_quarantined,
+         queue_oldest_at   = EXCLUDED.queue_oldest_at`,
       [String(device_id).slice(0, 64), rid ? String(rid).slice(0, 100) : null,
-       String(app_version || '').slice(0, 20), String(platform || '').slice(0, 20)]
+       String(app_version || '').slice(0, 20), String(platform || '').slice(0, 20),
+       qDepth, qQuar, qOldest]
     );
     res.json({ ok: true });
   } catch (err) {
@@ -1604,8 +1615,19 @@ app.post('/api/orders', requireActiveSubscription, requireValidLicense, async (r
           [table_id]
         );
         if (existing.rows.length > 0) {
+          const reuseId = existing.rows[0].id;
+          // SEPOS-GHOST-001 (Nook TILL-1, 5 Sep) — if the order we're reusing has
+          // NO items, it's a stale ghost from an earlier seating (a table left
+          // green kept an item-less open order for days). A new party must not
+          // inherit its old opened_at/covers — the floor timer then reads
+          // "154h" and Staff-Performance turn-time is poisoned. Restamp it.
+          const hasItems = await pool.query('SELECT 1 FROM order_items WHERE order_id = $1 LIMIT 1', [reuseId]);
+          if (hasItems.rows.length === 0) {
+            await pool.query('UPDATE orders SET opened_at = NOW(), created_at = NOW(), covers = $2 WHERE id = $1',
+              [reuseId, covers || 1]);
+          }
           await pool.query("UPDATE tables SET status = 'occupied' WHERE id = $1", [table_id]);
-          return { id: existing.rows[0].id, success: true, reused: true };
+          return { id: reuseId, success: true, reused: true };
         }
       }
       // SEPOS-SYNC-UNBLOCK-001 — a till's queued order that references a

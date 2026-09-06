@@ -98,7 +98,19 @@ async function markFailed(id, error) {
   );
 }
 
+// SEPOS-SYNC-ORPHAN-001 — move specific quarantined (synced=2) rows back to
+// pending (synced=0) with a fresh attempt budget, so a re-parented order's
+// children replay on the next drain. Returns how many rows were requeued.
+async function requeueFailed(ids) {
+  if (!isLocal || !Array.isArray(ids) || ids.length === 0) return 0;
+  const ph = ids.map((_, i) => `$${i + 1}`).join(',');
+  const r = await pool.query(
+    `UPDATE sync_queue SET synced = 0, attempts = 0, last_error = NULL, failed_at = NULL
+      WHERE synced = 2 AND id IN (${ph})`, ids);
+  return r.rowCount || 0;
+}
+
 module.exports = {
-  enqueue, pending, pendingCount, failed, failedCount,
+  enqueue, pending, pendingCount, failed, failedCount, requeueFailed,
   markSynced, bumpAttempt, markFailed, isLocal,
 };

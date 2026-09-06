@@ -11559,10 +11559,14 @@ app.post('/api/sync/run-now', async (req, res) => {
   const dbMode = (process.env.DB_MODE || 'cloud').toLowerCase();
   if (dbMode !== 'local') return res.status(400).json({ error: 'manual sync is local-mode only' });
   try {
+    // SEPOS-SYNC-ORPHAN-001 — the manual trigger also runs orphan recovery, so
+    // an operator hitting "Sync now"/retry on a till showing quarantined orders
+    // re-parents + drains them without waiting for the next boot.
+    const recovered = await syncService.recoverOrphans().catch(() => 0);
     // tick() is idempotent and self-guarded against overlap — safe to
     // fire even if the scheduled tick is mid-flight.
     await syncService.tick();
-    res.json({ success: true, status: syncService.getStatus() });
+    res.json({ success: true, status: syncService.getStatus(), recovered });
   } catch (err) {
     console.error('POST /api/sync/run-now error:', err);
     res.status(500).json({ error: err.message });

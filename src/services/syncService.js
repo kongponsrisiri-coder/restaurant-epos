@@ -1668,6 +1668,81 @@ function errHttpStatus(err) {
   return m ? Number(m[1]) : null;
 }
 
+// SEPOS-SYNC-ORPHAN-001 — self-heal quarantined orders. When a create_order
+// push was lost/quarantined (e.g. it referenced a table since deleted on the
+// cloud, pre the FK-tolerant fix), its child actions (add_items / pay / merge /
+// flags) sit quarantined "no cloud_id and no pending create_order", showing a
+// scary red list + ⚠️ badge on the client's till though the LOCAL data is
+// perfect. This re-creates each affected order on the cloud from the row still
+// in local SQLite, binds the cloud_id, and un-quarantines ONLY that order's
+// children so the ordered drain rebuilds the order on the cloud. Idempotent:
+// an order already bound is left to its children; an order gone locally is left
+// quarantined (can't rebuild what isn't there). Runs once on startup + on the
+// manual "Sync now"/retry trigger — never blindly re-tries dead entries.
+async function recoverOrphans() {
+  if (!offlineQueue.isLocal || !CLOUD_API_URL) return 0;
+  let failedRows;
+  try { failedRows = await offlineQueue.failed(); } catch { return 0; }
+  if (!failedRows || !failedRows.length) return 0;
+
+  // Map each quarantined row → the local order it belongs to.
+  // Order-scoped actions carry localOrderId (merge carries two/three);
+  // item-scoped actions (void_item / item discount) carry localItemId → look
+  // its order up in order_items.
+  const rowsByOrder = new Map(); // localOrderId -> [rowId,...]
+  const add = (oid, rowId) => {
+    if (oid == null) return;
+    const k = Number(oid);
+    if (!rowsByOrder.has(k)) rowsByOrder.set(k, []);
+    rowsByOrder.get(k).push(rowId);
+  };
+  for (const f of failedRows) {
+    const p = f.payload; if (!p) continue;
+    if (f.action_type === 'merge_orders') {
+      add(p.localOrderId, f.id); add(p.mergeLocalOrderId, f.id); add(p.localTargetOrderId, f.id);
+      continue;
+    }
+    if (p.localOrderId != null) { add(p.localOrderId, f.id); continue; }
+    if (p.localItemId != null) {
+      try {
+        const r = await pool.query('SELECT order_id FROM order_items WHERE id = $1', [Number(p.localItemId)]);
+        if (r.rows[0]) add(r.rows[0].order_id, f.id);
+      } catch {}
+    }
+  }
+  if (rowsByOrder.size === 0) return 0;
+
+  let requeued = 0;
+  for (const [localOrderId, rowIds] of rowsByOrder) {
+    try {
+      let cloudId = await getOrderCloudId(localOrderId);
+      if (!cloudId) {
+        const ord = (await pool.query(
+          'SELECT table_id, covers, staff_id, order_type FROM orders WHERE id = $1', [localOrderId])).rows[0];
+        if (!ord) { console.warn(`[orphan] local order ${localOrderId} no longer exists — left quarantined`); continue; }
+        const r = await fetch(CLOUD_API_URL + '/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(process.env.SYNC_SECRET ? { 'x-sync-secret': process.env.SYNC_SECRET } : {}) },
+          body: JSON.stringify({ table_id: ord.table_id, covers: ord.covers, staff_id: ord.staff_id, order_type: ord.order_type }),
+          signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+        });
+        if (!r.ok) { console.warn(`[orphan] re-create local order ${localOrderId} → cloud ${r.status}; leaving quarantined`); continue; }
+        const j = await r.json();
+        if (!j || j.id == null) { console.warn(`[orphan] re-create local order ${localOrderId}: no id returned`); continue; }
+        cloudId = j.id;
+        await setOrderCloudId(localOrderId, cloudId);
+      }
+      const n = await offlineQueue.requeueFailed(rowIds);
+      requeued += n;
+      console.log(`[orphan] re-parented local order ${localOrderId} → cloud ${cloudId}; requeued ${n} action(s)`);
+    } catch (e) {
+      console.warn(`[orphan] recover local order ${localOrderId} failed: ${e.message}`);
+    }
+  }
+  if (requeued) console.log(`[orphan] recovery complete — ${requeued} quarantined action(s) requeued for drain`);
+  return requeued;
+}
+
 async function syncOnce() {
   const queue = await offlineQueue.pending();
   if (queue.length === 0) return;
@@ -1803,6 +1878,10 @@ function start() {
   console.log('[sync] local mode, target=', CLOUD_API_URL, 'interval=', PING_INTERVAL_MS, 'ms');
   // Kick off immediately so status reflects reality on boot
   tick().catch((err) => console.error('[sync] initial tick failed:', err.message));
+  // SEPOS-SYNC-ORPHAN-001 — one self-heal pass ~12s after boot, once the first
+  // ticks have drained/bound the live queue, so any orders orphaned by a lost
+  // create_order re-parent themselves and clear the ⚠️ Sync-queue list.
+  setTimeout(() => { recoverOrphans().catch((e) => console.warn('[orphan] startup recovery:', e.message)); }, 12000);
   intervalHandle = setInterval(() => {
     tick().catch((err) => console.error('[sync] tick failed:', err.message));
   }, PING_INTERVAL_MS);
@@ -1947,4 +2026,4 @@ async function pullStaffSnapshot() {
   await pullStaff();
 }
 
-module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, pullActiveOrders, pullMenuSnapshot, pullModifiersSnapshot, pullTablesSnapshot, pullStaffSnapshot, pullSessionsSnapshot, tick };
+module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, pullActiveOrders, pullMenuSnapshot, pullModifiersSnapshot, pullTablesSnapshot, pullStaffSnapshot, pullSessionsSnapshot, tick, recoverOrphans };

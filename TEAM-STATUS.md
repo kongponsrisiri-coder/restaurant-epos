@@ -441,6 +441,9 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 🧪 NOOK ACTIVE 7 Sep — FULL SPA SYSTEM QA (Korakot's overnight update) — DEMO spa only (siamspa.netlify.app + spa-api.siamepos.co.uk, build 5d4958e) · ⛔ NOT Highbury/Jinta (live)
+Korakot updated the spa last night. Scope: post-update smoke walk of all 8 screens + 21 admin sections; then the 4 new features — **SPA-RBAC-001** (roles/permissions matrix + the "permission gate matched nothing at /api mount" fix — will verify server-side enforcement, not just UI, given restaurant perms were cosmetic), **SPA-EXTEND-001** (extend running booking +15/30/45/60), **SPA-DND-PRECISION-001/SPA-BLOCK-DRAG-001** (drag preview/confirm, press-hold to block), **SPA-PAYLINK-SEND-001** (payment links by email/SMS); plus public online-booking + voucher/payment (demo mock) adversarial. Findings → **Sam** (spa lane). Report `NOOK-SPA-FULL-QA-2026-09-07.md` (+PDF). IN PROGRESS.
+
 ### ✅ SAM — 7 Sep 08:55 Highbury till "No till staff set up yet" — FIXED 09:10 (was my 6 Sep Netlify redeploy: CLI ran netlify.toml's build → bundle pointed at the DEMO API spa-api.siamepos.co.uk)
 Redeployed `siamspa-highbury` (= highbury.siamepos.co.uk) with `netlify deploy --prod --no-build --dir=dist` from a `VITE_API_BASE=highbury-api-production` build; verified the live bundle now carries the Highbury API. RULE (memory updated): Highbury web-till deploys MUST use `--no-build`. Staff can log in again — no data touched.
 

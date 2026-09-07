@@ -69,14 +69,21 @@ if not sys.stdin.isatty():
 # so a wrong password is caught in 5 s, not after a 30-min CI build.
 only_app = '--app-password-only' in sys.argv
 if only_app:
-    app_pw = getpass.getpass('\n  Apple app-specific password (xxxx-xxxx-xxxx-xxxx): ')
+    # The app-specific password only works with the Apple ID it was generated
+    # under. The restaurant's working pair can't be read back from GitHub, so
+    # ask which Apple ID this password belongs to rather than assuming.
+    typed = input(f'\n  Apple ID the password was generated under [{APPLE_ID}]: ').strip()
+    apple_id = typed or APPLE_ID
+    app_pw = getpass.getpass('  Apple app-specific password (xxxx-xxxx-xxxx-xxxx): ')
     import subprocess
-    chk = subprocess.run(['xcrun', 'notarytool', 'history', '--apple-id', APPLE_ID, '--team-id', TEAM_ID,
+    chk = subprocess.run(['xcrun', 'notarytool', 'history', '--apple-id', apple_id, '--team-id', TEAM_ID,
                           '--password', app_pw], capture_output=True, text=True)
     if chk.returncode != 0:
-        sys.exit('✗ Apple rejected that password (notarytool: ' + (chk.stderr or chk.stdout).strip().splitlines()[-1] +
-                 ')\n  Generate a fresh one at appleid.apple.com → Sign-In and Security → App-Specific Passwords, then re-run.')
-    print('✓ Apple accepted the password (notarytool history OK)')
+        sys.exit('✗ Apple rejected that Apple ID + password pair (notarytool: ' + (chk.stderr or chk.stdout).strip().splitlines()[-1] +
+                 ')\n  Either the password was generated under a different Apple ID (re-run and type that one),\n'
+                 '  or generate a fresh one at appleid.apple.com → Sign-In and Security → App-Specific Passwords.')
+    print(f'✓ Apple accepted {apple_id} + that password (notarytool history OK)')
+    put_secret('MAC_APPLE_ID',           apple_id)
     put_secret('MAC_APPLE_APP_PASSWORD', app_pw)
     print('\nDone. Tell Krit/Joy → they re-run the failed build-mac job on the existing tag.')
     sys.exit(0)

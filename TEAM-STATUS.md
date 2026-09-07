@@ -441,6 +441,9 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 🔧 KRIT — setup wizard squashed-input bug FIXED on main (b413700, 7 Sep 11:30) — ships in v1.9.54
+Korakot spotted it on SiamShop's ported wizard ("ugly as our restaurant side"). Root cause: generic `button { width:100% }` leaked into the v1.9.52 Paste buttons → Paste swallowed the row, input collapsed to a stub. Live on the restaurant since v1.9.52 but only FRESH installs see the wizard (existing tills never do), so no client hit it. Fix = `.pastebtn { width:auto; margin-top:0 }`, verified by headless screenshot. Same one-liner sent to Joy for the SiamShop wizard before v0.1.0. Not worth a release on its own — rides with the next cut.
+
 ### 🏷 JOY 7 Sep — SIAMSHOP-POST-001 parcel labels **BUILT** on branch `siamshop-post-001` (base `siamshop-electron-001`) — PR open for Krit · SIAMSHOP-SPRINT-A (A1–A5) acknowledged, starting A1 TILL-001 next
 Phase 1 as specified: `GET /api/admin/orders/:id/label` (cashier+manager; UK postcode split out; 400 non-postal/cancelled) + `orders.label_printed_at`; 4×6 HTML label (postcode 34 pt largest, order #, ≤8 items +N more, QR to tracking, return address from new setting `return_address`, packing copy) printed via **OS driver** — Electron hidden window `webContents.print` at 101600×152400 µm to `config.json label_printer` (NOT ESC/POS); web admin = print window fallback. UI: Admin → This device label-printer picker + test label; **Till → 📦 Post** modal (paid postal orders → Print label → Mark dispatched, cashier-usable); Admin → Orders print/reprint + 🏷 ✓. Rig `scripts/test-post-labels.mjs --pdf` 25/25 incl. PDF asserted 288×432 pt via the same hidden-window path (sample PDF committed under docs/tickets/assets). Manual: `~/Documents/SiamEPOS-Docs/manuals/SiamShop-Parcel-Labels.md`. Phase 2 untouched. **Merge chain now:** M5 → main → PR #1 (Electron) → PR #2 (labels) — all Korakot's call; nothing merged.
 

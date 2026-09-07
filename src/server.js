@@ -4461,6 +4461,44 @@ app.get('/api/voucher-redemptions', requireStaffAuthOrSyncSecret(), async (req, 
 // SEPOS-AUDIT-001 (verify pass) — replay a voucher SOLD OFFLINE on a till.
 // Re-INSERTs with the SAME code the customer already holds; idempotent via
 // ON CONFLICT(code) so a replay after a lost markSynced is a no-op.
+// SEPOS-CLOCK-CLOUD-001 — Pro tills mirror staff clock in/out events here so
+// the owner can open Admin → Clock Records from anywhere, not just at the till.
+// Accepts a batch {events:[{staff_id,event_type,event_at}]} (the one-time
+// history backfill sends hundreds at once). Idempotent via the
+// (staff_id, event_type, event_at) unique index — retries and re-backfills
+// never duplicate. A staff row deleted on the cloud is SKIPPED (200), not
+// failed: a 4xx would quarantine the row and a 5xx would block every order
+// behind it in the queue — neither is worth a dead employee's timesheet.
+app.post('/api/sync/clock-event', async (req, res) => {
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected) return res.status(503).json({ error: 'SYNC_SECRET not set on this server' });
+  if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+  try {
+    const events = Array.isArray(req.body?.events) ? req.body.events : [req.body];
+    let inserted = 0, skipped = 0;
+    for (const e of events.slice(0, 1000)) {
+      const staffId = Number(e?.staff_id);
+      const type = e?.event_type === 'in' ? 'in' : e?.event_type === 'out' ? 'out' : null;
+      const at = e?.event_at ? new Date(e.event_at) : null;
+      if (!staffId || !type || !at || isNaN(at)) { skipped++; continue; }
+      try {
+        const r = await pool.query(
+          `INSERT INTO clock_events (staff_id, event_type, event_at)
+           VALUES ($1, $2, $3::timestamptz)
+           ON CONFLICT (staff_id, event_type, event_at) DO NOTHING RETURNING id`,
+          [staffId, type, at.toISOString()],
+        );
+        if (r.rows.length) inserted++; else skipped++;
+      } catch (err) {
+        if (err.code === '23503') { skipped++; continue; }   // staff deleted on cloud
+        throw err;
+      }
+    }
+    res.json({ ok: true, inserted, skipped });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/sync/sell-voucher', async (req, res) => {
   const provided = req.get('x-sync-secret') || '';
   const expected = process.env.SYNC_SECRET || '';
@@ -11422,8 +11460,12 @@ async function recordClockEvent(req, res, eventType) {
     const staffRes = await pool.query('SELECT id, name FROM staff WHERE pin=$1 AND is_active=1', [pin]);
     const staff = staffRes.rows[0];
     if (!staff) return res.status(401).json({ error: 'Invalid PIN' });
-    await pool.query('INSERT INTO clock_events (staff_id, event_type) VALUES ($1, $2)', [staff.id, eventType]);
-    res.json({ success: true, staff_id: staff.id, name: staff.name, event_type: eventType, event_at: new Date().toISOString() });
+    const eventAt = new Date().toISOString();
+    await pool.query('INSERT INTO clock_events (staff_id, event_type, event_at) VALUES ($1, $2, $3)', [staff.id, eventType, eventAt]);
+    // SEPOS-CLOCK-CLOUD-001 — mirror to the cloud so the owner can read clock
+    // records away from the till. Inert on cloud installs.
+    await offlineQueue.enqueue('clock_event', { events: [{ staff_id: staff.id, event_type: eventType, event_at: eventAt }] });
+    res.json({ success: true, staff_id: staff.id, name: staff.name, event_type: eventType, event_at: eventAt });
   } catch (err) { res.status(500).json({ error: err.message }); }
 }
 app.post('/api/clock/in',  (req, res) => recordClockEvent(req, res, 'in'));
@@ -11466,8 +11508,10 @@ app.post('/api/clock/toggle', async (req, res) => {
       [staff.id]
     );
     const next = last.rows[0] && last.rows[0].event_type === 'in' ? 'out' : 'in';
-    await pool.query('INSERT INTO clock_events (staff_id, event_type) VALUES ($1, $2)', [staff.id, next]);
-    res.json({ success: true, staff_id: staff.id, name: staff.name, event_type: next, event_at: new Date().toISOString() });
+    const eventAt = new Date().toISOString();
+    await pool.query('INSERT INTO clock_events (staff_id, event_type, event_at) VALUES ($1, $2, $3)', [staff.id, next, eventAt]);
+    await offlineQueue.enqueue('clock_event', { events: [{ staff_id: staff.id, event_type: next, event_at: eventAt }] }); // SEPOS-CLOCK-CLOUD-001
+    res.json({ success: true, staff_id: staff.id, name: staff.name, event_type: next, event_at: eventAt });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

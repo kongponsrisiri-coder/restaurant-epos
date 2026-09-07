@@ -679,6 +679,19 @@ async function applyToCloud(actionType, payload) {
       if (!r.ok) throw new Error(`edit_payment ${r.status}`);
       return r.json();
     }
+    case 'clock_event': {
+      // SEPOS-CLOCK-CLOUD-001 — mirror staff clock in/out to the cloud.
+      // Cloud dedupes on (staff_id, event_type, event_at); a deleted staff
+      // member is skipped with 200 so the queue never blocks on a timesheet.
+      if (!process.env.SYNC_SECRET) throw new Error('SYNC_SECRET missing');
+      const r = await fetch(url('/api/sync/clock-event'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-sync-secret': process.env.SYNC_SECRET },
+        body: JSON.stringify({ events: payload.events || [payload] }),
+      });
+      if (!r.ok) throw new Error(`clock_event ${r.status}`);
+      return r.json();
+    }
     case 'sell_voucher': {
       // Verify pass — replay an offline voucher sale with the SAME code the
       // customer holds. Idempotent (ON CONFLICT(code) DO NOTHING on the cloud).
@@ -1902,6 +1915,9 @@ function start() {
   // ticks have drained/bound the live queue, so any orders orphaned by a lost
   // create_order re-parent themselves and clear the ⚠️ Sync-queue list.
   setTimeout(() => { recoverOrphans().catch((e) => console.warn('[orphan] startup recovery:', e.message)); }, 12000);
+  // SEPOS-CLOCK-CLOUD-001 — one-time history backfill so the owner gets past
+  // weeks on the cloud, not just from update day. Idempotent on the cloud.
+  setTimeout(() => { backfillClockEvents().catch((e) => console.warn('[clock] backfill:', e.message)); }, 20000);
   intervalHandle = setInterval(() => {
     tick().catch((err) => console.error('[sync] tick failed:', err.message));
   }, PING_INTERVAL_MS);
@@ -1913,6 +1929,21 @@ function start() {
 // insurance against the engine silently never starting (or a crashed interval)
 // leaving a till trading cloud-blind for days.
 let watchdogHandle = null;
+// SEPOS-CLOCK-CLOUD-001 — queue every clock event the till already holds, in
+// batches of 200, exactly once per install (flag in sync_state). Runs after
+// the queue is otherwise idle at boot so it never sits in front of an order.
+async function backfillClockEvents() {
+  if (!process.env.SYNC_SECRET) return;
+  if (await readSyncState('clock_backfill_done')) return;
+  const r = await pool.query('SELECT staff_id, event_type, event_at FROM clock_events WHERE staff_id IS NOT NULL ORDER BY id');
+  const rows = r.rows.map((e) => ({ staff_id: e.staff_id, event_type: e.event_type, event_at: new Date(e.event_at).toISOString() }));
+  for (let i = 0; i < rows.length; i += 200) {
+    await offlineQueue.enqueue('clock_event', { events: rows.slice(i, i + 200), backfill: true });
+  }
+  await writeSyncState('clock_backfill_done', new Date().toISOString());
+  console.log(`[clock] backfill queued ${rows.length} events in ${Math.ceil(rows.length / 200)} batch(es)`);
+}
+
 function startWatchdog() {
   if (watchdogHandle) return;
   watchdogHandle = setInterval(() => {

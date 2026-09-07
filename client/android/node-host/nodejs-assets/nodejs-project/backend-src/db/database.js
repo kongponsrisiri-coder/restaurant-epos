@@ -452,6 +452,16 @@ async function initDB() {
       )
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_clock_events_staff_at ON clock_events(staff_id, event_at)`);
+    // SEPOS-CLOCK-CLOUD-001 — idempotency key for till→cloud clock mirroring.
+    // Own try/catch: a throw here would silently skip every migration below it.
+    // Exact duplicates (same person, same type, same instant) carry no
+    // information, so they are removed first rather than failing the index.
+    try {
+      await pool.query(`DELETE FROM clock_events a USING clock_events b
+                        WHERE a.id > b.id AND a.staff_id = b.staff_id
+                          AND a.event_type = b.event_type AND a.event_at = b.event_at`);
+      await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_clock_events_dedupe ON clock_events(staff_id, event_type, event_at)`);
+    } catch (err) { console.warn('[clock] dedupe index not created:', err.message); }
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS settings (
@@ -697,6 +707,11 @@ async function initDB() {
         last_seen     TIMESTAMP DEFAULT NOW()
       )
     `);
+    // SEPOS-SYNC-TELEMETRY-001 — per-till sync-queue depth reported in the
+    // heartbeat so ops flags a stalled push in minutes, not days.
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS queue_depth INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS queue_quarantined INTEGER DEFAULT 0`);
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS queue_oldest_at TIMESTAMP`);
 
     // SEPOS-PRINT-ALERT-001 — held tickets from failed kitchen/bar/station
     // prints (local tills only; cloud rows never created). See printAlertService.

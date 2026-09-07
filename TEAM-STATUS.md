@@ -441,7 +441,7 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
-### ✅ KRIT — SEPOS-CLOCK-CLOUD-001 clock in/out data on the cloud (client request via Korakot, 7 Sep) — CODE DONE, ships in v1.9.53
+### ✅ KRIT — v1.9.53 SHIPPED 7 Sep 07:30 (8/8 assets, latest.yml = 1.9.53) — clock in/out on the cloud (SEPOS-CLOCK-CLOUD-001) + everything from v1.9.52. Supersedes v1.9.52 (clients on 1.9.51 jump straight here). Canary: Korakot's Mac next. Patch note EN+TH delivered in chat. APK pair still owed (standing rule).
 Pro desktop tills kept staff clock records in local SQLite only (clock was never in the sync queue) — the owner could only read them standing at the till. Now every clock in/out is mirrored to the cloud within one sync tick + a **one-time history backfill** on first boot after the update, so past weeks appear too. Owner reads it at their app URL → Admin → Clock Records (weekly summary + CSV) from anywhere. Cloud dedupes on (staff, type, time); deleted staff skipped (never blocks the order queue); works offline (queues, drains). **Cloud side is live on next push (auto-deploy — safe, additive index with dedupe + own try/catch); till side needs v1.9.53.** Rig-tested end to end incl. upgrade path with a pre-existing duplicate row. Client-facing line for the patch note: "Staff clock-in/out records now sync to the cloud — view timesheets from home."
 **Sync guidance for clients (Korakot asked "keep restarting?") — NO.** v1.9.52 self-heals (watchdog restarts a dead loop in 60 s; orphans re-attach at boot; queue depth reported to ops). Tell clients: keep the app open + internet on; if the sync pill stays red > a few minutes, message us — don't restart.
 

@@ -35,6 +35,13 @@ const io = new Server(httpServer, {
 // (no-ops entirely unless DB_MODE=local, i.e. a desktop till).
 printAlerts.init({ pool, io, printService });
 
+// SEPOS-SYNC-EGRESS-001 (cloud half) — gzip every response at the origin.
+// Railway meters CONTAINER egress, so origin-side compression cuts the metered
+// bytes (~26% on the base64-logo settings payload) while the till-side
+// ETag/304 fix waits for the next cut. Does not touch response content.
+const compression = require('compression');
+app.use(compression());
+
 app.use(cors({
   origin: '*',
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
@@ -1425,12 +1432,15 @@ app.get('/api/health', async (req, res) => {
     // Wrapped separately so a missing devices table (older deploy) never breaks health.
     let tills = [];
     try {
-      const d = await pool.query(`SELECT device_id, app_version, platform, last_seen FROM devices ORDER BY last_seen DESC`);
+      const d = await pool.query(`SELECT device_id, app_version, platform, last_seen, queue_depth, queue_quarantined, queue_oldest_at FROM devices ORDER BY last_seen DESC`);
       tills = d.rows.map(r => ({
         device_id: r.device_id,
         app_version: r.app_version,
         platform: r.platform,
         last_seen: r.last_seen,
+        queue_depth: r.queue_depth ?? 0,               // SEPOS-SYNC-TELEMETRY-001
+        queue_quarantined: r.queue_quarantined ?? 0,
+        queue_oldest_at: r.queue_oldest_at ?? null,
       }));
     } catch (_) { /* devices table not present yet */ }
     res.json({
@@ -1455,16 +1465,24 @@ app.post('/api/device/heartbeat', async (req, res) => {
     const { device_id, app_version, platform } = req.body || {};
     if (!device_id) return res.status(400).json({ error: 'device_id required' });
     const rid = (req.body && req.body.restaurant_id) || resolveRestaurantId(req) || null;
+    // SEPOS-SYNC-TELEMETRY-001 — optional sync-queue stats (older tills omit them).
+    const qDepth = Number.isFinite(+req.body?.queue_depth) ? Math.max(0, Math.min(1e9, +req.body.queue_depth)) : 0;
+    const qQuar  = Number.isFinite(+req.body?.queue_quarantined) ? Math.max(0, Math.min(1e9, +req.body.queue_quarantined)) : 0;
+    const qOldest = req.body?.queue_oldest_at || null;
     await pool.query(
-      `INSERT INTO devices (device_id, restaurant_id, app_version, platform, last_seen)
-       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+      `INSERT INTO devices (device_id, restaurant_id, app_version, platform, last_seen, queue_depth, queue_quarantined, queue_oldest_at)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6, $7)
        ON CONFLICT(device_id) DO UPDATE SET
          restaurant_id = EXCLUDED.restaurant_id,
          app_version   = EXCLUDED.app_version,
          platform      = EXCLUDED.platform,
-         last_seen     = CURRENT_TIMESTAMP`,
+         last_seen     = CURRENT_TIMESTAMP,
+         queue_depth       = EXCLUDED.queue_depth,
+         queue_quarantined = EXCLUDED.queue_quarantined,
+         queue_oldest_at   = EXCLUDED.queue_oldest_at`,
       [String(device_id).slice(0, 64), rid ? String(rid).slice(0, 100) : null,
-       String(app_version || '').slice(0, 20), String(platform || '').slice(0, 20)]
+       String(app_version || '').slice(0, 20), String(platform || '').slice(0, 20),
+       qDepth, qQuar, qOldest]
     );
     res.json({ ok: true });
   } catch (err) {
@@ -1597,15 +1615,54 @@ app.post('/api/orders', requireActiveSubscription, requireValidLicense, async (r
           [table_id]
         );
         if (existing.rows.length > 0) {
+          const reuseId = existing.rows[0].id;
+          // SEPOS-GHOST-001 (Nook TILL-1, 5 Sep) — if the order we're reusing has
+          // NO items, it's a stale ghost from an earlier seating (a table left
+          // green kept an item-less open order for days). A new party must not
+          // inherit its old opened_at/covers — the floor timer then reads
+          // "154h" and Staff-Performance turn-time is poisoned. Restamp it.
+          const hasItems = await pool.query('SELECT 1 FROM order_items WHERE order_id = $1 LIMIT 1', [reuseId]);
+          if (hasItems.rows.length === 0) {
+            await pool.query('UPDATE orders SET opened_at = NOW(), created_at = NOW(), covers = $2 WHERE id = $1',
+              [reuseId, covers || 1]);
+          }
           await pool.query("UPDATE tables SET status = 'occupied' WHERE id = $1", [table_id]);
-          return { id: existing.rows[0].id, success: true, reused: true };
+          return { id: reuseId, success: true, reused: true };
         }
       }
-      const result = await pool.query(
-        `INSERT INTO orders (table_id, staff_id, status, covers, order_type, opened_at)
-         VALUES ($1, $2, 'open', $3, $4, NOW()) RETURNING id`,
-        [table_id || null, staff_id || null, covers || 1, type]
-      );
+      // SEPOS-SYNC-UNBLOCK-001 — a till's queued order that references a
+      // table/staff row DELETED on the cloud used to 500 forever, and the
+      // sync engine (correctly) never abandons order actions on 5xx: ONE
+      // poisoned order head-of-line-blocked a whole venue's queue for days
+      // (Yum Yum, w/c 29 Aug). The £X order matters more than its table
+      // pointer: drop the dead reference, keep the order, log loudly.
+      let insTable = table_id || null, insStaff = staff_id || null, result;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          result = await pool.query(
+            `INSERT INTO orders (table_id, staff_id, status, covers, order_type, opened_at)
+             VALUES ($1, $2, 'open', $3, $4, NOW()) RETURNING id`,
+            [insTable, insStaff, covers || 1, type]
+          );
+          break;
+        } catch (insErr) {
+          const c = String(insErr.code || ''), m = String(insErr.constraint || insErr.message || '');
+          if (attempt < 2 && c === '23503' && /table/i.test(m) && insTable != null) {
+            console.error(`[order] FK fallback: table ${insTable} missing on this server — creating order without table link`);
+            insTable = null; continue;
+          }
+          if (attempt < 2 && c === '23503' && /staff/i.test(m) && insStaff != null) {
+            console.error(`[order] FK fallback: staff ${insStaff} missing on this server — creating order without staff link`);
+            insStaff = null; continue;
+          }
+          // Other INTEGRITY errors are deterministic: a 5xx would retry
+          // forever, so surface as 400 → the till quarantines that one item
+          // VISIBLY and the queue drains past it. Non-integrity (connection
+          // etc.) stays a throw → 500 → transient retry, unchanged.
+          if (c.startsWith('23') || c.startsWith('22')) insErr.clientError = true;
+          throw insErr;
+        }
+      }
       if (table_id) {
         await pool.query("UPDATE tables SET status = 'occupied' WHERE id = $1", [table_id]);
       }
@@ -1618,7 +1675,11 @@ app.post('/api/orders', requireActiveSubscription, requireValidLicense, async (r
       return { id: localOrderId, success: true };
     });
     res.json(out);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    // SEPOS-SYNC-UNBLOCK-001 — deterministic data errors must not masquerade
+    // as transient server failures (see FK fallback above).
+    res.status(err.clientError ? 400 : 500).json({ error: err.message });
+  }
 });
 
 app.post('/api/orders/:id/items', requireValidLicense, async (req, res) => {
@@ -4400,6 +4461,44 @@ app.get('/api/voucher-redemptions', requireStaffAuthOrSyncSecret(), async (req, 
 // SEPOS-AUDIT-001 (verify pass) — replay a voucher SOLD OFFLINE on a till.
 // Re-INSERTs with the SAME code the customer already holds; idempotent via
 // ON CONFLICT(code) so a replay after a lost markSynced is a no-op.
+// SEPOS-CLOCK-CLOUD-001 — Pro tills mirror staff clock in/out events here so
+// the owner can open Admin → Clock Records from anywhere, not just at the till.
+// Accepts a batch {events:[{staff_id,event_type,event_at}]} (the one-time
+// history backfill sends hundreds at once). Idempotent via the
+// (staff_id, event_type, event_at) unique index — retries and re-backfills
+// never duplicate. A staff row deleted on the cloud is SKIPPED (200), not
+// failed: a 4xx would quarantine the row and a 5xx would block every order
+// behind it in the queue — neither is worth a dead employee's timesheet.
+app.post('/api/sync/clock-event', async (req, res) => {
+  const provided = req.get('x-sync-secret') || '';
+  const expected = process.env.SYNC_SECRET || '';
+  if (!expected) return res.status(503).json({ error: 'SYNC_SECRET not set on this server' });
+  if (provided !== expected) return res.status(401).json({ error: 'invalid sync secret' });
+  try {
+    const events = Array.isArray(req.body?.events) ? req.body.events : [req.body];
+    let inserted = 0, skipped = 0;
+    for (const e of events.slice(0, 1000)) {
+      const staffId = Number(e?.staff_id);
+      const type = e?.event_type === 'in' ? 'in' : e?.event_type === 'out' ? 'out' : null;
+      const at = e?.event_at ? new Date(e.event_at) : null;
+      if (!staffId || !type || !at || isNaN(at)) { skipped++; continue; }
+      try {
+        const r = await pool.query(
+          `INSERT INTO clock_events (staff_id, event_type, event_at)
+           VALUES ($1, $2, $3::timestamptz)
+           ON CONFLICT (staff_id, event_type, event_at) DO NOTHING RETURNING id`,
+          [staffId, type, at.toISOString()],
+        );
+        if (r.rows.length) inserted++; else skipped++;
+      } catch (err) {
+        if (err.code === '23503') { skipped++; continue; }   // staff deleted on cloud
+        throw err;
+      }
+    }
+    res.json({ ok: true, inserted, skipped });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/sync/sell-voucher', async (req, res) => {
   const provided = req.get('x-sync-secret') || '';
   const expected = process.env.SYNC_SECRET || '';
@@ -5870,6 +5969,19 @@ app.get('/api/reservations/availability', widgetCors, async (req, res) => {
       }
     }
 
+    // SEPOS-BOOK-HOURS-001 — per-day weekly_hours beats service_type for
+    // ONLINE slot generation, mirroring the takeaway/QR guards.
+    {
+      const pdA = perDayOrderingHours({ weekly_hours: s.weekly_hours }, new Date(date + 'T12:00:00'), s.timezone || 'Europe/London');
+      if (pdA && pdA.closed) {
+        return res.json({ date, covers: coversNum, restaurant_id, slots: [], closed: true,
+          message: 'We are closed that day — please choose another date.' });
+      }
+      if (pdA && pdA.windows) {
+        slots = slots.filter(t => { const m = toMins(t); return pdA.windows.some(w => m >= toMins(w[0]) && m <= toMins(w[1])); });
+      }
+    }
+
     // Fetch bookings with dining duration + assigned tables (table-aware).
     const bookingsRes = await pool.query(
       `SELECT TO_CHAR(r.reservation_time, 'HH24:MI') AS time_str, r.covers, r.table_id, r.table_ids,
@@ -6034,7 +6146,7 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
     const coversNum = parseInt(covers, 10);
     if (!coversNum || coversNum < 1) return res.status(400).json({ error: 'Covers must be at least 1' });
     const slotCheck = await pool.query(`SELECT COALESCE(SUM(covers), 0) AS booked FROM reservations WHERE reservation_date = $1 AND TO_CHAR(reservation_time, 'HH24:MI') = $2 AND restaurant_id = $3 AND status NOT IN ('cancelled','no-show')`, [reservation_date, reservation_time.slice(0, 5), restaurant_id]);
-    const settingsRes = await pool.query('SELECT max_covers_per_slot, max_party_size, restaurant_phone, closed_days FROM restaurant_settings WHERE restaurant_id = $1', [restaurant_id]);
+    const settingsRes = await pool.query('SELECT max_covers_per_slot, max_party_size, restaurant_phone, closed_days, weekly_hours, timezone FROM restaurant_settings WHERE restaurant_id = $1', [restaurant_id]);
     // SEPOS-051 — refuse bookings on weekly closed days (authoritative; widgets also hide them)
     try {
       const cd = JSON.parse(settingsRes.rows[0]?.closed_days || '[]');
@@ -6043,6 +6155,23 @@ app.post('/api/reservations', widgetCors, async (req, res) => {
         return res.status(400).json({ error: 'The restaurant is closed on that day — please choose another date.' });
       }
     } catch {}
+    // SEPOS-BOOK-HOURS-001 (Nook, 5 Sep) — ONLINE bookings honour the same
+    // per-day weekly_hours the ordering guards enforce (takeaway did, bookings
+    // didn't: Sat-closed venues took Saturday bookings). Staff bookings are
+    // NOT gated — they can judge their own floor.
+    if (source === 'widget' || source === 'online') {
+      const pdB = perDayOrderingHours({ weekly_hours: settingsRes.rows[0]?.weekly_hours },
+        new Date(String(reservation_date) + 'T12:00:00'), settingsRes.rows[0]?.timezone || 'Europe/London');
+      if (pdB && pdB.closed) {
+        return res.status(400).json({ error: 'The restaurant is closed on that day — please choose another date.' });
+      }
+      if (pdB && pdB.windows) {
+        const tMin = toMins(String(reservation_time).slice(0, 5));
+        if (!pdB.windows.some(w => tMin >= toMins(w[0]) && tMin <= toMins(w[1]))) {
+          return res.status(400).json({ error: 'We are closed at that time — please choose another time.' });
+        }
+      }
+    }
     // SEPOS-050 — online (widget) bookings are capped to the restaurant's
     // max party size. Staff-created bookings are NOT capped — staff can
     // link tables and judge their own floor.
@@ -6295,7 +6424,7 @@ app.get('/api/restaurant-settings', async (req, res) => {
 });
 
 // ── PUT reservation settings — saves all fields including lunch/dinner ──
-app.put('/api/reservations/settings/:restaurantId', async (req, res) => {
+app.put('/api/reservations/settings/:restaurantId', requireStaffAuthOrSyncSecret(), async (req, res) => {
   try {
     const {
       restaurant_name, brand_colour, opening_time, last_booking_time,
@@ -8248,8 +8377,15 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
           }
         }
       }
-      total += it.server_price * (Number(it.quantity) || 1);
+      // SEPOS-TA-VALID-001 (Nook, 5 Sep) — quantity was trusted raw: a negative
+      // qty minted a NEGATIVE order (−£3.95 accepted) and a huge qty a £3.35M
+      // one; the £500 cap only guarded the card path. Clamp to a sane integer.
+      const qty = Math.min(50, Math.max(1, Math.round(Number(it.quantity)) || 1));
+      it.quantity = qty;
+      total += it.server_price * qty;
     }
+    if (!(total > 0)) return res.status(400).json({ error: 'Order total must be greater than zero' });
+    if (total > 1000) return res.status(400).json({ error: 'Order too large for online ordering — please call the restaurant to arrange it' });
 
     // SEPOS-TAKEAWAY-DISCOUNT — optional % off online orders (Chart Thai,
     // 2026-07-21). Applied server-side BEFORE the paid-amount check so a
@@ -8275,9 +8411,21 @@ app.post('/api/takeaway/orders', widgetCors, requireActiveSubscription, requireV
     // The flat SiamPay fee is application_fee_amount — deducted from the
     // client's settlement by Stripe, never added on top for the customer.
     const expectedPence = Math.round(total * 100);
+    // SEPOS-TA-PENNY-001 — the widget prices the PI client-side with float
+    // arithmetic; on promo orders its rounding can land 1p either side of the
+    // server's recompute (seen live: a real customer bounced over 2731p vs
+    // 2732p, Yum Yum 2 Sep). A 1p difference is float noise, not tampering —
+    // accept it and adopt the pence Stripe ACTUALLY captured as the order
+    // total, so Card Sales reconciles against the Stripe settlement to the
+    // penny. Anything beyond 1p still rejects as before.
     if (verifiedPaymentIntentId !== null && verifiedPaymentPence !== expectedPence) {
-      console.warn(`[takeaway] PI ${verifiedPaymentIntentId} amount ${verifiedPaymentPence}p != expected ${expectedPence}p — rejected`);
-      return res.status(402).json({ error: 'Payment amount does not match the order total — please refresh and try again' });
+      if (Math.abs(verifiedPaymentPence - expectedPence) <= 1) {
+        console.warn(`[takeaway] PI ${verifiedPaymentIntentId} amount ${verifiedPaymentPence}p vs expected ${expectedPence}p — 1p float drift, accepted; order total set to the captured amount`);
+        total = verifiedPaymentPence / 100;
+      } else {
+        console.warn(`[takeaway] PI ${verifiedPaymentIntentId} amount ${verifiedPaymentPence}p != expected ${expectedPence}p — rejected`);
+        return res.status(402).json({ error: 'Payment amount does not match the order total — please refresh and try again' });
+      }
     }
 
     await client.query('BEGIN');
@@ -9638,7 +9786,7 @@ app.get('/api/widget/voucher/:code/wallet-pass', widgetCors, async (req, res) =>
 // EPOS — redeem against a bill. Atomic decrement under FOR UPDATE so two
 // terminals can't double-spend the same voucher. Returns the new balance
 // + amount_used so the caller can compose the discount line.
-app.post('/api/vouchers/:code/redeem', async (req, res) => {
+app.post('/api/vouchers/:code/redeem', requireStaffAuthOrSyncSecret(), async (req, res) => {
   // SEPOS-AUDIT-001 — redeem against the CLOUD balance on local installs
   // (that's where the voucher lives and where FOR UPDATE serialises the
   // decrement). bill_id is a LOCAL order id here — translate it to the cloud
@@ -9859,7 +10007,7 @@ app.get('/api/vouchers/:id', async (req, res) => {
 });
 
 // Admin — soft-void (manager-PIN gated by frontend; backend trusts staff_id)
-app.post('/api/vouchers/:id/void', async (req, res) => {
+app.post('/api/vouchers/:id/void', requireStaffAuthOrSyncSecret(), async (req, res) => {
   // SEPOS-AUDIT-001 — cloud-authoritative on local installs.
   if (await forwardToCloudWith(req, res, 'voucher-void')) return;
   try {
@@ -9879,7 +10027,7 @@ app.post('/api/vouchers/:id/void', async (req, res) => {
 // the EPOS till the same way Cash/Card on a normal order is. The voucher
 // row records payment_method='cash' or 'card' so the Z-Report shows
 // it as on-till revenue (not the off-till Stripe block).
-app.post('/api/vouchers/sell', async (req, res) => {
+app.post('/api/vouchers/sell', requireStaffAuthOrSyncSecret(), async (req, res) => {
   // SEPOS-AUDIT-001 — sell on the CLOUD from local installs: the voucher then
   // exists where redemptions/lookups are served, the gift email's Add-to-Wallet
   // link (built against the cloud host) actually resolves, and cloud/ops
@@ -9949,7 +10097,7 @@ app.post('/api/vouchers/sell', async (req, res) => {
 });
 
 // Admin — resend gift email (operator-initiated, e.g. lost-in-spam)
-app.post('/api/vouchers/:id/resend-email', async (req, res) => {
+app.post('/api/vouchers/:id/resend-email', requireStaffAuthOrSyncSecret(), async (req, res) => {
   // SEPOS-AUDIT-001 — resend from the CLOUD so the emailed wallet/balance
   // links point at a host that actually has the voucher.
   if (await forwardToCloudWith(req, res, 'voucher-resend')) return;
@@ -9972,7 +10120,7 @@ app.post('/api/vouchers/:id/resend-email', async (req, res) => {
 // (the same atomic decrement + voucher_redemptions ledger as gift vouchers);
 // the Bill screen applies it as a 'Deposit' tender. Phase A = manual create
 // (deposit taken by phone / card machine); Stripe capture = Phase B (widget).
-app.post('/api/deposits', async (req, res) => {
+app.post('/api/deposits', requireStaffAuthOrSyncSecret(), async (req, res) => {
   // Review H1 — vouchers/deposits are cloud-authoritative: create on the
   // cloud (like redeem/lookup already do) or a local till mints a deposit
   // the cloud-forwarded redeem can't find (404 in front of the guest).
@@ -10132,7 +10280,7 @@ app.post('/api/orders/:id/deposit-unapply', async (req, res) => {
 });
 
 // Manual forfeit — a no-show's deposit is kept as income (own report line).
-app.post('/api/deposits/:code/forfeit', async (req, res) => {
+app.post('/api/deposits/:code/forfeit', requireStaffAuthOrSyncSecret(), async (req, res) => {
   const client = await pool.connect();
   try {
     const code = String(req.params.code || '').trim().toUpperCase();
@@ -10538,6 +10686,10 @@ app.post('/api/deliveroo/ready/:orderId', async (req, res) => {
 // tenant's RESTAURANT_EMAIL env. Silently skipped when neither is set.
 async function sendRestaurantAlert(subject, bodyHtml) {
   try {
+    // SEPOS-OWNER-ALERT-002 — sendBrevoEmail was never imported in this scope,
+    // so EVERY owner alert died with "sendBrevoEmail is not defined" (caught +
+    // logged below, invisible to operators). Found in Yum Yum's Railway logs.
+    const { sendBrevoEmail } = require('./services/emailService');
     const r = await pool.query(`SELECT value FROM settings WHERE key = 'restaurant_notify_email'`);
     const to = (r.rows[0] && String(r.rows[0].value || '').trim()) || process.env.RESTAURANT_EMAIL || '';
     if (!to || !to.includes('@')) return;
@@ -11308,8 +11460,12 @@ async function recordClockEvent(req, res, eventType) {
     const staffRes = await pool.query('SELECT id, name FROM staff WHERE pin=$1 AND is_active=1', [pin]);
     const staff = staffRes.rows[0];
     if (!staff) return res.status(401).json({ error: 'Invalid PIN' });
-    await pool.query('INSERT INTO clock_events (staff_id, event_type) VALUES ($1, $2)', [staff.id, eventType]);
-    res.json({ success: true, staff_id: staff.id, name: staff.name, event_type: eventType, event_at: new Date().toISOString() });
+    const eventAt = new Date().toISOString();
+    await pool.query('INSERT INTO clock_events (staff_id, event_type, event_at) VALUES ($1, $2, $3)', [staff.id, eventType, eventAt]);
+    // SEPOS-CLOCK-CLOUD-001 — mirror to the cloud so the owner can read clock
+    // records away from the till. Inert on cloud installs.
+    await offlineQueue.enqueue('clock_event', { events: [{ staff_id: staff.id, event_type: eventType, event_at: eventAt }] });
+    res.json({ success: true, staff_id: staff.id, name: staff.name, event_type: eventType, event_at: eventAt });
   } catch (err) { res.status(500).json({ error: err.message }); }
 }
 app.post('/api/clock/in',  (req, res) => recordClockEvent(req, res, 'in'));
@@ -11352,8 +11508,10 @@ app.post('/api/clock/toggle', async (req, res) => {
       [staff.id]
     );
     const next = last.rows[0] && last.rows[0].event_type === 'in' ? 'out' : 'in';
-    await pool.query('INSERT INTO clock_events (staff_id, event_type) VALUES ($1, $2)', [staff.id, next]);
-    res.json({ success: true, staff_id: staff.id, name: staff.name, event_type: next, event_at: new Date().toISOString() });
+    const eventAt = new Date().toISOString();
+    await pool.query('INSERT INTO clock_events (staff_id, event_type, event_at) VALUES ($1, $2, $3)', [staff.id, next, eventAt]);
+    await offlineQueue.enqueue('clock_event', { events: [{ staff_id: staff.id, event_type: next, event_at: eventAt }] }); // SEPOS-CLOCK-CLOUD-001
+    res.json({ success: true, staff_id: staff.id, name: staff.name, event_type: next, event_at: eventAt });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -11467,10 +11625,14 @@ app.post('/api/sync/run-now', async (req, res) => {
   const dbMode = (process.env.DB_MODE || 'cloud').toLowerCase();
   if (dbMode !== 'local') return res.status(400).json({ error: 'manual sync is local-mode only' });
   try {
+    // SEPOS-SYNC-ORPHAN-001 — the manual trigger also runs orphan recovery, so
+    // an operator hitting "Sync now"/retry on a till showing quarantined orders
+    // re-parents + drains them without waiting for the next boot.
+    const recovered = await syncService.recoverOrphans().catch(() => 0);
     // tick() is idempotent and self-guarded against overlap — safe to
     // fire even if the scheduled tick is mid-flight.
     await syncService.tick();
-    res.json({ success: true, status: syncService.getStatus() });
+    res.json({ success: true, status: syncService.getStatus(), recovered });
   } catch (err) {
     console.error('POST /api/sync/run-now error:', err);
     res.status(500).json({ error: err.message });

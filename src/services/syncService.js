@@ -8,16 +8,21 @@
 const offlineQueue = require('./offlineQueue');
 const pool = require('../db/dbAdapter');
 
-const CLOUD_API_URL = process.env.CLOUD_API_URL || '';
+let CLOUD_API_URL = process.env.CLOUD_API_URL || ''; // SEPOS-FERN-BOOT-001 — watchdog may re-point
 // Default 5s — feels real-time for Mac↔Chrome floor-map flows. Override
 // per install via SYNC_PING_MS env var if you need to dial back (e.g.
 // multi-tenant deployments approaching Railway's egress quota).
 const PING_INTERVAL_MS = parseInt(process.env.SYNC_PING_MS || '5000', 10);
 const PING_TIMEOUT_MS = 5000;
 
+const _pullEtags = new Map(); // SEPOS-SYNC-EGRESS-001
 let status = 'local'; // 'cloud' | 'local' | 'syncing'
 let intervalHandle = null;
 let inProgress = false;
+// SEPOS-SYNC-EGRESS-001 — remember the ETag per pull path; send If-None-Match
+// each tick so an unchanged body (esp. /api/settings, which carries the base64
+// logo) returns 304 with no payload. In-memory is enough: a restart just
+// re-primes on the first tick. ~95% egress cut on logo-heavy tenants.
 const subscribers = new Set();
 
 // Flat-shape endpoints pulled directly into a single local table.
@@ -674,6 +679,19 @@ async function applyToCloud(actionType, payload) {
       if (!r.ok) throw new Error(`edit_payment ${r.status}`);
       return r.json();
     }
+    case 'clock_event': {
+      // SEPOS-CLOCK-CLOUD-001 — mirror staff clock in/out to the cloud.
+      // Cloud dedupes on (staff_id, event_type, event_at); a deleted staff
+      // member is skipped with 200 so the queue never blocks on a timesheet.
+      if (!process.env.SYNC_SECRET) throw new Error('SYNC_SECRET missing');
+      const r = await fetch(url('/api/sync/clock-event'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-sync-secret': process.env.SYNC_SECRET },
+        body: JSON.stringify({ events: payload.events || [payload] }),
+      });
+      if (!r.ok) throw new Error(`clock_event ${r.status}`);
+      return r.json();
+    }
     case 'sell_voucher': {
       // Verify pass — replay an offline voucher sale with the SAME code the
       // customer holds. Idempotent (ON CONFLICT(code) DO NOTHING on the cloud).
@@ -997,14 +1015,21 @@ async function pullFromCloud() {
       // REG-1 (Nook) — send the install's SYNC_SECRET on every pull: the
       // voucher endpoints are now auth-gated on the cloud (they were leaking
       // codes/balances publicly), and the header is harmless on open ones.
+      const pullHeaders = process.env.SYNC_SECRET ? { 'x-sync-secret': process.env.SYNC_SECRET } : {};
+      const knownEtag = _pullEtags.get(ep.path);
+      if (knownEtag) pullHeaders['If-None-Match'] = knownEtag;
       const r = await fetch(CLOUD_API_URL + ep.path, {
-        headers: process.env.SYNC_SECRET ? { 'x-sync-secret': process.env.SYNC_SECRET } : {},
+        headers: pullHeaders,
         signal: AbortSignal.timeout(PING_TIMEOUT_MS),
       });
+      // SEPOS-SYNC-EGRESS-001 — 304 = body unchanged since last tick: skip the
+      // download AND the local upsert. NOT an empty table — do nothing.
+      if (r.status === 304) continue;
       if (!r.ok) {
         console.warn(`[sync] pull ${ep.path} ${r.status}`);
         continue;
       }
+      { const et = r.headers && r.headers.get && r.headers.get('etag'); if (et) _pullEtags.set(ep.path, et); }
       const rows = await r.json();
       // SEPOS-060 fix — GET /api/settings returns an OBJECT {key:value}, not an
       // array, so the old `Array.isArray ? rows : rows?.data || []` discarded it
@@ -1668,6 +1693,81 @@ function errHttpStatus(err) {
   return m ? Number(m[1]) : null;
 }
 
+// SEPOS-SYNC-ORPHAN-001 — self-heal quarantined orders. When a create_order
+// push was lost/quarantined (e.g. it referenced a table since deleted on the
+// cloud, pre the FK-tolerant fix), its child actions (add_items / pay / merge /
+// flags) sit quarantined "no cloud_id and no pending create_order", showing a
+// scary red list + ⚠️ badge on the client's till though the LOCAL data is
+// perfect. This re-creates each affected order on the cloud from the row still
+// in local SQLite, binds the cloud_id, and un-quarantines ONLY that order's
+// children so the ordered drain rebuilds the order on the cloud. Idempotent:
+// an order already bound is left to its children; an order gone locally is left
+// quarantined (can't rebuild what isn't there). Runs once on startup + on the
+// manual "Sync now"/retry trigger — never blindly re-tries dead entries.
+async function recoverOrphans() {
+  if (!offlineQueue.isLocal || !CLOUD_API_URL) return 0;
+  let failedRows;
+  try { failedRows = await offlineQueue.failed(); } catch { return 0; }
+  if (!failedRows || !failedRows.length) return 0;
+
+  // Map each quarantined row → the local order it belongs to.
+  // Order-scoped actions carry localOrderId (merge carries two/three);
+  // item-scoped actions (void_item / item discount) carry localItemId → look
+  // its order up in order_items.
+  const rowsByOrder = new Map(); // localOrderId -> [rowId,...]
+  const add = (oid, rowId) => {
+    if (oid == null) return;
+    const k = Number(oid);
+    if (!rowsByOrder.has(k)) rowsByOrder.set(k, []);
+    rowsByOrder.get(k).push(rowId);
+  };
+  for (const f of failedRows) {
+    const p = f.payload; if (!p) continue;
+    if (f.action_type === 'merge_orders') {
+      add(p.localOrderId, f.id); add(p.mergeLocalOrderId, f.id); add(p.localTargetOrderId, f.id);
+      continue;
+    }
+    if (p.localOrderId != null) { add(p.localOrderId, f.id); continue; }
+    if (p.localItemId != null) {
+      try {
+        const r = await pool.query('SELECT order_id FROM order_items WHERE id = $1', [Number(p.localItemId)]);
+        if (r.rows[0]) add(r.rows[0].order_id, f.id);
+      } catch {}
+    }
+  }
+  if (rowsByOrder.size === 0) return 0;
+
+  let requeued = 0;
+  for (const [localOrderId, rowIds] of rowsByOrder) {
+    try {
+      let cloudId = await getOrderCloudId(localOrderId);
+      if (!cloudId) {
+        const ord = (await pool.query(
+          'SELECT table_id, covers, staff_id, order_type FROM orders WHERE id = $1', [localOrderId])).rows[0];
+        if (!ord) { console.warn(`[orphan] local order ${localOrderId} no longer exists — left quarantined`); continue; }
+        const r = await fetch(CLOUD_API_URL + '/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(process.env.SYNC_SECRET ? { 'x-sync-secret': process.env.SYNC_SECRET } : {}) },
+          body: JSON.stringify({ table_id: ord.table_id, covers: ord.covers, staff_id: ord.staff_id, order_type: ord.order_type }),
+          signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+        });
+        if (!r.ok) { console.warn(`[orphan] re-create local order ${localOrderId} → cloud ${r.status}; leaving quarantined`); continue; }
+        const j = await r.json();
+        if (!j || j.id == null) { console.warn(`[orphan] re-create local order ${localOrderId}: no id returned`); continue; }
+        cloudId = j.id;
+        await setOrderCloudId(localOrderId, cloudId);
+      }
+      const n = await offlineQueue.requeueFailed(rowIds);
+      requeued += n;
+      console.log(`[orphan] re-parented local order ${localOrderId} → cloud ${cloudId}; requeued ${n} action(s)`);
+    } catch (e) {
+      console.warn(`[orphan] recover local order ${localOrderId} failed: ${e.message}`);
+    }
+  }
+  if (requeued) console.log(`[orphan] recovery complete — ${requeued} quarantined action(s) requeued for drain`);
+  return requeued;
+}
+
 async function syncOnce() {
   const queue = await offlineQueue.pending();
   if (queue.length === 0) return;
@@ -1797,15 +1897,71 @@ function start() {
     return;
   }
   if (!CLOUD_API_URL) {
-    console.log('[sync] local mode but CLOUD_API_URL unset — staying offline');
+    // SEPOS-FERN-BOOT-001 — this is a real MISCONFIG on a local till (the
+    // config had no cloud_api_url, or it didn't reach the spawned server), not
+    // a benign state: the till trades but NOTHING reaches the cloud and it used
+    // to be silent (Fern, 4 Sep — 3 days invisible). Make it a loud, visible
+    // status the UI surfaces, and keep a watchdog trying in case the env
+    // arrives late (dev overrides, delayed config).
+    console.error('[sync] ⚠️ local mode but CLOUD_API_URL unset — this till is NOT syncing to the cloud. Check config.json cloud_api_url.');
+    setStatus('no_cloud');
+    startWatchdog();
     return;
   }
   console.log('[sync] local mode, target=', CLOUD_API_URL, 'interval=', PING_INTERVAL_MS, 'ms');
   // Kick off immediately so status reflects reality on boot
   tick().catch((err) => console.error('[sync] initial tick failed:', err.message));
+  // SEPOS-SYNC-ORPHAN-001 — one self-heal pass ~12s after boot, once the first
+  // ticks have drained/bound the live queue, so any orders orphaned by a lost
+  // create_order re-parent themselves and clear the ⚠️ Sync-queue list.
+  setTimeout(() => { recoverOrphans().catch((e) => console.warn('[orphan] startup recovery:', e.message)); }, 12000);
+  // SEPOS-CLOCK-CLOUD-001 — one-time history backfill so the owner gets past
+  // weeks on the cloud, not just from update day. Idempotent on the cloud.
+  setTimeout(() => { backfillClockEvents().catch((e) => console.warn('[clock] backfill:', e.message)); }, 20000);
   intervalHandle = setInterval(() => {
     tick().catch((err) => console.error('[sync] tick failed:', err.message));
   }, PING_INTERVAL_MS);
+  startWatchdog();
+}
+
+// SEPOS-FERN-BOOT-001 — a once-a-minute watchdog: if we're a local till with a
+// cloud URL but the tick loop somehow isn't running, restart it. Cheap
+// insurance against the engine silently never starting (or a crashed interval)
+// leaving a till trading cloud-blind for days.
+let watchdogHandle = null;
+// SEPOS-CLOCK-CLOUD-001 — queue every clock event the till already holds, in
+// batches of 200, exactly once per install (flag in sync_state). Runs after
+// the queue is otherwise idle at boot so it never sits in front of an order.
+async function backfillClockEvents() {
+  if (!process.env.SYNC_SECRET) return;
+  if (await readSyncState('clock_backfill_done')) return;
+  const r = await pool.query('SELECT staff_id, event_type, event_at FROM clock_events WHERE staff_id IS NOT NULL ORDER BY id');
+  const rows = r.rows.map((e) => ({ staff_id: e.staff_id, event_type: e.event_type, event_at: new Date(e.event_at).toISOString() }));
+  for (let i = 0; i < rows.length; i += 200) {
+    await offlineQueue.enqueue('clock_event', { events: rows.slice(i, i + 200), backfill: true });
+  }
+  await writeSyncState('clock_backfill_done', new Date().toISOString());
+  console.log(`[clock] backfill queued ${rows.length} events in ${Math.ceil(rows.length / 200)} batch(es)`);
+}
+
+function startWatchdog() {
+  if (watchdogHandle) return;
+  watchdogHandle = setInterval(() => {
+    try {
+      if (!offlineQueue.isLocal) return;
+      const cloud = process.env.CLOUD_API_URL || CLOUD_API_URL;
+      if (cloud && !intervalHandle) {
+        console.error('[sync] ⚠️ watchdog: tick loop not running on a local till with a cloud URL — restarting sync engine');
+        // Re-point the module's cloud target (env may have arrived after boot).
+        if (process.env.CLOUD_API_URL) CLOUD_API_URL = process.env.CLOUD_API_URL;
+        intervalHandle = setInterval(() => {
+          tick().catch((err) => console.error('[sync] tick failed:', err.message));
+        }, PING_INTERVAL_MS);
+        tick().catch(() => {});
+      }
+    } catch {}
+  }, 60000);
+  if (watchdogHandle && watchdogHandle.unref) watchdogHandle.unref();
 }
 
 function stop() {
@@ -1947,4 +2103,4 @@ async function pullStaffSnapshot() {
   await pullStaff();
 }
 
-module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, pullActiveOrders, pullMenuSnapshot, pullModifiersSnapshot, pullTablesSnapshot, pullStaffSnapshot, pullSessionsSnapshot, tick };
+module.exports = { start, stop, getStatus, onStatusChange, syncOnce, pullFromCloud, pullClosedOrders, pullActiveOrders, pullMenuSnapshot, pullModifiersSnapshot, pullTablesSnapshot, pullStaffSnapshot, pullSessionsSnapshot, tick, recoverOrphans };

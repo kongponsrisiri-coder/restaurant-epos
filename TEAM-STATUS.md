@@ -441,6 +441,9 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### 📨 JOY — SIAMSHOP-DEVICE-001 then SIAMSHOP-CRM-001 (Korakot GO 7 Sep 17:55 · Krit reviews each by running + rendering)
+**DEVICE-001 (~2½ d, v0.1.5):** from Korakot's walk through v0.1.4 Admin → This device — D1 "Find printers" (port restaurant `/api/printers/scan` into Electron main; fields empty by default; saved printer as a card; USB list by driver name) · D2 barcode-scanner card (test-scan box, suffix, capture when unfocused) · D3 brand theme + logo as per-shop settings (port theme.js; BRAND_CI.md) · D4 receipt logo raster via a generic helper (unlocks ELECTRON-002 Thai). **CRM-001 (~3 d, v0.1.6):** port of SEPOS-033 — Customers→CRM (spend/last/top products/lapsed 45 d; Till attaches in-store sales to a customer) · operator consent + HMAC unsubscribe · Brevo campaigns · in-app automations (lapsed/post-dispatch/birthday). ⛔ no loyalty (held). Specs + PDFs in `~/Documents/Claude/Projects/SiamEpos/SIAMSHOP-{DEVICE,CRM}-001-*.md`; copies in Joy's `docs/tickets/`.
+
 ### ✅ SAM — 7 Sep pm: SPA-BLOCK-DRAG-002 drag-to-block redone + SPA-HISTORY-LOCK-001 per-role "prevent editing past records" — SHIPPED `a2e7a15`, live on all 3 clouds + 3 web tills
 Korakot: "drag to block still not working" → cause: my 350 ms hold + touch-action:pan-y let the browser take the gesture as a scroll. Now mouse press-and-drag is immediate; touch uses a 🚫 Block toolbar toggle (Block mode → columns touch-action:none → finger drags at once, Done to exit). History lock: Roles & Permissions checkbox per role; server guard (`services/historyLock.js`) 403s writes dated before today (UK) on appointments/rota overrides/bills/back-dated petty cash; till shows past days read-only for locked roles. Existing View/Edit matrix already covers "reception views all admin, edits nothing". Verifying mouse drag on Highbury's till in Chrome now.
 

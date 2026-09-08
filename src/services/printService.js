@@ -460,8 +460,14 @@ function buildReceipt({ order, items, settings, paymentDetails = {} }) {
     // Footer
     lf(),
     CMD.ALIGN_CENTER,
-    CMD.BOLD_ON, CMD.SIZE_TALL, txt(footer), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(),
-    txt('ขอบคุณที่มาใช้บริการ'), lf(3),
+    // SEPOS-FOOTER-SIZE-001 — stays SIZE_TALL here on purpose: SIZE_BIG is
+    // double-WIDTH in ESC/POS (42 cols -> 21), which would truncate every live
+    // footer. This classic path only runs when the rendered receipt fails.
+    // The hardcoded Thai thank-you is gone (Korakot, 8 Sep): it never printed
+    // on the rendered path everyone actually uses, a venue could not remove it,
+    // and it is wrong on a sushi restaurant's paper. The footer setting is now
+    // the only message down here — a venue that wants Thai can type Thai.
+    CMD.BOLD_ON, CMD.SIZE_TALL, txt(footer), CMD.SIZE_NORMAL, CMD.BOLD_OFF, lf(3),
 
     // SEPOS-REVIEW-QR — Google-review QR on the thermal receipt (was browser-
     // receipt-only, so POS80 network tills never printed it). Prints only when

@@ -316,7 +316,7 @@ function buildReceiptHTML({ order, items, settings, paymentDetails }) {
 
   <hr class="divider-solid"/>
 
-  <div class="center" style="font-size:11px;margin-top:8px;color:#333;">${footerMsg}<br/>ขอบคุณที่มาใช้บริการ</div>
+  <div class="center" style="font-size:${rpx(15)};font-weight:900;margin-top:8px;color:#000;">${footerMsg}</div>
 
   ${qrHtml}
   <div style="height:10mm;"></div>

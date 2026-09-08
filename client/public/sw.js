@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v174'; // v174: v1.9.55 — cash-up screen shows the card-machine figure incl. vouchers
+const CACHE_NAME = 'siamepos-shell-v175'; // v175: v1.9.56 — bill/receipt footer at TOTAL size
 const APP_SHELL = [
   '/',
   '/index.html',

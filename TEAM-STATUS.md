@@ -441,7 +441,7 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
-### ✅ KRIT — SEPOS-FOOTER-SIZE-001: bill/receipt footer now prints at TOTAL size (Korakot 8 Sep) — v1.9.56
+### ✅ KRIT — v1.9.56 SHIPPED 8 Sep — 8/8 both repos, latest-mac.yml = 1.9.56, sw v175 — SEPOS-FOOTER-SIZE-001: bill/receipt footer prints at TOTAL size
 The footer carries money notices ("Service is not included." — Fern + Baan Siam) and customers read past it. Now the same size as TOTAL on every path that prints: rendered receipt 28→38, browser/A4 11→15px bold, Sunmi bold+'b'. **Classic ESC/POS fallback left at SIZE_TALL on purpose** — SIZE_BIG is double-WIDTH (42 cols→21) and would truncate all three live footers; that path only runs if rendering fails. **Hardcoded Thai thank-you removed** from all 3 paths that carried it (never printed on the rendered path, venues couldn't remove it, wrong on a sushi restaurant's paper) — the venue's footer setting is now the only message there. On-screen bill unchanged (Korakot: staff read it, not customers). Verified by rendering the real bill + receipt for all three live footers (23–29 chars, all one line, +14px paper) and checking classic bytes. Previews: `~/Desktop/SiamEPOS-bill-footer-preview/`.
 
 ### 🔥→✅ SAM — INCIDENT 8 Sep ~10:00–11:05 UK: CHECKOUT BROKEN ON ALL SPA CLOUDS (my SPA-PROMO-TIME-001 commit `cf37003`) — hotfix `d739513` LIVE on all 3 clouds, checkout verified on Highbury (bill created on Sam's test booking)
@@ -511,6 +511,13 @@ Korakot spotted it on SiamShop's ported wizard ("ugly as our restaurant side"). 
 1. **`--delete-branch` on a PR that is the base of another closes the child.** #11 did that to #12. Recover by pushing the base branch back, reopening, retargeting.
 2. **A stale dev server answers your tests.** Three times a leftover server on :4999/:5099 held the port, `nohup node src/server.js` died with EADDRINUSE, and suites happily tested months-old code — it looked like product bugs (print-render 4 failures, a validation "not firing"). Always assert the port holder is your own PID and grep the log for EADDRINUSE.
 3. **The till is NOT a cloud shell.** `build.extraResources` packages `client/dist-electron` and main.js does `loadFile`, so **every client-side change needs a release** to reach a till. An earlier note on this board said otherwise; corrected.
+
+**8 Sep later — two more from Korakot, both shipped:**
+- **PR #24 deep links.** Every "Add to basket" on the Cha & Pinto site pointed at the bare `/shop`, so a customer who tapped one product landed on the whole catalogue with an empty basket. New `/p/<ref>?add=1[&qty=N]` resolves by id, barcode **or name** (imported catalogues carry no barcodes at all), adds it, and lands on the basket with a confirmation. Refuses rather than guesses: 404 unknown, 409 ambiguous with candidates. Options / out-of-stock / outside its window go to the product page with the reason instead. test-deep-link 13; smoke 18 routes. **Verified live with a headless browser** — tapping a card lands on the cart with the item and "✓ … added to your basket".
+- **HTML entities in product names** (branch `chapinto-catalogue`, 7c9302d). Shoppers saw `S&amp;B GOLDEN CURRY MILD 92G` on the shelf and on receipts — the Wix JSON-LD is HTML-escaped and the scraper took it verbatim. 15 products on each shop. Scraper now decodes at the source; `scripts/fix-entity-names.mjs` repairs a loaded catalogue (dry-run default, --shop, idempotent). **chapinto: 15 repaired, 0 left. Demo still needs it.**
+- **Mockup site (Krit's, updated by me — please review):** `build-site.js` emits `/p/<name>?add=1` per card and 4 card names were aligned to the catalogue (Royal Umbrella → Umbrella, Oishi G/Tea Genmai, Kyoho 380g). **17 of 20 cards resolve today, 2 more once the demo entity repair runs, and 1 names a product the shop does not stock (`MK Signature Suki Sauce 350g`) — a content call, not mine to invent.**
+- **Why Korakot cannot see Mogu Mogu on his till:** his till points at the **demo** shop; the 15 counter drinks went to **chapinto**. Same blocker as the entity repair — the demo admin password.
+- **Note:** the demo shop is delivery-only with a £30 minimum, so a one-item deep link cannot reach checkout there. Correct behaviour (PR #13), but if the demo should feel like a shop, enable collection on it or drop the floor.
 
 **Open for Korakot (nothing is blocked on code):**
 - **Install v0.1.16** — the till is the only place today's work is not yet visible.

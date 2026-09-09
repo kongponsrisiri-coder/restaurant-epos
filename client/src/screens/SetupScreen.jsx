@@ -12,6 +12,24 @@ import { CapacitorHttp } from '@capacitor/core';
 
 const NAVY = 'var(--brand-primary,#0D1B3E)', GOLD = 'var(--brand-accent,#C9A84C)';
 
+// SEPOS-ANDROID-IP-001 (Korakot, 9 Sep) — a tablet joining a LAN host till is
+// pointed at an IP, not a domain, and this screen used to prepend https:// to
+// anything without a scheme. So typing "192.168.1.50" became
+// "https://192.168.1.50" and failed, forcing staff to type the whole
+// "http://192.168.1.50:3001" on a tablet keyboard. Now a bare IP (or
+// localhost) is understood as a host till on the local network: plain http,
+// and :3001 — the port the host server listens on — added when no port is
+// given. Anything that looks like a domain still gets https, as before.
+export function normaliseAddress(raw) {
+  const u = String(raw || '').trim().replace(/\/+$/, '');
+  if (!u) return '';
+  if (/^https?:\/\//i.test(u)) return u;                       // already explicit — respect it
+  const bareIp     = /^(\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(u);
+  const isLocalhost = /^localhost(:\d+)?$/i.test(u);
+  if (bareIp || isLocalhost) return u.includes(':') ? `http://${u}` : `http://${u}:3001`;
+  return 'https://' + u;                                       // a domain — cloud tenants are https
+}
+
 export default function SetupScreen({ onConfigured }) {
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -85,9 +103,8 @@ export default function SetupScreen({ onConfigured }) {
     // button is now onClick={() => connect()}; this guard is belt-and-braces
     // so only a real string override (the QR-scan path) is honoured.
     const raw = (typeof override === 'string' && override) ? override : url;
-    let u = String(raw).trim().replace(/\/+$/, '');
+    const u = normaliseAddress(raw);
     if (!u) { setError('Enter your SiamEPOS address.'); return; }
-    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
     setBusy(true); setError('');
 
     const isNative = (() => {
@@ -166,7 +183,7 @@ export default function SetupScreen({ onConfigured }) {
         <input
           type="url" inputMode="url" autoCapitalize="none" autoCorrect="off" autoFocus
           value={url} onChange={(e) => { setUrl(e.target.value); setError(''); }}
-          placeholder="e.g. baan-siam.siamepos.co.uk"
+          placeholder="192.168.1.50  or  baan-siam.siamepos.co.uk"
           style={{ width: '100%', height: 52, borderRadius: 12, border: '1px solid rgba(255,255,255,0.18)',
             background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: 16, padding: '0 16px', outline: 'none' }} />
         {error && (

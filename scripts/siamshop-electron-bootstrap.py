@@ -64,6 +64,30 @@ if not sys.stdin.isatty():
              '  Open Terminal.app and run:\n'
              '    cd ~/Desktop/restaurant-epos && python3 scripts/siamshop-electron-bootstrap.py\n'
              '  (repo step above is already done — safe to re-run)')
+# --app-password-only: re-upload just MAC_APPLE_APP_PASSWORD (notarize 401 fix)
+# without re-typing the cert password. Validates the trio with notarytool first
+# so a wrong password is caught in 5 s, not after a 30-min CI build.
+only_app = '--app-password-only' in sys.argv
+if only_app:
+    # The app-specific password only works with the Apple ID it was generated
+    # under. The restaurant's working pair can't be read back from GitHub, so
+    # ask which Apple ID this password belongs to rather than assuming.
+    typed = input(f'\n  Apple ID the password was generated under [{APPLE_ID}]: ').strip()
+    apple_id = typed or APPLE_ID
+    app_pw = getpass.getpass('  Apple app-specific password (xxxx-xxxx-xxxx-xxxx): ')
+    import subprocess
+    chk = subprocess.run(['xcrun', 'notarytool', 'history', '--apple-id', apple_id, '--team-id', TEAM_ID,
+                          '--password', app_pw], capture_output=True, text=True)
+    if chk.returncode != 0:
+        sys.exit('✗ Apple rejected that Apple ID + password pair (notarytool: ' + (chk.stderr or chk.stdout).strip().splitlines()[-1] +
+                 ')\n  Either the password was generated under a different Apple ID (re-run and type that one),\n'
+                 '  or generate a fresh one at appleid.apple.com → Sign-In and Security → App-Specific Passwords.')
+    print(f'✓ Apple accepted {apple_id} + that password (notarytool history OK)')
+    put_secret('MAC_APPLE_ID',           apple_id)
+    put_secret('MAC_APPLE_APP_PASSWORD', app_pw)
+    print('\nDone. Tell Krit/Joy → they re-run the failed build-mac job on the existing tag.')
+    sys.exit(0)
+
 if not os.path.exists(P12_PATH): sys.exit(f'✗ cert not found at {P12_PATH}')
 p12_b64 = base64.b64encode(open(P12_PATH, 'rb').read()).decode()
 print('\nTwo passwords needed (typed here only, sent encrypted to GitHub, never stored):')

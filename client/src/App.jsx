@@ -8,7 +8,7 @@ import { canAccessReservations, canAccessKitchen, canAccessFullEPOS } from './ut
 import UpgradeLocked from './components/UpgradeLocked';
 import LoginScreen from './screens/LoginScreen';
 import SetupScreen from './screens/SetupScreen';          // SEPOS-ANDROID-001
-import { needsTenantSetup } from './native/tenant';       // SEPOS-ANDROID-001
+import { needsTenantSetup, probeTenant, getTenantUrl } from './native/tenant';  // SEPOS-ANDROID-001 / -RECONNECT-001
 import OnlineOrderPrinter from './native/OnlineOrderPrinter'; // SEPOS-ANDROID-001
 import TableMapScreen from './screens/TableMapScreen';
 import OrderScreen from './screens/OrderScreen';
@@ -228,6 +228,22 @@ export default function App() {
   // till is locked. Fails open everywhere else (cloud, or until the signing key
   // is deployed), so this never blocks a paying till or the web POS.
   const [licenseLock, setLicenseLock] = useState(null);
+  // SEPOS-ANDROID-RECONNECT-001 — native satellites only. Probe the saved host
+  // once at start; retry once after 3 s before declaring it gone, so a momentary
+  // wifi blip never throws staff onto the reconnect screen mid-service.
+  const [hostUnreachable, setHostUnreachable] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (needsTenantSetup()) return;
+      if (await probeTenant()) return;
+      await new Promise((r) => setTimeout(r, 3000));
+      if (cancelled) return;
+      if (await probeTenant()) return;
+      if (!cancelled) setHostUnreachable(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => {
     let alive = true;
     const poll = async () => {
@@ -507,6 +523,13 @@ export default function App() {
   // No-op on web/desktop.
   if (needsTenantSetup()) {
     return <SetupScreen onConfigured={() => window.location.reload()} />;
+  }
+
+  // SEPOS-ANDROID-RECONNECT-001 — the saved host answered nothing. Its DHCP
+  // address has almost certainly moved (router restart). Offer the scanner
+  // rather than leaving a dead app that staff can only fix by wiping data.
+  if (hostUnreachable) {
+    return <SetupScreen reconnect currentUrl={getTenantUrl()} onConfigured={() => window.location.reload()} />;
   }
 
   // ── Determine body ────────────────────────────────────────────

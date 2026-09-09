@@ -291,7 +291,9 @@ export function buildReceiptOps({ order, items, settings, paymentDetails = {} })
     }
   }
   ops.push({ op: 'rule' });
-  ops.push({ op: 'align', v: 1 }, { op: 'text', v: footer }, { op: 'text', v: 'ขอบคุณที่มาใช้บริการ' }, { op: 'align', v: 0 }, { op: 'feed', v: 2 }, { op: 'cut' });
+  // SEPOS-FOOTER-SIZE-001 — footer at the same size as TOTAL ('b'), and the
+  // hardcoded Thai thank-you removed; the venue's own footer is the message.
+  ops.push({ op: 'align', v: 1 }, { op: 'bold', v: true }, { op: 'size', v: 'b' }, { op: 'text', v: footer }, { op: 'size', v: 'r' }, { op: 'bold', v: false }, { op: 'align', v: 0 }, { op: 'feed', v: 2 }, { op: 'cut' });
   // SEPOS-PRINT-FONT-001 — apply the receipt scale uniformly: the compact 'r'
   // body font → the scaled token, and rows/rules carry the matching (narrower)
   // width so a bigger font doesn't wrap. normal = no-op (rsz='r', rw=36).

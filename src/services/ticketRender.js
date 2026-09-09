@@ -409,7 +409,10 @@ function receiptLines(order, m, opts = {}) {
   // but txt() strips non-Latin so it has never actually printed — dropped.)
   // Korakot 2026-08-23: the footer often carries money-relevant notices
   // ("Service is not included.") — print it bigger and bold so it reads.
-  L.push({ text: m.footer, size: 28, bold: true, center: true, gap: 4 });
+  // SEPOS-FOOTER-SIZE-001 (Korakot, 8 Sep): 28 -> 38, the same size as TOTAL,
+  // because that notice is about money and customers were reading past it.
+  // Checked against every live footer (23-29 chars) — all still fit one line.
+  L.push({ text: m.footer, size: 38, bold: true, center: true, gap: 4 });
   return L;
 }
 

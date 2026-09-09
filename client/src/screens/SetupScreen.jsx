@@ -201,7 +201,7 @@ export default function SetupScreen({ onConfigured, reconnect = false, repoint =
           border: '1px solid rgba(201,168,76,0.35)', borderRadius: 10, padding: '12px 14px',
           marginBottom: 20, color: '#e5e7eb', fontSize: 13, lineHeight: 1.5 }}>
           This device is connected to <b style={{ color: '#fff' }}>{currentUrl || 'a till'}</b>.
-          <br /><br />Scan the QR on the new till's screen (Admin \u2192 Settings), or type its
+          <br /><br />Scan the QR on the new till's screen (Admin → Settings), or type its
           address below. Nothing changes until you connect.
         </div>
       )}

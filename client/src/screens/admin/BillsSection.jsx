@@ -123,14 +123,29 @@ export default function BillsSection() {
   const doReprintReceipt = (bill) => {
     if (!bill) return;
     if (!billItems.length) { alert('Items not loaded yet — try again in a moment.'); return; }
+    // SEPOS-REPRINT-FOOT-001 (Fern #2375, 9 Sep) — a reprint used to INVENT the
+    // service charge as `paid - subtotal`. On a bill with a discount and a tip
+    // that is wrong twice: it ignored the discount (so the printed lines did
+    // not foot to the printed TOTAL) and it relabelled a GRATUITY as a service
+    // charge on a venue whose service rate is 0%. Fern's #2375 reprinted as
+    // "Service (0%) £4.50, TOTAL £40.00" when the original said "Gratuity
+    // £8.05, TOTAL £31.95". Same money, different story on paper.
+    // Use what is stored, and derive only the tip — the one figure the bills
+    // payload does not carry — as "whatever was paid above the real bill".
+    // Same rule the Z report already follows (SEPOS-SVCFIX-001): never compute
+    // service as money-taken minus subtotal.
     const subtotal       = Number(bill.total || 0);
-    const paid           = Number(bill.paid_amount || bill.total || 0);
-    const serviceCharge  = Math.max(0, paid - subtotal);
     const discountAmount = bill.discount_value > 0
       ? (bill.discount_type === 'percent'
           ? subtotal * (bill.discount_value / 100)
           : Number(bill.discount_value))
       : 0;
+    const serviceCharge  = Number(bill.service_charge || 0);
+    const billTotal      = +(subtotal - discountAmount + serviceCharge).toFixed(2);
+    // ?? not || — a comped bill legitimately has paid_amount 0, and `0 || x`
+    // would print the full amount as if it had been taken.
+    const paid           = Number(bill.paid_amount ?? billTotal);
+    const tip            = Math.max(0, +(paid - billTotal).toFixed(2));
     printReceipt({
       order: bill,
       items: billItems,
@@ -139,11 +154,11 @@ export default function BillsSection() {
         subtotal,
         discountAmount,
         serviceCharge,
-        billTotal: paid,
+        billTotal,
         amountPaid: paid,
         change: 0,
         method: bill.method || '',
-        tip: 0,
+        tip,
         // SEPOS-QR-RECEIPT-002 — pass the round breakdown so a split receipt
         // prints each round, not just "Payment: Split".
         tenders: Array.isArray(bill.tenders) ? bill.tenders : [],

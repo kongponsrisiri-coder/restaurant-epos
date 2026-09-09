@@ -30,8 +30,8 @@ export function normaliseAddress(raw) {
   return 'https://' + u;                                       // a domain — cloud tenants are https
 }
 
-export default function SetupScreen({ onConfigured }) {
-  const [url, setUrl] = useState('');
+export default function SetupScreen({ onConfigured, reconnect = false, currentUrl = '' }) {
+  const [url, setUrl] = useState(reconnect ? (currentUrl || '') : '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -174,11 +174,25 @@ export default function SetupScreen({ onConfigured }) {
         <span style={{ color: '#fff' }}>Siam</span><span style={{ color: GOLD }}>EPOS</span>
       </div>
       <div style={{ color: 'rgba(201,168,76,0.8)', fontSize: 12, letterSpacing: '0.22em',
-        textTransform: 'uppercase', marginTop: 6, marginBottom: 28 }}>Set up this device</div>
+        textTransform: 'uppercase', marginTop: 6, marginBottom: reconnect ? 16 : 28 }}>
+        {reconnect ? "Can't reach the till" : 'Set up this device'}
+      </div>
+
+      {/* SEPOS-ANDROID-RECONNECT-001 — the router handed the host a new address.
+          Say so plainly and put the scanner in reach, instead of a dead app. */}
+      {reconnect && (
+        <div style={{ width: '100%', maxWidth: 380, background: 'rgba(239,68,68,0.12)',
+          border: '1px solid rgba(239,68,68,0.45)', borderRadius: 10, padding: '12px 14px',
+          marginBottom: 20, color: '#fecaca', fontSize: 13, lineHeight: 1.5 }}>
+          This device can't reach <b style={{ color: '#fff' }}>{currentUrl || 'the till'}</b>.
+          <br />The till's address usually changes when the router restarts.
+          <br /><br />Scan the QR on the till's screen, or type its new address below.
+        </div>
+      )}
 
       <div style={{ width: '100%', maxWidth: 380 }}>
         <label style={{ color: '#cbd5e1', fontSize: 13, display: 'block', marginBottom: 8 }}>
-          Your SiamEPOS address (from your setup email)
+          {reconnect ? "The till's address" : 'Your SiamEPOS address (from your setup email)'}
         </label>
         <input
           type="url" inputMode="url" autoCapitalize="none" autoCorrect="off" autoFocus

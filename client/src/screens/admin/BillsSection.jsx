@@ -12,6 +12,29 @@ import DeleteOrderModal from '../../components/DeleteOrderModal';
 import AmendPaymentModal from '../../components/AmendPaymentModal';
 import { downloadCsv } from '../../utils/csv';
 
+// SEPOS-REPRINT-FOOT-001 / Fern #2375 (Korakot, 9 Sep) — ONE place that works
+// out what a closed bill is actually made of. Three screens used to compute
+// this separately and all three forgot the discount: the reprint invented a
+// service charge as paid-subtotal, the Bill Summary said "Paid over bill
+// +£4.50" when the customer had in fact tipped £8.05, and the Edit modal said
+// "£35.50 expected" on a bill that was £31.95 after 10% off. Same rule as the
+// Z report (SEPOS-SVCFIX-001): never derive service from money-taken minus
+// subtotal, and never quote a bill total that ignores the discount.
+export function billMoney(bill) {
+  const subtotal = Number(bill?.total || 0);
+  const discount = Number(bill?.discount_value) > 0
+    ? (bill.discount_type === 'percent'
+        ? subtotal * (Number(bill.discount_value) / 100)
+        : Number(bill.discount_value))
+    : 0;
+  const service   = Number(bill?.service_charge || 0);
+  const billTotal = +(subtotal - discount + service).toFixed(2);
+  // ?? not || — a comped bill legitimately has paid_amount 0.
+  const paid      = Number(bill?.paid_amount ?? billTotal);
+  const overpaid  = +(paid - billTotal).toFixed(2);   // >0 = tip or double-charge
+  return { subtotal, discount, service, billTotal, paid, overpaid };
+}
+
 // Manager-unlock window. After this many ms with no fresh PIN entry the
 // delete buttons hide themselves again — same pattern OpenTable + Toast use
 // so destructive admin actions aren't visible to customers or junior staff
@@ -134,18 +157,8 @@ export default function BillsSection() {
     // payload does not carry — as "whatever was paid above the real bill".
     // Same rule the Z report already follows (SEPOS-SVCFIX-001): never compute
     // service as money-taken minus subtotal.
-    const subtotal       = Number(bill.total || 0);
-    const discountAmount = bill.discount_value > 0
-      ? (bill.discount_type === 'percent'
-          ? subtotal * (bill.discount_value / 100)
-          : Number(bill.discount_value))
-      : 0;
-    const serviceCharge  = Number(bill.service_charge || 0);
-    const billTotal      = +(subtotal - discountAmount + serviceCharge).toFixed(2);
-    // ?? not || — a comped bill legitimately has paid_amount 0, and `0 || x`
-    // would print the full amount as if it had been taken.
-    const paid           = Number(bill.paid_amount ?? billTotal);
-    const tip            = Math.max(0, +(paid - billTotal).toFixed(2));
+    const { subtotal, discount: discountAmount, service: serviceCharge, billTotal, paid, overpaid } = billMoney(bill);
+    const tip = Math.max(0, overpaid);
     printReceipt({
       order: bill,
       items: billItems,
@@ -385,12 +398,10 @@ export default function BillsSection() {
                             the server, NOT paid−subtotal (which double-counts a
                             split's second tender or a double-charge). */}
                         {(() => {
-                          const subtotal      = Number(bill.total || 0);
-                          const paid          = Number(bill.paid_amount || bill.total || 0);
-                          const serviceCharge = Number(bill.service_charge ?? Math.max(0, paid - subtotal));
+                          const { subtotal, discount: discountAmount, service: serviceCharge, billTotal, paid, overpaid } = billMoney(bill);
                           const scRate        = Number(bill.service_charge_rate ?? 12.5);
                           const tenders       = Array.isArray(bill.tenders) ? bill.tenders : [];
-                          const overpaid      = paid - subtotal - serviceCharge; // >0 = took more than the bill (e.g. double-charge)
+
                           return (
                             <>
                               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #e0edff', marginTop: 6 }}>
@@ -401,6 +412,20 @@ export default function BillsSection() {
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #e0edff' }}>
                                   <span style={{ color: 'var(--brand-primary,#0D1B3E)' }}>Service charge ({scRate}%)</span>
                                   <span style={{ fontWeight: 700, color: 'var(--brand-primary,#0D1B3E)' }}>£{serviceCharge.toFixed(2)}</span>
+                                </div>
+                              )}
+                              {/* Korakot, 9 Sep: the summary showed "Discount 10.00%" but never
+                                  the money, so nothing on screen added up to Total Paid. */}
+                              {discountAmount > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #e0edff' }}>
+                                  <span style={{ color: '#16a34a' }}>Discount</span>
+                                  <span style={{ fontWeight: 700, color: '#16a34a' }}>-£{discountAmount.toFixed(2)}</span>
+                                </div>
+                              )}
+                              {(discountAmount > 0 || serviceCharge > 0) && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '5px 0', borderBottom: '1px solid #e0edff', fontWeight: 700 }}>
+                                  <span>Bill total</span>
+                                  <span>£{billTotal.toFixed(2)}</span>
                                 </div>
                               )}
                               {/* SEPOS-SPLITBILL-001 — tender breakdown (Cash/Card split). */}
@@ -429,7 +454,7 @@ export default function BillsSection() {
                               </div>
                               {overpaid > 0.01 && (
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, color: '#dc2626', marginTop: 6, background:'#fef2f2', padding:'6px 8px', borderRadius:6 }}>
-                                  <span>⚠️ Paid over bill</span><span>+£{overpaid.toFixed(2)}</span>
+                                  <span>⚠️ Paid over bill (tip or double charge)</span><span>+£{overpaid.toFixed(2)}</span>
                                 </div>
                               )}
                             </>
@@ -534,9 +559,7 @@ function EditPaymentModal({ bill, items = [], onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
-  const subtotal = Number(bill.total || 0);
-  const service  = Number(bill.service_charge || 0);
-  const expected = subtotal + service; // what the bill SHOULD have been paid
+  const { subtotal, discount: mDiscount, service, billTotal: expected } = billMoney(bill); // expected = what the bill SHOULD have been paid, discount included
   const newTotal = rows.reduce((s, r) => s + (r.remove ? 0 : (parseFloat(r.amount) || 0)), 0);
   const editable = rows.some(r => r.id != null);
 
@@ -563,7 +586,7 @@ function EditPaymentModal({ bill, items = [], onClose, onDone }) {
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9500, padding:16 }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{ background:'white', borderRadius:16, padding:24, width:'100%', maxWidth:440, maxHeight:'90vh', overflowY:'auto' }}>
         <div style={{ fontWeight:800, fontSize:17, color:'var(--brand-primary,#0D1B3E)', marginBottom:4 }}>✏️ Edit payment — {dineTableLabel(bill)}</div>
-        <div style={{ fontSize:12, color:'#888', marginBottom:14 }}>Bill £{subtotal.toFixed(2)}{service > 0 ? ` + service £${service.toFixed(2)}` : ''} = <b>£{expected.toFixed(2)}</b> expected</div>
+        <div style={{ fontSize:12, color:'#888', marginBottom:14 }}>Bill £{subtotal.toFixed(2)}{mDiscount > 0 ? ` − discount £${mDiscount.toFixed(2)}` : ''}{service > 0 ? ` + service £${service.toFixed(2)}` : ''} = <b>£{expected.toFixed(2)}</b> expected</div>
 
         {rows.map((r, i) => (
           <div key={i} style={{ marginBottom:10, opacity: r.remove ? 0.45 : 1 }}>

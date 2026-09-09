@@ -441,6 +441,10 @@ A spa client asked Korakot for a **loyalty card**. Krit wrote the ticket: `~/Doc
 
 ## 🟢 Active Work
 
+### ✅ KRIT — v1.9.58 SHIPPED 9 Sep — 8/8 both repos, latest-mac.yml = 1.9.58, sw v177 — supersedes 1.9.57
+**SEPOS-TIPS-METHOD-001** (Korakot spotted it on Fern #335 Bar 4): the Z printed EVERY gratuity as "of which Card tips" — hardcoded — so a bill amended card→cash showed £7.25 card tips against £0.00 card sales. Matters because a card tip is inside the PDQ settlement and paid out later, while a cash tip is notes in the drawer that night, and the owner shares tips out on that number. Z now returns `tips_by_method` and one `tipsLabel()` drives screen + HTML + thermal: single method → "of which Cash/Card tips"; mixed → "of which tips (Card £31.00 · Cash £7.25)"; missing field on an older till → plain "of which tips". Note: a tip on a CASH payment only exists after an amend — the original design treats cash over-payment as change.
+⚠️ **This is the last release that installs by the old shutdown path.** Client note asks them to quit the app properly rather than switch the till off, just this once. Patch note EN+TH delivered (covers 1.9.57 + 1.9.58 together).
+
 ### ✅ KRIT — v1.9.57 SHIPPED 9 Sep — 8/8 both repos, latest-mac.yml = 1.9.57, sw v176
 Contents: **SEPOS-REPRINT-FOOT-001** (reprint + Admin→Bills) and **SEPOS-UPDATE-SAFE-001** (updates install at launch, never at shutdown; failed checks retry; 4-hourly re-check). ⚠️ Tills on 1.9.56 still apply THIS one by the old shutdown path — one more risky install before the protection is in force; ask clients to restart the app deliberately rather than switching the PC off. Patch note EN+TH delivered (corrected: the discount was ALWAYS on the printed bill — the missing amount was in Admin → Bills, and the reprint fault was a gratuity relabelled as service charge).
 

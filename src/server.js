@@ -4723,7 +4723,7 @@ app.get('/api/z-report/preview', async (req, res) => {
       from = sessionMeta.opened_at;
       to   = sessionMeta.closed_at || new Date().toISOString(); // open shift → up to now
     }
-    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, foodDrinkRes, vouchersSoldRes, vouchersRedeemedRes, settingsRes, depTakenRes, depRedeemedRes, depForfeitedRes, depHeldRes, compResZ, tipsResZ] = await Promise.all([
+    const [ordersRes, openRes, voidsRes, voidsByTypeRes, vatRowsRes, foodDrinkRes, vouchersSoldRes, vouchersRedeemedRes, settingsRes, depTakenRes, depRedeemedRes, depForfeitedRes, depHeldRes, compResZ, tipsResZ, tipsByMethodResZ] = await Promise.all([
       // SEPOS-REPREC-001 — exclude cancelled/void bills (payment method='cancelled', £0)
       // from the Z so its Total Sales + order count reconcile with Trading and Bills.
       // A closed order with no payment row (method NULL) is still kept.
@@ -4784,6 +4784,16 @@ app.get('/api/z-report/preview', async (req, res) => {
       // Already INSIDE total_card/total_other (tender amounts include the tip),
       // so this is an "of which" line — never added to takings again.
       pool.query(`SELECT COUNT(*)::int AS count, COALESCE(SUM(p.tip), 0) AS value FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.status='closed' AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp AND COALESCE(p.method,'') <> 'cancelled' AND p.tip > 0`, [from, to]).catch(() => ({ rows: [{ count: 0, value: 0 }] })),
+      // SEPOS-TIPS-METHOD-001 (Korakot, 9 Sep) — the same total, split by how
+      // the money actually arrived. A CARD tip is inside the PDQ settlement and
+      // is paid out later; a CASH tip is notes in the drawer tonight. The Z used
+      // to print every tip as a "Card tip" regardless, so a bill amended from
+      // card to cash reported £7.25 of card tips against £0.00 of card sales.
+      pool.query(`SELECT COALESCE(p.method,'Other') AS method, COUNT(*)::int AS count, COALESCE(SUM(p.tip), 0) AS value
+                    FROM payments p JOIN orders o ON o.id = p.order_id
+                   WHERE o.status='closed' AND o.closed_at >= $1::timestamp AND o.closed_at <= $2::timestamp
+                     AND COALESCE(p.method,'') <> 'cancelled' AND p.tip > 0
+                   GROUP BY COALESCE(p.method,'Other')`, [from, to]).catch(() => ({ rows: [] })),
     ]);
     const orders = ordersRes.rows;
     const voids = voidsRes.rows[0];
@@ -4883,7 +4893,7 @@ app.get('/api/z-report/preview', async (req, res) => {
     }
     const vouchersSold     = { count: vSoldCount, total: vSoldTotal };
     const vouchersRedeemed = vouchersRedeemedRes.rows[0] || { count: 0, total: 0 };
-    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_paid: totalPaid, total_subtotal: totalSubtotal, total_service: totalService, service_charge_rate: scRate, service_charge_enabled: scEnabled, vat_mode: vatMode, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: totalOrders, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: totalOrders > 0 ? totalSales / totalOrders : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0), by_method: vouchersSoldByMethod, till_cash: vSoldTillCash, till_card: vSoldTillCard }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, deposits_enabled: depositsEnabled, deposits_taken: { count: Number(depTaken.count || 0), total: Number(depTaken.total || 0) }, deposits_redeemed: { count: Number(depRedeemed.count || 0), total: Number(depRedeemed.total || 0) }, deposits_forfeited: { count: Number(depForfeited.count || 0), total: Number(depForfeited.total || 0) }, deposits_held: { count: Number(depHeld.count || 0), total: Number(depHeld.total || 0) }, comp_bills: { count: Number(compResZ.rows[0]?.count || 0), value: Number(compResZ.rows[0]?.value || 0) }, total_tips: Number(tipsResZ.rows[0]?.value || 0), tips_count: Number(tipsResZ.rows[0]?.count || 0), session: sessionMeta, from, to, ...orderTypeSplit });
+    res.json({ orders, open_orders: openRes.rows, total_sales: totalSales, total_paid: totalPaid, total_subtotal: totalSubtotal, total_service: totalService, service_charge_rate: scRate, service_charge_enabled: scEnabled, vat_mode: vatMode, total_food: totalFood, total_drink: totalDrink, total_covers: totalCovers, total_orders: totalOrders, total_cash: totalCash, total_card: totalCard, total_other: totalOther, total_discounts: totalDiscounts, void_count: voids?.void_count || 0, void_value: voids?.void_value || 0, voids_by_type: voidsByType, vat_breakdown: vatBreakdown, vat_total: vatTotal, avg_per_cover: totalCovers > 0 ? totalSales / totalCovers : 0, avg_per_order: totalOrders > 0 ? totalSales / totalOrders : 0, vouchers_sold: { count: Number(vouchersSold.count || 0), total: Number(vouchersSold.total || 0), by_method: vouchersSoldByMethod, till_cash: vSoldTillCash, till_card: vSoldTillCard }, vouchers_redeemed: { count: Number(vouchersRedeemed.count || 0), total: Number(vouchersRedeemed.total || 0) }, deposits_enabled: depositsEnabled, deposits_taken: { count: Number(depTaken.count || 0), total: Number(depTaken.total || 0) }, deposits_redeemed: { count: Number(depRedeemed.count || 0), total: Number(depRedeemed.total || 0) }, deposits_forfeited: { count: Number(depForfeited.count || 0), total: Number(depForfeited.total || 0) }, deposits_held: { count: Number(depHeld.count || 0), total: Number(depHeld.total || 0) }, comp_bills: { count: Number(compResZ.rows[0]?.count || 0), value: Number(compResZ.rows[0]?.value || 0) }, total_tips: Number(tipsResZ.rows[0]?.value || 0), tips_by_method: (tipsByMethodResZ?.rows || []).map((r) => ({ method: r.method, count: Number(r.count || 0), value: Number(r.value || 0) })), tips_count: Number(tipsResZ.rows[0]?.count || 0), session: sessionMeta, from, to, ...orderTypeSplit });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

@@ -3,6 +3,7 @@ import { setTenantUrl, markSetupDone } from '../native/tenant';
 import { HOST_MODE_KEY } from '../api';
 import { saveHostConfig, startHost, hostCapable } from '../native/nodeHost';
 import { isNativeApp } from '../native/printer';
+import { APP_VERSION } from '../version';
 import { CapacitorHttp } from '@capacitor/core';
 
 // SEPOS-ANDROID-001 — first-launch setup for the Android app. Point this device
@@ -276,8 +277,12 @@ export default function SetupScreen({ onConfigured, reconnect = false, currentUr
         <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 16, textAlign: 'center' }}>
           Not sure? Your SiamEPOS team sent this at setup — or email info@siamepos.co.uk
         </div>
+        {/* SEPOS-VERSION-001 — was the literal string "v1.4.5" while the build was
+            1.5.45. version.js existed and claimed to be shown here but was imported
+            nowhere, so every version read off a setup-screen photo was wrong, on BOTH
+            apps. Render the real constant; bump it with build.gradle versionName. */}
         <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 14, textAlign: 'center', letterSpacing: '0.1em' }}>
-          v1.4.5
+          v{APP_VERSION}
         </div>
       </div>
     </div>

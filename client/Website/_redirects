@@ -6,3 +6,8 @@
 # browser stays on siamepos.co.uk, receives the 302, lands on Stripe.
 # NB: ops.siamepos.co.uk is the SPA (Netlify) — the API lives on Railway.
 /pay-setup/*  https://restaurant-epos-back-office-production.up.railway.app/api/siampay/onboard/:splat  200
+
+# SEPOS-ANDROID-RESCAN-001 — short front door for the tablet app so the link on a
+# card / QR never changes between versions. The PAGE states the exact version.
+/app      /app.html   200
+/tablet   /app.html   301

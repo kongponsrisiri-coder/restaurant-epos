@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v175'; // v175: v1.9.56 — bill/receipt footer at TOTAL size
+const CACHE_NAME = 'siamepos-shell-v176'; // v176: v1.9.57 — bill discount shown + reprint foots
 const APP_SHELL = [
   '/',
   '/index.html',

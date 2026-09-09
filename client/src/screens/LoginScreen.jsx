@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { loginStaff, clockToggle, emailLogin, requestLoginLink, consumeLoginLink, storePinSession, getStaff, getRestaurant, getSettings, changeStaffPin, pushCfdState, requestDeviceAuth, consumeDeviceAuth } from '../api';
 import { resetDevice, currentTillTarget, canSwitchClient } from '../utils/deviceReset';
+import { isNativePlatform, getTenantUrl } from '../native/tenant';   // SEPOS-ANDROID-RESCAN-001
 import { NAVY, GOLD, RED, GREEN } from '../theme'; // SEPOS-BRAND-001 — per-client brand colours
 
 // SiamEPOS — LoginScreen (redesign per design_handoff_siamepos).
@@ -60,7 +61,7 @@ function Spinner({ size = 30 }) {
 const initials = (name) => String(name || '?').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
 const isManagerRole = (role) => role === 'admin' || role === 'manager';
 
-export default function LoginScreen({ onLogin }) {
+export default function LoginScreen({ onLogin, onRepoint }) {
   const [pin, setPin]         = useState('');
   const [error, setError]     = useState('');
   // SEPOS-DEVICE-AUTH-001 — public cloud till gated behind email device auth.
@@ -612,6 +613,23 @@ export default function LoginScreen({ onLogin }) {
     <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: selectedStaff ? 26 : 22, alignItems: 'center', flexWrap: 'wrap' }}>
       <button onClick={enterClockMode} disabled={loading} style={{ ...outlineBtn, color: GREEN, borderColor: '#BFE6D2' }}>🕐 Clock in / out</button>
       <button onClick={() => { setMode('email'); setError(''); }} style={linkBtn}>Sign in with email →</button>
+
+      {/* SEPOS-ANDROID-RESCAN-001 (Korakot, 9 Sep) — "if the till ip has change they
+          just scan again, that's why i want the re-scan button on the log in screen".
+          A satellite is pointed at the host by IP and the router can move it; before
+          this, re-pointing meant the hidden long-press RESET, which wipes the device's
+          role - far too destructive for a routine address change, and invisible to
+          staff. This is non-destructive: it opens the scanner, and nothing changes
+          unless a new address actually connects. Native satellites only (a browser is
+          fixed to the origin it was served from; a host till has no tenant URL). */}
+      {onRepoint && isNativePlatform() && !!getTenantUrl() && (
+        <div style={{ flexBasis: '100%', textAlign: 'center', marginTop: 4 }}>
+          <button onClick={onRepoint} disabled={loading}
+            style={{ ...linkBtn, fontSize: 13.5, opacity: 0.75 }}>
+            📷 Connect to a different till
+          </button>
+        </div>
+      )}
     </div>
   );
 

@@ -31,7 +31,12 @@ export function normaliseAddress(raw) {
   return 'https://' + u;                                       // a domain — cloud tenants are https
 }
 
-export default function SetupScreen({ onConfigured, reconnect = false, currentUrl = '' }) {
+// `reconnect` = we PROBED and the till is unreachable (router moved it).
+// `repoint`   = staff deliberately chose "connect to a different till" from the
+//               login screen (SEPOS-ANDROID-RESCAN-001). Same controls, but it is
+//               not an error, so it must not shout in red - and it must be
+//               cancellable, because a mis-tap mid-service has to be harmless.
+export default function SetupScreen({ onConfigured, reconnect = false, repoint = false, currentUrl = '', onCancel }) {
   const [url, setUrl] = useState(reconnect ? (currentUrl || '') : '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -175,8 +180,8 @@ export default function SetupScreen({ onConfigured, reconnect = false, currentUr
         <span style={{ color: '#fff' }}>Siam</span><span style={{ color: GOLD }}>EPOS</span>
       </div>
       <div style={{ color: 'rgba(201,168,76,0.8)', fontSize: 12, letterSpacing: '0.22em',
-        textTransform: 'uppercase', marginTop: 6, marginBottom: reconnect ? 16 : 28 }}>
-        {reconnect ? "Can't reach the till" : 'Set up this device'}
+        textTransform: 'uppercase', marginTop: 6, marginBottom: (reconnect || repoint) ? 16 : 28 }}>
+        {reconnect ? "Can't reach the till" : repoint ? 'Connect to a different till' : 'Set up this device'}
       </div>
 
       {/* SEPOS-ANDROID-RECONNECT-001 — the router handed the host a new address.
@@ -191,9 +196,19 @@ export default function SetupScreen({ onConfigured, reconnect = false, currentUr
         </div>
       )}
 
+      {repoint && (
+        <div style={{ width: '100%', maxWidth: 380, background: 'rgba(201,168,76,0.10)',
+          border: '1px solid rgba(201,168,76,0.35)', borderRadius: 10, padding: '12px 14px',
+          marginBottom: 20, color: '#e5e7eb', fontSize: 13, lineHeight: 1.5 }}>
+          This device is connected to <b style={{ color: '#fff' }}>{currentUrl || 'a till'}</b>.
+          <br /><br />Scan the QR on the new till's screen (Admin \u2192 Settings), or type its
+          address below. Nothing changes until you connect.
+        </div>
+      )}
+
       <div style={{ width: '100%', maxWidth: 380 }}>
         <label style={{ color: '#cbd5e1', fontSize: 13, display: 'block', marginBottom: 8 }}>
-          {reconnect ? "The till's address" : 'Your SiamEPOS address (from your setup email)'}
+          {(reconnect || repoint) ? "The till's address" : 'Your SiamEPOS address (from your setup email)'}
         </label>
         <input
           type="url" inputMode="url" autoCapitalize="none" autoCorrect="off" autoFocus
@@ -238,7 +253,7 @@ export default function SetupScreen({ onConfigured, reconnect = false, currentUr
         {/* SEPOS host spike — run THIS device as the host till. Only offered
             where the embedded NodeHost engine is actually in the build (the
             Android host APK) — not on iOS / plain tills, where it dead-ends. */}
-        {hostCapable() && (
+        {hostCapable() && !reconnect && !repoint && (
           <div style={{ marginTop: 22, borderTop: '1px solid rgba(255,255,255,0.12)', paddingTop: 16 }}>
             {!showHost ? (
               <button onClick={() => { setShowHost(true); setError(''); }} disabled={busy}
@@ -272,6 +287,15 @@ export default function SetupScreen({ onConfigured, reconnect = false, currentUr
               </div>
             )}
           </div>
+        )}
+
+        {onCancel && (
+          <button onClick={onCancel} disabled={busy}
+            style={{ width: '100%', marginTop: 14, background: 'transparent', border: 'none',
+              color: 'rgba(255,255,255,0.55)', fontSize: 13.5, fontWeight: 700, padding: '8px 0',
+              cursor: busy ? 'default' : 'pointer' }}>
+            ← Back to sign in
+          </button>
         )}
 
         <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 16, textAlign: 'center' }}>

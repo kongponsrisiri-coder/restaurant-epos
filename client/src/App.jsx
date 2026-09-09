@@ -8,6 +8,7 @@ import { canAccessReservations, canAccessKitchen, canAccessFullEPOS } from './ut
 import UpgradeLocked from './components/UpgradeLocked';
 import LoginScreen from './screens/LoginScreen';
 import SetupScreen from './screens/SetupScreen';          // SEPOS-ANDROID-001
+import TillUnreachableBanner from './components/TillUnreachableBanner';  // SEPOS-ANDROID-RESCAN-001
 import { needsTenantSetup, probeTenant, getTenantUrl } from './native/tenant';  // SEPOS-ANDROID-001 / -RECONNECT-001
 import OnlineOrderPrinter from './native/OnlineOrderPrinter'; // SEPOS-ANDROID-001
 import TableMapScreen from './screens/TableMapScreen';
@@ -232,6 +233,9 @@ export default function App() {
   // once at start; retry once after 3 s before declaring it gone, so a momentary
   // wifi blip never throws staff onto the reconnect screen mid-service.
   const [hostUnreachable, setHostUnreachable] = useState(false);
+  // SEPOS-ANDROID-RESCAN-001 — staff chose "connect to a different till" from the
+  // login screen. Deliberate, non-destructive, and cancellable (see SetupScreen).
+  const [repointing, setRepointing] = useState(false);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -532,11 +536,19 @@ export default function App() {
     return <SetupScreen reconnect currentUrl={getTenantUrl()} onConfigured={() => window.location.reload()} />;
   }
 
+  // SEPOS-ANDROID-RESCAN-001 — same screen, reached on purpose rather than after a
+  // failed probe. Nothing is cleared: backing out returns to sign-in unchanged.
+  if (repointing) {
+    return <SetupScreen repoint currentUrl={getTenantUrl()}
+             onCancel={() => setRepointing(false)}
+             onConfigured={() => window.location.reload()} />;
+  }
+
   // ── Determine body ────────────────────────────────────────────
   let body;
 
   if (!staff) {
-    body = <LoginScreen onLogin={setStaff} />;
+    body = <LoginScreen onLogin={setStaff} onRepoint={() => setRepointing(true)} />;
   } else if (staff.role === 'kitchen' && !kbAsWaiters) {
     // SEPOS-KDS-LOGOUT-001 — kitchen/bar render full-bleed with no navbar and
     // are exempt from idle auto sign-out, so without this they can only leave
@@ -769,6 +781,9 @@ export default function App() {
   return (
     <>
       <OfflineBanner />{/* SEPOS-ANDROID-002 — only visible when internet drops */}
+      {/* SEPOS-ANDROID-RESCAN-001 — only visible when the HOST TILL stops answering.
+          Suspended while the scanner is open so it can't nag over its own fix. */}
+      <TillUnreachableBanner suspended={repointing} onRescan={() => setRepointing(true)} />
       {body}
       <OnScreenKeyboard />{/* SEPOS-OSK-001 — pops for text fields on touch tills */}
       {/* SEPOS-ORDER-CHIME-001 — rings + banners on every new online order

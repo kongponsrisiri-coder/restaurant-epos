@@ -1,4 +1,4 @@
-const CACHE_NAME = 'siamepos-shell-v176'; // v176: v1.9.57 — bill discount shown + reprint foots
+const CACHE_NAME = 'siamepos-shell-v177'; // v177: v1.9.58 — tips split by cash/card on the Z
 const APP_SHELL = [
   '/',
   '/index.html',

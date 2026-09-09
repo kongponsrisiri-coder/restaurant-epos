@@ -868,6 +868,16 @@ function setupAutoUpdater() {
     autoUpdater = require('electron-updater').autoUpdater;
     autoUpdater.autoDownload = true;
 
+    // SEPOS-UPDATE-SAFE-001 (Yum Yum, 8-9 Sep) — NEVER install at shutdown.
+    // electron-updater's default is autoInstallOnAppQuit = true: the new
+    // installer runs as the app quits. In a restaurant that is the exact
+    // moment the PC gets switched off at the wall, and on Windows the NSIS
+    // installer replaces the old app before writing the new one. Interrupt it
+    // and the till is left with NO app and a dead shortcut — which is what
+    // Yum Yum opened to. The update still DOWNLOADS quietly; it is applied
+    // only when someone chooses to, with the machine definitely staying on.
+    autoUpdater.autoInstallOnAppQuit = false;
+
     // SEPOS-PRO-006 — persist updater logs to a file so failures are
     // diagnosable on a real till (electron-updater otherwise only logs to a
     // console nobody captures on a packaged app). One line per event in
@@ -910,12 +920,52 @@ function setupAutoUpdater() {
       console.error('[updater]', err?.message || err);
       sendStatus({ state: 'error', message: err?.message || String(err) });
     });
+    // SEPOS-UPDATE-SAFE-001 — WHEN to apply. Shutdown is the dangerous moment
+    // (PC switched off at the wall mid-install = a till with no app). Launch is
+    // the safe one: staff have just opened the app, the machine is on and
+    // staying on, and a failed install can simply be retried by opening it
+    // again. So: if the update lands within 3 minutes of boot, apply it now —
+    // this is what makes "restart the app once" in every patch note still work.
+    // If it lands later (a till open since morning, the 4-hourly check finds a
+    // release mid-service), do NOT touch it: show "Update ready" and let it
+    // install next time the app is opened. Never interrupt service.
+    const BOOT_AT = Date.now();
+    const APPLY_WINDOW_MS = 3 * 60 * 1000;
     autoUpdater.on('update-downloaded', (info) => {
-      console.log('[updater] update downloaded — will install on next restart');
-      sendStatus({ state: 'downloaded', version: info?.version });
-      // Keep the original channel too so the existing restart banner still fires.
+      const atLaunch = (Date.now() - BOOT_AT) < APPLY_WINDOW_MS;
+      const note = atLaunch
+        ? `update ${info?.version} downloaded — applying now (within the launch window)`
+        : `update ${info?.version} downloaded — holding until the next launch (service protection)`;
+      try { autoUpdater.logger?.info(note); } catch (_) { console.log('[updater]', note); }
+      sendStatus({ state: atLaunch ? 'installing' : 'downloaded', version: info?.version });
       if (mainWindow) mainWindow.webContents.send('siamepos:update-ready');
+      if (atLaunch) {
+        setTimeout(() => {
+          try { autoUpdater.quitAndInstall(); }
+          catch (e) { console.warn('[updater] quitAndInstall failed:', e?.message || e); }
+        }, 5000);
+      }
     });
+
+    // SEPOS-UPDATE-SAFE-001 — a till that runs for days used to check ONCE at
+    // boot: Korakot's Mac failed its check after a network change and then sat
+    // on "Check failed" for 24 h, silently missing three releases. Retry a
+    // failed check, and re-check every 4 h so a till that is never restarted
+    // still finds new versions.
+    let updateRetries = 0;
+    const scheduleRetry = () => {
+      if (updateRetries >= 3) return;
+      updateRetries += 1;
+      setTimeout(() => {
+        try { autoUpdater.checkForUpdates().catch(() => {}); } catch (_) {}
+      }, 10 * 60 * 1000);
+    };
+    autoUpdater.on('update-available',     () => { updateRetries = 0; });
+    autoUpdater.on('update-not-available', () => { updateRetries = 0; });
+    autoUpdater.on('error', () => scheduleRetry());
+    setInterval(() => {
+      try { autoUpdater.checkForUpdates().catch(() => {}); } catch (_) {}
+    }, 4 * 60 * 60 * 1000);
 
     autoUpdater.checkForUpdatesAndNotify().catch((err) => {
       console.warn('[updater] check skipped:', err?.message || err);

@@ -28,6 +28,18 @@
 	<string>SiamEPOS scans voucher and deposit QR codes with the camera.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>SiamEPOS connects to your receipt and kitchen printers on this network.</string>
+	<!-- SEPOS-IOS-LANHOST-001 — a satellite iPad reaches its host till over plain
+	     HTTP on the LAN (http://192.168.x:3001). iOS App Transport Security blocks
+	     cleartext by default; permit it so the app can reach the host like a browser
+	     (iOS twin of Android usesCleartextTraffic). NSLocalNetworkUsageDescription
+	     above still drives the one-time "find devices on your network" prompt. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

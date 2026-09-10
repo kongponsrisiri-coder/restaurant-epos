@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SEPOS-ANDROID-LANHOST-001 — a satellite talks to its host till over plain
+     HTTP on the LAN (http://192.168.x.x:3001). Permit cleartext so the native
+     HTTP stack (CapacitorHttp/OkHttp) can reach it, the same way a browser can. -->
+<network-security-config>
+  <base-config cleartextTrafficPermitted="true">
+    <trust-anchors><certificates src="system"/></trust-anchors>
+  </base-config>
+</network-security-config>

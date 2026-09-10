@@ -187,6 +187,13 @@ export default function ReservationsScreen() {
   if (!form.covers || form.covers < 1) { showToast('Covers must be at least 1', 'error'); return; }
   const payload = { ...form, table_id: form.table_id || null, source: 'epos' };
   const savedId = editingId;
+  // SEPOS-RESV-VIEW-JUMP-001 (Korakot, 10 Sep) — the list is filtered by the
+  // selected day (filterDate). A booking created/moved for ANOTHER day was saved
+  // but filtered OUT of the current view, so it looked "gone" on the device that
+  // made it while devices viewing that day still showed it. Jump the view to the
+  // booking's date so the device that made the change always sees it.
+  const bookingDay = String(payload.reservation_date || '').slice(0, 10);
+  if (bookingDay && filterDate && bookingDay !== filterDate) setFilterDate(bookingDay);
   closeModal();
   if (savedId) {
     setReservations(prev => prev.map(x => x.id === savedId ? { ...x, ...payload } : x));
